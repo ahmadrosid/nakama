@@ -1,0 +1,1948 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TinyClaw API",
+    "version": "1",
+    "description": "HTTP API for the TinyClaw personal AI assistant."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4310",
+      "description": "Local dev server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Chat"
+    },
+    {
+      "name": "Models"
+    },
+    {
+      "name": "Profiles"
+    },
+    {
+      "name": "Tools"
+    },
+    {
+      "name": "Automations"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "OpenAPI specification",
+        "operationId": "getOpenApiSpec",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "List available models",
+        "operationId": "listModels",
+        "responses": {
+          "200": {
+            "description": "Model catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settings/model": {
+      "put": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Switch the active model",
+        "operationId": "setModel",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetModelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetModelResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List saved chat sessions",
+        "operationId": "listSessions",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AgentChannel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved chat sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSessionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Create a chat session",
+        "operationId": "createSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{sessionId}": {
+      "delete": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Clear or delete a chat session",
+        "description": "Clears stored messages by default. Pass purge=true to delete the session record.",
+        "operationId": "clearSession",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Delete the session record entirely"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session cleared or deleted"
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{sessionId}/messages": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List chat messages for a session",
+        "operationId": "getSessionMessages",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored chat messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMessagesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Send a chat message",
+        "description": "Returns JSON by default. Set stream=true, ?stream=true, or Accept: text/event-stream for SSE.",
+        "operationId": "sendMessage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "stream",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Enable SSE streaming"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assistant reply",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE data lines with StreamEvent JSON payloads (chunk, tool_start, tool_end, done, error)"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "List bot profiles",
+        "operationId": "listProfiles",
+        "responses": {
+          "200": {
+            "description": "Profile list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListProfilesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Create a bot profile",
+        "operationId": "createProfile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Profile created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Get a bot profile",
+        "operationId": "getProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Update a bot profile",
+        "operationId": "updateProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Delete a bot profile",
+        "operationId": "deleteProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Profile deleted"
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/tools": {
+      "get": {
+        "tags": [
+          "Profiles",
+          "Tools"
+        ],
+        "summary": "List tools assigned to a profile",
+        "operationId": "listProfileTools",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListToolsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Profiles",
+          "Tools"
+        ],
+        "summary": "Assign a tool to a profile",
+        "operationId": "assignToolToProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignToolRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool assigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/tools/{toolId}": {
+      "delete": {
+        "tags": [
+          "Profiles",
+          "Tools"
+        ],
+        "summary": "Unassign a tool from a profile",
+        "operationId": "unassignToolFromProfile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ToolId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool unassigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "List all tools",
+        "operationId": "listTools",
+        "responses": {
+          "200": {
+            "description": "Tool list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListToolsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Register a tool",
+        "operationId": "createTool",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateToolRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tool created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateToolResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/{toolId}": {
+      "delete": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Delete a registered tool",
+        "operationId": "deleteTool",
+        "parameters": [
+          {
+            "name": "toolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tool deleted"
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/soul": {
+      "get": {
+        "tags": [
+          "Soul"
+        ],
+        "summary": "Get global soul status",
+        "operationId": "getSoulStatus",
+        "responses": {
+          "200": {
+            "description": "Soul status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoulStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/soul/stack": {
+      "get": {
+        "tags": [
+          "Soul"
+        ],
+        "summary": "Get global soul stack contents",
+        "operationId": "getSoulStack",
+        "responses": {
+          "200": {
+            "description": "Soul stack",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoulStackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/soul/files/{fileKey}": {
+      "put": {
+        "tags": [
+          "Soul"
+        ],
+        "summary": "Write a global soul file",
+        "operationId": "writeSoulFile",
+        "parameters": [
+          {
+            "name": "fileKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "soul",
+                "style",
+                "skill",
+                "memory"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSoulFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "File saved"
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/soul/init": {
+      "post": {
+        "tags": [
+          "Soul"
+        ],
+        "summary": "Initialize global soul templates",
+        "operationId": "initSoul",
+        "responses": {
+          "201": {
+            "description": "Soul initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitSoulResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/soul": {
+      "get": {
+        "tags": [
+          "Soul",
+          "Profiles"
+        ],
+        "summary": "Get soul status for a profile",
+        "operationId": "getProfileSoulStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soul status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoulStatusResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/soul/stack": {
+      "get": {
+        "tags": [
+          "Soul",
+          "Profiles"
+        ],
+        "summary": "Get soul stack contents for a profile",
+        "operationId": "getProfileSoulStack",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soul stack",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoulStackResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/soul/files/{fileKey}": {
+      "put": {
+        "tags": [
+          "Soul",
+          "Profiles"
+        ],
+        "summary": "Write a profile soul file",
+        "operationId": "writeProfileSoulFile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "name": "fileKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "soul",
+                "style",
+                "skill",
+                "memory"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSoulFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "File saved"
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/soul/init": {
+      "post": {
+        "tags": [
+          "Soul",
+          "Profiles"
+        ],
+        "summary": "Initialize soul templates for a profile",
+        "operationId": "initProfileSoul",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Soul initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitSoulResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/automations/draft": {
+      "post": {
+        "tags": [
+          "Automations"
+        ],
+        "summary": "Draft an automation from a prompt",
+        "operationId": "draftAutomation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftAutomationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Automation draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftAutomationResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "SessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ProfileId": {
+        "name": "profileId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ToolId": {
+        "name": "toolId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "AgentChannel": {
+        "type": "string",
+        "enum": [
+          "web",
+          "cli",
+          "telegram"
+        ]
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "apiVersion",
+          "providerConfigured"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "providerConfigured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/AgentChannel"
+          },
+          "profileId": {
+            "type": "string",
+            "description": "Bot profile ID. Defaults to profile_default."
+          }
+        }
+      },
+      "CreateSessionResponse": {
+        "type": "object",
+        "required": [
+          "sessionId"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "profileId",
+          "channel",
+          "createdAt",
+          "updatedAt",
+          "messageCount",
+          "preview"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/AgentChannel"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "messageCount": {
+            "type": "integer"
+          },
+          "preview": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ListSessionsResponse": {
+        "type": "object",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionSummary"
+            }
+          }
+        }
+      },
+      "SessionMessagesResponse": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SendMessageResponse": {
+        "type": "object",
+        "required": [
+          "reply"
+        ],
+        "properties": {
+          "reply": {
+            "type": "string"
+          }
+        }
+      },
+      "StreamEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "delta"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "chunk"
+              },
+              "delta": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "toolCallId",
+              "tool",
+              "input"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "tool_start"
+              },
+              "toolCallId": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "input": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "toolCallId",
+              "tool",
+              "result"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "tool_end"
+              },
+              "toolCallId": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "result": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "reply"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "done"
+              },
+              "reply": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "error"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "error"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ProviderModelOption": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "provider"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "anthropic"
+            ]
+          },
+          "default": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModelsResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "currentModel",
+          "defaultModel",
+          "models"
+        ],
+        "properties": {
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "openai",
+              "anthropic",
+              null
+            ]
+          },
+          "currentModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "defaultModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderModelOption"
+            }
+          }
+        }
+      },
+      "SetModelRequest": {
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          }
+        }
+      },
+      "SetModelResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "currentModel"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "anthropic"
+            ]
+          },
+          "currentModel": {
+            "type": "string"
+          }
+        }
+      },
+      "ToolSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "handlerType"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "handlerType": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "bash",
+              "javascript"
+            ]
+          }
+        }
+      },
+      "ProfileSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "model",
+          "isSuper",
+          "toolCount",
+          "soulActive",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isSuper": {
+            "type": "boolean"
+          },
+          "toolCount": {
+            "type": "integer"
+          },
+          "soulActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProfileDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProfileSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "systemPrompt",
+              "tools"
+            ],
+            "properties": {
+              "systemPrompt": {
+                "type": "string"
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolSummary"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ProfileResponse": {
+        "type": "object",
+        "required": [
+          "profile"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileDetail"
+          }
+        }
+      },
+      "ListProfilesResponse": {
+        "type": "object",
+        "required": [
+          "profiles"
+        ],
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileSummary"
+            }
+          }
+        }
+      },
+      "CreateProfileRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isSuper": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ListToolsResponse": {
+        "type": "object",
+        "required": [
+          "tools"
+        ],
+        "properties": {
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolSummary"
+            }
+          }
+        }
+      },
+      "CreateToolRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "handlerType": {
+            "type": "string",
+            "enum": [
+              "javascript"
+            ],
+            "description": "Must be \"javascript\"."
+          },
+          "handlerConfig": {
+            "type": "object",
+            "description": "JavaScript tool config, for example { \"modulePath\": \"my-tool.js\" } relative to ~/.tinyclaw/tools/."
+          }
+        }
+      },
+      "CreateToolResponse": {
+        "type": "object",
+        "required": [
+          "tool"
+        ],
+        "properties": {
+          "tool": {
+            "$ref": "#/components/schemas/ToolSummary"
+          }
+        }
+      },
+      "AssignToolRequest": {
+        "type": "object",
+        "required": [
+          "toolId"
+        ],
+        "properties": {
+          "toolId": {
+            "type": "string"
+          }
+        }
+      },
+      "SoulFileStatus": {
+        "type": "object",
+        "required": [
+          "soul",
+          "style",
+          "skill",
+          "memory",
+          "examples"
+        ],
+        "properties": {
+          "soul": {
+            "type": "boolean"
+          },
+          "style": {
+            "type": "boolean"
+          },
+          "skill": {
+            "type": "boolean"
+          },
+          "memory": {
+            "type": "boolean"
+          },
+          "examples": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SoulStatusResponse": {
+        "type": "object",
+        "required": [
+          "directory",
+          "active",
+          "files"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "files": {
+            "$ref": "#/components/schemas/SoulFileStatus"
+          },
+          "contents": {
+            "$ref": "#/components/schemas/SoulStackFiles"
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "InitSoulResponse": {
+        "type": "object",
+        "required": [
+          "directory",
+          "created"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "created": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "SoulStackFiles": {
+        "type": "object",
+        "properties": {
+          "soul": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "memory": {
+            "type": "string"
+          },
+          "examples": {
+            "type": "string"
+          }
+        }
+      },
+      "SoulStackResponse": {
+        "type": "object",
+        "required": [
+          "directory",
+          "files",
+          "loaded"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "files": {
+            "$ref": "#/components/schemas/SoulStackFiles"
+          },
+          "loaded": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateSoulFileRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "AutomationTriggerManual": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "manual"
+          }
+        }
+      },
+      "AutomationTriggerSchedule": {
+        "type": "object",
+        "required": [
+          "type",
+          "cron"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "schedule"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      },
+      "AutomationStep": {
+        "type": "object",
+        "required": [
+          "id",
+          "tool",
+          "input"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "AutomationDefinition": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "prompt",
+          "trigger",
+          "steps",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "trigger": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AutomationTriggerManual"
+              },
+              {
+                "$ref": "#/components/schemas/AutomationTriggerSchedule"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutomationStep"
+            }
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "DraftAutomationRequest": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "channel"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/AgentChannel"
+          }
+        }
+      },
+      "DraftAutomationResponse": {
+        "type": "object",
+        "required": [
+          "automation"
+        ],
+        "properties": {
+          "automation": {
+            "$ref": "#/components/schemas/AutomationDefinition"
+          }
+        }
+      }
+    }
+  }
+}

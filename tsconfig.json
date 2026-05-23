@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@tinyclaw/agent": ["packages/agent/src/index.ts"],
+      "@tinyclaw/client": ["packages/client/src/index.ts"],
+      "@tinyclaw/core": ["packages/core/src/index.ts"],
+      "@tinyclaw/db": ["packages/db/src/index.ts"]
+    }
+  }
+}

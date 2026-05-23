@@ -1,0 +1,34 @@
+services:
+  server:
+    build: .
+    command: server
+    ports:
+      - "4310:4310"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TINYCLAW_MODEL: ${TINYCLAW_MODEL:-}
+    volumes:
+      - tinyclaw-data:/app/data
+      - tinyclaw-config:/root/.tinyclaw
+    restart: unless-stopped
+
+  cli:
+    build: .
+    command: cli
+    stdin_open: true
+    tty: true
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TINYCLAW_MODEL: ${TINYCLAW_MODEL:-}
+      TINYCLAW_SERVER_URL: http://server:4310
+    volumes:
+      - tinyclaw-data:/app/data
+      - tinyclaw-config:/root/.tinyclaw
+    depends_on:
+      - server
+
+volumes:
+  tinyclaw-data:
+  tinyclaw-config:

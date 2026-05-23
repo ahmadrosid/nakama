@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+coverage
+.DS_Store
+.env
+.env.*
+!.env.example
+
+data/sqlite/*
+!data/sqlite/.gitkeep
+packages/db/data/
+data/automations/*
+!data/automations/.gitkeep
+data/logs/*
+!data/logs/.gitkeep

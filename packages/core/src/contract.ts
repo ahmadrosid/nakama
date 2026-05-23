@@ -1,0 +1,300 @@
+export type AutomationTrigger =
+  | { type: "manual" }
+  | { type: "schedule"; cron: string; timezone?: string };
+
+export interface AutomationStep {
+  id: string;
+  tool: string;
+  input: Record<string, unknown>;
+}
+
+export interface AutomationDefinition {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  trigger: AutomationTrigger;
+  steps: AutomationStep[];
+  version: number;
+}
+
+export type AgentChannel = "web" | "cli" | "telegram";
+
+export const TINYCLAW_API_VERSION = 1;
+
+export interface HealthResponse {
+  ok: true;
+  apiVersion: typeof TINYCLAW_API_VERSION;
+  providerConfigured: boolean;
+}
+
+export interface CreateSessionRequest {
+  channel: AgentChannel;
+  profileId?: string;
+}
+
+export interface CreateSessionResponse {
+  sessionId: string;
+}
+
+export interface SessionMessagesResponse {
+  messages: ChatMessage[];
+}
+
+export interface SessionSummary {
+  id: string;
+  profileId: string;
+  channel: AgentChannel;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  preview: string | null;
+}
+
+export interface ListSessionsResponse {
+  sessions: SessionSummary[];
+}
+
+export interface SendMessageRequest {
+  message: string;
+  stream?: boolean;
+}
+
+export interface SendMessageResponse {
+  reply: string;
+}
+
+export type StreamEvent =
+  | { type: "chunk"; delta: string }
+  | {
+      type: "tool_start";
+      toolCallId: string;
+      tool: string;
+      input: Record<string, unknown>;
+    }
+  | {
+      type: "tool_end";
+      toolCallId: string;
+      tool: string;
+      result: unknown;
+    }
+  | { type: "done"; reply: string }
+  | { type: "error"; error: string };
+
+export interface DraftAutomationRequest {
+  prompt: string;
+  channel: AgentChannel;
+}
+
+export interface DraftAutomationResponse {
+  automation: AutomationDefinition;
+}
+
+export interface ApiErrorResponse {
+  error: string;
+}
+
+export interface ProviderModelOption {
+  id: string;
+  name: string;
+  provider: "openai" | "anthropic";
+  default?: boolean;
+}
+
+export interface ModelsResponse {
+  provider: "openai" | "anthropic" | null;
+  currentModel: string | null;
+  defaultModel: string | null;
+  models: ProviderModelOption[];
+}
+
+export interface SetModelRequest {
+  model: string;
+}
+
+export interface SetModelResponse {
+  provider: "openai" | "anthropic";
+  currentModel: string;
+}
+
+export interface ProfileSummary {
+  id: string;
+  name: string;
+  model: string | null;
+  isSuper: boolean;
+  toolCount: number;
+  soulActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProfileDetail extends ProfileSummary {
+  systemPrompt: string;
+  tools: ToolSummary[];
+}
+
+export interface ToolSummary {
+  id: string;
+  name: string;
+  description: string;
+  handlerType: string;
+}
+
+export interface ListProfilesResponse {
+  profiles: ProfileSummary[];
+}
+
+export interface ProfileResponse {
+  profile: ProfileDetail;
+}
+
+export interface CreateProfileRequest {
+  name: string;
+  systemPrompt?: string;
+  model?: string | null;
+  isSuper?: boolean;
+}
+
+export interface UpdateProfileRequest {
+  name?: string;
+  systemPrompt?: string;
+  model?: string | null;
+}
+
+export interface CreateToolRequest {
+  name: string;
+  description: string;
+  handlerType?: string;
+  handlerConfig?: unknown;
+}
+
+export interface ListToolsResponse {
+  tools: ToolSummary[];
+}
+
+export interface AssignToolRequest {
+  toolId: string;
+}
+
+import type { SoulFileStatus, SoulStackFiles } from "./soul/types";
+
+export type { SoulFileStatus, SoulStackFiles } from "./soul/types";
+
+export interface SoulStatusResponse {
+  directory: string;
+  active: boolean;
+  files: SoulFileStatus;
+  contents?: SoulStackFiles;
+  profileId?: string;
+}
+
+export interface InitSoulResponse {
+  directory: string;
+  created: string[];
+  profileId?: string;
+}
+
+export interface SoulStackResponse {
+  directory: string;
+  files: SoulStackFiles;
+  loaded: string[];
+  profileId?: string;
+}
+
+export interface UpdateSoulFileRequest {
+  content: string;
+}
+
+export type ProviderName = "openai" | "anthropic";
+
+export interface GenerateTextInput {
+  system: string;
+  prompt: string;
+}
+
+export interface JsonSchema {
+  type?: string;
+  description?: string;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: boolean | JsonSchema;
+  enum?: Array<string | number | boolean>;
+  items?: JsonSchema;
+}
+
+export interface LlmToolDefinition {
+  name: string;
+  description: string;
+  parameters: JsonSchema;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export type ChatMessage =
+  | { role: "user"; content: string }
+  | {
+      role: "assistant";
+      content: string;
+      toolCalls?: ToolCall[];
+      /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
+      providerContent?: unknown[];
+    }
+  | { role: "tool"; toolCallId: string; name: string; content: string };
+
+export interface ChatCompletionResult {
+  content: string;
+  toolCalls: ToolCall[];
+  assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
+}
+
+export interface ProviderChatOptions {
+  /** Use the active provider's hosted web search instead of executing web_search locally. */
+  webSearch?: boolean;
+}
+
+export interface GenerateChatInput {
+  system: string;
+  messages: ChatMessage[];
+  tools?: LlmToolDefinition[];
+  providerOptions?: ProviderChatOptions;
+}
+
+export interface StreamChatHandlers {
+  onChunk: (delta: string) => void;
+  onToolStart?: (event: {
+    toolCallId: string;
+    tool: string;
+    input: Record<string, unknown>;
+  }) => void;
+  onToolEnd?: (event: {
+    toolCallId: string;
+    tool: string;
+    result: unknown;
+  }) => void;
+}
+
+export interface ProviderClient {
+  name: ProviderName;
+  generateText(input: GenerateTextInput): Promise<string>;
+  generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
+  streamChat(
+    input: GenerateChatInput,
+    handlers: StreamChatHandlers,
+  ): Promise<ChatCompletionResult>;
+}
+
+export interface ToolContext {
+  automationId?: string;
+  userId?: string;
+}
+
+export interface ToolDefinition<Input = unknown, Output = unknown> {
+  name: string;
+  description: string;
+  parameters?: JsonSchema;
+  run(input: Input, context: ToolContext): Promise<Output>;
+}

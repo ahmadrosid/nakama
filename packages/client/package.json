@@ -1,0 +1,14 @@
+{
+  "name": "@tinyclaw/client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tinyclaw/core": "workspace:*"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist"
+  }
+}

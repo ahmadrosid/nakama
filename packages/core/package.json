@@ -1,0 +1,15 @@
+{
+  "name": "@tinyclaw/core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contract": "./src/contract.ts",
+    "./runtime": "./src/runtime.ts",
+    "./ensure-server": "./src/ensure-server.ts"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist",
+    "test": "bun test"
+  }
+}

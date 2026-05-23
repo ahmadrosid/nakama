@@ -1,0 +1,454 @@
+import type {
+  AgentChannel,
+  AssignToolRequest,
+  ChatMessage,
+  CreateProfileRequest,
+  CreateSessionResponse,
+  CreateToolRequest,
+  DraftAutomationResponse,
+  HealthResponse,
+  InitSoulResponse,
+  ListProfilesResponse,
+  ListToolsResponse,
+  ListSessionsResponse,
+  ModelsResponse,
+  ProfileResponse,
+  SendMessageResponse,
+  SessionMessagesResponse,
+  SetModelResponse,
+  SoulStackResponse,
+  SoulStatusResponse,
+  StreamEvent,
+  UpdateProfileRequest,
+  UpdateSoulFileRequest,
+  AutomationDefinition,
+} from "@tinyclaw/core/contract";
+import { resolveServerUrl } from "@tinyclaw/core/runtime";
+
+export interface TinyClawClientOptions {
+  baseUrl?: string;
+  fetch?: typeof fetch;
+}
+
+export type StreamHandler = (delta: string) => void;
+
+export interface StreamHandlers {
+  onChunk: StreamHandler;
+  onToolStart?: (event: {
+    toolCallId: string;
+    tool: string;
+    input: Record<string, unknown>;
+  }) => void;
+  onToolEnd?: (event: {
+    toolCallId: string;
+    tool: string;
+    result: unknown;
+  }) => void;
+}
+
+export interface RemoteChatSession {
+  id: string;
+  send(message: string): Promise<string>;
+  sendStream(message: string, handler: StreamHandler | StreamHandlers): Promise<string>;
+  clear(): Promise<void>;
+  purge(): Promise<void>;
+  getMessages(): Promise<ChatMessage[]>;
+  createAutomation(prompt: string): Promise<AutomationDefinition>;
+}
+
+export class TinyClawClient {
+  readonly baseUrl: string;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: TinyClawClientOptions = {}) {
+    this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
+    const fetchFn = options.fetch ?? fetch;
+    this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
+  }
+
+  async health(): Promise<HealthResponse> {
+    return this.request<HealthResponse>("/health");
+  }
+
+  async getModels(): Promise<ModelsResponse> {
+    return this.request<ModelsResponse>("/v1/models");
+  }
+
+  async setModel(model: string): Promise<SetModelResponse> {
+    return this.request<SetModelResponse>("/v1/settings/model", {
+      method: "PUT",
+      body: JSON.stringify({ model }),
+    });
+  }
+
+  async createSession(
+    channel: AgentChannel,
+    options: { profileId?: string } = {},
+  ): Promise<RemoteChatSession> {
+    const response = await this.request<CreateSessionResponse>("/v1/sessions", {
+      method: "POST",
+      body: JSON.stringify({ channel, profileId: options.profileId }),
+    });
+
+    return this.createChatSession(response.sessionId, channel);
+  }
+
+  async getSessionMessages(sessionId: string): Promise<SessionMessagesResponse> {
+    return this.request<SessionMessagesResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+    );
+  }
+
+  async listSessions(
+    profileId: string,
+    channel: AgentChannel = "web",
+  ): Promise<ListSessionsResponse> {
+    const query = new URLSearchParams({ profileId, channel });
+    return this.request<ListSessionsResponse>(`/v1/sessions?${query.toString()}`);
+  }
+
+  async listProfiles(): Promise<ListProfilesResponse> {
+    return this.request<ListProfilesResponse>("/v1/profiles");
+  }
+
+  async getProfile(profileId: string): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(`/v1/profiles/${encodeURIComponent(profileId)}`);
+  }
+
+  async createProfile(request: CreateProfileRequest): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>("/v1/profiles", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async updateProfile(
+    profileId: string,
+    request: UpdateProfileRequest,
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async deleteProfile(profileId: string): Promise<void> {
+    await this.request(`/v1/profiles/${encodeURIComponent(profileId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listTools(): Promise<ListToolsResponse> {
+    return this.request<ListToolsResponse>("/v1/tools");
+  }
+
+  async createTool(request: CreateToolRequest) {
+    return this.request<{ tool: ListToolsResponse["tools"][number] }>("/v1/tools", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async deleteTool(toolId: string): Promise<void> {
+    await this.request(`/v1/tools/${encodeURIComponent(toolId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async assignTool(profileId: string, request: AssignToolRequest): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/tools`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async unassignTool(profileId: string, toolId: string): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/tools/${encodeURIComponent(toolId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+  }
+
+  async getSoulStatus(options: { includeContents?: boolean } = {}): Promise<SoulStatusResponse> {
+    const query = options.includeContents ? "?contents=true" : "";
+    return this.request<SoulStatusResponse>(`/v1/soul${query}`);
+  }
+
+  async initSoul(): Promise<InitSoulResponse> {
+    return this.request<InitSoulResponse>("/v1/soul/init", {
+      method: "POST",
+    });
+  }
+
+  async getProfileSoulStatus(
+    profileId: string,
+    options: { includeContents?: boolean } = {},
+  ): Promise<SoulStatusResponse> {
+    const query = options.includeContents ? "?contents=true" : "";
+    return this.request<SoulStatusResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul${query}`,
+    );
+  }
+
+  async initProfileSoul(profileId: string): Promise<InitSoulResponse> {
+    return this.request<InitSoulResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul/init`,
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  async getSoulStack(): Promise<SoulStackResponse> {
+    return this.request<SoulStackResponse>("/v1/soul/stack");
+  }
+
+  async getProfileSoulStack(profileId: string): Promise<SoulStackResponse> {
+    return this.request<SoulStackResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul/stack`,
+    );
+  }
+
+  async writeSoulFile(fileKey: string, content: string): Promise<void> {
+    await this.request(`/v1/soul/files/${encodeURIComponent(fileKey)}`, {
+      method: "PUT",
+      body: JSON.stringify({ content } satisfies UpdateSoulFileRequest),
+    });
+  }
+
+  async writeProfileSoulFile(
+    profileId: string,
+    fileKey: string,
+    content: string,
+  ): Promise<void> {
+    await this.request(
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul/files/${encodeURIComponent(fileKey)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ content } satisfies UpdateSoulFileRequest),
+      },
+    );
+  }
+
+  createChatSession(sessionId: string, channel: AgentChannel): RemoteChatSession {
+    return {
+      id: sessionId,
+      send: async (message: string) => {
+        const response = await this.request<SendMessageResponse>(
+          `/v1/sessions/${sessionId}/messages`,
+          {
+            method: "POST",
+            body: JSON.stringify({ message }),
+          },
+        );
+
+        return response.reply;
+      },
+      sendStream: async (message: string, handler: StreamHandler | StreamHandlers) => {
+        const handlers = normalizeStreamHandlers(handler);
+        const response = await this.fetchImpl(
+          `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify({ message, stream: true }),
+          },
+        );
+
+        if (!response.ok) {
+          let errorMessage = `Request failed (${response.status})`;
+
+          try {
+            const payload = (await response.json()) as { error?: string };
+            errorMessage = payload.error ?? errorMessage;
+          } catch {
+            // ignore parse errors
+          }
+
+          throw new Error(errorMessage);
+        }
+
+        if (!response.body) {
+          throw new Error("Server returned an empty stream.");
+        }
+
+        return readStreamEvents(response.body, handlers);
+      },
+      clear: async () => {
+        await this.request(`/v1/sessions/${sessionId}`, {
+          method: "DELETE",
+        });
+      },
+      purge: async () => {
+        await this.request(`/v1/sessions/${sessionId}?purge=true`, {
+          method: "DELETE",
+        });
+      },
+      getMessages: async () => {
+        const response = await this.getSessionMessages(sessionId);
+        return response.messages;
+      },
+      createAutomation: async (prompt: string) => {
+        const response = await this.request<DraftAutomationResponse>(
+          "/v1/automations/draft",
+          {
+            method: "POST",
+            body: JSON.stringify({ prompt, channel }),
+          },
+        );
+
+        return response.automation;
+      },
+    };
+  }
+
+  async draftAutomation(
+    prompt: string,
+    channel: AgentChannel,
+  ): Promise<AutomationDefinition> {
+    const response = await this.request<DraftAutomationResponse>(
+      "/v1/automations/draft",
+      {
+        method: "POST",
+        body: JSON.stringify({ prompt, channel }),
+      },
+    );
+
+    return response.automation;
+  }
+
+  private async request<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      let message = `Request failed (${response.status})`;
+
+      try {
+        const payload = (await response.json()) as { error?: string };
+        message = payload.error ?? message;
+      } catch {
+        // ignore parse errors
+      }
+
+      throw new Error(message);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return (await response.json()) as T;
+  }
+}
+
+async function readStreamEvents(
+  body: ReadableStream<Uint8Array>,
+  handlers: StreamHandlers,
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    while (true) {
+      const boundary = buffer.indexOf("\n\n");
+
+      if (boundary < 0) {
+        break;
+      }
+
+      const eventBlock = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      for (const line of eventBlock.split("\n")) {
+        if (!line.startsWith("data: ")) {
+          continue;
+        }
+
+        const payload = JSON.parse(line.slice(6)) as StreamEvent;
+
+        if (payload.type === "chunk") {
+          handlers.onChunk(payload.delta);
+          reply += payload.delta;
+        }
+
+        if (payload.type === "tool_start") {
+          handlers.onToolStart?.({
+            toolCallId: payload.toolCallId,
+            tool: payload.tool,
+            input: payload.input,
+          });
+        }
+
+        if (payload.type === "tool_end") {
+          handlers.onToolEnd?.({
+            toolCallId: payload.toolCallId,
+            tool: payload.tool,
+            result: payload.result,
+          });
+        }
+
+        if (payload.type === "done") {
+          return payload.reply;
+        }
+
+        if (payload.type === "error") {
+          throw new Error(payload.error);
+        }
+      }
+    }
+  }
+
+  if (!reply) {
+    throw new Error("Stream ended without a response.");
+  }
+
+  return reply;
+}
+
+function normalizeStreamHandlers(
+  handler: StreamHandler | StreamHandlers,
+): StreamHandlers {
+  if (typeof handler === "function") {
+    return { onChunk: handler };
+  }
+
+  return handler;
+}
+
+export function createClient(options?: TinyClawClientOptions): TinyClawClient {
+  return new TinyClawClient(options);
+}
+
+export function getServerUrl(): string {
+  return resolveServerUrl();
+}
