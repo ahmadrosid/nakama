@@ -15,3 +15,4 @@ data/automations/*
 data/logs/*
 !data/logs/.gitkeep
 .agents/
+apps/data/*
