@@ -42,7 +42,9 @@ describe("AutomationService", () => {
       cron: "0 8 * * *",
       timezone: "Asia/Jakarta",
     });
-    expect(automation.nextRunAt).toBeString();
+    expect(automation.nextRunAt).toBe(
+      service.computeNextRunAt(automation.trigger, "Asia/Jakarta"),
+    );
   });
 });
 

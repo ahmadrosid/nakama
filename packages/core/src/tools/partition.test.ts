@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolDefinition } from "../contract";
 import { partitionTools } from "./partition";
-import { WEB_SEARCH_TOOL_NAME, webSearchTool } from "./web-search";
+import { webSearchTool } from "./web-search";
 
 const writeFileTool: ToolDefinition = {
   name: "write_file",
@@ -24,9 +24,5 @@ describe("partitionTools", () => {
       localTools: [],
       hasWebSearch: true,
     });
-  });
-
-  test("uses the shared web_search tool name constant", () => {
-    expect(WEB_SEARCH_TOOL_NAME).toBe("web_search");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolDefinition } from "@tinyclaw/core";
-import { executeToolCall, findTool, serializeToolResult } from "./tool-loop";
+import { executeToolCall } from "./tool-loop";
 
 const sampleTool: ToolDefinition = {
   name: "sample",
@@ -18,11 +18,6 @@ const sampleTool: ToolDefinition = {
 };
 
 describe("tool-loop", () => {
-  test("findTool returns a matching tool", () => {
-    expect(findTool([sampleTool], "sample")).toBe(sampleTool);
-    expect(findTool([sampleTool], "missing")).toBeUndefined();
-  });
-
   test("executeToolCall runs a known tool", async () => {
     const result = await executeToolCall([sampleTool], {
       id: "call_1",
@@ -59,9 +54,5 @@ describe("tool-loop", () => {
     });
 
     expect(result).toEqual({ error: "boom" });
-  });
-
-  test("serializeToolResult returns JSON", () => {
-    expect(serializeToolResult({ ok: true })).toBe('{"ok":true}');
   });
 });

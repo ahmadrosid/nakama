@@ -1,4 +1,4 @@
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter, DEFAULT_PROFILE_ID } from "@tinyclaw/db";
 import { AutomationScheduler } from "./automation-scheduler";
 import { AutomationService } from "./automation-service";
@@ -43,9 +43,13 @@ describe("AutomationScheduler", () => {
     );
 
     await scheduler.start();
-    await scheduler.reload();
+    expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 1 });
+
     await service.update(automation.id, { enabled: false });
     await scheduler.reload();
+    expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 0 });
+
     scheduler.stop();
+    expect(scheduler.getStatus()).toEqual({ running: false, scheduledJobs: 0 });
   });
 });

@@ -38,9 +38,10 @@ describe("splitIntoChatBubbles", () => {
     const text = "First paragraph.\n\nSecond paragraph.\n\nThird.";
     const bubbles = splitIntoChatBubbles(text, 40);
 
-    expect(bubbles.length).toBeGreaterThan(1);
-    expect(bubbles.join(" ")).toContain("First paragraph.");
-    expect(bubbles.join(" ")).toContain("Third.");
+    expect(bubbles).toEqual([
+      "First paragraph.\n\nSecond paragraph.",
+      "Third.",
+    ]);
   });
 
   test("splits long paragraphs by words", () => {
@@ -49,7 +50,7 @@ describe("splitIntoChatBubbles", () => {
 
     expect(bubbles.length).toBeGreaterThan(1);
     for (const bubble of bubbles) {
-      expect(bubble.length).toBeLessThanOrEqual(4096);
+      expect(bubble.length).toBeLessThanOrEqual(50);
     }
   });
 });
