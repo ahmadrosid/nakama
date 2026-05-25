@@ -62,9 +62,12 @@ When the model needs a tool, the server sends **native tool definitions** to Ope
 
 ## Automations
 
-- Draft automations from natural language (`/create` in CLI)
-- LLM returns a JSON automation with steps that reference tools
-- **Not executed yet** — drafting only
+- Create automations from chat using the `create_automation` tool
+- Draft automations from natural language (`/create` in CLI or Automations page)
+- Save, edit, enable/disable, and delete automations via API or web UI
+- Run automations manually or on a timezone-aware cron schedule
+- Each run re-executes the stored prompt through the agent so it can choose tools dynamically
+- Run history is stored in SQLite
 
 ## Storage
 

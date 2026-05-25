@@ -71,6 +71,16 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/system/status": {
+        get: {
+          tags: ["Health"],
+          summary: "System status",
+          operationId: "getSystemStatus",
+          responses: {
+            "200": jsonResponse("SystemStatusResponse", "Server and automation worker status"),
+          },
+        },
+      },
       "/openapi.json": {
         get: {
           tags: ["Health"],
@@ -118,6 +128,27 @@ export function buildOpenApiSpec() {
           requestBody: jsonBody("ConfigureProviderRequest"),
           responses: {
             "200": jsonResponse("ConfigureProviderResponse", "Provider configured"),
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/settings/timezone": {
+        get: {
+          tags: ["Models"],
+          summary: "Get the user timezone",
+          operationId: "getTimezone",
+          responses: {
+            "200": jsonResponse("TimezoneSettingsResponse", "Timezone settings"),
+            "500": errorResponse,
+          },
+        },
+        put: {
+          tags: ["Models"],
+          summary: "Update the user timezone",
+          operationId: "setTimezone",
+          requestBody: jsonBody("UpdateTimezoneRequest"),
+          responses: {
+            "200": jsonResponse("TimezoneSettingsResponse", "Timezone updated"),
             "500": errorResponse,
           },
         },
@@ -473,6 +504,90 @@ export function buildOpenApiSpec() {
           requestBody: jsonBody("DraftAutomationRequest"),
           responses: {
             "200": jsonResponse("DraftAutomationResponse", "Automation draft"),
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/automations": {
+        get: {
+          tags: ["Automations"],
+          summary: "List saved automations",
+          operationId: "listAutomations",
+          responses: {
+            "200": jsonResponse("ListAutomationsResponse", "Saved automations"),
+            "500": errorResponse,
+          },
+        },
+        post: {
+          tags: ["Automations"],
+          summary: "Create a saved automation",
+          operationId: "createAutomation",
+          requestBody: jsonBody("CreateAutomationRequest"),
+          responses: {
+            "201": jsonResponse("AutomationResponse", "Automation created"),
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/automations/{automationId}": {
+        get: {
+          tags: ["Automations"],
+          summary: "Get a saved automation",
+          operationId: "getAutomation",
+          parameters: [{ $ref: "#/components/parameters/AutomationId" }],
+          responses: {
+            "200": jsonResponse("AutomationResponse", "Automation"),
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        put: {
+          tags: ["Automations"],
+          summary: "Update a saved automation",
+          operationId: "updateAutomation",
+          parameters: [{ $ref: "#/components/parameters/AutomationId" }],
+          requestBody: jsonBody("UpdateAutomationRequest"),
+          responses: {
+            "200": jsonResponse("AutomationResponse", "Automation updated"),
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        delete: {
+          tags: ["Automations"],
+          summary: "Delete a saved automation",
+          operationId: "deleteAutomation",
+          parameters: [{ $ref: "#/components/parameters/AutomationId" }],
+          responses: {
+            "204": { description: "Automation deleted" },
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/automations/{automationId}/run": {
+        post: {
+          tags: ["Automations"],
+          summary: "Run an automation now",
+          operationId: "runAutomation",
+          parameters: [{ $ref: "#/components/parameters/AutomationId" }],
+          responses: {
+            "200": jsonResponse("RunAutomationResponse", "Automation run"),
+            "404": errorResponse,
+            "409": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/automations/{automationId}/runs": {
+        get: {
+          tags: ["Automations"],
+          summary: "List automation run history",
+          operationId: "listAutomationRuns",
+          parameters: [{ $ref: "#/components/parameters/AutomationId" }],
+          responses: {
+            "200": jsonResponse("ListAutomationRunsResponse", "Automation runs"),
+            "404": errorResponse,
             "500": errorResponse,
           },
         },

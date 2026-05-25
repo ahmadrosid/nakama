@@ -8,6 +8,18 @@ export interface UserProviderConfig {
   provider: UserProviderName;
   apiKey: string;
   model?: string;
+  timezone?: string;
+}
+
+export const DEFAULT_TIMEZONE = "UTC";
+
+export function isValidTimezone(timezone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function inferProviderFromApiKey(apiKey: string): UserProviderName {
@@ -33,7 +45,7 @@ export async function loadUserConfig(): Promise<UserProviderConfig | null> {
     const apiKey = values.api_key?.trim();
 
     if (!apiKey) {
-      return null;
+      return loadTimezoneOnlyConfig(values);
     }
 
     const model = values.model?.trim();
@@ -42,15 +54,55 @@ export async function loadUserConfig(): Promise<UserProviderConfig | null> {
       configuredProvider === "openai" || configuredProvider === "anthropic"
         ? configuredProvider
         : inferProviderFromApiKey(apiKey);
+    const timezone = readTimezone(values);
 
     return {
       provider,
       apiKey,
       ...(model ? { model } : {}),
+      ...(timezone ? { timezone } : {}),
     };
   } catch {
     return null;
   }
+}
+
+export async function loadUserTimezone(): Promise<string> {
+  try {
+    const raw = await readFile(getUserConfigPath(), "utf8");
+    const values = parseIni(raw);
+    return readTimezone(values) ?? DEFAULT_TIMEZONE;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+}
+
+export async function saveUserTimezone(timezone: string): Promise<void> {
+  const trimmed = timezone.trim();
+
+  if (!trimmed || !isValidTimezone(trimmed)) {
+    throw new Error(`Invalid timezone: ${timezone}`);
+  }
+
+  const existing = await loadUserConfig();
+
+  if (existing?.apiKey) {
+    await saveUserConfig({ ...existing, timezone: trimmed });
+    return;
+  }
+
+  const dir = getUserConfigDir();
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+
+  const lines = [
+    "# TinyClaw user config",
+    `timezone=${trimmed}`,
+    "",
+  ];
+
+  const path = getUserConfigPath();
+  await writeFile(path, lines.join("\n"), { encoding: "utf8", mode: 0o600 });
+  await chmod(path, 0o600);
 }
 
 export async function saveUserConfig(config: UserProviderConfig): Promise<void> {
@@ -62,12 +114,32 @@ export async function saveUserConfig(config: UserProviderConfig): Promise<void> 
     `provider=${config.provider}`,
     `api_key=${config.apiKey}`,
     `model=${config.model ?? ""}`,
+    ...(config.timezone ? [`timezone=${config.timezone}`] : []),
     "",
   ];
 
   const path = getUserConfigPath();
   await writeFile(path, lines.join("\n"), { encoding: "utf8", mode: 0o600 });
   await chmod(path, 0o600);
+}
+
+function loadTimezoneOnlyConfig(values: Record<string, string>): UserProviderConfig | null {
+  const timezone = readTimezone(values);
+
+  if (!timezone) {
+    return null;
+  }
+
+  return {
+    provider: "openai",
+    apiKey: "",
+    timezone,
+  };
+}
+
+function readTimezone(values: Record<string, string>): string | undefined {
+  const timezone = values.timezone?.trim();
+  return timezone && isValidTimezone(timezone) ? timezone : undefined;
 }
 
 function parseIni(raw: string): Record<string, string> {

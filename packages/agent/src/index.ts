@@ -62,6 +62,13 @@ export function createAgentHarness(
 
 export * from "./automation";
 export {
+  isValidCronExpression,
+  resolveScheduleTimezone,
+  validateAutomationInput,
+  validateTimezone,
+} from "./automation/validate";
+export * from "./automation/validate";
+export {
   createAgentChatSession,
   getLastUserMessage,
   type AgentChatSession,

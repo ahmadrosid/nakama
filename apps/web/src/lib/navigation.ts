@@ -1,4 +1,12 @@
-export type PageId = "chat" | "history" | "profiles" | "tools" | "soul" | "automations" | "settings";
+export type PageId =
+  | "status"
+  | "chat"
+  | "history"
+  | "profiles"
+  | "tools"
+  | "soul"
+  | "automations"
+  | "settings";
 
 export interface NavItem {
   id: PageId;
@@ -7,6 +15,11 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  {
+    id: "status",
+    label: "Status",
+    description: "Server and automation worker health",
+  },
   {
     id: "chat",
     label: "Chat",

@@ -25,7 +25,7 @@ import type {
   UserProviderConfig,
   type ProviderClient,
 } from "@tinyclaw/core";
-import { createId, inferProviderFromApiKey, readEnvValue, saveUserConfig } from "@tinyclaw/core";
+import { createId, inferProviderFromApiKey, loadUserTimezone, readEnvValue, saveUserConfig, saveUserTimezone } from "@tinyclaw/core";
 import {
   DEFAULT_PROFILE_ID,
   SUPER_BOT_PROFILE_ID,
@@ -42,6 +42,7 @@ import {
   resolveModel,
 } from "../providers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
+import type { AutomationRunner } from "./automation-runner";
 import { ProfileService } from "./profile-service";
 import { SoulService } from "./soul-service";
 import { resolveToolsFromStorage } from "./tool-resolver";
@@ -60,6 +61,8 @@ export class AgentService {
   private readonly profileService: ProfileService;
   private readonly soulService: SoulService;
   private readonly superBotTools: ToolDefinition[];
+  private automationTools: ToolDefinition[] = [];
+  private automationRunner: AutomationRunner | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private _providerConfigured: boolean;
 
@@ -79,6 +82,62 @@ export class AgentService {
 
   get profiles(): ProfileService {
     return this.profileService;
+  }
+
+  setAutomationTools(tools: ToolDefinition[]): void {
+    this.automationTools = tools;
+    this.sessions.clear();
+  }
+
+  setAutomationRunner(runner: AutomationRunner): void {
+    this.automationRunner = runner;
+  }
+
+  async getUserTimezone(): Promise<string> {
+    return this.userConfig?.timezone ?? loadUserTimezone();
+  }
+
+  async setUserTimezone(timezone: string): Promise<string> {
+    await saveUserTimezone(timezone);
+
+    if (this.userConfig) {
+      this.userConfig = { ...this.userConfig, timezone };
+    }
+
+    return timezone;
+  }
+
+  async runAutomationPrompt(profileId: string, prompt: string): Promise<string> {
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const profile = await this.requireProfile(profileId);
+    const tools = await this.resolveProfileTools(profile, { includeAutomationTools: false });
+    const soulStack = await this.soulService.resolveSoulStack(profileId);
+    const systemPrompt = soulStack
+      ? await this.soulService.resolveSystemPrompt(profileId, profile.systemPrompt)
+      : profile.systemPrompt;
+    const userTimezone = await this.getUserTimezone();
+
+    const session = this.harness.createChatSession({
+      channel: "automation",
+      tools,
+      systemPrompt,
+      enableToolLoop: true,
+      soul: soulStack !== null,
+      userTimezone,
+    });
+
+    return session.send(prompt);
+  }
+
+  async runAutomation(automationId: string) {
+    if (!this.automationRunner) {
+      throw new Error("Automation runner is not configured.");
+    }
+
+    return this.automationRunner.run(automationId);
   }
 
   get providerConfigured(): boolean {
@@ -450,12 +509,20 @@ export class AgentService {
     return profile;
   }
 
-  private async resolveProfileTools(profile: StoredProfileRecord): Promise<ToolDefinition[]> {
+  private async resolveProfileTools(
+    profile: StoredProfileRecord,
+    options: { includeAutomationTools?: boolean } = {},
+  ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveToolsFromStorage(storedTools);
+    const includeAutomationTools = options.includeAutomationTools ?? true;
 
     if (profile.isSuper) {
       return [...tools, ...this.superBotTools];
+    }
+
+    if (includeAutomationTools && this.automationTools.length > 0) {
+      return [...tools, ...this.automationTools];
     }
 
     return tools;
@@ -476,6 +543,7 @@ export class AgentService {
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
       : systemPrompt;
     const initialHistory = await loadSessionHistory(this.db, sessionId);
+    const userTimezone = await this.getUserTimezone();
 
     const session = this.harness.createChatSession({
       channel,
@@ -484,6 +552,11 @@ export class AgentService {
       enableToolLoop: true,
       soul: soulStack !== null,
       initialHistory,
+      userTimezone,
+      toolContext: {
+        profileId,
+        sessionId,
+      },
     });
 
     return wrapPersistedSession(sessionId, session, this.db);
@@ -491,7 +564,7 @@ export class AgentService {
 }
 
 function parseAgentChannel(value: string): AgentChannel | null {
-  if (value === "cli" || value === "web" || value === "telegram") {
+  if (value === "cli" || value === "web" || value === "telegram" || value === "automation") {
     return value;
   }
 

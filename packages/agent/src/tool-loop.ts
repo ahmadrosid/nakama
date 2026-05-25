@@ -10,6 +10,7 @@ export function findTool(
 export async function executeToolCall(
   tools: ToolDefinition[],
   call: ToolCall,
+  context: ToolContext = {},
 ): Promise<unknown> {
   const tool = findTool(tools, call.name);
 
@@ -18,7 +19,7 @@ export async function executeToolCall(
   }
 
   try {
-    return await tool.run(call.arguments, {});
+    return await tool.run(call.arguments, context);
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),

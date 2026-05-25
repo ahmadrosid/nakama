@@ -72,6 +72,11 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState("");
   const [modelSaveHint, setModelSaveHint] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const [timezoneBusy, setTimezoneBusy] = useState(false);
+  const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
 
   const isConfigured = health?.providerConfigured === true && models != null;
 
@@ -271,6 +276,31 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
     clearFieldErrors();
   }, [clearFieldErrors, models?.provider]);
 
+  useEffect(() => {
+    void client
+      .getTimezone()
+      .then((value) => setTimezone(value))
+      .catch(() => {
+        // keep browser default
+      });
+  }, []);
+
+  const handleSaveTimezone = useCallback(async () => {
+    setTimezoneBusy(true);
+    setFormError(null);
+    setTimezoneHint(null);
+
+    try {
+      const saved = await client.setTimezone(timezone.trim());
+      setTimezone(saved);
+      setTimezoneHint(`Saved · ${saved}`);
+    } catch (err) {
+      setFormError(formatError(err));
+    } finally {
+      setTimezoneBusy(false);
+    }
+  }, [timezone]);
+
   const handleSaveModel = useCallback(async () => {
     if (!modelDraft || modelDraft === models?.currentModel) {
       return;
@@ -462,6 +492,59 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
               onSubmitReplaceKey={(event) => void handleSubmitCredentials(event, "replace")}
             />
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Timezone</CardTitle>
+          <CardDescription>
+            Used for scheduled automations when no timezone is specified on the automation itself.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="timezone" className="text-sm font-medium text-foreground">
+              IANA timezone
+            </label>
+            <InputGroup>
+              <InputGroupInput
+                id="timezone"
+                value={timezone}
+                disabled={timezoneBusy}
+                placeholder="America/Los_Angeles"
+                onChange={(event) => {
+                  setTimezone(event.target.value);
+                  setTimezoneHint(null);
+                }}
+              />
+            </InputGroup>
+            <p className="text-xs text-muted-foreground">
+              Browser default: {Intl.DateTimeFormat().resolvedOptions().timeZone}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              disabled={timezoneBusy || !timezone.trim()}
+              onClick={() => void handleSaveTimezone()}
+            >
+              {timezoneBusy ? (
+                <>
+                  <Spinner className="mr-2" />
+                  Saving…
+                </>
+              ) : (
+                "Save timezone"
+              )}
+            </Button>
+            {timezoneHint ? (
+              <p className="text-sm text-emerald-200" role="status">
+                {timezoneHint}
+              </p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

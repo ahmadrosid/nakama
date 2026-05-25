@@ -55,6 +55,23 @@ CREATE TABLE IF NOT EXISTS automations (
   name TEXT NOT NULL,
   version INTEGER NOT NULL,
   definition TEXT NOT NULL,
+  profile_id TEXT NOT NULL DEFAULT 'profile_default',
+  enabled INTEGER DEFAULT 1 NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS automation_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  automation_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  output TEXT,
+  error TEXT,
+  FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS automation_runs_automation_started
+  ON automation_runs (automation_id, started_at DESC);

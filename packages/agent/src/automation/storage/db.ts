@@ -1,26 +1,30 @@
 import type { DatabaseAdapter, StoredAutomationRecord } from "@tinyclaw/db";
-import type { AutomationDefinition } from "@tinyclaw/core";
+import type { AutomationDefinition, StoredAutomation } from "@tinyclaw/core";
 import type { AutomationStore } from "./index";
 
 export class DatabaseAutomationStore implements AutomationStore {
   constructor(private readonly db: DatabaseAdapter) {}
 
-  async list(): Promise<AutomationDefinition[]> {
+  async list(): Promise<StoredAutomation[]> {
     const records = await this.db.listAutomations();
     return records.map(fromRecord);
   }
 
-  async get(id: string): Promise<AutomationDefinition | null> {
+  async get(id: string): Promise<StoredAutomation | null> {
     const record = await this.db.getAutomation(id);
     return record ? fromRecord(record) : null;
   }
 
-  async save(definition: AutomationDefinition): Promise<void> {
+  async save(definition: StoredAutomation): Promise<void> {
     await this.db.upsertAutomation(toRecord(definition));
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.db.deleteAutomation(id);
   }
 }
 
-function fromRecord(record: StoredAutomationRecord): AutomationDefinition {
+function fromRecord(record: StoredAutomationRecord): StoredAutomation {
   const definition = record.definition as Partial<AutomationDefinition> | undefined;
 
   return {
@@ -31,18 +35,30 @@ function fromRecord(record: StoredAutomationRecord): AutomationDefinition {
     trigger: definition?.trigger ?? { type: "manual" },
     steps: definition?.steps ?? [],
     version: definition?.version ?? record.version,
+    profileId: record.profileId,
+    enabled: record.enabled,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
 }
 
-function toRecord(definition: AutomationDefinition): StoredAutomationRecord {
+function toRecord(definition: StoredAutomation): StoredAutomationRecord {
   const now = new Date().toISOString();
 
   return {
     id: definition.id,
     name: definition.name,
     version: definition.version,
-    definition,
-    createdAt: now,
+    definition: {
+      description: definition.description,
+      prompt: definition.prompt,
+      trigger: definition.trigger,
+      steps: definition.steps,
+      version: definition.version,
+    },
+    profileId: definition.profileId,
+    enabled: definition.enabled,
+    createdAt: definition.createdAt ?? now,
     updatedAt: now,
   };
 }

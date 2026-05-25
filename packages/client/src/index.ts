@@ -24,7 +24,23 @@ import type {
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   AutomationDefinition,
+  AutomationRunRecord,
+  CreateAutomationRequest,
+  ListAutomationRunsResponse,
+  ListAutomationsResponse,
+  AutomationResponse,
+  RunAutomationResponse,
+  StoredAutomation,
+  SystemStatusResponse,
+  TimezoneSettingsResponse,
+  UpdateAutomationRequest,
+  UpdateTimezoneRequest,
 } from "@tinyclaw/core/contract";
+import {
+  formatClientError,
+  readApiErrorMessage,
+  TinyClawApiError,
+} from "@tinyclaw/core/api-error";
 import { resolveServerUrl } from "@tinyclaw/core/runtime";
 
 export interface TinyClawClientOptions {
@@ -70,6 +86,10 @@ export class TinyClawClient {
 
   async health(): Promise<HealthResponse> {
     return this.request<HealthResponse>("/health");
+  }
+
+  async getSystemStatus(): Promise<SystemStatusResponse> {
+    return this.request<SystemStatusResponse>("/v1/system/status");
   }
 
   async getModels(): Promise<ModelsResponse> {
@@ -278,16 +298,7 @@ export class TinyClawClient {
         );
 
         if (!response.ok) {
-          let errorMessage = `Request failed (${response.status})`;
-
-          try {
-            const payload = (await response.json()) as { error?: string };
-            errorMessage = payload.error ?? errorMessage;
-          } catch {
-            // ignore parse errors
-          }
-
-          throw new Error(errorMessage);
+          throw await createApiError(response, `/v1/sessions/${sessionId}/messages`);
         }
 
         if (!response.body) {
@@ -339,6 +350,74 @@ export class TinyClawClient {
     return response.automation;
   }
 
+  async listAutomations(): Promise<StoredAutomation[]> {
+    const response = await this.request<ListAutomationsResponse>("/v1/automations");
+    return response.automations;
+  }
+
+  async getAutomation(automationId: string): Promise<StoredAutomation> {
+    const response = await this.request<AutomationResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}`,
+    );
+    return response.automation;
+  }
+
+  async createAutomation(request: CreateAutomationRequest): Promise<StoredAutomation> {
+    const response = await this.request<AutomationResponse>("/v1/automations", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    return response.automation;
+  }
+
+  async updateAutomation(
+    automationId: string,
+    request: UpdateAutomationRequest,
+  ): Promise<StoredAutomation> {
+    const response = await this.request<AutomationResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(request),
+      },
+    );
+    return response.automation;
+  }
+
+  async deleteAutomation(automationId: string): Promise<void> {
+    await this.request(`/v1/automations/${encodeURIComponent(automationId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async runAutomation(automationId: string): Promise<AutomationRunRecord> {
+    const response = await this.request<RunAutomationResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}/run`,
+      { method: "POST" },
+    );
+    return response.run;
+  }
+
+  async listAutomationRuns(automationId: string): Promise<AutomationRunRecord[]> {
+    const response = await this.request<ListAutomationRunsResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}/runs`,
+    );
+    return response.runs;
+  }
+
+  async getTimezone(): Promise<string> {
+    const response = await this.request<TimezoneSettingsResponse>("/v1/settings/timezone");
+    return response.timezone;
+  }
+
+  async setTimezone(timezone: string): Promise<string> {
+    const response = await this.request<TimezoneSettingsResponse>("/v1/settings/timezone", {
+      method: "PUT",
+      body: JSON.stringify({ timezone } satisfies UpdateTimezoneRequest),
+    });
+    return response.timezone;
+  }
+
   private async request<T>(
     path: string,
     init?: RequestInit,
@@ -352,16 +431,7 @@ export class TinyClawClient {
     });
 
     if (!response.ok) {
-      let message = `Request failed (${response.status})`;
-
-      try {
-        const payload = (await response.json()) as { error?: string };
-        message = payload.error ?? message;
-      } catch {
-        // ignore parse errors
-      }
-
-      throw new Error(message);
+      throw await createApiError(response, path);
     }
 
     if (response.status === 204) {
@@ -462,4 +532,11 @@ export function createClient(options?: TinyClawClientOptions): TinyClawClient {
 
 export function getServerUrl(): string {
   return resolveServerUrl();
+}
+
+export { formatClientError as formatError, TinyClawApiError } from "@tinyclaw/core/api-error";
+
+async function createApiError(response: Response, path: string): Promise<TinyClawApiError> {
+  const message = await readApiErrorMessage(response);
+  return new TinyClawApiError(message, response.status, path);
 }

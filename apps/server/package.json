@@ -5,12 +5,14 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "test": "bun test",
     "openapi:generate": "bun run scripts/generate-openapi.ts",
     "dev:docs": "bun run scripts/serve-docs.ts"
   },
   "dependencies": {
     "@tinyclaw/agent": "workspace:*",
     "@tinyclaw/core": "workspace:*",
-    "@tinyclaw/db": "workspace:*"
+    "@tinyclaw/db": "workspace:*",
+    "croner": "^10.0.1"
   }
 }

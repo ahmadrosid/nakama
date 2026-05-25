@@ -1,14 +1,23 @@
 import {
+  formatServerError,
   TINYCLAW_API_VERSION,
   type AgentChannel,
   type ApiErrorResponse,
   type AssignToolRequest,
   type CreateProfileRequest,
+  type CreateAutomationRequest,
   type CreateSessionRequest,
   type CreateSessionResponse,
   type CreateToolRequest,
   type DraftAutomationRequest,
   type DraftAutomationResponse,
+  type ListAutomationRunsResponse,
+  type ListAutomationsResponse,
+  type AutomationResponse,
+  type RunAutomationResponse,
+  type TimezoneSettingsResponse,
+  type UpdateAutomationRequest,
+  type UpdateTimezoneRequest,
   type HealthResponse,
   type InitSoulResponse,
   type ListProfilesResponse,
@@ -26,12 +35,15 @@ import {
   type SoulStackResponse,
   type SoulStatusResponse,
   type StreamEvent,
+  type SystemStatusResponse,
   type UpdateProfileRequest,
   type UpdateSoulFileRequest,
 } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
 import { serializeOpenApiSpec } from "./openapi/build-spec";
 import type { AgentService } from "./services/agent-service";
+import type { AutomationService } from "./services/automation-service";
+import { SystemStatusService } from "./services/system-status-service";
 import { tryServeStaticWeb } from "./static-web";
 
 const DOCS_HTML = `<!doctype html>
@@ -56,11 +68,13 @@ const DOCS_HTML = `<!doctype html>
 
 export interface ServerOptions {
   agent: AgentService;
+  automationService: AutomationService;
+  systemStatus: SystemStatusService;
   webDistDir?: string | null;
 }
 
 export function createApp(options: ServerOptions) {
-  const { agent, webDistDir = null } = options;
+  const { agent, automationService, systemStatus, webDistDir = null } = options;
 
   return {
     async fetch(request: Request): Promise<Response> {
@@ -90,6 +104,10 @@ export function createApp(options: ServerOptions) {
           });
         }
 
+        if (request.method === "GET" && url.pathname === "/v1/system/status") {
+          return json<SystemStatusResponse>(systemStatus.getStatus());
+        }
+
         if (request.method === "GET" && url.pathname === "/v1/models") {
           return json<ModelsResponse>(agent.getModels());
         }
@@ -106,6 +124,19 @@ export function createApp(options: ServerOptions) {
           const result = await agent.configureProvider(body.apiKey, body.model);
 
           return json<ConfigureProviderResponse>(result);
+        }
+
+        if (request.method === "GET" && url.pathname === "/v1/settings/timezone") {
+          return json<TimezoneSettingsResponse>({
+            timezone: await agent.getUserTimezone(),
+          });
+        }
+
+        if (request.method === "PUT" && url.pathname === "/v1/settings/timezone") {
+          const body = await readJson<UpdateTimezoneRequest>(request);
+          const timezone = await agent.setUserTimezone(body.timezone);
+
+          return json<TimezoneSettingsResponse>({ timezone });
         }
 
         if (request.method === "POST" && url.pathname === "/v1/sessions") {
@@ -321,6 +352,97 @@ export function createApp(options: ServerOptions) {
           return json<DraftAutomationResponse>({ automation });
         }
 
+        if (request.method === "GET" && url.pathname === "/v1/automations") {
+          const automations = await automationService.list();
+          return json<ListAutomationsResponse>({ automations });
+        }
+
+        if (request.method === "POST" && url.pathname === "/v1/automations") {
+          const body = await readJson<CreateAutomationRequest>(request);
+          const automation = await automationService.create(body, body.profileId);
+
+          return json<AutomationResponse>({ automation }, 201);
+        }
+
+        const automationMatch = url.pathname.match(/^\/v1\/automations\/([^/]+)$/);
+        const automationRunsMatch = url.pathname.match(
+          /^\/v1\/automations\/([^/]+)\/runs$/,
+        );
+        const automationRunMatch = url.pathname.match(
+          /^\/v1\/automations\/([^/]+)\/run$/,
+        );
+
+        if (automationMatch && request.method === "GET") {
+          const automationId = decodeURIComponent(automationMatch[1]!);
+          const automation = await automationService.get(automationId);
+
+          if (!automation) {
+            return errorResponse("Automation not found", 404);
+          }
+
+          return json<AutomationResponse>({ automation });
+        }
+
+        if (automationMatch && request.method === "PUT") {
+          const automationId = decodeURIComponent(automationMatch[1]!);
+          const body = await readJson<UpdateAutomationRequest>(request);
+
+          try {
+            const automation = await automationService.update(automationId, body);
+            return json<AutomationResponse>({ automation });
+          } catch (error) {
+            if (error instanceof Error && error.message === "Automation not found.") {
+              return errorResponse(error.message, 404);
+            }
+
+            throw error;
+          }
+        }
+
+        if (automationMatch && request.method === "DELETE") {
+          const automationId = decodeURIComponent(automationMatch[1]!);
+          const deleted = await automationService.delete(automationId);
+
+          if (!deleted) {
+            return errorResponse("Automation not found", 404);
+          }
+
+          return new Response(null, { status: 204 });
+        }
+
+        if (automationRunMatch && request.method === "POST") {
+          const automationId = decodeURIComponent(automationRunMatch[1]!);
+          const result = await agent.runAutomation(automationId);
+
+          if (result.skipped) {
+            return errorResponse(result.error ?? "Automation run skipped.", 409);
+          }
+
+          const runs = await automationService.listRuns(automationId, 1);
+          const run = runs[0];
+
+          if (!run) {
+            return errorResponse("Automation run record not found.", 500);
+          }
+
+          return json<RunAutomationResponse>({ run });
+        }
+
+        if (automationRunsMatch && request.method === "GET") {
+          const automationId = decodeURIComponent(automationRunsMatch[1]!);
+
+          try {
+            const runs = await automationService.listRuns(automationId);
+            return json<ListAutomationRunsResponse>({ runs });
+          } catch (error) {
+            if (error instanceof Error && error.message === "Automation not found.") {
+              return errorResponse(error.message, 404);
+            }
+
+            throw error;
+          }
+        }
+
         if (webDistDir) {
           const staticResponse = tryServeStaticWeb(request, webDistDir);
 
@@ -331,7 +453,7 @@ export function createApp(options: ServerOptions) {
 
         return errorResponse("Not found", 404);
       } catch (err) {
-        return errorResponse(formatError(err), 500);
+        return errorResponse(formatServerError(err), 500);
       }
     },
   };
@@ -355,10 +477,6 @@ function json<T>(body: T, status = 200): Response {
 
 function errorResponse(message: string, status: number): Response {
   return Response.json({ error: message } satisfies ApiErrorResponse, { status });
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function streamMessage(session: AgentChatSession, message: string): Response {
@@ -393,7 +511,7 @@ function streamMessage(session: AgentChatSession, message: string): Response {
 
         send({ type: "done", reply });
       } catch (error) {
-        send({ type: "error", error: formatError(error) });
+        send({ type: "error", error: formatServerError(error) });
       } finally {
         controller.close();
       }

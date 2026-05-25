@@ -8,6 +8,7 @@ import type { RequestedChatSession } from "@/lib/chat-history";
 import { ProfilesPage } from "@/pages/ProfilesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SoulPage } from "@/pages/SoulPage";
+import { StatusPage } from "@/pages/StatusPage";
 import { ToolsPage } from "@/pages/ToolsPage";
 import type { PageId } from "@/lib/navigation";
 
@@ -19,6 +20,7 @@ export function App() {
   return (
     <AppProvider>
       <Layout page={page} onNavigate={setPage}>
+        {page === "status" ? <StatusPage /> : null}
         {page === "chat" ? (
           <ChatPage
             requestedSession={requestedChatSession}

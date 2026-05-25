@@ -2,8 +2,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app";
 import { AgentService } from "./services/agent-service";
+import { AutomationRunner } from "./services/automation-runner";
+import { AutomationScheduler } from "./services/automation-scheduler";
+import { AutomationService } from "./services/automation-service";
+import { SystemStatusService } from "./services/system-status-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
+import { createAutomationTools } from "./tools/automation-tools";
 import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
 import {
   DEFAULT_SERVER_HOST,
@@ -35,8 +40,25 @@ const database = await createDatabase(config.databaseUrl, { baseDir: projectRoot
 await seedDatabase(database.adapter);
 
 const agent = new AgentService(userConfig, provider, database.adapter);
+const automationService = new AutomationService(database.adapter, {
+  getUserTimezone: () => agent.getUserTimezone(),
+});
+const automationRunner = new AutomationRunner(automationService, agent);
+const automationScheduler = new AutomationScheduler(
+  automationService,
+  automationRunner,
+  () => agent.getUserTimezone(),
+);
+
+agent.setAutomationTools(createAutomationTools(automationService));
+agent.setAutomationRunner(automationRunner);
+automationService.setOnChange(() => automationScheduler.reload());
+await automationScheduler.start();
+
+const systemStatus = new SystemStatusService(agent, automationScheduler, automationRunner);
+
 const webDistDir = resolveWebDistDir(projectRoot);
-const app = createApp({ agent, webDistDir });
+const app = createApp({ agent, automationService, systemStatus, webDistDir });
 
 const server = startServer({
   host,
@@ -48,7 +70,7 @@ const serverUrl = writeRuntimeServerUrl(
   `http://${server.hostname}:${server.port}`,
 );
 
-registerRuntimeCleanup(server, serverUrl, database);
+registerRuntimeCleanup(server, serverUrl, database, automationScheduler);
 
 if (server.port !== requestedPort) {
   console.log(`Port ${requestedPort} is busy. Using ${server.port} instead.`);
@@ -118,6 +140,7 @@ function registerRuntimeCleanup(
   server: ReturnType<typeof Bun.serve>,
   serverUrl: string,
   database: Database,
+  scheduler: AutomationScheduler,
 ): void {
   let cleanedUp = false;
 
@@ -127,6 +150,7 @@ function registerRuntimeCleanup(
     }
 
     cleanedUp = true;
+    scheduler.stop();
     clearRuntimeServerUrl(serverUrl);
     database.close();
   };

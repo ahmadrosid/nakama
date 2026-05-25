@@ -1,10 +1,24 @@
+export type AutomationRunStatus = "running" | "completed" | "failed";
+
 export interface StoredAutomationRecord {
   id: string;
   name: string;
   version: number;
   definition: unknown;
+  profileId: string;
+  enabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StoredAutomationRunRecord {
+  id: string;
+  automationId: string;
+  status: AutomationRunStatus;
+  startedAt: string;
+  completedAt: string | null;
+  output: string | null;
+  error: string | null;
 }
 
 export interface StoredProfileRecord {
@@ -56,6 +70,12 @@ export interface DatabaseAdapter {
   listAutomations(): Promise<StoredAutomationRecord[]>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
   upsertAutomation(record: StoredAutomationRecord): Promise<void>;
+  deleteAutomation(id: string): Promise<boolean>;
+
+  listAutomationRuns(automationId: string, limit?: number): Promise<StoredAutomationRunRecord[]>;
+  getActiveAutomationRun(automationId: string): Promise<StoredAutomationRunRecord | null>;
+  insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+  updateAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
 
   listProfiles(): Promise<StoredProfileRecord[]>;
   getProfile(id: string): Promise<StoredProfileRecord | null>;

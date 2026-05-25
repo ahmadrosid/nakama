@@ -1,4 +1,4 @@
-import type { AgentChannel, InitSoulResponse, ModelsResponse, SoulStatusResponse } from "@tinyclaw/core";
+import { formatClientError, type AgentChannel, type InitSoulResponse, type ModelsResponse, type SoulStatusResponse } from "@tinyclaw/core";
 import type { TinyClawClient } from "@tinyclaw/client";
 import { formatSlashCommands, resolveSuggestions } from "./commands";
 import { PromptCancelledError, promptLine } from "./prompt";
@@ -247,7 +247,7 @@ async function printModels(client: TinyClawClient): Promise<void> {
 }
 
 function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return formatClientError(error);
 }
 
 function printSoulStatus(status: SoulStatusResponse): void {

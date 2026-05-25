@@ -21,7 +21,7 @@ export function Layout({ page, onNavigate, children }: LayoutProps) {
   return (
     <div className="flex h-svh overflow-hidden bg-background">
       <aside className="flex h-full w-64 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar">
-        <div className="border-b border-border px-5 py-5">
+        <div className="border-b border-border px-5 py-5.5">
           <div className="flex items-center gap-3">
             <img
               src="/tinyclaw.png"
@@ -70,7 +70,7 @@ export function Layout({ page, onNavigate, children }: LayoutProps) {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {page !== "chat" ? (
+        {page !== "chat" && page !== "status" ? (
           <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-6 py-4">
             <div>
               <h1 className="type-page-title">{activeNav?.label}</h1>

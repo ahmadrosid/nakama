@@ -2,7 +2,7 @@ import type { ProviderClient, ToolDefinition } from "@tinyclaw/core";
 
 export interface AgentRequest {
   prompt: string;
-  channel: "web" | "cli" | "telegram";
+  channel: "web" | "cli" | "telegram" | "automation";
 }
 
 export interface AgentDependencies {

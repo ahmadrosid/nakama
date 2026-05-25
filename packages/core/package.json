@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./api-error": "./src/api-error.ts",
     "./contract": "./src/contract.ts",
     "./runtime": "./src/runtime.ts",
     "./ensure-server": "./src/ensure-server.ts"

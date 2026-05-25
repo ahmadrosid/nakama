@@ -18,7 +18,28 @@ export interface AutomationDefinition {
   version: number;
 }
 
-export type AgentChannel = "web" | "cli" | "telegram";
+export interface StoredAutomation extends AutomationDefinition {
+  profileId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  nextRunAt?: string | null;
+  lastRunAt?: string | null;
+}
+
+export type AutomationRunStatus = "running" | "completed" | "failed";
+
+export interface AutomationRunRecord {
+  id: string;
+  automationId: string;
+  status: AutomationRunStatus;
+  startedAt: string;
+  completedAt: string | null;
+  output: string | null;
+  error: string | null;
+}
+
+export type AgentChannel = "web" | "cli" | "telegram" | "automation";
 
 export const TINYCLAW_API_VERSION = 1;
 
@@ -26,6 +47,20 @@ export interface HealthResponse {
   ok: true;
   apiVersion: typeof TINYCLAW_API_VERSION;
   providerConfigured: boolean;
+}
+
+export interface AutomationWorkerStatus {
+  ok: boolean;
+  running: boolean;
+  scheduledJobs: number;
+  activeRuns: number;
+  providerConfigured: boolean;
+}
+
+export interface SystemStatusResponse {
+  server: HealthResponse;
+  automationWorker: AutomationWorkerStatus;
+  checkedAt: string;
 }
 
 export interface CreateSessionRequest {
@@ -88,6 +123,47 @@ export interface DraftAutomationRequest {
 
 export interface DraftAutomationResponse {
   automation: AutomationDefinition;
+}
+
+export interface ListAutomationsResponse {
+  automations: StoredAutomation[];
+}
+
+export interface AutomationResponse {
+  automation: StoredAutomation;
+}
+
+export interface CreateAutomationRequest {
+  name: string;
+  description: string;
+  prompt: string;
+  trigger: AutomationTrigger;
+  profileId?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateAutomationRequest {
+  name?: string;
+  description?: string;
+  prompt?: string;
+  trigger?: AutomationTrigger;
+  enabled?: boolean;
+}
+
+export interface RunAutomationResponse {
+  run: AutomationRunRecord;
+}
+
+export interface ListAutomationRunsResponse {
+  runs: AutomationRunRecord[];
+}
+
+export interface TimezoneSettingsResponse {
+  timezone: string;
+}
+
+export interface UpdateTimezoneRequest {
+  timezone: string;
 }
 
 export interface ApiErrorResponse {
@@ -300,6 +376,8 @@ export interface ProviderClient {
 export interface ToolContext {
   automationId?: string;
   userId?: string;
+  profileId?: string;
+  sessionId?: string;
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {

@@ -1,6 +1,7 @@
 import type {
   DatabaseAdapter,
   StoredAutomationRecord,
+  StoredAutomationRunRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
@@ -10,6 +11,7 @@ import type {
 
 export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const automations = new Map<string, StoredAutomationRecord>();
+  const automationRuns = new Map<string, StoredAutomationRunRecord[]>();
   const profiles = new Map<string, StoredProfileRecord>();
   const tools = new Map<string, StoredToolRecord>();
   const toolsByName = new Map<string, StoredToolRecord>();
@@ -28,6 +30,38 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async upsertAutomation(record) {
       automations.set(record.id, record);
+    },
+
+    async deleteAutomation(id) {
+      automationRuns.delete(id);
+      return automations.delete(id);
+    },
+
+    async listAutomationRuns(automationId, limit = 20) {
+      return [...(automationRuns.get(automationId) ?? [])]
+        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+        .slice(0, limit);
+    },
+
+    async getActiveAutomationRun(automationId) {
+      return (
+        [...(automationRuns.get(automationId) ?? [])]
+          .filter((run) => run.status === "running")
+          .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ?? null
+      );
+    },
+
+    async insertAutomationRun(record) {
+      const existing = automationRuns.get(record.automationId) ?? [];
+      automationRuns.set(record.automationId, [...existing, record]);
+    },
+
+    async updateAutomationRun(record) {
+      const existing = automationRuns.get(record.automationId) ?? [];
+      automationRuns.set(
+        record.automationId,
+        existing.map((run) => (run.id === record.id ? record : run)),
+      );
     },
 
     async listProfiles() {

@@ -4,6 +4,7 @@ import { migrateDatabase } from "../migrate";
 import type {
   DatabaseAdapter,
   StoredAutomationRecord,
+  StoredAutomationRunRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
@@ -21,8 +22,20 @@ interface AutomationRow {
   name: string;
   version: number;
   definition: string;
+  profile_id: string;
+  enabled: number;
   created_at: string;
   updated_at: string;
+}
+
+interface AutomationRunRow {
+  id: string;
+  automation_id: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  output: string | null;
+  error: string | null;
 }
 
 interface ProfileRow {
@@ -89,13 +102,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAutomationsStmt = db.prepare("SELECT * FROM automations");
   const getAutomationStmt = db.prepare("SELECT * FROM automations WHERE id = ?");
   const upsertAutomationStmt = db.prepare(`
-    INSERT INTO automations (id, name, version, definition, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO automations (id, name, version, definition, profile_id, enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       version = excluded.version,
       definition = excluded.definition,
+      profile_id = excluded.profile_id,
+      enabled = excluded.enabled,
       updated_at = excluded.updated_at
+  `);
+  const deleteAutomationStmt = db.prepare("DELETE FROM automations WHERE id = ?");
+
+  const listAutomationRunsStmt = db.prepare(`
+    SELECT * FROM automation_runs
+    WHERE automation_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `);
+  const getActiveAutomationRunStmt = db.prepare(`
+    SELECT * FROM automation_runs
+    WHERE automation_id = ? AND status = 'running'
+    ORDER BY started_at DESC
+    LIMIT 1
+  `);
+  const insertAutomationRunStmt = db.prepare(`
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateAutomationRunStmt = db.prepare(`
+    UPDATE automation_runs
+    SET status = ?, completed_at = ?, output = ?, error = ?
+    WHERE id = ?
   `);
 
   const listProfilesStmt = db.prepare("SELECT * FROM profiles");
@@ -208,8 +246,48 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.name,
         record.version,
         JSON.stringify(record.definition),
+        record.profileId,
+        record.enabled ? 1 : 0,
         existing?.createdAt ?? record.createdAt,
         record.updatedAt,
+      );
+    },
+
+    async deleteAutomation(id) {
+      const result = deleteAutomationStmt.run(id);
+      return result.changes > 0;
+    },
+
+    async listAutomationRuns(automationId, limit = 20) {
+      return listAutomationRunsStmt
+        .all(automationId, limit)
+        .map((row) => toAutomationRunRecord(row as AutomationRunRow));
+    },
+
+    async getActiveAutomationRun(automationId) {
+      const row = getActiveAutomationRunStmt.get(automationId) as AutomationRunRow | null;
+      return row ? toAutomationRunRecord(row) : null;
+    },
+
+    async insertAutomationRun(record) {
+      insertAutomationRunStmt.run(
+        record.id,
+        record.automationId,
+        record.status,
+        record.startedAt,
+        record.completedAt,
+        record.output,
+        record.error,
+      );
+    },
+
+    async updateAutomationRun(record) {
+      updateAutomationRunStmt.run(
+        record.status,
+        record.completedAt,
+        record.output,
+        record.error,
+        record.id,
       );
     },
 
@@ -344,8 +422,22 @@ function toAutomationRecord(row: AutomationRow): StoredAutomationRecord {
     name: row.name,
     version: row.version,
     definition: parseJson(row.definition),
+    profileId: row.profile_id,
+    enabled: row.enabled !== 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toAutomationRunRecord(row: AutomationRunRow): StoredAutomationRunRecord {
+  return {
+    id: row.id,
+    automationId: row.automation_id,
+    status: row.status as StoredAutomationRunRecord["status"],
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    output: row.output,
+    error: row.error,
   };
 }
 

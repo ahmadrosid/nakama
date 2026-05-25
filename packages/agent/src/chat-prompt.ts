@@ -2,7 +2,12 @@ import type { ToolDefinition } from "@tinyclaw/core";
 
 export function buildChatSystemPrompt(
   tools: ToolDefinition[],
-  options: { basePrompt?: string; enableToolLoop?: boolean; soul?: boolean } = {},
+  options: {
+    basePrompt?: string;
+    enableToolLoop?: boolean;
+    soul?: boolean;
+    userTimezone?: string;
+  } = {},
 ): string {
   const sections = [
     options.basePrompt?.trim() ||
@@ -18,10 +23,14 @@ export function buildChatSystemPrompt(
     );
   }
 
+  const timezone = options.userTimezone?.trim() || "UTC";
+
   sections.push(
     "",
-    "When the user wants something scheduled or automated, explain your plan clearly.",
-    "They can run /create in the CLI to turn a request into an automation draft.",
+    `The user's timezone is ${timezone}.`,
+    "When the user wants something scheduled or automated, explain your plan clearly in their timezone.",
+    "Use create_automation to save recurring or manual automations after confirming the schedule with the user.",
+    "For scheduled automations, use 5-field cron syntax and include the timezone when it differs from the user's timezone.",
   );
 
   if (options.enableToolLoop && tools.length > 0) {

@@ -14,3 +14,4 @@ data/automations/*
 !data/automations/.gitkeep
 data/logs/*
 !data/logs/.gitkeep
+.agents/

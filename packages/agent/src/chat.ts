@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ProviderClient,
   ToolCall,
+  ToolContext,
   ToolDefinition,
 } from "@tinyclaw/core";
 import { partitionTools, toLlmToolDefinitions } from "@tinyclaw/core";
@@ -46,6 +47,8 @@ export interface AgentChatSessionOptions {
   enableToolLoop?: boolean;
   soul?: boolean;
   initialHistory?: ChatMessage[];
+  toolContext?: ToolContext;
+  userTimezone?: string;
 }
 
 export function createAgentChatSession(
@@ -65,7 +68,9 @@ export function createAgentChatSession(
     basePrompt: options.systemPrompt,
     enableToolLoop,
     soul: options.soul,
+    userTimezone: options.userTimezone,
   });
+  const toolContext = options.toolContext ?? {};
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
@@ -74,6 +79,7 @@ export function createAgentChatSession(
     async send(message) {
       return sendMessage(dependencies, tools, systemPrompt, history, message, "send", {
         enableToolLoop,
+        toolContext,
       });
     },
     async sendStream(message, handlers) {
@@ -84,7 +90,7 @@ export function createAgentChatSession(
         history,
         message,
         "stream",
-        { enableToolLoop, handlers },
+        { enableToolLoop, handlers, toolContext },
       );
     },
     clear() {
@@ -109,6 +115,7 @@ async function sendMessage(
   options: {
     enableToolLoop: boolean;
     handlers?: StreamHandlers;
+    toolContext?: ToolContext;
   },
 ): Promise<string> {
   history.push({ role: "user", content: message });
@@ -145,6 +152,7 @@ async function sendMessage(
       llmTools,
       providerOptions,
       options.handlers,
+      options.toolContext,
     );
 
     return reply;
@@ -164,6 +172,7 @@ async function runConversation(
   llmTools: ReturnType<typeof toLlmToolDefinitions> | undefined,
   providerOptions: { webSearch?: boolean } | undefined,
   handlers?: StreamHandlers,
+  toolContext?: ToolContext,
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     const result = await generateReply(
@@ -182,7 +191,7 @@ async function runConversation(
       return result.content;
     }
 
-    await executeToolCalls(tools, result.toolCalls, history, handlers);
+    await executeToolCalls(tools, result.toolCalls, history, handlers, toolContext);
   }
 
   const lastAssistant = [...history]
@@ -199,6 +208,7 @@ async function executeToolCalls(
   toolCalls: ToolCall[],
   history: ChatMessage[],
   handlers?: StreamHandlers,
+  toolContext: ToolContext = {},
 ): Promise<void> {
   for (const call of toolCalls) {
     handlers?.onToolStart?.({
@@ -207,7 +217,7 @@ async function executeToolCalls(
       input: call.arguments,
     });
 
-    const result = await executeToolCall(tools, call);
+    const result = await executeToolCall(tools, call, toolContext);
 
     handlers?.onToolEnd?.({
       toolCallId: call.id,

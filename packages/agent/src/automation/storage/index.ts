@@ -1,7 +1,8 @@
-import type { AutomationDefinition } from "@tinyclaw/core";
+import type { StoredAutomation } from "@tinyclaw/core";
 
 export interface AutomationStore {
-  list(): Promise<AutomationDefinition[]>;
-  get(id: string): Promise<AutomationDefinition | null>;
-  save(definition: AutomationDefinition): Promise<void>;
+  list(): Promise<StoredAutomation[]>;
+  get(id: string): Promise<StoredAutomation | null>;
+  save(definition: StoredAutomation): Promise<void>;
+  delete(id: string): Promise<boolean>;
 }

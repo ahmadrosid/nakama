@@ -439,6 +439,26 @@ export const openApiSchemas = {
       version: { type: "integer" },
     },
   },
+  AutomationWorkerStatus: {
+    type: "object",
+    required: ["ok", "running", "scheduledJobs", "activeRuns", "providerConfigured"],
+    properties: {
+      ok: { type: "boolean" },
+      running: { type: "boolean" },
+      scheduledJobs: { type: "integer" },
+      activeRuns: { type: "integer" },
+      providerConfigured: { type: "boolean" },
+    },
+  },
+  SystemStatusResponse: {
+    type: "object",
+    required: ["server", "automationWorker", "checkedAt"],
+    properties: {
+      server: { $ref: "#/components/schemas/HealthResponse" },
+      automationWorker: { $ref: "#/components/schemas/AutomationWorkerStatus" },
+      checkedAt: { type: "string" },
+    },
+  },
   DraftAutomationRequest: {
     type: "object",
     required: ["prompt", "channel"],
@@ -452,6 +472,116 @@ export const openApiSchemas = {
     required: ["automation"],
     properties: {
       automation: { $ref: "#/components/schemas/AutomationDefinition" },
+    },
+  },
+  StoredAutomation: {
+    allOf: [
+      { $ref: "#/components/schemas/AutomationDefinition" },
+      {
+        type: "object",
+        required: ["profileId", "enabled", "createdAt", "updatedAt"],
+        properties: {
+          profileId: { type: "string" },
+          enabled: { type: "boolean" },
+          createdAt: { type: "string" },
+          updatedAt: { type: "string" },
+          nextRunAt: { type: ["string", "null"] },
+          lastRunAt: { type: ["string", "null"] },
+        },
+      },
+    ],
+  },
+  ListAutomationsResponse: {
+    type: "object",
+    required: ["automations"],
+    properties: {
+      automations: {
+        type: "array",
+        items: { $ref: "#/components/schemas/StoredAutomation" },
+      },
+    },
+  },
+  AutomationResponse: {
+    type: "object",
+    required: ["automation"],
+    properties: {
+      automation: { $ref: "#/components/schemas/StoredAutomation" },
+    },
+  },
+  CreateAutomationRequest: {
+    type: "object",
+    required: ["name", "description", "prompt", "trigger"],
+    properties: {
+      name: { type: "string" },
+      description: { type: "string" },
+      prompt: { type: "string" },
+      trigger: {
+        oneOf: [
+          { $ref: "#/components/schemas/AutomationTriggerManual" },
+          { $ref: "#/components/schemas/AutomationTriggerSchedule" },
+        ],
+      },
+      profileId: { type: "string" },
+      enabled: { type: "boolean" },
+    },
+  },
+  UpdateAutomationRequest: {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+      description: { type: "string" },
+      prompt: { type: "string" },
+      trigger: {
+        oneOf: [
+          { $ref: "#/components/schemas/AutomationTriggerManual" },
+          { $ref: "#/components/schemas/AutomationTriggerSchedule" },
+        ],
+      },
+      enabled: { type: "boolean" },
+    },
+  },
+  AutomationRunRecord: {
+    type: "object",
+    required: ["id", "automationId", "status", "startedAt", "completedAt", "output", "error"],
+    properties: {
+      id: { type: "string" },
+      automationId: { type: "string" },
+      status: { type: "string", enum: ["running", "completed", "failed"] },
+      startedAt: { type: "string" },
+      completedAt: { type: ["string", "null"] },
+      output: { type: ["string", "null"] },
+      error: { type: ["string", "null"] },
+    },
+  },
+  RunAutomationResponse: {
+    type: "object",
+    required: ["run"],
+    properties: {
+      run: { $ref: "#/components/schemas/AutomationRunRecord" },
+    },
+  },
+  ListAutomationRunsResponse: {
+    type: "object",
+    required: ["runs"],
+    properties: {
+      runs: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AutomationRunRecord" },
+      },
+    },
+  },
+  TimezoneSettingsResponse: {
+    type: "object",
+    required: ["timezone"],
+    properties: {
+      timezone: { type: "string" },
+    },
+  },
+  UpdateTimezoneRequest: {
+    type: "object",
+    required: ["timezone"],
+    properties: {
+      timezone: { type: "string" },
     },
   },
 } as const;
@@ -471,6 +601,12 @@ export const openApiParameters = {
   },
   ToolId: {
     name: "toolId",
+    in: "path",
+    required: true,
+    schema: { type: "string" },
+  },
+  AutomationId: {
+    name: "automationId",
     in: "path",
     required: true,
     schema: { type: "string" },
