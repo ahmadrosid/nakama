@@ -45,6 +45,7 @@ import {
   type SystemStatusResponse,
   type UpdateProfileRequest,
   type UpdateSoulFileRequest,
+  type ImageAttachment,
 } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
 import { serializeOpenApiSpec } from "./openapi/build-spec";
@@ -302,6 +303,29 @@ export function createApp(options: ServerOptions) {
           if (request.method === "PUT" && subpath?.startsWith("files/") && fileKey) {
             const body = await readJson<UpdateSoulFileRequest>(request);
             await agent.writeProfileSoulFile(profileId, fileKey, body);
+            return new Response(null, { status: 204 });
+          }
+        }
+
+        const profileAvatarMatch = url.pathname.match(/^\/v1\/profiles\/([^/]+)\/avatar$/);
+
+        if (profileAvatarMatch) {
+          const profileId = decodeURIComponent(profileAvatarMatch[1]!);
+
+          if (request.method === "GET") {
+            const avatar = await agent.getProfileAvatar(profileId);
+            return new Response(avatar.bytes, {
+              headers: { "Content-Type": avatar.mediaType },
+            });
+          }
+
+          if (request.method === "PUT") {
+            const body = await readJson<ImageAttachment>(request);
+            return json<ProfileResponse>(await agent.uploadProfileAvatar(profileId, body));
+          }
+
+          if (request.method === "DELETE") {
+            await agent.deleteProfileAvatar(profileId);
             return new Response(null, { status: 204 });
           }
         }

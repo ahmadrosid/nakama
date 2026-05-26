@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   Dialog,
   DialogContent,
@@ -21,13 +22,16 @@ import { useProfileQuery, useProfilesQuery, useToolsQuery } from "@/hooks/use-ap
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
+  useDeleteProfileAvatarMutation,
   useDeleteProfileMutation,
   useInitProfileSoulMutation,
   useUnassignToolMutation,
   useUpdateProfileMutation,
+  useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
 import { cn } from "@/lib/utils";
-import { PlusIcon } from "lucide-react";
+import { fileToImageAttachment } from "@/lib/profile-images";
+import { ImageIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { formatError } from "@/lib/client";
 
 const defaultCreatePrompt = "You are a helpful assistant.";
@@ -46,9 +50,12 @@ export function ProfilesPage() {
   const createMutation = useCreateProfileMutation();
   const updateMutation = useUpdateProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
+  const uploadAvatarMutation = useUploadProfileAvatarMutation();
+  const deleteAvatarMutation = useDeleteProfileAvatarMutation();
   const assignMutation = useAssignToolMutation();
   const unassignMutation = useUnassignToolMutation();
   const initSoulMutation = useInitProfileSoulMutation();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -61,6 +68,8 @@ export function ProfilesPage() {
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
+    uploadAvatarMutation.isPending ||
+    deleteAvatarMutation.isPending ||
     assignMutation.isPending ||
     unassignMutation.isPending ||
     initSoulMutation.isPending;
@@ -195,6 +204,45 @@ export function ProfilesPage() {
     }
   }
 
+  async function handleAvatarSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!selectedId || !file) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const attachment = await fileToImageAttachment(file);
+
+      if (!attachment) {
+        setError("Could not read the selected image.");
+        return;
+      }
+
+      await uploadAvatarMutation.mutateAsync({ profileId: selectedId, attachment });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    if (!selectedId || !detail?.hasAvatar) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteAvatarMutation.mutateAsync(selectedId);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   const availableTools = allTools.filter(
     (tool) => !detail?.tools.some((assigned) => assigned.id === tool.id),
   );
@@ -247,7 +295,10 @@ export function ProfilesPage() {
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium text-foreground">{profile.name}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
+                </div>
                 {profile.isSuper ? (
                   <span className="type-badge rounded-md bg-primary/15 px-2 py-0.5 text-primary">
                     Super
@@ -274,9 +325,46 @@ export function ProfilesPage() {
           <>
             <div className={cn(sectionClass, "p-5")}>
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="type-page-title">{detail.name}</h2>
-                  <p className="type-code mt-1 text-muted-foreground">{detail.id}</p>
+                <div className="flex min-w-0 items-start gap-4">
+                  <ProfileAvatar profile={detail} size="lg" />
+                  <div>
+                    <h2 className="type-page-title">{detail.name}</h2>
+                    <p className="type-code mt-1 text-muted-foreground">{detail.id}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        className="hidden"
+                        disabled={busy}
+                        onChange={(event) => void handleAvatarSelected(event)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        disabled={busy}
+                        aria-label="Upload avatar"
+                        title="Upload avatar"
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        <ImageIcon />
+                      </Button>
+                      {detail.hasAvatar ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          disabled={busy}
+                          aria-label="Remove avatar"
+                          title="Remove avatar"
+                          onClick={() => void handleRemoveAvatar()}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button

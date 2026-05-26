@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentChannel,
   CreateProfileRequest,
+  ImageAttachment,
   SoulStackFiles,
   UpdateProfileRequest,
 } from "@tinyclaw/core/contract";
@@ -60,6 +61,44 @@ export function useDeleteProfileMutation() {
     mutationFn: (profileId: string) => client.deleteProfile(profileId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all });
+    },
+  });
+}
+
+async function invalidateProfileQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  profileId: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.profiles.detail(profileId) }),
+  ]);
+}
+
+export function useUploadProfileAvatarMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      attachment,
+    }: {
+      profileId: string;
+      attachment: ImageAttachment;
+    }) => client.uploadProfileAvatar(profileId, attachment),
+    onSuccess: async (_data, variables) => {
+      await invalidateProfileQueries(queryClient, variables.profileId);
+    },
+  });
+}
+
+export function useDeleteProfileAvatarMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (profileId: string) => client.deleteProfileAvatar(profileId),
+    onSuccess: async (_data, profileId) => {
+      await invalidateProfileQueries(queryClient, profileId);
     },
   });
 }

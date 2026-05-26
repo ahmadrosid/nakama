@@ -1,6 +1,7 @@
 import type { SoulStackFiles } from "@tinyclaw/core/contract";
 import { CheckIcon, CircleIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -222,6 +223,7 @@ export function SoulPage() {
                 title={profile.name}
                 subtitle={profile.soulActive ? "soul active" : "soul inactive"}
                 activeLabel={profile.soulActive ? "active" : undefined}
+                leading={<ProfileAvatar profile={profile} size="sm" />}
                 onClick={() => handleScopeChange(profile.id)}
               />
             ))}
@@ -366,12 +368,14 @@ function ScopeButton({
   title,
   subtitle,
   activeLabel,
+  leading,
   onClick,
 }: {
   active: boolean;
   title: string;
   subtitle: string;
   activeLabel?: string;
+  leading?: React.ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -381,20 +385,25 @@ function ScopeButton({
       data-active={active || undefined}
       className="scope-item"
     >
-      <div className="flex items-center justify-between gap-2">
-        <p
-          className={cn(
-            "text-sm font-medium",
-            active ? "text-primary" : "text-foreground",
-          )}
-        >
-          {title}
-        </p>
-        {activeLabel ? (
-          <span className="scope-badge scope-badge-active">{activeLabel}</span>
-        ) : null}
+      <div className="flex items-start gap-3">
+        {leading}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p
+              className={cn(
+                "text-sm font-medium",
+                active ? "text-primary" : "text-foreground",
+              )}
+            >
+              {title}
+            </p>
+            {activeLabel ? (
+              <span className="scope-badge scope-badge-active">{activeLabel}</span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
       </div>
-      <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
     </button>
   );
 }

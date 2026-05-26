@@ -2,6 +2,7 @@ import type {
   AssignToolRequest,
   CreateProfileRequest,
   CreateToolRequest,
+  ImageAttachment,
   ListProfilesResponse,
   ListToolsResponse,
   ProfileDetail,
@@ -10,7 +11,15 @@ import type {
   ToolSummary,
   UpdateProfileRequest,
 } from "@tinyclaw/core";
-import { createId, resolveSoulStackForProfile } from "@tinyclaw/core";
+import {
+  createId,
+  deleteProfileAvatar,
+  hasProfileAvatar,
+  readProfileAvatar,
+  resolveSoulStackForProfile,
+  saveProfileAvatar,
+  TinyClawApiError,
+} from "@tinyclaw/core";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
 import { isProtectedToolId, SUPER_BOT_PROFILE_ID } from "@tinyclaw/db";
 import { validateJavascriptToolModule } from "./javascript-tool-loader";
@@ -185,6 +194,50 @@ export class ProfileService {
     return this.getProfile(profileId);
   }
 
+  async uploadProfileAvatar(
+    profileId: string,
+    attachment: ImageAttachment,
+  ): Promise<ProfileResponse> {
+    const profile = await this.requireProfile(profileId);
+
+    await saveProfileAvatar(profileId, attachment);
+
+    const now = new Date().toISOString();
+    await this.db.upsertProfile({
+      ...profile,
+      updatedAt: now,
+    });
+
+    return this.getProfile(profileId);
+  }
+
+  async getProfileAvatar(profileId: string): Promise<{ mediaType: string; bytes: Buffer }> {
+    await this.requireProfile(profileId);
+
+    const avatar = await readProfileAvatar(profileId);
+
+    if (!avatar) {
+      throw new TinyClawApiError("Profile avatar not found.", 404);
+    }
+
+    return avatar;
+  }
+
+  async deleteProfileAvatar(profileId: string): Promise<void> {
+    const profile = await this.requireProfile(profileId);
+    const removed = await deleteProfileAvatar(profileId);
+
+    if (!removed) {
+      throw new TinyClawApiError("Profile avatar not found.", 404);
+    }
+
+    const now = new Date().toISOString();
+    await this.db.upsertProfile({
+      ...profile,
+      updatedAt: now,
+    });
+  }
+
   private async requireProfile(profileId: string): Promise<StoredProfileRecord> {
     const profile = await this.db.getProfile(profileId);
 
@@ -206,6 +259,7 @@ export class ProfileService {
       isSuper: profile.isSuper,
       toolCount: tools.length,
       soulActive: soulStack !== null,
+      hasAvatar: await hasProfileAvatar(profile.id),
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };

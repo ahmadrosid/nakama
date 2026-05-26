@@ -6,6 +6,10 @@ import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { ProfileService } from "./profile-service";
 
 const originalToolsDir = process.env.TINYCLAW_TOOLS_DIR;
+const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+
+const tinyPngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("profile service createTool", () => {
   let tempToolsDir = "";
@@ -54,5 +58,45 @@ describe("profile service createTool", () => {
         handlerConfig: { modulePath: "bad-tool.js" },
       }),
     ).rejects.toThrow(/only javascript tools can be created/i);
+  });
+});
+
+describe("profile service avatar", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { recursive: true, force: true });
+      tempConfigDir = "";
+    }
+  });
+
+  test("uploads, serves, and deletes profile avatars", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-avatar-"));
+    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const created = await service.createProfile({ name: "Avatar Bot" });
+    const profileId = created.profile.id;
+
+    expect(created.profile.hasAvatar).toBe(false);
+
+    const updated = await service.uploadProfileAvatar(profileId, {
+      mediaType: "image/png",
+      data: tinyPngBase64,
+    });
+
+    expect(updated.profile.hasAvatar).toBe(true);
+
+    const avatar = await service.getProfileAvatar(profileId);
+    expect(avatar.mediaType).toBe("image/png");
+    expect(avatar.bytes.length).toBeGreaterThan(0);
+
+    await service.deleteProfileAvatar(profileId);
+
+    const afterDelete = await service.getProfile(profileId);
+    expect(afterDelete.profile.hasAvatar).toBe(false);
   });
 });

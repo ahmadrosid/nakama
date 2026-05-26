@@ -370,6 +370,47 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/profiles/{profileId}/avatar": {
+        get: {
+          tags: ["Profiles"],
+          summary: "Get a profile avatar image",
+          operationId: "getProfileAvatar",
+          parameters: [{ $ref: "#/components/parameters/ProfileId" }],
+          responses: {
+            "200": {
+              description: "Profile avatar image",
+              content: {
+                "image/*": { schema: { type: "string", format: "binary" } },
+              },
+            },
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        put: {
+          tags: ["Profiles"],
+          summary: "Upload a profile avatar",
+          operationId: "uploadProfileAvatar",
+          parameters: [{ $ref: "#/components/parameters/ProfileId" }],
+          requestBody: jsonBody("ImageAttachment"),
+          responses: {
+            "200": jsonResponse("ProfileResponse", "Profile with updated avatar"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        delete: {
+          tags: ["Profiles"],
+          summary: "Delete a profile avatar",
+          operationId: "deleteProfileAvatar",
+          parameters: [{ $ref: "#/components/parameters/ProfileId" }],
+          responses: {
+            "204": { description: "Avatar deleted" },
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/profiles/{profileId}/tools": {
         get: {
           tags: ["Profiles", "Tools"],

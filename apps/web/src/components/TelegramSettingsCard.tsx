@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { UpdateTelegramSettingsRequest } from "@tinyclaw/core/contract";
 import { CopyIcon, EyeIcon, EyeOffIcon, RefreshCwIcon } from "lucide-react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -257,7 +258,10 @@ export function TelegramSettingsCard() {
             <SelectContent>
               {profiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
+                  <span className="flex items-center gap-2">
+                    <ProfileAvatar profile={profile} size="sm" />
+                    <span>{profile.name}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

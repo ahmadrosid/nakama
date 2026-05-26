@@ -7,12 +7,14 @@ import type {
   CreateToolRequest,
   DraftAutomationResponse,
   HealthResponse,
+  ImageAttachment,
   InitSoulResponse,
   ListProfilesResponse,
   ListToolsResponse,
   ListSessionsResponse,
   ModelsResponse,
   ProfileResponse,
+  ProfileSummary,
   SendMessageInput,
   SendMessageResponse,
   SessionMessagesResponse,
@@ -175,6 +177,25 @@ export class TinyClawClient {
 
   async deleteProfile(profileId: string): Promise<void> {
     await this.request(`/v1/profiles/${encodeURIComponent(profileId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async uploadProfileAvatar(
+    profileId: string,
+    attachment: ImageAttachment,
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/avatar`,
+      {
+        method: "PUT",
+        body: JSON.stringify(attachment),
+      },
+    );
+  }
+
+  async deleteProfileAvatar(profileId: string): Promise<void> {
+    await this.request(`/v1/profiles/${encodeURIComponent(profileId)}/avatar`, {
       method: "DELETE",
     });
   }
@@ -569,6 +590,17 @@ function normalizeStreamHandlers(
 
 function resolveSendMessageBody(input: SendMessageArg): SendMessageInput {
   return typeof input === "string" ? { message: input } : input;
+}
+
+export function getProfileAvatarUrl(
+  profile: Pick<ProfileSummary, "id" | "hasAvatar" | "updatedAt">,
+): string | null {
+  if (!profile.hasAvatar) {
+    return null;
+  }
+
+  const query = new URLSearchParams({ v: profile.updatedAt });
+  return `/v1/profiles/${encodeURIComponent(profile.id)}/avatar?${query.toString()}`;
 }
 
 export function createClient(options?: TinyClawClientOptions): TinyClawClient {

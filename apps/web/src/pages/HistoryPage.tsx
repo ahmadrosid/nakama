@@ -12,6 +12,7 @@ import {
   UserIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -154,8 +155,13 @@ export function HistoryPage() {
               <SelectContent>
                 {profiles.map((profile) => (
                   <SelectItem key={profile.id} value={profile.id}>
-                    {profile.name}
-                    {profile.isSuper ? " (super)" : ""}
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar profile={profile} size="sm" />
+                      <span>
+                        {profile.name}
+                        {profile.isSuper ? " (super)" : ""}
+                      </span>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

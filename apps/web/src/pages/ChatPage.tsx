@@ -2,10 +2,10 @@ import type { ProfileSummary } from "@tinyclaw/core/contract";
 import type { ChatStatus } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
@@ -30,6 +30,11 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,7 +43,7 @@ import {
 import { useAppContext } from "@/context/app-context";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { cn } from "@/lib/utils";
-import { ArrowUpIcon, ChevronRightIcon, EllipsisIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronRightIcon, EllipsisIcon, ImageIcon, WifiOffIcon, XIcon } from "lucide-react";
 import type { FileUIPart } from "ai";
 import { filePartsToImageAttachments } from "@/lib/chat-images";
 import { client, formatError } from "@/lib/client";
@@ -53,6 +58,12 @@ import {
 } from "@/lib/chat-history";
 import { Spinner } from "@/components/ui/spinner";
 import type { RemoteChatSession } from "@tinyclaw/client";
+
+const composerIconButtonClass =
+  "size-10 shrink-0 rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40";
+
+const composerShellClass =
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-3 [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] sm:[&_[data-slot=input-group]]:p-4 [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25";
 
 function formatBashToolResult(result: unknown): string | null {
   if (typeof result !== "object" || result === null) {
@@ -177,7 +188,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const { navigateToPage } = useAppNavigation();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
-  const { health, models, loading, setModel } = useAppContext();
+  const { health, models, setModel } = useAppContext();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profileId, setProfileId] = useState("");
   const [session, setSession] = useState<RemoteChatSession | null>(null);
@@ -186,6 +197,21 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const skipNextProfileSessionRef = useRef(false);
   const loadedRouteRef = useRef<string | null>(null);
+  const profileSwitchInFlightRef = useRef(false);
+
+  const syncChatUrl = useCallback(
+    (nextProfileId: string, sessionId: string) => {
+      const routeKey = `${nextProfileId}:${sessionId}`;
+      const targetPath = buildChatPath(nextProfileId, sessionId);
+
+      loadedRouteRef.current = routeKey;
+
+      if (location.pathname !== targetPath) {
+        navigate(targetPath, { replace: true });
+      }
+    },
+    [location.pathname, navigate],
+  );
 
   const chatStatus = useMemo(
     () => deriveChatStatus(busy, error, messages),
@@ -204,11 +230,6 @@ export function ChatPage() {
     [profiles, profileId]
   );
 
-  const profileInitial =
-    activeProfile?.name?.charAt(0)?.toUpperCase() ??
-    activeProfile?.id?.charAt(0)?.toUpperCase() ??
-    "?";
-
   const loadProfiles = useCallback(async () => {
     try {
       const response = await client.listProfiles();
@@ -225,44 +246,52 @@ export function ChatPage() {
     }
   }, [profileId, routeSession]);
 
-  const startSession = useCallback(async (nextProfileId: string, options?: { forceNew?: boolean }) => {
-    setBusy(true);
-    setError(null);
+  const startSession = useCallback(
+    async (
+      nextProfileId: string,
+      options?: { forceNew?: boolean },
+    ): Promise<RemoteChatSession | null> => {
+      setBusy(true);
+      setError(null);
 
-    try {
-      const storageKey = sessionStorageKey(nextProfileId);
+      try {
+        const storageKey = sessionStorageKey(nextProfileId);
 
-      if (!options?.forceNew) {
-        const storedSessionId = localStorage.getItem(storageKey);
+        if (!options?.forceNew) {
+          const storedSessionId = localStorage.getItem(storageKey);
 
-        if (storedSessionId) {
-          try {
-            const { messages: storedMessages } =
-              await client.getSessionMessages(storedSessionId);
-            const nextSession = client.createChatSession(storedSessionId, "web");
-            setSession(nextSession);
-            setMessages(chatMessagesToListItems(storedMessages));
-            return;
-          } catch {
-            localStorage.removeItem(storageKey);
+          if (storedSessionId) {
+            try {
+              const { messages: storedMessages } =
+                await client.getSessionMessages(storedSessionId);
+              const nextSession = client.createChatSession(storedSessionId, "web");
+              setSession(nextSession);
+              setMessages(chatMessagesToListItems(storedMessages));
+              return nextSession;
+            } catch {
+              localStorage.removeItem(storageKey);
+            }
           }
+        } else {
+          localStorage.removeItem(storageKey);
         }
-      } else {
-        localStorage.removeItem(storageKey);
-      }
 
-      const nextSession = await client.createSession("web", {
-        profileId: nextProfileId || undefined,
-      });
-      localStorage.setItem(storageKey, nextSession.id);
-      setSession(nextSession);
-      setMessages([]);
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+        const nextSession = await client.createSession("web", {
+          profileId: nextProfileId || undefined,
+        });
+        localStorage.setItem(storageKey, nextSession.id);
+        setSession(nextSession);
+        setMessages([]);
+        return nextSession;
+      } catch (err) {
+        setError(formatError(err));
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
 
   const resumeSession = useCallback(
     async (nextProfileId: string, sessionId: string) => {
@@ -277,18 +306,44 @@ export function ChatPage() {
         setProfileId(nextProfileId);
         setSession(nextSession);
         setMessages(chatMessagesToListItems(storedMessages));
+        syncChatUrl(nextProfileId, sessionId);
       } catch (err) {
         setError(formatError(err));
       } finally {
         setBusy(false);
       }
     },
-    [profileId],
+    [profileId, syncChatUrl],
   );
 
-  useEffect(() => {
-    void loadProfiles();
-  }, [loadProfiles]);
+  const handleProfileSwitch = useCallback(
+    async (nextProfileId: string) => {
+      if (!nextProfileId || nextProfileId === profileId || busy) {
+        return;
+      }
+
+      profileSwitchInFlightRef.current = true;
+      skipNextProfileSessionRef.current = true;
+      loadedRouteRef.current = `switch:${nextProfileId}`;
+      setSession(null);
+      setMessages([]);
+      setError(null);
+      setProfileId(nextProfileId);
+
+      if (location.pathname !== buildChatBasePath()) {
+        navigate(buildChatBasePath(), { replace: true });
+      }
+
+      const nextSession = await startSession(nextProfileId);
+
+      if (nextSession) {
+        syncChatUrl(nextProfileId, nextSession.id);
+      }
+
+      profileSwitchInFlightRef.current = false;
+    },
+    [profileId, busy, location.pathname, navigate, startSession, syncChatUrl],
+  );
 
   useEffect(() => {
     if (!profileId) {
@@ -304,11 +359,15 @@ export function ChatPage() {
       return;
     }
 
-    void startSession(profileId);
-  }, [profileId, routeSession, startSession]);
+    void startSession(profileId).then((nextSession) => {
+      if (nextSession) {
+        syncChatUrl(profileId, nextSession.id);
+      }
+    });
+  }, [profileId, routeSession, startSession, syncChatUrl]);
 
   useEffect(() => {
-    if (!routeSession) {
+    if (!routeSession || profileSwitchInFlightRef.current) {
       return;
     }
 
@@ -324,17 +383,16 @@ export function ChatPage() {
   }, [routeSession, resumeSession]);
 
   useEffect(() => {
-    if (!session || !profileId) {
+    if (!session || !profileId || profileSwitchInFlightRef.current) {
       return;
     }
 
-    const targetPath = buildChatPath(profileId, session.id);
-    loadedRouteRef.current = `${profileId}:${session.id}`;
+    syncChatUrl(profileId, session.id);
+  }, [session, profileId, syncChatUrl]);
 
-    if (location.pathname !== targetPath) {
-      navigate(targetPath, { replace: true });
-    }
-  }, [session, profileId, location.pathname, navigate]);
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles]);
 
   const sendMessage = useCallback(
     async (text: string, files: FileUIPart[] = []) => {
@@ -464,7 +522,7 @@ export function ChatPage() {
         setBusy(false);
       }
     },
-    [session, busy, profileId]
+    [session, busy, profileId],
   );
 
   async function handleClear() {
@@ -490,32 +548,25 @@ export function ChatPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
         <Conversation className="min-h-0 flex-1">
           <ConversationContent className="gap-6 py-4">
-            {messages.length === 0 ? (
-              <ConversationEmptyState
-                title="Start a conversation"
-                description="Choose a profile and model in the composer below, then send a message. Changing the model clears server-side chat history."
-              />
-            ) : (
-              messages.map((message) => (
-                <Message
-                  key={message.id}
-                  from={message.role === "tool" ? "assistant" : message.role}
-                  className="mr-auto ml-0 max-w-full justify-start"
-                >
-                  <MessageContent className="ml-0 max-w-full group-[.is-user]:ml-0">
-                    {message.role === "user" ? (
-                      <UserMessageContent message={message} />
-                    ) : message.role === "tool" ? (
-                      <ToolMessageContent message={message} />
-                    ) : (
-                      <MessageResponse isAnimating={message.streaming}>
-                        {message.content || (message.streaming ? "…" : "")}
-                      </MessageResponse>
-                    )}
-                  </MessageContent>
-                </Message>
-              ))
-            )}
+            {messages.map((message) => (
+              <Message
+                key={message.id}
+                from={message.role === "tool" ? "assistant" : message.role}
+                className="mr-auto ml-0 max-w-full justify-start"
+              >
+                <MessageContent className="ml-0 max-w-full group-[.is-user]:ml-0">
+                  {message.role === "user" ? (
+                    <UserMessageContent message={message} />
+                  ) : message.role === "tool" ? (
+                    <ToolMessageContent message={message} />
+                  ) : (
+                    <MessageResponse isAnimating={message.streaming}>
+                      {message.content || (message.streaming ? "…" : "")}
+                    </MessageResponse>
+                  )}
+                </MessageContent>
+              </Message>
+            ))}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -529,39 +580,50 @@ export function ChatPage() {
             {error ?? "\u00a0"}
           </p>
           {showOfflineHint ? (
-            <p className="text-xs text-amber-200/90">
-              No provider configured — limited responses.{" "}
-              <button
-                type="button"
-                className="underline underline-offset-2 hover:text-amber-100"
-                onClick={() => navigateToPage("settings")}
-              >
-                Configure in Settings
-              </button>
+            <p
+              className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+              role="status"
+            >
+              <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
+              <span>
+                No provider configured — limited responses.{" "}
+                <button
+                  type="button"
+                  className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+                  onClick={() => navigateToPage("settings")}
+                >
+                  Configure in Settings
+                </button>
+              </span>
             </p>
           ) : null}
           <PromptInput
             accept="image/*"
             multiple
             maxFiles={5}
-            className="[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-md [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-4 [&_[data-slot=input-group]]:shadow-sm"
+            className={composerShellClass}
             onSubmit={({ text, files }) => void sendMessage(text.trim(), files)}
           >
-            <PromptInputHeader>
-              <ChatAttachmentPreview />
-            </PromptInputHeader>
+            <ChatAttachmentHeader />
             <PromptInputBody>
               <PromptInputTextarea
-                className="!min-h-10 max-h-32 px-1 py-0.5 text-sm"
-                placeholder="Enter a message…"
+                className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                placeholder="Message…"
                 disabled={busy || !session}
               />
             </PromptInputBody>
-            <PromptInputFooter className="w-full items-center justify-between border-0 px-0 pt-3 pb-0">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <PromptInputTools>
+            <PromptInputFooter className="w-full flex-wrap items-center gap-3 border-0 px-0 pt-3 pb-0">
+              <div
+                role="toolbar"
+                aria-label="Composer options"
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+              >
+                <PromptInputTools className="gap-2">
                   <ChatAttachmentButton disabled={busy || !session} />
                 </PromptInputTools>
+
+                <span className="hidden h-6 w-px bg-border sm:block" aria-hidden />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={
@@ -570,30 +632,36 @@ export function ChatPage() {
                         variant="ghost"
                         size="icon-sm"
                         disabled={busy}
-                        aria-label="Switch profile"
-                        className="size-9 shrink-0 rounded-full bg-muted text-sm font-medium text-foreground hover:bg-muted/80"
+                        aria-label={
+                          activeProfile
+                            ? `Switch profile (${activeProfile.name})`
+                            : "Switch profile"
+                        }
+                        title={activeProfile?.name ?? "Switch profile"}
+                        className={cn(composerIconButtonClass, "p-0")}
                       />
                     }
                   >
-                    {profileInitial}
+                    {activeProfile ? (
+                      <ProfileAvatar profile={activeProfile} size="md" />
+                    ) : (
+                      "?"
+                    )}
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
+                  <DropdownMenuContent align="start" className="min-w-52 w-auto">
                     {profiles.map((profile) => (
                       <DropdownMenuItem
                         key={profile.id}
                         disabled={busy || profile.id === profileId}
-                        onClick={() => {
-                          if (profile.id === profileId) {
-                            return;
-                          }
-
-                          loadedRouteRef.current = null;
-                          navigate(buildChatBasePath(), { replace: true });
-                          setProfileId(profile.id);
-                        }}
+                        onClick={() => void handleProfileSwitch(profile.id)}
                       >
-                        {profile.name}
-                        {profile.isSuper ? " (super)" : ""}
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <ProfileAvatar profile={profile} size="sm" />
+                          <span className="whitespace-nowrap">
+                            {profile.name}
+                            {profile.isSuper ? " (super)" : ""}
+                          </span>
+                        </span>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
@@ -607,7 +675,7 @@ export function ChatPage() {
                       void setModel(value != null ? String(value) : "")
                     }
                   >
-                    <PromptInputSelectTrigger className="h-9 max-w-48 rounded-full bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80">
+                    <PromptInputSelectTrigger className="h-10 max-w-[min(12rem,42vw)] truncate rounded-full bg-muted px-3.5 text-sm font-medium text-foreground hover:bg-muted/80">
                       <PromptInputSelectValue placeholder="Model" />
                     </PromptInputSelectTrigger>
                     <PromptInputSelectContent>
@@ -619,49 +687,43 @@ export function ChatPage() {
                     </PromptInputSelectContent>
                   </PromptInputSelect>
                 ) : (
-                  <span className="rounded-full bg-muted px-4 py-2 text-sm font-medium text-amber-200/90">
+                  <span className="inline-flex h-10 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                    <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
                     Offline
                   </span>
                 )}
               </div>
 
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span
-                  className={[
-                    "size-2 rounded-full",
-                    loading
-                      ? "animate-pulse bg-muted-foreground"
-                      : health?.ok
-                        ? "bg-emerald-500"
-                        : "bg-red-500",
-                  ].join(" ")}
-                  title={
-                    loading
-                      ? "Checking connection"
-                      : health?.ok
-                        ? "Server online"
-                        : "Server offline"
-                  }
-                />
-
+              <div
+                role="toolbar"
+                aria-label="Composer actions"
+                className="ml-auto flex shrink-0 items-center gap-2"
+              >
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="icon-sm"
                         aria-label="Chat actions"
-                        className="size-9 rounded-md border-border text-muted-foreground"
+                        title="Chat actions"
+                        className={composerIconButtonClass}
                       />
                     }
                   >
-                    <EllipsisIcon />
+                    <EllipsisIcon className="size-4" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
                       disabled={busy || !session}
-                      onClick={() => void startSession(profileId, { forceNew: true })}
+                      onClick={() =>
+                        void startSession(profileId, { forceNew: true }).then((nextSession) => {
+                          if (nextSession) {
+                            syncChatUrl(profileId, nextSession.id);
+                          }
+                        })
+                      }
                     >
                       New session
                     </DropdownMenuItem>
@@ -674,12 +736,13 @@ export function ChatPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <span className="mx-0.5 h-6 w-px bg-border" aria-hidden />
+                <span className="h-6 w-px bg-border" aria-hidden />
 
                 <PromptInputSubmit
                   status={chatStatus}
                   disabled={busy || !session}
-                  className="size-10 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none hover:bg-primary/90 disabled:opacity-50"
+                  aria-label={busy ? "Sending message" : "Send message"}
+                  className="size-10 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
                   <ArrowUpIcon className="size-4" />
                 </PromptInputSubmit>
@@ -712,7 +775,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
   );
 }
 
-function ChatAttachmentPreview() {
+function ChatAttachmentHeader() {
   const attachments = usePromptInputAttachments();
 
   if (attachments.files.length === 0) {
@@ -720,28 +783,30 @@ function ChatAttachmentPreview() {
   }
 
   return (
-    <div className="flex w-full flex-wrap gap-2 pb-2">
-      {attachments.files.map((file) => (
-        <div
-          key={file.id}
-          className="relative size-16 overflow-hidden rounded-md border border-border bg-muted"
-        >
-          <img
-            src={file.url}
-            alt={file.filename ?? "attachment"}
-            className="size-full object-cover"
-          />
-          <button
-            type="button"
-            className="absolute top-0.5 right-0.5 rounded-full bg-background/80 p-0.5 text-foreground hover:bg-background"
-            aria-label="Remove attachment"
-            onClick={() => attachments.remove(file.id)}
+    <PromptInputHeader className="pb-0">
+      <div className="flex w-full flex-wrap gap-2 border-b border-border/60 pb-3">
+        {attachments.files.map((file) => (
+          <div
+            key={file.id}
+            className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
           >
-            <XIcon className="size-3" />
-          </button>
-        </div>
-      ))}
-    </div>
+            <img
+              src={file.url}
+              alt={file.filename ?? "attachment preview"}
+              className="size-full object-cover"
+            />
+            <button
+              type="button"
+              className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+              aria-label={`Remove ${file.filename ?? "attachment"}`}
+              onClick={() => attachments.remove(file.id)}
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </PromptInputHeader>
   );
 }
 
@@ -749,16 +814,24 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      disabled={disabled}
-      className="h-9 rounded-full bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80"
-      onClick={() => attachments.openFileDialog()}
-    >
-      Add image
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={disabled}
+            aria-label="Add image"
+            className={composerIconButtonClass}
+            onClick={() => attachments.openFileDialog()}
+          >
+            <ImageIcon className="size-4" />
+          </Button>
+        }
+      />
+      <TooltipContent side="top">Add image</TooltipContent>
+    </Tooltip>
   );
 }
 

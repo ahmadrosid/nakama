@@ -274,6 +274,7 @@ export interface ProfileSummary {
   isSuper: boolean;
   toolCount: number;
   soulActive: boolean;
+  hasAvatar: boolean;
   createdAt: string;
   updatedAt: string;
 }

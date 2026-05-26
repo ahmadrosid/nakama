@@ -18,6 +18,7 @@ import type {
   ModelsResponse,
   ProfileResponse,
   ConfigureProviderResponse,
+  ImageAttachment,
   SetModelResponse,
   SoulStackResponse,
   SoulStatusResponse,
@@ -492,6 +493,23 @@ export class AgentService {
 
   async unassignTool(profileId: string, toolId: string): Promise<ProfileResponse> {
     return this.profileService.unassignTool(profileId, toolId);
+  }
+
+  async uploadProfileAvatar(
+    profileId: string,
+    attachment: ImageAttachment,
+  ): Promise<ProfileResponse> {
+    return this.profileService.uploadProfileAvatar(profileId, attachment);
+  }
+
+  async getProfileAvatar(
+    profileId: string,
+  ): Promise<{ mediaType: string; bytes: Buffer }> {
+    return this.profileService.getProfileAvatar(profileId);
+  }
+
+  async deleteProfileAvatar(profileId: string): Promise<void> {
+    return this.profileService.deleteProfileAvatar(profileId);
   }
 
   async getGlobalSoulStatus(includeContents = false): Promise<SoulStatusResponse> {

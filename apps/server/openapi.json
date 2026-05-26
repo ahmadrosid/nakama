@@ -883,6 +883,144 @@
         }
       }
     },
+    "/v1/profiles/{profileId}/avatar": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Get a profile avatar image",
+        "operationId": "getProfileAvatar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile avatar image",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Upload a profile avatar",
+        "operationId": "uploadProfileAvatar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageAttachment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile with updated avatar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Delete a profile avatar",
+        "operationId": "deleteProfileAvatar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Avatar deleted"
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/profiles/{profileId}/tools": {
       "get": {
         "tags": [
@@ -2288,6 +2426,7 @@
           "isSuper",
           "toolCount",
           "soulActive",
+          "hasAvatar",
           "createdAt",
           "updatedAt"
         ],
@@ -2311,6 +2450,9 @@
             "type": "integer"
           },
           "soulActive": {
+            "type": "boolean"
+          },
+          "hasAvatar": {
             "type": "boolean"
           },
           "createdAt": {

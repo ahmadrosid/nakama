@@ -4,6 +4,7 @@ export * from "./contract";
 export * from "./message-content";
 export * from "./env";
 export * from "./ids";
+export * from "./profile-avatar";
 export * from "./provider-setup-prompt";
 export * from "./soul";
 export * from "./telegram-config";

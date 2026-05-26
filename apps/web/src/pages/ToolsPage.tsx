@@ -58,36 +58,24 @@ export function ToolsPage() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <section className={cn(sectionClass, "p-5")}>
-        <h2 className="type-section-title">Create via agent</h2>
-        <p className="type-body mt-2">
-          New tools are registered by <strong className="text-foreground">Super Bot</strong> in
-          Chat using the <code className="rounded bg-muted px-1 py-0.5 type-code">create_tool</code>{" "}
-          meta-tool.
-        </p>
+      <div>
+        <section className={cn(sectionClass, "p-5")}>
+          <h2 className="type-section-title">Create via agent</h2>
+          <p className="type-body mt-2">
+            New tools are registered by <strong className="text-foreground">Super Bot</strong> in
+            Chat using the <code className="rounded bg-muted px-1 py-0.5 type-code">create_tool</code>{" "}
+            meta-tool.
+          </p>
 
-        <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-          <li>Built-in: write_file, delete_file, web_search (provider-native)</li>
-          <li>JavaScript tools: modules in ~/.tinyclaw/tools/</li>
-          <li>Super Bot only: bash (one-off tasks, not tool files)</li>
-          <li>Detach a tool from a bot on Profiles</li>
-          <li>Delete JavaScript tools here</li>
-        </ul>
-
-        <Button
-          type="button"
-          className="mt-5 w-full"
-          onClick={() => navigateToPage("chat")}
-        >
-          <MessageSquareIcon />
-          Open Chat
-        </Button>
-
-        <p className="mt-3 text-xs text-muted-foreground">
-          Select the <span className="text-foreground">Super Bot</span> profile in Chat, then
-          describe the tool you want to add.
-        </p>
-      </section>
+          <Button
+            type="button"
+            className="mt-5 w-full"
+            onClick={() => navigateToPage("chat")}
+          >
+            Open Chat
+          </Button>
+        </section>
+      </div>
 
       <section className="space-y-4">
         {errorMessage ? (

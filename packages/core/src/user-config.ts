@@ -31,6 +31,12 @@ export function inferProviderFromApiKey(apiKey: string): UserProviderName {
 }
 
 export function getUserConfigDir(): string {
+  const override = process.env.TINYCLAW_CONFIG_DIR?.trim();
+
+  if (override) {
+    return override;
+  }
+
   return join(homedir(), ".tinyclaw");
 }
 
