@@ -14,6 +14,7 @@ export interface PromptSuggestion {
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/help", description: "show commands" },
   { name: "/clear", description: "clear history" },
+  { name: "/compact", description: "compact conversation history" },
   { name: "/create", description: "draft an automation" },
   { name: "/soul", description: "show or initialize agent identity" },
   { name: "/models", description: "list available models" },

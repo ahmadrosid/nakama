@@ -18,6 +18,7 @@ import type {
   SetModelResponse,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
+  CompactionResponse,
   SoulStackResponse,
   SoulStatusResponse,
   StreamEvent,
@@ -70,6 +71,7 @@ export interface RemoteChatSession {
   id: string;
   send(message: string): Promise<string>;
   sendStream(message: string, handler: StreamHandler | StreamHandlers): Promise<string>;
+  compact(options?: { force?: boolean }): Promise<CompactionResponse>;
   clear(): Promise<void>;
   purge(): Promise<void>;
   getMessages(): Promise<ChatMessage[]>;
@@ -308,6 +310,15 @@ export class TinyClawClient {
         }
 
         return readStreamEvents(response.body, handlers);
+      },
+      compact: async (options = {}) => {
+        return this.request<CompactionResponse>(
+          `/v1/sessions/${sessionId}/compact`,
+          {
+            method: "POST",
+            body: JSON.stringify(options),
+          },
+        );
       },
       clear: async () => {
         await this.request(`/v1/sessions/${sessionId}`, {

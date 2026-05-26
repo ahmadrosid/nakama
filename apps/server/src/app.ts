@@ -35,6 +35,8 @@ import {
   type SetModelResponse,
   type ConfigureProviderRequest,
   type ConfigureProviderResponse,
+  type CompactSessionRequest,
+  type CompactionResponse,
   type SoulStackResponse,
   type SoulStatusResponse,
   type StreamEvent,
@@ -339,6 +341,22 @@ export function createApp(options: ServerOptions) {
         }
 
         const messageMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/messages$/);
+
+        const compactMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/compact$/);
+
+        if (compactMatch && request.method === "POST") {
+          const sessionId = decodeURIComponent(compactMatch[1]!);
+          const body = await readJson<CompactSessionRequest>(request).catch(() => ({}));
+          const result = await agent.compactSession(sessionId, {
+            force: body.force ?? false,
+          });
+
+          if (!result) {
+            return errorResponse("Session not found", 404);
+          }
+
+          return json<CompactionResponse>(result);
+        }
 
         if (messageMatch && request.method === "GET") {
           const sessionId = decodeURIComponent(messageMatch[1]!);

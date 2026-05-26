@@ -2,11 +2,13 @@ import {
   createAgentHarness,
   type AgentChatSession,
   type AgentHarness,
+  type CompactionConfig,
 } from "@tinyclaw/agent";
 import type {
   AgentChannel,
   AssignToolRequest,
   ChatMessage,
+  CompactionResponse,
   CreateProfileRequest,
   CreateToolRequest,
   InitSoulResponse,
@@ -303,6 +305,19 @@ export class AgentService {
     return true;
   }
 
+  async compactSession(
+    sessionId: string,
+    options: { force?: boolean } = {},
+  ): Promise<CompactionResponse | null> {
+    const session = await this.resolveSession(sessionId);
+
+    if (!session) {
+      return null;
+    }
+
+    return session.compact(options);
+  }
+
   deleteSession(sessionId: string): boolean {
     const deleted = this.sessions.delete(sessionId);
 
@@ -589,6 +604,7 @@ export class AgentService {
       : systemPrompt;
     const initialHistory = await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
+    const compaction = this.resolveCompactionConfig(profile);
 
     const session = this.harness.createChatSession({
       channel,
@@ -598,6 +614,7 @@ export class AgentService {
       soul: soulStack !== null,
       initialHistory,
       userTimezone,
+      compaction,
       toolContext: {
         profileId,
         sessionId,
@@ -605,6 +622,32 @@ export class AgentService {
     });
 
     return wrapPersistedSession(sessionId, session, this.db);
+  }
+
+  private resolveCompactionConfig(
+    profile: StoredProfileRecord,
+  ): CompactionConfig | undefined {
+    if (!this.userConfig) {
+      return undefined;
+    }
+
+    const provider = detectProvider(process.env, this.userConfig);
+
+    if (!provider) {
+      return undefined;
+    }
+
+    const modelId = resolveModel(provider, profile.model ?? this.userConfig.model);
+    const model = getModelById(modelId);
+
+    if (!model) {
+      return undefined;
+    }
+
+    return {
+      contextWindow: model.contextWindow,
+      maxOutputTokens: model.maxOutputTokens,
+    };
   }
 }
 

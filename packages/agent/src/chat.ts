@@ -1,6 +1,7 @@
 import type {
   AutomationDefinition,
   ChatMessage,
+  CompactionResponse,
   ProviderClient,
   ToolCall,
   ToolContext,
@@ -8,6 +9,10 @@ import type {
 } from "@tinyclaw/core";
 import { partitionTools, toLlmToolDefinitions } from "@tinyclaw/core";
 import { buildChatSystemPrompt } from "./chat-prompt";
+import {
+  compactHistory,
+  type CompactionConfig,
+} from "./history-compaction";
 import {
   buildAutomationSystemPrompt,
   buildAutomationUserPrompt,
@@ -36,7 +41,9 @@ export interface AgentChatSession {
   send(message: string): Promise<string>;
   sendStream(message: string, handlers: StreamHandlers): Promise<string>;
   clear(): void;
+  compact(options?: { force?: boolean }): Promise<CompactionResponse>;
   getHistory(): readonly ChatMessage[];
+  getHistoryRevision(): number;
   createAutomation(prompt: string): Promise<AutomationDefinition>;
 }
 
@@ -49,6 +56,7 @@ export interface AgentChatSessionOptions {
   initialHistory?: ChatMessage[];
   toolContext?: ToolContext;
   userTimezone?: string;
+  compaction?: CompactionConfig;
 }
 
 export function createAgentChatSession(
@@ -75,12 +83,49 @@ export function createAgentChatSession(
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
+  let historyRevision = 0;
+
+  function bumpHistoryRevision(): void {
+    historyRevision += 1;
+  }
+
+  async function runCompaction(force: boolean): Promise<CompactionResponse> {
+    if (!dependencies.provider || !options.compaction) {
+      return {
+        action: "none",
+        messagesBefore: history.length,
+        messagesAfter: history.length,
+      };
+    }
+
+    const { localTools } = partitionTools(tools);
+    const llmTools =
+      options.enableToolLoop !== false && localTools.length > 0
+        ? toLlmToolDefinitions(localTools)
+        : undefined;
+    const result = await compactHistory({
+      history,
+      provider: dependencies.provider,
+      systemPrompt,
+      tools: llmTools,
+      compaction: options.compaction,
+      force,
+    });
+
+    if (result.action !== "none") {
+      bumpHistoryRevision();
+    }
+
+    return result;
+  }
 
   return {
     async send(message) {
       return sendMessage(dependencies, tools, systemPrompt, history, message, "send", {
         enableToolLoop,
         toolContext,
+        compaction: options.compaction,
+        runCompaction,
       });
     },
     async sendStream(message, handlers) {
@@ -91,14 +136,21 @@ export function createAgentChatSession(
         history,
         message,
         "stream",
-        { enableToolLoop, handlers, toolContext },
+        { enableToolLoop, handlers, toolContext, compaction: options.compaction, runCompaction },
       );
     },
     clear() {
       history.length = 0;
+      bumpHistoryRevision();
+    },
+    compact(options) {
+      return runCompaction(options?.force ?? false);
     },
     getHistory() {
       return history;
+    },
+    getHistoryRevision() {
+      return historyRevision;
     },
     createAutomation(prompt) {
       return harness.createAutomationFromPrompt({ prompt, channel }, { tools });
@@ -117,6 +169,8 @@ async function sendMessage(
     enableToolLoop: boolean;
     handlers?: StreamHandlers;
     toolContext?: ToolContext;
+    compaction?: CompactionConfig;
+    runCompaction?: (force: boolean) => Promise<CompactionResponse>;
   },
 ): Promise<string> {
   history.push({ role: "user", content: message });
@@ -141,6 +195,10 @@ async function sendMessage(
     enableTools && hasWebSearch && dependencies.provider
       ? { webSearch: true }
       : undefined;
+
+  if (options.runCompaction) {
+    await options.runCompaction(false);
+  }
 
   try {
     const reply = await runConversation(

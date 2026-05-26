@@ -187,6 +187,10 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       sessionMessages.set(sessionId, [...existing, ...messages]);
     },
 
+    async replaceMessagesForSession(sessionId, messages) {
+      sessionMessages.set(sessionId, [...messages]);
+    },
+
     async deleteMessagesForSession(sessionId) {
       sessionMessages.delete(sessionId);
     },

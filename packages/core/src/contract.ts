@@ -90,6 +90,17 @@ export interface ListSessionsResponse {
   sessions: SessionSummary[];
 }
 
+export interface CompactSessionRequest {
+  force?: boolean;
+}
+
+export interface CompactionResponse {
+  action: "none" | "pruned" | "summarized";
+  prunedTokens?: number;
+  messagesBefore: number;
+  messagesAfter: number;
+}
+
 export interface SendMessageRequest {
   message: string;
   stream?: boolean;
@@ -363,6 +374,7 @@ export type ChatMessage =
   | {
       role: "assistant";
       content: string;
+      summary?: boolean;
       toolCalls?: ToolCall[];
       /** Provider-specific assistant payload for multi-turn replay (Anthropic blocks, OpenAI response items). */
       providerContent?: unknown[];

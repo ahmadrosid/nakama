@@ -95,6 +95,25 @@ export const openApiSchemas = {
       reply: { type: "string" },
     },
   },
+  CompactSessionRequest: {
+    type: "object",
+    properties: {
+      force: { type: "boolean" },
+    },
+  },
+  CompactionResponse: {
+    type: "object",
+    required: ["action", "messagesBefore", "messagesAfter"],
+    properties: {
+      action: {
+        type: "string",
+        enum: ["none", "pruned", "summarized"],
+      },
+      prunedTokens: { type: "integer" },
+      messagesBefore: { type: "integer" },
+      messagesAfter: { type: "integer" },
+    },
+  },
   StreamEvent: {
     oneOf: [
       {

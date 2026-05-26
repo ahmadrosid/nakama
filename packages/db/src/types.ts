@@ -106,5 +106,9 @@ export interface DatabaseAdapter {
     sessionId: string,
     messages: StoredSessionMessageRecord[],
   ): Promise<void>;
+  replaceMessagesForSession(
+    sessionId: string,
+    messages: StoredSessionMessageRecord[],
+  ): Promise<void>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
 }

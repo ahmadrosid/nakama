@@ -113,6 +113,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      case "/compact": {
+        const session = await resolveSession(chatId);
+        const result = await session.compact({ force: true });
+        await ctx.reply(
+          `Compacted (${result.action}). Messages: ${result.messagesAfter}.`,
+        );
+        return;
+      }
+
       case "/new": {
         await createAndBindSession(chatId);
         await ctx.reply("Started a new conversation.");

@@ -222,6 +222,39 @@ describe("createChatHandler security", () => {
     });
   });
 
+  test("compacts session history on /compact", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "profile_default" },
+        authStore,
+        sessionStore,
+      });
+
+      const { ctx, replies } = createMessageContext({
+        userId: 4242,
+        text: "/compact",
+      });
+
+      await handleMessage(ctx);
+
+      expect(calls.compact).toBe(1);
+      expect(calls.sendStream).toBe(0);
+      expect(replies).toEqual(["Compacted (summarized). Messages: 4."]);
+    });
+  });
+
   test("allows pre-approved users to skip pairing", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

@@ -303,6 +303,20 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/sessions/{sessionId}/compact": {
+        post: {
+          tags: ["Chat"],
+          summary: "Compact chat session history",
+          operationId: "compactSession",
+          parameters: [{ $ref: "#/components/parameters/SessionId" }],
+          requestBody: jsonBody("CompactSessionRequest"),
+          responses: {
+            "200": jsonResponse("CompactionResponse", "Compaction result"),
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/profiles": {
         get: {
           tags: ["Profiles"],

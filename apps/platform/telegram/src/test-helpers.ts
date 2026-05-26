@@ -37,6 +37,7 @@ export function createMockClient() {
   const calls = {
     createSession: 0,
     sendStream: 0,
+    compact: 0,
   };
 
   const sendStream = async () => {
@@ -47,6 +48,14 @@ export function createMockClient() {
   const session = {
     id: "session_test",
     sendStream,
+    compact: async () => {
+      calls.compact += 1;
+      return {
+        action: "summarized" as const,
+        messagesBefore: 10,
+        messagesAfter: 4,
+      };
+    },
     getMessages: async () => [],
     clear: async () => {},
     send: async () => "ok",

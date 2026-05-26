@@ -75,6 +75,14 @@ export {
   type AgentChatSessionOptions,
 } from "./chat";
 export { buildChatSystemPrompt } from "./chat-prompt";
+export {
+  compactHistory,
+  estimateHistoryTokens,
+  isOverflow,
+  pruneToolOutputs,
+  selectCompactionRange,
+  type CompactionConfig,
+} from "./history-compaction";
 export { executeToolCall, findTool, serializeToolResult } from "./tool-loop";
 export { createFallbackAutomation } from "./fallback";
 export { deriveName, parseAutomationResponse } from "./parse";

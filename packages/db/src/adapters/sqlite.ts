@@ -410,6 +410,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
     },
 
+    async replaceMessagesForSession(sessionId, messages) {
+      deleteMessagesForSessionStmt.run(sessionId);
+
+      for (const message of messages) {
+        appendMessageStmt.run(
+          message.id,
+          sessionId,
+          message.seq,
+          JSON.stringify(message.payload),
+          message.createdAt,
+        );
+      }
+    },
+
     async deleteMessagesForSession(sessionId) {
       deleteMessagesForSessionStmt.run(sessionId);
     },

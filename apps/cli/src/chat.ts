@@ -79,6 +79,27 @@ export async function runChat(options: RunChatOptions): Promise<void> {
         continue;
       }
 
+      if (line === "/compact") {
+        if (processing) {
+          continue;
+        }
+
+        processing = true;
+
+        try {
+          const result = await session.compact({ force: true });
+          console.log(
+            `Compacted (${result.action}). Messages: ${result.messagesAfter}\n`,
+          );
+        } catch (error) {
+          console.log(`${formatError(error)}\n`);
+        } finally {
+          processing = false;
+        }
+
+        continue;
+      }
+
       if (line === "/help") {
         console.log(`${HELP_TEXT}\n`);
         continue;

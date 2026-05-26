@@ -4,15 +4,49 @@ export interface ProviderModelOption {
   id: string;
   name: string;
   provider: ProviderName;
+  contextWindow: number;
+  maxOutputTokens: number;
   default?: boolean;
 }
 
 export const AVAILABLE_MODELS: ProviderModelOption[] = [
-  { id: "claude-sonnet-4-6", name: "Sonnet 4.6", provider: "anthropic", default: true },
-  { id: "claude-opus-4-6", name: "Opus 4.6", provider: "anthropic" },
-  { id: "gpt-5.5", name: "GPT-5.5", provider: "openai" },
-  { id: "gpt-5.4", name: "GPT-5.4", provider: "openai", default: true },
-  { id: "gpt-5.3-codex", name: "GPT-5.3 Codex", provider: "openai" },
+  {
+    id: "claude-sonnet-4-6",
+    name: "Sonnet 4.6",
+    provider: "anthropic",
+    contextWindow: 200_000,
+    maxOutputTokens: 8_192,
+    default: true,
+  },
+  {
+    id: "claude-opus-4-6",
+    name: "Opus 4.6",
+    provider: "anthropic",
+    contextWindow: 200_000,
+    maxOutputTokens: 8_192,
+  },
+  {
+    id: "gpt-5.5",
+    name: "GPT-5.5",
+    provider: "openai",
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+  },
+  {
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    provider: "openai",
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    default: true,
+  },
+  {
+    id: "gpt-5.3-codex",
+    name: "GPT-5.3 Codex",
+    provider: "openai",
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+  },
 ];
 
 export function getAvailableModels(): ProviderModelOption[] {
