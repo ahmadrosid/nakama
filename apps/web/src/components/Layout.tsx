@@ -4,7 +4,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAppContext } from "@/context/app-context";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
-import { usePrefetchTimezones } from "@/hooks/use-timezones";
 import { NAV_ITEMS, pageIdFromPath, SETTINGS_NAV_ITEM } from "@/lib/navigation";
 import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 
@@ -13,12 +12,7 @@ export function Layout() {
   const { navigateToPage } = useAppNavigation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const { health, models, loading, error, refresh, setModel } = useAppContext();
-  const prefetchTimezones = usePrefetchTimezones();
   const prefetchAppData = usePrefetchAppData();
-  const prefetchSettingsData = () => {
-    prefetchAppData();
-    prefetchTimezones();
-  };
   const activeNav =
     page === "settings"
       ? SETTINGS_NAV_ITEM
@@ -51,8 +45,8 @@ export function Layout() {
                 title={item.description}
                 aria-current={active ? "page" : undefined}
                 onClick={() => navigateToPage(item.id)}
-                onMouseEnter={item.id === "automations" ? prefetchSettingsData : undefined}
-                onFocus={item.id === "automations" ? prefetchSettingsData : undefined}
+                onMouseEnter={item.id === "automations" ? prefetchAppData : undefined}
+                onFocus={item.id === "automations" ? prefetchAppData : undefined}
                 data-active={active || undefined}
                 className="sidebar-nav-link"
               >
@@ -68,8 +62,8 @@ export function Layout() {
             title={SETTINGS_NAV_ITEM.description}
             aria-current={page === "settings" ? "page" : undefined}
             onClick={() => navigateToPage("settings")}
-            onMouseEnter={prefetchSettingsData}
-            onFocus={prefetchSettingsData}
+            onMouseEnter={prefetchAppData}
+            onFocus={prefetchAppData}
             data-active={page === "settings" || undefined}
             className="sidebar-nav-link !w-auto shrink-0"
           >

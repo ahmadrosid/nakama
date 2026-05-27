@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateAutomationRequest, UpdateAutomationRequest } from "@tinyclaw/core/contract";
+import type { UpdateAutomationRequest } from "@tinyclaw/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -61,17 +61,6 @@ export function useRunAutomationMutation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.automations.runs(automationId) }),
       ]);
-    },
-  });
-}
-
-export function useCreateAutomationMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CreateAutomationRequest) => client.createAutomation(input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.automations.all });
     },
   });
 }

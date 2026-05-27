@@ -10,8 +10,10 @@ import {
   SearchIcon,
   Trash2Icon,
   UserIcon,
+  XIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,11 +46,13 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 
 export function HistoryPage() {
   const { navigateToPage, navigateToChat } = useAppNavigation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
-  const [profileId, setProfileId] = useState("");
+  const [profileId, setProfileIdState] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
+  const profileInitializedRef = useRef(false);
   const {
     data: sessions = [],
     isLoading: initialLoading,
@@ -58,6 +62,27 @@ export function HistoryPage() {
   } = useSessionsQuery(profileId);
   const purgeMutation = usePurgeSessionMutation();
   const busy = purgeMutation.isPending;
+  const trimmedSearch = searchQuery.trim();
+  const isSearching = trimmedSearch.length > 0;
+
+  const setProfileId = useCallback(
+    (nextProfileId: string) => {
+      setProfileIdState(nextProfileId);
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (nextProfileId) {
+            next.set("profile", nextProfileId);
+          } else {
+            next.delete("profile");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     const queryError = profilesError ?? sessionsError;
@@ -67,14 +92,20 @@ export function HistoryPage() {
   }, [profilesError, sessionsError]);
 
   useEffect(() => {
-    if (profileId || profiles.length === 0) {
+    if (profiles.length === 0 || profileInitializedRef.current) {
       return;
     }
 
+    profileInitializedRef.current = true;
+    const fromUrl = searchParams.get("profile");
+    const matchedProfile = fromUrl ? profiles.find((profile) => profile.id === fromUrl) : null;
     const defaultProfile =
-      profiles.find((profile) => profile.id === "profile_default") ?? profiles[0]!;
+      matchedProfile ??
+      profiles.find((profile) => profile.id === "profile_default") ??
+      profiles[0]!;
+
     setProfileId(defaultProfile.id);
-  }, [profileId, profiles]);
+  }, [profiles, searchParams, setProfileId]);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === profileId),
@@ -82,7 +113,7 @@ export function HistoryPage() {
   );
 
   const filteredSessions = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = trimmedSearch.toLowerCase();
     if (!query) {
       return sessions;
     }
@@ -91,12 +122,34 @@ export function HistoryPage() {
       const preview = session.preview?.trim().toLowerCase() ?? "";
       return preview.includes(query) || session.id.toLowerCase().includes(query);
     });
-  }, [searchQuery, sessions]);
+  }, [sessions, trimmedSearch]);
 
   const groupedSessions = useMemo(
     () => groupSessionsByDate(filteredSessions),
     [filteredSessions],
   );
+
+  const sessionCountLabel = useMemo(() => {
+    if (!profileId) {
+      return "Select a profile to browse saved chats.";
+    }
+
+    if (initialLoading) {
+      return "Loading saved chats…";
+    }
+
+    if (sessions.length === 0) {
+      return "No saved chats for this profile yet.";
+    }
+
+    if (isSearching && filteredSessions.length !== sessions.length) {
+      return `${filteredSessions.length} of ${sessions.length} conversation${
+        sessions.length === 1 ? "" : "s"
+      } match your search`;
+    }
+
+    return `${sessions.length} saved chat${sessions.length === 1 ? "" : "s"}`;
+  }, [filteredSessions.length, initialLoading, isSearching, profileId, sessions.length]);
 
   async function handleDeleteConfirm() {
     if (!deleteTarget || !profileId) {
@@ -124,172 +177,190 @@ export function HistoryPage() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <Card className="h-fit">
-        <CardHeader>
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
-              <UserIcon className="size-5 text-foreground" aria-hidden />
+    <div className="space-y-4">
+      {error ? (
+        <Card className="border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20">
+          <CardContent className="flex flex-wrap items-start gap-3 p-4">
+            <AlertTriangleIcon
+              className="mt-0.5 size-5 shrink-0 text-red-700 dark:text-red-300"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                Could not load chat history
+              </p>
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+              {profileId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-red-300 bg-white text-red-900 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
+                  onClick={() => void refetchSessions()}
+                >
+                  Try again
+                </Button>
+              ) : null}
             </div>
-            <div>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription className="mt-1">
-                Choose which bot profile&apos;s saved chats to browse.
-              </CardDescription>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader className="gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
+                <HistoryIcon className="size-5 text-foreground" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <CardTitle>Saved chats</CardTitle>
+                <CardDescription className="mt-1">{sessionCountLabel}</CardDescription>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="label" htmlFor="history-profile">
-              Active profile
-            </label>
-            <Select
-              value={profileId}
-              disabled={busy || profiles.length === 0}
-              onValueChange={(value) => setProfileId(value != null ? String(value) : "")}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={refreshing || busy || !profileId}
+              aria-label="Refresh session list"
+              className="shrink-0"
+              onClick={() => void refetchSessions()}
             >
-              <SelectTrigger id="history-profile" className="w-full">
-                <SelectValue placeholder="Select profile" />
-              </SelectTrigger>
-              <SelectContent>
-                {profiles.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id}>
-                    <span className="flex items-center gap-2">
-                      <ProfileAvatar profile={profile} size="sm" />
-                      <span>
-                        {profile.name}
-                        {profile.isSuper ? " (super)" : ""}
+              {refreshing ? (
+                <Spinner className="size-4" />
+              ) : (
+                <RefreshCwIcon className="size-4" aria-hidden />
+              )}
+            </Button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="label" htmlFor="history-profile">
+                Profile
+              </label>
+              <Select
+                value={profileId}
+                disabled={busy || profiles.length === 0}
+                onValueChange={(value) => setProfileId(value != null ? String(value) : "")}
+              >
+                <SelectTrigger id="history-profile" className="w-full">
+                  <SelectValue placeholder="Select profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      <span className="flex items-center gap-2">
+                        <ProfileAvatar profile={profile} size="sm" />
+                        <span>
+                          {profile.name}
+                          {profile.isSuper ? " (super)" : ""}
+                        </span>
                       </span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <Button type="button" className="w-full" onClick={() => navigateToPage("chat")}>
-            <MessageSquareIcon aria-hidden />
-            Back to Chat
-          </Button>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">
-              {activeProfile ? activeProfile.name : "Saved sessions"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {activeProfile
-                ? `${sessions.length} saved web chat${sessions.length === 1 ? "" : "s"}`
-                : "Select a profile to view sessions."}
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={refreshing || busy || !profileId}
-            aria-label="Refresh session list"
-            onClick={() => void refetchSessions()}
-          >
-            {refreshing ? (
-              <Spinner className="size-4" />
-            ) : (
-              <RefreshCwIcon className="size-4" aria-hidden />
-            )}
-            Refresh
-          </Button>
-        </div>
-
-        <div className="relative">
-          <SearchIcon
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search conversations…"
-            disabled={!profileId || initialLoading}
-            className="pl-9"
-            aria-label="Search saved conversations"
-          />
-        </div>
-
-        {error ? (
-          <Card className="border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20">
-            <CardContent className="flex flex-wrap items-start gap-3 p-4">
-              <AlertTriangleIcon
-                className="mt-0.5 size-5 shrink-0 text-red-700 dark:text-red-300"
-                aria-hidden
-              />
-              <div className="min-w-0 flex-1 space-y-2">
-                <p className="text-sm font-medium text-red-900 dark:text-red-100">
-                  Could not load chat history
-                </p>
-                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-                {profileId ? (
+            <div className="space-y-2">
+              <label className="label" htmlFor="history-search">
+                Search
+              </label>
+              <div className="relative">
+                <SearchIcon
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  id="history-search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search by preview or ID…"
+                  disabled={!profileId || initialLoading}
+                  className={cn("pl-9", isSearching && "pr-9")}
+                  aria-label="Search saved conversations"
+                />
+                {isSearching ? (
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="border-red-300 bg-white text-red-900 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
-                    onClick={() => void refetchSessions()}
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Clear search"
+                    className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setSearchQuery("")}
                   >
-                    Try again
+                    <XIcon className="size-4" aria-hidden />
                   </Button>
                 ) : null}
               </div>
-            </CardContent>
-          </Card>
-        ) : null}
+            </div>
+          </div>
 
-        <Card>
-          <CardContent className="p-0">
-            {initialLoading ? (
-              <HistoryListSkeleton />
-            ) : filteredSessions.length === 0 ? (
-              <HistoryEmptyState
-                hasSessions={sessions.length > 0}
-                onStartChat={() => navigateToPage("chat")}
-              />
-            ) : (
-              <div className="divide-y divide-border">
-                {groupedSessions.map((group) => (
-                  <section key={group.label}>
-                    <div className="flex items-center gap-2 bg-muted/30 px-4 py-2.5">
-                      <ClockIcon className="size-3.5 text-muted-foreground" aria-hidden />
-                      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                        {group.label}
-                      </h3>
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        ({group.sessions.length})
-                      </span>
-                    </div>
+          {refreshing && !initialLoading ? (
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Updating list…
+            </p>
+          ) : null}
+        </CardHeader>
 
-                    <ul>
-                      {group.sessions.map((session) => (
-                        <li key={session.id}>
-                          <SessionRow
-                            session={session}
-                            disabled={busy}
-                            onOpen={() => handleOpen(session)}
-                            onDelete={() => setDeleteTarget(session)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        <CardContent className="p-0">
+          {profiles.length === 0 ? (
+            <HistoryEmptyState
+              variant="no-profiles"
+              onPrimaryAction={() => navigateToPage("profiles")}
+            />
+          ) : initialLoading ? (
+            <HistoryListSkeleton />
+          ) : filteredSessions.length === 0 ? (
+            <HistoryEmptyState
+              variant={sessions.length > 0 ? "no-results" : "no-sessions"}
+              profileName={activeProfile?.name}
+              onPrimaryAction={() => navigateToPage("chat")}
+              onClearSearch={() => setSearchQuery("")}
+            />
+          ) : (
+            <div
+              className={cn(
+                "divide-y divide-border transition-opacity duration-200",
+                refreshing && !initialLoading && "opacity-70",
+              )}
+            >
+              {groupedSessions.map((group) => (
+                <section key={group.label} aria-labelledby={`history-group-${group.label}`}>
+                  <div
+                    id={`history-group-${group.label}`}
+                    className="flex items-center gap-2 bg-muted/30 px-4 py-2.5"
+                  >
+                    <ClockIcon className="size-3.5 text-muted-foreground" aria-hidden />
+                    <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                      {group.label}
+                    </h3>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      ({group.sessions.length})
+                    </span>
+                  </div>
+
+                  <ul>
+                    {group.sessions.map((session) => (
+                      <li key={session.id}>
+                        <SessionRow
+                          session={session}
+                          disabled={busy}
+                          onOpen={() => handleOpen(session)}
+                          onDelete={() => setDeleteTarget(session)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog
         open={deleteTarget !== null}
@@ -357,12 +428,13 @@ function SessionRow({
   const title = session.preview?.trim() || "Untitled conversation";
 
   return (
-    <div className="group flex items-stretch gap-1 px-2 py-1 sm:px-3">
+    <div className="flex items-stretch gap-1 px-2 py-1 sm:px-3">
       <button
         type="button"
         disabled={disabled}
+        aria-label={`Open conversation: ${title}`}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-3 text-left transition",
+          "flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-2 py-3 text-left transition-colors duration-200",
           "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
@@ -373,18 +445,18 @@ function SessionRow({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{title}</p>
+          <p className="line-clamp-2 text-sm font-medium text-foreground">{title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            <span title={formatSessionTimestamp(session.updatedAt)}>
+            <time dateTime={session.updatedAt} title={formatSessionTimestamp(session.updatedAt)}>
               {formatSessionRelativeTime(session.updatedAt)}
-            </span>
+            </time>
             <span aria-hidden>·</span>
             <span className="tabular-nums">{session.messageCount} messages</span>
           </div>
         </div>
 
         <ChevronRightIcon
-          className="size-4 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100 motion-reduce:opacity-100"
+          className="size-4 shrink-0 text-muted-foreground"
           aria-hidden
         />
       </button>
@@ -392,11 +464,14 @@ function SessionRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
+        size="icon"
         disabled={disabled}
         aria-label={`Delete ${title}`}
-        className="my-auto shrink-0 text-muted-foreground hover:text-destructive"
-        onClick={onDelete}
+        className="my-auto size-11 shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
       >
         <Trash2Icon className="size-4" />
       </Button>
@@ -405,39 +480,67 @@ function SessionRow({
 }
 
 function HistoryEmptyState({
-  hasSessions,
-  onStartChat,
+  variant,
+  profileName,
+  onPrimaryAction,
+  onClearSearch,
 }: {
-  hasSessions: boolean;
-  onStartChat: () => void;
+  variant: "no-profiles" | "no-sessions" | "no-results";
+  profileName?: string;
+  onPrimaryAction: () => void;
+  onClearSearch?: () => void;
 }) {
+  const icon =
+    variant === "no-results" ? (
+      <SearchIcon className="size-5 text-muted-foreground" aria-hidden />
+    ) : (
+      <HistoryIcon className="size-5 text-muted-foreground" aria-hidden />
+    );
+
+  const title =
+    variant === "no-profiles"
+      ? "No profiles yet"
+      : variant === "no-results"
+        ? "No matching conversations"
+        : "No saved chats yet";
+
+  const description =
+    variant === "no-profiles"
+      ? "Create a profile first, then start chatting to build history."
+      : variant === "no-results"
+        ? "Try a shorter keyword, check spelling, or clear the filter."
+        : profileName
+          ? `Start a conversation with ${profileName} in Chat and it will appear here.`
+          : "Start a conversation in Chat and it will appear here for this profile.";
+
   return (
     <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <div className="flex size-12 items-center justify-center rounded-full border border-border bg-muted/40">
-        {hasSessions ? (
-          <SearchIcon className="size-5 text-muted-foreground" aria-hidden />
-        ) : (
-          <HistoryIcon className="size-5 text-muted-foreground" aria-hidden />
-        )}
+        {icon}
       </div>
 
       <div className="space-y-1.5">
-        <h3 className="type-section-title">
-          {hasSessions ? "No matching conversations" : "No saved chats yet"}
-        </h3>
-        <p className="type-body max-w-sm text-muted-foreground">
-          {hasSessions
-            ? "Try a different search term or clear the filter."
-            : "Start a conversation in Chat and it will appear here for this profile."}
-        </p>
+        <h3 className="type-section-title">{title}</h3>
+        <p className="type-body max-w-sm text-muted-foreground">{description}</p>
       </div>
 
-      {!hasSessions ? (
-        <Button type="button" onClick={onStartChat}>
-          <MessageSquareIcon aria-hidden />
-          Go to Chat
-        </Button>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {variant === "no-results" && onClearSearch ? (
+          <Button type="button" variant="outline" onClick={onClearSearch}>
+            Clear search
+          </Button>
+        ) : null}
+        {variant !== "no-results" ? (
+          <Button type="button" onClick={onPrimaryAction}>
+            {variant === "no-profiles" ? (
+              <UserIcon aria-hidden />
+            ) : (
+              <MessageSquareIcon aria-hidden />
+            )}
+            {variant === "no-profiles" ? "Go to Profiles" : "Go to Chat"}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

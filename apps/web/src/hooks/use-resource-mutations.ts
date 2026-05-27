@@ -7,7 +7,6 @@ import type {
   UpdateProfileRequest,
 } from "@tinyclaw/core/contract";
 import { client } from "@/lib/client";
-import { profileQueryOptions } from "@/hooks/use-app-queries";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useDeleteToolMutation() {
@@ -160,13 +159,6 @@ export function useSessionsQuery(profileId: string, channel: AgentChannel = "web
   });
 }
 
-export function useInvalidateSessions() {
-  const queryClient = useQueryClient();
-
-  return (profileId: string, channel: AgentChannel = "web") =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.sessions(profileId, channel) });
-}
-
 export function useSoulStatusQuery(scope: "global" | string) {
   return useQuery({
     queryKey: scope === "global" ? queryKeys.soul.global : queryKeys.soul.profile(scope),
@@ -264,5 +256,3 @@ export function useWriteSoulFileMutation() {
     },
   });
 }
-
-export { profileQueryOptions };

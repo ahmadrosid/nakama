@@ -5,7 +5,6 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useCallback } from "react";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -26,14 +25,6 @@ export const userTimezoneQueryOptions = queryOptions({
 export function prefetchTimezoneData(queryClient: QueryClient): void {
   void queryClient.prefetchQuery(timezoneCatalogQueryOptions);
   void queryClient.prefetchQuery(userTimezoneQueryOptions);
-}
-
-export function usePrefetchTimezones(): () => void {
-  const queryClient = useQueryClient();
-
-  return useCallback(() => {
-    prefetchTimezoneData(queryClient);
-  }, [queryClient]);
 }
 
 export function useTimezoneCatalog() {
