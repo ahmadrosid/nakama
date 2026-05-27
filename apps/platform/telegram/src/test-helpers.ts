@@ -33,16 +33,49 @@ export function createMessageContext(options: {
   return { ctx, replies };
 }
 
-export function createMockClient() {
+export interface MockStreamControl {
+  complete(reply?: string): void;
+  readonly signal: AbortSignal | undefined;
+}
+
+export function createMockClient(options: { streaming?: boolean } = {}) {
   const calls = {
     createSession: 0,
     sendStream: 0,
     compact: 0,
   };
 
-  const sendStream = async () => {
+  let streamControl: MockStreamControl | null = null;
+
+  const sendStream = async (
+    _input: unknown,
+    _handlers: unknown,
+    streamOptions?: { signal?: AbortSignal },
+  ) => {
     calls.sendStream += 1;
-    return "Agent reply";
+
+    if (!options.streaming) {
+      return "Agent reply";
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      streamControl = {
+        get signal() {
+          return streamOptions?.signal;
+        },
+        complete(reply = "Agent reply") {
+          resolve(reply);
+        },
+      };
+
+      streamOptions?.signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        },
+        { once: true },
+      );
+    });
   };
 
   const session = {
@@ -73,7 +106,11 @@ export function createMockClient() {
     getModels: async () => ({ provider: null, currentModel: null }),
   } as unknown as TinyClawClient;
 
-  return { client, calls };
+  return {
+    client,
+    calls,
+    getStreamControl: () => streamControl,
+  };
 }
 
 export async function writeTelegramConfigIni(

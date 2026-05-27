@@ -1,6 +1,12 @@
 import type { TinyClawClient, RemoteChatSession } from "@tinyclaw/client";
 import type { SendMessageInput } from "@tinyclaw/core";
 import type { Context } from "grammy";
+import {
+  clearActiveStream,
+  isAbortError,
+  registerActiveStream,
+  stopActiveStream,
+} from "./active-stream";
 import { buildTelegramImageInput } from "./images";
 import { normalizeHandshakeInput } from "@tinyclaw/core/telegram-config";
 import type { TelegramBridgeConfig } from "./config";
@@ -45,6 +51,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const text = ctx.message?.text?.trim();
     const chatId = String(ctx.chat.id);
+
+    if (text && isStopCommand(text)) {
+      if (!stopActiveStream(chatId)) {
+        await ctx.reply("Nothing to stop.");
+      }
+
+      return;
+    }
 
     await withChatLock(chatId, async () => {
       await authStore.reload();
@@ -175,26 +189,50 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const session = await resolveSession(chatId);
     const typingLoop = createTypingLoop(ctx);
+    const signal = registerActiveStream(chatId);
     let reply = "";
 
     typingLoop.start();
 
     try {
-      reply = await session.sendStream(input, {
-        onChunk: () => {
-          // v1: accumulate only; deliver as chat bubbles at the end
+      reply = await session.sendStream(
+        input,
+        {
+          onChunk: (delta) => {
+            reply += delta;
+          },
+          onToolStart: () => {
+            typingLoop.ping();
+          },
+          onToolEnd: () => {
+            typingLoop.ping();
+          },
         },
-        onToolStart: () => {
-          typingLoop.ping();
-        },
-        onToolEnd: () => {
-          typingLoop.ping();
-        },
-      });
+        { signal },
+      );
+
+      if (signal.aborted) {
+        if (reply.trim()) {
+          await replyAsChat(ctx, reply);
+        }
+
+        await ctx.reply("Stopped.");
+        return;
+      }
     } catch (error) {
+      if (isAbortError(error)) {
+        if (reply.trim()) {
+          await replyAsChat(ctx, reply);
+        }
+
+        await ctx.reply("Stopped.");
+        return;
+      }
+
       await ctx.reply(formatError(error));
       return;
     } finally {
+      clearActiveStream(chatId);
       typingLoop.stop();
     }
 
@@ -269,6 +307,10 @@ async function replyChunks(ctx: Context, text: string): Promise<void> {
 
 function looksLikeHandshakeAttempt(text: string): boolean {
   return /^[0-9A-F]{8}$/.test(normalizeHandshakeInput(text));
+}
+
+function isStopCommand(text: string): boolean {
+  return text.split(/\s+/)[0]?.toLowerCase() === "/stop";
 }
 
 async function withChatLock(chatId: string, fn: () => Promise<void>): Promise<void> {

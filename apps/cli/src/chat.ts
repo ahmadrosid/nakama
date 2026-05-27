@@ -13,6 +13,7 @@ import { mergeSendInput, parseImageLine } from "./image-input";
 import type { TinyClawClient } from "@tinyclaw/client";
 import { formatSlashCommands, resolveSuggestions } from "./commands";
 import { PromptCancelledError, promptLine } from "./prompt";
+import { sendStreamCancellable } from "./stream-abort";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it`;
 
@@ -135,18 +136,12 @@ export async function runChat(options: RunChatOptions): Promise<void> {
 
           lastUserMessage = "";
 
-          await session.sendStream({ message: "", images: [image] }, {
-            onChunk: (delta) => {
-              process.stdout.write(delta);
-            },
-            onToolStart: (event) => {
-              process.stdout.write(`\n\x1b[2m[tool: ${event.tool}]\x1b[0m\n`);
-            },
-            onToolEnd: (event) => {
-              process.stdout.write(`\x1b[2m[tool: ${event.tool} done]\x1b[0m\n`);
-            },
-          });
-          process.stdout.write("\n\n");
+          const { aborted } = await sendStreamCancellable(
+            session,
+            { message: "", images: [image] },
+            streamHandlers,
+          );
+          finishStreamOutput(aborted);
         } catch (error) {
           console.log(`${formatError(error)}\n`);
         } finally {
@@ -291,18 +286,8 @@ export async function runChat(options: RunChatOptions): Promise<void> {
       lastUserMessage = sendInput.message || line;
 
       try {
-        await session.sendStream(sendInput, {
-          onChunk: (delta) => {
-            process.stdout.write(delta);
-          },
-          onToolStart: (event) => {
-            process.stdout.write(`\n\x1b[2m[tool: ${event.tool}]\x1b[0m\n`);
-          },
-          onToolEnd: (event) => {
-            process.stdout.write(`\x1b[2m[tool: ${event.tool} done]\x1b[0m\n`);
-          },
-        });
-        process.stdout.write("\n\n");
+        const { aborted } = await sendStreamCancellable(session, sendInput, streamHandlers);
+        finishStreamOutput(aborted);
       } catch (error) {
         console.log(`${formatError(error)}\n`);
       } finally {
@@ -427,4 +412,24 @@ function printUserContextInitResult(result: InitUserContextResponse): void {
 function isExitCommand(line: string): boolean {
   const normalized = line.trim().toLowerCase();
   return normalized === "/exit" || normalized === "/quit";
+}
+
+const streamHandlers = {
+  onChunk: (delta: string) => {
+    process.stdout.write(delta);
+  },
+  onToolStart: (event: { tool: string }) => {
+    process.stdout.write(`\n\x1b[2m[tool: ${event.tool}]\x1b[0m\n`);
+  },
+  onToolEnd: (event: { tool: string }) => {
+    process.stdout.write(`\x1b[2m[tool: ${event.tool} done]\x1b[0m\n`);
+  },
+} as const;
+
+function finishStreamOutput(aborted: boolean): void {
+  if (aborted) {
+    process.stdout.write("\n\x1b[2m[stopped]\x1b[0m");
+  }
+
+  process.stdout.write("\n\n");
 }

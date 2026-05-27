@@ -75,10 +75,18 @@ export interface StreamHandlers {
 
 export type SendMessageArg = string | SendMessageInput;
 
+export interface SendStreamOptions {
+  signal?: AbortSignal;
+}
+
 export interface RemoteChatSession {
   id: string;
   send(input: SendMessageArg): Promise<string>;
-  sendStream(input: SendMessageArg, handler: StreamHandler | StreamHandlers): Promise<string>;
+  sendStream(
+    input: SendMessageArg,
+    handler: StreamHandler | StreamHandlers,
+    options?: SendStreamOptions,
+  ): Promise<string>;
   compact(options?: { force?: boolean }): Promise<CompactionResponse>;
   clear(): Promise<void>;
   purge(): Promise<void>;
@@ -335,7 +343,11 @@ export class TinyClawClient {
 
         return response.reply;
       },
-      sendStream: async (input: SendMessageArg, handler: StreamHandler | StreamHandlers) => {
+      sendStream: async (
+        input: SendMessageArg,
+        handler: StreamHandler | StreamHandlers,
+        options?: SendStreamOptions,
+      ) => {
         const handlers = normalizeStreamHandlers(handler);
         const body = { ...resolveSendMessageBody(input), stream: true };
         const response = await this.fetchImpl(
@@ -347,6 +359,7 @@ export class TinyClawClient {
               Accept: "text/event-stream",
             },
             body: JSON.stringify(body),
+            signal: options?.signal,
           },
         );
 
@@ -358,7 +371,7 @@ export class TinyClawClient {
           throw new Error("Server returned an empty stream.");
         }
 
-        return readStreamEvents(response.body, handlers);
+        return readStreamEvents(response.body, handlers, options?.signal);
       },
       compact: async (options = {}) => {
         return this.request<CompactionResponse>(
@@ -530,75 +543,96 @@ export class TinyClawClient {
 async function readStreamEvents(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
+  signal?: AbortSignal,
 ): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let reply = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
+  const abortReader = () => {
+    void reader.cancel();
+  };
 
-    if (done) {
-      break;
-    }
+  signal?.addEventListener("abort", abortReader, { once: true });
 
-    buffer += decoder.decode(value, { stream: true });
-
+  try {
     while (true) {
-      const boundary = buffer.indexOf("\n\n");
+      const { done, value } = await reader.read();
 
-      if (boundary < 0) {
+      if (done) {
         break;
       }
 
-      const eventBlock = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
+      buffer += decoder.decode(value, { stream: true });
 
-      for (const line of eventBlock.split("\n")) {
-        if (!line.startsWith("data: ")) {
-          continue;
+      while (true) {
+        const boundary = buffer.indexOf("\n\n");
+
+        if (boundary < 0) {
+          break;
         }
 
-        const payload = JSON.parse(line.slice(6)) as StreamEvent;
+        const eventBlock = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
 
-        if (payload.type === "chunk") {
-          handlers.onChunk(payload.delta);
-          reply += payload.delta;
-        }
+        for (const line of eventBlock.split("\n")) {
+          if (!line.startsWith("data: ")) {
+            continue;
+          }
 
-        if (payload.type === "tool_start") {
-          handlers.onToolStart?.({
-            toolCallId: payload.toolCallId,
-            tool: payload.tool,
-            input: payload.input,
-          });
-        }
+          const payload = JSON.parse(line.slice(6)) as StreamEvent;
 
-        if (payload.type === "tool_end") {
-          handlers.onToolEnd?.({
-            toolCallId: payload.toolCallId,
-            tool: payload.tool,
-            result: payload.result,
-          });
-        }
+          if (payload.type === "chunk") {
+            handlers.onChunk(payload.delta);
+            reply += payload.delta;
+          }
 
-        if (payload.type === "done") {
-          return payload.reply;
-        }
+          if (payload.type === "tool_start") {
+            handlers.onToolStart?.({
+              toolCallId: payload.toolCallId,
+              tool: payload.tool,
+              input: payload.input,
+            });
+          }
 
-        if (payload.type === "error") {
-          throw new Error(payload.error);
+          if (payload.type === "tool_end") {
+            handlers.onToolEnd?.({
+              toolCallId: payload.toolCallId,
+              tool: payload.tool,
+              result: payload.result,
+            });
+          }
+
+          if (payload.type === "done") {
+            return payload.reply;
+          }
+
+          if (payload.type === "error") {
+            throw new Error(payload.error);
+          }
         }
       }
     }
-  }
 
-  if (!reply) {
-    throw new Error("Stream ended without a response.");
-  }
+    if (signal?.aborted) {
+      return reply;
+    }
 
-  return reply;
+    if (!reply) {
+      throw new Error("Stream ended without a response.");
+    }
+
+    return reply;
+  } catch (error) {
+    if (signal?.aborted) {
+      return reply;
+    }
+
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", abortReader);
+  }
 }
 
 function normalizeStreamHandlers(

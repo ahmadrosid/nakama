@@ -288,6 +288,81 @@ describe("createChatHandler security", () => {
     });
   });
 
+  test("/stop aborts an in-flight stream without waiting for the chat lock", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls, getStreamControl } = createMockClient({ streaming: true });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "profile_default" },
+        authStore,
+        sessionStore,
+      });
+
+      const chatAttempt = createMessageContext({
+        userId: 4242,
+        text: "hello agent",
+      });
+      const stopAttempt = createMessageContext({
+        userId: 4242,
+        text: "/stop",
+      });
+
+      const chatPromise = handleMessage(chatAttempt.ctx);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(getStreamControl()?.signal).toBeDefined();
+
+      await handleMessage(stopAttempt.ctx);
+
+      await chatPromise;
+
+      expect(calls.sendStream).toBe(1);
+      expect(stopAttempt.replies).toEqual([]);
+      expect(chatAttempt.replies).toEqual(["Stopped."]);
+    });
+  });
+
+  test("/stop with no active stream replies with nothing to stop", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "profile_default" },
+        authStore,
+        sessionStore,
+      });
+
+      const { ctx, replies } = createMessageContext({
+        userId: 4242,
+        text: "/stop",
+      });
+
+      await handleMessage(ctx);
+
+      expect(replies).toEqual(["Nothing to stop."]);
+    });
+  });
+
   test("prompts for dashboard setup when no pairing code is active", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

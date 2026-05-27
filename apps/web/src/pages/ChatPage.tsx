@@ -48,6 +48,7 @@ import {
   ChevronRightIcon,
   ImageIcon,
   MessageCircleIcon,
+  SquareIcon,
   WifiOffIcon,
   XIcon,
 } from "lucide-react";
@@ -171,6 +172,36 @@ function formatToolSummary(
   return null;
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+function finalizeStreamingMessages(messages: ChatListItem[]): ChatListItem[] {
+  const next = messages.map((message) =>
+    message.role === "tool" && message.toolStatus === "running"
+      ? {
+          ...message,
+          toolStatus: "done" as const,
+          content: `${message.tool} stopped`,
+        }
+      : message,
+  );
+
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    const message = next[index];
+
+    if (message?.role === "assistant") {
+      next[index] = { ...message, streaming: false };
+      break;
+    }
+  }
+
+  return next;
+}
+
 function deriveChatStatus(
   busy: boolean,
   error: string | null,
@@ -208,7 +239,9 @@ export function ChatPage() {
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const skipNextProfileSessionRef = useRef(false);
   const loadedRouteRef = useRef<string | null>(null);
   const profileSwitchInFlightRef = useRef(false);
@@ -396,6 +429,10 @@ export function ChatPage() {
     void loadProfiles();
   }, [loadProfiles]);
 
+  const stopStreaming = useCallback(() => {
+    streamAbortRef.current?.abort();
+  }, []);
+
   const sendMessage = useCallback(
     async (text: string, files: FileUIPart[] = []) => {
       const images = filePartsToImageAttachments(files);
@@ -439,84 +476,84 @@ export function ChatPage() {
         { id: crypto.randomUUID(), role: "assistant", content: "", streaming: true },
       ]);
 
+      const abortController = new AbortController();
+      streamAbortRef.current = abortController;
+      setCanStop(true);
+
       try {
-        await activeSession.sendStream({ message: text, images: images.length > 0 ? images : undefined }, {
-          onChunk: (delta) => {
-            setMessages((current) => {
-              const next = [...current];
-              const last = next[next.length - 1];
+        await activeSession.sendStream(
+          { message: text, images: images.length > 0 ? images : undefined },
+          {
+            onChunk: (delta) => {
+              setMessages((current) => {
+                const next = [...current];
+                const last = next[next.length - 1];
 
-              if (last?.role === "assistant" && last.streaming) {
-                next[next.length - 1] = {
-                  ...last,
-                  content: last.content + delta,
+                if (last?.role === "assistant" && last.streaming) {
+                  next[next.length - 1] = {
+                    ...last,
+                    content: last.content + delta,
+                    streaming: true,
+                  };
+                  return next;
+                }
+
+                next.push({
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: delta,
                   streaming: true,
-                };
+                });
                 return next;
-              }
-
-              next.push({
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: delta,
-                streaming: true,
               });
-              return next;
-            });
-          },
-          onToolStart: (event) => {
-            setMessages((current) => {
-              const next = current.map((message) =>
-                message.role === "assistant" && message.streaming
-                  ? { ...message, streaming: false }
-                  : message,
+            },
+            onToolStart: (event) => {
+              setMessages((current) => {
+                const next = current.map((message) =>
+                  message.role === "assistant" && message.streaming
+                    ? { ...message, streaming: false }
+                    : message,
+                );
+
+                return [
+                  ...next,
+                  {
+                    id: event.toolCallId,
+                    role: "tool",
+                    content: event.tool,
+                    toolCallId: event.toolCallId,
+                    tool: event.tool,
+                    toolStatus: "running",
+                    toolInput: event.input,
+                  },
+                ];
+              });
+            },
+            onToolEnd: (event) => {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.toolCallId === event.toolCallId
+                    ? {
+                        ...message,
+                        toolStatus: "done",
+                        content: `${event.tool} completed`,
+                        toolResult: event.result,
+                      }
+                    : message,
+                ),
               );
-
-              return [
-                ...next,
-                {
-                  id: event.toolCallId,
-                  role: "tool",
-                  content: event.tool,
-                  toolCallId: event.toolCallId,
-                  tool: event.tool,
-                  toolStatus: "running",
-                  toolInput: event.input,
-                },
-              ];
-            });
+            },
           },
-          onToolEnd: (event) => {
-            setMessages((current) =>
-              current.map((message) =>
-                message.toolCallId === event.toolCallId
-                  ? {
-                      ...message,
-                      toolStatus: "done",
-                      content: `${event.tool} completed`,
-                      toolResult: event.result,
-                    }
-                  : message,
-              ),
-            );
-          },
-        });
+          { signal: abortController.signal },
+        );
 
-        setMessages((current) => {
-          const next = [...current];
-
-          for (let index = next.length - 1; index >= 0; index -= 1) {
-            const message = next[index];
-
-            if (message?.role === "assistant") {
-              next[index] = { ...message, streaming: false };
-              break;
-            }
-          }
-
-          return next;
-        });
+        setMessages((current) => finalizeStreamingMessages(current));
       } catch (err) {
+        if (isAbortError(err)) {
+          setMessages((current) => finalizeStreamingMessages(current));
+          return;
+        }
+
         const message = formatError(err);
 
         if (message.includes("Session not found") && profileId) {
@@ -537,6 +574,8 @@ export function ChatPage() {
         setError(message);
         setMessages((current) => current.filter((message) => !message.streaming));
       } finally {
+        streamAbortRef.current = null;
+        setCanStop(false);
         setBusy(false);
       }
     },
@@ -712,11 +751,18 @@ export function ChatPage() {
 
                 <PromptInputSubmit
                   status={chatStatus}
-                  disabled={busy || !profileId}
-                  aria-label={busy ? "Sending message" : "Send message"}
+                  disabled={!profileId || (busy && !canStop)}
+                  onStop={canStop ? stopStreaming : undefined}
+                  aria-label={
+                    canStop ? "Stop response" : busy ? "Sending message" : "Send message"
+                  }
                   className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
-                  <ArrowUpIcon className="size-3.5" />
+                  {canStop ? (
+                    <SquareIcon className="size-3.5" />
+                  ) : (
+                    <ArrowUpIcon className="size-3.5" />
+                  )}
                 </PromptInputSubmit>
               </div>
             </PromptInputFooter>

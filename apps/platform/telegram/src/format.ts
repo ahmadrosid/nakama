@@ -126,6 +126,7 @@ export function splitTelegramMessage(text: string): string[] {
 export const HELP_TEXT = `TinyClaw Telegram commands:
 
 /help — show this message
+/stop — stop the current reply while it is streaming
 /clear — clear chat history
 /compact — compact conversation history
 /new — start a new conversation
