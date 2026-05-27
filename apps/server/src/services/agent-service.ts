@@ -615,15 +615,17 @@ export class AgentService {
     const tools = await resolveToolsFromStorage(storedTools);
     const includeAutomationTools = options.includeAutomationTools ?? true;
 
-    if (profile.isSuper) {
-      return [...tools, ...this.superBotTools];
-    }
+    let resolved = [...tools];
 
     if (includeAutomationTools && this.automationTools.length > 0) {
-      return [...tools, ...this.automationTools];
+      resolved = [...resolved, ...this.automationTools];
     }
 
-    return tools;
+    if (profile.isSuper) {
+      resolved = [...resolved, ...this.superBotTools];
+    }
+
+    return resolved;
   }
 
   private async buildChatSession(

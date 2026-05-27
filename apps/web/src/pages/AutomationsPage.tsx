@@ -46,13 +46,14 @@ import {
 } from "@/hooks/use-automations";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { formatError } from "@/lib/client";
+import { SUPER_BOT_PROFILE_ID } from "@/lib/profiles";
 import { formatFutureRelativeTime, formatSessionRelativeTime, formatSessionTimestamp } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
 export function AutomationsPage() {
-  const { navigateToPage } = useAppNavigation();
+  const { navigateToNewChat } = useAppNavigation();
   const {
     data: automations = [],
     isLoading: initialLoading,
@@ -194,6 +195,10 @@ export function AutomationsPage() {
     ]);
   }
 
+  function goToCreateAutomation() {
+    navigateToNewChat(SUPER_BOT_PROFILE_ID);
+  }
+
   const runScheduleHint = selected
     ? selected.nextRunAt
       ? `Next run ${formatFutureRelativeTime(selected.nextRunAt)}`
@@ -259,9 +264,9 @@ export function AutomationsPage() {
                     <RefreshCwIcon className="size-4" aria-hidden />
                   )}
                 </Button>
-                <Button type="button" size="sm" onClick={() => navigateToPage("chat")}>
+                <Button type="button" size="sm" onClick={goToCreateAutomation}>
                   <MessageSquareIcon className="size-4" aria-hidden />
-                  Chat
+                  Create automation
                 </Button>
               </div>
             </div>
@@ -354,8 +359,8 @@ export function AutomationsPage() {
               ) : automations.length === 0 ? (
                 <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
                   <AutomationsEmptyState />
-                  <Button type="button" size="sm" onClick={() => navigateToPage("chat")}>
-                    Open Chat
+                  <Button type="button" size="sm" onClick={goToCreateAutomation}>
+                    Create automation
                   </Button>
                 </div>
               ) : !selected ? (

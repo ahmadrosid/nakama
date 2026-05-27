@@ -60,6 +60,9 @@ Super Bot is the **orchestrator**. It can manage other bots via meta-tools:
 | `list_tools` | List all tools |
 | `create_tool` | Register a new tool |
 | `assign_tool_to_profile` | Give a tool to a bot |
+| `create_automation` | Save a manual or scheduled automation |
+| `list_automations` | List saved automations |
+| `delete_automation` | Delete an automation |
 | `bash` | Run a shell command (Super Bot only) |
 
 When the model needs a tool, the server sends **native tool definitions** to OpenAI or Anthropic. The model returns structured tool calls; the server executes them and continues the conversation. Streaming clients receive `tool_start` and `tool_end` SSE events while tools run.
