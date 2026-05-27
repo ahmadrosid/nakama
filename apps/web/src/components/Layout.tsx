@@ -57,27 +57,7 @@ export function Layout() {
             {!collapsed ? (
               <p className="type-brand min-w-0 flex-1 truncate">TinyClaw</p>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              onClick={toggle}
-              className={cn(
-                "shrink-0 text-muted-foreground/70 hover:text-foreground",
-                collapsed &&
-                  "size-9 rounded-md hover:bg-sidebar-accent/60",
-                !collapsed && "ml-auto",
-              )}
-            >
-              {collapsed ? (
-                <ChevronsRightIcon className="sidebar-nav-icon" strokeWidth={1.75} />
-              ) : (
-                <ChevronsLeftIcon className="sidebar-nav-icon" strokeWidth={1.75} />
-              )}
-            </Button>
+            <SidebarCollapseButton collapsed={collapsed} onToggle={toggle} />
           </div>
 
           <nav
@@ -162,6 +142,35 @@ export function Layout() {
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+function SidebarCollapseButton({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const CollapseIcon = collapsed ? ChevronsRightIcon : ChevronsLeftIcon;
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-expanded={!collapsed}
+      title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      onClick={onToggle}
+      className={cn(
+        "shrink-0 text-muted-foreground/70 hover:text-foreground",
+        collapsed && "size-9 rounded-md hover:bg-sidebar-accent/60",
+        !collapsed && "ml-auto",
+      )}
+    >
+      <CollapseIcon className="sidebar-nav-icon" strokeWidth={1.75} />
+    </Button>
   );
 }
 
