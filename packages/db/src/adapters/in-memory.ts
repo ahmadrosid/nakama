@@ -7,12 +7,16 @@ import type {
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
+  StoredTaskRecord,
+  StoredTaskRunRecord,
   StoredToolRecord,
 } from "../types";
 
 export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const automations = new Map<string, StoredAutomationRecord>();
   const automationRuns = new Map<string, StoredAutomationRunRecord[]>();
+  const tasks = new Map<string, StoredTaskRecord>();
+  const taskRuns = new Map<string, StoredTaskRunRecord[]>();
   const profiles = new Map<string, StoredProfileRecord>();
   const tools = new Map<string, StoredToolRecord>();
   const toolsByName = new Map<string, StoredToolRecord>();
@@ -194,6 +198,53 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async deleteMessagesForSession(sessionId) {
       sessionMessages.delete(sessionId);
+    },
+
+    async listTasks() {
+      return Array.from(tasks.values()).sort((left, right) => {
+        const statusCompare = left.status.localeCompare(right.status);
+        return statusCompare !== 0 ? statusCompare : left.position - right.position;
+      });
+    },
+
+    async getTask(id) {
+      return tasks.get(id) ?? null;
+    },
+
+    async upsertTask(record) {
+      tasks.set(record.id, record);
+    },
+
+    async deleteTask(id) {
+      taskRuns.delete(id);
+      return tasks.delete(id);
+    },
+
+    async listTaskRuns(taskId, limit = 20) {
+      return [...(taskRuns.get(taskId) ?? [])]
+        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+        .slice(0, limit);
+    },
+
+    async getActiveTaskRun(taskId) {
+      return (
+        [...(taskRuns.get(taskId) ?? [])]
+          .filter((run) => run.status === "running")
+          .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ?? null
+      );
+    },
+
+    async insertTaskRun(record) {
+      const existing = taskRuns.get(record.taskId) ?? [];
+      taskRuns.set(record.taskId, [...existing, record]);
+    },
+
+    async updateTaskRun(record) {
+      const existing = taskRuns.get(record.taskId) ?? [];
+      taskRuns.set(
+        record.taskId,
+        existing.map((run) => (run.id === record.id ? record : run)),
+      );
     },
   };
 }

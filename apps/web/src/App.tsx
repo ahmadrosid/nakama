@@ -12,6 +12,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { SoulPage } from "@/pages/SoulPage";
 import { StatusPage } from "@/pages/StatusPage";
 import { ToolsPage } from "@/pages/ToolsPage";
+import { TasksPage } from "@/pages/TasksPage";
 
 function AppShell() {
   return (
@@ -37,6 +38,7 @@ export function App() {
         <Route path="/tools" element={<ToolsPage />} />
         <Route path="/soul" element={<SoulPage />} />
         <Route path="/automations" element={<AutomationsPage />} />
+        <Route path="/tasks" element={<TasksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Route>

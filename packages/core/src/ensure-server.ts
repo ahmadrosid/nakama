@@ -57,6 +57,26 @@ export function stopSpawnedServer(child: Bun.Subprocess | null): void {
 
 const REQUIRED_BUILTIN_TOOLS = ["write_file", "delete_file", "web_search"] as const;
 
+export async function serverHasTaskChat(
+  serverUrl: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${serverUrl}/v1/tasks/__capability_probe__/messages`, {
+      signal,
+    });
+
+    if (response.status !== 404) {
+      return false;
+    }
+
+    const payload = (await response.json()) as { error?: string };
+    return payload.error === "Task not found.";
+  } catch {
+    return false;
+  }
+}
+
 async function isServerHealthy(serverUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 800);
@@ -76,6 +96,10 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
     };
 
     if (payload.ok !== true || payload.apiVersion !== TINYCLAW_API_VERSION) {
+      return false;
+    }
+
+    if (!(await serverHasTaskChat(serverUrl, controller.signal))) {
       return false;
     }
 

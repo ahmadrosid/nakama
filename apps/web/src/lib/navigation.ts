@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   CircleGaugeIcon,
   GemIcon,
+  KanbanIcon,
   MessageCircleIcon,
   ArchiveIcon,
   Settings2Icon,
@@ -18,6 +19,7 @@ export type PageId =
   | "tools"
   | "soul"
   | "automations"
+  | "tasks"
   | "settings";
 
 export interface NavItem {
@@ -84,6 +86,11 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Automations",
         description: "Draft workflows from natural language",
       },
+      {
+        id: "tasks",
+        label: "Tasks",
+        description: "Agent swarm kanban board",
+      },
     ],
   },
 ];
@@ -104,6 +111,7 @@ export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
   tools: WrenchIcon,
   soul: GemIcon,
   automations: WorkflowIcon,
+  tasks: KanbanIcon,
   settings: Settings2Icon,
 };
 
@@ -115,6 +123,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   tools: "/tools",
   soul: "/soul",
   automations: "/automations",
+  tasks: "/tasks",
   settings: "/settings",
 };
 

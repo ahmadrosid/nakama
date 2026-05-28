@@ -45,6 +45,15 @@ import type {
   UpdateTelegramSettingsRequest,
   UpdateTimezoneRequest,
   ListTimezonesResponse,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  ListTasksResponse,
+  TaskResponse,
+  RunTaskResponse,
+  ListTaskRunsResponse,
+  TaskMessagesResponse,
+  StoredTask,
+  TaskRunRecord,
 } from "@tinyclaw/core/contract";
 import {
   readApiErrorMessage,
@@ -478,6 +487,64 @@ export class TinyClawClient {
       `/v1/automations/${encodeURIComponent(automationId)}/runs`,
     );
     return response.runs;
+  }
+
+  async listTasks(): Promise<StoredTask[]> {
+    const response = await this.request<ListTasksResponse>("/v1/tasks");
+    return response.tasks;
+  }
+
+  async getTask(taskId: string): Promise<StoredTask> {
+    const response = await this.request<TaskResponse>(
+      `/v1/tasks/${encodeURIComponent(taskId)}`,
+    );
+    return response.task;
+  }
+
+  async createTask(request: CreateTaskRequest): Promise<StoredTask> {
+    const response = await this.request<TaskResponse>("/v1/tasks", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    return response.task;
+  }
+
+  async updateTask(taskId: string, request: UpdateTaskRequest): Promise<StoredTask> {
+    const response = await this.request<TaskResponse>(
+      `/v1/tasks/${encodeURIComponent(taskId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(request),
+      },
+    );
+    return response.task;
+  }
+
+  async deleteTask(taskId: string): Promise<void> {
+    await this.request(`/v1/tasks/${encodeURIComponent(taskId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async runTask(taskId: string): Promise<TaskRunRecord> {
+    const response = await this.request<RunTaskResponse>(
+      `/v1/tasks/${encodeURIComponent(taskId)}/run`,
+      { method: "POST" },
+    );
+    return response.run;
+  }
+
+  async listTaskRuns(taskId: string): Promise<TaskRunRecord[]> {
+    const response = await this.request<ListTaskRunsResponse>(
+      `/v1/tasks/${encodeURIComponent(taskId)}/runs`,
+    );
+    return response.runs;
+  }
+
+  async getTaskMessages(taskId: string): Promise<TaskMessagesResponse> {
+    return this.request<TaskMessagesResponse>(
+      `/v1/tasks/${encodeURIComponent(taskId)}/messages`,
+    );
   }
 
   async getTimezone(): Promise<string> {

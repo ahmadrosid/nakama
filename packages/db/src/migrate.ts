@@ -12,6 +12,7 @@ export function migrateDatabase(db: Database): void {
 
   db.exec(sql);
   migrateAutomationsTable(db);
+  migrateTasksTable(db);
 }
 
 function migrateAutomationsTable(db: Database): void {
@@ -29,6 +30,19 @@ function migrateAutomationsTable(db: Database): void {
   if (!columnNames.has("enabled")) {
     db.exec(`
       ALTER TABLE automations ADD COLUMN enabled INTEGER DEFAULT 1 NOT NULL;
+    `);
+  }
+}
+
+function migrateTasksTable(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(tasks)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("session_id")) {
+    db.exec(`
+      ALTER TABLE tasks ADD COLUMN session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL;
     `);
   }
 }

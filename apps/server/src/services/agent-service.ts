@@ -51,6 +51,7 @@ import {
   SUPER_BOT_TOOL_AUTHORING_RULES,
   type DatabaseAdapter,
   type StoredProfileRecord,
+  type StoredTaskRunRecord,
 } from "@tinyclaw/db";
 import {
   createProviderFromSources,
@@ -62,11 +63,12 @@ import {
 } from "../providers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import type { AutomationRunner } from "./automation-runner";
+import type { TaskRunner } from "./task-runner";
 import { ProfileService } from "./profile-service";
 import { SoulService } from "./soul-service";
 import { UserContextService } from "./user-context-service";
 import { resolveToolsFromStorage } from "./tool-resolver";
-import { loadSessionHistory, wrapPersistedSession } from "./session-persistence";
+import { loadSessionHistory, replaceSessionHistory, wrapPersistedSession } from "./session-persistence";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -84,6 +86,7 @@ export class AgentService {
   private readonly superBotTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
+  private taskRunner: TaskRunner | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private _providerConfigured: boolean;
 
@@ -113,6 +116,10 @@ export class AgentService {
 
   setAutomationRunner(runner: AutomationRunner): void {
     this.automationRunner = runner;
+  }
+
+  setTaskRunner(runner: TaskRunner): void {
+    this.taskRunner = runner;
   }
 
   async getUserTimezone(): Promise<string> {
@@ -188,12 +195,121 @@ export class AgentService {
     return session.send(prompt);
   }
 
+  async runTaskPrompt(taskId: string, profileId: string, prompt: string): Promise<string> {
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const sessionId = await this.ensureTaskSession(taskId, profileId);
+    const session = await this.resolveSession(sessionId);
+
+    if (!session) {
+      throw new Error("Session not found.");
+    }
+
+    return session.send(prompt);
+  }
+
+  async ensureTaskSession(taskId: string, profileId: string): Promise<string> {
+    const record = await this.db.getTask(taskId);
+
+    if (!record) {
+      throw new Error("Task not found.");
+    }
+
+    if (record.sessionId) {
+      const existing = await this.db.getSession(record.sessionId);
+
+      if (existing) {
+        return record.sessionId;
+      }
+    }
+
+    const sessionId = await this.createSession("task", profileId);
+
+    await this.db.upsertTask({
+      ...record,
+      sessionId,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return sessionId;
+  }
+
+  async getTaskChatMessages(
+    taskId: string,
+  ): Promise<{ sessionId: string; messages: ChatMessage[] } | null> {
+    const record = await this.db.getTask(taskId);
+
+    if (!record) {
+      return null;
+    }
+
+    let sessionId = record.sessionId;
+
+    if (sessionId) {
+      const existing = await this.db.getSession(sessionId);
+
+      if (!existing) {
+        sessionId = null;
+      }
+    }
+
+    if (!sessionId) {
+      sessionId = await this.ensureTaskSession(taskId, record.profileId);
+    }
+
+    let messages = await loadSessionHistory(this.db, sessionId);
+
+    if (messages.length === 0) {
+      const runs = await this.db.listTaskRuns(taskId, 1);
+      const latestRun = runs[0];
+
+      if (latestRun && latestRun.status !== "running") {
+        await this.seedTaskSessionFromRun(record.prompt, latestRun, sessionId);
+        messages = await loadSessionHistory(this.db, sessionId);
+      }
+    }
+
+    return { sessionId, messages };
+  }
+
+  private async seedTaskSessionFromRun(
+    prompt: string,
+    run: StoredTaskRunRecord,
+    sessionId: string,
+  ): Promise<void> {
+    const history: ChatMessage[] = [{ role: "user", content: prompt }];
+
+    if (run.status === "failed") {
+      history.push({
+        role: "assistant",
+        content: run.error ?? "Task run failed.",
+      });
+    } else if (run.output) {
+      history.push({
+        role: "assistant",
+        content: run.output,
+      });
+    }
+
+    await replaceSessionHistory(this.db, sessionId, history);
+  }
+
   async runAutomation(automationId: string) {
     if (!this.automationRunner) {
       throw new Error("Automation runner is not configured.");
     }
 
     return this.automationRunner.run(automationId);
+  }
+
+  async runTask(taskId: string) {
+    if (!this.taskRunner) {
+      throw new Error("Task runner is not configured.");
+    }
+
+    return this.taskRunner.run(taskId);
   }
 
   get providerConfigured(): boolean {

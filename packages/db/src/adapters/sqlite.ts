@@ -11,6 +11,8 @@ import type {
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
+  StoredTaskRecord,
+  StoredTaskRunRecord,
   StoredToolRecord,
 } from "../types";
 
@@ -73,6 +75,29 @@ interface SessionMessageRow {
   seq: number;
   payload: string;
   created_at: string;
+}
+
+interface TaskRow {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  profile_id: string;
+  status: string;
+  position: number;
+  session_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TaskRunRow {
+  id: string;
+  task_id: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  output: string | null;
+  error: string | null;
 }
 
 interface SessionSummaryRow {
@@ -228,6 +253,45 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     GROUP BY s.id
     HAVING COUNT(m.id) > 0
     ORDER BY updated_at DESC, s.created_at DESC
+  `);
+
+  const listTasksStmt = db.prepare("SELECT * FROM tasks ORDER BY status ASC, position ASC");
+  const getTaskStmt = db.prepare("SELECT * FROM tasks WHERE id = ?");
+  const upsertTaskStmt = db.prepare(`
+    INSERT INTO tasks (id, title, description, prompt, profile_id, status, position, session_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      description = excluded.description,
+      prompt = excluded.prompt,
+      profile_id = excluded.profile_id,
+      status = excluded.status,
+      position = excluded.position,
+      session_id = excluded.session_id,
+      updated_at = excluded.updated_at
+  `);
+  const deleteTaskStmt = db.prepare("DELETE FROM tasks WHERE id = ?");
+
+  const listTaskRunsStmt = db.prepare(`
+    SELECT * FROM task_runs
+    WHERE task_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `);
+  const getActiveTaskRunStmt = db.prepare(`
+    SELECT * FROM task_runs
+    WHERE task_id = ? AND status = 'running'
+    ORDER BY started_at DESC
+    LIMIT 1
+  `);
+  const insertTaskRunStmt = db.prepare(`
+    INSERT INTO task_runs (id, task_id, status, started_at, completed_at, output, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateTaskRunStmt = db.prepare(`
+    UPDATE task_runs
+    SET status = ?, completed_at = ?, output = ?, error = ?
+    WHERE id = ?
   `);
 
   return {
@@ -429,6 +493,70 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteMessagesForSession(sessionId) {
       deleteMessagesForSessionStmt.run(sessionId);
     },
+
+    async listTasks() {
+      return listTasksStmt.all().map((row) => toTaskRecord(row as TaskRow));
+    },
+
+    async getTask(id) {
+      const row = getTaskStmt.get(id) as TaskRow | null;
+      return row ? toTaskRecord(row) : null;
+    },
+
+    async upsertTask(record) {
+      const existing = await this.getTask(record.id);
+
+      upsertTaskStmt.run(
+        record.id,
+        record.title,
+        record.description,
+        record.prompt,
+        record.profileId,
+        record.status,
+        record.position,
+        record.sessionId ?? null,
+        existing?.createdAt ?? record.createdAt,
+        record.updatedAt,
+      );
+    },
+
+    async deleteTask(id) {
+      const result = deleteTaskStmt.run(id);
+      return result.changes > 0;
+    },
+
+    async listTaskRuns(taskId, limit = 20) {
+      return listTaskRunsStmt
+        .all(taskId, limit)
+        .map((row) => toTaskRunRecord(row as TaskRunRow));
+    },
+
+    async getActiveTaskRun(taskId) {
+      const row = getActiveTaskRunStmt.get(taskId) as TaskRunRow | null;
+      return row ? toTaskRunRecord(row) : null;
+    },
+
+    async insertTaskRun(record) {
+      insertTaskRunStmt.run(
+        record.id,
+        record.taskId,
+        record.status,
+        record.startedAt,
+        record.completedAt,
+        record.output,
+        record.error,
+      );
+    },
+
+    async updateTaskRun(record) {
+      updateTaskRunStmt.run(
+        record.status,
+        record.completedAt,
+        record.output,
+        record.error,
+        record.id,
+      );
+    },
   };
 }
 
@@ -497,6 +625,33 @@ function toSessionMessageRecord(row: SessionMessageRow): StoredSessionMessageRec
     seq: row.seq,
     payload: parseJson(row.payload),
     createdAt: row.created_at,
+  };
+}
+
+function toTaskRecord(row: TaskRow): StoredTaskRecord {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    prompt: row.prompt,
+    profileId: row.profile_id,
+    status: row.status,
+    position: row.position,
+    sessionId: row.session_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toTaskRunRecord(row: TaskRunRow): StoredTaskRunRecord {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    status: row.status as StoredTaskRunRecord["status"],
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    output: row.output,
+    error: row.error,
   };
 }
 

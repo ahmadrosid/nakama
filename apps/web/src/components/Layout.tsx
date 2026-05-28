@@ -138,7 +138,7 @@ export function Layout() {
 
           <main
             className={
-              page === "chat"
+              page === "chat" || page === "tasks"
                 ? "flex min-h-0 flex-1 flex-col overflow-hidden"
                 : "min-h-0 flex-1 overflow-y-auto p-6"
             }

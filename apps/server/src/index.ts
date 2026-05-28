@@ -5,6 +5,8 @@ import { AgentService } from "./services/agent-service";
 import { AutomationRunner } from "./services/automation-runner";
 import { AutomationScheduler } from "./services/automation-scheduler";
 import { AutomationService } from "./services/automation-service";
+import { TaskRunner } from "./services/task-runner";
+import { TaskService } from "./services/task-service";
 import { SystemStatusService } from "./services/system-status-service";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
@@ -17,6 +19,7 @@ import {
   loadConfig,
   writeRuntimeServerUrl,
 } from "@tinyclaw/core";
+import { serverHasTaskChat } from "@tinyclaw/core/ensure-server";
 import { createDatabase, seedDatabase, type Database } from "@tinyclaw/db";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -55,10 +58,20 @@ agent.setAutomationRunner(automationRunner);
 automationService.setOnChange(() => automationScheduler.reload());
 await automationScheduler.start();
 
-const systemStatus = new SystemStatusService(agent, automationScheduler, automationRunner);
+const taskService = new TaskService(database.adapter);
+const taskRunner = new TaskRunner(taskService, agent);
+taskService.setTaskRunner(taskRunner);
+agent.setTaskRunner(taskRunner);
+
+const systemStatus = new SystemStatusService(
+  agent,
+  automationScheduler,
+  automationRunner,
+  taskRunner,
+);
 
 const webDistDir = resolveWebDistDir(projectRoot);
-const app = createApp({ agent, automationService, systemStatus, webDistDir });
+const app = createApp({ agent, automationService, taskService, systemStatus, webDistDir });
 
 const server = startServer({
   host,
@@ -118,7 +131,7 @@ function startServer(options: {
       return Bun.serve({
         hostname: options.host,
         port,
-        idleTimeout: 600,
+        idleTimeout: 255,
         fetch: options.fetch,
       });
     } catch (error) {
@@ -188,7 +201,10 @@ async function findRunningTinyClawServerUrl(
       ok?: boolean;
       apiVersion?: number;
     };
-    return payload.ok === true && payload.apiVersion === TINYCLAW_API_VERSION
+    const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
+    return payload.ok === true &&
+      payload.apiVersion === TINYCLAW_API_VERSION &&
+      hasTaskChat
       ? serverUrl
       : null;
   } catch {

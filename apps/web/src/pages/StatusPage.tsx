@@ -106,17 +106,23 @@ export function StatusPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <MetricTile
               label="Scheduled jobs"
               value={status.automationWorker.scheduledJobs}
               hint="Enabled cron automations"
             />
             <MetricTile
-              label="Active runs"
+              label="Automation runs"
               value={status.automationWorker.activeRuns}
               hint="Currently executing"
               highlight={status.automationWorker.activeRuns > 0}
+            />
+            <MetricTile
+              label="Task runs"
+              value={status.taskWorker.activeRuns}
+              hint="Agent swarm in progress"
+              highlight={status.taskWorker.activeRuns > 0}
             />
             <MetricTile
               label="API version"
@@ -130,7 +136,7 @@ export function StatusPage() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             <ServiceStatusCard
               icon={ServerIcon}
               title="Server"
@@ -183,6 +189,32 @@ export function StatusPage() {
                 },
               ]}
               footer={describeWorkerHint(status)}
+            />
+
+            <ServiceStatusCard
+              icon={BotIcon}
+              title="Task worker"
+              subtitle={
+                status.taskWorker.activeRuns > 0
+                  ? "Agents are executing swarm tasks"
+                  : "No active task runs"
+              }
+              healthy={status.taskWorker.ok}
+              statusLabel={status.taskWorker.activeRuns > 0 ? "Running" : "Idle"}
+              rows={[
+                {
+                  label: "Active runs",
+                  value: String(status.taskWorker.activeRuns),
+                  tone: status.taskWorker.activeRuns > 0 ? "ok" : undefined,
+                },
+                {
+                  label: "LLM provider",
+                  value: status.taskWorker.providerConfigured
+                    ? "Ready for runs"
+                    : "Required for execution",
+                  tone: status.taskWorker.providerConfigured ? "ok" : "warn",
+                },
+              ]}
             />
           </div>
         </>

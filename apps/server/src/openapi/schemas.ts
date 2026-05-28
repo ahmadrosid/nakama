@@ -3,7 +3,7 @@ import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
 export const openApiSchemas = {
   AgentChannel: {
     type: "string",
-    enum: ["web", "cli", "telegram"],
+    enum: ["web", "cli", "telegram", "automation", "task"],
   },
   ApiErrorResponse: {
     type: "object",
@@ -524,12 +524,22 @@ export const openApiSchemas = {
       providerConfigured: { type: "boolean" },
     },
   },
+  TaskWorkerStatus: {
+    type: "object",
+    required: ["ok", "activeRuns", "providerConfigured"],
+    properties: {
+      ok: { type: "boolean" },
+      activeRuns: { type: "integer" },
+      providerConfigured: { type: "boolean" },
+    },
+  },
   SystemStatusResponse: {
     type: "object",
-    required: ["server", "automationWorker", "checkedAt"],
+    required: ["server", "automationWorker", "taskWorker", "checkedAt"],
     properties: {
       server: { $ref: "#/components/schemas/HealthResponse" },
       automationWorker: { $ref: "#/components/schemas/AutomationWorkerStatus" },
+      taskWorker: { $ref: "#/components/schemas/TaskWorkerStatus" },
       checkedAt: { type: "string" },
     },
   },
@@ -641,6 +651,117 @@ export const openApiSchemas = {
       runs: {
         type: "array",
         items: { $ref: "#/components/schemas/AutomationRunRecord" },
+      },
+    },
+  },
+  TaskStatus: {
+    type: "string",
+    enum: ["backlog", "todo", "in_progress", "done", "failed"],
+  },
+  StoredTask: {
+    type: "object",
+    required: [
+      "id",
+      "title",
+      "description",
+      "prompt",
+      "profileId",
+      "status",
+      "position",
+      "sessionId",
+      "createdAt",
+      "updatedAt",
+    ],
+    properties: {
+      id: { type: "string" },
+      title: { type: "string" },
+      description: { type: "string" },
+      prompt: { type: "string" },
+      profileId: { type: "string" },
+      status: { $ref: "#/components/schemas/TaskStatus" },
+      position: { type: "integer" },
+      sessionId: { type: "string", nullable: true },
+      createdAt: { type: "string" },
+      updatedAt: { type: "string" },
+    },
+  },
+  TaskMessagesResponse: {
+    type: "object",
+    required: ["sessionId", "messages"],
+    properties: {
+      sessionId: { type: "string" },
+      messages: {
+        type: "array",
+        items: { $ref: "#/components/schemas/ChatMessage" },
+      },
+    },
+  },
+  ListTasksResponse: {
+    type: "object",
+    required: ["tasks"],
+    properties: {
+      tasks: {
+        type: "array",
+        items: { $ref: "#/components/schemas/StoredTask" },
+      },
+    },
+  },
+  TaskResponse: {
+    type: "object",
+    required: ["task"],
+    properties: {
+      task: { $ref: "#/components/schemas/StoredTask" },
+    },
+  },
+  CreateTaskRequest: {
+    type: "object",
+    required: ["title", "prompt"],
+    properties: {
+      title: { type: "string" },
+      description: { type: "string" },
+      prompt: { type: "string" },
+      profileId: { type: "string" },
+      status: { $ref: "#/components/schemas/TaskStatus" },
+    },
+  },
+  UpdateTaskRequest: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      description: { type: "string" },
+      prompt: { type: "string" },
+      profileId: { type: "string" },
+      status: { $ref: "#/components/schemas/TaskStatus" },
+      position: { type: "integer" },
+    },
+  },
+  TaskRunRecord: {
+    type: "object",
+    required: ["id", "taskId", "status", "startedAt", "completedAt", "output", "error"],
+    properties: {
+      id: { type: "string" },
+      taskId: { type: "string" },
+      status: { type: "string", enum: ["running", "completed", "failed"] },
+      startedAt: { type: "string" },
+      completedAt: { type: "string", nullable: true },
+      output: { type: "string", nullable: true },
+      error: { type: "string", nullable: true },
+    },
+  },
+  RunTaskResponse: {
+    type: "object",
+    required: ["run"],
+    properties: {
+      run: { $ref: "#/components/schemas/TaskRunRecord" },
+    },
+  },
+  ListTaskRunsResponse: {
+    type: "object",
+    required: ["runs"],
+    properties: {
+      runs: {
+        type: "array",
+        items: { $ref: "#/components/schemas/TaskRunRecord" },
       },
     },
   },
@@ -763,6 +884,12 @@ export const openApiParameters = {
   },
   AutomationId: {
     name: "automationId",
+    in: "path",
+    required: true,
+    schema: { type: "string" },
+  },
+  TaskId: {
+    name: "taskId",
     in: "path",
     required: true,
     schema: { type: "string" },

@@ -49,11 +49,19 @@ import {
   type UpdateUserContextRequest,
   type ImageAttachment,
   type UserContextStatusResponse,
+  type CreateTaskRequest,
+  type UpdateTaskRequest,
+  type ListTasksResponse,
+  type TaskResponse,
+  type RunTaskResponse,
+  type ListTaskRunsResponse,
+  type TaskMessagesResponse,
 } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
 import { serializeOpenApiSpec } from "./openapi/build-spec";
 import type { AgentService } from "./services/agent-service";
 import type { AutomationService } from "./services/automation-service";
+import type { TaskService } from "./services/task-service";
 import { getTimezoneCatalog } from "./services/timezone-catalog-service";
 import { SystemStatusService } from "./services/system-status-service";
 import { tryServeStaticWeb } from "./static-web";
@@ -81,12 +89,13 @@ const DOCS_HTML = `<!doctype html>
 export interface ServerOptions {
   agent: AgentService;
   automationService: AutomationService;
+  taskService: TaskService;
   systemStatus: SystemStatusService;
   webDistDir?: string | null;
 }
 
 export function createApp(options: ServerOptions) {
-  const { agent, automationService, systemStatus, webDistDir = null } = options;
+  const { agent, automationService, taskService, systemStatus, webDistDir = null } = options;
 
   return {
     async fetch(request: Request): Promise<Response> {
@@ -536,6 +545,144 @@ export function createApp(options: ServerOptions) {
 
             throw error;
           }
+        }
+
+        if (request.method === "GET" && url.pathname === "/v1/tasks") {
+          const tasks = await taskService.list();
+          return json<ListTasksResponse>({ tasks });
+        }
+
+        if (request.method === "POST" && url.pathname === "/v1/tasks") {
+          const body = await readJson<CreateTaskRequest>(request);
+
+          try {
+            const task = await taskService.create(body, body.profileId);
+            return json<TaskResponse>({ task }, 201);
+          } catch (error) {
+            if (error instanceof Error) {
+              if (error.message === "Profile not found.") {
+                return errorResponse(error.message, 400);
+              }
+
+              if (
+                error.message === "Task title is required." ||
+                error.message === "Task prompt is required." ||
+                error.message.startsWith("Invalid task status:")
+              ) {
+                return errorResponse(error.message, 400);
+              }
+            }
+
+            throw error;
+          }
+        }
+
+        const taskMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)$/);
+        const taskRunsMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/runs$/);
+        const taskMessagesMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/messages$/);
+        const taskRunMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/run$/);
+
+        if (taskMatch && request.method === "GET") {
+          const taskId = decodeURIComponent(taskMatch[1]!);
+          const task = await taskService.get(taskId);
+
+          if (!task) {
+            return errorResponse("Task not found.", 404);
+          }
+
+          return json<TaskResponse>({ task });
+        }
+
+        if (taskMatch && request.method === "PUT") {
+          const taskId = decodeURIComponent(taskMatch[1]!);
+          const body = await readJson<UpdateTaskRequest>(request);
+
+          try {
+            const task = await taskService.update(taskId, body);
+            return json<TaskResponse>({ task });
+          } catch (error) {
+            if (error instanceof Error) {
+              if (error.message === "Task not found.") {
+                return errorResponse(error.message, 404);
+              }
+
+              if (
+                error.message === "Profile not found." ||
+                error.message === "Task title is required." ||
+                error.message === "Task prompt is required." ||
+                error.message.startsWith("Invalid task status:")
+              ) {
+                return errorResponse(error.message, 400);
+              }
+            }
+
+            throw error;
+          }
+        }
+
+        if (taskMatch && request.method === "DELETE") {
+          const taskId = decodeURIComponent(taskMatch[1]!);
+          const deleted = await taskService.delete(taskId);
+
+          if (!deleted) {
+            return errorResponse("Task not found.", 404);
+          }
+
+          return new Response(null, { status: 204 });
+        }
+
+        if (taskRunMatch && request.method === "POST") {
+          const taskId = decodeURIComponent(taskRunMatch[1]!);
+          const task = await taskService.get(taskId);
+
+          if (!task) {
+            return errorResponse("Task not found.", 404);
+          }
+
+          if (task.status !== "in_progress") {
+            await taskService.update(taskId, { status: "in_progress" }, { triggerRun: false });
+          }
+
+          const result = await agent.runTask(taskId);
+
+          if (result.skipped) {
+            return errorResponse(result.error ?? "Task run skipped.", 409);
+          }
+
+          const runs = await taskService.listRuns(taskId, 1);
+          const run = runs[0];
+
+          if (!run) {
+            return errorResponse("Task run record not found.", 500);
+          }
+
+          return json<RunTaskResponse>({ run });
+        }
+
+        if (taskRunsMatch && request.method === "GET") {
+          const taskId = decodeURIComponent(taskRunsMatch[1]!);
+          const task = await taskService.get(taskId);
+
+          if (!task) {
+            return errorResponse("Task not found.", 404);
+          }
+
+          const runs = await taskService.listRuns(taskId);
+          return json<ListTaskRunsResponse>({ runs });
+        }
+
+        if (taskMessagesMatch && request.method === "GET") {
+          const taskId = decodeURIComponent(taskMessagesMatch[1]!);
+          const result = await agent.getTaskChatMessages(taskId);
+
+          if (!result) {
+            return errorResponse("Task not found.", 404);
+          }
+
+          return json<TaskMessagesResponse>({
+            sessionId: result.sessionId,
+            messages: result.messages,
+          });
         }
 
         if (webDistDir) {

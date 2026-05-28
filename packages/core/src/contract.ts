@@ -39,7 +39,7 @@ export interface AutomationRunRecord {
   error: string | null;
 }
 
-export type AgentChannel = "web" | "cli" | "telegram" | "automation";
+export type AgentChannel = "web" | "cli" | "telegram" | "automation" | "task";
 
 export const TINYCLAW_API_VERSION = 1;
 
@@ -57,9 +57,16 @@ export interface AutomationWorkerStatus {
   providerConfigured: boolean;
 }
 
+export interface TaskWorkerStatus {
+  ok: boolean;
+  activeRuns: number;
+  providerConfigured: boolean;
+}
+
 export interface SystemStatusResponse {
   server: HealthResponse;
   automationWorker: AutomationWorkerStatus;
+  taskWorker: TaskWorkerStatus;
   checkedAt: string;
 }
 
@@ -182,6 +189,79 @@ export interface RunAutomationResponse {
 
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
+}
+
+export const TASK_STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "done",
+  "failed",
+] as const;
+
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export interface StoredTask {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  profileId: string;
+  status: TaskStatus;
+  position: number;
+  sessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaskRequest {
+  title: string;
+  description?: string;
+  prompt: string;
+  profileId?: string;
+  status?: TaskStatus;
+}
+
+export interface UpdateTaskRequest {
+  title?: string;
+  description?: string;
+  prompt?: string;
+  profileId?: string;
+  status?: TaskStatus;
+  position?: number;
+}
+
+export interface ListTasksResponse {
+  tasks: StoredTask[];
+}
+
+export interface TaskResponse {
+  task: StoredTask;
+}
+
+export type TaskRunStatus = "running" | "completed" | "failed";
+
+export interface TaskRunRecord {
+  id: string;
+  taskId: string;
+  status: TaskRunStatus;
+  startedAt: string;
+  completedAt: string | null;
+  output: string | null;
+  error: string | null;
+}
+
+export interface RunTaskResponse {
+  run: TaskRunRecord;
+}
+
+export interface ListTaskRunsResponse {
+  runs: TaskRunRecord[];
+}
+
+export interface TaskMessagesResponse {
+  sessionId: string;
+  messages: ChatMessage[];
 }
 
 export interface TimezoneSettingsResponse {

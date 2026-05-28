@@ -66,6 +66,31 @@ export interface StoredSessionSummaryRecord {
   preview: string | null;
 }
 
+export interface StoredTaskRecord {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  profileId: string;
+  status: string;
+  position: number;
+  sessionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TaskRunStatus = "running" | "completed" | "failed";
+
+export interface StoredTaskRunRecord {
+  id: string;
+  taskId: string;
+  status: TaskRunStatus;
+  startedAt: string;
+  completedAt: string | null;
+  output: string | null;
+  error: string | null;
+}
+
 export interface DatabaseAdapter {
   listAutomations(): Promise<StoredAutomationRecord[]>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
@@ -111,4 +136,14 @@ export interface DatabaseAdapter {
     messages: StoredSessionMessageRecord[],
   ): Promise<void>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
+
+  listTasks(): Promise<StoredTaskRecord[]>;
+  getTask(id: string): Promise<StoredTaskRecord | null>;
+  upsertTask(record: StoredTaskRecord): Promise<void>;
+  deleteTask(id: string): Promise<boolean>;
+
+  listTaskRuns(taskId: string, limit?: number): Promise<StoredTaskRunRecord[]>;
+  getActiveTaskRun(taskId: string): Promise<StoredTaskRunRecord | null>;
+  insertTaskRun(record: StoredTaskRunRecord): Promise<void>;
+  updateTaskRun(record: StoredTaskRunRecord): Promise<void>;
 }

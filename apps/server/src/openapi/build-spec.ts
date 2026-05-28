@@ -59,6 +59,7 @@ export function buildOpenApiSpec() {
       { name: "Profiles" },
       { name: "Tools" },
       { name: "Automations" },
+      { name: "Tasks" },
     ],
     paths: {
       "/health": {
@@ -730,6 +731,100 @@ export function buildOpenApiSpec() {
             "200": jsonResponse("ListAutomationRunsResponse", "Automation runs"),
             "404": errorResponse,
             "500": errorResponse,
+          },
+        },
+      },
+      "/v1/tasks": {
+        get: {
+          tags: ["Tasks"],
+          summary: "List all tasks",
+          operationId: "listTasks",
+          responses: {
+            "200": jsonResponse("ListTasksResponse", "Tasks"),
+          },
+        },
+        post: {
+          tags: ["Tasks"],
+          summary: "Create a task",
+          operationId: "createTask",
+          requestBody: jsonBody("CreateTaskRequest"),
+          responses: {
+            "201": jsonResponse("TaskResponse", "Task created"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/tasks/{taskId}": {
+        get: {
+          tags: ["Tasks"],
+          summary: "Get a task",
+          operationId: "getTask",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          responses: {
+            "200": jsonResponse("TaskResponse", "Task"),
+            "404": errorResponse,
+          },
+        },
+        put: {
+          tags: ["Tasks"],
+          summary: "Update a task",
+          operationId: "updateTask",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          requestBody: jsonBody("UpdateTaskRequest"),
+          responses: {
+            "200": jsonResponse("TaskResponse", "Task updated"),
+            "400": errorResponse,
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        delete: {
+          tags: ["Tasks"],
+          summary: "Delete a task",
+          operationId: "deleteTask",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          responses: {
+            "204": { description: "Task deleted" },
+            "404": errorResponse,
+          },
+        },
+      },
+      "/v1/tasks/{taskId}/run": {
+        post: {
+          tags: ["Tasks"],
+          summary: "Run a task now",
+          operationId: "runTask",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          responses: {
+            "200": jsonResponse("RunTaskResponse", "Task run"),
+            "404": errorResponse,
+            "409": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/tasks/{taskId}/runs": {
+        get: {
+          tags: ["Tasks"],
+          summary: "List task run history",
+          operationId: "listTaskRuns",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          responses: {
+            "200": jsonResponse("ListTaskRunsResponse", "Task runs"),
+            "404": errorResponse,
+          },
+        },
+      },
+      "/v1/tasks/{taskId}/messages": {
+        get: {
+          tags: ["Tasks"],
+          summary: "Get task chat messages",
+          operationId: "getTaskMessages",
+          parameters: [{ $ref: "#/components/parameters/TaskId" }],
+          responses: {
+            "200": jsonResponse("TaskMessagesResponse", "Task chat messages"),
+            "404": errorResponse,
           },
         },
       },
