@@ -36,7 +36,7 @@ export function parseAutomationResponse(
   };
 }
 
-function extractJsonObject(raw: string): unknown {
+export function extractJsonObject(raw: string): unknown {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
 

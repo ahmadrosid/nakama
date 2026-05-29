@@ -14,7 +14,6 @@ import {
   useCreateTaskMutation,
   useDeleteTaskMutation,
   useRunTaskMutation,
-  useTaskRunsQuery,
   useTasksQuery,
   useUpdateTaskMutation,
 } from "@/hooks/use-tasks";
@@ -53,11 +52,6 @@ export function TasksPage() {
 
   const focusedTask = tasks.find((task) => task.id === focusedTaskId) ?? null;
   const showHistoryPanel = isHistoryTask(focusedTask);
-
-  const {
-    data: detailRuns = [],
-    isLoading: detailRunsLoading,
-  } = useTaskRunsQuery(detailTask?.id ?? null);
 
   const runningTaskIds = useMemo(() => {
     return new Set(tasks.filter((task) => task.status === "in_progress").map((task) => task.id));
@@ -127,7 +121,12 @@ export function TasksPage() {
     }
   }
 
-  async function handleSave(input: { title: string; description: string; prompt: string }) {
+  async function handleSave(input: {
+    title: string;
+    description: string;
+    prompt: string;
+    profileId: string;
+  }) {
     if (!detailTask) {
       return;
     }
@@ -135,11 +134,11 @@ export function TasksPage() {
     setPageError(null);
 
     try {
-      const updated = await updateMutation.mutateAsync({
+      await updateMutation.mutateAsync({
         taskId: detailTask.id,
         input,
       });
-      setDetailTask(updated);
+      setDetailTask(null);
     } catch (saveError) {
       setPageError(formatError(saveError));
     }
@@ -367,8 +366,7 @@ export function TasksPage() {
 
       <TaskDetailDialog
         task={detailTask}
-        runs={detailRuns}
-        runsLoading={detailRunsLoading}
+        profiles={profiles}
         busy={busy}
         onOpenChange={(open) => {
           if (!open) {

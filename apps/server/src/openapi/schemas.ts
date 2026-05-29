@@ -713,6 +713,21 @@ export const openApiSchemas = {
       task: { $ref: "#/components/schemas/StoredTask" },
     },
   },
+  DraftTaskPromptRequest: {
+    type: "object",
+    required: ["title"],
+    properties: {
+      title: { type: "string" },
+      description: { type: "string" },
+    },
+  },
+  DraftTaskPromptResponse: {
+    type: "object",
+    required: ["prompt"],
+    properties: {
+      prompt: { type: "string" },
+    },
+  },
   CreateTaskRequest: {
     type: "object",
     required: ["title", "prompt"],

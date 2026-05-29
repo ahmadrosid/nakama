@@ -1983,6 +1983,57 @@
         }
       }
     },
+    "/v1/tasks/draft-prompt": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Draft an agent prompt from task title and description",
+        "operationId": "draftTaskPrompt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftTaskPromptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generated prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftTaskPromptResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tasks": {
       "get": {
         "tags": [
@@ -2255,6 +2306,42 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListTaskRunsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tasks/{taskId}/messages": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Get task chat messages",
+        "operationId": "getTaskMessages",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task chat messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskMessagesResponse"
                 }
               }
             }
@@ -3612,6 +3699,7 @@
           "profileId",
           "status",
           "position",
+          "sessionId",
           "createdAt",
           "updatedAt"
         ],
@@ -3637,11 +3725,33 @@
           "position": {
             "type": "integer"
           },
+          "sessionId": {
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string"
           },
           "updatedAt": {
             "type": "string"
+          }
+        }
+      },
+      "TaskMessagesResponse": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "messages"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
           }
         }
       },
@@ -3667,6 +3777,31 @@
         "properties": {
           "task": {
             "$ref": "#/components/schemas/StoredTask"
+          }
+        }
+      },
+      "DraftTaskPromptRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "DraftTaskPromptResponse": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
           }
         }
       },

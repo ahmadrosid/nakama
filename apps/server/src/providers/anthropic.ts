@@ -21,10 +21,15 @@ export function createAnthropicProvider(
   return {
     name: "anthropic",
     generateText(input: GenerateTextInput) {
+      const useJson = (input.format ?? "json") === "json";
+      const system = useJson
+        ? `${input.system}\n\nRespond with valid JSON only.`
+        : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
+
       return requestMessage({
         apiKey: options.apiKey,
         model,
-        system: `${input.system}\n\nRespond with valid JSON only.`,
+        system,
         messages: [{ role: "user", content: input.prompt }],
       });
     },

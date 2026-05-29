@@ -214,6 +214,15 @@ export interface StoredTask {
   updatedAt: string;
 }
 
+export interface DraftTaskPromptRequest {
+  title: string;
+  description?: string;
+}
+
+export interface DraftTaskPromptResponse {
+  prompt: string;
+}
+
 export interface CreateTaskRequest {
   title: string;
   description?: string;
@@ -453,9 +462,13 @@ export interface InitUserContextResponse {
 
 export type ProviderName = "openai" | "anthropic";
 
+export type GenerateTextFormat = "json" | "text";
+
 export interface GenerateTextInput {
   system: string;
   prompt: string;
+  /** Defaults to `json` for structured automation drafts. Use `text` for plain prose. */
+  format?: GenerateTextFormat;
 }
 
 export interface JsonSchema {

@@ -1,4 +1,5 @@
 import type { ProfileSummary } from "@tinyclaw/core/contract";
+import { SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useDraftTaskPromptMutation } from "@/hooks/use-tasks";
+import { normalizeTaskPrompt } from "@tinyclaw/core/normalize-task-prompt";
+import { formatError } from "@/lib/client";
 import { DEFAULT_PROFILE_ID } from "@/lib/profiles";
 
 interface CreateTaskDialogProps {
@@ -44,7 +49,10 @@ export function CreateTaskDialog({
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
   const [profileId, setProfileId] = useState(DEFAULT_PROFILE_ID);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const draftPromptMutation = useDraftTaskPromptMutation();
   const selectedProfileName = profiles.find((profile) => profile.id === profileId)?.name;
+  const generating = draftPromptMutation.isPending;
 
   async function handleSubmit() {
     await onCreate({ title, description, prompt, profileId });
@@ -52,7 +60,28 @@ export function CreateTaskDialog({
     setDescription("");
     setPrompt("");
     setProfileId(DEFAULT_PROFILE_ID);
+    setGenerateError(null);
     onOpenChange(false);
+  }
+
+  async function handleGeneratePrompt() {
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      return;
+    }
+
+    setGenerateError(null);
+
+    try {
+      const generated = await draftPromptMutation.mutateAsync({
+        title: trimmedTitle,
+        description: description.trim() || undefined,
+      });
+      setPrompt(normalizeTaskPrompt(generated));
+    } catch (error) {
+      setGenerateError(formatError(error));
+    }
   }
 
   return (
@@ -92,9 +121,25 @@ export function CreateTaskDialog({
           </div>
 
           <div className="space-y-2.5">
-            <label className="block text-sm font-medium" htmlFor="task-prompt">
-              Agent prompt
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium" htmlFor="task-prompt">
+                Agent prompt
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={generating || !title.trim()}
+                onClick={() => void handleGeneratePrompt()}
+              >
+                {generating ? (
+                  <Spinner className="size-3.5" />
+                ) : (
+                  <SparklesIcon className="size-3.5" aria-hidden />
+                )}
+                Generate
+              </Button>
+            </div>
             <Textarea
               id="task-prompt"
               value={prompt}
@@ -102,6 +147,9 @@ export function CreateTaskDialog({
               placeholder="Find the top 5 competitors and summarize their positioning"
               rows={4}
             />
+            {generateError ? (
+              <p className="text-sm text-red-700 dark:text-red-300">{generateError}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2.5">
@@ -136,7 +184,7 @@ export function CreateTaskDialog({
           </Button>
           <Button
             type="button"
-            disabled={busy || !title.trim() || !prompt.trim()}
+            disabled={busy || generating || !title.trim() || !prompt.trim()}
             onClick={() => void handleSubmit()}
           >
             Create task

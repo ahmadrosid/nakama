@@ -46,6 +46,8 @@ import type {
   UpdateTimezoneRequest,
   ListTimezonesResponse,
   CreateTaskRequest,
+  DraftTaskPromptRequest,
+  DraftTaskPromptResponse,
   UpdateTaskRequest,
   ListTasksResponse,
   TaskResponse,
@@ -499,6 +501,14 @@ export class TinyClawClient {
       `/v1/tasks/${encodeURIComponent(taskId)}`,
     );
     return response.task;
+  }
+
+  async draftTaskPrompt(request: DraftTaskPromptRequest): Promise<string> {
+    const response = await this.request<DraftTaskPromptResponse>("/v1/tasks/draft-prompt", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    return response.prompt;
   }
 
   async createTask(request: CreateTaskRequest): Promise<StoredTask> {

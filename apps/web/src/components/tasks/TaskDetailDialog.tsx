@@ -1,13 +1,6 @@
-import type { StoredTask, TaskRunRecord } from "@tinyclaw/core/contract";
-import {
-  CheckCircle2Icon,
-  Loader2Icon,
-  PlayIcon,
-  Trash2Icon,
-  XCircleIcon,
-} from "lucide-react";
+import type { ProfileSummary, StoredTask } from "@tinyclaw/core/contract";
+import { PlayIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,21 +11,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import { formatSessionTimestamp } from "@/lib/chat-history";
-import { cn } from "@/lib/utils";
+import { useDraftTaskPromptMutation } from "@/hooks/use-tasks";
+import { normalizeTaskPrompt } from "@tinyclaw/core/normalize-task-prompt";
+import { formatError } from "@/lib/client";
 
 interface TaskDetailDialogProps {
   task: StoredTask | null;
-  runs: TaskRunRecord[];
-  runsLoading: boolean;
+  profiles: ProfileSummary[];
   busy: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (input: {
     title: string;
     description: string;
     prompt: string;
+    profileId: string;
   }) => Promise<void>;
   onDelete: () => Promise<void>;
   onRun: () => Promise<void>;
@@ -40,8 +41,7 @@ interface TaskDetailDialogProps {
 
 export function TaskDetailDialog({
   task,
-  runs,
-  runsLoading,
+  profiles,
   busy,
   onOpenChange,
   onSave,
@@ -51,6 +51,12 @@ export function TaskDetailDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const draftPromptMutation = useDraftTaskPromptMutation();
+  const selectedProfileName = profiles.find((profile) => profile.id === profileId)?.name;
+  const generating = draftPromptMutation.isPending;
+  const actionsBusy = busy || generating;
 
   useEffect(() => {
     if (!task) {
@@ -60,7 +66,29 @@ export function TaskDetailDialog({
     setTitle(task.title);
     setDescription(task.description);
     setPrompt(task.prompt);
+    setProfileId(task.profileId);
+    setGenerateError(null);
   }, [task]);
+
+  async function handleGeneratePrompt() {
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      return;
+    }
+
+    setGenerateError(null);
+
+    try {
+      const generated = await draftPromptMutation.mutateAsync({
+        title: trimmedTitle,
+        description: description.trim() || undefined,
+      });
+      setPrompt(normalizeTaskPrompt(generated));
+    } catch (error) {
+      setGenerateError(formatError(error));
+    }
+  }
 
   if (!task) {
     return null;
@@ -68,24 +96,24 @@ export function TaskDetailDialog({
 
   return (
     <Dialog open={Boolean(task)} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-2xl">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Task details</DialogTitle>
           <DialogDescription>
-            Status: {task.status.replace("_", " ")} · Profile: {task.profileId}
+            Status: {task.status.replace("_", " ")}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="detail-title">
+        <div className="space-y-4">
+          <div className="space-y-2.5">
+            <label className="block text-sm font-medium" htmlFor="detail-title">
               Title
             </label>
             <Input id="detail-title" value={title} onChange={(event) => setTitle(event.target.value)} />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="detail-description">
+          <div className="space-y-2.5">
+            <label className="block text-sm font-medium" htmlFor="detail-description">
               Description
             </label>
             <Input
@@ -95,67 +123,83 @@ export function TaskDetailDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="detail-prompt">
-              Agent prompt
-            </label>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium" htmlFor="detail-prompt">
+                Agent prompt
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={actionsBusy || !title.trim()}
+                onClick={() => void handleGeneratePrompt()}
+              >
+                {generating ? (
+                  <Spinner className="size-3.5" />
+                ) : (
+                  <SparklesIcon className="size-3.5" aria-hidden />
+                )}
+                Generate
+              </Button>
+            </div>
             <Textarea
               id="detail-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               rows={5}
             />
+            {generateError ? (
+              <p className="text-sm text-red-700 dark:text-red-300">{generateError}</p>
+            ) : null}
           </div>
 
-          <section className="space-y-3 rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Run history</h3>
-              {runsLoading ? <Spinner className="size-4" /> : null}
-            </div>
-
-            {runs.length === 0 && !runsLoading ? (
-              <p className="text-sm text-muted-foreground">No runs yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {runs.map((run) => (
-                  <li key={run.id} className="rounded-md border border-border bg-muted/20 p-3">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <RunStatusIcon status={run.status} />
-                      <span className="capitalize">{run.status}</span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {formatSessionTimestamp(run.startedAt)}
-                      </span>
-                    </div>
-                    {run.output ? (
-                      <div className="mt-2 text-sm">
-                        <MessageResponse>{run.output}</MessageResponse>
-                      </div>
-                    ) : null}
-                    {run.error ? (
-                      <p className="mt-2 text-sm text-red-700 dark:text-red-300">{run.error}</p>
-                    ) : null}
-                  </li>
+          <div className="space-y-2.5">
+            <label className="block text-sm font-medium" htmlFor="detail-profile">
+              Profile
+            </label>
+            <Select
+              value={profileId}
+              onValueChange={(value) => {
+                if (value) {
+                  setProfileId(value);
+                }
+              }}
+            >
+              <SelectTrigger id="detail-profile">
+                <SelectValue placeholder="Select profile">{selectedProfileName}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {profiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </SelectItem>
                 ))}
-              </ul>
-            )}
-          </section>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="destructive" disabled={busy} onClick={() => void onDelete()}>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={actionsBusy}
+            onClick={() => void onDelete()}
+          >
             <Trash2Icon className="size-4" aria-hidden />
             Delete
           </Button>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void onRun()}>
+            <Button type="button" variant="outline" disabled={actionsBusy} onClick={() => void onRun()}>
               {busy ? <Spinner className="size-4" /> : <PlayIcon className="size-4" aria-hidden />}
               Run agent
             </Button>
             <Button
               type="button"
-              disabled={busy}
-              onClick={() => void onSave({ title, description, prompt })}
+              disabled={actionsBusy}
+              onClick={() => void onSave({ title, description, prompt, profileId })}
             >
               Save changes
             </Button>
@@ -164,16 +208,4 @@ export function TaskDetailDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function RunStatusIcon({ status }: { status: TaskRunRecord["status"] }) {
-  if (status === "running") {
-    return <Loader2Icon className="size-4 animate-spin text-primary" aria-hidden />;
-  }
-
-  if (status === "completed") {
-    return <CheckCircle2Icon className="size-4 text-emerald-600" aria-hidden />;
-  }
-
-  return <XCircleIcon className={cn("size-4 text-red-600")} aria-hidden />;
 }

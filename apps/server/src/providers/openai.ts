@@ -24,14 +24,19 @@ export function createOpenAIProvider(
   return {
     name: "openai",
     generateText(input: GenerateTextInput) {
+      const useJson = (input.format ?? "json") === "json";
+      const system = useJson
+        ? input.system
+        : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
+
       return requestCompletion({
         apiKey: options.apiKey,
         model,
         messages: [
-          { role: "system", content: input.system },
+          { role: "system", content: system },
           { role: "user", content: input.prompt },
         ],
-        responseFormat: { type: "json_object" },
+        responseFormat: useJson ? { type: "json_object" } : undefined,
       });
     },
     generateChat(input: GenerateChatInput) {

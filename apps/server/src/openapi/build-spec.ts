@@ -734,6 +734,19 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/tasks/draft-prompt": {
+        post: {
+          tags: ["Tasks"],
+          summary: "Draft an agent prompt from task title and description",
+          operationId: "draftTaskPrompt",
+          requestBody: jsonBody("DraftTaskPromptRequest"),
+          responses: {
+            "200": jsonResponse("DraftTaskPromptResponse", "Generated prompt"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/tasks": {
         get: {
           tags: ["Tasks"],

@@ -50,6 +50,8 @@ import {
   type ImageAttachment,
   type UserContextStatusResponse,
   type CreateTaskRequest,
+  type DraftTaskPromptRequest,
+  type DraftTaskPromptResponse,
   type UpdateTaskRequest,
   type ListTasksResponse,
   type TaskResponse,
@@ -550,6 +552,21 @@ export function createApp(options: ServerOptions) {
         if (request.method === "GET" && url.pathname === "/v1/tasks") {
           const tasks = await taskService.list();
           return json<ListTasksResponse>({ tasks });
+        }
+
+        if (request.method === "POST" && url.pathname === "/v1/tasks/draft-prompt") {
+          const body = await readJson<DraftTaskPromptRequest>(request);
+
+          try {
+            const prompt = await agent.draftTaskPrompt(body.title, body.description);
+            return json<DraftTaskPromptResponse>({ prompt });
+          } catch (error) {
+            if (error instanceof Error && error.message === "Task title is required.") {
+              return errorResponse(error.message, 400);
+            }
+
+            throw error;
+          }
         }
 
         if (request.method === "POST" && url.pathname === "/v1/tasks") {

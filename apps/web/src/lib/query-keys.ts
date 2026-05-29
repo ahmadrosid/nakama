@@ -15,7 +15,6 @@ export const queryKeys = {
   },
   tasks: {
     all: ["tasks"] as const,
-    runs: (taskId: string) => ["tasks", taskId, "runs"] as const,
     messages: (taskId: string) => ["tasks", taskId, "messages"] as const,
   },
   sessions: (profileId: string, channel: string) => ["sessions", profileId, channel] as const,

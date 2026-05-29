@@ -2,6 +2,7 @@ export * from "./api-error";
 export * from "./config";
 export * from "./contract";
 export * from "./message-content";
+export * from "./normalize-task-prompt";
 export * from "./env";
 export * from "./ids";
 export * from "./profile-avatar";

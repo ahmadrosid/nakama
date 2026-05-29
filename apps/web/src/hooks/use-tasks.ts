@@ -16,19 +16,17 @@ export function useTasksQuery() {
   });
 }
 
-export function useTaskRunsQuery(taskId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.tasks.runs(taskId ?? ""),
-    queryFn: () => client.listTaskRuns(taskId!),
-    enabled: Boolean(taskId),
-  });
-}
-
 export function useTaskMessagesQuery(taskId: string | null) {
   return useQuery({
     queryKey: queryKeys.tasks.messages(taskId ?? ""),
     queryFn: () => loadTaskMessages(taskId!),
     enabled: Boolean(taskId),
+  });
+}
+
+export function useDraftTaskPromptMutation() {
+  return useMutation({
+    mutationFn: (input: { title: string; description?: string }) => client.draftTaskPrompt(input),
   });
 }
 
@@ -54,13 +52,8 @@ export function useUpdateTaskMutation() {
       taskId: string;
       input: UpdateTaskRequest;
     }) => client.updateTask(taskId, input),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.tasks.runs(variables.taskId),
-        }),
-      ]);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
     },
   });
 }
@@ -84,7 +77,6 @@ export function useRunTaskMutation() {
     onSuccess: async (_data, taskId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.runs(taskId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.messages(taskId) }),
       ]);
     },

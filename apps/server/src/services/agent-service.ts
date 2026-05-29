@@ -1,5 +1,6 @@
 import {
   createAgentHarness,
+  draftTaskPromptFromFields,
   type AgentChatSession,
   type AgentHarness,
   type CompactionConfig,
@@ -455,6 +456,15 @@ export class AgentService {
 
   async draftAutomation(prompt: string, channel: AgentChannel) {
     return this.harness.createAutomationFromPrompt({ prompt, channel });
+  }
+
+  async draftTaskPrompt(title: string, description?: string): Promise<string> {
+    const provider = createProviderFromSources(process.env, this.userConfig);
+
+    return draftTaskPromptFromFields(
+      { title, description },
+      { provider: provider ?? undefined },
+    );
   }
 
   getModels(): ModelsResponse {

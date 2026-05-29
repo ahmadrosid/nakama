@@ -90,4 +90,11 @@ export {
   buildAutomationSystemPrompt,
   buildAutomationUserPrompt,
 } from "./prompt";
+export {
+  buildTaskPromptUserPrompt,
+  draftTaskPromptFromFields,
+  fallbackTaskPrompt,
+  type DraftTaskPromptInput,
+} from "./task-prompt";
+export { normalizeTaskPrompt } from "@tinyclaw/core";
 export type { AgentDependencies, AgentRequest } from "./types";
