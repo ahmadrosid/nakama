@@ -12,6 +12,7 @@ import {
   buildAutomationSystemPrompt,
   buildAutomationUserPrompt,
 } from "./prompt";
+
 export interface AgentHarness {
   createAutomationFromPrompt(
     request: AgentRequest,
@@ -60,35 +61,20 @@ export function createAgentHarness(
   return harness;
 }
 
-export * from "./automation";
-export * from "./automation/validate";
-export {
-  createAgentChatSession,
-  getLastUserMessage,
-  type AgentChatSession,
-  type AgentChatSessionOptions,
-  type AgentDependencies,
-  type AgentRequest,
+export type {
+  AgentChatSession,
+  AgentChatSessionOptions,
+  AgentDependencies,
+  AgentRequest,
 } from "./chat";
-export { buildChatSystemPrompt } from "./chat-prompt";
+export type { CompactionConfig } from "./history-compaction";
+export type { AutomationStore } from "./automation/storage/db";
+export type { DraftTaskPromptInput } from "./task-prompt";
+export { draftTaskPromptFromFields } from "./task-prompt";
 export {
-  compactHistory,
-  estimateHistoryTokens,
-  isOverflow,
-  pruneToolOutputs,
-  selectCompactionRange,
-  type CompactionConfig,
-} from "./history-compaction";
-export { executeToolCall, findTool, serializeToolResult } from "./tool-loop";
-export { createFallbackAutomation } from "./fallback";
-export { deriveName, parseAutomationResponse } from "./parse";
+  DatabaseAutomationStore,
+} from "./automation/storage/db";
 export {
-  buildAutomationSystemPrompt,
-  buildAutomationUserPrompt,
-} from "./prompt";
-export {
-  buildTaskPromptUserPrompt,
-  draftTaskPromptFromFields,
-  fallbackTaskPrompt,
-  type DraftTaskPromptInput,
-} from "./task-prompt";
+  resolveScheduleTimezone,
+  validateAutomationInput,
+} from "./automation/validate";

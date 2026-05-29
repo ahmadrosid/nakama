@@ -1,5 +1,6 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileExists } from "../file-exists";
 import {
   BAD_OUTPUTS_TEMPLATE,
   GOOD_OUTPUTS_TEMPLATE,
@@ -18,15 +19,6 @@ const INIT_FILES = [
   { path: "examples/good-outputs.md", content: GOOD_OUTPUTS_TEMPLATE },
   { path: "examples/bad-outputs.md", content: BAD_OUTPUTS_TEMPLATE },
 ] as const;
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function initSoulDirectory(directory: string): Promise<InitSoulResult> {
   await mkdir(directory, { recursive: true, mode: 0o700 });

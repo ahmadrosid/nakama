@@ -1,5 +1,6 @@
-import { access, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileExists } from "../file-exists";
 import type { LoadedSoulStack, SoulFileStatus, SoulStatus } from "./types";
 
 const SOUL_FILES = {
@@ -8,15 +9,6 @@ const SOUL_FILES = {
   skill: "SKILL.md",
   memory: "MEMORY.md",
 } as const;
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function readOptionalFile(path: string): Promise<string | undefined> {
   if (!(await fileExists(path))) {

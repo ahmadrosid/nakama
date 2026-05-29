@@ -1,19 +1,44 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getUserConfigDir } from "../user-config";
-import { USER_TEMPLATE } from "./templates";
+import { fileExists } from "./file-exists";
+import { getUserConfigDir } from "./user-config";
+
+const USER_TEMPLATE = `# About Me
+
+How the agent should understand and help you.
+
+---
+
+## Basics
+
+- Name / nickname:
+- Role:
+
+---
+
+## Communication
+
+- Preferred tone from the agent:
+- Detail level (concise vs thorough):
+
+---
+
+## Work context
+
+- Current projects:
+- Tech stack:
+- Priorities:
+
+---
+
+## Preferences
+
+- Always:
+- Never:
+`;
 
 export function getUserContextPath(): string {
   return join(getUserConfigDir(), "USER.md");
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function loadUserContext(): Promise<string | undefined> {
