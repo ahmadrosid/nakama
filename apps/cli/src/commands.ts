@@ -1,4 +1,4 @@
-import type { ProviderModelOption } from "@tinyclaw/core";
+import type { ProfileSummary, ProviderModelOption } from "@tinyclaw/core";
 
 export interface SlashCommand {
   name: string;
@@ -21,24 +21,65 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "/user", description: "show or initialize USER.md" },
   { name: "/models", description: "list available models" },
   { name: "/model", description: "show or switch model" },
+  { name: "/profile", description: "show or switch bot profile" },
   { name: "/exit", description: "quit" },
 ];
 
-const COMMANDS_WITH_ARGS = new Set(["/model", "/create", "/soul", "/user"]);
+const COMMANDS_WITH_ARGS = new Set(["/model", "/profile", "/create", "/soul", "/user"]);
 
 export interface ResolveSuggestionsOptions {
   input: string;
   models?: ProviderModelOption[];
   currentModel?: string | null;
+  profiles?: ProfileSummary[];
+  currentProfileId?: string | null;
 }
 
 export function resolveSuggestions(
   options: ResolveSuggestionsOptions,
 ): PromptSuggestion[] {
-  const { input, models = [], currentModel = null } = options;
+  const {
+    input,
+    models = [],
+    currentModel = null,
+    profiles = [],
+    currentProfileId = null,
+  } = options;
 
   if (!input.startsWith("/")) {
     return [];
+  }
+
+  const profileMatch = input.match(/^\/profile(?:\s+(.*))?$/);
+
+  if (profileMatch) {
+    const query = (profileMatch[1] ?? "").trim().toLowerCase();
+
+    return profiles
+      .filter((profile) => {
+        if (!query) {
+          return true;
+        }
+
+        return (
+          profile.id.toLowerCase().includes(query) ||
+          profile.name.toLowerCase().includes(query)
+        );
+      })
+      .map((profile) => {
+        const markers = [
+          profile.id === currentProfileId ? "current" : null,
+          profile.isSuper ? "orchestrator" : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        return {
+          label: profile.id,
+          description: `${profile.name}${markers ? ` (${markers})` : ""}`,
+          insertValue: `/profile ${profile.id}`,
+        };
+      });
   }
 
   const modelMatch = input.match(/^\/model(?:\s+(.*))?$/);

@@ -1,5 +1,6 @@
 import { createClient } from "@tinyclaw/client";
 import { runChat } from "./chat";
+import { parseCliProfileArgs } from "./profile";
 import { ensureProviderConfiguredViaCli } from "./setup";
 import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
 
@@ -22,7 +23,14 @@ try {
     }
   }
 
-  await runChat({ client, channel: "cli", offline: !health.providerConfigured });
+  const cliProfile = parseCliProfileArgs();
+
+  await runChat({
+    client,
+    channel: "cli",
+    offline: !health.providerConfigured,
+    profileId: cliProfile.profileId,
+  });
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);

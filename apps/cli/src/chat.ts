@@ -5,6 +5,7 @@ import {
   type InitSoulResponse,
   type InitUserContextResponse,
   type ModelsResponse,
+  type ProfileSummary,
   type SendMessageInput,
   type SoulStatusResponse,
   type UserContextStatusResponse,
@@ -12,6 +13,13 @@ import {
 import { mergeSendInput, parseImageLine } from "./image-input";
 import type { TinyClawClient } from "@tinyclaw/client";
 import { formatSlashCommands, resolveSuggestions } from "./commands";
+import { saveCliProfileId } from "./cli-config";
+import {
+  printProfiles,
+  resolveProfileInput,
+  resolveStartupProfile,
+  type CliProfileOptions,
+} from "./profile";
 import { PromptCancelledError, promptLine } from "./prompt";
 import { sendStreamCancellable } from "./stream-abort";
 
@@ -21,10 +29,20 @@ interface RunChatOptions {
   client: TinyClawClient;
   channel: AgentChannel;
   offline?: boolean;
+  profileId?: CliProfileOptions["profileId"];
 }
 
 export async function runChat(options: RunChatOptions): Promise<void> {
-  let session = await options.client.createSession(options.channel);
+  const startup = await resolveStartupProfile(options.client, {
+    profileId: options.profileId,
+  });
+  let currentProfileId = startup.profileId;
+  let currentProfile = startup.profile;
+  let session = await options.client.createSession(options.channel, {
+    profileId: currentProfileId,
+  });
+
+  console.log(`Profile: ${currentProfile.name} (${currentProfile.id})\n`);
 
   if (options.offline) {
     console.error("Server has no provider configured. Chat runs in offline mode.\n");
@@ -40,6 +58,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   let processing = false;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
+  let profilesCache: ProfileSummary[] = [];
 
   async function refreshModelsCache() {
     try {
@@ -48,6 +67,17 @@ export async function runChat(options: RunChatOptions): Promise<void> {
       modelsCache = null;
     }
   }
+
+  async function refreshProfilesCache() {
+    try {
+      const response = await options.client.listProfiles();
+      profilesCache = response.profiles;
+    } catch {
+      profilesCache = [];
+    }
+  }
+
+  await refreshProfilesCache();
 
   if (!options.offline) {
     await refreshModelsCache();
@@ -64,6 +94,8 @@ export async function runChat(options: RunChatOptions): Promise<void> {
               input,
               models: modelsCache?.models,
               currentModel: modelsCache?.currentModel,
+              profiles: profilesCache,
+              currentProfileId,
             }),
         });
       } catch (error) {
@@ -172,11 +204,60 @@ export async function runChat(options: RunChatOptions): Promise<void> {
 
         try {
           const result = await options.client.setModel(modelId);
-          session = await options.client.createSession(options.channel);
+          session = await options.client.createSession(options.channel, {
+            profileId: currentProfileId,
+          });
           lastUserMessage = null;
           await refreshModelsCache();
           console.log(
             `Model switched to ${result.currentModel}. Chat history reset.\n`,
+          );
+        } catch (error) {
+          console.log(`${formatError(error)}\n`);
+        } finally {
+          processing = false;
+        }
+
+        continue;
+      }
+
+      if (line === "/profile" || line.startsWith("/profile ")) {
+        const profileArg = line.slice("/profile".length).trim();
+
+        if (!profileArg) {
+          printProfiles(profilesCache, { currentProfileId });
+          continue;
+        }
+
+        if (processing) {
+          continue;
+        }
+
+        processing = true;
+
+        try {
+          await refreshProfilesCache();
+          const nextProfile = resolveProfileInput(profilesCache, profileArg);
+
+          if (!nextProfile) {
+            console.log(`Unknown profile: ${profileArg}\n`);
+            continue;
+          }
+
+          if (nextProfile.id === currentProfileId) {
+            console.log(`Already using ${nextProfile.name}.\n`);
+            continue;
+          }
+
+          currentProfileId = nextProfile.id;
+          currentProfile = nextProfile;
+          await saveCliProfileId(currentProfileId);
+          session = await options.client.createSession(options.channel, {
+            profileId: currentProfileId,
+          });
+          lastUserMessage = null;
+          console.log(
+            `Profile switched to ${currentProfile.name}. Chat history reset.\n`,
           );
         } catch (error) {
           console.log(`${formatError(error)}\n`);
