@@ -462,6 +462,10 @@ export class AgentService {
   }
 
   async draftAutomation(prompt: string, channel: AgentChannel) {
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
     return this.harness.createAutomationFromPrompt({ prompt, channel });
   }
 

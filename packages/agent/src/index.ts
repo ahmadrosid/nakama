@@ -6,7 +6,6 @@ import {
   type AgentDependencies,
   type AgentRequest,
 } from "./chat";
-import { createFallbackAutomation } from "./fallback";
 import { parseAutomationResponse } from "./parse";
 import {
   buildAutomationSystemPrompt,
@@ -30,28 +29,18 @@ export function createAgentHarness(
       const tools = options?.tools ?? defaultTools;
 
       if (!dependencies.provider) {
-        return createFallbackAutomation({
-          prompt: request.prompt,
-          tools,
-        });
+        throw new Error("Provider is not configured.");
       }
 
-      try {
-        const raw = await dependencies.provider.generateText({
-          system: buildAutomationSystemPrompt(tools),
-          prompt: buildAutomationUserPrompt(request.prompt, request.channel),
-        });
+      const raw = await dependencies.provider.generateText({
+        system: buildAutomationSystemPrompt(tools),
+        prompt: buildAutomationUserPrompt(request.prompt, request.channel),
+      });
 
-        return parseAutomationResponse(raw, {
-          prompt: request.prompt,
-          tools,
-        });
-      } catch {
-        return createFallbackAutomation({
-          prompt: request.prompt,
-          tools,
-        });
-      }
+      return parseAutomationResponse(raw, {
+        prompt: request.prompt,
+        tools,
+      });
     },
     createChatSession(options) {
       return createAgentChatSession(dependencies, harness, options);
