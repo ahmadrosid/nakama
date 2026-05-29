@@ -68,13 +68,5 @@ export type {
   AgentRequest,
 } from "./chat";
 export type { CompactionConfig } from "./history-compaction";
-export type { AutomationStore } from "./automation/storage/db";
 export type { DraftTaskPromptInput } from "./task-prompt";
 export { draftTaskPromptFromFields } from "./task-prompt";
-export {
-  DatabaseAutomationStore,
-} from "./automation/storage/db";
-export {
-  resolveScheduleTimezone,
-  validateAutomationInput,
-} from "./automation/validate";

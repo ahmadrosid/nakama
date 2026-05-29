@@ -1,4 +1,5 @@
 export * from "./api-error";
+export * from "./automation-validate";
 export * from "./config";
 export * from "./contract";
 export * from "./fs";

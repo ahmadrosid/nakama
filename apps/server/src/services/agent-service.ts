@@ -35,16 +35,29 @@ import type {
   type ProviderClient,
 } from "@tinyclaw/core";
 import {
+  composeSoulSystemPrompt,
   createId,
   createSessionId,
+  getGlobalSoulDir,
+  getProfileSoulDir,
+  getResolvedSoulStatus,
+  getUserContextStatus,
   inferProviderFromApiKey,
+  initSoulDirectory,
+  initUserContext as initializeUserContext,
+  isWritableSoulFileKey,
+  loadSoulStack,
   loadTelegramSettingsPublic,
+  loadUserContext,
   loadUserTimezone,
   readEnvValue,
   regenerateTelegramHandshake,
+  resolveSoulStackForProfile,
   saveTelegramConfig,
   saveUserConfig,
   saveUserTimezone,
+  writeSoulFile,
+  writeUserContext as persistUserContext,
 } from "@tinyclaw/core";
 import {
   DEFAULT_PROFILE_ID,
@@ -66,8 +79,6 @@ import { createSuperBotTools } from "../tools/super-bot-tools";
 import type { AutomationRunner } from "./automation-runner";
 import type { TaskRunner } from "./task-runner";
 import { ProfileService } from "./profile-service";
-import { SoulService } from "./soul-service";
-import { UserContextService } from "./user-context-service";
 import { resolveToolsFromStorage } from "./tool-resolver";
 import { loadSessionHistory, replaceSessionHistory, wrapPersistedSession } from "./session-persistence";
 
@@ -82,8 +93,6 @@ export class AgentService {
   private userConfig: UserProviderConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
-  private readonly soulService: SoulService;
-  private readonly userContextService: UserContextService;
   private readonly superBotTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
@@ -99,8 +108,6 @@ export class AgentService {
     this.userConfig = userConfig;
     this.db = db;
     this.profileService = new ProfileService(db);
-    this.soulService = new SoulService();
-    this.userContextService = new UserContextService();
     this.superBotTools = createSuperBotTools(this.profileService);
     this._providerConfigured = provider !== null;
     this.harness = this.createHarness(provider);
@@ -176,12 +183,12 @@ export class AgentService {
 
     const profile = await this.requireProfile(profileId);
     const tools = await this.resolveProfileTools(profile, { includeAutomationTools: false });
-    const soulStack = await this.soulService.resolveSoulStack(profileId);
-    const systemPrompt = soulStack
-      ? await this.soulService.resolveSystemPrompt(profileId, profile.systemPrompt)
-      : profile.systemPrompt;
+    const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
+      profileId,
+      profile.systemPrompt,
+    );
     const userTimezone = await this.getUserTimezone();
-    const userContext = await this.userContextService.load();
+    const userContext = await loadUserContext();
 
     const session = this.harness.createChatSession({
       channel: "automation",
@@ -189,7 +196,7 @@ export class AgentService {
       systemPrompt,
       userContext,
       enableToolLoop: true,
-      soul: soulStack !== null,
+      soul: soulActive,
       userTimezone,
     });
 
@@ -647,13 +654,13 @@ export class AgentService {
   }
 
   async getGlobalSoulStatus(includeContents = false): Promise<SoulStatusResponse> {
-    const status = await this.soulService.getGlobalSoulStatus();
+    const status = await getResolvedSoulStatus();
 
     if (!includeContents) {
       return status;
     }
 
-    const stack = await this.soulService.getGlobalSoulStack();
+    const stack = await loadSoulStack(getGlobalSoulDir());
     return { ...status, contents: stack.files };
   }
 
@@ -662,38 +669,42 @@ export class AgentService {
     includeContents = false,
   ): Promise<SoulStatusResponse> {
     await this.requireProfile(profileId);
-    const status = await this.soulService.getProfileSoulStatus(profileId);
+    const status = await getResolvedSoulStatus(profileId);
 
     if (!includeContents) {
       return { ...status, profileId };
     }
 
-    const stack = await this.soulService.getProfileSoulStack(profileId);
+    const stack = await loadSoulStack(getProfileSoulDir(profileId));
     return { ...status, profileId, contents: stack.files };
   }
 
   async initGlobalSoul(): Promise<InitSoulResponse> {
-    return this.soulService.initGlobalSoul();
+    return initSoulDirectory(getGlobalSoulDir());
   }
 
   async initProfileSoul(profileId: string): Promise<InitSoulResponse> {
     await this.requireProfile(profileId);
-    const result = await this.soulService.initProfileSoul(profileId);
+    const result = await initSoulDirectory(getProfileSoulDir(profileId));
     return { ...result, profileId };
   }
 
   async getGlobalSoulStack(): Promise<SoulStackResponse> {
-    return this.soulService.getGlobalSoulStack();
+    return loadSoulStack(getGlobalSoulDir());
   }
 
   async getProfileSoulStack(profileId: string): Promise<SoulStackResponse> {
     await this.requireProfile(profileId);
-    const stack = await this.soulService.getProfileSoulStack(profileId);
+    const stack = await loadSoulStack(getProfileSoulDir(profileId));
     return { ...stack, profileId };
   }
 
   async writeGlobalSoulFile(key: string, request: UpdateSoulFileRequest): Promise<void> {
-    await this.soulService.writeGlobalSoulFile(key, request.content);
+    if (!isWritableSoulFileKey(key)) {
+      throw new Error(`Invalid soul file key: ${key}`);
+    }
+
+    await writeSoulFile(getGlobalSoulDir(), key, request.content);
   }
 
   async writeProfileSoulFile(
@@ -702,19 +713,31 @@ export class AgentService {
     request: UpdateSoulFileRequest,
   ): Promise<void> {
     await this.requireProfile(profileId);
-    await this.soulService.writeProfileSoulFile(profileId, key, request.content);
+
+    if (!isWritableSoulFileKey(key)) {
+      throw new Error(`Invalid soul file key: ${key}`);
+    }
+
+    await writeSoulFile(getProfileSoulDir(profileId), key, request.content);
   }
 
   async getUserContext(includeContent = false): Promise<UserContextStatusResponse> {
-    return this.userContextService.getStatus(includeContent);
+    const status = await getUserContextStatus();
+
+    if (!includeContent) {
+      const { content: _content, ...rest } = status;
+      return rest;
+    }
+
+    return status;
   }
 
   async initUserContext(): Promise<InitUserContextResponse> {
-    return this.userContextService.init();
+    return initializeUserContext();
   }
 
   async writeUserContext(request: UpdateUserContextRequest): Promise<void> {
-    await this.userContextService.write(request.content);
+    await persistUserContext(request.content);
   }
 
   private createHarness(provider: ProviderClient | null): AgentHarness {
@@ -761,16 +784,16 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     const profile = await this.requireProfile(profileId);
     const tools = await this.resolveProfileTools(profile);
-    const soulStack = await this.soulService.resolveSoulStack(profileId);
-    const systemPrompt = soulStack
-      ? await this.soulService.resolveSystemPrompt(profileId, profile.systemPrompt)
-      : profile.systemPrompt;
+    const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
+      profileId,
+      profile.systemPrompt,
+    );
     const resolvedSystemPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
       : systemPrompt;
     const initialHistory = await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = await this.userContextService.load();
+    const userContext = await loadUserContext();
     const compaction = this.resolveCompactionConfig(profile);
 
     const session = this.harness.createChatSession({
@@ -779,7 +802,7 @@ export class AgentService {
       systemPrompt: resolvedSystemPrompt,
       userContext,
       enableToolLoop: true,
-      soul: soulStack !== null,
+      soul: soulActive,
       initialHistory,
       userTimezone,
       compaction,
@@ -790,6 +813,22 @@ export class AgentService {
     });
 
     return wrapPersistedSession(sessionId, session, this.db);
+  }
+
+  private async resolveProfileSystemPrompt(
+    profileId: string,
+    profilePrompt: string,
+  ): Promise<{ systemPrompt: string; soulActive: boolean }> {
+    const stack = await resolveSoulStackForProfile(profileId);
+
+    if (!stack) {
+      return { systemPrompt: profilePrompt, soulActive: false };
+    }
+
+    return {
+      systemPrompt: composeSoulSystemPrompt(stack, { profilePrompt }),
+      soulActive: true,
+    };
   }
 
   private resolveCompactionConfig(

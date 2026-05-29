@@ -79,9 +79,3 @@ When creating a persistent tool:
 - Never describe a placeholder or partial setup as a working tool
 - Do not say the tool is ready until list_tools, write_file, create_tool, and assign_tool_to_profile all succeed`;
 
-export {
-  BASH_TOOL_ID,
-  BUILTIN_TOOL_IDS,
-  PROTECTED_TOOL_IDS,
-  isProtectedToolId,
-} from "@tinyclaw/core/tools/protected";

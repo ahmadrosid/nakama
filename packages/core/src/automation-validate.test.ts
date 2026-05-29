@@ -4,7 +4,7 @@ import {
   resolveScheduleTimezone,
   validateAutomationInput,
   validateTimezone,
-} from "./validate";
+} from "./automation-validate";
 
 describe("validateAutomationInput", () => {
   test("accepts manual automations with prompt", () => {

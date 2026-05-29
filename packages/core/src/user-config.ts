@@ -22,6 +22,19 @@ export function isValidTimezone(timezone: string): boolean {
   }
 }
 
+export function validateTimezone(
+  timezone: string | undefined,
+  fallback = DEFAULT_TIMEZONE,
+): string {
+  const value = timezone?.trim() || fallback;
+
+  if (!isValidTimezone(value)) {
+    throw new Error(`Invalid timezone: ${value}`);
+  }
+
+  return value;
+}
+
 export function inferProviderFromApiKey(apiKey: string): UserProviderName {
   if (apiKey.trim().startsWith("sk-ant-")) {
     return "anthropic";

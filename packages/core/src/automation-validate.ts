@@ -1,5 +1,5 @@
-import type { AutomationTrigger } from "@tinyclaw/core";
-import { DEFAULT_TIMEZONE, isValidTimezone } from "@tinyclaw/core";
+import type { AutomationTrigger } from "./contract";
+import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
@@ -12,16 +12,6 @@ export function isValidCronExpression(cron: string): boolean {
   }
 
   return fields.every((field) => CRON_FIELD_PATTERN.test(field));
-}
-
-export function validateTimezone(timezone: string | undefined): string {
-  const value = timezone?.trim() || DEFAULT_TIMEZONE;
-
-  if (!isValidTimezone(value)) {
-    throw new Error(`Invalid timezone: ${value}`);
-  }
-
-  return value;
 }
 
 export function validateAutomationInput(input: {
@@ -62,3 +52,5 @@ export function resolveScheduleTimezone(
     timezone: validateTimezone(trigger.timezone ?? userTimezone),
   };
 }
+
+export { validateTimezone, DEFAULT_TIMEZONE };

@@ -1,7 +1,6 @@
 import { builtinTools } from "@tinyclaw/core";
+import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import {
-  BASH_TOOL_ID,
-  BUILTIN_TOOL_IDS,
   DEFAULT_PROFILE_ID,
   LEGACY_SUPER_BOT_SYSTEM_PROMPTS,
   SUPER_BOT_PROFILE_ID,

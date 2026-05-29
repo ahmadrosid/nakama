@@ -20,8 +20,9 @@ import {
   saveProfileAvatar,
   TinyClawApiError,
 } from "@tinyclaw/core";
+import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
-import { isProtectedToolId, SUPER_BOT_PROFILE_ID } from "@tinyclaw/db";
+import { SUPER_BOT_PROFILE_ID } from "@tinyclaw/db";
 import { validateJavascriptToolModule } from "./javascript-tool-loader";
 
 export class ProfileService {

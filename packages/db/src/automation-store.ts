@@ -1,5 +1,5 @@
-import type { DatabaseAdapter, StoredAutomationRecord } from "@tinyclaw/db";
 import type { AutomationDefinition, StoredAutomation } from "@tinyclaw/core";
+import type { DatabaseAdapter, StoredAutomationRecord } from "./types";
 
 export interface AutomationStore {
   list(): Promise<StoredAutomation[]>;

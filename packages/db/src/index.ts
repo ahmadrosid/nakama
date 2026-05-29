@@ -8,6 +8,7 @@ import type { DatabaseAdapter } from "./types";
 
 export type { ResolveDatabasePathOptions } from "./database-url";
 
+export * from "./automation-store";
 export * from "./constants";
 export * from "./seed";
 export * from "./types";

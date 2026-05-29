@@ -80,7 +80,6 @@
       "name": "@tinyclaw/agent",
       "dependencies": {
         "@tinyclaw/core": "workspace:*",
-        "@tinyclaw/db": "workspace:*",
       },
     },
     "packages/client": {

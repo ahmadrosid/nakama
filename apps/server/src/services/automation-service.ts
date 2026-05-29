@@ -6,13 +6,17 @@ import type {
   StoredAutomation,
   UpdateAutomationRequest,
 } from "@tinyclaw/core";
-import { createId, DEFAULT_TIMEZONE } from "@tinyclaw/core";
 import {
-  DatabaseAutomationStore,
+  createId,
+  DEFAULT_TIMEZONE,
   resolveScheduleTimezone,
   validateAutomationInput,
-} from "@tinyclaw/agent";
-import { DEFAULT_PROFILE_ID, type DatabaseAdapter } from "@tinyclaw/db";
+} from "@tinyclaw/core";
+import {
+  DatabaseAutomationStore,
+  DEFAULT_PROFILE_ID,
+  type DatabaseAdapter,
+} from "@tinyclaw/db";
 
 export interface AutomationServiceOptions {
   getUserTimezone: () => Promise<string>;
