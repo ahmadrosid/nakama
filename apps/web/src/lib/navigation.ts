@@ -115,6 +115,8 @@ export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
   settings: Settings2Icon,
 };
 
+export const SETUP_PATH = "/setup";
+
 export const PAGE_PATHS: Record<PageId, string> = {
   status: "/status",
   chat: "/chat",

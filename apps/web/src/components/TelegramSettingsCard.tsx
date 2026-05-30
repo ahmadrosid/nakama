@@ -32,7 +32,17 @@ import {
 } from "@/hooks/use-telegram-settings";
 import { formatError } from "@/lib/client";
 
-export function TelegramSettingsCard() {
+interface TelegramSettingsCardProps {
+  embedded?: boolean;
+  submitLabel?: string;
+  onSaveSuccess?: () => void;
+}
+
+export function TelegramSettingsCard({
+  embedded = false,
+  submitLabel = "Save Telegram settings",
+  onSaveSuccess,
+}: TelegramSettingsCardProps) {
   const { data: settings, isLoading, error: loadError } = useTelegramSettings();
   const { data: profiles = [] } = useProfilesQuery();
   const saveMutation = useSaveTelegramSettings();
@@ -97,6 +107,7 @@ export function TelegramSettingsCard() {
         } else {
           setHint("Saved.");
         }
+        onSaveSuccess?.();
       },
       onError: (err) => {
         setFormError(formatError(err));
@@ -119,6 +130,12 @@ export function TelegramSettingsCard() {
   }
 
   if (isLoading) {
+    if (embedded) {
+      return (
+        <div className="h-24 animate-pulse rounded-lg bg-muted" aria-hidden="true" />
+      );
+    }
+
     return (
       <Card className="w-full">
         <CardHeader>
@@ -132,21 +149,8 @@ export function TelegramSettingsCard() {
     );
   }
 
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>Telegram</CardTitle>
-        <CardDescription>
-          Link your Telegram account with a one-time pairing code. Saved to{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">
-            ~/.tinyclaw/telegram/config.ini
-          </code>
-          . Restart{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">bun run dev:telegram</code>{" "}
-          after saving.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="max-w-md space-y-4">
+  const content = (
+    <div className={embedded ? "space-y-4" : "max-w-md space-y-4"}>
         {loadError ? (
           <p className="text-sm text-destructive" role="alert">
             {formatError(loadError)}
@@ -317,10 +321,31 @@ export function TelegramSettingsCard() {
               Saving…
             </>
           ) : (
-            "Save Telegram settings"
+            submitLabel
           )}
         </Button>
-      </CardContent>
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Telegram</CardTitle>
+        <CardDescription>
+          Link your Telegram account with a one-time pairing code. Saved to{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            ~/.tinyclaw/telegram/config.ini
+          </code>
+          . Restart{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">bun run dev:telegram</code>{" "}
+          after saving.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

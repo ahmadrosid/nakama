@@ -2,13 +2,13 @@ import type { ProviderModelOption } from "@tinyclaw/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangleIcon,
-  ArrowRightIcon,
   CheckCircle2Icon,
   ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
   KeyRoundIcon,
 } from "lucide-react";
+import { ProviderOptionCards, ProviderSetupForm } from "@/components/ProviderSetupForm";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserContextCard } from "@/components/UserContextCard";
@@ -43,7 +43,6 @@ import {
   inferProviderFromApiKey,
   type InferredProvider,
 } from "@/lib/models";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   apiKeyHint,
   apiKeyPlaceholder,
@@ -51,29 +50,24 @@ import {
   filterModelsByProvider,
   formatProviderLabel,
   getModelDisplayName,
-  PROVIDER_OPTIONS,
   validateApiKeyForProvider,
 } from "@/lib/models";
 import { getBrowserTimezone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
 export function SettingsPage() {
-  const { navigateToPage } = useAppNavigation();
   const { health, models, configureProvider, setModel } = useAppContext();
   const { data: catalogResponse, isLoading: catalogLoading, error: catalogQueryError } =
     useModelsQuery();
   const catalog = catalogResponse?.models ?? [];
-  const [selectedProvider, setSelectedProvider] = useState<InferredProvider>("openai");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("");
   const [busy, setBusy] = useState(false);
   const [modelBusy, setModelBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showGoToChat, setShowGoToChat] = useState(false);
   const [replaceKeyOpen, setReplaceKeyOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState("");
   const [modelSaveHint, setModelSaveHint] = useState<string | null>(null);
@@ -92,7 +86,6 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (models?.provider === "openai" || models?.provider === "anthropic") {
-      setSelectedProvider(models.provider);
       setModelDraft(models.currentModel ?? "");
     }
   }, [models?.provider, models?.currentModel]);
@@ -103,52 +96,18 @@ export function SettingsPage() {
     }
   }, [isConfigured]);
 
-  const inferredProvider = useMemo(() => {
-    const trimmed = apiKey.trim();
-    return trimmed ? inferProviderFromApiKey(trimmed) : null;
-  }, [apiKey]);
-
-  useEffect(() => {
-    if (isConfigured && replaceKeyOpen) {
-      return;
-    }
-
-    if (inferredProvider && inferredProvider !== selectedProvider) {
-      setSelectedProvider(inferredProvider);
-    }
-  }, [inferredProvider, selectedProvider, isConfigured, replaceKeyOpen]);
-
   const providerForValidation = useMemo(() => {
     if (isConfigured && replaceKeyOpen && models?.provider) {
       return models.provider as InferredProvider;
     }
 
-    return selectedProvider;
-  }, [isConfigured, replaceKeyOpen, models?.provider, selectedProvider]);
-
-  const filteredModels = useMemo(
-    () => filterModelsByProvider(catalog, selectedProvider),
-    [catalog, selectedProvider],
-  );
+    return "openai";
+  }, [isConfigured, replaceKeyOpen, models?.provider]);
 
   const configuredModels = useMemo(
     () => filterModelsByProvider(catalog, models?.provider),
     [catalog, models?.provider],
   );
-
-  useEffect(() => {
-    if (filteredModels.length === 0) {
-      return;
-    }
-
-    setSelectedModel((current) => {
-      if (current && filteredModels.some((model) => model.id === current)) {
-        return current;
-      }
-
-      return defaultModelForProvider(catalog, selectedProvider);
-    });
-  }, [selectedProvider, filteredModels, catalog]);
 
   const clearFieldErrors = useCallback(() => {
     setApiKeyError(null);
@@ -170,7 +129,6 @@ export function SettingsPage() {
     (value: string) => {
       setApiKey(value);
       setSuccessMessage(null);
-      setShowGoToChat(false);
 
       if (formError) {
         setFormError(null);
@@ -185,78 +143,44 @@ export function SettingsPage() {
     [apiKeyTouched, apiKeyError, formError, providerForValidation],
   );
 
-  const handleProviderSelect = useCallback(
-    (provider: InferredProvider) => {
-      setSelectedProvider(provider);
-      setSuccessMessage(null);
-      setShowGoToChat(false);
-
-      if (apiKeyTouched && apiKey.trim()) {
-        setApiKeyError(validateApiKeyForProvider(apiKey, provider));
-      }
-    },
-    [apiKey, apiKeyTouched],
-  );
-
-  const handleSubmitCredentials = useCallback(
-    async (event: React.FormEvent, mode: "initial" | "replace") => {
+  const handleSubmitReplaceKey = useCallback(
+    async (event: React.FormEvent) => {
       event.preventDefault();
 
       const trimmedKey = apiKey.trim();
-      const validationProvider =
-        mode === "replace" ? (models!.provider as InferredProvider) : selectedProvider;
+      const validationProvider = models!.provider as InferredProvider;
       const nextApiKeyError = validateApiKeyForProvider(trimmedKey, validationProvider);
-      const focusTargetId = mode === "replace" ? "replace-api-key" : "api-key";
 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
 
       if (nextApiKeyError) {
-        document.getElementById(focusTargetId)?.focus();
+        document.getElementById("replace-api-key")?.focus();
         return;
       }
 
-      const wasConfigured = isConfigured;
-      const modelToSave =
-        mode === "replace" ? models?.currentModel ?? selectedModel : selectedModel;
+      const modelToSave = models?.currentModel ?? "";
 
       setBusy(true);
       setFormError(null);
       setSuccessMessage(null);
-      setShowGoToChat(false);
       setModelSaveHint(null);
 
       try {
-        const result = await configureProvider(
-          trimmedKey,
-          modelToSave || undefined,
-        );
+        await configureProvider(trimmedKey, modelToSave || undefined);
         setApiKey("");
         setApiKeyTouched(false);
         setShowApiKey(false);
         setReplaceKeyOpen(false);
-        setSuccessMessage(
-          wasConfigured
-            ? "API key updated."
-            : `${formatProviderLabel(result.provider)} connected with ${getModelDisplayName(catalog, result.currentModel)}.`,
-        );
-        setShowGoToChat(!wasConfigured);
+        setSuccessMessage("API key updated.");
       } catch (err) {
         setFormError(formatError(err));
-        document.getElementById(focusTargetId)?.focus();
+        document.getElementById("replace-api-key")?.focus();
       } finally {
         setBusy(false);
       }
     },
-    [
-      apiKey,
-      selectedModel,
-      selectedProvider,
-      configureProvider,
-      isConfigured,
-      models,
-      catalog,
-    ],
+    [apiKey, configureProvider, models],
   );
 
   const closeReplaceKeyForm = useCallback(() => {
@@ -264,11 +188,8 @@ export function SettingsPage() {
     setApiKey("");
     setApiKeyTouched(false);
     setApiKeyError(null);
-    if (models?.provider === "openai" || models?.provider === "anthropic") {
-      setSelectedProvider(models.provider);
-    }
     clearFieldErrors();
-  }, [clearFieldErrors, models?.provider]);
+  }, [clearFieldErrors]);
 
   useEffect(() => {
     if (savedTimezone) {
@@ -397,103 +318,11 @@ export function SettingsPage() {
 
         <CardContent className={cn("space-y-5", isConfigured && "pt-4")}>
           {!isConfigured ? (
-            <form
-              className="space-y-5"
-              onSubmit={(event) => void handleSubmitCredentials(event, "initial")}
-            >
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Connect a provider</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Choose OpenAI or Anthropic, paste your API key, and pick a default model.
-                </p>
-              </div>
-
-              <ProviderOptionCards
-                selectedProvider={selectedProvider}
-                disabled={busy}
-                onSelect={handleProviderSelect}
-              />
-
-              <div className="space-y-2">
-                <label htmlFor="api-key" className="text-sm font-medium text-foreground">
-                  API key
-                </label>
-                <InputGroup>
-                  <InputGroupInput
-                    id="api-key"
-                    type={showApiKey ? "text" : "password"}
-                    autoComplete="off"
-                    placeholder={apiKeyPlaceholder(selectedProvider)}
-                    value={apiKey}
-                    disabled={busy}
-                    aria-invalid={apiKeyError != null}
-                    aria-describedby={apiKeyError ? "api-key-error" : "api-key-hint"}
-                    onBlur={handleApiKeyBlur}
-                    onChange={(event) => handleApiKeyChange(event.target.value)}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      size="icon-sm"
-                      aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                      onClick={() => setShowApiKey((current) => !current)}
-                    >
-                      {showApiKey ? <EyeOffIcon /> : <EyeIcon />}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-                {apiKeyError ? (
-                  <p id="api-key-error" className="text-sm text-destructive" role="alert">
-                    {apiKeyError}
-                  </p>
-                ) : (
-                  <p id="api-key-hint" className="text-xs text-muted-foreground">
-                    {apiKeyHint(selectedProvider)}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="model" className="text-sm font-medium text-foreground">
-                  Model
-                </label>
-                <Select
-                  value={selectedModel}
-                  disabled={busy || filteredModels.length === 0}
-                  onValueChange={(value) => setSelectedModel(value != null ? String(value) : "")}
-                >
-                  <SelectTrigger id="model" className="w-full">
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name}
-                        {model.default ? " (default)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formError ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {formError}
-                </p>
-              ) : null}
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={busy || !apiKey.trim()}>
-                  {busy ? (
-                    <>
-                      <Spinner className="mr-2" />
-                      Saving…
-                    </>
-                  ) : (
-                    "Save & continue"
-                  )}
-                </Button>
-              </div>
-            </form>
+            <ProviderSetupForm
+              onSuccess={() => {
+                setSuccessMessage("Provider connected.");
+              }}
+            />
           ) : (
             <ConnectedProviderSection
               models={models}
@@ -519,14 +348,13 @@ export function SettingsPage() {
               onOpenReplaceKey={() => {
                 setReplaceKeyOpen(true);
                 setSuccessMessage(null);
-                setShowGoToChat(false);
                 clearFieldErrors();
               }}
               onCancelReplaceKey={closeReplaceKeyForm}
               onApiKeyChange={handleApiKeyChange}
               onApiKeyBlur={handleApiKeyBlur}
               onToggleShowApiKey={() => setShowApiKey((current) => !current)}
-              onSubmitReplaceKey={(event) => void handleSubmitCredentials(event, "replace")}
+              onSubmitReplaceKey={(event) => void handleSubmitReplaceKey(event)}
             />
           )}
         </CardContent>
@@ -535,15 +363,7 @@ export function SettingsPage() {
       {successMessage ? (
         <div className="flex items-start gap-3" role="status" aria-live="polite">
           <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-emerald-300" />
-          <div className="min-w-0 flex-1 space-y-3">
-            <p className="text-sm text-emerald-100">{successMessage}</p>
-            {showGoToChat ? (
-              <Button type="button" onClick={() => navigateToPage("chat")}>
-                Go to Chat
-                <ArrowRightIcon className="size-4" />
-              </Button>
-            ) : null}
-          </div>
+          <p className="text-sm text-emerald-100">{successMessage}</p>
         </div>
       ) : null}
 
@@ -573,7 +393,6 @@ export function SettingsPage() {
                 configureProvider={configureProvider}
                 onSuccess={(message) => {
                   setSuccessMessage(message);
-                  setShowGoToChat(false);
                   setFormError(null);
                 }}
               />
@@ -601,48 +420,6 @@ function SettingsSkeleton() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function ProviderOptionCards({
-  selectedProvider,
-  disabled,
-  onSelect,
-}: {
-  selectedProvider: InferredProvider;
-  disabled?: boolean;
-  onSelect: (provider: InferredProvider) => void;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-foreground">Provider</legend>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {PROVIDER_OPTIONS.map((option) => {
-          const active = selectedProvider === option.id;
-
-          return (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={active}
-              disabled={disabled}
-              onClick={() => onSelect(option.id)}
-              className={cn(
-                "rounded-lg border p-4 text-left transition-colors",
-                active
-                  ? "border-primary bg-primary/10 ring-2 ring-primary/30"
-                  : "border-border bg-background hover:bg-muted/50",
-              )}
-            >
-              <p className="text-sm font-medium text-foreground">{option.label}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {option.id === "openai" ? "GPT models" : "Claude models"}
-              </p>
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
   );
 }
 

@@ -8,7 +8,6 @@ import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { filePartsToDocumentAttachments, filePartsToImageAttachments } from "@/lib/chat-images";
 import {
   buildChatBasePath,
@@ -28,13 +27,13 @@ import {
 } from "@/lib/chat-stream";
 import { client, formatError } from "@/lib/client";
 import { filterModelsByProvider } from "@/lib/models";
+import { SETUP_PATH } from "@/lib/navigation";
 
 export function ChatPage() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { navigateToPage } = useAppNavigation();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models, setModel } = useAppContext();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
@@ -350,7 +349,7 @@ export function ChatPage() {
           onProfileSwitch={handleProfileSwitch}
           showOfflineHint={showOfflineHint}
           providerConfigured={health?.providerConfigured}
-          onNavigateSettings={() => navigateToPage("settings")}
+          onNavigateSetup={() => navigate(SETUP_PATH)}
           providerModels={providerModels}
           currentModel={models?.currentModel ?? null}
           onModelChange={setModel}

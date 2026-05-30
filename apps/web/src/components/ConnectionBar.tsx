@@ -5,14 +5,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/app-context";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { SETUP_PATH } from "@/lib/navigation";
 import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 export function ConnectionBar() {
   const { health, models, loading, setModel } = useAppContext();
-  const { navigateToPage } = useAppNavigation();
+  const navigate = useNavigate();
   const providerConfigured = health?.providerConfigured === true;
   const filteredModels = filterModelsByProvider(models?.models ?? [], models?.provider);
   const statusActive = !loading && health?.ok === true;
@@ -65,7 +66,7 @@ export function ConnectionBar() {
           <BarDivider />
           <button
             type="button"
-            onClick={() => navigateToPage("settings")}
+            onClick={() => navigate(SETUP_PATH)}
             className="flex h-9 items-center rounded-none px-3 text-xs font-medium text-amber-900 transition hover:bg-amber-100/80 dark:text-amber-200 dark:hover:bg-amber-950/50"
           >
             No provider — configure

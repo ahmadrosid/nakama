@@ -72,7 +72,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   onProfileSwitch: (profileId: string) => void;
   showOfflineHint?: boolean;
   providerConfigured?: boolean;
-  onNavigateSettings?: () => void;
+  onNavigateSetup?: () => void;
   providerModels: Array<{ id: string; name: string }>;
   currentModel: string | null;
   onModelChange: (modelId: string) => void;
@@ -120,9 +120,9 @@ export function ChatComposer(props: ChatComposerProps) {
             <button
               type="button"
               className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
-              onClick={props.onNavigateSettings}
+              onClick={props.onNavigateSetup}
             >
-              Configure in Settings
+              Set up provider
             </button>
           </span>
         </p>
