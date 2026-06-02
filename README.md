@@ -6,7 +6,7 @@
 
 TinyClaw is a personal AI assistant built as a tiny Bun + TypeScript monorepo. Prompt the agent in chat, draft automations from natural language, and reach the same agent from multiple channels through one central server.
 
-![Demo](./tinyclaw-demo.png)
+![Demo](./demo.png)
 
 Inspired by [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes](https://github.com/nousresearch/hermes-agent).
 
