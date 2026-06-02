@@ -10,6 +10,7 @@
     "dev:docs": "bun run scripts/serve-docs.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@countrystatecity/timezones": "^1.0.5",
     "@openrouter/sdk": "^0.12.79",
     "@tinyclaw/agent": "workspace:*",
