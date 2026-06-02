@@ -212,6 +212,7 @@ export function ProviderSelect({
   const options = excludeProvider
     ? PROVIDER_OPTIONS.filter((option) => option.id !== excludeProvider)
     : PROVIDER_OPTIONS;
+  const selectedOption = PROVIDER_OPTIONS.find((option) => option.id === selectedProvider);
 
   return (
     <FormField id={id} label={label} density={density}>
@@ -228,7 +229,7 @@ export function ProviderSelect({
           id={id}
           className={density === "compact" ? "w-full" : "w-full sm:max-w-sm"}
         >
-          <SelectValue />
+          <SelectValue>{selectedOption?.label ?? selectedProvider}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (

@@ -631,7 +631,6 @@ function SwitchProviderSection({
         <ProviderSelect
           id="switch-provider"
           selectedProvider={targetProvider}
-          excludeProvider={currentProvider}
           density="compact"
           disabled={busy}
           onSelect={(provider) => {
