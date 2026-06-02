@@ -6,9 +6,8 @@ import {
   readFile,
   unlink,
   writeFile,
-  type Mode,
 } from "node:fs/promises";
-import type { Dirent } from "node:fs";
+import type { Dirent, Mode } from "node:fs";
 import { dirname } from "node:path";
 
 export const PRIVATE_DIR_MODE = 0o700;

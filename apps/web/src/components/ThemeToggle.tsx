@@ -28,8 +28,8 @@ export function ThemeToggle() {
     <Select
       value={theme}
       onValueChange={(value) => {
-        if (value != null && isTheme(String(value))) {
-          setTheme(String(value));
+        if (value != null && isTheme(value)) {
+          setTheme(value);
         }
       }}
     >

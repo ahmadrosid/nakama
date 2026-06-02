@@ -547,7 +547,7 @@ function SwitchProviderSection({
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    setTargetProvider((current) =>
+    setTargetProvider((current: SelectedProvider) =>
       current === currentProvider
         ? (PROVIDER_OPTIONS.find((option) => option.id !== currentProvider)?.id ?? "openai")
         : current,

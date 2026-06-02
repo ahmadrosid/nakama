@@ -26,18 +26,22 @@ import {
 interface ProviderSetupFormProps {
   submitLabel?: string;
   showHeading?: boolean;
+  density?: "default" | "compact";
   onSuccess?: (result: ConfigureProviderResponse) => void;
 }
 
 export function ProviderSetupForm({
   submitLabel = "Save & continue",
   showHeading = true,
+  density = "default",
   onSuccess,
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
 
+  const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
+
   return (
-    <form className="space-y-5" onSubmit={(event) => void form.handleSubmit(event)}>
+    <form className={formSpacing} onSubmit={(event) => void form.handleSubmit(event)}>
       {showHeading ? (
         <div>
           <h3 className="text-sm font-medium text-foreground">Connect a provider</h3>
@@ -50,12 +54,14 @@ export function ProviderSetupForm({
       <ProviderSelect
         selectedProvider={form.selectedProvider}
         disabled={form.busy}
+        density={density}
         onSelect={form.handleProviderSelect}
       />
 
       <FormField
         id="api-key"
         label="API key"
+        density={density}
         footer={
           form.apiKeyError ? (
             <p id="api-key-error" className="text-sm text-destructive" role="alert">
@@ -96,7 +102,7 @@ export function ProviderSetupForm({
         </InputGroup>
       </FormField>
 
-      <FormField id="model" label="Model">
+      <FormField id="model" label="Model" density={density}>
         <Select
           value={form.selectedModel}
           disabled={form.busy || form.filteredModels.length === 0}
@@ -119,6 +125,7 @@ export function ProviderSetupForm({
       {form.selectedProvider === "openrouter" ? (
         <FormField
           id="custom-model"
+          density={density}
           label={
             <>
               Custom model ID <span className="font-normal text-muted-foreground">(optional)</span>
@@ -176,7 +183,11 @@ export function ProviderSetupForm({
   );
 }
 
-function isSelectedProvider(value: string): value is SelectedProvider {
+function isSelectedProvider(value: string | null): value is SelectedProvider {
+  if (value == null) {
+    return false;
+  }
+
   return PROVIDER_OPTIONS.some((option) => option.id === value);
 }
 
@@ -208,8 +219,8 @@ export function ProviderSelect({
         value={selectedProvider}
         disabled={disabled}
         onValueChange={(value) => {
-          if (value != null && isSelectedProvider(String(value))) {
-            onSelect(String(value));
+          if (value != null && isSelectedProvider(value)) {
+            onSelect(value);
           }
         }}
       >

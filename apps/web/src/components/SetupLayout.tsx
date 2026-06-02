@@ -18,7 +18,7 @@ export function SetupLayout({ children }: SetupLayoutProps) {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex flex-1 flex-col items-center px-6 py-10">
-          <main className="w-full max-w-lg">{children}</main>
+          <main className="w-full max-w-3xl">{children}</main>
         </div>
       </div>
     </div>
