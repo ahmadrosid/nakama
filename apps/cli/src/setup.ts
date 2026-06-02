@@ -35,6 +35,7 @@ export async function ensureProviderConfiguredViaCli(
     const result = await client.configureProvider({
       apiKey: config.apiKey,
       model: config.model,
+      provider: config.provider,
     });
 
     console.log(

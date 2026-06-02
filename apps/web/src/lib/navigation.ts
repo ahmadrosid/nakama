@@ -1,14 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BlocksIcon,
   CircleGaugeIcon,
   BrainIcon,
   KanbanIcon,
   MessageCircleIcon,
   ClockIcon,
-  Settings2Icon,
+  CogIcon,
   UserRoundIcon,
   WorkflowIcon,
-  WrenchIcon,
 } from "lucide-react";
 
 export type PageId =
@@ -108,11 +108,11 @@ export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
   chat: MessageCircleIcon,
   history: ClockIcon,
   profiles: UserRoundIcon,
-  tools: WrenchIcon,
+  tools: BlocksIcon,
   soul: BrainIcon,
   automations: WorkflowIcon,
   tasks: KanbanIcon,
-  settings: Settings2Icon,
+  settings: CogIcon,
 };
 
 export const SETUP_PATH = "/setup";

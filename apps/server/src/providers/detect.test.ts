@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { detectProvider } from "./detect";
 
 describe("detectProvider", () => {
-  test("prefers OPENROUTER_API_KEY over OPENAI_API_KEY", () => {
+  test("prefers TINYCLAW_PROVIDER over env keys", () => {
     const provider = detectProvider({
+      TINYCLAW_PROVIDER: "openrouter",
       OPENROUTER_API_KEY: "sk-or-v1-test",
       OPENAI_API_KEY: "sk-test",
     });
@@ -11,7 +12,24 @@ describe("detectProvider", () => {
     expect(provider).toBe("openrouter");
   });
 
-  test("uses user config provider for OpenRouter custom models", () => {
+  test("detects a single configured env API key", () => {
+    const provider = detectProvider({
+      GEMINI_API_KEY: "test-key",
+    });
+
+    expect(provider).toBe("gemini");
+  });
+
+  test("returns null when multiple env API keys are set", () => {
+    const provider = detectProvider({
+      OPENROUTER_API_KEY: "sk-or-v1-test",
+      OPENAI_API_KEY: "sk-test",
+    });
+
+    expect(provider).toBeNull();
+  });
+
+  test("uses user config provider", () => {
     const provider = detectProvider(
       {},
       {

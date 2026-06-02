@@ -90,6 +90,21 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = [
     maxOutputTokens: 8_192,
     supportsThinking: false,
   },
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "gemini",
+    contextWindow: 1_000_000,
+    maxOutputTokens: 8_192,
+    default: true,
+  },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    provider: "gemini",
+    contextWindow: 1_000_000,
+    maxOutputTokens: 8_192,
+  },
 ];
 
 const OPENROUTER_MODEL_SLUG_PATTERN = /^[\w.-]+\/[\w.:-]+$/;
@@ -119,7 +134,9 @@ export function getDefaultModel(provider: ProviderName): string {
       ? "anthropic/claude-sonnet-4-6"
       : provider === "anthropic"
         ? "claude-sonnet-4-6"
-        : "gpt-5.4";
+        : provider === "gemini"
+          ? "gemini-2.5-flash"
+          : "gpt-5.4";
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 

@@ -29,4 +29,9 @@ describe("resolveModel", () => {
   test("resolves catalog models for OpenAI", () => {
     expect(resolveModel("openai", "gpt-5.4")).toBe("gpt-5.4");
   });
+
+  test("resolves catalog models for Gemini", () => {
+    expect(resolveModel("gemini", "gemini-2.5-pro")).toBe("gemini-2.5-pro");
+    expect(getDefaultModel("gemini")).toBe("gemini-2.5-flash");
+  });
 });

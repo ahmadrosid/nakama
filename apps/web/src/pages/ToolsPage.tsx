@@ -1,6 +1,6 @@
 import type { ToolDetail } from "@tinyclaw/core/contract";
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
-import { PlusIcon, RefreshCwIcon, Trash2Icon, WrenchIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ToolDetailDialog } from "@/components/tools/ToolDetailDialog";
@@ -10,11 +10,14 @@ import { useToolsQuery } from "@/hooks/use-app-queries";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useDeleteToolMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
+import { NAV_ITEM_ICONS } from "@/lib/navigation";
 import { SUPER_BOT_PROFILE_ID } from "@/lib/profiles";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
+
+const ToolsIcon = NAV_ITEM_ICONS.tools;
 
 function isDeletableTool(tool: ToolDetail): boolean {
   return !isProtectedToolId(tool.id);
@@ -260,7 +263,7 @@ function ToolListItem({
             deletable ? "text-muted-foreground" : "text-emerald-700 dark:text-emerald-300",
           )}
         >
-          <WrenchIcon className="size-4" aria-hidden />
+          <ToolsIcon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">{tool.name}</p>

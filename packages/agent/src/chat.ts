@@ -218,8 +218,8 @@ async function sendMessage(
   if (!dependencies.provider) {
     const hasAttachments = multimodalTurn;
     const reply = hasAttachments
-      ? "Attachments require a configured provider. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY in Settings."
-      : "I'm running in offline mode. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY to chat with me. You can still use /create to draft automations locally.";
+      ? "Attachments require a configured provider. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY in Settings."
+      : "I'm running in offline mode. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY to chat with me. You can still use /create to draft automations locally.";
 
     if (mode === "stream" && options.handlers) {
       options.handlers.onChunk(reply);
@@ -239,6 +239,9 @@ async function sendMessage(
       hasWebSearch &&
       Boolean(dependencies.provider) &&
       dependencies.provider.name !== "openrouter" &&
+      !(
+        dependencies.provider.name === "gemini" && localTools.length > 0
+      ) &&
       !multimodalTurn,
     multimodalTurn,
   });

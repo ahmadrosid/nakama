@@ -45,17 +45,13 @@ import {
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
 import {
-  inferProviderFromApiKey,
-  type InferredProvider,
-} from "@/lib/models";
-import {
-  apiKeyHint,
   apiKeyPlaceholder,
   defaultModelForProvider,
   filterModelsByProvider,
   formatProviderLabel,
   getModelDisplayName,
   PROVIDER_OPTIONS,
+  type SelectedProvider,
   resolveModelForProvider,
   validateApiKeyForProvider,
   validateCustomOpenRouterModel,
@@ -101,7 +97,8 @@ export function SettingsPage() {
     if (
       models?.provider === "openai" ||
       models?.provider === "anthropic" ||
-      models?.provider === "openrouter"
+      models?.provider === "openrouter" ||
+      models?.provider === "gemini"
     ) {
       setModelDraft(models.currentModel ?? "");
     }
@@ -112,14 +109,6 @@ export function SettingsPage() {
       setReplaceKeyOpen(false);
     }
   }, [isConfigured]);
-
-  const providerForValidation = useMemo(() => {
-    if (isConfigured && replaceKeyOpen && models?.provider) {
-      return models.provider as InferredProvider;
-    }
-
-    return "openai";
-  }, [isConfigured, replaceKeyOpen, models?.provider]);
 
   const configuredModels = useMemo(
     () => filterModelsByProvider(catalog, models?.provider),
@@ -139,8 +128,8 @@ export function SettingsPage() {
       return;
     }
 
-    setApiKeyError(validateApiKeyForProvider(apiKey, providerForValidation));
-  }, [apiKey, providerForValidation]);
+    setApiKeyError(validateApiKeyForProvider(apiKey));
+  }, [apiKey]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
@@ -152,12 +141,12 @@ export function SettingsPage() {
       }
 
       if (apiKeyTouched && value.trim()) {
-        setApiKeyError(validateApiKeyForProvider(value, providerForValidation));
+        setApiKeyError(validateApiKeyForProvider(value));
       } else if (apiKeyError) {
         setApiKeyError(null);
       }
     },
-    [apiKeyTouched, apiKeyError, formError, providerForValidation],
+    [apiKeyTouched, apiKeyError, formError],
   );
 
   const handleSubmitReplaceKey = useCallback(
@@ -165,8 +154,7 @@ export function SettingsPage() {
       event.preventDefault();
 
       const trimmedKey = apiKey.trim();
-      const validationProvider = models!.provider as InferredProvider;
-      const nextApiKeyError = validateApiKeyForProvider(trimmedKey, validationProvider);
+      const nextApiKeyError = validateApiKeyForProvider(trimmedKey);
 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
@@ -184,7 +172,11 @@ export function SettingsPage() {
       setModelSaveHint(null);
 
       try {
-        await configureProvider(trimmedKey, modelToSave || undefined);
+        await configureProvider(
+          trimmedKey,
+          modelToSave || undefined,
+          models!.provider as SelectedProvider,
+        );
         setApiKey("");
         setApiKeyTouched(false);
         setShowApiKey(false);
@@ -502,7 +494,7 @@ export function SettingsPage() {
           {isConfigured && models?.provider ? (
             <div className="border-t border-border pt-8">
               <SwitchProviderSection
-                currentProvider={models.provider as InferredProvider}
+                currentProvider={models.provider as SelectedProvider}
                 catalog={catalog}
                 configureProvider={configureProvider}
                 onSuccess={(message) => {
@@ -543,14 +535,14 @@ function SwitchProviderSection({
   configureProvider,
   onSuccess,
 }: {
-  currentProvider: InferredProvider;
+  currentProvider: SelectedProvider;
   catalog: ProviderModelOption[];
   configureProvider: ReturnType<typeof useAppContext>["configureProvider"];
   onSuccess: (message: string) => void;
 }) {
   const defaultTarget =
     PROVIDER_OPTIONS.find((option) => option.id !== currentProvider)?.id ?? "openai";
-  const [targetProvider, setTargetProvider] = useState<InferredProvider>(defaultTarget);
+  const [targetProvider, setTargetProvider] = useState<SelectedProvider>(defaultTarget);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
@@ -588,22 +580,11 @@ function SwitchProviderSection({
     });
   }, [targetProvider, targetModels, catalog]);
 
-  const inferredProvider = useMemo(() => {
-    const trimmed = apiKey.trim();
-    return trimmed ? inferProviderFromApiKey(trimmed) : null;
-  }, [apiKey]);
-
-  useEffect(() => {
-    if (inferredProvider && inferredProvider !== targetProvider) {
-      setTargetProvider(inferredProvider);
-    }
-  }, [inferredProvider, targetProvider]);
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const trimmedKey = apiKey.trim();
-    const nextApiKeyError = validateApiKeyForProvider(trimmedKey, targetProvider);
+    const nextApiKeyError = validateApiKeyForProvider(trimmedKey);
     const nextCustomModelError =
       targetProvider === "openrouter" ? validateCustomOpenRouterModel(customModel) : null;
 
@@ -673,7 +654,7 @@ function SwitchProviderSection({
             setCustomModelError(null);
           }
           if (apiKeyTouched && apiKey.trim()) {
-            setApiKeyError(validateApiKeyForProvider(apiKey, provider));
+            setApiKeyError(validateApiKeyForProvider(apiKey));
           }
         }}
       />
@@ -698,14 +679,14 @@ function SwitchProviderSection({
                 setApiKeyError(null);
                 return;
               }
-              setApiKeyError(validateApiKeyForProvider(apiKey, targetProvider));
+              setApiKeyError(validateApiKeyForProvider(apiKey));
             }}
             onChange={(event) => {
               const value = event.target.value;
               setApiKey(value);
               setLocalError(null);
               if (apiKeyTouched && value.trim()) {
-                setApiKeyError(validateApiKeyForProvider(value, targetProvider));
+                setApiKeyError(validateApiKeyForProvider(value));
               } else if (apiKeyError) {
                 setApiKeyError(null);
               }
@@ -727,7 +708,7 @@ function SwitchProviderSection({
           </p>
         ) : (
           <p id="switch-api-key-hint" className="text-xs text-muted-foreground">
-            {apiKeyHint(targetProvider)}
+            Paste the API key from your {formatProviderLabel(targetProvider)} dashboard.
           </p>
         )}
       </div>
@@ -856,7 +837,7 @@ function ConnectedProviderSection({
   onToggleShowApiKey: () => void;
   onSubmitReplaceKey: (event: React.FormEvent) => void;
 }) {
-  const currentProvider = models.provider as InferredProvider;
+  const currentProvider = models.provider as SelectedProvider;
 
   return (
     <>
@@ -964,7 +945,7 @@ function ConnectedProviderSection({
               </p>
             ) : (
               <p id="replace-api-key-hint" className="text-xs text-muted-foreground">
-                {apiKeyHint(currentProvider)}
+                Paste the API key from your {formatProviderLabel(currentProvider)} dashboard.
               </p>
             )}
             {formError ? (

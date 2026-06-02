@@ -49,7 +49,7 @@ import {
   getProfileSoulDir,
   getResolvedSoulStatus,
   getUserContextStatus,
-  inferProviderFromApiKey,
+  apiKeyEnvVarForProvider,
   initSoulDirectory,
   initUserContext as initializeUserContext,
   isWritableSoulFileKey,
@@ -598,16 +598,12 @@ export class AgentService {
     const currentProvider = detectProvider(process.env, this.userConfig);
 
     if (targetProvider !== currentProvider) {
-      const envVar =
-        targetProvider === "openai"
-          ? "OPENAI_API_KEY"
-          : targetProvider === "anthropic"
-            ? "ANTHROPIC_API_KEY"
-            : "OPENROUTER_API_KEY";
-      const apiKey = readEnvValue(process.env, envVar);
+      const apiKey = readEnvValue(process.env, apiKeyEnvVarForProvider(targetProvider!));
 
       if (!apiKey) {
-        throw new Error(`Switching to ${targetProvider} requires ${envVar}.`);
+        throw new Error(
+          `Switching to ${targetProvider} requires ${apiKeyEnvVarForProvider(targetProvider!)}.`,
+        );
       }
 
       nextConfig.apiKey = apiKey;
@@ -634,8 +630,8 @@ export class AgentService {
 
   async configureProvider(
     apiKey: string,
-    model?: string,
-    explicitProvider?: UserProviderConfig["provider"],
+    model: string | undefined,
+    provider: UserProviderConfig["provider"],
   ): Promise<ConfigureProviderResponse> {
     const trimmedKey = apiKey.trim();
 
@@ -643,7 +639,6 @@ export class AgentService {
       throw new Error("API key is required.");
     }
 
-    const provider = explicitProvider ?? inferProviderFromApiKey(trimmedKey);
     const selectedModel = model?.trim()
       ? resolveModel(provider, model.trim())
       : getDefaultModel(provider);

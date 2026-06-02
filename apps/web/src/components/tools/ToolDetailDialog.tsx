@@ -1,5 +1,5 @@
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
-import { Trash2Icon, WrenchIcon } from "lucide-react";
+import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useToolQuery, useToolSourceQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
+import { NAV_ITEM_ICONS } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 const SHARED_BUILTIN_FILE = "packages/core/src/tools/builtin.ts";
@@ -98,7 +99,7 @@ export function ToolDetailDialog({
                       : "text-emerald-700 dark:text-emerald-300",
                   )}
                 >
-                  <WrenchIcon className="size-4" aria-hidden />
+                  <NAV_ITEM_ICONS.tools className="size-4" aria-hidden />
                 </span>
                 {tool.name}
               </DialogTitle>

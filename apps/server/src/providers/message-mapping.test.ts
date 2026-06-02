@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@tinyclaw/core";
 import { toAnthropicMessages } from "./anthropic";
+import { toGeminiContents } from "./gemini";
 import { toOpenAIMessages, toResponsesInput } from "./openai";
 
 const tinyPngBase64 =
@@ -59,6 +60,21 @@ describe("provider user content mapping", () => {
         media_type: "application/pdf",
         data: "JVBERi0=",
       },
+    });
+  });
+
+  test("toGeminiContents maps image and document parts", async () => {
+    const imageResult = await toGeminiContents([multimodalUserMessage]);
+    expect(imageResult[0]?.parts?.[0]?.text).toBe("What is this?");
+    expect(imageResult[0]?.parts?.[1]?.inlineData).toEqual({
+      mimeType: "image/png",
+      data: tinyPngBase64,
+    });
+
+    const docResult = await toGeminiContents([documentUserMessage]);
+    expect(docResult[0]?.parts?.[1]?.inlineData).toEqual({
+      mimeType: "application/pdf",
+      data: "JVBERi0=",
     });
   });
 

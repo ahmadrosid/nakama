@@ -134,7 +134,7 @@ export function useConfigureProviderMutation() {
     }: {
       apiKey: string;
       model?: string;
-      provider?: "openai" | "anthropic" | "openrouter";
+      provider?: "openai" | "anthropic" | "openrouter" | "gemini";
     }) => client.configureProvider({ apiKey, model, provider }),
     onSuccess: async () => {
       await Promise.all([

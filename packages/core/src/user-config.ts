@@ -7,12 +7,16 @@ import type {
 } from "./contract";
 import { readTextOrNull, writePrivateTextFile } from "./fs";
 import {
-  inferProviderFromApiKey,
+  parseProviderName,
   type UserProviderName,
-} from "./provider-inference";
+} from "./provider-resolution";
 
-export type { UserProviderName } from "./provider-inference";
-export { inferProviderFromApiKey } from "./provider-inference";
+export type { UserProviderName } from "./provider-resolution";
+export {
+  apiKeyEnvVarForProvider,
+  parseProviderName,
+  resolveProvider,
+} from "./provider-resolution";
 
 export interface UserProviderConfig {
   provider: UserProviderName;
@@ -72,19 +76,13 @@ export async function loadUserConfig(): Promise<UserProviderConfig | null> {
 
   const values = parseIni(raw);
   const apiKey = values.api_key?.trim();
+  const provider = parseProviderName(values.provider);
 
-  if (!apiKey) {
-    return loadTimezoneOnlyConfig(values);
+  if (!apiKey || !provider) {
+    return null;
   }
 
   const model = values.model?.trim();
-  const configuredProvider = values.provider?.toLowerCase();
-  const provider =
-    configuredProvider === "openai" ||
-    configuredProvider === "anthropic" ||
-    configuredProvider === "openrouter"
-      ? configuredProvider
-      : inferProviderFromApiKey(apiKey);
   const timezone = readTimezone(values);
   const thinking = readThinkingSettings(values);
 
@@ -209,23 +207,6 @@ export async function saveUserConfig(config: UserProviderConfig): Promise<void> 
   await writePrivateTextFile(getUserConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),
   });
-}
-
-function loadTimezoneOnlyConfig(values: Record<string, string>): UserProviderConfig | null {
-  const timezone = readTimezone(values);
-  const thinking = readThinkingSettings(values);
-
-  if (!timezone && values.thinking === undefined && values.thinking_effort === undefined) {
-    return null;
-  }
-
-  return {
-    provider: "openai",
-    apiKey: "",
-    ...(timezone ? { timezone } : {}),
-    thinkingEnabled: thinking.enabled,
-    thinkingEffort: thinking.effort,
-  };
 }
 
 function buildConfigIniLines(values: Record<string, string | undefined>): string[] {

@@ -22,8 +22,8 @@ interface AppContextValue {
   setModel: (modelId: string) => Promise<void>;
   configureProvider: (
     apiKey: string,
-    model?: string,
-    provider?: ConfigureProviderResponse["provider"],
+    model: string | undefined,
+    provider: ConfigureProviderResponse["provider"],
   ) => Promise<ConfigureProviderResponse>;
 }
 
@@ -46,8 +46,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const configureProvider = useCallback(
     async (
       apiKey: string,
-      model?: string,
-      provider?: ConfigureProviderResponse["provider"],
+      model: string | undefined,
+      provider: ConfigureProviderResponse["provider"],
     ) => {
       return configureProviderMutation.mutateAsync({ apiKey, model, provider });
     },

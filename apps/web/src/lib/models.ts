@@ -1,13 +1,9 @@
 import type { ProviderModelOption } from "@tinyclaw/core/contract";
-import {
-  inferProviderFromApiKey,
-  type UserProviderName,
-} from "@tinyclaw/core/provider-inference";
+import type { UserProviderName } from "@tinyclaw/core/provider-resolution";
 
-export type InferredProvider = UserProviderName;
-export { inferProviderFromApiKey };
+export type SelectedProvider = UserProviderName;
 
-const OPENROUTER_MODEL_SLUG_PATTERN = /^[\w.-]+\/[\w.:-]+$/;
+export const OPENROUTER_MODEL_SLUG_PATTERN = /^[\w.-]+\/[\w.:-]+$/;
 
 export function isOpenRouterModelSlug(model: string): boolean {
   return OPENROUTER_MODEL_SLUG_PATTERN.test(model.trim());
@@ -15,7 +11,7 @@ export function isOpenRouterModelSlug(model: string): boolean {
 
 export function filterModelsByProvider(
   models: ProviderModelOption[],
-  provider: InferredProvider | null | undefined,
+  provider: SelectedProvider | null | undefined,
 ): ProviderModelOption[] {
   if (!provider) {
     return models;
@@ -26,7 +22,7 @@ export function filterModelsByProvider(
 
 export function defaultModelForProvider(
   models: ProviderModelOption[],
-  provider: InferredProvider,
+  provider: SelectedProvider,
 ): string {
   const providerModels = filterModelsByProvider(models, provider);
   return (
@@ -49,16 +45,21 @@ export function formatProviderLabel(provider: string | null | undefined): string
     return "OpenRouter";
   }
 
+  if (provider === "gemini") {
+    return "Gemini";
+  }
+
   return provider ?? "Provider";
 }
 
-export const PROVIDER_OPTIONS: Array<{ id: InferredProvider; label: string }> = [
+export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = [
   { id: "openai", label: "OpenAI" },
   { id: "anthropic", label: "Anthropic" },
   { id: "openrouter", label: "OpenRouter" },
+  { id: "gemini", label: "Gemini" },
 ];
 
-export function apiKeyPlaceholder(provider: InferredProvider): string {
+export function apiKeyPlaceholder(provider: SelectedProvider): string {
   if (provider === "anthropic") {
     return "sk-ant-…";
   }
@@ -67,46 +68,16 @@ export function apiKeyPlaceholder(provider: InferredProvider): string {
     return "sk-or-v1-…";
   }
 
+  if (provider === "gemini") {
+    return "AIza…";
+  }
+
   return "sk-…";
 }
 
-export function apiKeyHint(provider: InferredProvider): string {
-  if (provider === "anthropic") {
-    return "Anthropic API keys start with sk-ant-";
-  }
-
-  if (provider === "openrouter") {
-    return "OpenRouter API keys start with sk-or-";
-  }
-
-  return "OpenAI API keys start with sk-";
-}
-
-export function getModelDisplayName(
-  models: ProviderModelOption[],
-  modelId: string | null | undefined,
-): string {
-  if (!modelId) {
-    return "Unknown";
-  }
-
-  return models.find((model) => model.id === modelId)?.name ?? modelId;
-}
-
-export function validateApiKeyForProvider(
-  apiKey: string,
-  provider: InferredProvider,
-): string | null {
-  const trimmed = apiKey.trim();
-
-  if (!trimmed) {
+export function validateApiKeyForProvider(apiKey: string): string | null {
+  if (!apiKey.trim()) {
     return "API key is required.";
-  }
-
-  const keyProvider = inferProviderFromApiKey(trimmed);
-
-  if (keyProvider !== provider) {
-    return `This looks like a ${formatProviderLabel(keyProvider)} key. Choose ${formatProviderLabel(keyProvider)} or paste a ${formatProviderLabel(provider)} key.`;
   }
 
   return null;
@@ -126,8 +97,19 @@ export function validateCustomOpenRouterModel(model: string): string | null {
   return null;
 }
 
+export function getModelDisplayName(
+  models: ProviderModelOption[],
+  modelId: string | null | undefined,
+): string {
+  if (!modelId) {
+    return "Unknown";
+  }
+
+  return models.find((model) => model.id === modelId)?.name ?? modelId;
+}
+
 export function resolveModelForProvider(
-  provider: InferredProvider,
+  provider: SelectedProvider,
   catalogModel: string,
   customModel?: string,
 ): string {

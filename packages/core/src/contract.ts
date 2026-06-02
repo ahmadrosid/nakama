@@ -352,12 +352,12 @@ export interface ApiErrorResponse {
 export interface ProviderModelOption {
   id: string;
   name: string;
-  provider: "openai" | "anthropic" | "openrouter";
+  provider: "openai" | "anthropic" | "openrouter" | "gemini";
   default?: boolean;
 }
 
 export interface ModelsResponse {
-  provider: "openai" | "anthropic" | "openrouter" | null;
+  provider: "openai" | "anthropic" | "openrouter" | "gemini" | null;
   currentModel: string | null;
   defaultModel: string | null;
   models: ProviderModelOption[];
@@ -368,18 +368,18 @@ export interface SetModelRequest {
 }
 
 export interface SetModelResponse {
-  provider: "openai" | "anthropic" | "openrouter";
+  provider: "openai" | "anthropic" | "openrouter" | "gemini";
   currentModel: string;
 }
 
 export interface ConfigureProviderRequest {
   apiKey: string;
+  provider: "openai" | "anthropic" | "openrouter" | "gemini";
   model?: string;
-  provider?: "openai" | "anthropic" | "openrouter";
 }
 
 export interface ConfigureProviderResponse {
-  provider: "openai" | "anthropic" | "openrouter";
+  provider: "openai" | "anthropic" | "openrouter" | "gemini";
   currentModel: string;
 }
 
@@ -503,7 +503,7 @@ export interface InitUserContextResponse {
   created: boolean;
 }
 
-export type ProviderName = "openai" | "anthropic" | "openrouter";
+export type ProviderName = "openai" | "anthropic" | "openrouter" | "gemini";
 
 export type GenerateTextFormat = "json" | "text";
 

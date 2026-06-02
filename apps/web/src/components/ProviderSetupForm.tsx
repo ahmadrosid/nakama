@@ -17,9 +17,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
-  apiKeyHint,
   apiKeyPlaceholder,
-  type InferredProvider,
+  type SelectedProvider,
   PROVIDER_OPTIONS,
 } from "@/lib/models";
 import { cn } from "@/lib/utils";
@@ -87,7 +86,7 @@ export function ProviderSetupForm({
           </p>
         ) : (
           <p id="api-key-hint" className="text-xs text-muted-foreground">
-            {apiKeyHint(form.selectedProvider)}
+            Paste the API key from your {PROVIDER_OPTIONS.find((option) => option.id === form.selectedProvider)?.label ?? "provider"} dashboard.
           </p>
         )}
       </div>
@@ -174,9 +173,9 @@ export function ProviderOptionCards({
   disabled,
   onSelect,
 }: {
-  selectedProvider: InferredProvider;
+  selectedProvider: SelectedProvider;
   disabled?: boolean;
-  onSelect: (provider: InferredProvider) => void;
+  onSelect: (provider: SelectedProvider) => void;
 }) {
   return (
     <fieldset className="space-y-2">

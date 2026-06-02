@@ -8,8 +8,7 @@ import {
   filterModelsByProvider,
   formatProviderLabel,
   getModelDisplayName,
-  inferProviderFromApiKey,
-  type InferredProvider,
+  type SelectedProvider,
   resolveModelForProvider,
   validateApiKeyForProvider,
   validateCustomOpenRouterModel,
@@ -24,7 +23,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const { data: catalogResponse, error: catalogQueryError } = useModelsQuery();
   const catalog = catalogResponse?.models ?? [];
 
-  const [selectedProvider, setSelectedProvider] = useState<InferredProvider>("openai");
+  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
@@ -40,17 +39,6 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       setFormError(formatError(catalogQueryError));
     }
   }, [catalogQueryError]);
-
-  const inferredProvider = useMemo(() => {
-    const trimmed = apiKey.trim();
-    return trimmed ? inferProviderFromApiKey(trimmed) : null;
-  }, [apiKey]);
-
-  useEffect(() => {
-    if (inferredProvider && inferredProvider !== selectedProvider) {
-      setSelectedProvider(inferredProvider);
-    }
-  }, [inferredProvider, selectedProvider]);
 
   const filteredModels = useMemo(
     () => filterModelsByProvider(catalog, selectedProvider),
@@ -73,14 +61,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const handleApiKeyBlur = useCallback(() => {
     setApiKeyTouched(true);
-
-    if (!apiKey.trim()) {
-      setApiKeyError(null);
-      return;
-    }
-
-    setApiKeyError(validateApiKeyForProvider(apiKey, selectedProvider));
-  }, [apiKey, selectedProvider]);
+    setApiKeyError(validateApiKeyForProvider(apiKey));
+  }, [apiKey]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
@@ -90,30 +72,23 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setFormError(null);
       }
 
-      if (apiKeyTouched && value.trim()) {
-        setApiKeyError(validateApiKeyForProvider(value, selectedProvider));
+      if (apiKeyTouched) {
+        setApiKeyError(validateApiKeyForProvider(value));
       } else if (apiKeyError) {
         setApiKeyError(null);
       }
     },
-    [apiKeyTouched, apiKeyError, formError, selectedProvider],
+    [apiKeyTouched, apiKeyError, formError],
   );
 
-  const handleProviderSelect = useCallback(
-    (provider: InferredProvider) => {
-      setSelectedProvider(provider);
+  const handleProviderSelect = useCallback((provider: SelectedProvider) => {
+    setSelectedProvider(provider);
 
-      if (provider !== "openrouter") {
-        setCustomModel("");
-        setCustomModelError(null);
-      }
-
-      if (apiKeyTouched && apiKey.trim()) {
-        setApiKeyError(validateApiKeyForProvider(apiKey, provider));
-      }
-    },
-    [apiKey, apiKeyTouched],
-  );
+    if (provider !== "openrouter") {
+      setCustomModel("");
+      setCustomModelError(null);
+    }
+  }, []);
 
   const handleCustomModelChange = useCallback((value: string) => {
     setCustomModel(value);
@@ -127,7 +102,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       event.preventDefault();
 
       const trimmedKey = apiKey.trim();
-      const nextApiKeyError = validateApiKeyForProvider(trimmedKey, selectedProvider);
+      const nextApiKeyError = validateApiKeyForProvider(trimmedKey);
       const nextCustomModelError =
         selectedProvider === "openrouter"
           ? validateCustomOpenRouterModel(customModel)

@@ -31,6 +31,11 @@ describe("providerSupportsNativeDocument", () => {
       ),
     ).toBe(true);
   });
+
+  test("gemini supports pdf and text documents", () => {
+    expect(providerSupportsNativeDocument("gemini", "application/pdf")).toBe(true);
+    expect(providerSupportsNativeDocument("gemini", "text/plain")).toBe(true);
+  });
 });
 
 describe("registerDocumentTextParser", () => {

@@ -1,5 +1,9 @@
 import type { ProviderModelOption } from "./contract";
-import { inferProviderFromApiKey, type UserProviderConfig, type UserProviderName } from "./user-config";
+import {
+  parseProviderName,
+  type UserProviderConfig,
+  type UserProviderName,
+} from "./user-config";
 
 export interface ProviderSetupPromptOptions {
   question: (prompt: string) => Promise<string>;
@@ -9,6 +13,13 @@ export interface ProviderSetupPromptOptions {
   getModelById: (modelId: string) => ProviderModelOption | undefined;
 }
 
+const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
+  { id: "openai", label: "OpenAI" },
+  { id: "anthropic", label: "Anthropic" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "gemini", label: "Gemini" },
+];
+
 export async function promptForProviderConfig(
   options: ProviderSetupPromptOptions,
 ): Promise<UserProviderConfig> {
@@ -16,6 +27,19 @@ export async function promptForProviderConfig(
     options;
 
   while (true) {
+    writeLine("\nChoose a provider:");
+    for (const [index, choice] of PROVIDER_CHOICES.entries()) {
+      writeLine(`  ${index + 1}) ${choice.label}`);
+    }
+
+    const providerInput = (await question("\nProvider: ")).trim();
+    const provider = resolveProviderChoice(providerInput);
+
+    if (!provider) {
+      writeLine("Enter a provider number or name.\n");
+      continue;
+    }
+
     const apiKey = (await question("API key: ")).trim();
 
     if (!apiKey) {
@@ -23,9 +47,8 @@ export async function promptForProviderConfig(
       continue;
     }
 
-    const provider = inferProviderFromApiKey(apiKey);
     const models = getModelsForProvider(provider);
-    writeLine(`\nDetected provider: ${provider}`);
+    writeLine(`\nSelected provider: ${provider}`);
     writeLine("\nAvailable models:");
 
     for (const [index, model] of models.entries()) {
@@ -46,6 +69,22 @@ export async function promptForProviderConfig(
       model: selectedModel,
     };
   }
+}
+
+function resolveProviderChoice(input: string): UserProviderName | null {
+  const parsed = parseProviderName(input);
+
+  if (parsed) {
+    return parsed;
+  }
+
+  const numeric = Number(input);
+
+  if (Number.isInteger(numeric) && numeric >= 1 && numeric <= PROVIDER_CHOICES.length) {
+    return PROVIDER_CHOICES[numeric - 1]!.id;
+  }
+
+  return null;
 }
 
 function resolveModelChoice(

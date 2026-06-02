@@ -228,7 +228,7 @@ export const openApiSchemas = {
     properties: {
       id: { type: "string" },
       name: { type: "string" },
-      provider: { type: "string", enum: ["openai", "anthropic", "openrouter"] },
+      provider: { type: "string", enum: ["openai", "anthropic", "openrouter", "gemini"] },
       default: { type: "boolean" },
     },
   },
@@ -238,7 +238,7 @@ export const openApiSchemas = {
     properties: {
       provider: {
         type: ["string", "null"],
-        enum: ["openai", "anthropic", "openrouter", null],
+        enum: ["openai", "anthropic", "openrouter", "gemini", null],
       },
       currentModel: { type: ["string", "null"] },
       defaultModel: { type: ["string", "null"] },
@@ -259,24 +259,24 @@ export const openApiSchemas = {
     type: "object",
     required: ["provider", "currentModel"],
     properties: {
-      provider: { type: "string", enum: ["openai", "anthropic", "openrouter"] },
+      provider: { type: "string", enum: ["openai", "anthropic", "openrouter", "gemini"] },
       currentModel: { type: "string" },
     },
   },
   ConfigureProviderRequest: {
     type: "object",
-    required: ["apiKey"],
+    required: ["apiKey", "provider"],
     properties: {
       apiKey: { type: "string" },
       model: { type: "string" },
-      provider: { type: "string", enum: ["openai", "anthropic", "openrouter"] },
+      provider: { type: "string", enum: ["openai", "anthropic", "openrouter", "gemini"] },
     },
   },
   ConfigureProviderResponse: {
     type: "object",
     required: ["provider", "currentModel"],
     properties: {
-      provider: { type: "string", enum: ["openai", "anthropic", "openrouter"] },
+      provider: { type: "string", enum: ["openai", "anthropic", "openrouter", "gemini"] },
       currentModel: { type: "string" },
     },
   },
