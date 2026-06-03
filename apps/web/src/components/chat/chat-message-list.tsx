@@ -38,9 +38,21 @@ export function ChatMessageList({
           <Message
             key={message.id}
             from={message.role === "tool" ? "assistant" : message.role}
-            className="mr-auto ml-0 max-w-full justify-start"
+            className={cn(
+              "max-w-full",
+              message.role === "user"
+                ? "ml-auto mr-0 items-end justify-end"
+                : "mr-auto ml-0 items-start justify-start",
+            )}
           >
-            <MessageContent className="ml-0 max-w-full group-[.is-user]:ml-0">
+            <MessageContent
+              className={cn(
+                "max-w-full",
+                message.role === "user"
+                  ? "ml-auto group-[.is-user]:ml-auto"
+                  : "ml-0 group-[.is-user]:ml-0",
+              )}
+            >
               {message.role === "user" ? (
                 <UserMessageContent message={message} />
               ) : message.role === "tool" ? (
