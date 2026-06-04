@@ -12,7 +12,7 @@ import type {
   ThinkingEffort,
   ThinkingSettings,
 } from "./contract";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
 import {
   parseProviderName,
   type UserProviderName,
@@ -321,28 +321,4 @@ function readCompatibleProviderFields(
     ...(displayName ? { displayName } : {}),
     ...(customModels ? { customModels } : {}),
   };
-}
-
-function parseIni(raw: string): Record<string, string> {
-  const values: Record<string, string> = {};
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) {
-      continue;
-    }
-
-    const separator = trimmed.indexOf("=");
-
-    if (separator <= 0) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
-    values[key] = value;
-  }
-
-  return values;
 }

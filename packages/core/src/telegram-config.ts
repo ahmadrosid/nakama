@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
 
 export const DEFAULT_TELEGRAM_PROFILE_ID = "profile_default";
 
@@ -297,28 +297,4 @@ export function resolveTelegramConfigFromSources(options: {
       ? parseAllowedUserIds(envAllowlist)
       : (file?.allowedUserIds ?? []),
   };
-}
-
-function parseIni(raw: string): Record<string, string> {
-  const values: Record<string, string> = {};
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) {
-      continue;
-    }
-
-    const separator = trimmed.indexOf("=");
-
-    if (separator <= 0) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
-    values[key] = value;
-  }
-
-  return values;
 }

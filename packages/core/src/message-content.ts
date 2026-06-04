@@ -342,10 +342,15 @@ export function documentAttachmentFromBase64(
   };
 }
 
-export async function toAnthropicUserContent(
+type ProviderContentBlock = Record<string, unknown>;
+
+async function mapResolvedUserContent(
   content: string | MessageContentPart[],
-  provider: ProviderName = "anthropic",
-): Promise<string | Array<Record<string, unknown>>> {
+  provider: ProviderName,
+  mapText: (text: string) => ProviderContentBlock,
+  mapDocument: (part: Extract<MessageContentPart, { type: "document" }>) => ProviderContentBlock,
+  mapImage: (part: Extract<MessageContentPart, { type: "image" }>) => ProviderContentBlock,
+): Promise<string | ProviderContentBlock[]> {
   const resolved = await resolveUserContentForProvider(content, provider);
 
   if (typeof resolved === "string") {
@@ -354,72 +359,65 @@ export async function toAnthropicUserContent(
 
   return resolved.map((part) => {
     if (part.type === "text") {
-      return { type: "text", text: part.text };
+      return mapText(part.text);
     }
 
     if (part.type === "document") {
-      return toAnthropicDocumentBlock(part);
+      return mapDocument(part);
     }
 
-    return {
+    return mapImage(part);
+  });
+}
+
+export async function toAnthropicUserContent(
+  content: string | MessageContentPart[],
+  provider: ProviderName = "anthropic",
+): Promise<string | Array<Record<string, unknown>>> {
+  return mapResolvedUserContent(
+    content,
+    provider,
+    (text) => ({ type: "text", text }),
+    (part) => toAnthropicDocumentBlock(part),
+    (part) => ({
       type: "image",
       source: {
         type: "base64",
         media_type: part.mediaType,
         data: part.data,
       },
-    };
-  });
+    }),
+  );
 }
 
 export async function toOpenAIChatUserContent(
   content: string | MessageContentPart[],
   provider: ProviderName = "openai",
 ): Promise<string | Array<Record<string, unknown>>> {
-  const resolved = await resolveUserContentForProvider(content, provider);
-
-  if (typeof resolved === "string") {
-    return resolved;
-  }
-
-  return resolved.map((part) => {
-    if (part.type === "text") {
-      return { type: "text", text: part.text };
-    }
-
-    if (part.type === "document") {
-      return toOpenAIResponsesDocumentBlock(part, toDataUrl);
-    }
-
-    return {
+  return mapResolvedUserContent(
+    content,
+    provider,
+    (text) => ({ type: "text", text }),
+    (part) => toOpenAIResponsesDocumentBlock(part, toDataUrl),
+    (part) => ({
       type: "image_url",
       image_url: { url: toDataUrl(part.mediaType, part.data) },
-    };
-  });
+    }),
+  );
 }
 
 export async function toOpenAIResponsesUserContent(
   content: string | MessageContentPart[],
   provider: ProviderName = "openai",
 ): Promise<string | Array<Record<string, unknown>>> {
-  const resolved = await resolveUserContentForProvider(content, provider);
-
-  if (typeof resolved === "string") {
-    return resolved;
-  }
-
-  return resolved.map((part) => {
-    if (part.type === "text") {
-      return { type: "input_text", text: part.text };
-    }
-
-    if (part.type === "document") {
-      return toOpenAIResponsesDocumentBlock(part, toDataUrl);
-    }
-
-    return {
+  return mapResolvedUserContent(
+    content,
+    provider,
+    (text) => ({ type: "input_text", text }),
+    (part) => toOpenAIResponsesDocumentBlock(part, toDataUrl),
+    (part) => ({
       type: "input_image",
       image_url: toDataUrl(part.mediaType, part.data),
-    };
-  });
+    }),
+  );
 }
