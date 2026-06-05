@@ -164,48 +164,74 @@ async function writeTelegramConfigFile(config: TelegramConfigFile): Promise<void
   });
 }
 
-export async function saveTelegramConfig(
+function resolveTelegramBotToken(
   input: UpdateTelegramSettingsInput,
-): Promise<TelegramSettingsPublic> {
-  const existing = await loadTelegramConfigFile();
-  const botToken =
-    input.botToken !== undefined ? input.botToken.trim() : (existing?.botToken ?? "");
+  existing: TelegramConfigFile | null,
+): string {
+  return input.botToken !== undefined ? input.botToken.trim() : (existing?.botToken ?? "");
+}
 
-  const allowlistRaw =
+function resolveTelegramProfileId(
+  input: UpdateTelegramSettingsInput,
+  existing: TelegramConfigFile | null,
+): string {
+  return input.profileId?.trim() || existing?.profileId || DEFAULT_TELEGRAM_PROFILE_ID;
+}
+
+function resolveAllowedUserIdsInput(
+  input: UpdateTelegramSettingsInput,
+  existing: TelegramConfigFile | null,
+): number[] {
+  const raw =
     input.allowedUserIds !== undefined
       ? input.allowedUserIds.trim()
       : (existing?.allowedUserIds.join(",") ?? "");
 
-  const profileId =
-    input.profileId?.trim() || existing?.profileId || DEFAULT_TELEGRAM_PROFILE_ID;
+  return raw ? parseAllowedUserIds(raw) : [];
+}
+
+function resolveHandshakeCode(
+  existing: TelegramConfigFile | null,
+  allowedUserIds: number[],
+): string | null {
+  const pairedUserIds = existing?.pairedUserIds ?? [];
+  const handshakeCode = existing?.handshakeCode ?? null;
+
+  if (pairedUserIds.length > 0 || allowedUserIds.length > 0 || handshakeCode) {
+    return handshakeCode;
+  }
+
+  return generateHandshakeCode();
+}
+
+function buildSavedTelegramConfig(
+  input: UpdateTelegramSettingsInput,
+  existing: TelegramConfigFile | null,
+): TelegramConfigFile {
+  const botToken = resolveTelegramBotToken(input, existing);
 
   if (!botToken) {
     throw new Error("Bot token is required.");
   }
 
-  const allowedUserIds = allowlistRaw ? parseAllowedUserIds(allowlistRaw) : [];
-  const pairedUserIds = existing?.pairedUserIds ?? [];
-  let handshakeCode = existing?.handshakeCode ?? null;
+  const allowedUserIds = resolveAllowedUserIdsInput(input, existing);
 
-  if (pairedUserIds.length === 0 && allowedUserIds.length === 0 && !handshakeCode) {
-    handshakeCode = generateHandshakeCode();
-  }
-
-  await writeTelegramConfigFile({
+  return {
     botToken,
-    profileId,
-    handshakeCode,
-    pairedUserIds,
+    profileId: resolveTelegramProfileId(input, existing),
+    handshakeCode: resolveHandshakeCode(existing, allowedUserIds),
+    pairedUserIds: existing?.pairedUserIds ?? [],
     allowedUserIds,
-  });
+  };
+}
 
-  return toTelegramSettingsPublic({
-    botToken,
-    profileId,
-    handshakeCode,
-    pairedUserIds,
-    allowedUserIds,
-  });
+export async function saveTelegramConfig(
+  input: UpdateTelegramSettingsInput,
+): Promise<TelegramSettingsPublic> {
+  const existing = await loadTelegramConfigFile();
+  const next = buildSavedTelegramConfig(input, existing);
+  await writeTelegramConfigFile(next);
+  return toTelegramSettingsPublic(next);
 }
 
 export async function regenerateTelegramHandshake(): Promise<TelegramSettingsPublic> {
@@ -275,12 +301,7 @@ export function resolveTelegramConfigFromSources(options: {
 }): TelegramConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
-
   const botToken = env.TELEGRAM_BOT_TOKEN?.trim() || file?.botToken?.trim() || "";
-  const profileId =
-    env.TINYCLAW_TELEGRAM_PROFILE_ID?.trim() ||
-    file?.profileId?.trim() ||
-    DEFAULT_TELEGRAM_PROFILE_ID;
 
   if (!botToken) {
     return null;
@@ -290,7 +311,10 @@ export function resolveTelegramConfigFromSources(options: {
 
   return {
     botToken,
-    profileId,
+    profileId:
+      env.TINYCLAW_TELEGRAM_PROFILE_ID?.trim() ||
+      file?.profileId?.trim() ||
+      DEFAULT_TELEGRAM_PROFILE_ID,
     handshakeCode: file?.handshakeCode ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     allowedUserIds: envAllowlist

@@ -11,6 +11,7 @@ import {
   normalizeHandshakeInput,
   parseAllowedUserIds,
   resolveTelegramConfigFromSources,
+  saveTelegramConfig,
   verifyAndPairTelegramUser,
 } from "./telegram-config";
 
@@ -155,6 +156,54 @@ describe("verifyAndPairTelegramUser", () => {
         });
       },
     );
+  });
+});
+
+describe("saveTelegramConfig", () => {
+  let tempHome = "";
+  let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
+
+  afterEach(async () => {
+    homedirSpy?.mockRestore();
+    homedirSpy = null;
+
+    if (tempHome) {
+      await rm(tempHome, { recursive: true, force: true });
+      tempHome = "";
+    }
+  });
+
+  async function useTempTelegramHome(run: () => Promise<void>): Promise<void> {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-tg-home-"));
+    homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+    await run();
+  }
+
+  test("generates a handshake code for a new unrestricted config", async () => {
+    await useTempTelegramHome(async () => {
+      const result = await saveTelegramConfig({ botToken: "1234567890:TEST" });
+
+      expect(result.handshakeCode).toMatch(/^[0-9A-F]{8}$/);
+
+      const saved = await loadTelegramConfigFile();
+      expect(saved?.handshakeCode).toBe(result.handshakeCode);
+      expect(saved?.allowedUserIds).toEqual([]);
+    });
+  });
+
+  test("does not generate a handshake code when allowlist is set", async () => {
+    await useTempTelegramHome(async () => {
+      const result = await saveTelegramConfig({
+        botToken: "1234567890:TEST",
+        allowedUserIds: "42, 43",
+      });
+
+      expect(result.handshakeCode).toBeNull();
+
+      const saved = await loadTelegramConfigFile();
+      expect(saved?.allowedUserIds).toEqual([42, 43]);
+      expect(saved?.handshakeCode).toBeNull();
+    });
   });
 });
 
