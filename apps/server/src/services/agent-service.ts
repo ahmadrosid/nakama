@@ -83,7 +83,6 @@ import {
 } from "@tinyclaw/db";
 import {
   createProviderFromSources,
-  detectProvider,
   fetchRemoteOpenAIModels,
   getDefaultModel,
   getModelById,
@@ -91,8 +90,8 @@ import {
   isCompatibleModelId,
   isCostEstimated,
   isOpenRouterModelSlug,
-  validateOpenRouterCustomModels,
   resolveModel,
+  resolveProvider,
 } from "../providers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import type { AutomationRunner } from "./automation-runner";
@@ -221,7 +220,7 @@ export class AgentService {
   private resolveChatProviderOptions(
     overrides?: Partial<ProviderChatOptions>,
   ): ProviderChatOptions | undefined {
-    const providerName = detectProvider(process.env, this.userConfig);
+    const providerName = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
     const thinking =
       providerName === "openai_compatible"
         ? undefined
@@ -593,7 +592,7 @@ export class AgentService {
   }
 
   async getModels(options: { source?: "catalog" | "remote" } = {}): Promise<ModelsResponse> {
-    const provider = detectProvider(process.env, this.userConfig);
+    const provider = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
     const currentModel =
       provider && this.userConfig
         ? resolveModel(
@@ -698,7 +697,7 @@ export class AgentService {
       model: targetModel!,
     };
 
-    const currentProvider = detectProvider(process.env, this.userConfig);
+    const currentProvider = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
 
     if (targetProvider !== currentProvider) {
       const apiKey = readEnvValue(process.env, apiKeyEnvVarForProvider(targetProvider!));
@@ -994,7 +993,7 @@ export class AgentService {
   }
 
   private createHarness(provider: ProviderClient | null): AgentHarness {
-    const providerName = detectProvider(process.env, this.userConfig);
+    const providerName = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
     const modelId =
       provider && providerName && this.userConfig
         ? resolveModel(
@@ -1018,7 +1017,7 @@ export class AgentService {
   }
 
   private syncUsagePricingContext(
-    provider: ReturnType<typeof detectProvider>,
+    provider: ReturnType<typeof resolveProvider>,
   ): void {
     this.llmUsageTracker?.setPricingContext({
       provider,
@@ -1030,7 +1029,7 @@ export class AgentService {
     displayName: string | null;
     costEstimated: boolean;
   } {
-    const provider = detectProvider(process.env, this.userConfig);
+    const provider = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
     const currentModel =
       provider && this.userConfig
         ? resolveModel(
@@ -1141,7 +1140,7 @@ export class AgentService {
       return undefined;
     }
 
-    const provider = detectProvider(process.env, this.userConfig);
+    const provider = resolveProvider({ env: process.env, configuredProvider: this.userConfig?.provider });
 
     if (!provider) {
       return undefined;

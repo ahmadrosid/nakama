@@ -1,5 +1,4 @@
 import { createAnthropicProvider } from "./anthropic";
-import { detectProvider } from "./detect";
 import { createGeminiProvider } from "./gemini";
 import {
   apiKeyEnvVarForProvider,
@@ -88,7 +87,7 @@ export function createProviderFromSources(
   env: Record<string, string | undefined> = process.env,
   userConfig?: UserProviderConfig | null,
 ): ProviderClient | null {
-  const provider = detectProvider(env, userConfig);
+  const provider = resolveProvider({ env, configuredProvider: userConfig?.provider });
 
   if (!provider) {
     return null;
