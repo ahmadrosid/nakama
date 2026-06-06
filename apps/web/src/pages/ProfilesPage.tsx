@@ -1,7 +1,15 @@
 import type { ProfileSummary } from "@tinyclaw/core/contract";
-import { PlusIcon, RefreshCwIcon, SearchIcon, UsersRoundIcon, XIcon } from "lucide-react";
+import {
+  PlusIcon,
+  RefreshCwIcon,
+  SearchIcon,
+  Trash2Icon,
+  UsersRoundIcon,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +58,10 @@ const profileSaveDelayMs = 600;
 
 type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
+type RemoveAssignmentTarget =
+  | { kind: "tool"; id: string; name: string }
+  | { kind: "mcp"; id: string; name: string };
+
 export function ProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -83,6 +95,7 @@ export function ProfilesPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState<RemoveAssignmentTarget | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [createName, setCreateName] = useState("");
   const [createPrompt, setCreatePrompt] = useState(defaultCreatePrompt);
@@ -96,7 +109,6 @@ export function ProfilesPage() {
   const [savedPrompt, setSavedPrompt] = useState("");
   const [saveStatus, setSaveStatus] = useState<ProfileSaveStatus>("idle");
   const [assignToolId, setAssignToolId] = useState("");
-  const [assignMcpServerId, setAssignMcpServerId] = useState("");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
@@ -124,7 +136,9 @@ export function ProfilesPage() {
     uploadAvatarMutation.isPending ||
     deleteAvatarMutation.isPending ||
     assignMutation.isPending ||
-    unassignMutation.isPending;
+    unassignMutation.isPending ||
+    assignMcpMutation.isPending ||
+    unassignMcpMutation.isPending;
 
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
@@ -498,22 +512,8 @@ export function ProfilesPage() {
     }
   }
 
-  async function handleUnassignTool(toolId: string) {
+  async function handleAssignMcpServer(serverId: string) {
     if (!selectedId) {
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await unassignMutation.mutateAsync({ profileId: selectedId, toolId });
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }
-
-  async function handleAssignMcpServer() {
-    if (!selectedId || !assignMcpServerId) {
       return;
     }
 
@@ -522,23 +522,28 @@ export function ProfilesPage() {
     try {
       await assignMcpMutation.mutateAsync({
         profileId: selectedId,
-        serverId: assignMcpServerId,
+        serverId,
       });
-      setAssignMcpServerId("");
     } catch (err) {
       setError(formatError(err));
     }
   }
 
-  async function handleUnassignMcpServer(serverId: string) {
-    if (!selectedId) {
+  async function handleRemoveAssignmentConfirm() {
+    if (!selectedId || !removeConfirm) {
       return;
     }
 
     setError(null);
 
     try {
-      await unassignMcpMutation.mutateAsync({ profileId: selectedId, serverId });
+      if (removeConfirm.kind === "tool") {
+        await unassignMutation.mutateAsync({ profileId: selectedId, toolId: removeConfirm.id });
+      } else {
+        await unassignMcpMutation.mutateAsync({ profileId: selectedId, serverId: removeConfirm.id });
+      }
+
+      setRemoveConfirm(null);
     } catch (err) {
       setError(formatError(err));
     }
@@ -1004,12 +1009,15 @@ export function ProfilesPage() {
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="sm"
-                                className="shrink-0 text-muted-foreground"
+                                size="icon-sm"
+                                className="shrink-0 text-muted-foreground/60 hover:text-destructive"
                                 disabled={busy}
-                                onClick={() => void handleUnassignTool(tool.id)}
+                                aria-label={`Remove ${tool.name}`}
+                                onClick={() =>
+                                  setRemoveConfirm({ kind: "tool", id: tool.id, name: tool.name })
+                                }
                               >
-                                Remove
+                                <Trash2Icon className="size-4" aria-hidden />
                               </Button>
                             </li>
                           ))}
@@ -1027,38 +1035,11 @@ export function ProfilesPage() {
                               : `${detail.mcpServers.length} assigned`}
                           </p>
                         </div>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                          <Select
-                            value={assignMcpServerId}
-                            disabled={busy || availableMcpServers.length === 0}
-                            onValueChange={(value) =>
-                              setAssignMcpServerId(value != null ? String(value) : "")
-                            }
-                          >
-                            <SelectTrigger
-                              className="w-full sm:w-44"
-                              aria-label="MCP server to assign"
-                            >
-                              <SelectValue placeholder="Assign MCP server…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableMcpServers.map((server) => (
-                                <SelectItem key={server.id} value={server.id}>
-                                  {server.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy || !assignMcpServerId}
-                            onClick={() => void handleAssignMcpServer()}
-                          >
-                            Assign
-                          </Button>
-                        </div>
+                        <McpServerAssignPicker
+                          servers={availableMcpServers}
+                          disabled={busy}
+                          onAssign={handleAssignMcpServer}
+                        />
                       </div>
 
                       {detail.mcpServers.length === 0 ? (
@@ -1074,18 +1055,21 @@ export function ProfilesPage() {
                                 <p className="text-sm text-foreground">{server.name}</p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
                                   {server.transport} · {server.toolCount} tool
-                                  {server.toolCount === 1 ? "" : "s"} · {server.status}
+                                  {server.toolCount === 1 ? "" : "s"}
                                 </p>
                               </div>
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="sm"
-                                className="shrink-0 text-muted-foreground"
+                                size="icon-sm"
+                                className="shrink-0 text-muted-foreground/60 hover:text-destructive"
                                 disabled={busy}
-                                onClick={() => void handleUnassignMcpServer(server.id)}
+                                aria-label={`Remove ${server.name}`}
+                                onClick={() =>
+                                  setRemoveConfirm({ kind: "mcp", id: server.id, name: server.name })
+                                }
                               >
-                                Remove
+                                <Trash2Icon className="size-4" aria-hidden />
                               </Button>
                             </li>
                           ))}
@@ -1272,6 +1256,51 @@ export function ProfilesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={removeConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setRemoveConfirm(null);
+          }
+        }}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>
+              {removeConfirm?.kind === "mcp" ? "Remove MCP server?" : "Remove tool?"}
+            </DialogTitle>
+            <DialogDescription>
+              {removeConfirm?.kind === "mcp"
+                ? `Remove "${removeConfirm.name}" from this profile? The server stays registered in Soul.`
+                : `Remove "${removeConfirm?.name}" from this profile?`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setRemoveConfirm(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void handleRemoveAssignmentConfirm()}
+            >
+              {unassignMutation.isPending || unassignMcpMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                "Remove"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
