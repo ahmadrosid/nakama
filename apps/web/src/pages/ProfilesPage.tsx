@@ -1,5 +1,6 @@
 import type { ProfileSummary } from "@tinyclaw/core/contract";
 import {
+  CameraIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
@@ -40,7 +41,6 @@ import {
   useAssignMcpServerMutation,
   useAssignToolMutation,
   useCreateProfileMutation,
-  useDeleteProfileAvatarMutation,
   useDeleteProfileMutation,
   useUnassignMcpServerMutation,
   useUnassignToolMutation,
@@ -84,7 +84,6 @@ export function ProfilesPage() {
   const updateMutation = useUpdateProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
-  const deleteAvatarMutation = useDeleteProfileAvatarMutation();
   const assignMutation = useAssignToolMutation();
   const unassignMutation = useUnassignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
@@ -132,7 +131,6 @@ export function ProfilesPage() {
     updateMutation.isPending ||
     deleteMutation.isPending ||
     uploadAvatarMutation.isPending ||
-    deleteAvatarMutation.isPending ||
     assignMutation.isPending ||
     unassignMutation.isPending ||
     assignMcpMutation.isPending ||
@@ -571,20 +569,6 @@ export function ProfilesPage() {
     }
   }
 
-  async function handleRemoveAvatar() {
-    if (!selectedId || !detail?.hasAvatar) {
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await deleteAvatarMutation.mutateAsync(selectedId);
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }
-
   function handleCreateOpenChange(open: boolean) {
     setCreateOpen(open);
 
@@ -705,7 +689,6 @@ export function ProfilesPage() {
                     New
                   </Button>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">{profilesTagline}</p>
               </div>
 
               {profiles.length > 0 ? (
@@ -746,15 +729,6 @@ export function ProfilesPage() {
                 </div>
               )}
 
-              {profiles.length > 0 ? (
-                <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs dark:bg-muted/30">
-                  <p className="font-medium text-foreground">How it works</p>
-                  <p className="mt-2">
-                    Profiles isolate prompts and tool access. Edit settings here, then open Soul to
-                    customize voice and identity per profile.
-                  </p>
-                </div>
-              ) : null}
             </aside>
 
             <div className="min-w-0 p-4 sm:p-5">
@@ -774,7 +748,20 @@ export function ProfilesPage() {
                 <>
                   <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
-                      <ProfileAvatar profile={detail} size="lg" />
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        className="hidden"
+                        disabled={busy}
+                        onChange={(event) => void handleAvatarSelected(event)}
+                      />
+                      <EditableProfileAvatar
+                        profile={detail}
+                        disabled={busy || uploadAvatarMutation.isPending}
+                        uploading={uploadAvatarMutation.isPending}
+                        onPick={() => avatarInputRef.current?.click()}
+                      />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="type-section-title">{detail.name}</h2>
@@ -825,45 +812,6 @@ export function ProfilesPage() {
                   </div>
 
                   <div className="space-y-5">
-                    <div className="flex flex-wrap gap-2">
-                      <input
-                        ref={avatarInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        className="hidden"
-                        disabled={busy}
-                        onChange={(event) => void handleAvatarSelected(event)}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy || uploadAvatarMutation.isPending}
-                        onClick={() => avatarInputRef.current?.click()}
-                      >
-                        {uploadAvatarMutation.isPending ? (
-                          <Spinner className="size-4" />
-                        ) : (
-                          "Upload avatar"
-                        )}
-                      </Button>
-                      {detail.hasAvatar ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busy || deleteAvatarMutation.isPending}
-                          onClick={() => void handleRemoveAvatar()}
-                        >
-                          {deleteAvatarMutation.isPending ? (
-                            <Spinner className="size-4" />
-                          ) : (
-                            "Remove avatar"
-                          )}
-                        </Button>
-                      ) : null}
-                    </div>
-
                     <div className="grid gap-4 md:grid-cols-2">
                       <Field label="Name" htmlFor="profile-name">
                         <Input
@@ -1301,6 +1249,37 @@ function ProfileSaveIndicator({
   return null;
 }
 
+function EditableProfileAvatar({
+  profile,
+  disabled,
+  uploading,
+  onPick,
+}: {
+  profile: ProfileSummary;
+  disabled: boolean;
+  uploading: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onPick}
+      aria-label="Change profile image"
+      className="group relative shrink-0 rounded-full disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <ProfileAvatar profile={profile} size="lg" />
+      <span className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        {uploading ? (
+          <Spinner className="size-5 text-primary-foreground" />
+        ) : (
+          <CameraIcon className="size-5 text-primary-foreground" aria-hidden />
+        )}
+      </span>
+    </button>
+  );
+}
+
 function ProfileScopeButton({
   profile,
   active,
@@ -1323,19 +1302,14 @@ function ProfileScopeButton({
       <div className="flex items-start gap-3">
         <ProfileAvatar profile={profile} size="sm" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <p
-              className={cn(
-                "truncate text-sm font-medium",
-                active ? "text-primary" : "text-foreground",
-              )}
-            >
-              {profile.name}
-            </p>
-            {profile.soulActive ? (
-              <span className="scope-badge scope-badge-active">active</span>
-            ) : null}
-          </div>
+          <p
+            className={cn(
+              "truncate text-sm font-medium",
+              active ? "text-primary" : "text-foreground",
+            )}
+          >
+            {profile.name}
+          </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {profile.toolCount} tools · soul {profile.soulActive ? "on" : "off"}
           </p>

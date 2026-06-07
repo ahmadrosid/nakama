@@ -323,14 +323,6 @@ export function SoulTab() {
                 />
               ))}
             </div>
-
-            <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs dark:bg-muted/30">
-              <p className="font-medium text-foreground">How it works</p>
-              <p className="mt-2">
-                Soul files shape the agent&apos;s identity and voice. Click a file to view or edit
-                its content. Start a new chat session after editing so changes take effect.
-              </p>
-            </div>
           </aside>
 
           <div className="min-w-0 p-4 sm:p-5">
