@@ -1,6 +1,5 @@
 import type { ProviderModelOption } from "@tinyclaw/core/contract";
 import { useEffect, useState } from "react";
-import { useConnectedModelDraft } from "@/hooks/use-connected-model-draft";
 import { useReplaceApiKeyForm } from "@/hooks/use-replace-api-key-form";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -52,8 +51,6 @@ export function ConnectedProviderSection({
   models,
   configureProvider,
   configuredModels,
-  catalog,
-  setModel,
   formError,
   onFormError,
   onReplaceKeyOpen,
@@ -62,27 +59,11 @@ export function ConnectedProviderSection({
   models: NonNullable<ReturnType<typeof useAppContext>["models"]>;
   configureProvider: ReturnType<typeof useAppContext>["configureProvider"];
   configuredModels: ProviderModelOption[];
-  catalog: ProviderModelOption[];
-  setModel: ReturnType<typeof useAppContext>["setModel"];
   formError: string | null;
   onFormError: (error: string | null) => void;
   onReplaceKeyOpen?: () => void;
   onReplaceKeySuccess?: () => void;
 }) {
-  const {
-    draft: modelDraft,
-    busy: modelBusy,
-    saveHint: modelSaveHint,
-    dirty: modelDirty,
-    handleDraftChange: onModelDraftChange,
-    handleSave: onSaveModel,
-  } = useConnectedModelDraft({
-    models,
-    catalog,
-    setModel,
-    onFormError,
-  });
-
   const {
     open: replaceKeyOpen,
     apiKey,
@@ -265,77 +246,21 @@ export function ConnectedProviderSection({
         <SettingsRow
           label="Model"
           description={
-            modelSaveHint ? (
-              <span className="text-emerald-200" role="status">
-                {modelSaveHint}
+            <>
+              <span className="block font-mono text-[11px] text-foreground/90">
+                {models.currentModel}
               </span>
-            ) : (
-              <>
-                <span className="block font-mono text-[11px] text-foreground/90">
-                  {models.currentModel}
-                </span>
-                <span className="mt-0.5 block">
-                  Chat history resets when you change models
-                </span>
-              </>
-            )
+              <span className="mt-0.5 block">
+                Chat history resets when you change models
+              </span>
+            </>
           }
         >
           <Button type="button" size="sm" variant="outline" onClick={openOpenRouterManage}>
             Manage
           </Button>
         </SettingsRow>
-      ) : (
-        <SettingsRow
-          label="Model"
-          description={
-            modelSaveHint ? (
-              <span className="text-emerald-200" role="status">
-                {modelSaveHint}
-              </span>
-            ) : (
-              "Chat history resets when you change models"
-            )
-          }
-        >
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Select
-              value={modelDraft}
-              disabled={modelBusy || configuredModels.length === 0}
-              onValueChange={(value) =>
-                onModelDraftChange(value != null ? String(value) : "")
-              }
-            >
-              <SelectTrigger id="connected-model" className="w-44 sm:w-52">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {configuredModels.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    {model.name}
-                    {model.default ? " (default)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              size="sm"
-              disabled={modelBusy || !modelDraft || !modelDirty}
-              onClick={() => void onSaveModel()}
-            >
-              {modelBusy ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Saving…
-                </>
-              ) : (
-                "Save"
-              )}
-            </Button>
-          </div>
-        </SettingsRow>
-      )}
+      ) : null}
 
       <SettingsRow label="API key" description="Saved on the server">
         <Button

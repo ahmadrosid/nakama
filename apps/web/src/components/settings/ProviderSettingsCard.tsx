@@ -30,7 +30,7 @@ interface ProviderSettingsCardProps {
 }
 
 export function ProviderSettingsCard({ formError, onFormError }: ProviderSettingsCardProps) {
-  const { health, models, configureProvider, setModel } = useAppContext();
+  const { health, models, configureProvider } = useAppContext();
   const { data: catalogResponse, isLoading: catalogLoading, error: catalogQueryError } =
     useModelsQuery();
   const { data: openRouterRows = [] } = useOpenRouterModels();
@@ -93,8 +93,6 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
               models={models}
               configureProvider={configureProvider}
               configuredModels={configuredModels}
-              catalog={catalog}
-              setModel={setModel}
               formError={formError}
               onFormError={onFormError}
               onReplaceKeyOpen={() => setSuccessMessage(null)}
