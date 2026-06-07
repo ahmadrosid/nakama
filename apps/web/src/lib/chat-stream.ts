@@ -1,8 +1,10 @@
 import type { ChatStatus } from "ai";
 import { nanoid } from "nanoid";
 import type { Dispatch, SetStateAction } from "react";
+import type { AgentTodo } from "@tinyclaw/core/contract";
 import type { StreamHandlers } from "@tinyclaw/client";
 import type { ChatListItem } from "@/lib/chat-history";
+import { cn } from "@/lib/utils";
 
 export function formatBashToolResult(result: unknown): string | null {
   if (typeof result !== "object" || result === null) {
@@ -157,6 +159,7 @@ export function deriveChatStatus(
 
 export function buildStreamHandlers(
   setMessages: Dispatch<SetStateAction<ChatListItem[]>>,
+  options: { onTodosUpdated?: (todos: AgentTodo[]) => void } = {},
 ): StreamHandlers {
   return {
     onThinking: (delta) => {
@@ -236,6 +239,7 @@ export function buildStreamHandlers(
         ),
       );
     },
+    onTodosUpdated: options.onTodosUpdated,
   };
 }
 
@@ -270,8 +274,27 @@ export const composerIconButtonClass =
 
 export const composerToolbarClass = "flex min-w-0 flex-1 flex-wrap items-center gap-1.5";
 
-export const composerShellClass =
-  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-2.5 [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] sm:[&_[data-slot=input-group]]:p-3 [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25";
+const composerInputGroupBase =
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:p-2.5 sm:[&_[data-slot=input-group]]:p-3";
+
+const composerFocusRing =
+  "focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-ring/25";
+
+export const composerDockClass = cn(
+  "flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-[box-shadow,border-color]",
+  composerFocusRing,
+);
+
+export const composerShellClass = cn(
+  composerInputGroupBase,
+  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25",
+);
+
+export const composerShellStackedClass = cn(
+  composerInputGroupBase,
+  "w-full [&_form]:w-full",
+  "[&_[data-slot=input-group]]:w-full [&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none",
+);
 
 export const composerShellCompactClass =
   "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-2.5 [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25";

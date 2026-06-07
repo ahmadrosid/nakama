@@ -810,7 +810,7 @@
               "text/event-stream": {
                 "schema": {
                   "type": "string",
-                  "description": "SSE data lines with StreamEvent JSON payloads (chunk, tool_start, tool_end, done, error)"
+                  "description": "SSE data lines with StreamEvent JSON payloads (chunk, tool_start, tool_end, todos_updated, done, error)"
                 }
               }
             }
@@ -2935,6 +2935,7 @@
           "createdAt",
           "updatedAt",
           "messageCount",
+          "title",
           "preview"
         ],
         "properties": {
@@ -2956,6 +2957,10 @@
           "messageCount": {
             "type": "integer"
           },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
           "preview": {
             "type": "string",
             "nullable": true
@@ -2976,10 +2981,36 @@
           }
         }
       },
+      "AgentTodo": {
+        "type": "object",
+        "required": [
+          "id",
+          "content",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed",
+              "cancelled"
+            ]
+          }
+        }
+      },
       "SessionMessagesResponse": {
         "type": "object",
         "required": [
-          "messages"
+          "messages",
+          "todos"
         ],
         "properties": {
           "messages": {
@@ -2987,6 +3018,12 @@
             "items": {
               "type": "object",
               "additionalProperties": true
+            }
+          },
+          "todos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTodo"
             }
           }
         }
@@ -3238,6 +3275,25 @@
                 "type": "string"
               },
               "result": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "todos"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "todos_updated"
+              },
+              "todos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AgentTodo"
+                }
+              }
             }
           },
           {

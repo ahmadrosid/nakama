@@ -72,6 +72,7 @@ interface SessionRow {
   channel: string;
   created_at: string;
   title: string | null;
+  agent_todos: string;
 }
 
 interface SessionMessageRow {
@@ -250,6 +251,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const updateSessionTitleStmt = db.prepare(`
     UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL
   `);
+  const getSessionTodosStmt = db.prepare(
+    "SELECT agent_todos FROM sessions WHERE id = ?",
+  );
+  const updateSessionTodosStmt = db.prepare(
+    "UPDATE sessions SET agent_todos = ? WHERE id = ?",
+  );
 
   const listMessagesForSessionStmt = db.prepare(`
     SELECT * FROM session_messages
@@ -551,6 +558,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async getSessionTodos(sessionId) {
+      const row = getSessionTodosStmt.get(sessionId) as { agent_todos: string } | null;
+      return row ? parseAgentTodos(row.agent_todos) : [];
+    },
+
+    async updateSessionTodos(sessionId, todos) {
+      updateSessionTodosStmt.run(JSON.stringify(todos), sessionId);
+    },
+
     async deleteSession(id) {
       const result = deleteSessionStmt.run(id);
       return result.changes > 0;
@@ -794,6 +810,31 @@ function toToolRecord(row: ToolRow): StoredToolRecord {
   };
 }
 
+function parseAgentTodos(raw: string | null | undefined): StoredSessionRecord["agentTodos"] {
+  if (!raw || raw.trim() === "") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(
+      (item): item is StoredSessionRecord["agentTodos"][number] =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string" &&
+        typeof (item as { content?: unknown }).content === "string" &&
+        typeof (item as { status?: unknown }).status === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
 function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     id: row.id,
@@ -801,6 +842,7 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
     channel: row.channel,
     createdAt: row.created_at,
     title: row.title ?? null,
+    agentTodos: parseAgentTodos(row.agent_todos),
   };
 }
 

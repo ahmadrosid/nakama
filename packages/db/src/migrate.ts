@@ -85,4 +85,10 @@ function migrateSessionsTable(db: Database): void {
       ALTER TABLE sessions ADD COLUMN title TEXT;
     `);
   }
+
+  if (!columnNames.has("agent_todos")) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN agent_todos TEXT DEFAULT '[]' NOT NULL;
+    `);
+  }
 }

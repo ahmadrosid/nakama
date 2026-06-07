@@ -3,6 +3,7 @@ import {
   TinyClawApiError,
   TINYCLAW_API_VERSION,
   type AgentChannel,
+  type AgentTodo,
   type ApiErrorResponse,
   type AssignToolRequest,
   type CreateProfileRequest,
@@ -521,7 +522,9 @@ export function createApp(options: ServerOptions) {
             return errorResponse("Session not found", 404);
           }
 
-          return json<SessionMessagesResponse>({ messages });
+          const todos = (await agent.getSessionTodos(sessionId)) ?? [];
+
+          return json<SessionMessagesResponse>({ messages, todos });
         }
 
         if (messageMatch && request.method === "POST") {
@@ -884,13 +887,22 @@ function streamMessage(
               tool: event.tool,
               input: event.input,
             }),
-          onToolEnd: (event) =>
+          onToolEnd: (event) => {
             send({
               type: "tool_end",
               toolCallId: event.toolCallId,
               tool: event.tool,
               result: event.result,
-            }),
+            });
+
+            if (event.tool === "todo_write") {
+              const todos = readTodosFromToolResult(event.result);
+
+              if (todos) {
+                send({ type: "todos_updated", todos });
+              }
+            }
+          },
         });
 
         send({ type: "done", reply });
@@ -911,4 +923,42 @@ function streamMessage(
       Connection: "keep-alive",
     },
   });
+}
+
+function readTodosFromToolResult(result: unknown): AgentTodo[] | null {
+  if (typeof result !== "object" || result === null || !("todos" in result)) {
+    return null;
+  }
+
+  const todos = (result as { todos?: unknown }).todos;
+
+  if (!Array.isArray(todos)) {
+    return null;
+  }
+
+  const parsed: AgentTodo[] = [];
+
+  for (const item of todos) {
+    if (typeof item !== "object" || item === null) {
+      return null;
+    }
+
+    const record = item as Record<string, unknown>;
+
+    if (
+      typeof record.id !== "string" ||
+      typeof record.content !== "string" ||
+      typeof record.status !== "string"
+    ) {
+      return null;
+    }
+
+    parsed.push({
+      id: record.id,
+      content: record.content,
+      status: record.status as AgentTodo["status"],
+    });
+  }
+
+  return parsed;
 }

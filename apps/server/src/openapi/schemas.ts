@@ -72,13 +72,29 @@ export const openApiSchemas = {
       },
     },
   },
+  AgentTodo: {
+    type: "object",
+    required: ["id", "content", "status"],
+    properties: {
+      id: { type: "string" },
+      content: { type: "string" },
+      status: {
+        type: "string",
+        enum: ["pending", "in_progress", "completed", "cancelled"],
+      },
+    },
+  },
   SessionMessagesResponse: {
     type: "object",
-    required: ["messages"],
+    required: ["messages", "todos"],
     properties: {
       messages: {
         type: "array",
         items: { type: "object", additionalProperties: true },
+      },
+      todos: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AgentTodo" },
       },
     },
   },
@@ -204,6 +220,17 @@ export const openApiSchemas = {
           toolCallId: { type: "string" },
           tool: { type: "string" },
           result: {},
+        },
+      },
+      {
+        type: "object",
+        required: ["type", "todos"],
+        properties: {
+          type: { type: "string", const: "todos_updated" },
+          todos: {
+            type: "array",
+            items: { $ref: "#/components/schemas/AgentTodo" },
+          },
         },
       },
       {

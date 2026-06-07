@@ -1,5 +1,6 @@
 import type {
   AgentChannel,
+  AgentTodo,
   AssignMcpServerRequest,
   AssignToolRequest,
   CreateMcpServerRequest,
@@ -94,6 +95,7 @@ export interface StreamHandlers {
     tool: string;
     result: unknown;
   }) => void;
+  onTodosUpdated?: (todos: AgentTodo[]) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;
@@ -787,6 +789,10 @@ async function readStreamEvents(
               tool: payload.tool,
               result: payload.result,
             });
+          }
+
+          if (payload.type === "todos_updated") {
+            handlers.onTodosUpdated?.(payload.todos);
           }
 
           if (payload.type === "done") {

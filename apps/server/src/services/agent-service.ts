@@ -7,6 +7,7 @@ import {
 } from "@tinyclaw/agent";
 import type {
   AgentChannel,
+  AgentTodo,
   AssignToolRequest,
   ChatMessage,
   CompactionResponse,
@@ -95,6 +96,8 @@ import {
   validateOpenRouterCustomModels,
 } from "../providers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
+import { createTodoTools } from "../tools/todo-tools";
+import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
   loadSessionHistory,
@@ -124,8 +127,10 @@ export class AgentService {
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
   private readonly superBotSessionState = new SuperBotSessionState();
+  private readonly agentTodoState: AgentTodoState;
   private readonly superBotTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
+  private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
   private taskRunner: TaskRunner | null = null;
   private mcpClientManager: McpClientManager | null = null;
@@ -148,6 +153,8 @@ export class AgentService {
       () => this.userConfig,
       () => this._providerConfigured,
     );
+    this.agentTodoState = new AgentTodoState(db);
+    this.todoTools = createTodoTools(this.agentTodoState);
     this.superBotTools = createSuperBotTools(this.profileService, this.superBotSessionState);
     this._providerConfigured = provider !== null;
     this.harness = this.createHarness(provider);
@@ -306,7 +313,10 @@ export class AgentService {
     }
 
     const profile = await this.requireProfile(profileId);
-    const tools = await this.resolveProfileTools(profile, { includeAutomationTools: false });
+    const tools = await this.resolveProfileTools(profile, {
+      includeAutomationTools: false,
+      includeTodoTools: false,
+    });
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       profileId,
       profile.systemPrompt,
@@ -460,6 +470,7 @@ export class AgentService {
       channel,
       createdAt: new Date().toISOString(),
       title: null,
+      agentTodos: [],
     });
 
     const session = await this.buildChatSession(channel, profileId, sessionId);
@@ -467,6 +478,16 @@ export class AgentService {
     this.sessions.set(sessionId, { channel, profileId, session });
 
     return sessionId;
+  }
+
+  async getSessionTodos(sessionId: string): Promise<AgentTodo[] | null> {
+    const record = await this.db.getSession(sessionId);
+
+    if (!record) {
+      return null;
+    }
+
+    return this.agentTodoState.listActive(sessionId);
   }
 
   async getSessionMessages(sessionId: string): Promise<ChatMessage[] | null> {
@@ -514,6 +535,7 @@ export class AgentService {
 
     this.sessions.delete(sessionId);
     this.superBotSessionState.clearSession(sessionId);
+    this.agentTodoState.clearSession(sessionId);
     await this.db.deleteSession(sessionId);
     return true;
   }
@@ -586,6 +608,7 @@ export class AgentService {
     const deleted = this.sessions.delete(sessionId);
 
     if (deleted) {
+      this.agentTodoState.clearSession(sessionId);
       void this.db.deleteSession(sessionId);
     }
 
@@ -1105,11 +1128,12 @@ export class AgentService {
 
   private async resolveProfileTools(
     profile: StoredProfileRecord,
-    options: { includeAutomationTools?: boolean } = {},
+    options: { includeAutomationTools?: boolean; includeTodoTools?: boolean } = {},
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveToolsFromStorage(storedTools);
     const includeAutomationTools = options.includeAutomationTools ?? true;
+    const includeTodoTools = options.includeTodoTools ?? true;
 
     let resolved = [...tools];
 
@@ -1123,6 +1147,10 @@ export class AgentService {
 
     if (includeAutomationTools && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
+    }
+
+    if (includeTodoTools && this.todoTools.length > 0) {
+      resolved = [...resolved, ...this.todoTools];
     }
 
     if (profile.isSuper) {
@@ -1165,6 +1193,7 @@ export class AgentService {
         profileId,
         sessionId,
       },
+      resolvePromptContext: () => this.agentTodoState.formatForPrompt(sessionId),
     });
 
     return wrapPersistedSession(sessionId, session, this.db, {

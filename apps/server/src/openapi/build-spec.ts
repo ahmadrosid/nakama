@@ -356,7 +356,7 @@ export function buildOpenApiSpec() {
                   schema: {
                     type: "string",
                     description:
-                      "SSE data lines with StreamEvent JSON payloads (chunk, tool_start, tool_end, done, error)",
+                      "SSE data lines with StreamEvent JSON payloads (chunk, tool_start, tool_end, todos_updated, done, error)",
                   },
                 },
               },

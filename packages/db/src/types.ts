@@ -1,3 +1,5 @@
+import type { AgentTodo } from "@tinyclaw/core";
+
 export type AutomationRunStatus = "running" | "completed" | "failed";
 
 export interface StoredAutomationRecord {
@@ -47,6 +49,7 @@ export interface StoredSessionRecord {
   channel: string;
   createdAt: string;
   title: string | null;
+  agentTodos: AgentTodo[];
 }
 
 export interface StoredSessionMessageRecord {
@@ -166,6 +169,8 @@ export interface DatabaseAdapter {
   getSession(id: string): Promise<StoredSessionRecord | null>;
   upsertSession(record: StoredSessionRecord): Promise<void>;
   updateSessionTitle(sessionId: string, title: string): Promise<boolean>;
+  getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
+  updateSessionTodos(sessionId: string, todos: AgentTodo[]): Promise<void>;
   deleteSession(id: string): Promise<boolean>;
 
   listMessagesForSession(sessionId: string): Promise<StoredSessionMessageRecord[]>;

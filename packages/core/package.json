@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./agent-todo": "./src/agent-todo.ts",
     "./api-error": "./src/api-error.ts",
     "./contract": "./src/contract.ts",
     "./thinking-content": "./src/thinking-content.ts",

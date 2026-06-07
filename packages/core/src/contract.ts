@@ -112,8 +112,17 @@ export interface CreateSessionResponse {
   sessionId: string;
 }
 
+export type AgentTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+export interface AgentTodo {
+  id: string;
+  content: string;
+  status: AgentTodoStatus;
+}
+
 export interface SessionMessagesResponse {
   messages: ChatMessage[];
+  todos: AgentTodo[];
 }
 
 export interface SessionSummary {
@@ -190,6 +199,7 @@ export type StreamEvent =
       tool: string;
       result: unknown;
     }
+  | { type: "todos_updated"; todos: AgentTodo[] }
   | { type: "done"; reply: string }
   | { type: "error"; error: string };
 

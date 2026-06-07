@@ -1,4 +1,4 @@
-import type { ProfileSummary } from "@tinyclaw/core/contract";
+import type { AgentTodo, ProfileSummary } from "@tinyclaw/core/contract";
 import type { FileUIPart } from "ai";
 import { MessageCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,6 +44,7 @@ export function ChatPage() {
   );
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [messages, setMessages] = useState<ChatListItem[]>([]);
+  const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
   const [busy, setBusy] = useState(false);
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +124,7 @@ export function ChatPage() {
       setSession(null);
       setMessages([]);
       setError(null);
+      setAgentTodos([]);
 
       if (location.pathname !== buildChatBasePath()) {
         navigate(buildChatBasePath(), { replace: true });
@@ -139,11 +141,12 @@ export function ChatPage() {
       try {
         localStorage.setItem(sessionStorageKey(nextProfileId), sessionId);
         skipNextProfileSessionRef.current = nextProfileId !== profileId;
-        const { messages: storedMessages } = await client.getSessionMessages(sessionId);
+        const { messages: storedMessages, todos } = await client.getSessionMessages(sessionId);
         const nextSession = client.createChatSession(sessionId, "web");
         setProfileId(nextProfileId);
         setSession(nextSession);
         setMessages(chatMessagesToListItems(storedMessages));
+        setAgentTodos(todos);
         syncChatUrl(nextProfileId, sessionId);
       } catch (err) {
         setError(formatError(err));
@@ -291,7 +294,7 @@ export function ChatPage() {
             images: images.length > 0 ? images : undefined,
             documents: documents.length > 0 ? documents : undefined,
           },
-          buildStreamHandlers(setMessages),
+          buildStreamHandlers(setMessages, { onTodosUpdated: setAgentTodos }),
           { signal: abortController.signal },
         );
 
@@ -333,33 +336,38 @@ export function ChatPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6">
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-        {messages.length === 0 && !busy ? (
-          <ChatWelcome profile={activeProfile} />
-        ) : (
-          <ChatMessageList messages={messages} />
-        )}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {messages.length === 0 && !busy ? (
+            <ChatWelcome profile={activeProfile} />
+          ) : (
+            <ChatMessageList messages={messages} />
+          )}
+        </div>
 
-        <ChatComposer
-          className="py-4"
-          chatStatus={chatStatus}
-          busy={busy}
-          canStop={canStop}
-          disabled={!profileId}
-          error={error}
-          profileId={profileId}
-          profiles={profiles}
-          activeProfile={activeProfile}
-          onProfileSwitch={handleProfileSwitch}
-          showOfflineHint={showOfflineHint}
-          providerConfigured={health?.providerConfigured}
-          onNavigateSetup={() => navigate(SETUP_PATH)}
-          providerModels={providerModels}
-          currentModel={models?.currentModel ?? null}
-          onModelChange={setModel}
-          renderModelLabel={renderModelLabel}
-          onSubmit={(text, files) => void sendMessage(text, files)}
-          onStop={stopStreaming}
-        />
+        <div className="sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <ChatComposer
+            className="py-0"
+            chatStatus={chatStatus}
+            busy={busy}
+            canStop={canStop}
+            disabled={!profileId}
+            error={error}
+            profileId={profileId}
+            profiles={profiles}
+            activeProfile={activeProfile}
+            onProfileSwitch={handleProfileSwitch}
+            showOfflineHint={showOfflineHint}
+            providerConfigured={health?.providerConfigured}
+            onNavigateSetup={() => navigate(SETUP_PATH)}
+            providerModels={providerModels}
+            currentModel={models?.currentModel ?? null}
+            onModelChange={setModel}
+            renderModelLabel={renderModelLabel}
+            todos={agentTodos}
+            onSubmit={(text, files) => void sendMessage(text, files)}
+            onStop={stopStreaming}
+          />
+        </div>
       </div>
     </div>
   );

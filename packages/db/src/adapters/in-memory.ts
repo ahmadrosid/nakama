@@ -198,6 +198,20 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       return true;
     },
 
+    async getSessionTodos(sessionId) {
+      return sessions.get(sessionId)?.agentTodos ?? [];
+    },
+
+    async updateSessionTodos(sessionId, todos) {
+      const session = sessions.get(sessionId);
+
+      if (!session) {
+        return;
+      }
+
+      sessions.set(sessionId, { ...session, agentTodos: todos });
+    },
+
     async deleteSession(id) {
       sessionMessages.delete(id);
       return sessions.delete(id);

@@ -176,4 +176,39 @@ describe("agent chat tool loop", () => {
     await expect(session.send("say hi")).rejects.toThrow("Unexpected provider call 2");
     expect(session.getHistory()).toEqual([]);
   });
+
+  test("appends resolvePromptContext to the system prompt each turn", async () => {
+    const systems: string[] = [];
+    const provider: ProviderClient = {
+      name: "openai",
+      generateText() {
+        return Promise.resolve("{}");
+      },
+      generateChat(input) {
+        systems.push(input.system);
+        return Promise.resolve({
+          content: "done",
+          assistantMessage: { role: "assistant", content: "done" },
+        });
+      },
+      streamChat(input, handlers) {
+        systems.push(input.system);
+        handlers.onChunk("done");
+        return Promise.resolve({
+          content: "done",
+          assistantMessage: { role: "assistant", content: "done" },
+        });
+      },
+    };
+
+    const harness = createAgentHarness({ provider });
+    const session = harness.createChatSession({
+      resolvePromptContext: () => "# Active Task Plan\n- [pending] Ship (id: 1)",
+    });
+
+    await session.send("hello");
+
+    expect(systems[0]).toContain("# Active Task Plan");
+    expect(systems[0]).toContain("[pending] Ship");
+  });
 });

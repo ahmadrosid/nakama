@@ -83,6 +83,7 @@ export interface AgentChatSessionOptions {
   toolContext?: ToolContext;
   userTimezone?: string;
   compaction?: CompactionConfig;
+  resolvePromptContext?: () => string | Promise<string>;
 }
 
 export function createAgentChatSession(
@@ -153,6 +154,7 @@ export function createAgentChatSession(
         toolContext,
         compaction: options.compaction,
         runCompaction,
+        resolvePromptContext: options.resolvePromptContext,
       });
     },
     async sendStream(input, handlers) {
@@ -163,7 +165,14 @@ export function createAgentChatSession(
         history,
         resolveSendInput(input),
         "stream",
-        { enableToolLoop, handlers, toolContext, compaction: options.compaction, runCompaction },
+        {
+          enableToolLoop,
+          handlers,
+          toolContext,
+          compaction: options.compaction,
+          runCompaction,
+          resolvePromptContext: options.resolvePromptContext,
+        },
       );
     },
     clear() {
@@ -202,6 +211,7 @@ async function sendMessage(
     toolContext?: ToolContext;
     compaction?: CompactionConfig;
     runCompaction?: (force: boolean) => Promise<CompactionResponse>;
+    resolvePromptContext?: () => string | Promise<string>;
   },
 ): Promise<string> {
   const userContent = normalizeUserContent(
@@ -251,11 +261,18 @@ async function sendMessage(
     await options.runCompaction(false);
   }
 
+  const promptContext = options.resolvePromptContext
+    ? await options.resolvePromptContext()
+    : "";
+  const effectiveSystemPrompt = promptContext.trim()
+    ? `${systemPrompt}\n\n${promptContext.trim()}`
+    : systemPrompt;
+
   try {
     const reply = await runConversation(
       dependencies.provider,
       localTools,
-      systemPrompt,
+      effectiveSystemPrompt,
       history,
       mode,
       enableTools,

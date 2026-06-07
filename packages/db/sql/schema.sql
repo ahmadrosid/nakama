@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   channel TEXT NOT NULL,
   created_at TEXT NOT NULL,
   title TEXT,
+  agent_todos TEXT DEFAULT '[]' NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
 );
 

@@ -1,4 +1,5 @@
-import type { ProfileSummary } from "@tinyclaw/core/contract";
+import { hasActiveAgentTodos } from "@tinyclaw/core/agent-todo";
+import type { AgentTodo, ProfileSummary } from "@tinyclaw/core/contract";
 import type { ChatStatus } from "ai";
 import type { FileUIPart } from "ai";
 import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
@@ -45,6 +46,7 @@ import {
   composerShellCompactClass,
   composerToolbarClass,
 } from "@/lib/chat-stream";
+import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
 import { cn } from "@/lib/utils";
 
 interface ChatComposerBaseProps {
@@ -58,6 +60,7 @@ interface ChatComposerBaseProps {
   onStop?: () => void;
   className?: string;
   footerClassName?: string;
+  todos?: AgentTodo[];
 }
 
 interface ChatComposerMinimalProps extends ChatComposerBaseProps {
@@ -93,15 +96,17 @@ export function ChatComposer(props: ChatComposerProps) {
     onStop,
     className,
     footerClassName,
+    todos = [],
   } = props;
 
   const isMinimal = props.variant === "minimal";
+  const hasTodos = hasActiveAgentTodos(todos);
   const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = error ?? attachmentError;
 
   return (
-    <div className={cn("shrink-0 space-y-2", className)}>
+    <div className={cn("w-full shrink-0 space-y-2", className)}>
       <p
         className={`min-h-5 text-sm ${displayError ? "text-destructive" : "invisible"}`}
         role={displayError ? "alert" : undefined}
@@ -127,6 +132,51 @@ export function ChatComposer(props: ChatComposerProps) {
           </span>
         </p>
       ) : null}
+      {hasTodos && !isMinimal ? (
+        <div className="relative flex w-full flex-col">
+          <AgentTodoPanel todos={todos} stack />
+          <div className="relative z-10 -mt-2 w-full">
+            <PromptInput
+              accept={ALL_ATTACHMENT_ACCEPT}
+              multiple
+              maxFiles={5}
+              maxFileSize={MAX_IMAGE_BYTES}
+              prepareFiles={prepareChatUploadFiles}
+              onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
+              className={shellClass}
+              onSubmit={({ text, files }) => {
+                setAttachmentError(null);
+                onSubmit(text.trim(), files);
+              }}
+            >
+              <ChatAttachmentHeader />
+              <PromptInputBody>
+                <PromptInputTextarea
+                  className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                  placeholder={placeholder}
+                  disabled={disabled || busy}
+                />
+              </PromptInputBody>
+              <PromptInputFooter
+                className={cn(
+                  "w-full border-0 px-0 pb-0",
+                  "flex-wrap items-center gap-2 pt-2.5",
+                  footerClassName,
+                )}
+              >
+                <ChatComposerFullFooter
+                  props={props}
+                  chatStatus={chatStatus}
+                  busy={busy}
+                  canStop={canStop}
+                  disabled={disabled}
+                  onStop={onStop}
+                />
+              </PromptInputFooter>
+            </PromptInput>
+          </div>
+        </div>
+      ) : (
       <PromptInput
         accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
         multiple={!isMinimal}
@@ -180,133 +230,161 @@ export function ChatComposer(props: ChatComposerProps) {
               )}
             </PromptInputSubmit>
           ) : (
-            <>
-              <div
-                role="toolbar"
-                aria-label="Composer options"
-                className={composerToolbarClass}
-              >
-                <PromptInputTools className="gap-1.5">
-                  <ChatAttachmentButton disabled={disabled || busy} />
-                </PromptInputTools>
-
-                <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
-
-                {props.providerConfigured ? (
-                  <PromptInputSelect
-                    value={props.currentModel ?? ""}
-                    disabled={!props.providerModels.length || busy}
-                    onValueChange={(value) =>
-                      void props.onModelChange(value != null ? String(value) : "")
-                    }
-                  >
-                    <PromptInputSelectTrigger
-                      className="h-8 w-auto max-w-[min(16rem,52vw)] rounded-full bg-muted px-2.5 text-[11px] font-medium leading-none text-foreground hover:bg-muted/80 sm:max-w-[min(20rem,60vw)] sm:text-xs"
-                      title={
-                        props.currentModel
-                          ? (props.renderModelLabel(props.currentModel) ?? undefined)
-                          : undefined
-                      }
-                    >
-                      <PromptInputSelectValue placeholder="Model">
-                        {props.renderModelLabel}
-                      </PromptInputSelectValue>
-                    </PromptInputSelectTrigger>
-                    <PromptInputSelectContent
-                      align="start"
-                      alignItemWithTrigger={false}
-                      className="w-max max-w-[min(24rem,92vw)] text-xs"
-                    >
-                      {props.providerModels.map((model) => (
-                        <PromptInputSelectItem
-                          key={model.id}
-                          value={model.id}
-                          label={model.name}
-                        >
-                          {model.name}
-                        </PromptInputSelectItem>
-                      ))}
-                    </PromptInputSelectContent>
-                  </PromptInputSelect>
-                ) : (
-                  <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-800 dark:text-amber-200">
-                    <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
-                    Offline
-                  </span>
-                )}
-              </div>
-
-              <div
-                role="toolbar"
-                aria-label="Composer actions"
-                className="ml-auto flex shrink-0 items-center gap-1.5"
-              >
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={busy}
-                        aria-label={
-                          props.activeProfile
-                            ? `Switch profile (${props.activeProfile.name})`
-                            : "Switch profile"
-                        }
-                        title={props.activeProfile?.name ?? "Switch profile"}
-                        className={cn(composerIconButtonClass, "p-0")}
-                      />
-                    }
-                  >
-                    {props.activeProfile ? (
-                      <ProfileAvatar profile={props.activeProfile} size="sm" className="size-7" />
-                    ) : (
-                      <span className="text-xs font-medium">?</span>
-                    )}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-52 w-auto">
-                    {props.profiles.map((profile) => (
-                      <DropdownMenuItem
-                        key={profile.id}
-                        disabled={busy || profile.id === props.profileId}
-                        onClick={() => void props.onProfileSwitch(profile.id)}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <ProfileAvatar profile={profile} size="sm" />
-                          <span className="whitespace-nowrap">
-                            {profile.name}
-                            {profile.isSuper ? " (super)" : ""}
-                          </span>
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <span className="h-5 w-px bg-border" aria-hidden />
-
-                <PromptInputSubmit
-                  status={chatStatus}
-                  disabled={disabled || (busy && !canStop)}
-                  onStop={canStop ? onStop : undefined}
-                  aria-label={
-                    canStop ? "Stop response" : busy ? "Sending message" : "Send message"
-                  }
-                  className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {canStop ? (
-                    <StopIcon />
-                  ) : (
-                    <ArrowUpIcon className="size-3.5" />
-                  )}
-                </PromptInputSubmit>
-              </div>
-            </>
+            <ChatComposerFullFooter
+              props={props}
+              chatStatus={chatStatus}
+              busy={busy}
+              canStop={canStop}
+              disabled={disabled}
+              onStop={onStop}
+            />
           )}
         </PromptInputFooter>
       </PromptInput>
+      )}
     </div>
+  );
+}
+
+function ChatComposerFullFooter({
+  props,
+  chatStatus,
+  busy,
+  canStop,
+  disabled,
+  onStop,
+}: {
+  props: ChatComposerFullProps;
+  chatStatus: ChatStatus;
+  busy: boolean;
+  canStop: boolean;
+  disabled: boolean;
+  onStop?: () => void;
+}) {
+  return (
+    <>
+      <div
+        role="toolbar"
+        aria-label="Composer options"
+        className={composerToolbarClass}
+      >
+        <PromptInputTools className="gap-1.5">
+          <ChatAttachmentButton disabled={disabled || busy} />
+        </PromptInputTools>
+
+        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+
+        {props.providerConfigured ? (
+          <PromptInputSelect
+            value={props.currentModel ?? ""}
+            disabled={!props.providerModels.length || busy}
+            onValueChange={(value) =>
+              void props.onModelChange(value != null ? String(value) : "")
+            }
+          >
+            <PromptInputSelectTrigger
+              className="h-8 w-auto max-w-[min(16rem,52vw)] rounded-full bg-muted px-2.5 text-[11px] font-medium leading-none text-foreground hover:bg-muted/80 sm:max-w-[min(20rem,60vw)] sm:text-xs"
+              title={
+                props.currentModel
+                  ? (props.renderModelLabel(props.currentModel) ?? undefined)
+                  : undefined
+              }
+            >
+              <PromptInputSelectValue placeholder="Model">
+                {props.renderModelLabel}
+              </PromptInputSelectValue>
+            </PromptInputSelectTrigger>
+            <PromptInputSelectContent
+              align="start"
+              alignItemWithTrigger={false}
+              className="w-max max-w-[min(24rem,92vw)] text-xs"
+            >
+              {props.providerModels.map((model) => (
+                <PromptInputSelectItem
+                  key={model.id}
+                  value={model.id}
+                  label={model.name}
+                >
+                  {model.name}
+                </PromptInputSelectItem>
+              ))}
+            </PromptInputSelectContent>
+          </PromptInputSelect>
+        ) : (
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-800 dark:text-amber-200">
+            <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
+            Offline
+          </span>
+        )}
+      </div>
+
+      <div
+        role="toolbar"
+        aria-label="Composer actions"
+        className="ml-auto flex shrink-0 items-center gap-1.5"
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={busy}
+                aria-label={
+                  props.activeProfile
+                    ? `Switch profile (${props.activeProfile.name})`
+                    : "Switch profile"
+                }
+                title={props.activeProfile?.name ?? "Switch profile"}
+                className={cn(composerIconButtonClass, "p-0")}
+              />
+            }
+          >
+            {props.activeProfile ? (
+              <ProfileAvatar profile={props.activeProfile} size="sm" className="size-7" />
+            ) : (
+              <span className="text-xs font-medium">?</span>
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-52 w-auto">
+            {props.profiles.map((profile) => (
+              <DropdownMenuItem
+                key={profile.id}
+                disabled={busy || profile.id === props.profileId}
+                onClick={() => void props.onProfileSwitch(profile.id)}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <span className="whitespace-nowrap">
+                    {profile.name}
+                    {profile.isSuper ? " (super)" : ""}
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <span className="h-5 w-px bg-border" aria-hidden />
+
+        <PromptInputSubmit
+          status={chatStatus}
+          disabled={disabled || (busy && !canStop)}
+          onStop={canStop ? onStop : undefined}
+          aria-label={
+            canStop ? "Stop response" : busy ? "Sending message" : "Send message"
+          }
+          className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          {canStop ? (
+            <StopIcon />
+          ) : (
+            <ArrowUpIcon className="size-3.5" />
+          )}
+        </PromptInputSubmit>
+      </div>
+    </>
   );
 }
 
