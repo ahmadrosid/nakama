@@ -41,8 +41,7 @@ export function TaskColumn({
     <section
       className={cn(
         "flex min-h-[20rem] w-[min(100%,18rem)] shrink-0 snap-start flex-col rounded-lg border border-border bg-muted/20 sm:min-h-[24rem] sm:w-72",
-        "border-t-2 shadow-sm transition-shadow duration-200 motion-reduce:transition-none",
-        meta.headerAccent,
+        "shadow-sm transition-shadow duration-200 motion-reduce:transition-none",
         isOver && "ring-2 ring-primary/40 shadow-md",
         hasRunning && "bg-amber-500/[0.03] dark:bg-amber-400/[0.04]",
       )}

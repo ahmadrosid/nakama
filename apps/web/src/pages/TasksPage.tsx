@@ -216,7 +216,7 @@ export function TasksPage() {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6",
-          showHistoryPanel && "bg-muted/10 lg:border-r lg:border-border/50",
+          showHistoryPanel && "bg-muted/10",
         )}
       >
         <header className="flex flex-wrap items-start justify-between gap-4">
@@ -330,24 +330,17 @@ export function TasksPage() {
               </CardContent>
             </Card>
           ) : (
-            <div
-              className={cn(
-                showHistoryPanel &&
-                  "rounded-xl border border-border/70 bg-card/40 p-2 shadow-sm sm:p-3",
-              )}
-            >
-              <TaskBoard
-                tasks={tasks}
-                profileById={profileById}
-                runningTaskIds={runningTaskIds}
-                startingTaskId={startingTaskId}
-                focusedTaskId={focusedTaskId}
-                onMoveTask={handleMoveTask}
-                onFocusTask={handleFocusTask}
-                onOpenTask={setDetailTask}
-                onStartTask={handleStartTask}
-              />
-            </div>
+            <TaskBoard
+              tasks={tasks}
+              profileById={profileById}
+              runningTaskIds={runningTaskIds}
+              startingTaskId={startingTaskId}
+              focusedTaskId={focusedTaskId}
+              onMoveTask={handleMoveTask}
+              onFocusTask={handleFocusTask}
+              onOpenTask={setDetailTask}
+              onStartTask={handleStartTask}
+            />
           )}
         </div>
       </div>

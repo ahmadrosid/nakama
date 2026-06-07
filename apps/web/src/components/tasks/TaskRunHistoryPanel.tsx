@@ -129,14 +129,14 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
     <aside
       className={cn(
         "flex min-h-[24rem] shrink-0 flex-col bg-background",
-        "border-t border-border/80",
-        "lg:h-full lg:min-h-0 lg:w-[24rem] lg:border-t-0 lg:border-l lg:border-border/80",
+        "border-t border-border/50",
+        "lg:h-full lg:min-h-0 lg:w-[24rem] lg:border-t-0 lg:border-l lg:border-border/30",
         "xl:w-[26rem]",
-        "lg:shadow-[-16px_0_40px_-24px_rgba(0,0,0,0.22)] dark:lg:shadow-[-16px_0_40px_-24px_rgba(0,0,0,0.5)]",
+        "lg:shadow-xs",
       )}
       aria-label={`Run chat for ${task.title}`}
     >
-      <header className="flex items-start justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-4 sm:px-5">
+      <header className="flex items-start justify-between gap-3 border-b border-border/50 bg-muted/20 px-4 py-4 sm:px-5">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-2">
             <ChatNavIcon
@@ -191,13 +191,13 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
       </div>
 
       {displayError ? (
-        <div className="shrink-0 border-t border-border/60 px-4 py-3 sm:px-5">
+        <div className="shrink-0 border-t border-border/50 px-4 py-3 sm:px-5">
           <p className="text-sm text-red-700 dark:text-red-300">{displayError}</p>
         </div>
       ) : null}
 
       {chatUnavailable ? (
-        <div className="shrink-0 space-y-2 border-t border-border/60 px-4 py-4 sm:px-5">
+        <div className="shrink-0 space-y-2 border-t border-border/50 px-4 py-4 sm:px-5">
           <p className="text-sm text-muted-foreground">
             Run history is shown above. Restart the TinyClaw server to enable follow-up chat.
           </p>
@@ -211,7 +211,7 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
           disabled={!sessionId || waitingForMessages}
           error={displayError}
           placeholder="Follow up on this task…"
-          className="border-t border-border/60 px-4 py-4 sm:px-5"
+          className="border-t border-border/50 px-4 py-4 sm:px-5"
           onSubmit={(text) => void sendMessage(text)}
           onStop={stopStreaming}
         />

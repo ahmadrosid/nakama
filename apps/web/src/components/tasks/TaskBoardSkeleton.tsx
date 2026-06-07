@@ -13,8 +13,6 @@ export function TaskBoardSkeleton() {
           key={column.id}
           className={cn(
             "flex min-h-[24rem] w-72 shrink-0 snap-start flex-col rounded-lg border border-border bg-muted/20",
-            "border-t-2",
-            column.headerAccent,
           )}
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
