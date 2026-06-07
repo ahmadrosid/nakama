@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/index.ts",
+    "dev": "bun run scripts/dev.ts",
     "build": "bun build ./src/index.ts --outdir dist --target bun",
     "test": "bun test",
     "openapi:generate": "bun run scripts/generate-openapi.ts",

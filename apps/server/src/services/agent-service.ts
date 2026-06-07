@@ -1141,7 +1141,7 @@ export class AgentService {
       const mcpServers = await this.db.listMcpServersForProfile(profile.id);
       resolved = [
         ...resolved,
-        ...buildMcpToolDefinitions(mcpServers, this.mcpClientManager),
+        ...buildMcpToolDefinitions(mcpServers, this.mcpClientManager, profile.id),
       ];
     }
 

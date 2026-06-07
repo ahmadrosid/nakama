@@ -46,7 +46,7 @@ describe("mcp tool bridge", () => {
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager);
+    const tools = buildMcpToolDefinitions(servers, manager, "profile_test");
 
     expect(tools.map((tool) => tool.name)).toEqual([
       "github__tools_list",
@@ -78,7 +78,7 @@ describe("mcp tool bridge", () => {
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager);
+    const tools = buildMcpToolDefinitions(servers, manager, "profile_test");
 
     expect(tools).toHaveLength(1);
     expect(tools[0]?.name).toBe("filesystem__read_file");
@@ -101,7 +101,7 @@ describe("mcp tool bridge", () => {
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager);
+    const tools = buildMcpToolDefinitions(servers, manager, "profile_test");
     const result = await tools[0]!.run({}, {});
 
     expect(result).toEqual({

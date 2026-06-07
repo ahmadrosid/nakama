@@ -1,7 +1,10 @@
 import type {
   CachedMcpToolSummary,
   CreateMcpServerRequest,
+  McpHttpConfig,
   McpServerSummary,
+  McpStdioConfig,
+  McpTransport,
 } from "@tinyclaw/core/contract";
 import {
   BlocksIcon,
@@ -12,8 +15,16 @@ import {
   PlusIcon,
   RefreshCwIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { McpToolLabels, McpToolList } from "@/components/soul-tools/McpToolList";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,10 +52,14 @@ import {
   useUpdateMcpServerMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
+import {
+  parseMcpConfigJson,
+  type ParsedMcpServerImport,
+} from "@/lib/mcp-config-import";
 import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
-const REDACTED_HEADER_VALUE = "••••••••";
+const REDACTED_SECRET_VALUE = "••••••••";
 
 type McpHeaderRow = {
   key: string;
@@ -361,7 +376,15 @@ function McpServerToolsDialog({
               <DialogDescription className="leading-relaxed">
                 Tools exposed by this MCP server and available to assigned profiles.
               </DialogDescription>
-              {detail?.config.url ? (
+              {detail?.transport === "stdio" && "command" in detail.config ? (
+                <p
+                  className="truncate font-mono text-xs text-muted-foreground"
+                  title={detail.config.command}
+                >
+                  {detail.config.command}
+                  {detail.config.args?.length ? ` ${detail.config.args.join(" ")}` : ""}
+                </p>
+              ) : detail?.transport === "http" && "url" in detail.config ? (
                 <p className="truncate font-mono text-xs text-muted-foreground" title={detail.config.url}>
                   {detail.config.url}
                 </p>
@@ -396,6 +419,12 @@ function McpServerToolsDialog({
                 <McpToolList tools={detail.cachedTools} />
               )}
             </div>
+
+            <DialogFooter className="mx-0 mb-0 shrink-0 gap-3 border-t-0 bg-transparent p-0 pt-2 sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            </DialogFooter>
           </>
         ) : null}
       </DialogContent>
@@ -421,9 +450,14 @@ function McpServerDialog({
     open && server ? server.id : null,
   );
   const [name, setName] = useState("");
+  const [transport, setTransport] = useState<McpTransport>("http");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
+  const [command, setCommand] = useState("");
+  const [args, setArgs] = useState<string[]>([]);
+  const [env, setEnv] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     ok: boolean;
@@ -435,7 +469,11 @@ function McpServerDialog({
   const idPrefix = server ? `mcp-edit-${server.id}` : "mcp-create";
   const loadingForm = isEdit && loadingDetail && !detail;
   const formDisabled = busy || testing || loadingForm;
-  const canSubmit = name.trim().length > 0 && url.trim().length > 0 && !loadingForm;
+  const activeTransport = resolveFormTransport(transport, command, url);
+  const canSubmit =
+    name.trim().length > 0 &&
+    !loadingForm &&
+    (activeTransport === "http" ? url.trim().length > 0 : command.trim().length > 0);
 
   useEffect(() => {
     if (!open) {
@@ -444,9 +482,14 @@ function McpServerDialog({
 
     if (!server) {
       setName("");
+      setTransport("http");
       setUrl("");
       setHeaders([emptyHeaderRow()]);
+      setCommand("");
+      setArgs([]);
+      setEnv([emptyHeaderRow()]);
       setSubmitError(null);
+      setImportMessage(null);
       setTestResult(null);
       setTesting(false);
       return;
@@ -457,14 +500,47 @@ function McpServerDialog({
     }
 
     setName(detail.name);
-    setUrl(detail.config.url);
-    setHeaders(recordToHeaderRows(detail.config.headers));
+    setTransport(detail.transport);
     setSubmitError(null);
+    setImportMessage(null);
     setTestResult(null);
     setTesting(false);
+
+    if (detail.transport === "stdio") {
+      const stdioConfig = detail.config as McpStdioConfig;
+      setCommand(stdioConfig.command);
+      setArgs(stdioConfig.args ?? []);
+      setEnv(recordToHeaderRows(stdioConfig.env));
+      setUrl("");
+      setHeaders([emptyHeaderRow()]);
+      return;
+    }
+
+    const httpConfig = detail.config as McpHttpConfig;
+    setUrl(httpConfig.url);
+    setHeaders(recordToHeaderRows(httpConfig.headers));
+    setCommand("");
+    setArgs([]);
+    setEnv([emptyHeaderRow()]);
   }, [open, server, detail]);
 
   function buildRequest(): CreateMcpServerRequest {
+    const activeTransport = resolveFormTransport(transport, command, url);
+
+    if (activeTransport === "stdio") {
+      return {
+        name: name.trim(),
+        transport: "stdio",
+        config: {
+          command: command.trim(),
+          args: argsToArray(args),
+          env: headersToRecord(env, isEdit),
+        },
+        connect: false,
+        ...(isEdit && server ? { serverId: server.id } : {}),
+      };
+    }
+
     return {
       name: name.trim(),
       transport: "http",
@@ -520,6 +596,64 @@ function McpServerDialog({
     }
   }
 
+  function applyImportedServer(imported: ParsedMcpServerImport) {
+    if (isEdit && imported.transport !== transport) {
+      setImportMessage(
+        `Imported config uses ${imported.transport}, but this server uses ${transport}.`,
+      );
+      return;
+    }
+
+    setName(imported.name);
+    setTransport(imported.transport);
+
+    if (imported.transport === "stdio") {
+      const stdioConfig = imported.config as McpStdioConfig;
+      setCommand(stdioConfig.command);
+      setArgs(stdioConfig.args ?? []);
+      setEnv(recordToHeaderRows(stdioConfig.env));
+      setUrl("");
+      setHeaders([emptyHeaderRow()]);
+    } else {
+      const httpConfig = imported.config as McpHttpConfig;
+      setUrl(httpConfig.url);
+      setHeaders(recordToHeaderRows(httpConfig.headers));
+      setCommand("");
+      setArgs([]);
+      setEnv([emptyHeaderRow()]);
+    }
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLFormElement>) {
+    if (formDisabled) {
+      return;
+    }
+
+    const text = event.clipboardData.getData("text/plain");
+    const result = parseMcpConfigJson(text);
+
+    if (result === null) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!result.ok) {
+      setImportMessage(result.error);
+      setTestResult(null);
+      return;
+    }
+
+    applyImportedServer(result.server);
+    setImportMessage(
+      result.importedCount > 1
+        ? `Imported "${result.server.name}". Only the first of ${result.importedCount} servers was applied.`
+        : `Imported "${result.server.name}" from pasted config.`,
+    );
+    setSubmitError(null);
+    setTestResult(null);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
@@ -539,15 +673,26 @@ function McpServerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-6 p-6 sm:max-w-lg">
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={handleSubmit} onPaste={handlePaste}>
           <DialogHeader className="gap-2">
             <DialogTitle>{isEdit ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
             <DialogDescription>
               {isEdit
-                ? "Update the server URL or headers. Leave values blank to keep the current ones."
-                : "Register a server, then assign it to profiles on the Profiles page."}
+                ? transport === "stdio"
+                  ? "Update the command, args, or environment. Leave values blank to keep the current ones."
+                  : "Update the server URL or headers. Leave values blank to keep the current ones."
+                : "Register an HTTP or command-based server, then assign it to profiles on the Profiles page. Paste MCP JSON anywhere in this form to import."}
             </DialogDescription>
           </DialogHeader>
+
+          {importMessage ? (
+            <p
+              className="rounded-md bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
+              role="status"
+            >
+              {importMessage}
+            </p>
+          ) : null}
 
           {loadingForm ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -556,6 +701,39 @@ function McpServerDialog({
             </div>
           ) : (
           <div className="space-y-5">
+            <McpFormField label="Transport">
+              <div
+                role="tablist"
+                aria-label="MCP transport"
+                className="segmented-control w-full"
+              >
+                {(
+                  [
+                    { id: "http" as const, label: "HTTP" },
+                    { id: "stdio" as const, label: "Command" },
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    id={`${idPrefix}-transport-${item.id}`}
+                    role="tab"
+                    aria-selected={transport === item.id}
+                    aria-controls={`${idPrefix}-transport-panel-${item.id}`}
+                    data-active={transport === item.id || undefined}
+                    disabled={formDisabled || isEdit}
+                    className="segmented-control-item"
+                    onClick={() => {
+                      setTransport(item.id);
+                      setTestResult(null);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </McpFormField>
+
             <McpFormField label="Name" htmlFor={`${idPrefix}-name`}>
               <Input
                 id={`${idPrefix}-name`}
@@ -566,35 +744,100 @@ function McpServerDialog({
                   setName(event.target.value);
                   setTestResult(null);
                 }}
-                placeholder="github"
+                placeholder="server name"
               />
             </McpFormField>
 
-            <McpFormField label="URL" htmlFor={`${idPrefix}-url`}>
-              <Input
-                id={`${idPrefix}-url`}
-                value={url}
-                disabled={formDisabled}
-                className="font-mono text-sm"
-                onChange={(event) => {
-                  setUrl(event.target.value);
-                  setTestResult(null);
-                }}
-                placeholder="https://example.com/mcp"
-              />
-            </McpFormField>
+            <div
+              id={`${idPrefix}-transport-panel-${transport}`}
+              role="tabpanel"
+              aria-labelledby={`${idPrefix}-transport-${transport}`}
+              className="space-y-5"
+            >
+            {transport === "http" ? (
+              <>
+                <McpFormField label="URL" htmlFor={`${idPrefix}-url`}>
+                  <Input
+                    id={`${idPrefix}-url`}
+                    value={url}
+                    disabled={formDisabled}
+                    className="font-mono text-sm"
+                    onChange={(event) => {
+                      const nextUrl = event.target.value;
+                      setUrl(nextUrl);
+                      if (nextUrl.trim()) {
+                        setTransport("http");
+                      }
+                      setTestResult(null);
+                    }}
+                    placeholder="https://example.com/mcp"
+                  />
+                </McpFormField>
 
-            <McpFormField label="Headers" hint="Optional">
-              <McpHeadersEditor
-                headers={headers}
-                isEdit={isEdit}
-                disabled={formDisabled}
-                onChange={(nextHeaders) => {
-                  setHeaders(nextHeaders);
-                  setTestResult(null);
-                }}
-              />
-            </McpFormField>
+                <McpFormField label="Headers" hint="Optional">
+                  <McpHeadersEditor
+                    headers={headers}
+                    isEdit={isEdit}
+                    disabled={formDisabled}
+                    onChange={(nextHeaders) => {
+                      setHeaders(nextHeaders);
+                      setTestResult(null);
+                    }}
+                  />
+                </McpFormField>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <McpFormField label="Command" htmlFor={`${idPrefix}-command`}>
+                    <Input
+                      id={`${idPrefix}-command`}
+                      value={command}
+                      disabled={formDisabled}
+                      className="font-mono text-sm"
+                      onChange={(event) => {
+                        const nextCommand = event.target.value;
+                        setCommand(nextCommand);
+                        if (nextCommand.trim()) {
+                          setTransport("stdio");
+                        }
+                        setTestResult(null);
+                      }}
+                      placeholder="npx"
+                    />
+                  </McpFormField>
+
+                  <McpFormField label="Arguments" hint="Optional">
+                    <McpArgsEditor
+                      args={args}
+                      disabled={formDisabled}
+                      inputId={`${idPrefix}-args`}
+                      onChange={(nextArgs) => {
+                        setArgs(nextArgs);
+                        setTestResult(null);
+                      }}
+                    />
+                  </McpFormField>
+                </div>
+
+                <McpFormField label="Environment" hint="Optional">
+                  <McpHeadersEditor
+                    headers={env}
+                    isEdit={isEdit}
+                    disabled={formDisabled}
+                    keyLabel="Variable"
+                    valueLabel="Value"
+                    valuePlaceholder={isEdit ? "Leave blank to keep" : "secret-value"}
+                    onChange={(nextEnv) => {
+                      setEnv(nextEnv);
+                      setTestResult(null);
+                    }}
+                  />
+                </McpFormField>
+
+              </>
+            )}
+            </div>
 
             <Button
               type="button"
@@ -668,15 +911,127 @@ function McpServerDialog({
   );
 }
 
+function McpArgsEditor({
+  args,
+  disabled,
+  inputId,
+  onChange,
+}: {
+  args: string[];
+  disabled?: boolean;
+  inputId?: string;
+  onChange: (args: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function addArg(value: string) {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    onChange([...args, trimmed]);
+    setDraft("");
+  }
+
+  function removeArg(index: number) {
+    onChange(args.filter((_, argIndex) => argIndex !== index));
+  }
+
+  function handleDraftChange(value: string) {
+    if (!value.includes(",")) {
+      setDraft(value);
+      return;
+    }
+
+    const segments = value.split(",");
+    const remainder = segments.pop() ?? "";
+    const nextArgs = [...args];
+
+    for (const segment of segments) {
+      const trimmed = segment.trim();
+
+      if (trimmed) {
+        nextArgs.push(trimmed);
+      }
+    }
+
+    if (nextArgs.length !== args.length) {
+      onChange(nextArgs);
+    }
+
+    setDraft(remainder);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addArg(draft);
+      return;
+    }
+
+    if (event.key === "Backspace" && !draft && args.length > 0) {
+      onChange(args.slice(0, -1));
+    }
+  }
+
+  return (
+    <div
+      className={cn(
+        "no-scrollbar flex h-8 w-full min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-sm transition-colors outline-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
+        disabled &&
+          "pointer-events-none cursor-not-allowed bg-input/50 opacity-50 dark:disabled:bg-input/80",
+      )}
+    >
+      {args.map((arg, index) => (
+        <span
+          key={`${index}-${arg}`}
+          className="inline-flex h-5 max-w-full shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/50 pl-1.5 pr-0.5 text-xs text-foreground"
+        >
+          <span className="truncate">{arg}</span>
+          <button
+            type="button"
+            disabled={disabled}
+            className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none"
+            aria-label={`Remove argument ${arg}`}
+            onClick={() => removeArg(index)}
+          >
+            <XIcon className="size-2.5" aria-hidden />
+          </button>
+        </span>
+      ))}
+      <input
+        id={inputId}
+        type="text"
+        value={draft}
+        disabled={disabled}
+        className="min-w-[4rem] flex-1 border-0 bg-transparent p-0 font-mono text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+        placeholder={args.length === 0 ? "-y" : "Add argument"}
+        aria-label="Add argument"
+        onChange={(event) => handleDraftChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => addArg(draft)}
+      />
+    </div>
+  );
+}
+
 function McpHeadersEditor({
   headers,
   isEdit = false,
   disabled,
+  keyLabel = "Header",
+  valueLabel = "Value",
+  valuePlaceholder,
   onChange,
 }: {
   headers: McpHeaderRow[];
   isEdit?: boolean;
   disabled?: boolean;
+  keyLabel?: string;
+  valueLabel?: string;
+  valuePlaceholder?: string;
   onChange: (headers: McpHeaderRow[]) => void;
 }) {
   function updateRow(index: number, field: keyof McpHeaderRow, value: string) {
@@ -701,16 +1056,18 @@ function McpHeadersEditor({
                 value={row.key}
                 disabled={disabled}
                 className="font-mono text-sm"
-                aria-label={`Header name ${index + 1}`}
-                placeholder="Authorization"
+                aria-label={`${keyLabel} name ${index + 1}`}
+                placeholder={keyLabel === "Header" ? "Authorization" : "API_KEY"}
                 onChange={(event) => updateRow(index, "key", event.target.value)}
               />
               <Input
                 value={row.value}
                 disabled={disabled}
                 className="font-mono text-sm"
-                aria-label={`Header value ${index + 1}`}
-                placeholder={isEdit ? "Leave blank to keep" : "Bearer token"}
+                aria-label={`${valueLabel} ${index + 1}`}
+                placeholder={
+                  valuePlaceholder ?? (isEdit ? "Leave blank to keep" : "Bearer token")
+                }
                 onChange={(event) => updateRow(index, "value", event.target.value)}
               />
             </div>
@@ -803,8 +1160,29 @@ function recordToHeaderRows(headers?: Record<string, string>): McpHeaderRow[] {
 
   return Object.entries(headers).map(([key, value]) => ({
     key,
-    value: value === REDACTED_HEADER_VALUE ? "" : value,
+    value: value === REDACTED_SECRET_VALUE ? "" : value,
   }));
+}
+
+function resolveFormTransport(
+  transport: McpTransport,
+  command: string,
+  url: string,
+): McpTransport {
+  if (command.trim()) {
+    return "stdio";
+  }
+
+  if (url.trim()) {
+    return "http";
+  }
+
+  return transport;
+}
+
+function argsToArray(values: string[]): string[] | undefined {
+  const items = values.map((value) => value.trim()).filter(Boolean);
+  return items.length > 0 ? items : undefined;
 }
 
 function headersToRecord(

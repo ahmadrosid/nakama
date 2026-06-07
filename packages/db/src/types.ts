@@ -114,7 +114,7 @@ export interface LlmUsageStatsDelta {
 }
 
 export type McpServerStatus = "connected" | "disconnected" | "error";
-export type McpTransport = "http";
+export type McpTransport = "http" | "stdio";
 
 export interface CachedMcpTool {
   name: string;

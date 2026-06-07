@@ -3696,7 +3696,8 @@
           "transport": {
             "type": "string",
             "enum": [
-              "http"
+              "http",
+              "stdio"
             ]
           },
           "enabled": {
@@ -3809,7 +3810,8 @@
           "transport": {
             "type": "string",
             "enum": [
-              "http"
+              "http",
+              "stdio"
             ]
           },
           "config": {
@@ -3832,7 +3834,8 @@
           "transport": {
             "type": "string",
             "enum": [
-              "http"
+              "http",
+              "stdio"
             ]
           },
           "config": {

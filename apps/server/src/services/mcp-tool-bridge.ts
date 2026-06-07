@@ -8,6 +8,7 @@ const LLM_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 export function buildMcpToolDefinitions(
   servers: StoredMcpServerRecord[],
   manager: McpClientManager,
+  profileId: string,
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
   const usedNames = new Set<string>();
@@ -25,14 +26,22 @@ export function buildMcpToolDefinitions(
         description: cachedTool.description,
         parameters: toJsonSchema(cachedTool.inputSchema),
         async run(input) {
-          if (!manager.isConnected(server.id)) {
-            return {
-              error: `MCP server "${server.name}" is not connected.`,
-            };
-          }
-
           try {
-            return await manager.callTool(server.id, cachedTool.name, input);
+            if (server.transport === "stdio") {
+              await manager.ensureConnected(server, profileId);
+            } else if (!manager.isConnected(server.id, server.transport)) {
+              return {
+                error: `MCP server "${server.name}" is not connected.`,
+              };
+            }
+
+            return await manager.callTool(
+              server.id,
+              server.transport,
+              cachedTool.name,
+              input,
+              server.transport === "stdio" ? profileId : undefined,
+            );
           } catch (error) {
             return {
               error: error instanceof Error ? error.message : String(error),

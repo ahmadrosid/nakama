@@ -471,12 +471,20 @@ export interface ProfileDetail extends ProfileSummary {
 }
 
 export type McpServerStatus = "connected" | "disconnected" | "error";
-export type McpTransport = "http";
+export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
   url: string;
   headers?: Record<string, string>;
 }
+
+export interface McpStdioConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export type McpServerConfig = McpHttpConfig | McpStdioConfig;
 
 export interface CachedMcpToolSummary {
   name: string;
@@ -497,7 +505,7 @@ export interface McpServerSummary {
 }
 
 export interface McpServerDetail extends McpServerSummary {
-  config: McpHttpConfig;
+  config: McpServerConfig;
   cachedTools: CachedMcpToolSummary[];
 }
 
@@ -512,17 +520,17 @@ export interface McpServerResponse {
 export interface CreateMcpServerRequest {
   name: string;
   transport: McpTransport;
-  config: McpHttpConfig;
+  config: McpServerConfig;
   enabled?: boolean;
   connect?: boolean;
-  /** When testing an existing server, merges blank header values with stored secrets. */
+  /** When testing an existing server, merges blank header/env values with stored secrets. */
   serverId?: string;
 }
 
 export interface UpdateMcpServerRequest {
   name?: string;
   transport?: McpTransport;
-  config?: McpHttpConfig;
+  config?: McpServerConfig;
   enabled?: boolean;
 }
 

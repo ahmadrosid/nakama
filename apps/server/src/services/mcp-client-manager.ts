@@ -1,11 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
   CachedMcpToolSummary,
   McpHttpConfig,
+  McpStdioConfig,
   McpTransport,
 } from "@tinyclaw/core";
+import { getProfileSoulDir } from "@tinyclaw/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@tinyclaw/db";
 
 interface ConnectedMcpClient {
@@ -16,18 +19,39 @@ interface ConnectedMcpClient {
 export class McpClientManager {
   private readonly connections = new Map<string, ConnectedMcpClient>();
 
-  isConnected(serverId: string): boolean {
-    return this.connections.has(serverId);
+  isConnected(
+    serverId: string,
+    transport: McpTransport,
+    profileId?: string,
+  ): boolean {
+    return this.connections.has(connectionKey(serverId, transport, profileId));
   }
 
   getConnectedCount(): number {
     return this.connections.size;
   }
 
-  async connect(server: StoredMcpServerRecord): Promise<CachedMcpTool[]> {
-    await this.disconnect(server.id);
+  async ensureConnected(
+    server: StoredMcpServerRecord,
+    profileId: string,
+  ): Promise<void> {
+    if (this.isConnected(server.id, server.transport, profileId)) {
+      return;
+    }
 
-    const transport = createTransport(server.transport, server.config);
+    await this.connect(server, { profileId });
+  }
+
+  async connect(
+    server: StoredMcpServerRecord,
+    options?: { profileId?: string },
+  ): Promise<CachedMcpTool[]> {
+    const key = connectionKey(server.id, server.transport, options?.profileId);
+    await this.disconnectKey(key);
+
+    const transport = createTransport(server.transport, server.config, {
+      profileId: options?.profileId,
+    });
     const client = new Client({
       name: "tinyclaw",
       version: "1.0.0",
@@ -37,47 +61,47 @@ export class McpClientManager {
     const result = await client.listTools();
     const tools = normalizeListedTools(result.tools);
 
-    this.connections.set(server.id, { client, transport });
+    this.connections.set(key, { client, transport });
 
     return tools;
   }
 
   async disconnect(serverId: string): Promise<void> {
-    const connection = this.connections.get(serverId);
+    const keys = [...this.connections.keys()].filter(
+      (key) => key === serverId || key.startsWith(`${serverId}:`),
+    );
 
-    if (!connection) {
-      return;
-    }
-
-    this.connections.delete(serverId);
-
-    try {
-      await connection.transport.close();
-    } catch {
-      // Ignore transport shutdown errors.
+    for (const key of keys) {
+      await this.disconnectKey(key);
     }
   }
 
   async disconnectAll(): Promise<void> {
-    const serverIds = [...this.connections.keys()];
+    const keys = [...this.connections.keys()];
 
-    for (const serverId of serverIds) {
-      await this.disconnect(serverId);
+    for (const key of keys) {
+      await this.disconnectKey(key);
     }
   }
 
-  async listTools(serverId: string): Promise<CachedMcpTool[]> {
-    const client = this.requireClient(serverId);
+  async listTools(
+    serverId: string,
+    transport: McpTransport,
+    profileId?: string,
+  ): Promise<CachedMcpTool[]> {
+    const client = this.requireClient(serverId, transport, profileId);
     const result = await client.listTools();
     return normalizeListedTools(result.tools);
   }
 
   async callTool(
     serverId: string,
+    transport: McpTransport,
     toolName: string,
     input: unknown,
+    profileId?: string,
   ): Promise<unknown> {
-    const client = this.requireClient(serverId);
+    const client = this.requireClient(serverId, transport, profileId);
     const result = await client.callTool({
       name: toolName,
       arguments: asToolArguments(input),
@@ -126,8 +150,12 @@ export class McpClientManager {
     }
   }
 
-  private requireClient(serverId: string): Client {
-    const connection = this.connections.get(serverId);
+  private requireClient(
+    serverId: string,
+    transport: McpTransport,
+    profileId?: string,
+  ): Client {
+    const connection = this.connections.get(connectionKey(serverId, transport, profileId));
 
     if (!connection) {
       throw new Error(`MCP server "${serverId}" is not connected.`);
@@ -135,20 +163,100 @@ export class McpClientManager {
 
     return connection.client;
   }
+
+  private async disconnectKey(key: string): Promise<void> {
+    const connection = this.connections.get(key);
+
+    if (!connection) {
+      return;
+    }
+
+    this.connections.delete(key);
+
+    try {
+      await connection.transport.close();
+    } catch {
+      // Ignore transport shutdown errors.
+    }
+  }
 }
 
-function createTransport(transport: McpTransport, config: unknown): Transport {
-  if (transport !== "http") {
-    throw new Error('MCP transport must be "http".');
+function connectionKey(
+  serverId: string,
+  transport: McpTransport,
+  profileId?: string,
+): string {
+  if (transport === "stdio" && profileId) {
+    return `${serverId}:${profileId}`;
   }
 
-  const http = readHttpConfig(config);
+  return serverId;
+}
 
-  return new StreamableHTTPClientTransport(new URL(http.url), {
-    requestInit: {
-      headers: http.headers,
-    },
-  });
+function createTransport(
+  transport: McpTransport,
+  config: unknown,
+  options?: { profileId?: string },
+): Transport {
+  if (transport === "http") {
+    const http = readHttpConfig(config);
+
+    return new StreamableHTTPClientTransport(new URL(http.url), {
+      requestInit: {
+        headers: http.headers,
+      },
+    });
+  }
+
+  if (transport === "stdio") {
+    const stdio = readStdioConfig(config);
+    const cwd = options?.profileId ? getProfileSoulDir(options.profileId) : undefined;
+
+    return new StdioClientTransport({
+      ...stdio,
+      ...(cwd ? { cwd } : {}),
+    });
+  }
+
+  throw new Error(`Unsupported MCP transport: ${transport}`);
+}
+
+function readStdioConfig(config: unknown): McpStdioConfig {
+  if (typeof config !== "object" || config === null) {
+    throw new Error("stdio MCP servers require config.command.");
+  }
+
+  const record = config as Record<string, unknown>;
+  const command =
+    typeof record.command === "string" && record.command.trim()
+      ? record.command.trim()
+      : null;
+
+  if (!command) {
+    throw new Error("stdio MCP servers require config.command.");
+  }
+
+  const args = readStringArray(record.args);
+  const env = readStringRecord(record.env);
+
+  return {
+    command,
+    ...(args ? { args } : {}),
+    ...(env ? { env } : {}),
+  };
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const items = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return items.length > 0 ? items : undefined;
 }
 
 function readHttpConfig(config: unknown): McpHttpConfig {

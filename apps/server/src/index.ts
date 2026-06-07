@@ -36,6 +36,10 @@ const existingServerUrl = await findRunningTinyClawServerUrl(host, requestedPort
 if (existingServerUrl) {
   const runtimeServerUrl = writeRuntimeServerUrl(existingServerUrl);
   console.log(`TinyClaw server already running on ${runtimeServerUrl}`);
+  console.log(
+    "Stop it before restarting to pick up code changes (for example: kill $(lsof -ti :4310)).",
+  );
+  console.log("Or run: bun run dev:server");
   process.exit(0);
 }
 

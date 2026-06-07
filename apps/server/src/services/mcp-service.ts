@@ -2,9 +2,11 @@ import type {
   CreateMcpServerRequest,
   ListMcpServersResponse,
   McpHttpConfig,
+  McpServerConfig,
   McpServerDetail,
   McpServerResponse,
   McpServerSummary,
+  McpStdioConfig,
   McpTransport,
   TestMcpServerResponse,
   UpdateMcpServerRequest,
@@ -39,8 +41,8 @@ export class McpService {
       throw new Error("MCP server name is required.");
     }
 
-    validateTransport(request.transport);
-    validateConfig(request.transport, request.config);
+    const transport = normalizeTransport(request.transport);
+    validateConfig(transport, request.config);
 
     const existing = await this.db.getMcpServerByName(name);
 
@@ -52,7 +54,7 @@ export class McpService {
     const record: StoredMcpServerRecord = {
       id: createId("mcp"),
       name,
-      transport: request.transport,
+      transport,
       config: request.config,
       enabled: request.enabled ?? true,
       status: "disconnected",
@@ -91,11 +93,18 @@ export class McpService {
       }
     }
 
+    const transportChanged =
+      request.transport !== undefined && request.transport !== server.transport;
     const transport = request.transport ?? server.transport;
-    const previousConfig = asMcpHttpConfig(server.config);
     const config = request.config
-      ? mergeMcpHttpConfig(previousConfig, request.config)
-      : previousConfig;
+      ? transportChanged
+        ? request.config
+        : mergeMcpConfig(
+            transport,
+            resolveMcpConfig(server.transport, server.config),
+            request.config,
+          )
+      : resolveMcpConfig(server.transport, server.config);
 
     if (request.transport !== undefined) {
       validateTransport(transport);
@@ -116,7 +125,7 @@ export class McpService {
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
 
-    if (configChanged && this.manager.isConnected(serverId)) {
+    if (configChanged) {
       await this.manager.disconnect(serverId);
       updated.status = "disconnected";
       updated.lastError = null;
@@ -175,12 +184,12 @@ export class McpService {
   async syncServer(serverId: string): Promise<McpServerResponse> {
     const server = await this.requireServer(serverId);
 
-    if (!this.manager.isConnected(serverId)) {
+    if (!this.manager.isConnected(serverId, server.transport)) {
       return this.connectServer(serverId);
     }
 
     try {
-      const cachedTools = await this.manager.listTools(serverId);
+      const cachedTools = await this.manager.listTools(serverId, server.transport);
       const updated: StoredMcpServerRecord = {
         ...server,
         status: "connected",
@@ -208,18 +217,25 @@ export class McpService {
 
   async testServer(
     transport: McpTransport,
-    config: McpHttpConfig,
+    config: McpServerConfig,
     serverId?: string,
   ): Promise<TestMcpServerResponse> {
-    validateTransport(transport);
+    const normalizedTransport = normalizeTransport(transport);
     const resolvedConfig = serverId
-      ? mergeMcpHttpConfig(asMcpHttpConfig((await this.requireServer(serverId)).config), config)
+      ? mergeMcpConfig(
+          normalizedTransport,
+          resolveMcpConfig(
+            normalizedTransport,
+            (await this.requireServer(serverId)).config,
+          ),
+          config,
+        )
       : config;
 
-    validateConfig(transport, resolvedConfig);
+    validateConfig(normalizedTransport, resolvedConfig);
 
     try {
-      const tools = await this.manager.testConnection(transport, resolvedConfig);
+      const tools = await this.manager.testConnection(normalizedTransport, resolvedConfig);
 
       return {
         ok: true,
@@ -327,14 +343,26 @@ function toMcpServerDetail(server: StoredMcpServerRecord): McpServerDetail {
   };
 }
 
-const REDACTED_HEADER_VALUE = "••••••••";
+const REDACTED_SECRET_VALUE = "••••••••";
 
-function asMcpHttpConfig(config: unknown): McpHttpConfig {
-  if (typeof config === "object" && config !== null) {
-    return config as McpHttpConfig;
+function resolveMcpConfig(transport: McpTransport, config: unknown): McpServerConfig {
+  if (typeof config !== "object" || config === null) {
+    return transport === "http" ? { url: "" } : { command: "" };
   }
 
-  return { url: "" };
+  return config as McpServerConfig;
+}
+
+function mergeMcpConfig(
+  transport: McpTransport,
+  previous: McpServerConfig,
+  next: McpServerConfig,
+): McpServerConfig {
+  if (transport === "http") {
+    return mergeMcpHttpConfig(previous as McpHttpConfig, next as McpHttpConfig);
+  }
+
+  return mergeMcpStdioConfig(previous as McpStdioConfig, next as McpStdioConfig);
 }
 
 function mergeMcpHttpConfig(previous: McpHttpConfig, next: McpHttpConfig): McpHttpConfig {
@@ -342,11 +370,21 @@ function mergeMcpHttpConfig(previous: McpHttpConfig, next: McpHttpConfig): McpHt
 
   return {
     url,
-    headers: mergeRedactedHeaders(previous.headers, next.headers),
+    headers: mergeRedactedStringRecord(previous.headers, next.headers),
   };
 }
 
-function mergeRedactedHeaders(
+function mergeMcpStdioConfig(previous: McpStdioConfig, next: McpStdioConfig): McpStdioConfig {
+  const command = next.command?.trim() || previous.command;
+
+  return {
+    command,
+    args: next.args !== undefined ? normalizeStringArray(next.args) : previous.args,
+    env: mergeRedactedStringRecord(previous.env, next.env),
+  };
+}
+
+function mergeRedactedStringRecord(
   previous: Record<string, string> | undefined,
   next: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
@@ -354,7 +392,7 @@ function mergeRedactedHeaders(
     return previous;
   }
 
-  const previousHeaders = previous ?? {};
+  const previousRecord = previous ?? {};
   const merged: Record<string, string> = {};
 
   for (const [key, nextValue] of Object.entries(next)) {
@@ -367,15 +405,15 @@ function mergeRedactedHeaders(
     const trimmedValue = nextValue.trim();
 
     if (!trimmedValue) {
-      if (trimmedKey in previousHeaders) {
-        merged[trimmedKey] = previousHeaders[trimmedKey]!;
+      if (trimmedKey in previousRecord) {
+        merged[trimmedKey] = previousRecord[trimmedKey]!;
       }
 
       continue;
     }
 
-    if (trimmedValue === REDACTED_HEADER_VALUE && trimmedKey in previousHeaders) {
-      merged[trimmedKey] = previousHeaders[trimmedKey]!;
+    if (trimmedValue === REDACTED_SECRET_VALUE && trimmedKey in previousRecord) {
+      merged[trimmedKey] = previousRecord[trimmedKey]!;
       continue;
     }
 
@@ -385,7 +423,29 @@ function mergeRedactedHeaders(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-function redactMcpConfig(_transport: McpTransport, config: unknown): McpHttpConfig {
+function normalizeStringArray(value: string[] | undefined): string[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const items = value.map((entry) => entry.trim()).filter(Boolean);
+  return items.length > 0 ? items : undefined;
+}
+
+function redactMcpConfig(transport: McpTransport, config: unknown): McpServerConfig {
+  if (transport === "stdio") {
+    const stdio =
+      typeof config === "object" && config !== null
+        ? (config as McpStdioConfig)
+        : { command: "" };
+
+    return {
+      command: stdio.command,
+      args: stdio.args,
+      env: redactStringRecord(stdio.env),
+    };
+  }
+
   const http =
     typeof config === "object" && config !== null
       ? (config as McpHttpConfig)
@@ -407,37 +467,57 @@ function redactStringRecord(
   const redacted: Record<string, string> = {};
 
   for (const [key, entry] of Object.entries(value)) {
-    redacted[key] = entry ? REDACTED_HEADER_VALUE : entry;
+    redacted[key] = entry ? REDACTED_SECRET_VALUE : entry;
   }
 
   return redacted;
 }
 
-function validateTransport(transport: string): asserts transport is McpTransport {
-  if (transport !== "http") {
-    throw new Error('MCP transport must be "http".');
+function normalizeTransport(transport: string | undefined): McpTransport {
+  const value = transport?.trim().toLowerCase();
+
+  if (value === "http") {
+    return "http";
   }
+
+  if (value === "stdio" || value === "command") {
+    return "stdio";
+  }
+
+  throw new Error('MCP transport must be "http" or "stdio".');
+}
+
+function validateTransport(transport: string): asserts transport is McpTransport {
+  normalizeTransport(transport);
 }
 
 function validateConfig(transport: McpTransport, config: unknown): void {
-  if (transport !== "http") {
-    throw new Error('MCP transport must be "http".');
-  }
-
   if (typeof config !== "object" || config === null) {
     throw new Error("MCP server config is required.");
   }
 
-  const url = (config as Record<string, unknown>).url;
+  const record = config as Record<string, unknown>;
 
-  if (typeof url !== "string" || !url.trim()) {
-    throw new Error("HTTP MCP servers require config.url.");
+  if (transport === "http") {
+    const url = record.url;
+
+    if (typeof url !== "string" || !url.trim()) {
+      throw new Error("HTTP MCP servers require config.url.");
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      throw new Error(`Invalid MCP server URL: ${url}`);
+    }
+
+    return;
   }
 
-  try {
-    new URL(url);
-  } catch {
-    throw new Error(`Invalid MCP server URL: ${url}`);
+  const command = record.command;
+
+  if (typeof command !== "string" || !command.trim()) {
+    throw new Error("stdio MCP servers require config.command.");
   }
 }
 

@@ -426,7 +426,7 @@ export const openApiSchemas = {
     properties: {
       id: { type: "string" },
       name: { type: "string" },
-      transport: { type: "string", enum: ["http"] },
+      transport: { type: "string", enum: ["http", "stdio"] },
       enabled: { type: "boolean" },
       status: { type: "string", enum: ["connected", "disconnected", "error"] },
       toolCount: { type: "integer" },
@@ -482,7 +482,7 @@ export const openApiSchemas = {
     required: ["name", "transport", "config"],
     properties: {
       name: { type: "string" },
-      transport: { type: "string", enum: ["http"] },
+      transport: { type: "string", enum: ["http", "stdio"] },
       config: { type: "object" },
       enabled: { type: "boolean" },
       connect: { type: "boolean" },
@@ -492,7 +492,7 @@ export const openApiSchemas = {
     type: "object",
     properties: {
       name: { type: "string" },
-      transport: { type: "string", enum: ["http"] },
+      transport: { type: "string", enum: ["http", "stdio"] },
       config: { type: "object" },
       enabled: { type: "boolean" },
     },
