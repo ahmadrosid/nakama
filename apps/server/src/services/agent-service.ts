@@ -941,6 +941,7 @@ export class AgentService {
     const provider = createProviderFromActiveConfig(this.userConfig);
     this._providerConfigured = isProviderConfigured(this.userConfig);
     this.harness = this.createHarness(provider);
+    this.sessions.clear();
   }
 
   async listProfiles(): Promise<ListProfilesResponse> {
