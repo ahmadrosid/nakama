@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": ["apps/*", "apps/platform/*", "packages/*"],
   "scripts": {
+    "dev": "bun run dev:web",
     "dev:server": "bun run apps/server/scripts/dev.ts",
     "dev:cli": "bun run apps/cli/src/index.ts",
     "dev:telegram": "bun run --filter @tinyclaw/telegram dev",
