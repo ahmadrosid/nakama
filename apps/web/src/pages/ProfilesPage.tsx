@@ -49,6 +49,7 @@ import {
   useCreateProfileMutation,
   useCreateSkillMutation,
   useDeleteProfileMutation,
+  useDeleteSkillMutation,
   useUnassignMcpServerMutation,
   useUnassignSkillMutation,
   useUnassignToolMutation,
@@ -102,6 +103,7 @@ export function ProfilesPage() {
   const createSkillMutation = useCreateSkillMutation();
   const assignSkillMutation = useAssignSkillMutation();
   const unassignSkillMutation = useUnassignSkillMutation();
+  const deleteSkillMutation = useDeleteSkillMutation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +156,8 @@ export function ProfilesPage() {
     createMcpMutation.isPending ||
     createSkillMutation.isPending ||
     assignSkillMutation.isPending ||
-    unassignSkillMutation.isPending;
+    unassignSkillMutation.isPending ||
+    deleteSkillMutation.isPending;
 
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
@@ -579,6 +582,26 @@ export function ProfilesPage() {
 
     try {
       await assignSkillMutation.mutateAsync({ profileId: selectedId, skillId });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleDeleteSkill(skillId: string) {
+    const skill = allSkills.find((entry) => entry.id === skillId);
+
+    if (!skill) {
+      return;
+    }
+
+    if (!window.confirm(`Delete skill "${skill.name}"? This removes it from every profile.`)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteSkillMutation.mutateAsync(skillId);
     } catch (err) {
       setError(formatError(err));
     }
@@ -1077,6 +1100,7 @@ export function ProfilesPage() {
                             disabled={busy}
                             buttonLabel="Manage skills"
                             onAssign={handleAssignSkill}
+                            onDelete={handleDeleteSkill}
                           />
                         </div>
                       </div>

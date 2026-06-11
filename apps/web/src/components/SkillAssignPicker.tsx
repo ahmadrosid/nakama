@@ -1,5 +1,5 @@
 import type { SkillSummary } from "@tinyclaw/core/contract";
-import { CheckIcon, PlusIcon } from "lucide-react";
+import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 interface SkillAssignPickerProps {
   skills: SkillSummary[];
@@ -25,6 +26,7 @@ interface SkillAssignPickerProps {
   disabled?: boolean;
   buttonLabel?: string;
   onAssign: (skillId: string) => void | Promise<void>;
+  onDelete?: (skillId: string) => void | Promise<void>;
   className?: string;
 }
 
@@ -66,6 +68,7 @@ export function SkillAssignPicker({
   disabled = false,
   buttonLabel = "Add skill",
   onAssign,
+  onDelete,
   className,
 }: SkillAssignPickerProps) {
   const [open, setOpen] = useState(false);
@@ -99,7 +102,9 @@ export function SkillAssignPicker({
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
           <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
             <DialogTitle>Manage skills</DialogTitle>
-            <DialogDescription>Add skills to this profile.</DialogDescription>
+            <DialogDescription>
+              Add skills to this profile, or delete them from your library.
+            </DialogDescription>
           </DialogHeader>
 
           <Command className="rounded-none bg-transparent">
@@ -120,7 +125,10 @@ export function SkillAssignPicker({
                         key={skill.id}
                         value={`${skill.name} ${skill.description}`}
                         disabled={disabled}
-                        className="items-center gap-3 px-3 py-2.5"
+                        className={cn(
+                          "items-center gap-3 px-3 py-2.5",
+                          onDelete && "[&>svg:last-child]:hidden",
+                        )}
                         onSelect={() => {
                           assignSkill(skill.id, onAssign, setOpen);
                         }}
@@ -140,20 +148,39 @@ export function SkillAssignPicker({
                             <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
                           ) : null}
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          disabled={disabled}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                        >
-                          <PlusIcon aria-hidden />
-                          Add
-                        </Button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled={disabled}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              assignSkill(skill.id, onAssign, setOpen);
+                            }}
+                          >
+                            <PlusIcon aria-hidden />
+                            Add
+                          </Button>
+                          {onDelete ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground/60 hover:text-destructive"
+                              disabled={disabled}
+                              aria-label={`Delete ${skill.name} from library`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void onDelete(skill.id);
+                              }}
+                            >
+                              <Trash2Icon className="size-4" aria-hidden />
+                            </Button>
+                          ) : null}
+                        </div>
                       </CommandItem>
                     );
                   })}
@@ -174,7 +201,10 @@ export function SkillAssignPicker({
                       <CommandItem
                         key={skill.id}
                         value={`${skill.name} ${skill.description}`}
-                        className="cursor-default items-center gap-3 bg-muted/20 px-3 py-2.5 data-selected:bg-muted/20"
+                        className={cn(
+                          "cursor-default items-center gap-3 bg-muted/20 px-3 py-2.5 data-selected:bg-muted/20",
+                          onDelete && "[&>svg:last-child]:hidden",
+                        )}
                         onSelect={() => {}}
                       >
                         <div className="min-w-0 flex-1 space-y-1">
@@ -196,6 +226,23 @@ export function SkillAssignPicker({
                             <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
                           ) : null}
                         </div>
+                        {onDelete ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="shrink-0 self-center text-muted-foreground/60 hover:text-destructive"
+                            disabled={disabled}
+                            aria-label={`Delete ${skill.name} from library`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void onDelete(skill.id);
+                            }}
+                          >
+                            <Trash2Icon className="size-4" aria-hidden />
+                          </Button>
+                        ) : null}
                       </CommandItem>
                     );
                   })}
