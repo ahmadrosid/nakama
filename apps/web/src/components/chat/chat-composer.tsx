@@ -158,7 +158,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <PromptInputTextarea
                   className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
                   placeholder={placeholder}
-                  disabled={disabled || busy}
+                  disabled={disabled}
                 />
               </PromptInputBody>
               <PromptInputFooter
@@ -207,7 +207,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 : "min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
             }
             placeholder={placeholder}
-            disabled={disabled || busy}
+            disabled={disabled}
           />
         </PromptInputBody>
         <PromptInputFooter
@@ -273,7 +273,7 @@ function ChatComposerFullFooter({
         className={composerToolbarClass}
       >
         <PromptInputTools className="gap-1.5">
-          <ChatAttachmentButton disabled={disabled || busy} />
+          <ChatAttachmentButton disabled={disabled} />
         </PromptInputTools>
 
         <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
@@ -282,7 +282,7 @@ function ChatComposerFullFooter({
           <PromptInputSelect
             value={props.currentModelSelection ?? ""}
             disabled={
-              !props.providerModelGroups.some((group) => group.models.length > 0) || busy
+              !props.providerModelGroups.some((group) => group.models.length > 0)
             }
             onValueChange={(value) =>
               void props.onModelChange(value != null ? String(value) : "")
@@ -347,7 +347,6 @@ function ChatComposerFullFooter({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                disabled={busy}
                 aria-label={
                   props.activeProfile
                     ? `Switch profile (${props.activeProfile.name})`
@@ -368,7 +367,7 @@ function ChatComposerFullFooter({
             {props.profiles.map((profile) => (
               <DropdownMenuItem
                 key={profile.id}
-                disabled={busy || profile.id === props.profileId}
+                disabled={profile.id === props.profileId}
                 onClick={() => void props.onProfileSwitch(profile.id)}
               >
                 <span className="flex min-w-0 items-center gap-2.5">
