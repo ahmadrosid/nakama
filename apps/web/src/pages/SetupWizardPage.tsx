@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
 import { SetupLayout } from "@/components/SetupLayout";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { useAppContext } from "@/context/app-context";
@@ -46,16 +45,6 @@ export function SetupWizardPage() {
             in Settings later.
           </p>
         </div>
-
-        <Card className="w-full">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="space-y-0.5">
-              <p className="text-sm font-medium text-foreground">Appearance</p>
-              <p className="text-xs text-muted-foreground">Color theme</p>
-            </div>
-            <ThemeToggle />
-          </CardContent>
-        </Card>
 
         <Card className="w-full">
           <CardHeader className="border-b border-border pb-3">
