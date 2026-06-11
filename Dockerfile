@@ -2,19 +2,31 @@
 # Build: docker build -t tinyclaw .
 # Run:   docker run -d -p 4310:4310 -v tinyclaw-data:/app/data -v tinyclaw-config:/root/.tinyclaw tinyclaw
 
-FROM oven/bun:1.3-debian
+# --- Build web dashboard (devDependencies stay in this stage only) ---
+FROM oven/bun:1.3-debian AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
 COPY apps apps
 COPY packages packages
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg \
-  && pip3 install --no-cache-dir --break-system-packages yt-dlp \
-  && rm -rf /var/lib/apt/lists/* \
-  && bun install --frozen-lockfile \
-  && bun run --filter @tinyclaw/web build \
+RUN bun install --frozen-lockfile \
+  && bun run --filter @tinyclaw/web build
+
+# --- Production runtime (server + workspace packages + built static assets) ---
+FROM oven/bun:1.3-debian AS runtime
+WORKDIR /app
+
+COPY package.json bun.lock ./
+COPY apps/server apps/server
+COPY packages packages
+# Workspace stubs keep the lockfile valid without pulling web/cli/telegram sources.
+COPY apps/web/package.json apps/web/
+COPY apps/cli/package.json apps/cli/
+COPY apps/platform/telegram/package.json apps/platform/telegram/
+COPY --from=web-builder /app/apps/web/dist apps/web/dist
+
+RUN bun install --frozen-lockfile --production --filter '@tinyclaw/server' \
   && mkdir -p data/sqlite data/automations data/logs
 
 ENV NODE_ENV=production \
