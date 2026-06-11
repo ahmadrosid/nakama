@@ -148,12 +148,18 @@ export function SkillAssignPicker({
                             <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
                           ) : null}
                         </div>
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div
+                          className="flex shrink-0 items-center gap-1"
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                          }}
+                        >
                           <Button
                             type="button"
                             variant="outline"
                             size="xs"
                             disabled={disabled}
+                            className="[&_svg]:pointer-events-auto"
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
@@ -168,7 +174,7 @@ export function SkillAssignPicker({
                               type="button"
                               variant="ghost"
                               size="icon-sm"
-                              className="text-muted-foreground/60 hover:text-destructive"
+                              className="text-muted-foreground/60 hover:text-destructive [&_svg]:pointer-events-auto"
                               disabled={disabled}
                               aria-label={`Delete ${skill.name} from library`}
                               onClick={(event) => {
@@ -231,9 +237,12 @@ export function SkillAssignPicker({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="shrink-0 self-center text-muted-foreground/60 hover:text-destructive"
+                            className="shrink-0 self-center text-muted-foreground/60 hover:text-destructive [&_svg]:pointer-events-auto"
                             disabled={disabled}
                             aria-label={`Delete ${skill.name} from library`}
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                            }}
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
