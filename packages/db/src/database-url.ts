@@ -1,8 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { getUserConfigDir } from "@tinyclaw/core";
 
 export interface ResolveDatabasePathOptions {
-  /** Anchor relative file: paths (defaults to TINYCLAW_PROJECT_ROOT or cwd). */
+  /** Anchor relative file: paths (defaults to ~/.tinyclaw). */
   baseDir?: string;
 }
 
@@ -24,10 +25,7 @@ export function resolveDatabasePath(
     return withoutScheme;
   }
 
-  const baseDir =
-    options.baseDir?.trim() ||
-    process.env.TINYCLAW_PROJECT_ROOT?.trim() ||
-    process.cwd();
+  const baseDir = options.baseDir?.trim() || getUserConfigDir();
 
   return resolve(baseDir, withoutScheme);
 }

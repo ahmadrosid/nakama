@@ -1,6 +1,6 @@
 # TinyClaw — one container: API, web dashboard, automation + task workers
 # Build: docker build -t tinyclaw .
-# Run:   docker run -d -p 4310:4310 -v tinyclaw-data:/app/data -v tinyclaw-config:/root/.tinyclaw tinyclaw
+# Run:   docker run -d -p 4310:4310 -v tinyclaw-config:/root/.tinyclaw tinyclaw
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
 FROM oven/bun:1.3-debian AS web-builder
@@ -26,8 +26,7 @@ COPY apps/cli/package.json apps/cli/
 COPY apps/platform/telegram/package.json apps/platform/telegram/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
-RUN bun install --frozen-lockfile --production --filter '@tinyclaw/server' \
-  && mkdir -p data/sqlite data/automations data/logs
+RUN bun install --frozen-lockfile --production --filter '@tinyclaw/server'
 
 ENV NODE_ENV=production \
     TINYCLAW_HOST=0.0.0.0 \
@@ -36,7 +35,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 4310
 
-VOLUME ["/app/data", "/root/.tinyclaw"]
+VOLUME ["/root/.tinyclaw"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://127.0.0.1:4310/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"

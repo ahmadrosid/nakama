@@ -270,6 +270,51 @@ export function useUnassignMcpServerMutation() {
   });
 }
 
+export function useSyncSkillsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.syncSkills(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
+    },
+  });
+}
+
+export function useAssignSkillMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ profileId, skillId }: { profileId: string; skillId: string }) =>
+      client.assignSkill(profileId, { skillId }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profiles.detail(variables.profileId),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useUnassignSkillMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ profileId, skillId }: { profileId: string; skillId: string }) =>
+      client.unassignSkill(profileId, skillId),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profiles.detail(variables.profileId),
+        }),
+      ]);
+    },
+  });
+}
+
 export function useSessionsQuery(profileId: string, channel: AgentChannel = "web") {
   return useQuery({
     queryKey: queryKeys.sessions(profileId, channel),

@@ -11,7 +11,6 @@ import type { DiscoveredSkill } from "./types";
 
 export interface DiscoverSkillsOptions {
   profileId?: string;
-  projectRoot?: string;
 }
 
 export async function discoverSkills(

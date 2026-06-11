@@ -43,6 +43,12 @@ export const mcpServersQueryOptions = queryOptions({
   staleTime: defaultStaleTime,
 });
 
+export const skillsQueryOptions = queryOptions({
+  queryKey: queryKeys.skills.all,
+  queryFn: async () => (await client.listSkills()).skills,
+  staleTime: defaultStaleTime,
+});
+
 export function profileQueryOptions(profileId: string) {
   return queryOptions({
     queryKey: queryKeys.profiles.detail(profileId),
@@ -59,6 +65,7 @@ export function prefetchAppData(queryClient: QueryClient): void {
   void queryClient.prefetchQuery(modelsQueryOptions);
   void queryClient.prefetchQuery(profilesQueryOptions);
   void queryClient.prefetchQuery(toolsQueryOptions);
+  void queryClient.prefetchQuery(skillsQueryOptions);
 }
 
 export function AppQueryPrefetch() {
@@ -99,6 +106,10 @@ export function useToolsQuery() {
 
 export function useMcpServersQuery() {
   return useQuery(mcpServersQueryOptions);
+}
+
+export function useSkillsQuery() {
+  return useQuery(skillsQueryOptions);
 }
 
 export function mcpServerDetailQueryOptions(serverId: string) {

@@ -13,10 +13,7 @@ const child = Bun.spawn(["bun", "--watch", serverEntry], {
   stdout: "inherit",
   stderr: "inherit",
   stdin: "inherit",
-  env: {
-    ...process.env,
-    TINYCLAW_PROJECT_ROOT: projectRoot,
-  },
+  env: process.env,
 });
 
 const exitCode = await child.exited;

@@ -25,10 +25,7 @@ export async function ensureServerRunning(): Promise<EnsureServerResult> {
     stdout: "inherit",
     stderr: "inherit",
     stdin: "ignore",
-    env: {
-      ...process.env,
-      TINYCLAW_PROJECT_ROOT: projectRoot,
-    },
+    env: process.env,
   });
 
   console.warn("Starting TinyClaw server...");

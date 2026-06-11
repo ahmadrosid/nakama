@@ -2,6 +2,7 @@ import type {
   AgentChannel,
   AgentTodo,
   AssignMcpServerRequest,
+  AssignSkillRequest,
   AssignToolRequest,
   CreateMcpServerRequest,
   ListMcpServersResponse,
@@ -18,7 +19,9 @@ import type {
   InitSoulResponse,
   InitUserContextResponse,
   ListProfilesResponse,
+  ListSkillsResponse,
   ListToolsResponse,
+  SyncSkillsResponse,
   ToolResponse,
   ToolSourceResponse,
   ListSessionsResponse,
@@ -405,6 +408,33 @@ export class TinyClawClient {
   async unassignMcpServer(profileId: string, serverId: string): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/mcp-servers/${encodeURIComponent(serverId)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async listSkills(): Promise<ListSkillsResponse> {
+    return this.request<ListSkillsResponse>("/v1/skills");
+  }
+
+  async syncSkills(): Promise<SyncSkillsResponse> {
+    return this.request<SyncSkillsResponse>("/v1/skills/sync", {
+      method: "POST",
+    });
+  }
+
+  async assignSkill(profileId: string, request: AssignSkillRequest): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/skills`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async unassignSkill(profileId: string, skillId: string): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/skills/${encodeURIComponent(skillId)}`,
       { method: "DELETE" },
     );
   }

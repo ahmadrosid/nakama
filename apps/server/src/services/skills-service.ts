@@ -21,10 +21,7 @@ import {
 export class SkillsService {
   private discoveredCache: DiscoveredSkill[] | null = null;
 
-  constructor(
-    private readonly db: DatabaseAdapter,
-    private readonly projectRoot?: string,
-  ) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   async syncDiscoveredSkills(): Promise<SyncSkillsResponse> {
     const discovered = await this.refreshDiscoveryCache();
@@ -118,7 +115,7 @@ export class SkillsService {
   }
 
   private async refreshDiscoveryCache(): Promise<DiscoveredSkill[]> {
-    this.discoveredCache = await discoverSkills({ projectRoot: this.projectRoot });
+    this.discoveredCache = await discoverSkills();
     return this.discoveredCache;
   }
 

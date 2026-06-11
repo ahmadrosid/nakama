@@ -16,6 +16,9 @@ export const queryKeys = {
     all: ["mcp", "servers"] as const,
     detail: (serverId: string) => ["mcp", "servers", serverId] as const,
   },
+  skills: {
+    all: ["skills"] as const,
+  },
   automations: {
     all: ["automations"] as const,
     runs: (automationId: string) => ["automations", automationId, "runs"] as const,

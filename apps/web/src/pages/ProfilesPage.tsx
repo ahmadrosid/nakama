@@ -2,6 +2,7 @@ import type { ProfileSummary } from "@tinyclaw/core/contract";
 import {
   CameraIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   Trash2Icon,
   UsersRoundIcon,
@@ -10,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
+import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -35,14 +37,18 @@ import {
   useMcpServersQuery,
   useProfileQuery,
   useProfilesQuery,
+  useSkillsQuery,
   useToolsQuery,
 } from "@/hooks/use-app-queries";
 import {
   useAssignMcpServerMutation,
+  useAssignSkillMutation,
   useAssignToolMutation,
   useCreateProfileMutation,
   useDeleteProfileMutation,
+  useSyncSkillsMutation,
   useUnassignMcpServerMutation,
+  useUnassignSkillMutation,
   useUnassignToolMutation,
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
@@ -60,7 +66,8 @@ type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 type RemoveAssignmentTarget =
   | { kind: "tool"; id: string; name: string }
-  | { kind: "mcp"; id: string; name: string };
+  | { kind: "mcp"; id: string; name: string }
+  | { kind: "skill"; id: string; name: string };
 
 export function ProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -72,6 +79,7 @@ export function ProfilesPage() {
   } = useProfilesQuery();
   const { data: allTools = [] } = useToolsQuery();
   const { data: allMcpServers = [] } = useMcpServersQuery();
+  const { data: allSkills = [] } = useSkillsQuery();
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
   const {
@@ -88,6 +96,9 @@ export function ProfilesPage() {
   const unassignMutation = useUnassignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
   const unassignMcpMutation = useUnassignMcpServerMutation();
+  const syncSkillsMutation = useSyncSkillsMutation();
+  const assignSkillMutation = useAssignSkillMutation();
+  const unassignSkillMutation = useUnassignSkillMutation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,7 +145,10 @@ export function ProfilesPage() {
     assignMutation.isPending ||
     unassignMutation.isPending ||
     assignMcpMutation.isPending ||
-    unassignMcpMutation.isPending;
+    unassignMcpMutation.isPending ||
+    syncSkillsMutation.isPending ||
+    assignSkillMutation.isPending ||
+    unassignSkillMutation.isPending;
 
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
@@ -370,6 +384,10 @@ export function ProfilesPage() {
     (server) => !detail?.mcpServers.some((assigned) => assigned.id === server.id),
   );
 
+  const availableSkills = allSkills.filter(
+    (skill) => !detail?.skills.some((assigned) => assigned.id === skill.id),
+  );
+
   const createAvailableTools = allTools.filter((tool) => !createToolIds.includes(tool.id));
 
   async function handleSelectProfile(profileId: string) {
@@ -524,6 +542,30 @@ export function ProfilesPage() {
     }
   }
 
+  async function handleSyncSkills() {
+    setError(null);
+
+    try {
+      await syncSkillsMutation.mutateAsync();
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleAssignSkill(skillId: string) {
+    if (!selectedId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await assignSkillMutation.mutateAsync({ profileId: selectedId, skillId });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleRemoveAssignmentConfirm() {
     if (!selectedId || !removeConfirm) {
       return;
@@ -534,8 +576,10 @@ export function ProfilesPage() {
     try {
       if (removeConfirm.kind === "tool") {
         await unassignMutation.mutateAsync({ profileId: selectedId, toolId: removeConfirm.id });
-      } else {
+      } else if (removeConfirm.kind === "mcp") {
         await unassignMcpMutation.mutateAsync({ profileId: selectedId, serverId: removeConfirm.id });
+      } else {
+        await unassignSkillMutation.mutateAsync({ profileId: selectedId, skillId: removeConfirm.id });
       }
 
       setRemoveConfirm(null);
@@ -943,6 +987,94 @@ export function ProfilesPage() {
                         </ul>
                       )}
                     </div>
+
+                    <div className="border-t border-border pt-5">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="type-section-title">Allowed skills</h3>
+                          <p className="type-body mt-1 text-xs">
+                            {detail.skills.length === 0
+                              ? "No workflow skills assigned to this profile."
+                              : `${detail.skills.length} assigned`}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => void handleSyncSkills()}
+                          >
+                            {syncSkillsMutation.isPending ? (
+                              <Spinner className="size-4" />
+                            ) : (
+                              <RefreshCwIcon className="size-4" aria-hidden />
+                            )}
+                            Sync skills
+                          </Button>
+                          <SkillAssignPicker
+                            skills={availableSkills}
+                            disabled={busy}
+                            onAssign={handleAssignSkill}
+                          />
+                        </div>
+                      </div>
+
+                      {allSkills.length === 0 ? (
+                        <p className="type-body text-xs">
+                          No skills discovered yet. Add folders with{" "}
+                          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> under{" "}
+                          <code className="rounded bg-muted px-1 py-0.5">~/.tinyclaw/agent/skills/</code>{" "}
+                          or{" "}
+                          <code className="rounded bg-muted px-1 py-0.5">
+                            ~/.tinyclaw/profiles/&lt;profile&gt;/skills/
+                          </code>
+                          , then sync.
+                        </p>
+                      ) : detail.skills.length === 0 ? (
+                        <p className="type-body text-xs">No skills assigned.</p>
+                      ) : (
+                        <ul className="divide-y divide-border rounded-md border border-border">
+                          {detail.skills.map((skill) => (
+                            <li
+                              key={skill.id}
+                              className="flex items-start justify-between gap-3 px-4 py-3 first:rounded-t-md last:rounded-b-md"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm text-foreground">{skill.name}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {skill.description}
+                                </p>
+                                {skill.hasTool || skill.disableModelInvocation ? (
+                                  <p className="mt-0.5 text-xs text-muted-foreground/80">
+                                    {[
+                                      skill.hasTool ? "includes tool" : null,
+                                      skill.disableModelInvocation ? "explicit invoke only" : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                                disabled={busy}
+                                aria-label={`Remove ${skill.name}`}
+                                onClick={() =>
+                                  setRemoveConfirm({ kind: "skill", id: skill.id, name: skill.name })
+                                }
+                              >
+                                <Trash2Icon className="size-4" aria-hidden />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
 
                   <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs lg:hidden dark:bg-muted/30">
@@ -1137,12 +1269,18 @@ export function ProfilesPage() {
         <DialogContent className="gap-6 p-6 sm:max-w-md">
           <DialogHeader className="gap-3">
             <DialogTitle>
-              {removeConfirm?.kind === "mcp" ? "Remove MCP server?" : "Remove tool?"}
+              {removeConfirm?.kind === "mcp"
+                ? "Remove MCP server?"
+                : removeConfirm?.kind === "skill"
+                  ? "Remove skill?"
+                  : "Remove tool?"}
             </DialogTitle>
             <DialogDescription>
               {removeConfirm?.kind === "mcp"
                 ? `Remove "${removeConfirm.name}" from this profile? The server stays registered in Soul.`
-                : `Remove "${removeConfirm?.name}" from this profile?`}
+                : removeConfirm?.kind === "skill"
+                  ? `Remove "${removeConfirm.name}" from this profile? The skill stays available to assign again.`
+                  : `Remove "${removeConfirm?.name}" from this profile?`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1161,7 +1299,9 @@ export function ProfilesPage() {
               disabled={busy}
               onClick={() => void handleRemoveAssignmentConfirm()}
             >
-              {unassignMutation.isPending || unassignMcpMutation.isPending ? (
+              {unassignMutation.isPending ||
+              unassignMcpMutation.isPending ||
+              unassignSkillMutation.isPending ? (
                 <Spinner className="size-4" />
               ) : (
                 "Remove"

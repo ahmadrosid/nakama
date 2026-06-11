@@ -20,6 +20,7 @@ import {
   DEFAULT_SERVER_HOST,
   DEFAULT_SERVER_PORT,
   clearRuntimeServerUrl,
+  getUserConfigDir,
   loadConfig,
   writeRuntimeServerUrl,
 } from "@tinyclaw/core";
@@ -46,7 +47,7 @@ if (existingServerUrl) {
 
 const { provider, userConfig } = await ensureProviderConfigured();
 const config = loadConfig();
-const database = await createDatabase(config.databaseUrl, { baseDir: projectRoot });
+const database = await createDatabase(config.databaseUrl, { baseDir: getUserConfigDir() });
 
 await seedDatabase(database.adapter);
 
@@ -54,7 +55,7 @@ const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
 const agent = new AgentService(userConfig, provider, database.adapter, llmUsageTracker);
 const mcpClientManager = new McpClientManager();
 const mcpService = new McpService(database.adapter, mcpClientManager);
-const skillsService = new SkillsService(database.adapter, projectRoot);
+const skillsService = new SkillsService(database.adapter);
 
 agent.setMcpClientManager(mcpClientManager);
 agent.setMcpService(mcpService);
