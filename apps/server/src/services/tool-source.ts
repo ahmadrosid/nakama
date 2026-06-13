@@ -20,6 +20,10 @@ const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: st
     filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
     displayPath: "packages/core/src/tools/builtin.ts",
   },
+  search_workspace: {
+    filePath: path.join(corePackageRoot, "src/tools/search-workspace.ts"),
+    displayPath: "packages/core/src/tools/search-workspace.ts",
+  },
   web_search: {
     filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
     displayPath: "packages/core/src/tools/web-search.ts",

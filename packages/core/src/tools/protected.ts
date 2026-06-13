@@ -1,6 +1,7 @@
 export const BUILTIN_TOOL_IDS = {
   write_file: "tool_write_file",
   delete_file: "tool_delete_file",
+  search_workspace: "tool_search_workspace",
   web_search: "tool_web_search",
 } as const;
 

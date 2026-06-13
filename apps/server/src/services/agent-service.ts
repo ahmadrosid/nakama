@@ -353,6 +353,9 @@ export class AgentService {
       enableToolLoop: true,
       soul: soulActive,
       userTimezone,
+      toolContext: {
+        profileId,
+      },
     });
 
     return session.send(prompt);

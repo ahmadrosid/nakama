@@ -52,7 +52,12 @@ export function stopSpawnedServer(child: Bun.Subprocess | null): void {
   child.kill();
 }
 
-const REQUIRED_BUILTIN_TOOLS = ["write_file", "delete_file", "web_search"] as const;
+const REQUIRED_BUILTIN_TOOLS = [
+  "write_file",
+  "delete_file",
+  "search_workspace",
+  "web_search",
+] as const;
 
 export async function serverHasTaskChat(
   serverUrl: string,

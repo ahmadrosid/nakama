@@ -24,6 +24,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@vscode/ripgrep": "^1.18.0",
     "nanoid": "^5.1.11"
   }
 }
