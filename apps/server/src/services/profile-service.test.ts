@@ -128,3 +128,44 @@ describe("profile service createProfile", () => {
     );
   });
 });
+
+describe("profile service knowledge base", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { recursive: true, force: true });
+      tempConfigDir = "";
+    }
+  });
+
+  test("uploads, lists, and deletes knowledge base documents", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-kb-"));
+    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const created = await service.createProfile({ name: "KB Bot" });
+    const profileId = created.profile.id;
+
+    const uploaded = await service.uploadKnowledgeBaseDocument(profileId, {
+      filename: "notes.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("project fact", "utf8").toString("base64"),
+    });
+
+    expect(uploaded.document.status).toBe("ready");
+    expect(uploaded.profileId).toBe(profileId);
+
+    const listed = await service.listKnowledgeBase(profileId);
+    expect(listed.documents).toHaveLength(1);
+    expect(listed.documents[0]?.filename).toBe("notes.txt");
+
+    const deleted = await service.deleteKnowledgeBaseDocument(profileId, uploaded.document.id);
+    expect(deleted.deleted).toBe(true);
+
+    const afterDelete = await service.listKnowledgeBase(profileId);
+    expect(afterDelete.documents).toHaveLength(0);
+  });
+});

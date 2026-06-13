@@ -1,13 +1,15 @@
 import type { LucideIcon } from "lucide-react";
-import { BlocksIcon, BrainIcon, PlugIcon } from "lucide-react";
+import { BlocksIcon, BookOpenIcon, BrainIcon, PlugIcon } from "lucide-react";
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { McpTab } from "@/components/soul-tools/McpTab";
 import { ToolsTab } from "@/components/soul-tools/ToolsTab";
 
 const TABS = [
   { id: "soul" as const, label: "Soul", icon: BrainIcon },
+  { id: "knowledge" as const, label: "Knowledge", icon: BookOpenIcon },
   { id: "tools" as const, label: "Tools", icon: BlocksIcon },
   { id: "mcp" as const, label: "MCP", icon: PlugIcon },
 ] as const;
@@ -15,7 +17,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 function resolveTab(value: string | null): TabId {
-  if (value === "tools" || value === "mcp") {
+  if (value === "knowledge" || value === "tools" || value === "mcp") {
     return value;
   }
 
@@ -69,7 +71,15 @@ export function SoulPage() {
         role="tabpanel"
         aria-labelledby={`soul-tools-tab-${tab}`}
       >
-        {tab === "soul" ? <SoulTab /> : tab === "tools" ? <ToolsTab /> : <McpTab />}
+        {tab === "soul" ? (
+          <SoulTab />
+        ) : tab === "knowledge" ? (
+          <KnowledgeTab />
+        ) : tab === "tools" ? (
+          <ToolsTab />
+        ) : (
+          <McpTab />
+        )}
       </div>
     </div>
   );

@@ -119,6 +119,7 @@ When you don't know something:
 
 When using tools, stay in character in user-facing replies.
 Explain actions plainly without breaking voice.
+For project facts and reference documents, use knowledge_base_search instead of dumping content into MEMORY.md.
 `;
 
 export const MEMORY_TEMPLATE = `# Memory Log

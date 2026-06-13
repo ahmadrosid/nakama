@@ -490,6 +490,53 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/profiles/{profileId}/knowledge-base": {
+        get: {
+          tags: ["Profiles"],
+          summary: "List knowledge base documents for a profile",
+          operationId: "listKnowledgeBase",
+          parameters: [{ $ref: "#/components/parameters/ProfileId" }],
+          responses: {
+            "200": jsonResponse("ListKnowledgeBaseResponse", "Knowledge base documents"),
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+        post: {
+          tags: ["Profiles"],
+          summary: "Upload a knowledge base document",
+          operationId: "uploadKnowledgeBaseDocument",
+          parameters: [{ $ref: "#/components/parameters/ProfileId" }],
+          requestBody: jsonBody("UploadKnowledgeBaseRequest"),
+          responses: {
+            "201": jsonResponse("UploadKnowledgeBaseResponse", "Uploaded knowledge base document"),
+            "400": errorResponse,
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/profiles/{profileId}/knowledge-base/{documentId}": {
+        delete: {
+          tags: ["Profiles"],
+          summary: "Delete a knowledge base document",
+          operationId: "deleteKnowledgeBaseDocument",
+          parameters: [
+            { $ref: "#/components/parameters/ProfileId" },
+            {
+              name: "documentId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": jsonResponse("DeleteKnowledgeBaseResponse", "Deleted knowledge base document"),
+            "404": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/profiles/{profileId}/avatar": {
         get: {
           tags: ["Profiles"],

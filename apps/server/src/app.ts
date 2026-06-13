@@ -45,7 +45,9 @@ import {
   type ConfigureProviderResponse,
   type CreateProviderRequest,
   type CreateProviderResponse,
+  type DeleteKnowledgeBaseResponse,
   type DeleteProviderResponse,
+  type ListKnowledgeBaseResponse,
   type ListProvidersResponse,
   type UpdateProviderRequest,
   type UpdateProviderResponse,
@@ -58,6 +60,8 @@ import {
   type SystemStatusResponse,
   type UpdateProfileRequest,
   type UpdateSoulFileRequest,
+  type UploadKnowledgeBaseRequest,
+  type UploadKnowledgeBaseResponse,
   type UpdateUserContextRequest,
   type ImageAttachment,
   type UserContextStatusResponse,
@@ -511,6 +515,35 @@ export function createApp(options: ServerOptions) {
             const body = await readJson<UpdateSoulFileRequest>(request);
             await agent.writeProfileSoulFile(profileId, fileKey, body);
             return new Response(null, { status: 204 });
+          }
+        }
+
+        const profileKnowledgeBaseMatch = url.pathname.match(
+          /^\/v1\/profiles\/([^/]+)\/knowledge-base(?:\/([^/]+))?$/,
+        );
+
+        if (profileKnowledgeBaseMatch) {
+          const profileId = decodeURIComponent(profileKnowledgeBaseMatch[1]!);
+          const documentId = profileKnowledgeBaseMatch[2]
+            ? decodeURIComponent(profileKnowledgeBaseMatch[2])
+            : null;
+
+          if (!documentId && request.method === "GET") {
+            return json<ListKnowledgeBaseResponse>(await agent.listKnowledgeBase(profileId));
+          }
+
+          if (!documentId && request.method === "POST") {
+            const body = await readJson<UploadKnowledgeBaseRequest>(request);
+            return json<UploadKnowledgeBaseResponse>(
+              await agent.uploadKnowledgeBaseDocument(profileId, body.document),
+              201,
+            );
+          }
+
+          if (documentId && request.method === "DELETE") {
+            return json<DeleteKnowledgeBaseResponse>(
+              await agent.deleteKnowledgeBaseDocument(profileId, documentId),
+            );
           }
         }
 

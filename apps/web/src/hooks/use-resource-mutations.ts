@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentChannel,
   CreateProfileRequest,
+  DocumentAttachment,
   ImageAttachment,
   SoulStackFiles,
   UpdateProfileRequest,
@@ -356,6 +357,14 @@ export function useSoulStatusQuery(profileId: string | null) {
   });
 }
 
+export function useKnowledgeBaseQuery(profileId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.knowledgeBase.profile(profileId ?? ""),
+    queryFn: () => client.listKnowledgeBase(profileId!),
+    enabled: Boolean(profileId),
+  });
+}
+
 export function useSoulFileQuery(
   profileId: string | null,
   fileKey: string | null,
@@ -443,6 +452,44 @@ export function useWriteUserContextMutation() {
     mutationFn: (content: string) => client.writeUserContext(content),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.userContext });
+    },
+  });
+}
+
+export function useUploadKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      document,
+    }: {
+      profileId: string;
+      document: DocumentAttachment;
+    }) => client.uploadKnowledgeBaseDocument(profileId, document),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useDeleteKnowledgeBaseDocumentMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      documentId,
+    }: {
+      profileId: string;
+      documentId: string;
+    }) => client.deleteKnowledgeBaseDocument(profileId, documentId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
     },
   });
 }

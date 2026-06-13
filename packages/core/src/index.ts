@@ -8,6 +8,7 @@ export * from "./message-content";
 export * from "./document-content";
 export * from "./normalize-task-prompt";
 export * from "./ids";
+export * from "./knowledge-base";
 export * from "./profile-avatar";
 export * from "./compatible-provider-config";
 export * from "./provider-label";

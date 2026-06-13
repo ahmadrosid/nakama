@@ -4,7 +4,10 @@ import type {
   AssignToolRequest,
   CreateProfileRequest,
   CreateToolRequest,
+  DeleteKnowledgeBaseResponse,
+  DocumentAttachment,
   ImageAttachment,
+  ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListToolsResponse,
   ProfileDetail,
@@ -15,17 +18,21 @@ import type {
   ToolSourceResponse,
   ToolSummary,
   UpdateProfileRequest,
+  UploadKnowledgeBaseResponse,
 } from "@tinyclaw/core";
 import {
   createId,
+  deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
   deleteProfileAvatar,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
+  listKnowledgeBaseDocuments,
   readProfileAvatar,
   resolveSoulStackForProfile,
   saveProfileAvatar,
   TinyClawApiError,
+  uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
 } from "@tinyclaw/core";
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
@@ -320,6 +327,41 @@ export class ProfileService {
       ...profile,
       updatedAt: now,
     });
+  }
+
+  async listKnowledgeBase(profileId: string): Promise<ListKnowledgeBaseResponse> {
+    await this.requireProfile(profileId);
+    const documents = await listKnowledgeBaseDocuments(profileId);
+    return { documents, profileId };
+  }
+
+  async uploadKnowledgeBaseDocument(
+    profileId: string,
+    document: DocumentAttachment,
+  ): Promise<UploadKnowledgeBaseResponse> {
+    await this.requireProfile(profileId);
+
+    try {
+      const uploaded = await persistKnowledgeBaseDocument(profileId, document);
+      return { document: uploaded, profileId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to upload knowledge base document.";
+      throw new TinyClawApiError(message, 400);
+    }
+  }
+
+  async deleteKnowledgeBaseDocument(
+    profileId: string,
+    documentId: string,
+  ): Promise<DeleteKnowledgeBaseResponse> {
+    await this.requireProfile(profileId);
+    const deleted = await removeKnowledgeBaseDocument(profileId, documentId);
+
+    if (!deleted) {
+      throw new TinyClawApiError("Knowledge base document not found.", 404);
+    }
+
+    return { deleted: true, profileId, documentId };
   }
 
   private async requireProfile(profileId: string): Promise<StoredProfileRecord> {

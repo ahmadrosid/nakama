@@ -4,6 +4,7 @@ import type { ToolContext, ToolDefinition } from "../contract";
 import { getProfileSoulDir } from "../soul/resolve";
 import { getCustomToolsDir, guardFilePath, PathGuardError, type PathGuardOptions } from "./paths";
 import { searchWorkspaceTool } from "./search-workspace";
+import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import { webSearchTool } from "./web-search";
 
 export interface WriteFileInput {
@@ -146,6 +147,7 @@ export const builtinTools: ToolDefinition[] = [
   writeFileTool,
   deleteFileTool,
   searchWorkspaceTool,
+  knowledgeBaseSearchTool,
   webSearchTool,
 ];
 
