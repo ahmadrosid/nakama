@@ -2,27 +2,51 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { deleteFileTool, PathGuardError, setDefaultFileGuardOptions, writeFileTool } from "./builtin";
+import {
+  PathGuardError,
+  runDeleteFile,
+  runWriteFile,
+  setDefaultFileGuardOptions,
+} from "./builtin";
+
+const PROFILE_CONTEXT = { profileId: "profile_test" };
+const originalToolsDir = process.env.TINYCLAW_TOOLS_DIR;
+const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
 
 describe("file builtin tools", () => {
   let tempDir = "";
+  let toolsDir = "";
 
   afterEach(async () => {
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
       tempDir = "";
     }
+    if (toolsDir) {
+      await rm(toolsDir, { recursive: true, force: true });
+      toolsDir = "";
+    }
+    if (originalToolsDir === undefined) {
+      delete process.env.TINYCLAW_TOOLS_DIR;
+    } else {
+      process.env.TINYCLAW_TOOLS_DIR = originalToolsDir;
+    }
+    if (originalConfigDir === undefined) {
+      delete process.env.TINYCLAW_CONFIG_DIR;
+    } else {
+      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    }
     setDefaultFileGuardOptions({});
   });
 
   test("write_file creates nested files", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
     const targetPath = path.join(tempDir, "nested", "hello.txt");
 
-    const result = await writeFileTool.run(
+    const result = await runWriteFile(
       { path: targetPath, content: "hello world" },
-      {},
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
     );
 
     expect(result.path).toBe(targetPath);
@@ -30,29 +54,54 @@ describe("file builtin tools", () => {
     expect(await readFile(targetPath, "utf8")).toBe("hello world");
   });
 
-  test("write_file resolves relative paths from cwd", async () => {
+  test("write_file resolves relative paths from profile workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir], cwd: tempDir });
-    const result = await writeFileTool.run(
+    const result = await runWriteFile(
       { path: "notes.txt", content: "relative" },
-      {},
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
     );
 
     expect(result.path).toBe(path.join(tempDir, "notes.txt"));
     expect(await readFile(result.path, "utf8")).toBe("relative");
   });
 
+  test("write_file allows custom tool modules outside profile workspace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
+    toolsDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-tools-"));
+    process.env.TINYCLAW_TOOLS_DIR = toolsDir;
+
+    const targetPath = path.join(toolsDir, "echo.js");
+    const result = await runWriteFile(
+      { path: targetPath, content: "export async function run() { return null; }" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.path).toBe(targetPath);
+    expect(await readFile(targetPath, "utf8")).toContain("export async function run");
+  });
+
   test("delete_file removes a file", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-delete-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
     const targetPath = path.join(tempDir, "remove-me.txt");
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, "temp", "utf8");
 
-    const result = await deleteFileTool.run({ path: targetPath }, {});
+    const result = await runDeleteFile(
+      { path: targetPath },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
 
     expect(result).toEqual({ path: targetPath, deleted: true });
     await expect(readFile(targetPath, "utf8")).rejects.toThrow();
+  });
+
+  test("requires profileId", async () => {
+    await expect(runWriteFile({ path: "a.txt", content: "x" }, {})).rejects.toThrow(
+      "profileId is required.",
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -61,39 +110,48 @@ describe("file builtin tools", () => {
 
   test("rejects path traversal via ../ escape", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
     const escapePath = path.join(tempDir, "../../../etc/tinyclaw-exploit-test");
 
     await expect(
-      writeFileTool.run({ path: escapePath, content: "ESCAPE" }, {}),
+      runWriteFile(
+        { path: escapePath, content: "ESCAPE" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("rejects absolute path outside allowed dirs", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
 
     await expect(
-      writeFileTool.run({ path: "/etc/tinyclaw-should-fail", content: "NOPE" }, {}),
+      runWriteFile(
+        { path: "/etc/tinyclaw-should-fail", content: "NOPE" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("rejects home directory expansion outside allowed dirs", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
 
     await expect(
-      writeFileTool.run({ path: "~/.ssh/tinyclaw-test", content: "SSH_KEY" }, {}),
+      runWriteFile(
+        { path: "~/.ssh/tinyclaw-test", content: "SSH_KEY" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
     ).rejects.toThrow(PathGuardError);
   });
 
-  test("cwd injection falls back to safe cwd", async () => {
+  test("cwd injection falls back to profile workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir], cwd: tempDir });
 
-    const result = await writeFileTool.run(
+    const result = await runWriteFile(
       { path: "safe.txt", content: "OK", cwd: "/etc" },
-      {},
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
     );
 
     expect(result.path).toStartWith(tempDir);
@@ -101,43 +159,50 @@ describe("file builtin tools", () => {
 
   test("rejects null byte in path", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
 
     await expect(
-      writeFileTool.run(
+      runWriteFile(
         { path: path.join(tempDir, "safe.txt\0.sh"), content: "X" },
-        {},
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
       ),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("rejects content exceeding max file size", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir], maxFileBytes: 100 });
+    setDefaultFileGuardOptions({ maxFileBytes: 100 });
 
     await expect(
-      writeFileTool.run(
+      runWriteFile(
         { path: path.join(tempDir, "big.txt"), content: "A".repeat(200) },
-        {},
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
       ),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("delete_file rejects path outside allowed dirs", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
 
     await expect(
-      deleteFileTool.run({ path: "/etc/should-not-delete" }, {}),
+      runDeleteFile(
+        { path: "/etc/should-not-delete" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("allows nested subdirectory writes", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir] });
 
     const nestedPath = path.join(tempDir, "deep", "nested", "file.txt");
-    const result = await writeFileTool.run({ path: nestedPath, content: "deep" }, {});
+    const result = await runWriteFile(
+      { path: nestedPath, content: "deep" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
 
     expect(result.path).toBe(nestedPath);
     expect(await readFile(nestedPath, "utf8")).toBe("deep");
@@ -145,28 +210,13 @@ describe("file builtin tools", () => {
 
   test("rejects special filesystem paths", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    setDefaultFileGuardOptions({ allowedDirs: [tempDir, "/dev"] });
 
     await expect(
-      writeFileTool.run({ path: "/dev/null", content: "test" }, {}),
+      runWriteFile(
+        { path: "/dev/null", content: "test" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
     ).rejects.toThrow(PathGuardError);
-  });
-
-  test("multiple allowed directories", async () => {
-    const dirA = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-a-"));
-    const dirB = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-b-"));
-    setDefaultFileGuardOptions({ allowedDirs: [dirA, dirB] });
-
-    const pathA = path.join(dirA, "a.txt");
-    const pathB = path.join(dirB, "b.txt");
-
-    const resultA = await writeFileTool.run({ path: pathA, content: "A" }, {});
-    const resultB = await writeFileTool.run({ path: pathB, content: "B" }, {});
-
-    expect(resultA.path).toBe(pathA);
-    expect(resultB.path).toBe(pathB);
-
-    await rm(dirA, { recursive: true, force: true });
-    await rm(dirB, { recursive: true, force: true });
   });
 });

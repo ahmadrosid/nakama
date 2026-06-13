@@ -43,9 +43,10 @@ export async function guardFilePath(
   rawContentLength: number | undefined,
   options: PathGuardOptions = {},
 ): Promise<{ resolved: string; allowed: true }> {
-  const allowedDirs = options.allowedDirs ?? [options.cwd ?? process.cwd()];
+  const rawAllowedDirs = options.allowedDirs ?? [options.cwd ?? process.cwd()];
+  const allowedDirs = await resolveAllowedDirs(rawAllowedDirs);
   const maxBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-  const defaultCwd = options.cwd ?? process.cwd();
+  const defaultCwd = await resolveDirectoryPath(options.cwd ?? process.cwd());
 
   if (rawPath.includes("\0")) {
     throw new PathGuardError(`Path contains null byte`, "NULL_BYTE");
@@ -85,6 +86,18 @@ export async function guardFilePath(
   }
 
   return { resolved: realPath, allowed: true };
+}
+
+async function resolveAllowedDirs(dirs: string[]): Promise<string[]> {
+  return Promise.all(dirs.map((dir) => resolveDirectoryPath(dir)));
+}
+
+async function resolveDirectoryPath(dir: string): Promise<string> {
+  try {
+    return await realpath(dir);
+  } catch {
+    return path.resolve(dir);
+  }
 }
 
 function expandHome(filePath: string): string {

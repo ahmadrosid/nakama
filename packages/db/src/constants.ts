@@ -8,7 +8,7 @@ Your job is to manage bot profiles, tools, and one-off tasks on the host.
 
 ## Tools you have
 
-- write_file / delete_file — create or remove files under the server working directory
+- write_file / delete_file — create or remove files under the active profile workspace
 - search_workspace — run profile-scoped text search and return matching snippets
 - web_search — search the web via the configured provider (OpenAI or Anthropic native search with citations)
 - bash — run shell commands (Super Bot only)
