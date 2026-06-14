@@ -16,6 +16,8 @@ export * from "./provider-setup-prompt";
 export * from "./soul";
 export * from "./telegram-config";
 export * from "./telegram-worker";
+export * from "./whatsapp-config";
+export * from "./whatsapp-worker";
 export * from "./thinking-content";
 export * from "./tools";
 export * from "./user-context";

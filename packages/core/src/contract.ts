@@ -70,6 +70,13 @@ export interface TelegramWorkerStatus {
   running: boolean;
 }
 
+export interface WhatsAppWorkerStatus {
+  ok: boolean;
+  configured: boolean;
+  paired: boolean;
+  running: boolean;
+}
+
 export interface LlmUsageStats {
   requestCount: number;
   inputTokens: number;
@@ -98,6 +105,7 @@ export interface SystemStatusResponse {
   automationWorker: AutomationWorkerStatus;
   taskWorker: TaskWorkerStatus;
   telegramWorker: TelegramWorkerStatus;
+  whatsappWorker: WhatsAppWorkerStatus;
   llmUsage: LlmUsageStatus;
   mcp: McpStatus;
   checkedAt: string;
@@ -378,6 +386,19 @@ export interface TelegramSettingsResponse {
 export interface UpdateTelegramSettingsRequest {
   botToken?: string;
   allowedUserIds?: string;
+  profileId?: string;
+}
+
+export interface WhatsAppSettingsResponse {
+  configured: boolean;
+  phoneNumberMasked: string | null;
+  pairingCode: string | null;
+  pairedJid: string | null;
+  profileId: string;
+}
+
+export interface UpdateWhatsAppSettingsRequest {
+  phoneNumber?: string;
   profileId?: string;
 }
 
