@@ -24,6 +24,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,7 +73,7 @@ import {
 
 const defaultCreatePrompt = "You are a helpful assistant.";
 const sectionClass = "rounded-md border border-border bg-card";
-const identityBoxClass = "rounded-md border border-border bg-card p-3";
+const identityBoxClass = "p-3";
 const profilesTagline = "Separate prompt, tools, and soul for each bot.";
 const profileSaveDelayMs = 600;
 
@@ -564,6 +565,14 @@ export function ProfilesPage() {
   }
 
 
+  function handleDeleteOpenChange(open: boolean) {
+    if (busy) {
+      return;
+    }
+
+    setDeleteOpen(open);
+  }
+
   async function handleDeleteConfirm() {
     if (!selectedId || !detail || detail.isSuper) {
       return;
@@ -928,8 +937,8 @@ export function ProfilesPage() {
                         uploading={uploadAvatarMutation.isPending}
                         onPick={() => avatarInputRef.current?.click()}
                       />
-                      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
-                        <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+                        <div>
                           <label htmlFor="profile-name" className="sr-only">
                             Name
                           </label>
@@ -940,19 +949,6 @@ export function ProfilesPage() {
                             className="h-8 min-w-0 font-semibold"
                             onChange={(event) => setEditName(event.target.value)}
                           />
-                          {!detail.isSuper ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon-sm"
-                              disabled={busy}
-                              className="shrink-0 text-destructive hover:text-destructive"
-                              aria-label="Delete profile"
-                              onClick={() => setDeleteOpen(true)}
-                            >
-                              <Trash2Icon className="size-4" aria-hidden />
-                            </Button>
-                          ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
                           <span className="type-body">{profileSubtitle}</span>
@@ -965,6 +961,56 @@ export function ProfilesPage() {
                             nameMissing={isDirty && !editName.trim()}
                           />
                         </div>
+                        {!detail.isSuper ? (
+                          <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
+                            <DialogTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={busy}
+                                  className="w-fit text-destructive hover:text-destructive"
+                                />
+                              }
+                            >
+                              <Trash2Icon className="size-4" aria-hidden />
+                              Delete
+                            </DialogTrigger>
+                            <DialogContent className="gap-6 p-6 sm:max-w-md">
+                              <DialogHeader className="gap-3">
+                                <DialogTitle>Delete profile?</DialogTitle>
+                                <DialogDescription>
+                                  This removes {detail.name} and its chat history. This cannot be
+                                  undone.
+                                </DialogDescription>
+                              </DialogHeader>
+
+                              <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  disabled={busy}
+                                  onClick={() => setDeleteOpen(false)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  disabled={busy}
+                                  onClick={() => void handleDeleteConfirm()}
+                                >
+                                  {deleteMutation.isPending ? (
+                                    <Spinner className="size-4" />
+                                  ) : (
+                                    "Delete"
+                                  )}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1085,7 +1131,7 @@ export function ProfilesPage() {
                       )}
                     </div>
 
-                    <div className="border-t border-border pt-5">
+                    <div className="pt-5">
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="type-section-title">MCP servers</h3>
@@ -1159,7 +1205,7 @@ export function ProfilesPage() {
                       )}
                     </div>
 
-                    <div className="border-t border-border pt-5">
+                    <div className="pt-5">
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="type-section-title">Skills</h3>
@@ -1508,37 +1554,6 @@ export function ProfilesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          if (!open && !busy) {
-            setDeleteOpen(false);
-          }
-        }}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete profile?</DialogTitle>
-            <DialogDescription>
-              This removes {detail?.name} and its chat history. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy}
-              onClick={() => void handleDeleteConfirm()}
-            >
-              {deleteMutation.isPending ? <Spinner className="size-4" /> : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
