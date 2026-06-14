@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import {
+  CheckIcon,
   CopyIcon,
   FileTextIcon,
   GitBranchIcon,
@@ -214,6 +216,17 @@ function AssistantMessageActions({
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   async function copyMessage() {
     const content = copyContent.trim();
 
@@ -223,6 +236,14 @@ function AssistantMessageActions({
 
     try {
       await navigator.clipboard.writeText(content);
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
     } catch {
       // Clipboard may be unavailable outside secure contexts.
     }
@@ -234,13 +255,20 @@ function AssistantMessageActions({
     <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
       <button
         type="button"
-        aria-label="Copy response"
-        title="Copy response"
+        aria-label={copied ? "Copied" : "Copy response"}
+        title={copied ? "Copied" : "Copy response"}
         disabled={!copyContent.trim()}
         onClick={() => void copyMessage()}
-        className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+        className={cn(
+          "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+          copied && "text-emerald-600 dark:text-emerald-400",
+        )}
       >
-        <CopyIcon className="size-4" aria-hidden />
+        {copied ? (
+          <CheckIcon className="size-4" aria-hidden />
+        ) : (
+          <CopyIcon className="size-4" aria-hidden />
+        )}
       </button>
       {onRetryMessage ? (
         <button
