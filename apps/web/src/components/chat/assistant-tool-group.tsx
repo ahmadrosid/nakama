@@ -144,11 +144,6 @@ function AssistantWorkGroup({
         open={open}
         onToggle={() => setOpen((current) => !current)}
         label={label}
-        trailing={
-          hasRunningTools || isThinking ? (
-            <Spinner className="size-3.5 shrink-0 text-muted-foreground" />
-          ) : null
-        }
       />
       {open ? (
         <TimelineBody>
