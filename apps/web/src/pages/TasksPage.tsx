@@ -324,8 +324,8 @@ export function TasksPage() {
                   </p>
                 </div>
                 <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
-                  <PlusIcon className="size-4" aria-hidden />
-                  Create first task
+                  <PlusIcon className="size-4" data-icon="inline-start" aria-hidden />
+                  Create task
                 </Button>
               </CardContent>
             </Card>
