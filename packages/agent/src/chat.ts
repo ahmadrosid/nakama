@@ -36,11 +36,6 @@ import {
   compactHistory,
   type CompactionConfig,
 } from "./history-compaction";
-import {
-  buildAutomationSystemPrompt,
-  buildAutomationUserPrompt,
-} from "./prompt";
-import { parseAutomationResponse } from "./parse";
 import { executeToolCall, serializeToolResult } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 50;
@@ -158,7 +153,6 @@ export function createAgentChatSession(
       return sendMessage(dependencies, tools, systemPrompt, history, resolveSendInput(input), "send", {
         enableToolLoop,
         toolContext,
-        compaction: options.compaction,
         runCompaction,
         resolvePromptContext: options.resolvePromptContext,
       });
@@ -175,7 +169,6 @@ export function createAgentChatSession(
           enableToolLoop,
           handlers,
           toolContext,
-          compaction: options.compaction,
           runCompaction,
           resolvePromptContext: options.resolvePromptContext,
         },
@@ -215,7 +208,6 @@ async function sendMessage(
     enableToolLoop: boolean;
     handlers?: StreamHandlers;
     toolContext?: ToolContext;
-    compaction?: CompactionConfig;
     runCompaction?: (force: boolean) => Promise<CompactionResponse>;
     resolvePromptContext?: (
       context?: ResolvePromptContextInput,
@@ -257,7 +249,6 @@ async function sendMessage(
     webSearch:
       enableTools &&
       hasWebSearch &&
-      Boolean(dependencies.provider) &&
       dependencies.provider.name !== "openrouter" &&
       !(
         dependencies.provider.name === "gemini" && localTools.length > 0
@@ -276,8 +267,6 @@ async function sendMessage(
   const effectiveSystemPrompt = promptContext.trim()
     ? `${systemPrompt}\n\n${promptContext.trim()}`
     : systemPrompt;
-
-  console.log("[tinyclaw] agent system prompt:\n", effectiveSystemPrompt);
 
   try {
     const reply = await runConversation(
@@ -439,20 +428,4 @@ function buildProviderOptions(
     ...(webSearch ? { webSearch: true } : {}),
     ...(thinking ? { thinking } : {}),
   };
-}
-
-export function getLastUserMessage(history: readonly ChatMessage[]): string | null {
-  for (let index = history.length - 1; index >= 0; index -= 1) {
-    const message = history[index];
-
-    if (message?.role === "user") {
-      const text = getUserMessageText(message.content).trim();
-
-      if (text) {
-        return text;
-      }
-    }
-  }
-
-  return null;
 }
