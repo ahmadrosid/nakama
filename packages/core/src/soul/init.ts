@@ -27,6 +27,8 @@ export async function initSoulDirectory(directory: string): Promise<InitSoulResu
   await ensureDir(directory);
   await ensureDir(join(directory, "examples"));
   await ensureDir(join(directory, "data"));
+  await ensureDir(join(directory, "data", "knowledge-base", "uploads"));
+  await ensureDir(join(directory, "data", "knowledge-base", "extracted"));
 
   const created: string[] = [];
 

@@ -3,9 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { PathGuardError } from "./builtin";
-import { runSearchWorkspace } from "./search-workspace";
+import { runSearchFiles } from "./search-files";
 
-describe("search_workspace tool", () => {
+describe("search_files tool", () => {
   let workspaceRoot = "";
 
   afterEach(async () => {
@@ -20,7 +20,7 @@ describe("search_workspace tool", () => {
     await writeFile(path.join(workspaceRoot, "notes.txt"), "alpha one\nbeta two\n", "utf8");
     await writeFile(path.join(workspaceRoot, "guide.md"), "alpha docs\n", "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "alpha" },
       { profileId: "profile_test" },
       { workspaceRoot },
@@ -38,7 +38,7 @@ describe("search_workspace tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-search-"));
     await writeFile(path.join(workspaceRoot, "literal.txt"), "abc.def\n", "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "abc.def", regex: false },
       { profileId: "profile_test" },
       { workspaceRoot },
@@ -53,7 +53,7 @@ describe("search_workspace tool", () => {
     await writeFile(path.join(workspaceRoot, "one.md"), "needle here\n", "utf8");
     await writeFile(path.join(workspaceRoot, "two.ts"), "needle here\n", "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "needle", glob: "*.md" },
       { profileId: "profile_test" },
       { workspaceRoot },
@@ -69,7 +69,7 @@ describe("search_workspace tool", () => {
     await writeFile(path.join(workspaceRoot, "data", "inside.txt"), "scoped needle\n", "utf8");
     await writeFile(path.join(workspaceRoot, "outside.txt"), "scoped needle\n", "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "scoped", path: "data" },
       { profileId: "profile_test" },
       { workspaceRoot },
@@ -83,7 +83,7 @@ describe("search_workspace tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-search-"));
 
     await expect(
-      runSearchWorkspace(
+      runSearchFiles(
         { query: "x", path: "../../../etc/passwd" },
         { profileId: "profile_test" },
         { workspaceRoot },
@@ -95,7 +95,7 @@ describe("search_workspace tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-search-"));
 
     await expect(
-      runSearchWorkspace({ query: "x" }, {}, { workspaceRoot }),
+      runSearchFiles({ query: "x" }, {}, { workspaceRoot }),
     ).rejects.toThrow("profileId is required.");
   });
 
@@ -104,7 +104,7 @@ describe("search_workspace tool", () => {
     const lines = Array.from({ length: 40 }, (_, index) => `hit ${index + 1}`).join("\n");
     await writeFile(path.join(workspaceRoot, "many.txt"), `${lines}\n`, "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "hit", maxResults: 5 },
       { profileId: "profile_test" },
       { workspaceRoot },
@@ -118,7 +118,7 @@ describe("search_workspace tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-search-"));
     await writeFile(path.join(workspaceRoot, "plain.txt"), "hello world\n", "utf8");
 
-    const result = await runSearchWorkspace(
+    const result = await runSearchFiles(
       { query: "missing-term" },
       { profileId: "profile_test" },
       { workspaceRoot },

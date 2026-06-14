@@ -731,6 +731,38 @@ export interface UpdateSoulFileRequest {
   content: string;
 }
 
+export type KnowledgeBaseDocumentStatus = "ready" | "failed";
+
+export interface KnowledgeBaseDocument {
+  id: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  status: KnowledgeBaseDocumentStatus;
+  error?: string;
+}
+
+export interface ListKnowledgeBaseResponse {
+  documents: KnowledgeBaseDocument[];
+  profileId: string;
+}
+
+export interface UploadKnowledgeBaseRequest {
+  document: DocumentAttachment;
+}
+
+export interface UploadKnowledgeBaseResponse {
+  document: KnowledgeBaseDocument;
+  profileId: string;
+}
+
+export interface DeleteKnowledgeBaseResponse {
+  deleted: boolean;
+  profileId: string;
+  documentId: string;
+}
+
 export interface UserContextStatusResponse {
   path: string;
   active: boolean;

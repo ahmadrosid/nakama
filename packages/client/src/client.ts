@@ -12,11 +12,14 @@ import type {
   CreateSkillRequest,
   CreateSessionResponse,
   CreateToolRequest,
+  DeleteKnowledgeBaseResponse,
+  DocumentAttachment,
   DraftAutomationResponse,
   HealthResponse,
   ImageAttachment,
   InitSoulResponse,
   InitUserContextResponse,
+  ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListSkillsResponse,
   ListToolsResponse,
@@ -42,10 +45,11 @@ import type {
   CompactionResponse,
   SoulStackResponse,
   SoulStatusResponse,
-  StreamEvent,
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UpdateUserContextRequest,
+  UploadKnowledgeBaseRequest,
+  UploadKnowledgeBaseResponse,
   UserContextStatusResponse,
   AutomationDefinition,
   AutomationRunRecord,
@@ -452,6 +456,35 @@ export class TinyClawClient {
         method: "PUT",
         body: JSON.stringify({ content } satisfies UpdateSoulFileRequest),
       },
+    );
+  }
+
+  async listKnowledgeBase(profileId: string): Promise<ListKnowledgeBaseResponse> {
+    return this.request<ListKnowledgeBaseResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
+    );
+  }
+
+  async uploadKnowledgeBaseDocument(
+    profileId: string,
+    document: DocumentAttachment,
+  ): Promise<UploadKnowledgeBaseResponse> {
+    return this.request<UploadKnowledgeBaseResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
+      {
+        method: "POST",
+        body: JSON.stringify({ document } satisfies UploadKnowledgeBaseRequest),
+      },
+    );
+  }
+
+  async deleteKnowledgeBaseDocument(
+    profileId: string,
+    documentId: string,
+  ): Promise<DeleteKnowledgeBaseResponse> {
+    return this.request<DeleteKnowledgeBaseResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" },
     );
   }
 

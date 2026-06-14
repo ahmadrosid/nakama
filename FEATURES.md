@@ -42,7 +42,7 @@ On first start, two profiles are created:
 
 Tools are actions a bot can use (in chat or automations).
 
-**Built-in tools:** `write_file`, `delete_file`, `search_workspace`, `web_search`
+**Built-in tools:** `write_file`, `delete_file`, `search_files`, `web_search`
 
 When an OpenAI or Anthropic provider is configured, `web_search` runs natively on the provider with citations. OpenRouter uses the OpenRouter SDK (Chat Completions API, many models via one API key) and supports extended thinking via the `reasoning` parameter when enabled in Settings; native `web_search` is not enabled on OpenRouter yet.
 

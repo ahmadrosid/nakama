@@ -29,8 +29,11 @@ import type {
   ConfigureProviderResponse,
   CreateProviderRequest,
   CreateProviderResponse,
+  DeleteKnowledgeBaseResponse,
   DeleteProviderResponse,
+  DocumentAttachment,
   ImageAttachment,
+  ListKnowledgeBaseResponse,
   ListProvidersResponse,
   SetModelRequest,
   SetModelResponse,
@@ -50,12 +53,15 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   UpdateThinkingRequest,
+  UploadKnowledgeBaseRequest,
+  UploadKnowledgeBaseResponse,
   ProviderChatOptions,
   ProviderClient,
   type UserConfig,
 } from "@tinyclaw/core";
 import {
   buildThinkingProviderOptions,
+  composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
   createId,
   createSessionId,
@@ -1077,6 +1083,24 @@ export class AgentService {
     return this.profileService.deleteProfileAvatar(profileId);
   }
 
+  async listKnowledgeBase(profileId: string): Promise<ListKnowledgeBaseResponse> {
+    return this.profileService.listKnowledgeBase(profileId);
+  }
+
+  async uploadKnowledgeBaseDocument(
+    profileId: string,
+    document: DocumentAttachment,
+  ): Promise<UploadKnowledgeBaseResponse> {
+    return this.profileService.uploadKnowledgeBaseDocument(profileId, document);
+  }
+
+  async deleteKnowledgeBaseDocument(
+    profileId: string,
+    documentId: string,
+  ): Promise<DeleteKnowledgeBaseResponse> {
+    return this.profileService.deleteKnowledgeBaseDocument(profileId, documentId);
+  }
+
   async getProfileSoulStatus(
     profileId: string,
     includeContents = false,
@@ -1312,6 +1336,12 @@ export class AgentService {
       if (skillsCatalog.trim()) {
         systemPrompt = `${systemPrompt.trim()}\n\n${skillsCatalog.trim()}`;
       }
+    }
+
+    const kbCatalog = await composeKnowledgeBaseCatalog(profileId);
+
+    if (kbCatalog.trim()) {
+      systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
     }
 
     return {

@@ -824,6 +824,54 @@ export const openApiSchemas = {
       profileId: { type: "string" },
     },
   },
+  KnowledgeBaseDocument: {
+    type: "object",
+    required: ["id", "filename", "mediaType", "sizeBytes", "uploadedAt", "status"],
+    properties: {
+      id: { type: "string" },
+      filename: { type: "string" },
+      mediaType: { type: "string" },
+      sizeBytes: { type: "integer" },
+      uploadedAt: { type: "string", format: "date-time" },
+      status: { type: "string", enum: ["ready", "failed"] },
+      error: { type: "string" },
+    },
+  },
+  ListKnowledgeBaseResponse: {
+    type: "object",
+    required: ["documents", "profileId"],
+    properties: {
+      documents: {
+        type: "array",
+        items: { $ref: "#/components/schemas/KnowledgeBaseDocument" },
+      },
+      profileId: { type: "string" },
+    },
+  },
+  UploadKnowledgeBaseRequest: {
+    type: "object",
+    required: ["document"],
+    properties: {
+      document: { $ref: "#/components/schemas/DocumentAttachment" },
+    },
+  },
+  UploadKnowledgeBaseResponse: {
+    type: "object",
+    required: ["document", "profileId"],
+    properties: {
+      document: { $ref: "#/components/schemas/KnowledgeBaseDocument" },
+      profileId: { type: "string" },
+    },
+  },
+  DeleteKnowledgeBaseResponse: {
+    type: "object",
+    required: ["deleted", "profileId", "documentId"],
+    properties: {
+      deleted: { type: "boolean" },
+      profileId: { type: "string" },
+      documentId: { type: "string" },
+    },
+  },
   InitSoulResponse: {
     type: "object",
     required: ["directory", "created"],

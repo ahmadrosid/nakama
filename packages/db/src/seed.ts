@@ -7,7 +7,7 @@ import {
 } from "./constants";
 import type { DatabaseAdapter } from "./types";
 
-const LEGACY_BUILTIN_TOOL_NAMES = new Set(["echo", "log", "delay"]);
+const LEGACY_BUILTIN_TOOL_NAMES = new Set(["echo", "log", "delay", "search_workspace"]);
 const SUPPORTED_TOOL_HANDLER_TYPES = new Set(["builtin", "bash", "javascript"]);
 
 export async function seedDatabase(db: DatabaseAdapter): Promise<void> {

@@ -31,6 +31,9 @@ export const queryKeys = {
   soul: {
     profile: (profileId: string) => ["soul", "profile", profileId] as const,
   },
+  knowledgeBase: {
+    profile: (profileId: string) => ["knowledgeBase", profileId] as const,
+  },
   timezones: {
     catalog: ["timezones", "catalog"] as const,
     settings: ["timezones", "settings"] as const,
