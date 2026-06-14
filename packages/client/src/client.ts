@@ -1,5 +1,7 @@
 import type {
   AgentChannel,
+  BranchSessionRequest,
+  BranchSessionResponse,
   AssignMcpServerRequest,
   AssignSkillRequest,
   AssignToolRequest,
@@ -193,6 +195,19 @@ export class TinyClawClient {
   async getSessionMessages(sessionId: string): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+    );
+  }
+
+  async branchSession(
+    sessionId: string,
+    request: BranchSessionRequest,
+  ): Promise<BranchSessionResponse> {
+    return this.request<BranchSessionResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/branch`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
     );
   }
 

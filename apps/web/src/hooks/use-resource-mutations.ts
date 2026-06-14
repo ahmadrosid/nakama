@@ -400,6 +400,27 @@ export function usePurgeSessionMutation() {
   });
 }
 
+export function useBranchSessionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      sessionId,
+      messageIndex,
+    }: {
+      profileId: string;
+      sessionId: string;
+      messageIndex: number;
+      channel?: AgentChannel;
+    }) => client.branchSession(sessionId, { messageIndex }),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions(variables.profileId, variables.channel ?? "web"),
+      });
+    },
+  });
+}
+
 export function useWriteSoulFileMutation() {
   const queryClient = useQueryClient();
 

@@ -226,6 +226,7 @@ export interface DatabaseAdapter {
   listSkills(): Promise<StoredSkillRecord[]>;
   getSkill(id: string): Promise<StoredSkillRecord | null>;
   getSkillByName(name: string): Promise<StoredSkillRecord | null>;
+  getSkillBySourcePath(sourcePath: string): Promise<StoredSkillRecord | null>;
   upsertSkill(record: StoredSkillRecord): Promise<void>;
   deleteSkill(id: string): Promise<boolean>;
 

@@ -35,6 +35,7 @@ import {
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
 } from "@tinyclaw/core";
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
+import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
 import { SUPER_BOT_PROFILE_ID } from "@tinyclaw/db";
 import { validateJavascriptToolModule } from "./javascript-tool-loader";
@@ -89,6 +90,7 @@ export class ProfileService {
 
     await this.db.upsertProfile(profile);
     await initSoulDirectory(getProfileSoulDir(profile.id));
+    await this.assignDefaultTools(profile.id);
 
     return this.getProfile(profile.id);
   }
@@ -372,6 +374,14 @@ export class ProfileService {
     }
 
     return profile;
+  }
+
+  private async assignDefaultTools(profileId: string): Promise<void> {
+    const createSkillTool = await this.db.getTool(BUILTIN_TOOL_IDS.create_skill);
+
+    if (createSkillTool) {
+      await this.db.assignToolToProfile(profileId, createSkillTool.id);
+    }
   }
 
   private async requireTool(toolId: string): Promise<StoredToolRecord> {

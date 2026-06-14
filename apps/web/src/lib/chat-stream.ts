@@ -101,6 +101,86 @@ export function formatToolSummary(
   return null;
 }
 
+function truncateDisplay(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, maxLength - 1)}…`;
+}
+
+function basename(value: string): string {
+  const normalized = value.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || normalized;
+}
+
+export function formatToolActionLabel(
+  tool: string | undefined,
+  input?: Record<string, unknown>,
+): string {
+  const summary = formatToolSummary(tool, input);
+
+  if (tool === "bash" && summary) {
+    return `Ran ${truncateDisplay(summary.split("\n")[0] ?? summary, 96)}`;
+  }
+
+  if (tool === "write_file" && typeof input?.path === "string") {
+    return `Wrote ${basename(input.path)}`;
+  }
+
+  if (tool === "delete_file" && typeof input?.path === "string") {
+    return `Deleted ${basename(input.path)}`;
+  }
+
+  if (tool === "search_files") {
+    const query = typeof input?.query === "string" ? input.query.trim() : null;
+    const path = typeof input?.path === "string" ? basename(input.path) : null;
+
+    if (query && path) {
+      return `Searched ${path} · ${truncateDisplay(query, 48)}`;
+    }
+
+    if (query) {
+      return `Searched · ${truncateDisplay(query, 64)}`;
+    }
+  }
+
+  if (summary) {
+    const firstLine = summary.split("\n")[0] ?? summary;
+
+    if (/^(npm|pnpm|yarn|bun|node|python|cd|curl|git|tail|cat|grep|ls)\b/.test(firstLine)) {
+      return `Ran ${truncateDisplay(firstLine, 96)}`;
+    }
+
+    if (typeof input?.path === "string") {
+      return `Read ${basename(input.path)} · ${truncateDisplay(firstLine, 48)}`;
+    }
+
+    const displayTool = tool?.replace(/^[^_]+__/, "") ?? "tool";
+    return `${displayTool} · ${truncateDisplay(firstLine, 64)}`;
+  }
+
+  return tool?.replace(/^[^_]+__/, "") ?? "Tool";
+}
+
+export function formatToolCommand(
+  tool: string | undefined,
+  input?: Record<string, unknown>,
+): string | null {
+  if (tool === "bash" && typeof input?.command === "string" && input.command.trim()) {
+    return input.command.trim();
+  }
+
+  if (!input || Object.keys(input).length === 0) {
+    return null;
+  }
+
+  return JSON.stringify(input, null, 2);
+}
+
 export function isAbortError(error: unknown): boolean {
   return (
     (error instanceof DOMException && error.name === "AbortError") ||

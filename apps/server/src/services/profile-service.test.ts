@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
+import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { ProfileService } from "./profile-service";
 
@@ -126,6 +127,30 @@ describe("profile service createProfile", () => {
     await expect(readFile(path.join(soulDir, "STYLE.md"), "utf8")).resolves.toContain(
       "# Voice & Style",
     );
+  });
+
+  test("assigns create_skill when the built-in tool exists", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-default-tools-"));
+    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertTool({
+      id: BUILTIN_TOOL_IDS.create_skill,
+      name: "create_skill",
+      description: "Create a skill",
+      handlerType: "builtin",
+      handlerConfig: { name: "create_skill" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const service = new ProfileService(db);
+    const created = await service.createProfile({ name: "Skill Bot" });
+    const tools = await db.listToolsForProfile(created.profile.id);
+
+    expect(tools.map((tool) => tool.name)).toContain("create_skill");
   });
 });
 

@@ -1,4 +1,8 @@
-import type { ChatMessage, MessageContentPart } from "@tinyclaw/core/contract";
+import type {
+  ChatMessage,
+  MessageContentPart,
+  SessionMessageMeta,
+} from "@tinyclaw/core/contract";
 import { extractThinkingFromAssistantMessage } from "@tinyclaw/core/thinking-content";
 import { userContentToDisplayDocuments, userContentToDisplayImages } from "@/lib/chat-images";
 
@@ -46,6 +50,8 @@ export function parseChatRouteParams(params: {
 
 export interface ChatListItem {
   id: string;
+  historyIndex?: number;
+  createdAt?: string;
   role: "user" | "assistant" | "tool";
   content: string;
   thinking?: string;
@@ -72,7 +78,10 @@ function parseToolResult(content: string): unknown {
   }
 }
 
-export function chatMessagesToListItems(messages: ChatMessage[]): ChatListItem[] {
+export function chatMessagesToListItems(
+  messages: ChatMessage[],
+  messageMeta: SessionMessageMeta[] = [],
+): ChatListItem[] {
   const toolInputs = new Map<string, Record<string, unknown>>();
 
   for (const message of messages) {
@@ -88,6 +97,8 @@ export function chatMessagesToListItems(messages: ChatMessage[]): ChatListItem[]
   const items: ChatListItem[] = [];
 
   for (const [index, message] of messages.entries()) {
+    const meta = messageMeta[index];
+
     if (message.role === "user") {
       const content = message.content;
       const text =
@@ -100,6 +111,8 @@ export function chatMessagesToListItems(messages: ChatMessage[]): ChatListItem[]
 
       items.push({
         id: `history-${index}`,
+        historyIndex: index,
+        createdAt: meta?.createdAt,
         role: "user",
         content: text,
         images: userContentToDisplayImages(content),
@@ -117,6 +130,8 @@ export function chatMessagesToListItems(messages: ChatMessage[]): ChatListItem[]
 
       items.push({
         id: `history-${index}`,
+        historyIndex: index,
+        createdAt: meta?.createdAt,
         role: "assistant",
         content: message.content,
         ...(thinking ? { thinking } : {}),
@@ -127,6 +142,8 @@ export function chatMessagesToListItems(messages: ChatMessage[]): ChatListItem[]
     if (message.role === "tool") {
       items.push({
         id: message.toolCallId,
+        historyIndex: index,
+        createdAt: meta?.createdAt,
         role: "tool",
         content: `${message.name} completed`,
         toolCallId: message.toolCallId,

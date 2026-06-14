@@ -43,7 +43,7 @@ export async function discoverSkills(
         const parsed = parseSkillMarkdown(content, skillFilePath);
         const toolPath = await findSkillToolPath(directory);
 
-        discovered.set(parsed.frontmatter.name, {
+        discovered.set(skillFilePath, {
           name: parsed.frontmatter.name,
           description: parsed.frontmatter.description,
           disableModelInvocation: parsed.frontmatter.disableModelInvocation ?? false,

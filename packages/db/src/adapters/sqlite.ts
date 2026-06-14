@@ -391,6 +391,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listSkillsStmt = db.prepare("SELECT * FROM skills ORDER BY name ASC");
   const getSkillStmt = db.prepare("SELECT * FROM skills WHERE id = ?");
   const getSkillByNameStmt = db.prepare("SELECT * FROM skills WHERE name = ?");
+  const getSkillBySourcePathStmt = db.prepare("SELECT * FROM skills WHERE source_path = ?");
   const upsertSkillStmt = db.prepare(`
     INSERT INTO skills (
       id, name, description, source_path, has_tool, disable_model_invocation, enabled, created_at, updated_at
@@ -802,6 +803,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async getSkillByName(name) {
       const row = getSkillByNameStmt.get(name) as SkillRow | null;
+      return row ? toSkillRecord(row) : null;
+    },
+
+    async getSkillBySourcePath(sourcePath) {
+      const row = getSkillBySourcePathStmt.get(sourcePath) as SkillRow | null;
       return row ? toSkillRecord(row) : null;
     },
 

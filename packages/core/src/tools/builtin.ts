@@ -28,6 +28,13 @@ export interface DeleteFileOutput {
   deleted: true;
 }
 
+export interface CreateSkillInput {
+  name: string;
+  description: string;
+  body?: string;
+  disableModelInvocation?: boolean;
+}
+
 interface FileToolRunOptions {
   workspaceRoot?: string;
 }
@@ -143,9 +150,42 @@ export async function runDeleteFile(
   return { path: guarded.resolved, deleted: true };
 }
 
+export const createSkillTool: ToolDefinition<CreateSkillInput> = {
+  name: "create_skill",
+  description:
+    "Create a reusable skill for the active profile and assign it immediately. Use when the agent needs to save a repeatable workflow.",
+  parameters: {
+    type: "object",
+    properties: {
+      name: {
+        type: "string",
+        description: "Unique skill name for the active profile.",
+      },
+      description: {
+        type: "string",
+        description: "Short summary explaining when the skill should be used.",
+      },
+      body: {
+        type: "string",
+        description: "Optional skill instructions to save in SKILL.md.",
+      },
+      disableModelInvocation: {
+        type: "boolean",
+        description: "When true, the skill only activates on explicit invocation.",
+      },
+    },
+    required: ["name", "description"],
+    additionalProperties: false,
+  },
+  async run() {
+    throw new Error("create_skill must be resolved by the TinyClaw server.");
+  },
+};
+
 export const builtinTools: ToolDefinition[] = [
   writeFileTool,
   deleteFileTool,
+  createSkillTool,
   searchFilesTool,
   knowledgeBaseSearchTool,
   webSearchTool,

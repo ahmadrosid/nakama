@@ -56,7 +56,8 @@ function migrateSkillsTables(db: Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS skills_name_unique ON skills (name);
+    DROP INDEX IF EXISTS skills_name_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS skills_source_path_unique ON skills (source_path);
     CREATE TABLE IF NOT EXISTS profile_skills (
       profile_id TEXT NOT NULL,
       skill_id TEXT NOT NULL,

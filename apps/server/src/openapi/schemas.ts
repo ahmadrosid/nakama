@@ -39,6 +39,20 @@ export const openApiSchemas = {
       sessionId: { type: "string" },
     },
   },
+  BranchSessionRequest: {
+    type: "object",
+    required: ["messageIndex"],
+    properties: {
+      messageIndex: { type: "integer", minimum: 0 },
+    },
+  },
+  BranchSessionResponse: {
+    type: "object",
+    required: ["sessionId"],
+    properties: {
+      sessionId: { type: "string" },
+    },
+  },
   SessionSummary: {
     type: "object",
     required: [
@@ -84,13 +98,26 @@ export const openApiSchemas = {
       },
     },
   },
+  SessionMessageMeta: {
+    type: "object",
+    required: ["id", "seq", "createdAt"],
+    properties: {
+      id: { type: "string" },
+      seq: { type: "integer" },
+      createdAt: { type: "string", format: "date-time" },
+    },
+  },
   SessionMessagesResponse: {
     type: "object",
-    required: ["messages", "todos"],
+    required: ["messages", "messageMeta", "todos"],
     properties: {
       messages: {
         type: "array",
         items: { type: "object", additionalProperties: true },
+      },
+      messageMeta: {
+        type: "array",
+        items: { $ref: "#/components/schemas/SessionMessageMeta" },
       },
       todos: {
         type: "array",

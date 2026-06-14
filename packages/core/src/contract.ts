@@ -112,6 +112,14 @@ export interface CreateSessionResponse {
   sessionId: string;
 }
 
+export interface BranchSessionRequest {
+  messageIndex: number;
+}
+
+export interface BranchSessionResponse {
+  sessionId: string;
+}
+
 export type AgentTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
 export interface AgentTodo {
@@ -120,8 +128,15 @@ export interface AgentTodo {
   status: AgentTodoStatus;
 }
 
+export interface SessionMessageMeta {
+  id: string;
+  seq: number;
+  createdAt: string;
+}
+
 export interface SessionMessagesResponse {
   messages: ChatMessage[];
+  messageMeta: SessionMessageMeta[];
   todos: AgentTodo[];
 }
 

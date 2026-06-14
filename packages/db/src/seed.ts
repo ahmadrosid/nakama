@@ -81,12 +81,13 @@ export async function removeUnsupportedTools(db: DatabaseAdapter): Promise<void>
 export async function ensureBuiltinTools(db: DatabaseAdapter): Promise<void> {
   const now = new Date().toISOString();
   const profiles = await db.listProfiles();
-  const profileIds = profiles
+  const defaultProfileIds = profiles
     .filter(
       (profile) =>
         profile.id === SUPER_BOT_PROFILE_ID || profile.id === DEFAULT_PROFILE_ID,
     )
     .map((profile) => profile.id);
+  const allProfileIds = profiles.map((profile) => profile.id);
 
   for (const tool of builtinTools) {
     const toolId = BUILTIN_TOOL_IDS[tool.name as keyof typeof BUILTIN_TOOL_IDS];
@@ -106,6 +107,9 @@ export async function ensureBuiltinTools(db: DatabaseAdapter): Promise<void> {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
+
+    const profileIds =
+      tool.name === "create_skill" ? allProfileIds : defaultProfileIds;
 
     for (const profileId of profileIds) {
       await db.assignToolToProfile(profileId, toolId);

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type {
   CreateSkillRequest,
   ListSkillsResponse,
@@ -16,6 +17,8 @@ import {
   createSkillFile,
   deleteSkillDirectory,
   discoverSkills,
+  getGlobalSkillsDir,
+  getProfileSkillsDir,
   loadSkillTools,
   matchSkillsForMessage,
   type DiscoveredSkill,
@@ -32,7 +35,7 @@ export class SkillsService {
     let updated = 0;
 
     for (const skill of discovered) {
-      const existing = await this.db.getSkillByName(skill.name);
+      const existing = await this.db.getSkillBySourcePath(skill.directory);
       const now = new Date().toISOString();
       const record: StoredSkillRecord = {
         id: existing?.id ?? createId("skill"),
@@ -89,13 +92,30 @@ export class SkillsService {
 
     await this.syncDiscoveredSkills();
 
-    const record = await this.db.getSkillByName(name);
+    const sourcePath = request.profileId?.trim()
+      ? getProfileSkillsDir(request.profileId.trim())
+      : getGlobalSkillsDir();
+    const record = await this.db.getSkillBySourcePath(path.join(sourcePath, name));
 
     if (!record) {
       throw new Error("Skill was created but could not be synced.");
     }
 
     return this.getSkill(record.id);
+  }
+
+  async createAndAssignSkillToProfile(
+    profileId: string,
+    request: Omit<CreateSkillRequest, "profileId">,
+  ): Promise<SkillResponse> {
+    const created = await this.createSkill({
+      ...request,
+      profileId,
+    });
+
+    await this.db.assignSkillToProfile(profileId, created.skill.id);
+
+    return created;
   }
 
   async deleteSkill(skillId: string): Promise<void> {
@@ -116,7 +136,7 @@ export class SkillsService {
 
   async getSkill(skillId: string): Promise<SkillResponse> {
     const record = await this.requireSkill(skillId);
-    const discovered = await this.getDiscoveredSkill(record.name);
+    const discovered = await this.getDiscoveredSkill(record.sourcePath);
     const body = discovered?.body ?? (await readSkillBody(record));
 
     return {
@@ -156,10 +176,10 @@ export class SkillsService {
   ): Promise<DiscoveredSkill[]> {
     const assigned = await this.db.listSkillsForProfile(profileId);
     const discovered = await this.getDiscoveryCache();
-    const byName = new Map(discovered.map((skill) => [skill.name, skill]));
+    const bySourcePath = new Map(discovered.map((skill) => [skill.directory, skill]));
 
     return assigned
-      .map((record) => byName.get(record.name))
+      .map((record) => bySourcePath.get(record.sourcePath))
       .filter((skill): skill is DiscoveredSkill => skill !== undefined);
   }
 
@@ -176,9 +196,9 @@ export class SkillsService {
     return this.discoveredCache;
   }
 
-  private async getDiscoveredSkill(name: string): Promise<DiscoveredSkill | null> {
+  private async getDiscoveredSkill(sourcePath: string): Promise<DiscoveredSkill | null> {
     const discovered = await this.getDiscoveryCache();
-    return discovered.find((skill) => skill.name === name) ?? null;
+    return discovered.find((skill) => skill.directory === sourcePath) ?? null;
   }
 
   private async requireSkill(skillId: string): Promise<StoredSkillRecord> {

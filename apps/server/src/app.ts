@@ -6,6 +6,8 @@ import {
   type AgentTodo,
   type ApiErrorResponse,
   type AssignToolRequest,
+  type BranchSessionRequest,
+  type BranchSessionResponse,
   type CreateProfileRequest,
   type CreateAutomationRequest,
   type CreateSessionRequest,
@@ -607,6 +609,7 @@ export function createApp(options: ServerOptions) {
         }
 
         const messageMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/messages$/);
+        const branchMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/branch$/);
 
         const compactMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)\/compact$/);
 
@@ -626,15 +629,36 @@ export function createApp(options: ServerOptions) {
 
         if (messageMatch && request.method === "GET") {
           const sessionId = decodeURIComponent(messageMatch[1]!);
-          const messages = await agent.getSessionMessages(sessionId);
+          const result = await agent.getSessionMessages(sessionId);
 
-          if (!messages) {
+          if (!result) {
             return errorResponse("Session not found", 404);
           }
 
           const todos = (await agent.getSessionTodos(sessionId)) ?? [];
 
-          return json<SessionMessagesResponse>({ messages, todos });
+          return json<SessionMessagesResponse>({
+            messages: result.messages,
+            messageMeta: result.messageMeta,
+            todos,
+          });
+        }
+
+        if (branchMatch && request.method === "POST") {
+          try {
+            const sessionId = decodeURIComponent(branchMatch[1]!);
+            const body = await readJson<BranchSessionRequest>(request);
+            const result = await agent.branchSession(sessionId, body.messageIndex);
+
+            if (!result) {
+              return errorResponse("Session not found", 404);
+            }
+
+            return json<BranchSessionResponse>(result, 201);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return errorResponse(message, 400);
+          }
         }
 
         if (messageMatch && request.method === "POST") {

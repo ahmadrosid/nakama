@@ -8,6 +8,7 @@ import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";
+import { useBranchSessionMutation } from "@/hooks/use-resource-mutations";
 import { useThinkingSettings } from "@/hooks/use-thinking-settings";
 import { filePartsToDocumentAttachments, filePartsToImageAttachments } from "@/lib/chat-images";
 import {
@@ -34,6 +35,11 @@ import {
 } from "@/lib/models";
 import { SETUP_PATH } from "@/lib/navigation";
 
+interface SendMessageOptions {
+  sessionOverride?: RemoteChatSession;
+  initialMessages?: ChatListItem[];
+}
+
 export function ChatPage() {
   const params = useParams();
   const location = useLocation();
@@ -50,6 +56,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
   const [busy, setBusy] = useState(false);
+  const [branchingMessageId, setBranchingMessageId] = useState<string | null>(null);
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -76,6 +83,7 @@ export function ChatPage() {
   );
 
   const showOfflineHint = health != null && !health.providerConfigured;
+  const branchSessionMutation = useBranchSessionMutation();
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(models?.models ?? []),
@@ -178,11 +186,15 @@ export function ChatPage() {
       try {
         localStorage.setItem(sessionStorageKey(nextProfileId), sessionId);
         skipNextProfileSessionRef.current = nextProfileId !== profileId;
-        const { messages: storedMessages, todos } = await client.getSessionMessages(sessionId);
+        const {
+          messages: storedMessages,
+          messageMeta,
+          todos,
+        } = await client.getSessionMessages(sessionId);
         const nextSession = client.createChatSession(sessionId, "web");
         setProfileId(nextProfileId);
         setSession(nextSession);
-        setMessages(chatMessagesToListItems(storedMessages));
+        setMessages(chatMessagesToListItems(storedMessages, messageMeta));
         setAgentTodos(todos);
         syncChatUrl(nextProfileId, sessionId);
       } catch (err) {
@@ -192,6 +204,32 @@ export function ChatPage() {
       }
     },
     [profileId, syncChatUrl],
+  );
+
+  const handleBranchMessage = useCallback(
+    async (message: ChatListItem) => {
+      if (!session || !profileId || typeof message.historyIndex !== "number") {
+        return;
+      }
+
+      setBranchingMessageId(message.id);
+      setError(null);
+
+      try {
+        const result = await branchSessionMutation.mutateAsync({
+          profileId,
+          sessionId: session.id,
+          messageIndex: message.historyIndex,
+          channel: "web",
+        });
+        await resumeSession(profileId, result.sessionId);
+      } catch (err) {
+        setError(formatError(err));
+      } finally {
+        setBranchingMessageId(null);
+      }
+    },
+    [branchSessionMutation, profileId, resumeSession, session],
   );
 
   const handleProfileSwitch = useCallback(
@@ -280,7 +318,7 @@ export function ChatPage() {
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string, files: FileUIPart[] = []) => {
+    async (text: string, files: FileUIPart[] = [], options: SendMessageOptions = {}) => {
       const images = filePartsToImageAttachments(files);
       const documents = filePartsToDocumentAttachments(files);
 
@@ -291,7 +329,12 @@ export function ChatPage() {
       setBusy(true);
       setError(null);
 
-      let activeSession = session;
+      if (options.initialMessages) {
+        setMessages(options.initialMessages);
+        setAgentTodos([]);
+      }
+
+      let activeSession = options.sessionOverride ?? session;
 
       if (!activeSession) {
         try {
@@ -335,7 +378,13 @@ export function ChatPage() {
           { signal: abortController.signal },
         );
 
-        setMessages((current) => finalizeStreamingMessages(current));
+        const {
+          messages: storedMessages,
+          messageMeta,
+          todos,
+        } = await client.getSessionMessages(activeSession.id);
+        setMessages(chatMessagesToListItems(storedMessages, messageMeta));
+        setAgentTodos(todos);
       } catch (err) {
         if (isAbortError(err)) {
           setMessages((current) => finalizeStreamingMessages(current));
@@ -370,6 +419,80 @@ export function ChatPage() {
     [session, busy, profileId, syncChatUrl, thinkingSettings?.enabled],
   );
 
+  const handleTryAgainMessage = useCallback(
+    async (message: ChatListItem) => {
+      if (busy || !profileId) {
+        return;
+      }
+
+      const prompt = findRetryPrompt(messages, message);
+
+      if (!prompt?.content.trim()) {
+        setError("Could not find a prompt to try again.");
+        return;
+      }
+
+      if (prompt.images?.length || prompt.documents?.length) {
+        setError("Try again is available for text-only prompts.");
+        return;
+      }
+
+      const checkpoint = findRetryCheckpoint(messages, prompt);
+
+      if (checkpoint && !session) {
+        setError("Chat session is unavailable. Please send a new message instead.");
+        return;
+      }
+
+      setBranchingMessageId(message.id);
+      setError(null);
+
+      try {
+        let retrySession: RemoteChatSession;
+        let initialMessages: ChatListItem[] = [];
+
+        if (checkpoint && session) {
+          const result = await branchSessionMutation.mutateAsync({
+            profileId,
+            sessionId: session.id,
+            messageIndex: checkpoint.historyIndex!,
+            channel: "web",
+          });
+          retrySession = client.createChatSession(result.sessionId, "web");
+          initialMessages = messages.filter(
+            (item) =>
+              typeof item.historyIndex === "number" &&
+              item.historyIndex <= checkpoint.historyIndex!,
+          );
+        } else {
+          retrySession = await client.createSession("web", { profileId });
+        }
+
+        localStorage.setItem(sessionStorageKey(profileId), retrySession.id);
+        setSession(retrySession);
+        syncChatUrl(profileId, retrySession.id);
+
+        await sendMessage(prompt.content, [], {
+          sessionOverride: retrySession,
+          initialMessages,
+        });
+      } catch (err) {
+        setError(formatError(err));
+      } finally {
+        setBranchingMessageId(null);
+      }
+    },
+    [
+      branchSessionMutation,
+      busy,
+      messages,
+      profileId,
+      sendMessage,
+      session,
+      syncChatUrl,
+    ],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6">
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
@@ -377,7 +500,12 @@ export function ChatPage() {
           {messages.length === 0 && !busy ? (
             <ChatWelcome profile={activeProfile} />
           ) : (
-            <ChatMessageList messages={messages} />
+            <ChatMessageList
+              messages={messages}
+              branchingMessageId={branchingMessageId}
+              onBranchMessage={(message) => void handleBranchMessage(message)}
+              onRetryMessage={(message) => void handleTryAgainMessage(message)}
+            />
           )}
         </div>
 
@@ -407,6 +535,41 @@ export function ChatPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function findRetryPrompt(
+  messages: ChatListItem[],
+  assistantMessage: ChatListItem,
+): ChatListItem | null {
+  if (typeof assistantMessage.historyIndex !== "number") {
+    return null;
+  }
+
+  return (
+    messages.findLast(
+      (message) =>
+        message.role === "user" &&
+        typeof message.historyIndex === "number" &&
+        message.historyIndex < assistantMessage.historyIndex!,
+    ) ?? null
+  );
+}
+
+function findRetryCheckpoint(
+  messages: ChatListItem[],
+  promptMessage: ChatListItem,
+): ChatListItem | null {
+  if (typeof promptMessage.historyIndex !== "number") {
+    return null;
+  }
+
+  return (
+    messages.findLast(
+      (message) =>
+        typeof message.historyIndex === "number" &&
+        message.historyIndex < promptMessage.historyIndex!,
+    ) ?? null
   );
 }
 

@@ -31,6 +31,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const profileMcpServers = new Map<string, Set<string>>();
   const skills = new Map<string, StoredSkillRecord>();
   const skillsByName = new Map<string, StoredSkillRecord>();
+  const skillsBySourcePath = new Map<string, StoredSkillRecord>();
   const profileSkills = new Map<string, Set<string>>();
   const sessions = new Map<string, StoredSessionRecord>();
   const sessionMessages = new Map<string, StoredSessionMessageRecord[]>();
@@ -407,15 +408,21 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       return skillsByName.get(name) ?? null;
     },
 
+    async getSkillBySourcePath(sourcePath) {
+      return skillsBySourcePath.get(sourcePath) ?? null;
+    },
+
     async upsertSkill(record) {
       const existing = skills.get(record.id);
 
       if (existing) {
         skillsByName.delete(existing.name);
+        skillsBySourcePath.delete(existing.sourcePath);
       }
 
       skills.set(record.id, record);
       skillsByName.set(record.name, record);
+      skillsBySourcePath.set(record.sourcePath, record);
     },
 
     async deleteSkill(id) {
@@ -427,6 +434,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
       skills.delete(id);
       skillsByName.delete(existing.name);
+      skillsBySourcePath.delete(existing.sourcePath);
 
       for (const assigned of profileSkills.values()) {
         assigned.delete(id);

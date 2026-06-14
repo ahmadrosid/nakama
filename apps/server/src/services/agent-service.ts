@@ -10,6 +10,7 @@ import type {
   AgentTodo,
   AssignSkillRequest,
   AssignToolRequest,
+  BranchSessionResponse,
   ChatMessage,
   CompactionResponse,
   CreateProfileRequest,
@@ -117,6 +118,7 @@ import {
 } from "./provider-instance-helpers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import { createTodoTools } from "../tools/todo-tools";
+import { createCreateSkillTool } from "../tools/create-skill";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -520,14 +522,82 @@ export class AgentService {
     return this.agentTodoState.listActive(sessionId);
   }
 
-  async getSessionMessages(sessionId: string): Promise<ChatMessage[] | null> {
+  async getSessionMessages(sessionId: string): Promise<{
+    messages: ChatMessage[];
+    messageMeta: Array<{ id: string; seq: number; createdAt: string }>;
+  } | null> {
     const record = await this.db.getSession(sessionId);
 
     if (!record) {
       return null;
     }
 
-    return loadSessionHistory(this.db, sessionId);
+    const storedMessages = await this.db.listMessagesForSession(sessionId);
+
+    return {
+      messages: storedMessages.map((message) => message.payload as ChatMessage),
+      messageMeta: storedMessages.map((message) => ({
+        id: message.id,
+        seq: message.seq,
+        createdAt: message.createdAt,
+      })),
+    };
+  }
+
+  async branchSession(
+    sessionId: string,
+    messageIndex: number,
+  ): Promise<BranchSessionResponse | null> {
+    const record = await this.db.getSession(sessionId);
+
+    if (!record) {
+      return null;
+    }
+
+    if (!Number.isInteger(messageIndex) || messageIndex < 0) {
+      throw new Error("messageIndex must be a non-negative integer.");
+    }
+
+    const sourceMessages = await loadSessionHistory(this.db, sessionId);
+
+    if (messageIndex >= sourceMessages.length) {
+      throw new Error("messageIndex is out of bounds.");
+    }
+
+    const nextSessionId = createSessionId();
+    const sourceTitle = record.title?.trim();
+    const branchTitle = sourceTitle ? `${sourceTitle} (Branch)` : "Untitled (Branch)";
+
+    await this.db.upsertSession({
+      id: nextSessionId,
+      profileId: record.profileId,
+      channel: record.channel,
+      createdAt: new Date().toISOString(),
+      title: null,
+      agentTodos: [],
+    });
+
+    await replaceSessionHistory(
+      this.db,
+      nextSessionId,
+      sourceMessages.slice(0, messageIndex + 1),
+    );
+    await this.db.updateSessionTitle(nextSessionId, branchTitle);
+
+    const channel = parseAgentChannel(record.channel);
+
+    if (!channel) {
+      throw new Error("Session channel is invalid.");
+    }
+
+    const session = await this.buildChatSession(channel, record.profileId, nextSessionId);
+    this.sessions.set(nextSessionId, {
+      channel,
+      profileId: record.profileId,
+      session,
+    });
+
+    return { sessionId: nextSessionId };
   }
 
   async listSessions(
@@ -1226,7 +1296,10 @@ export class AgentService {
     options: { includeAutomationTools?: boolean; includeTodoTools?: boolean } = {},
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
-    const tools = await resolveToolsFromStorage(storedTools);
+    const builtinOverrides = this.skillsService
+      ? [createCreateSkillTool(this.skillsService)]
+      : [];
+    const tools = await resolveToolsFromStorage(storedTools, builtinOverrides);
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
 
@@ -1396,5 +1469,3 @@ function parseAgentChannel(value: string): AgentChannel | null {
 
   return null;
 }
-
-

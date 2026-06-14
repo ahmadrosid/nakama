@@ -7,8 +7,11 @@ const SERVER_TOOLS = new Map<string, ToolDefinition>([[bashTool.name, bashTool]]
 
 export async function resolveToolsFromStorage(
   records: StoredToolRecord[],
+  builtinOverrides: ToolDefinition[] = [],
 ): Promise<ToolDefinition[]> {
-  const builtinMap = new Map(builtinTools.map((tool) => [tool.name, tool]));
+  const builtinMap = new Map(
+    [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool]),
+  );
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {

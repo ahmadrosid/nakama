@@ -423,6 +423,20 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/sessions/{sessionId}/branch": {
+        post: {
+          tags: ["Chat"],
+          summary: "Create a branched chat session from a message checkpoint",
+          operationId: "branchSession",
+          parameters: [{ $ref: "#/components/parameters/SessionId" }],
+          requestBody: jsonBody("BranchSessionRequest"),
+          responses: {
+            "201": jsonResponse("BranchSessionResponse", "Created branched session"),
+            "400": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/v1/sessions/{sessionId}/compact": {
         post: {
           tags: ["Chat"],
