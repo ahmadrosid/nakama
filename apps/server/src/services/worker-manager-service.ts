@@ -110,7 +110,7 @@ export class WorkerManagerService {
     match: Pm2ProcessDescription | undefined,
   ): WorkerProcessInfo {
     if (!match) {
-      return { managed: false, status: null, cpuPercent: null, memoryMb: null, uptimeSeconds: null };
+      return { managed: true, status: "stopped", cpuPercent: null, memoryMb: null, uptimeSeconds: null };
     }
 
     const status = match.pm2_env?.status ?? null;
@@ -130,6 +130,10 @@ export class WorkerManagerService {
     };
   }
 
+  private pm2UnavailableInfo(): WorkerProcessInfo {
+    return { managed: false, status: null, cpuPercent: null, memoryMb: null, uptimeSeconds: null };
+  }
+
   async getWorkerStatus(name: string): Promise<WorkerProcessInfo | null> {
     if (!this.isValidWorker(name)) {
       return null;
@@ -140,7 +144,7 @@ export class WorkerManagerService {
       const match = list.find((p) => p.name === name);
       return this.pm2ProcessToInfo(match);
     } catch {
-      return { managed: false, status: null, cpuPercent: null, memoryMb: null, uptimeSeconds: null };
+      return this.pm2UnavailableInfo();
     }
   }
 
@@ -156,10 +160,7 @@ export class WorkerManagerService {
       );
     } catch {
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => [
-          name,
-          { managed: false, status: null, cpuPercent: null, memoryMb: null, uptimeSeconds: null },
-        ]),
+        VALID_WORKERS.map((name) => [name, this.pm2UnavailableInfo()]),
       );
     }
   }

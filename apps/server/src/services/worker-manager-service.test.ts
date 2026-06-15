@@ -145,7 +145,7 @@ describe("WorkerManagerService", () => {
       });
     });
 
-    test("returns managed: false when worker not in PM2 list", async () => {
+    test("returns managed: true / stopped when worker not in PM2 list", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
         cb(null, []),
@@ -155,8 +155,8 @@ describe("WorkerManagerService", () => {
       const status = await service.getWorkerStatus("telegram");
 
       expect(status).toEqual({
-        managed: false,
-        status: null,
+        managed: true,
+        status: "stopped",
         cpuPercent: null,
         memoryMb: null,
         uptimeSeconds: null,
@@ -189,7 +189,7 @@ describe("WorkerManagerService", () => {
   });
 
   describe("getAllWorkerStatuses", () => {
-    test("returns statuses for all workers in one PM2 call", async () => {
+    test("returns managed true for stopped workers when PM2 is available", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
         cb(null, [
@@ -208,8 +208,8 @@ describe("WorkerManagerService", () => {
       expect(result.telegram.managed).toBe(true);
       expect(result.telegram.status).toBe("online");
       expect(result.telegram.cpuPercent).toBe(3.1);
-      expect(result.whatsapp.managed).toBe(false);
-      expect(result.whatsapp.status).toBeNull();
+      expect(result.whatsapp.managed).toBe(true);
+      expect(result.whatsapp.status).toBe("stopped");
     });
 
     test("returns managed: false for all when PM2 connect fails", async () => {
