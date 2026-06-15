@@ -277,6 +277,40 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/settings/whatsapp": {
+        get: {
+          tags: ["Models"],
+          summary: "Get WhatsApp bridge settings",
+          operationId: "getWhatsAppSettings",
+          responses: {
+            "200": jsonResponse("WhatsAppSettingsResponse", "WhatsApp settings"),
+            "500": errorResponse,
+          },
+        },
+        put: {
+          tags: ["Models"],
+          summary: "Update WhatsApp bridge settings",
+          operationId: "setWhatsAppSettings",
+          requestBody: jsonBody("UpdateWhatsAppSettingsRequest"),
+          responses: {
+            "200": jsonResponse("WhatsAppSettingsResponse", "WhatsApp settings updated"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/settings/whatsapp/pairing-code": {
+        post: {
+          tags: ["Models"],
+          summary: "Regenerate WhatsApp pairing code",
+          operationId: "regenerateWhatsAppPairingCode",
+          responses: {
+            "200": jsonResponse("WhatsAppSettingsResponse", "Pairing code regenerated"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/user/context": {
         get: {
           tags: ["User"],

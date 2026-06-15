@@ -3,11 +3,12 @@ import type {
   GenerateChatInput,
   GenerateTextInput,
   ProviderClient,
+  ProviderName,
   StreamChatHandlers,
 } from "@tinyclaw/core";
 import { continueAnthropicUntilDone } from "./web-search";
 
-const PROVIDER_LABEL = "Anthropic";
+const DEFAULT_PROVIDER_LABEL = "Anthropic";
 
 export interface AnthropicProviderOptions {
   apiKey: string;
@@ -15,6 +16,8 @@ export interface AnthropicProviderOptions {
   baseUrl?: string;
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetch?: typeof fetch;
+  providerName?: ProviderName;
+  providerLabel?: string;
 }
 
 function createAnthropicClient(
@@ -29,10 +32,10 @@ function createAnthropicClient(
   });
 }
 
-function formatAnthropicError(error: unknown): Error {
+function formatAnthropicError(error: unknown, label: string): Error {
   if (error instanceof APIError) {
     return new Error(
-      `${PROVIDER_LABEL} request failed (${error.status}): ${error.message}`,
+      `${label} request failed (${error.status}): ${error.message}`,
     );
   }
 
@@ -40,14 +43,17 @@ function formatAnthropicError(error: unknown): Error {
     return error;
   }
 
-  return new Error(`${PROVIDER_LABEL} request failed.`);
+  return new Error(`${label} request failed.`);
 }
 
-async function withAnthropicError<T>(run: () => Promise<T>): Promise<T> {
+async function withAnthropicError<T>(
+  run: () => Promise<T>,
+  label: string,
+): Promise<T> {
   try {
     return await run();
   } catch (error) {
-    throw formatAnthropicError(error);
+    throw formatAnthropicError(error, label);
   }
 }
 
@@ -56,9 +62,11 @@ export function createAnthropicProvider(
 ): ProviderClient {
   const model = options.model ?? "claude-sonnet-4-6";
   const client = createAnthropicClient(options.apiKey, options.baseUrl, options.fetch);
+  const name: ProviderName = options.providerName ?? "anthropic";
+  const label = options.providerLabel ?? DEFAULT_PROVIDER_LABEL;
 
   return {
-    name: "anthropic",
+    name,
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -80,39 +88,43 @@ export function createAnthropicProvider(
           .trim();
 
         if (!content) {
-          throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
+          throw new Error(`${label} returned an empty response.`);
         }
 
         return content;
-      });
+      }, label);
     },
     generateChat(input: GenerateChatInput) {
-      return withAnthropicError(() =>
-        continueAnthropicUntilDone({
-          client,
-          model,
-          system: input.system,
-          messages: input.messages,
-          tools: input.tools,
-          webSearch: input.providerOptions?.webSearch ?? false,
-          thinking: input.providerOptions,
-          stream: false,
-        }),
+      return withAnthropicError(
+        () =>
+          continueAnthropicUntilDone({
+            client,
+            model,
+            system: input.system,
+            messages: input.messages,
+            tools: input.tools,
+            webSearch: input.providerOptions?.webSearch ?? false,
+            thinking: input.providerOptions,
+            stream: false,
+          }),
+        label,
       );
     },
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
-      return withAnthropicError(() =>
-        continueAnthropicUntilDone({
-          client,
-          model,
-          system: input.system,
-          messages: input.messages,
-          tools: input.tools,
-          webSearch: input.providerOptions?.webSearch ?? false,
-          thinking: input.providerOptions,
-          stream: true,
-          handlers,
-        }),
+      return withAnthropicError(
+        () =>
+          continueAnthropicUntilDone({
+            client,
+            model,
+            system: input.system,
+            messages: input.messages,
+            tools: input.tools,
+            webSearch: input.providerOptions?.webSearch ?? false,
+            thinking: input.providerOptions,
+            stream: true,
+            handlers,
+          }),
+        label,
       );
     },
   };

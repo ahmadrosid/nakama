@@ -9,6 +9,7 @@ import {
   KanbanIcon,
   MessageCircleIcon,
   ServerIcon,
+  SmartphoneIcon,
   SparklesIcon,
   WorkflowIcon,
   XCircleIcon,
@@ -47,7 +48,7 @@ export function StatusPage() {
           <div className="min-w-0 space-y-0.5">
             <h1 className="type-page-title">Status</h1>
             <p className="type-body max-w-2xl">
-              Live health for the server, workers, and Telegram bridge.
+              Live health for the server, workers, and message bridges.
             </p>
           </div>
         </div>
@@ -112,7 +113,7 @@ function StatusDashboard({ status }: { status: SystemStatusResponse }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+      <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 lg:grid-cols-5 lg:divide-x lg:divide-y-0">
         {services.map((service) => (
           <ServiceColumn key={service.title} {...service} />
         ))}
@@ -537,7 +538,7 @@ function StatusSkeleton() {
 }
 
 function buildServiceColumns(status: SystemStatusResponse) {
-  const { server, automationWorker, telegramWorker } = status;
+  const { server, automationWorker, telegramWorker, whatsappWorker } = status;
 
   return [
     {
@@ -560,6 +561,11 @@ function buildServiceColumns(status: SystemStatusResponse) {
       icon: MessageCircleIcon,
       title: "Telegram",
       ...telegramServiceStatus(telegramWorker),
+    },
+    {
+      icon: SmartphoneIcon,
+      title: "WhatsApp",
+      ...whatsappServiceStatus(whatsappWorker),
     },
   ];
 }
@@ -606,6 +612,24 @@ function telegramServiceStatus(
   return { status: "Healthy", tone: "ok" };
 }
 
+function whatsappServiceStatus(
+  whatsappWorker: SystemStatusResponse["whatsappWorker"],
+): { status: string; tone: ServiceStatusTone } {
+  if (!whatsappWorker.configured) {
+    return { status: "Not set up", tone: "muted" };
+  }
+
+  if (!whatsappWorker.running) {
+    return { status: "Offline", tone: "bad" };
+  }
+
+  if (!whatsappWorker.paired) {
+    return { status: "Awaiting pairing", tone: "warn" };
+  }
+
+  return { status: "Healthy", tone: "ok" };
+}
+
 function deriveSummary(status: SystemStatusResponse): {
   tone: StatusTone;
   title: string;
@@ -635,6 +659,14 @@ function deriveSummary(status: SystemStatusResponse): {
     };
   }
 
+  if (status.whatsappWorker.configured && !status.whatsappWorker.running) {
+    return {
+      tone: "warn",
+      title: "WhatsApp bridge offline",
+      description: "Start the WhatsApp worker (bun run dev:whatsapp) to receive messages.",
+    };
+  }
+
   if (!status.server.providerConfigured || !status.automationWorker.providerConfigured) {
     return {
       tone: "warn",
@@ -646,7 +678,7 @@ function deriveSummary(status: SystemStatusResponse): {
   return {
     tone: "ok",
     title: "All systems operational",
-    description: "Server, workers, and Telegram bridge are healthy.",
+    description: "Server, workers, and bridges are healthy.",
   };
 }
 

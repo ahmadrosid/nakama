@@ -43,6 +43,9 @@ export const queryKeys = {
   telegram: {
     settings: ["telegram", "settings"] as const,
   },
+  whatsapp: {
+    settings: ["whatsapp", "settings"] as const,
+  },
   userContext: ["userContext"] as const,
   modelsDev: ["modelsDev"] as const,
   openRouterModels: ["openRouterModels"] as const,

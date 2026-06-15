@@ -1,0 +1,15 @@
+{
+  "name": "@tinyclaw/whatsapp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@tinyclaw/client": "workspace:*",
+    "@tinyclaw/core": "workspace:*",
+    "@whiskeysockets/baileys": "^6.7.16"
+  }
+}

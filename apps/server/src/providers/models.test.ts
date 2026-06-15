@@ -52,4 +52,17 @@ describe("resolveModel", () => {
       "llama3.2",
     );
   });
+
+  test("resolves catalog models for OpenCode Go", () => {
+    expect(resolveModel("opencode_go", "opencode-go/kimi-k2.7-code")).toBe(
+      "opencode-go/kimi-k2.7-code",
+    );
+    expect(getDefaultModel("opencode_go")).toBe("opencode-go/kimi-k2.7-code");
+  });
+
+  test("passes through unknown OpenCode Go model ids", () => {
+    expect(resolveModel("opencode_go", "opencode-go/future-model")).toBe(
+      "opencode-go/future-model",
+    );
+  });
 });

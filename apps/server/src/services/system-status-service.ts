@@ -1,5 +1,5 @@
 import type { HealthResponse, LlmUsageStatus, SystemStatusResponse } from "@tinyclaw/core";
-import { getTelegramWorkerStatus, TINYCLAW_API_VERSION } from "@tinyclaw/core";
+import { getTelegramWorkerStatus, getWhatsAppWorkerStatus, TINYCLAW_API_VERSION } from "@tinyclaw/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { AutomationScheduler } from "./automation-scheduler";
@@ -36,6 +36,7 @@ export class SystemStatusService {
         providerConfigured,
       },
       telegramWorker: await getTelegramWorkerStatus(),
+      whatsappWorker: await getWhatsAppWorkerStatus(),
       llmUsage: this.getLlmUsage(
         models.provider,
         models.currentModel,

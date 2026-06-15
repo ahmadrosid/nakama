@@ -1,28 +1,102 @@
+import {
+  activeAnsiPrefix,
+  applySgr,
+  encodeSgr,
+  isSgrSequence,
+  parseSgrParams,
+  tokenizeText,
+  type SgrState,
+  type TextToken,
+} from "./text-measure";
+
 export function appendStreamText(
   lines: string[],
   activeLine: string,
   text: string,
   width: number,
 ): { lines: string[]; activeLine: string } {
-  let current = activeLine;
+  if (width <= 0) {
+    return { lines: [...lines, activeLine], activeLine: text };
+  }
+
   const nextLines = [...lines];
+  let current = activeLine;
+  let currentWidth = visibleWidth(current);
+  let sgrState: SgrState = activeSgrState(current);
 
-  for (const char of text) {
-    if (char === "\n") {
+  function activePrefix(): string {
+    return encodeSgr(sgrState);
+  }
+
+  function flushCurrentLine(): void {
+    if (activePrefix()) {
+      nextLines.push(`${current}\x1b[0m`);
+    } else {
       nextLines.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-
-    if (current.length >= width) {
-      nextLines.push(current);
-      current = "";
     }
   }
 
+  function consumeToken(token: TextToken): void {
+    if (token.type === "ansi") {
+      current += token.value;
+      if (isSgrSequence(token.value)) {
+        sgrState = applySgr(sgrState, parseSgrParams(token.value));
+      }
+      return;
+    }
+
+    if (token.value === "\n") {
+      flushCurrentLine();
+      current = activePrefix();
+      currentWidth = 0;
+      return;
+    }
+
+    const charWidth = token.width;
+
+    if (charWidth > width && currentWidth === 0) {
+      current += token.value;
+      currentWidth += charWidth;
+    } else if (currentWidth + charWidth > width) {
+      flushCurrentLine();
+      current = activePrefix() + token.value;
+      currentWidth = charWidth;
+    } else {
+      current += token.value;
+      currentWidth += charWidth;
+    }
+  }
+
+  for (const token of tokenizeText(text)) {
+    consumeToken(token);
+  }
+
+  if (currentWidth >= width) {
+    flushCurrentLine();
+    current = activePrefix();
+  }
+
   return { lines: nextLines, activeLine: current };
+}
+
+function visibleWidth(text: string): number {
+  let width = 0;
+  for (const token of tokenizeText(text)) {
+    if (token.type === "char") {
+      width += token.width;
+    }
+  }
+  return width;
+}
+
+function activeSgrState(text: string): SgrState {
+  let state: SgrState = {};
+  for (const token of tokenizeText(text)) {
+    if (token.type === "ansi" && isSgrSequence(token.value)) {
+      state = applySgr(state, parseSgrParams(token.value));
+    }
+  }
+  return state;
 }
 
 export function finalizeStreamLine(lines: string[], activeLine: string): string[] {
@@ -55,7 +129,10 @@ export class ScreenBuffer {
       return;
     }
 
-    this.contentLines.push(this.streamLine);
+    const activePrefix = activeAnsiPrefix(this.streamLine);
+    this.contentLines.push(
+      activePrefix ? `${this.streamLine}\x1b[0m` : this.streamLine,
+    );
     this.streamLine = "";
   }
 

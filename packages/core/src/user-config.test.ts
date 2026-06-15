@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   createProviderInstanceId,
   getUserConfigPath,
   loadUserConfig,
+  normalizeProviderInstanceLabel,
   saveUserConfig,
 } from "./user-config";
 
@@ -70,5 +71,32 @@ describe("user config multi-provider", () => {
     expect(loaded?.defaultProviderId).toBe(openaiId);
     expect(loaded?.defaultModel).toBe("gpt-5.4");
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("llama3.2");
+  });
+
+  test("repairs literal undefined label on load", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-config-"));
+    process.env.TINYCLAW_CONFIG_DIR = configDir;
+
+    const id = createProviderInstanceId();
+
+    await writeFile(
+      getUserConfigPath(),
+      `[provider.${id}]
+type=opencode_go
+label=undefined
+api_key=test-key
+created_at=2026-06-15T00:00:00.000Z
+`,
+      "utf8",
+    );
+
+    const loaded = await loadUserConfig();
+    expect(loaded?.providers[0]?.label).toBe("OpenCode Go");
+  });
+
+  test("normalizeProviderInstanceLabel rejects undefined string", () => {
+    expect(
+      normalizeProviderInstanceLabel("openrouter", "undefined", []),
+    ).toBe("OpenRouter");
   });
 });

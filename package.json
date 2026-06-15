@@ -8,6 +8,7 @@
     "dev:server": "bun run apps/server/scripts/dev.ts",
     "dev:cli": "bun run apps/cli/src/index.ts",
     "dev:telegram": "bun run --filter @tinyclaw/telegram dev",
+    "dev:whatsapp": "bun run --filter @tinyclaw/whatsapp dev",
     "dev:web": "bun run --filter @tinyclaw/web dev",
     "build": "bun run --workspaces --if-present build",
     "test": "bun run --workspaces --if-present test",

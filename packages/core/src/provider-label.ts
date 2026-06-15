@@ -8,6 +8,7 @@ const BUILTIN_LABELS: Record<
   anthropic: "Anthropic",
   openrouter: "OpenRouter",
   gemini: "Gemini",
+  opencode_go: "OpenCode Go",
 };
 
 export function formatConfiguredProviderLabel(

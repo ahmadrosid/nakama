@@ -67,6 +67,7 @@ import {
   encodeModelSelection,
   groupModelsByProvider,
   INHERIT_MODEL_VALUE,
+  modelSelectContentMaxHeightClass,
   profileModelLabel,
   profileModelSelectionValue,
 } from "@/lib/models";
@@ -1098,7 +1099,7 @@ export function ProfilesPage() {
                               )}
                             </SelectValue>
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className={modelSelectContentMaxHeightClass}>
                             <SelectItem value={INHERIT_MODEL_VALUE}>
                               {profileModelLabel(null, providerModelGroups, modelsResponse?.defaultModel)}
                             </SelectItem>

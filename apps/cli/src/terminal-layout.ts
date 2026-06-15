@@ -1,5 +1,6 @@
 import type { TerminalInput } from "./terminal-input";
 import { ScreenBuffer } from "./screen-buffer";
+import { tokenizeText, visibleLength } from "./text-measure";
 
 export function computeReservedRows(options: {
   pendingLineCount: number;
@@ -359,19 +360,23 @@ export class TerminalLayout {
     this.buffer.appendStream(text, getTerminalColumns());
 
     const width = getTerminalColumns();
-    for (const char of text) {
-      if (char === "\n") {
+    for (const token of tokenizeText(text)) {
+      if (token.type === "ansi") {
+        continue;
+      }
+
+      if (token.value === "\n") {
         this.streamAbsoluteRow += 1;
         this.streamColumn = 1;
         this.contentBottomRow = Math.max(this.contentBottomRow, this.streamAbsoluteRow);
         continue;
       }
 
-      this.streamColumn += 1;
+      this.streamColumn += token.width;
 
       if (this.streamColumn > width) {
         this.streamAbsoluteRow += 1;
-        this.streamColumn = 1;
+        this.streamColumn = token.width;
         this.contentBottomRow = Math.max(this.contentBottomRow, this.streamAbsoluteRow);
       }
     }
@@ -505,7 +510,7 @@ export class TerminalLayout {
 
     const inputRow = startRow + lines.length - 1;
     const lastLine = lines[lines.length - 1] ?? "";
-    process.stdout.write(`\x1b[${inputRow};${lastLine.length + 1}H`);
+    process.stdout.write(`\x1b[${inputRow};${visibleLength(lastLine) + 1}H`);
     process.stdout.write("\x1b[?25l");
   }
 
@@ -546,7 +551,7 @@ export class TerminalLayout {
 
     const inputRow = startRow + visibleLines.length - 1;
     const lastLine = visibleLines[visibleLines.length - 1] ?? "";
-    process.stdout.write(`\x1b[${inputRow};${lastLine.length + 1}H`);
+    process.stdout.write(`\x1b[${inputRow};${visibleLength(lastLine) + 1}H`);
     process.stdout.write("\x1b[?25l");
   }
 

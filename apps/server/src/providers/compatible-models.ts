@@ -30,6 +30,35 @@ export function openRouterCustomModelsToCatalog(
   }));
 }
 
+export function openCodeGoCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+  staticModels: ProviderModelOption[],
+): ProviderModelOption[] {
+  const staticById = new Map(staticModels.map((model) => [model.id, model]));
+
+  return entries.map((entry) => {
+    const existing = staticById.get(entry.id);
+    return {
+      ...(existing ?? {
+        id: entry.id,
+        provider: "opencode_go" as const,
+        contextWindow: DEFAULT_CONTEXT_WINDOW,
+        maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      }),
+      id: entry.id,
+      name: entry.name?.trim() || existing?.name || entry.id,
+      provider: "opencode_go",
+      ...(entry.default ? { default: true } : {}),
+      ...(entry.inputPerMillionUsd !== undefined
+        ? { inputPerMillionUsd: entry.inputPerMillionUsd }
+        : {}),
+      ...(entry.outputPerMillionUsd !== undefined
+        ? { outputPerMillionUsd: entry.outputPerMillionUsd }
+        : {}),
+    };
+  });
+}
+
 export function mergeOpenRouterCatalog(
   staticModels: ProviderModelOption[],
   customEntries: CustomModelEntry[],
@@ -131,6 +160,20 @@ export function getModelsForProviderInstance(
     return annotate(
       ensureCurrentModelInCatalog(catalog, currentModel, "openrouter"),
     );
+  }
+
+  if (instance.type === "opencode_go") {
+    const entries = instance.customModels ?? [];
+    if (entries.length) {
+      const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "opencode_go");
+      return annotate(
+        ensureCurrentModelInCatalog(
+          openCodeGoCustomModelsToCatalog(entries, staticModels),
+          currentModel,
+          "opencode_go",
+        ),
+      );
+    }
   }
 
   return annotate(AVAILABLE_MODELS.filter((model) => model.provider === instance.type));

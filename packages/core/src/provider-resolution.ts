@@ -10,6 +10,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "openai_compatible",
+  "opencode_go",
 ] as const;
 
 export function parseProviderName(value: string | undefined): UserProviderName | null {
@@ -20,7 +21,8 @@ export function parseProviderName(value: string | undefined): UserProviderName |
     normalized === "anthropic" ||
     normalized === "openrouter" ||
     normalized === "gemini" ||
-    normalized === "openai_compatible"
+    normalized === "openai_compatible" ||
+    normalized === "opencode_go"
   ) {
     return normalized;
   }
@@ -40,6 +42,8 @@ export function apiKeyEnvVarForProvider(provider: UserProviderName): string {
       return "OPENROUTER_API_KEY";
     case "openai_compatible":
       return "OPENAI_COMPATIBLE_API_KEY";
+    case "opencode_go":
+      return "OPENCODE_GO_API_KEY";
   }
 }
 

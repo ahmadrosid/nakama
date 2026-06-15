@@ -11,6 +11,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("Anthropic")).toBe("anthropic");
     expect(parseProviderName(" GEMINI ")).toBe("gemini");
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
+    expect(parseProviderName("opencode_go")).toBe("opencode_go");
   });
 
   test("rejects unknown values", () => {
@@ -76,5 +77,6 @@ describe("apiKeyEnvVarForProvider", () => {
     expect(apiKeyEnvVarForProvider("openai_compatible")).toBe(
       "OPENAI_COMPATIBLE_API_KEY",
     );
+    expect(apiKeyEnvVarForProvider("opencode_go")).toBe("OPENCODE_GO_API_KEY");
   });
 });

@@ -30,7 +30,7 @@ interface UseProviderSetupFormOptions {
 export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) {
   const { createProvider } = useAppContext();
   const { data: catalogResponse, error: catalogQueryError } = useModelsQuery();
-  const catalog = catalogResponse?.models ?? [];
+  const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? [];
 
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");
   const [apiKey, setApiKey] = useState("");
@@ -160,6 +160,26 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         if (row.isZen && row.isFree && !row.deprecated) {
           setApiKey("public");
         }
+      } else if (provider === "opencode_go") {
+        setExtraModels((current) => {
+          if (
+            current.some(
+              (model) => model.provider === provider && model.id === modelId,
+            )
+          ) {
+            return current;
+          }
+          return [
+            ...current,
+            {
+              id: modelId,
+              name: row.modelName,
+              provider,
+              ...(row.context > 0 ? { contextWindow: row.context } : {}),
+            },
+          ];
+        });
+        setSelectedModel(modelId);
       } else {
         setExtraModels((current) => {
           if (
@@ -275,7 +295,15 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
                 ? normalizeModelListRows(customModels)
                 : selectedProvider === "openrouter"
                   ? normalizeModelListRows(openRouterModels)
-                  : undefined,
+                  : selectedProvider === "opencode_go" && modelToSave
+                    ? normalizeModelListRows([
+                        {
+                          id: modelToSave,
+                          name: getModelDisplayName(filteredModels, modelToSave),
+                          default: true,
+                        },
+                      ])
+                    : undefined,
           }),
         );
         setApiKey("");
@@ -300,6 +328,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       selectedProvider,
       createProvider,
       onSuccess,
+      filteredModels,
     ],
   );
 

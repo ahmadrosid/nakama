@@ -1,31 +1,11 @@
+import { wrapText } from "./text-measure";
+
 export function formatInputForDisplay(value: string): string {
   return normalizePastedText(value);
 }
 
 export function normalizePastedText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
-}
-
-function wrapTextSegment(
-  text: string,
-  firstLineCapacity: number,
-  continuationLineCapacity: number,
-): string[] {
-  if (text.length === 0) {
-    return [];
-  }
-
-  const lines: string[] = [];
-  let index = 0;
-  let capacity = firstLineCapacity;
-
-  while (index < text.length) {
-    lines.push(text.slice(index, index + capacity));
-    index += capacity;
-    capacity = continuationLineCapacity;
-  }
-
-  return lines;
 }
 
 export function splitInputDisplayLines(
@@ -44,7 +24,7 @@ export function splitInputDisplayLines(
       continue;
     }
 
-    const wrapped = wrapTextSegment(logicalLine, lineCapacity, lineCapacity);
+    const wrapped = wrapText(logicalLine, lineCapacity);
     result.push(...wrapped);
   }
 

@@ -36,3 +36,16 @@ test("buildChatSystemPrompt includes todo_write guidance when tool is available"
   expect(prompt).toContain("merge: true");
   expect(prompt).toContain("continue unfinished tasks");
 });
+
+test("buildChatSystemPrompt adds private chat guidance for telegram and whatsapp", () => {
+  const telegram = buildChatSystemPrompt([], { channel: "telegram" });
+  const whatsapp = buildChatSystemPrompt([], { channel: "whatsapp" });
+
+  expect(telegram).toContain("private Telegram chat");
+  expect(telegram).toContain("Write like texting a friend");
+  expect(telegram).toContain("plain text only");
+
+  expect(whatsapp).toContain("private WhatsApp chat");
+  expect(whatsapp).toContain("Write like texting a friend");
+  expect(whatsapp).toContain("*bold* and _italic_");
+});

@@ -25,7 +25,7 @@ describe("buildComposerLines", () => {
           },
         ],
       },
-      20,
+      30,
     );
 
     expect(lines).toEqual([
@@ -51,6 +51,24 @@ describe("buildComposerLines", () => {
     );
 
     expect(lines).toEqual(["> ▌"]);
+  });
+
+  test("truncates suggestions to fit the terminal width", () => {
+    const lines = buildComposerLines(
+      {
+        composer: {
+          prefix: "> ",
+          value: "",
+          cursorVisible: true,
+          suggestions: [{ label: "/help", description: "show help" }],
+          selectedIndex: 0,
+        },
+        pendingMessages: [],
+      },
+      20,
+    );
+
+    expect(lines).toEqual(["> ▌", `\x1b[36m› ${"/help".padEnd(14)} sh…\x1b[0m`]);
   });
 });
 

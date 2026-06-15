@@ -34,6 +34,7 @@ interface RunChatOptions {
   channel: AgentChannel;
   offline?: boolean;
   profileId?: CliProfileOptions["profileId"];
+  signal?: AbortSignal;
 }
 
 export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
@@ -205,7 +206,7 @@ async function runStickyChat(
   }
 
   async function drainQueue(): Promise<void> {
-    if (isStreaming) {
+    if (isStreaming || exiting) {
       return;
     }
 
@@ -638,6 +639,18 @@ async function runStickyChat(
   syncPendingMessages();
   prompt.start();
 
+  function cleanupChat(): void {
+    prompt.stop();
+    renderer.reset();
+    terminalInput.stop();
+  }
+
+  function onAbortSignal(): void {
+    exiting = true;
+  }
+
+  options.signal?.addEventListener("abort", onAbortSignal);
+
   await new Promise<void>((resolve) => {
     const check = setInterval(() => {
       if (exiting) {
@@ -647,9 +660,8 @@ async function runStickyChat(
     }, 50);
   });
 
-  prompt.stop();
-  renderer.reset();
-  terminalInput.stop();
+  options.signal?.removeEventListener("abort", onAbortSignal);
+  cleanupChat();
 }
 
 async function runBlockingChat(context: ChatContext): Promise<void> {

@@ -16,7 +16,9 @@
     "./runtime": "./src/runtime.ts",
     "./ensure-server": "./src/ensure-server.ts",
     "./telegram-config": "./src/telegram-config.ts",
-    "./telegram-worker": "./src/telegram-worker.ts",
+  "./telegram-worker": "./src/telegram-worker.ts",
+  "./whatsapp-config": "./src/whatsapp-config.ts",
+  "./whatsapp-worker": "./src/whatsapp-worker.ts",
     "./tools/protected": "./src/tools/protected.ts"
   },
   "scripts": {

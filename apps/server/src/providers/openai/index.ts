@@ -109,6 +109,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Anthropic";
   }
 
+  if (providerName === "opencode_go") {
+    return "OpenCode Go";
+  }
+
   return "OpenAI";
 }
 

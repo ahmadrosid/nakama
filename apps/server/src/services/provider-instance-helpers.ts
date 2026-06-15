@@ -12,7 +12,7 @@ import type {
 } from "@tinyclaw/core/contract";
 import {
   createProviderInstanceId,
-  defaultProviderLabel,
+  normalizeProviderInstanceLabel,
   type ProviderInstance,
   validateProviderInstanceLabel,
 } from "@tinyclaw/core";
@@ -23,6 +23,7 @@ import {
   isCompatibleModelId,
   isOpenRouterModelSlug,
   resolveModel,
+  validateOpenCodeGoCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
 
@@ -33,7 +34,7 @@ export function toProviderInstanceSummary(
   return {
     id: instance.id,
     type: instance.type,
-    label: instance.label,
+    label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
     hasApiKey: Boolean(instance.apiKey.trim()) || instance.type === "openai_compatible",
     baseUrl: instance.baseUrl ?? null,
     ...(instance.customModels?.length ? { customModels: instance.customModels } : {}),
@@ -82,6 +83,13 @@ export function modelExistsOnInstance(
     return isCompatibleModelId(trimmed, instance.customModels);
   }
 
+  if (instance.type === "opencode_go" && trimmed.startsWith("opencode-go/")) {
+    if (instance.customModels?.length) {
+      return findCustomModel(instance.customModels, trimmed) !== undefined;
+    }
+    return true;
+  }
+
   return Boolean(getModelById(trimmed)?.provider === instance.type);
 }
 
@@ -102,9 +110,10 @@ export function buildProviderInstanceFromCreateRequest(
   }
 
   const fields = buildProviderFieldsFromRequest(request);
-  const label = request.label?.trim()
+  const rawLabel = request.label?.trim()
     ? validateProviderInstanceLabel(request.label, type)
-    : fields.label ?? defaultProviderLabel(type, existing);
+    : fields.label;
+  const label = normalizeProviderInstanceLabel(type, rawLabel, existing);
 
   return {
     id: createProviderInstanceId(),
@@ -146,6 +155,8 @@ export function applyProviderInstanceUpdate(
       }
     } else if (instance.type === "openrouter") {
       next.customModels = validateOpenRouterCustomModels(request.customModels);
+    } else if (instance.type === "opencode_go") {
+      next.customModels = validateOpenCodeGoCustomModels(request.customModels);
     }
   }
 
@@ -156,6 +167,20 @@ function buildProviderFieldsFromRequest(
   request: CreateProviderRequest,
 ): Pick<ProviderInstance, "baseUrl" | "customModels" | "label"> {
   const type = request.type;
+
+  if (type === "opencode_go") {
+    let customModels = request.customModels?.length
+      ? validateOpenCodeGoCustomModels(request.customModels)
+      : undefined;
+
+    if (!customModels?.length && request.model?.trim()) {
+      customModels = validateOpenCodeGoCustomModels([
+        { id: request.model.trim(), default: true },
+      ]);
+    }
+
+    return { ...(customModels ? { customModels } : {}) };
+  }
 
   if (type === "openai_compatible") {
     const label = validateDisplayName(request.label ?? "");

@@ -48,7 +48,11 @@ import {
 } from "@/lib/chat-stream";
 import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
 import { cn } from "@/lib/utils";
-import { INHERIT_MODEL_VALUE, encodeModelSelection } from "@/lib/models";
+import {
+  INHERIT_MODEL_VALUE,
+  encodeModelSelection,
+  modelSelectContentMaxHeightClass,
+} from "@/lib/models";
 
 interface ChatComposerBaseProps {
   chatStatus: ChatStatus;
@@ -306,7 +310,10 @@ function ChatComposerFullFooter({
             <PromptInputSelectContent
               align="start"
               alignItemWithTrigger={false}
-              className="w-max max-w-[min(24rem,92vw)] text-xs"
+              className={cn(
+                "w-max max-w-[min(24rem,92vw)] text-xs",
+                modelSelectContentMaxHeightClass,
+              )}
             >
               {props.inheritModelLabel ? (
                 <PromptInputSelectItem

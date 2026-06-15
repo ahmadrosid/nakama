@@ -26,6 +26,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "anthropic", label: "Anthropic" },
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
+  { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
 
@@ -108,7 +109,8 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "anthropic" ||
     normalized === "openrouter" ||
     normalized === "gemini" ||
-    normalized === "openai_compatible"
+    normalized === "openai_compatible" ||
+    normalized === "opencode_go"
   ) {
     return normalized;
   }

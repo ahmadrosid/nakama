@@ -12,6 +12,7 @@ import {
 import { resolveModel } from "./models";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
+import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 
 export interface CreateProviderOptions {
@@ -53,6 +54,11 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         apiKey: options.apiKey,
         model,
         ...(baseUrlOverride ? { baseUrl: baseUrlOverride } : {}),
+      });
+    case "opencode_go":
+      return createOpenCodeGoProvider({
+        apiKey: options.apiKey,
+        model,
       });
     case "openai_compatible": {
       const displayName = options.instance?.label?.trim();

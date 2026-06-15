@@ -41,4 +41,16 @@ describe("splitInputDisplayLines", () => {
   test("preserves blank lines", () => {
     expect(splitInputDisplayLines("a\n\nb", 2, 80)).toEqual(["a", "", "b"]);
   });
+
+  test("does not split ansi escape sequences when wrapping", () => {
+    const lines = splitInputDisplayLines("\x1b[31mabcdef\x1b[0m", 2, 6);
+
+    expect(lines).toEqual(["\x1b[31mabcd\x1b[0m", "\x1b[31mef\x1b[0m"]);
+  });
+
+  test("wraps wide characters by visible width", () => {
+    const lines = splitInputDisplayLines("中文中文", 2, 6);
+
+    expect(lines).toEqual(["中文", "中文"]);
+  });
 });

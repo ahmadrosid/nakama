@@ -56,6 +56,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openrouter: "OpenRouter",
   gemini: "Gemini",
   openai_compatible: "Custom",
+  opencode_go: "OpenCode Go",
 };
 
 export function createProviderInstanceId(): string {
@@ -66,7 +67,7 @@ export function defaultProviderLabel(
   type: UserProviderName,
   existing: ProviderInstance[],
 ): string {
-  const base = PROVIDER_TYPE_LABELS[type];
+  const base = PROVIDER_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
   const sameType = existing.filter((entry) => entry.type === type);
 
   if (sameType.length === 0) {
@@ -74,6 +75,20 @@ export function defaultProviderLabel(
   }
 
   return `${base} (${sameType.length + 1})`;
+}
+
+export function normalizeProviderInstanceLabel(
+  type: UserProviderName,
+  label: string | undefined,
+  existing: ProviderInstance[],
+): string {
+  const trimmed = label?.trim();
+
+  if (trimmed && trimmed !== "undefined") {
+    return trimmed;
+  }
+
+  return defaultProviderLabel(type, existing);
 }
 
 export function findProviderInstance(
@@ -271,8 +286,16 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
   };
 
   const sections: Record<string, Record<string, string>> = {};
+  const providers = config.providers.map((provider, index) => ({
+    ...provider,
+    label: normalizeProviderInstanceLabel(
+      provider.type,
+      provider.label,
+      config.providers.slice(0, index),
+    ),
+  }));
 
-  for (const provider of config.providers) {
+  for (const provider of providers) {
     const sectionName = `${PROVIDER_SECTION_PREFIX}${provider.id}`;
     sections[sectionName] = buildProviderSectionValues(provider);
   }
@@ -344,14 +367,15 @@ function loadProvidersFromSections(
       continue;
     }
 
-    const label =
-      values.label?.trim() || defaultProviderLabel(type, providers);
+    const label = normalizeProviderInstanceLabel(type, values.label, providers);
     const apiKey = values.api_key ?? "";
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
       : undefined;
     const customModels =
-      type === "openai_compatible" || type === "openrouter"
+      type === "openai_compatible" ||
+      type === "openrouter" ||
+      type === "opencode_go"
         ? parseCustomModelsJson(values.models_json)
         : undefined;
     const createdAt = values.created_at?.trim() || new Date(0).toISOString();
@@ -375,7 +399,7 @@ function loadProvidersFromSections(
 function buildProviderSectionValues(provider: ProviderInstance): Record<string, string> {
   const values: Record<string, string> = {
     type: provider.type,
-    label: provider.label,
+    label: normalizeProviderInstanceLabel(provider.type, provider.label, []),
     api_key: provider.apiKey,
     created_at: provider.createdAt,
   };

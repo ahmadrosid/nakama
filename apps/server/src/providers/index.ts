@@ -5,5 +5,6 @@ export * from "./models";
 export * from "./compatible-models";
 export * from "./openai";
 export * from "./openai-compatible";
+export * from "./opencode-go";
 export * from "./openrouter";
 export * from "./pricing";

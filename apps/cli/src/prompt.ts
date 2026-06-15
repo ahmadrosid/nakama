@@ -7,6 +7,7 @@ import {
   normalizePastedText,
   splitInputDisplayLines,
 } from "./prompt-display";
+import { visibleLength } from "./text-measure";
 
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
@@ -159,7 +160,7 @@ export async function promptLine(
         stdout.write(`\x1b[${rowsUpFromBottom}A`);
       }
 
-      stdout.write(`\r\x1b[${lastLinePrefix.length + lastLine.length}C`);
+      stdout.write(`\r\x1b[${visibleLength(lastLinePrefix) + visibleLength(lastLine)}C`);
       writeCursorCell();
 
       previousBlockHeight = Math.max(totalLines, 1);

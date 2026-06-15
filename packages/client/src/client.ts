@@ -69,7 +69,9 @@ import type {
   UpdateAutomationRequest,
   UpdateThinkingRequest,
   UpdateTelegramSettingsRequest,
+  UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
+  WhatsAppSettingsResponse,
   ListTimezonesResponse,
   CreateTaskRequest,
   DraftTaskPromptRequest,
@@ -788,6 +790,25 @@ export class TinyClawClient {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return this.request<TelegramSettingsResponse>("/v1/settings/telegram/handshake", {
+      method: "POST",
+    });
+  }
+
+  async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
+    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp");
+  }
+
+  async setWhatsAppSettings(
+    request: UpdateWhatsAppSettingsRequest,
+  ): Promise<WhatsAppSettingsResponse> {
+    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp", {
+      method: "PUT",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsResponse> {
+    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp/pairing-code", {
       method: "POST",
     });
   }

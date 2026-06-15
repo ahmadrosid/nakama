@@ -49,8 +49,10 @@ import type {
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UpdateTelegramSettingsRequest,
+  UpdateWhatsAppSettingsRequest,
   UpdateUserContextRequest,
   UserContextStatusResponse,
+  WhatsAppSettingsResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
   UpdateThinkingRequest,
@@ -77,11 +79,14 @@ import {
   isWritableSoulFileKey,
   loadSoulStack,
   loadTelegramSettingsPublic,
+  loadWhatsAppSettingsPublic,
   loadUserContext,
   loadUserTimezone,
   regenerateTelegramHandshake,
+  regenerateWhatsAppPairingCode,
   resolveSoulStackForProfile,
   saveTelegramConfig,
+  saveWhatsAppConfig,
   loadUserThinkingSettings,
   saveUserConfig,
   saveUserThinkingSettings,
@@ -335,6 +340,33 @@ export class AgentService {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return regenerateTelegramHandshake();
+  }
+
+  async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
+    return loadWhatsAppSettingsPublic();
+  }
+
+  async setWhatsAppSettings(
+    input: UpdateWhatsAppSettingsRequest,
+  ): Promise<WhatsAppSettingsResponse> {
+    const existing = await loadWhatsAppSettingsPublic();
+    const phoneNumber =
+      input.phoneNumber !== undefined && input.phoneNumber.trim()
+        ? input.phoneNumber.trim()
+        : undefined;
+
+    if (!phoneNumber && !existing.configured) {
+      throw new Error("Phone number is required.");
+    }
+
+    return saveWhatsAppConfig({
+      ...(phoneNumber ? { phoneNumber } : {}),
+      ...(input.profileId !== undefined ? { profileId: input.profileId } : {}),
+    });
+  }
+
+  async regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsResponse> {
+    return regenerateWhatsAppPairingCode();
   }
 
   async runAutomationPrompt(profileId: string, prompt: string): Promise<string> {
@@ -951,6 +983,7 @@ export class AgentService {
       defaultModel: currentModel,
       providers,
       models,
+      catalog: AVAILABLE_MODELS,
       provider: active?.type ?? null,
       displayName: active?.type === "openai_compatible" ? active.label : null,
       baseUrl: active?.type === "openai_compatible" ? (active.baseUrl ?? null) : null,
@@ -1493,7 +1526,7 @@ export class AgentService {
 }
 
 function parseAgentChannel(value: string): AgentChannel | null {
-  if (value === "cli" || value === "web" || value === "telegram" || value === "automation") {
+  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp" || value === "automation") {
     return value;
   }
 

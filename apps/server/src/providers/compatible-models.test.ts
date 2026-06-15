@@ -32,6 +32,36 @@ describe("mergeOpenRouterCatalog", () => {
   });
 });
 
+describe("getModelsForProviderInstance opencode_go", () => {
+  test("uses shortlist when custom models are saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "oc-1",
+      type: "opencode_go",
+      label: "OpenCode Go",
+      apiKey: "oc-test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [{ id: "opencode-go/kimi-k2.7-code", name: "Kimi Code", default: true }],
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]?.id).toBe("opencode-go/kimi-k2.7-code");
+    expect(models[0]?.providerId).toBe("oc-1");
+  });
+
+  test("returns full catalog when no shortlist is saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "oc-1",
+      type: "opencode_go",
+      label: "OpenCode Go",
+      apiKey: "oc-test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+    });
+
+    expect(models.length).toBeGreaterThan(1);
+    expect(models.some((model) => model.id === "opencode-go/kimi-k2.7-code")).toBe(true);
+  });
+});
+
 describe("getModelsForProviderInstance openrouter", () => {
   test("uses shortlist only when custom models are saved", () => {
     const models = getModelsForProviderInstance({

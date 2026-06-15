@@ -31,7 +31,6 @@ import { client, formatError } from "@/lib/client";
 import {
   decodeModelSelection,
   effectiveProfileModelSelection,
-  encodeModelSelection,
   groupModelsByProvider,
   INHERIT_MODEL_VALUE,
   profileModelLabel,

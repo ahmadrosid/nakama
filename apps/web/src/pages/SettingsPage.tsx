@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
+import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserContextSettings } from "@/components/UserContextCard";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
@@ -224,6 +225,8 @@ export function SettingsPage() {
       </Card>
 
       <TelegramSettingsCard />
+
+      <WhatsAppSettingsCard />
 
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />
 

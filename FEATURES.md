@@ -23,6 +23,7 @@ TinyClaw currently supports these providers:
 - **Anthropic**
 - **Google Gemini**
 - **OpenRouter**
+- **OpenCode Go**
 - **OpenAI-compatible custom providers** via a custom `baseUrl`
 
 Provider selection and API keys can be configured in the web dashboard under **Settings**.

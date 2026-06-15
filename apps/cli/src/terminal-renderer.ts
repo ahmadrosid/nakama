@@ -5,6 +5,7 @@ import {
   type PendingMessage,
 } from "./message-queue";
 import { formatInputForDisplay, splitInputDisplayLines } from "./prompt-display";
+import { truncateText, visibleLength } from "./text-measure";
 
 export interface ComposerRenderer {
   setComposerState(state: ComposerState): void;
@@ -70,11 +71,18 @@ export function buildComposerLines(
     lines.push(`${linePrefix}${lineText}${cursor}`);
   }
 
+  const labelWidth = 14;
+  const suggestionPrefixWidth = labelWidth + 3; // marker + space + label + space
+
   for (let index = 0; index < state.composer.suggestions.length; index += 1) {
     const suggestion = state.composer.suggestions[index];
     const selected = index === state.composer.selectedIndex;
     const marker = selected ? "›" : " ";
-    const content = `${marker} ${suggestion.label.padEnd(14)} ${suggestion.description}`;
+    const label = truncateText(suggestion.label, labelWidth);
+    const labelPadding = Math.max(0, labelWidth - visibleLength(label));
+    const descriptionWidth = Math.max(0, width - suggestionPrefixWidth);
+    const description = truncateText(suggestion.description, descriptionWidth);
+    const content = `${marker} ${label}${" ".repeat(labelPadding)} ${description}`;
 
     if (selected) {
       lines.push(`\x1b[36m${content}\x1b[0m`);

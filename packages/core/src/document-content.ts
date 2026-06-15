@@ -33,6 +33,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ]),
   openai_compatible: new Set<string>(),
+  opencode_go: new Set<string>(),
 };
 
 export function registerDocumentTextParser(

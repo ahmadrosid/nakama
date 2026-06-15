@@ -57,18 +57,38 @@ export function buildChatSystemPrompt(
     }
   }
 
-  if (options.channel === "telegram") {
-    sections.push(
-      "",
-      "You are replying in a private Telegram chat. Telegram does not render Markdown.",
-      "Use plain text only: no markdown, no HTML, no formatting syntax.",
-      "Do not use **bold**, *italic*, # headings, bullet lists with - or *, numbered markdown lists, tables, or ``` code fences.",
-      "Write like texting a friend: short paragraphs and a conversational tone.",
-      "Prefer one to three brief paragraphs unless the user asks for detail.",
-      "If you must share code or commands, put them on their own line as plain text without backticks.",
-      "Do not mention tools, JSON, or internal steps in the user-visible reply.",
-    );
+  if (options.channel === "telegram" || options.channel === "whatsapp") {
+    appendPrivateChatPrompt(sections, options.channel);
   }
 
   return sections.join("\n");
+}
+
+function appendPrivateChatPrompt(
+  sections: string[],
+  channel: "telegram" | "whatsapp",
+): void {
+  const platform = channel === "telegram" ? "Telegram" : "WhatsApp";
+
+  sections.push("", `You are replying in a private ${platform} chat.`);
+
+  if (channel === "telegram") {
+    sections.push(
+      "Telegram does not render Markdown.",
+      "Use plain text only: no markdown, no HTML, no formatting syntax.",
+      "Do not use **bold**, *italic*, # headings, bullet lists with - or *, numbered markdown lists, tables, or ``` code fences.",
+    );
+  } else {
+    sections.push(
+      "WhatsApp only supports simple *bold* and _italic_ formatting.",
+      "Do not use markdown headings, bullet lists, numbered lists, tables, or ``` code fences.",
+    );
+  }
+
+  sections.push(
+    "Write like texting a friend: short paragraphs and a conversational tone.",
+    "Prefer one to three brief paragraphs unless the user asks for detail.",
+    "If you must share code or commands, put them on their own line as plain text without backticks.",
+    "Do not mention tools, JSON, or internal steps in the user-visible reply.",
+  );
 }

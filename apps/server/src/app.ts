@@ -27,6 +27,8 @@ import {
   type UpdateAutomationRequest,
   type UpdateTimezoneRequest,
   type UpdateTelegramSettingsRequest,
+  type UpdateWhatsAppSettingsRequest,
+  type WhatsAppSettingsResponse,
   type HealthResponse,
   type InitSoulResponse,
   type InitUserContextResponse,
@@ -264,6 +266,30 @@ export function createApp(options: ServerOptions) {
         if (request.method === "POST" && url.pathname === "/v1/settings/telegram/handshake") {
           try {
             return json<TelegramSettingsResponse>(await agent.regenerateTelegramHandshake());
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return errorResponse(message, 400);
+          }
+        }
+
+        if (request.method === "GET" && url.pathname === "/v1/settings/whatsapp") {
+          return json<WhatsAppSettingsResponse>(await agent.getWhatsAppSettings());
+        }
+
+        if (request.method === "PUT" && url.pathname === "/v1/settings/whatsapp") {
+          const body = await readJson<UpdateWhatsAppSettingsRequest>(request);
+
+          try {
+            return json<WhatsAppSettingsResponse>(await agent.setWhatsAppSettings(body));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return errorResponse(message, 400);
+          }
+        }
+
+        if (request.method === "POST" && url.pathname === "/v1/settings/whatsapp/pairing-code") {
+          try {
+            return json<WhatsAppSettingsResponse>(await agent.regenerateWhatsAppPairingCode());
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return errorResponse(message, 400);
@@ -967,7 +993,7 @@ export function createApp(options: ServerOptions) {
 }
 
 function parseChannel(value: string | undefined): AgentChannel {
-  if (value === "cli" || value === "web" || value === "telegram") {
+  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp") {
     return value;
   }
 
