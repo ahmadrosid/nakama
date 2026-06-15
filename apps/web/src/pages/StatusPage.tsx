@@ -18,8 +18,7 @@ import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { LlmUsageStatus, SystemStatusResponse } from "@tinyclaw/core/contract";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { useRestartWorker, useStartWorker, useStopWorker } from "@/hooks/use-worker-actions";
+import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { useRefreshSystemStatus, useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 import { PAGE_PATHS } from "@/lib/navigation";
@@ -51,10 +50,6 @@ export function StatusPage() {
               Live health for the server, workers, and message bridges.
             </p>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <LiveIndicator active={Boolean(status) && !errorMessage} />
         </div>
       </header>
 
@@ -95,10 +90,6 @@ function StatusDashboard({ status }: { status: SystemStatusResponse }) {
   const services = useMemo(() => buildServiceColumns(status), [status]);
   const { automationWorker, taskWorker, telegramWorker, whatsappWorker } = status;
 
-  const startWorker = useStartWorker();
-  const stopWorker = useStopWorker();
-  const restartWorker = useRestartWorker();
-
   return (
     <section className={cn(sectionClass, "min-w-0 overflow-hidden")}>
       <SummaryStrip status={status} summary={summary} />
@@ -129,9 +120,6 @@ function StatusDashboard({ status }: { status: SystemStatusResponse }) {
                 tone={service.tone}
                 worker={telegramWorker}
                 workerName="telegram"
-                startWorker={startWorker}
-                stopWorker={stopWorker}
-                restartWorker={restartWorker}
               />
             );
           }
@@ -146,9 +134,6 @@ function StatusDashboard({ status }: { status: SystemStatusResponse }) {
                 tone={service.tone}
                 worker={whatsappWorker}
                 workerName="whatsapp"
-                startWorker={startWorker}
-                stopWorker={stopWorker}
-                restartWorker={restartWorker}
               />
             );
           }
@@ -411,29 +396,6 @@ function UsageMetricTile({
   );
 }
 
-function LiveIndicator({ active }: { active: boolean }) {
-  return (
-    <div
-      className="inline-flex h-9 items-center gap-2 rounded-lg bg-muted/30 px-3 text-xs font-medium text-muted-foreground"
-      aria-live="polite"
-    >
-      <span className="relative flex size-2 shrink-0">
-        {active ? (
-          <>
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:animate-none" />
-            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-          </>
-        ) : (
-          <span className="relative inline-flex size-2 rounded-full bg-muted-foreground/40" />
-        )}
-      </span>
-      <span className={active ? "text-emerald-800 dark:text-emerald-200" : undefined}>
-        {active ? "Live" : "Waiting"}
-      </span>
-    </div>
-  );
-}
-
 function SummaryStrip({
   status,
   summary,
@@ -565,75 +527,6 @@ function MetricsDisplay({
   );
 }
 
-function WorkerActionBar({
-  running,
-  pm2Managed,
-  workerName,
-  startWorker,
-  stopWorker,
-  restartWorker,
-}: {
-  running: boolean;
-  pm2Managed: boolean;
-  workerName: string;
-  startWorker: ReturnType<typeof useStartWorker>;
-  stopWorker: ReturnType<typeof useStopWorker>;
-  restartWorker: ReturnType<typeof useRestartWorker>;
-}) {
-  const isLoading =
-    startWorker.isPending && (startWorker.variables === workerName) ||
-    stopWorker.isPending && (stopWorker.variables === workerName) ||
-    restartWorker.isPending && (restartWorker.variables === workerName);
-
-  if (!pm2Managed) {
-    return (
-      <div className="flex items-center gap-2 border-t border-border px-5 py-2">
-        <span className="text-xs text-muted-foreground">PM2 not available</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 border-t border-border px-5 py-2">
-      {running ? (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isLoading}
-            onClick={() => stopWorker.mutate(workerName)}
-          >
-            {isLoading ? <Spinner className="size-3" /> : null}
-            Stop
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isLoading}
-            onClick={() => restartWorker.mutate(workerName)}
-          >
-            {isLoading ? <Spinner className="size-3" /> : null}
-            Restart
-          </Button>
-        </>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isLoading}
-          onClick={() => startWorker.mutate(workerName)}
-        >
-          {isLoading ? <Spinner className="size-3" /> : null}
-          Start
-        </Button>
-      )}
-    </div>
-  );
-}
-
 function WorkerServiceColumn({
   icon: Icon,
   title,
@@ -641,9 +534,6 @@ function WorkerServiceColumn({
   tone,
   worker,
   workerName,
-  startWorker,
-  stopWorker,
-  restartWorker,
 }: {
   icon: LucideIcon;
   title: string;
@@ -651,9 +541,6 @@ function WorkerServiceColumn({
   tone: ServiceStatusTone;
   worker: SystemStatusResponse["telegramWorker"];
   workerName: string;
-  startWorker: ReturnType<typeof useStartWorker>;
-  stopWorker: ReturnType<typeof useStopWorker>;
-  restartWorker: ReturnType<typeof useRestartWorker>;
 }) {
   return (
     <div className="flex flex-col">
@@ -682,12 +569,10 @@ function WorkerServiceColumn({
         </div>
       </div>
       <WorkerActionBar
+        className="border-t border-border px-5 py-2"
         running={worker.running}
         pm2Managed={worker.process?.managed ?? false}
         workerName={workerName}
-        startWorker={startWorker}
-        stopWorker={stopWorker}
-        restartWorker={restartWorker}
       />
       <MetricsDisplay
         cpuPercent={worker.process?.cpuPercent}

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { UpdateTelegramSettingsRequest } from "@tinyclaw/core/contract";
 import { CopyIcon, EyeIcon, EyeOffIcon, RefreshCwIcon } from "lucide-react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
+import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
   useRegenerateTelegramHandshake,
   useSaveTelegramSettings,
@@ -59,6 +61,7 @@ export function TelegramSettingsCard({
   onSaveSuccess,
 }: TelegramSettingsCardProps) {
   const { data: settings, isLoading, error: loadError } = useTelegramSettings();
+  const { data: status } = useSystemStatusQuery();
   const { data: profiles = [] } = useProfilesQuery();
   const saveMutation = useSaveTelegramSettings();
   const regenerateMutation = useRegenerateTelegramHandshake();
@@ -81,6 +84,8 @@ export function TelegramSettingsCard({
   const configured = settings?.configured === true;
   const isPaired = (settings?.pairedUserIds.length ?? 0) > 0;
   const pairingCode = settings?.handshakeCode ?? null;
+  const worker = status?.telegramWorker;
+  const running = worker?.running === true;
   const canSave = configured || botToken.trim().length > 0;
 
   const statusLine =
@@ -88,13 +93,21 @@ export function TelegramSettingsCard({
 
   const headerSubtitle = !configured
     ? "Step 1: paste a bot token from @BotFather"
-    : isPaired
+    : isPaired && running
       ? "Your Telegram is connected to TinyClaw"
-      : pairingCode
-        ? "Step 2: send your pairing code to the bot in Telegram"
-        : "Step 2: generate a pairing code and send it to your bot";
+      : isPaired
+        ? "Linked. Start the bridge to receive messages"
+        : pairingCode
+          ? "Step 2: send your pairing code to the bot in Telegram"
+          : "Step 2: generate a pairing code and send it to your bot";
 
-  const statusBadge = !configured ? "Not set up" : isPaired ? "Connected" : "Awaiting link";
+  const statusBadge = !configured
+    ? "Not set up"
+    : isPaired && running
+      ? "Connected"
+      : isPaired
+        ? "Paired"
+        : "Awaiting link";
 
   async function copyHandshakeCode() {
     if (!pairingCode) {
@@ -180,7 +193,7 @@ export function TelegramSettingsCard({
           <span
             className={cn(
               "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-              isPaired
+              isPaired && running
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
                 : configured
                   ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100"
@@ -350,6 +363,19 @@ export function TelegramSettingsCard({
         </SettingsRow>
       ) : null}
 
+      {configured ? (
+        <SettingsRow
+          label="Bridge worker"
+          description={running ? "Running" : "Stopped"}
+        >
+          <WorkerActionBar
+            workerName="telegram"
+            running={running}
+            pm2Managed={worker?.process?.managed ?? false}
+          />
+        </SettingsRow>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         {statusLine ? (
           <p
@@ -361,12 +387,8 @@ export function TelegramSettingsCard({
           >
             {statusLine}
           </p>
-        ) : configured ? (
-          <p className="min-w-0 text-xs text-muted-foreground">
-            Restart the Telegram bot after you change the token.
-          </p>
         ) : (
-          <span className="text-xs text-muted-foreground" />
+          <span />
         )}
         <Button
           type="button"

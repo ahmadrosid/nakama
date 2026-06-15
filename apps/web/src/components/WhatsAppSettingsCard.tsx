@@ -3,6 +3,7 @@ import type { UpdateWhatsAppSettingsRequest } from "@tinyclaw/core/contract";
 import { ClipboardPasteIcon, CopyIcon, RefreshCwIcon, ScanQrCodeIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
@@ -441,6 +442,19 @@ export function WhatsAppSettingsCard({
         </SettingsRow>
       ) : null}
 
+      {configured ? (
+        <SettingsRow
+          label="Bridge worker"
+          description={running ? "Running" : "Stopped"}
+        >
+          <WorkerActionBar
+            workerName="whatsapp"
+            running={running}
+            pm2Managed={worker?.process?.managed ?? false}
+          />
+        </SettingsRow>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         {statusLine ? (
           <p
@@ -452,12 +466,8 @@ export function WhatsAppSettingsCard({
           >
             {statusLine}
           </p>
-        ) : configured ? (
-          <p className="min-w-0 text-xs text-muted-foreground">
-            Run `bun run dev:whatsapp` after saving if the bridge is not running.
-          </p>
         ) : (
-          <span className="text-xs text-muted-foreground" />
+          <span />
         )}
         <Button
           type="button"
