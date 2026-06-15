@@ -54,6 +54,7 @@ export function buildOpenApiSpec() {
     ],
     tags: [
       { name: "Health" },
+      { name: "Workers" },
       { name: "Chat" },
       { name: "Models" },
       { name: "Profiles" },
@@ -1229,6 +1230,96 @@ export function buildOpenApiSpec() {
           responses: {
             "200": jsonResponse("TaskMessagesResponse", "Task chat messages"),
             "404": errorResponse,
+          },
+        },
+      },
+      "/v1/workers/{name}/start": {
+        post: {
+          tags: ["Workers"],
+          summary: "Start a background worker",
+          operationId: "startWorker",
+          parameters: [
+            {
+              name: "name",
+              in: "path",
+              required: true,
+              schema: { type: "string", enum: ["telegram", "whatsapp"] },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Worker started",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { ok: { type: "boolean" } },
+                  },
+                },
+              },
+            },
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/workers/{name}/stop": {
+        post: {
+          tags: ["Workers"],
+          summary: "Stop a background worker",
+          operationId: "stopWorker",
+          parameters: [
+            {
+              name: "name",
+              in: "path",
+              required: true,
+              schema: { type: "string", enum: ["telegram", "whatsapp"] },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Worker stopped",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { ok: { type: "boolean" } },
+                  },
+                },
+              },
+            },
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
+      "/v1/workers/{name}/restart": {
+        post: {
+          tags: ["Workers"],
+          summary: "Restart a background worker",
+          operationId: "restartWorker",
+          parameters: [
+            {
+              name: "name",
+              in: "path",
+              required: true,
+              schema: { type: "string", enum: ["telegram", "whatsapp"] },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Worker restarted",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { ok: { type: "boolean" } },
+                  },
+                },
+              },
+            },
+            "400": errorResponse,
+            "500": errorResponse,
           },
         },
       },

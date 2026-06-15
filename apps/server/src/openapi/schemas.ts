@@ -1035,6 +1035,20 @@ export const openApiSchemas = {
       providerConfigured: { type: "boolean" },
     },
   },
+  WorkerProcessInfo: {
+    type: "object",
+    required: ["managed"],
+    properties: {
+      managed: { type: "boolean" },
+      status: {
+        type: ["string", "null"],
+        enum: ["online", "stopped", "errored", null],
+      },
+      cpuPercent: { type: ["number", "null"] },
+      memoryMb: { type: ["number", "null"] },
+      uptimeSeconds: { type: ["number", "null"] },
+    },
+  },
   TelegramWorkerStatus: {
     type: "object",
     required: ["ok", "configured", "paired", "running"],
@@ -1043,6 +1057,7 @@ export const openApiSchemas = {
       configured: { type: "boolean" },
       paired: { type: "boolean" },
       running: { type: "boolean" },
+      process: { $ref: "#/components/schemas/WorkerProcessInfo" },
     },
   },
   WhatsAppWorkerStatus: {
@@ -1054,6 +1069,7 @@ export const openApiSchemas = {
       paired: { type: "boolean" },
       running: { type: "boolean" },
       qrCode: { type: "string", nullable: true },
+      process: { $ref: "#/components/schemas/WorkerProcessInfo" },
     },
   },
   LlmUsageStats: {

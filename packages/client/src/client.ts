@@ -119,6 +119,24 @@ export class TinyClawClient {
     return this.request<SystemStatusResponse>("/v1/system/status");
   }
 
+  async startWorker(name: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/start`, {
+      method: "POST",
+    });
+  }
+
+  async stopWorker(name: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/stop`, {
+      method: "POST",
+    });
+  }
+
+  async restartWorker(name: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/restart`, {
+      method: "POST",
+    });
+  }
+
   async getModels(options: { source?: "catalog" | "remote" } = {}): Promise<ModelsResponse> {
     const query =
       options.source === "remote" ? "?source=remote" : "";

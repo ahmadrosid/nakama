@@ -8,6 +8,7 @@ import { AutomationService } from "./services/automation-service";
 import { TaskRunner } from "./services/task-runner";
 import { TaskService } from "./services/task-service";
 import { SystemStatusService } from "./services/system-status-service";
+import { WorkerManagerService } from "./services/worker-manager-service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { ensureProviderConfigured } from "./setup";
 import { resolveWebDistDir } from "./static-web";
@@ -99,11 +100,14 @@ const taskRunner = new TaskRunner(taskService, agent);
 taskService.setTaskRunner(taskRunner);
 agent.setTaskRunner(taskRunner);
 
+const workerManager = new WorkerManagerService(projectRoot);
+
 const systemStatus = new SystemStatusService(
   agent,
   automationScheduler,
   automationRunner,
   taskRunner,
+  workerManager,
   mcpService,
 );
 
@@ -113,6 +117,7 @@ const app = createApp({
   automationService,
   taskService,
   systemStatus,
+  workerManager,
   mcpService,
   webDistDir,
 });

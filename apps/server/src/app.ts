@@ -98,6 +98,7 @@ import type { McpService } from "./services/mcp-service";
 import type { TaskService } from "./services/task-service";
 import { getTimezoneCatalog } from "./services/timezone-catalog-service";
 import { SystemStatusService } from "./services/system-status-service";
+import type { WorkerManagerService } from "./services/worker-manager-service";
 import { tryServeStaticWeb } from "./static-web";
 
 const DOCS_HTML = `<!doctype html>
@@ -125,6 +126,7 @@ export interface ServerOptions {
   automationService: AutomationService;
   taskService: TaskService;
   systemStatus: SystemStatusService;
+  workerManager: WorkerManagerService;
   mcpService: McpService;
   webDistDir?: string | null;
 }
@@ -135,6 +137,7 @@ export function createApp(options: ServerOptions) {
     automationService,
     taskService,
     systemStatus,
+    workerManager,
     mcpService,
     webDistDir = null,
   } = options;
@@ -167,9 +170,35 @@ export function createApp(options: ServerOptions) {
           });
         }
 
-        if (request.method === "GET" && url.pathname === "/v1/system/status") {
-          return json<SystemStatusResponse>(await systemStatus.getStatus());
-        }
+if (request.method === "GET" && url.pathname === "/v1/system/status") {
+  return json<SystemStatusResponse>(await systemStatus.getStatus());
+}
+
+const workerActionMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/(start|stop|restart)$/);
+
+if (workerActionMatch && request.method === "POST") {
+  const name = decodeURIComponent(workerActionMatch[1]!);
+  const action = workerActionMatch[2];
+
+  if (!workerManager.isValidWorker(name)) {
+    return errorResponse(`Unknown worker: ${name}`, 400);
+  }
+
+  try {
+    if (action === "start") {
+      await workerManager.startWorker(name);
+    } else if (action === "stop") {
+      await workerManager.stopWorker(name);
+    } else {
+      await workerManager.restartWorker(name);
+    }
+
+    return json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return errorResponse(message, 500);
+  }
+}
 
         if (request.method === "GET" && url.pathname === "/v1/models") {
           const source = url.searchParams.get("source");

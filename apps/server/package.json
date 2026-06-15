@@ -20,6 +20,7 @@
     "@tinyclaw/db": "workspace:*",
     "@tinyclaw/skills": "workspace:*",
     "croner": "^10.0.1",
+    "pm2": "^6.0.0",
     "openai": "^6.41.0"
   }
 }

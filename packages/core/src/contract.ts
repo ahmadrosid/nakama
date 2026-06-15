@@ -63,11 +63,20 @@ export interface TaskWorkerStatus {
   providerConfigured: boolean;
 }
 
+export interface WorkerProcessInfo {
+  managed: boolean;
+  status: "online" | "stopped" | "errored" | null;
+  cpuPercent: number | null;
+  memoryMb: number | null;
+  uptimeSeconds: number | null;
+}
+
 export interface TelegramWorkerStatus {
   ok: boolean;
   configured: boolean;
   paired: boolean;
   running: boolean;
+  process?: WorkerProcessInfo;
 }
 
 export interface WhatsAppWorkerStatus {
@@ -76,6 +85,7 @@ export interface WhatsAppWorkerStatus {
   paired: boolean;
   running: boolean;
   qrCode: string | null;
+  process?: WorkerProcessInfo;
 }
 
 export interface LlmUsageStats {
