@@ -4,7 +4,7 @@
 
 # TinyClaw
 
-TinyClaw is a personal AI assistant built as a tiny Bun + TypeScript monorepo. Prompt the agent in chat, draft automations from natural language, and reach the same agent from multiple channels through one central server.
+TinyClaw is a personal AI assistant built as a tiny Bun + TypeScript monorepo. Prompt the agent in chat, draft automations from natural language, and reach the same agent from the web, CLI, Telegram, and WhatsApp through one central server.
 
 ![Demo](./demo.png)
 
@@ -43,6 +43,18 @@ bun run dev:telegram
 ```
 
 See [apps/platform/telegram/README.md](./apps/platform/telegram/README.md) for setup details.
+
+### WhatsApp
+
+Configure it in **Settings → WhatsApp**, then run:
+
+```bash
+bun run dev:whatsapp
+```
+
+Save your phone number, generate the pairing code, then enter it in WhatsApp under **Settings → Linked Devices → Link with phone number**.
+
+See [apps/platform/whatsapp/README.md](./apps/platform/whatsapp/README.md) for bridge details.
 
 On first run, the server prompts for a provider and API key if none is configured. Settings are saved to `~/.tinyclaw/config.ini`.
 
