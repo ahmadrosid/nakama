@@ -149,6 +149,12 @@ export class TinyClawClient {
     return this.request<WorkerLogsResponse>(`/v1/workers/${encodeURIComponent(name)}/logs${query}`);
   }
 
+  async clearWorkerLogs(name: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/clear-logs`, {
+      method: "POST",
+    });
+  }
+
   async getModels(options: { source?: "catalog" | "remote" } = {}): Promise<ModelsResponse> {
     const query =
       options.source === "remote" ? "?source=remote" : "";

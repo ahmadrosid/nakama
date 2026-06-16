@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileTextIcon } from "lucide-react";
+import { FileTextIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useWorkerLogs } from "@/hooks/use-worker-logs";
+import { useWorkerLogs, useClearWorkerLogs } from "@/hooks/use-worker-logs";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +19,10 @@ interface WorkerLogDialogProps {
 
 export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDialogProps) {
   const { data, error, isLoading, refetch } = useWorkerLogs(workerName, 500);
+  const clearLogs = useClearWorkerLogs(workerName);
   const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
   const errorMessage = error ? formatError(error) : null;
+  const clearErrorMessage = clearLogs.error ? formatError(clearLogs.error) : null;
 
   const content = activeTab === "stdout" ? (data?.stdout ?? "") : (data?.stderr ?? "");
   const isEmpty = !isLoading && !errorMessage && content.length === 0;
@@ -65,12 +67,33 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             variant="outline"
             size="sm"
             className="ml-auto text-xs"
-            disabled={isLoading}
+            disabled={isLoading || clearLogs.isPending}
             onClick={() => void refetch()}
           >
             Refresh
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={isLoading || clearLogs.isPending}
+            onClick={() => {
+              if (confirm("Are you sure you want to clear the logs?")) {
+                void clearLogs.mutate();
+              }
+            }}
+          >
+            <Trash2Icon className="mr-1 size-3" aria-hidden />
+            Clear
+          </Button>
         </div>
+
+        {clearErrorMessage ? (
+          <div className="flex items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            Failed to clear logs: {clearErrorMessage}
+          </div>
+        ) : null}
 
         {isLoading ? (
           <div className="flex h-64 items-center justify-center">
