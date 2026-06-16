@@ -1,0 +1,101 @@
+import { useState } from "react";
+import { FileTextIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useWorkerLogs } from "@/hooks/use-worker-logs";
+import { formatError } from "@/lib/client";
+import { cn } from "@/lib/utils";
+
+interface WorkerLogDialogProps {
+  workerName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDialogProps) {
+  const { data, error, isLoading, refetch } = useWorkerLogs(workerName, 500);
+  const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
+  const errorMessage = error ? formatError(error) : null;
+
+  const content = activeTab === "stdout" ? (data?.stdout ?? "") : (data?.stderr ?? "");
+  const isEmpty = !isLoading && !errorMessage && content.length === 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
+        <DialogHeader className="flex flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FileTextIcon className="size-4 text-muted-foreground" aria-hidden />
+            <DialogTitle className="text-base">{workerName} worker logs</DialogTitle>
+          </div>
+        </DialogHeader>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("stdout")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "stdout"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            )}
+          >
+            Stdout
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("stderr")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "stderr"
+                ? "bg-destructive text-destructive-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            )}
+          >
+            Stderr
+          </button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto text-xs"
+            disabled={isLoading}
+            onClick={() => void refetch()}
+          >
+            Refresh
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : errorMessage ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
+            <p className="text-sm text-destructive">Failed to load logs: {errorMessage}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        ) : isEmpty ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/15 px-4 py-3">
+            <p className="text-sm font-medium text-muted-foreground">No log output</p>
+            <p className="text-xs text-muted-foreground">
+              The log file is empty or the worker has not produced any output yet.
+            </p>
+          </div>
+        ) : (
+          <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 text-xs font-mono leading-relaxed text-foreground dark:bg-muted/10">
+            {content}
+          </pre>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
