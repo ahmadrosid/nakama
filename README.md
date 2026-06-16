@@ -1,7 +1,4 @@
-<p align="center">
-  <img alt="TinyClaw logo" src="tinyclaw.png" width="188">
-</p>
-
+<p align="center"> <img alt="TinyClaw logo" src="tinyclaw.png" width="188"> </p>
 # TinyClaw
 
 > Deploy your own personal AI Assistant as easy as using WordPress.
@@ -12,9 +9,7 @@ A tiny, working Bun + TypeScript monorepo for running your own AI agent. Chat, c
 
 Inspired by [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes](https://github.com/nousresearch/hermes-agent).
 
-- [FEATURES.md](./FEATURES.md) — what works today (chat, profiles, tools, API, storage)
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design, package layout, and data flows
-- [DEVELOPMENT.md](./DEVELOPMENT.md) — local setup, Docker (GHCR), env vars
 
 ## Quick start
 
