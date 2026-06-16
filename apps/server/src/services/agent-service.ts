@@ -60,7 +60,7 @@ import type {
   UploadKnowledgeBaseResponse,
   ProviderChatOptions,
   ProviderClient,
-  type UserConfig,
+  UserConfig,
 } from "@tinyclaw/core";
 import {
   buildThinkingProviderOptions,
@@ -738,12 +738,12 @@ export class AgentService {
     return session.compact(options);
   }
 
-  deleteSession(sessionId: string): boolean {
+  async deleteSession(sessionId: string): Promise<boolean> {
     const deleted = this.sessions.delete(sessionId);
 
     if (deleted) {
       this.agentTodoState.clearSession(sessionId);
-      void this.db.deleteSession(sessionId);
+      await this.db.deleteSession(sessionId);
     }
 
     return deleted;
