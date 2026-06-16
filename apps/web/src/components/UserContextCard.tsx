@@ -217,7 +217,7 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
           <DialogHeader>
             <DialogTitle>About you (USER.md)</DialogTitle>
             <DialogDescription>
-              Name, preferences, and projects. Start a new chat after saving to apply changes.
+              A quick note so the agent knows who you are.
             </DialogDescription>
           </DialogHeader>
 

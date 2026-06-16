@@ -59,7 +59,6 @@ test("initUserContext creates the simplified template", async () => {
 
   const content = await loadUserContext();
   expect(content).toContain("# About Me");
-  expect(content).toContain("A quick note so the agent knows who you are:");
   expect(content).toContain("Name / nickname:");
   expect(content).toContain("How you like replies");
 });
