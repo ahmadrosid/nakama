@@ -1350,6 +1350,36 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/workers/{name}/clear-logs": {
+        post: {
+          tags: ["Workers"],
+          summary: "Clear worker logs",
+          operationId: "clearWorkerLogs",
+          parameters: [
+            {
+              name: "name",
+              in: "path",
+              required: true,
+              schema: { type: "string", enum: ["telegram", "whatsapp"] },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Logs cleared",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { ok: { type: "boolean" } },
+                  },
+                },
+              },
+            },
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
     },
     components: {
       parameters: openApiParameters,

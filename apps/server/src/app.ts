@@ -290,6 +290,7 @@ export function createApp(options: ServerOptions) {
 
         const workerActionMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/(start|stop|restart)$/);
         const workerLogsMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/logs$/);
+        const workerClearLogsMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/clear-logs$/);
 
         if (workerActionMatch && request.method === "POST") {
           const name = decodeURIComponent(workerActionMatch[1]!);
@@ -331,6 +332,22 @@ export function createApp(options: ServerOptions) {
           try {
             const logs = await workerManager.getWorkerLogs(name, lines);
             return json<WorkerLogsResponse>(logs);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return errorResponse(message, 500);
+          }
+        }
+
+        if (workerClearLogsMatch && request.method === "POST") {
+          const name = decodeURIComponent(workerClearLogsMatch[1]!);
+
+          if (!workerManager.isValidWorker(name)) {
+            return errorResponse(`Unknown worker: ${name}`, 400);
+          }
+
+          try {
+            await workerManager.clearWorkerLogs(name);
+            return json({ ok: true });
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             return errorResponse(message, 500);

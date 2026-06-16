@@ -198,3 +198,77 @@ describe("GET /v1/workers/{name}/logs", () => {
     expect(body.error).toBe("PM2 not available");
   });
 });
+
+describe("POST /v1/workers/{name}/clear-logs", () => {
+  async function createMockAppWithWorkerManager(workerManager: any) {
+    const authService = new AuthService(TEST_CONFIG);
+    const token = await createValidToken(authService);
+    const app = createApp({
+      agent: {} as any,
+      automationService: {} as any,
+      taskService: {} as any,
+      systemStatus: {
+        getStatus: async () => ({ ok: true }),
+      } as any,
+      workerManager,
+      mcpService: {} as any,
+      authService,
+      databaseAdapter: {
+        countUsers: async () => 1,
+        getUserByEmail: async () => null,
+      } as any,
+      webDistDir: null,
+    });
+    return { app, token };
+  }
+
+  test("clears logs for a valid worker", async () => {
+    const clearWorkerLogs = async () => {};
+    const { app, token } = await createMockAppWithWorkerManager({
+      isValidWorker: (name: string) => name === "whatsapp",
+      clearWorkerLogs,
+    });
+    const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const response = await app.fetch(request);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+  });
+
+  test("returns 400 for unknown worker", async () => {
+    const { app, token } = await createMockAppWithWorkerManager({
+      isValidWorker: () => false,
+    });
+    const request = new Request("http://localhost:4310/v1/workers/foobar/clear-logs", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const response = await app.fetch(request);
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Unknown worker: foobar");
+  });
+
+  test("returns 500 when clearWorkerLogs fails", async () => {
+    const { app, token } = await createMockAppWithWorkerManager({
+      isValidWorker: (name: string) => name === "whatsapp",
+      clearWorkerLogs: async () => {
+        throw new Error("PM2 flush failed");
+      },
+    });
+    const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const response = await app.fetch(request);
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("PM2 flush failed");
+  });
+});

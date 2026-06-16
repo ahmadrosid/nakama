@@ -186,6 +186,16 @@ export class WorkerManagerService {
     });
   }
 
+  async clearWorkerLogs(name: string): Promise<void> {
+    if (!this.isValidWorker(name)) {
+      throw new Error(`Unknown worker: ${name}`);
+    }
+
+    await this.withPm2(async (pm2) => {
+      await promisifyPm2<void>((cb) => pm2.flush(name, cb));
+    });
+  }
+
   private async listAllPm2Processes(): Promise<Pm2ProcessDescription[]> {
     return this.withPm2(async (pm2) => {
       return promisifyPm2<Pm2ProcessDescription[]>((cb) => pm2.list(cb));

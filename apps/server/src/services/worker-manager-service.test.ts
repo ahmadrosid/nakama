@@ -14,6 +14,7 @@ function createMockPm2() {
     restart: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     list: mock((cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
     describe: mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
+    flush: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
   };
 
   return mockPm2 as unknown as typeof import("pm2");
@@ -319,6 +320,32 @@ describe("WorkerManagerService", () => {
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
       expect(service.getWorkerLogs("whatsapp", 10)).rejects.toThrow("PM2 describe failed");
+    });
+  });
+
+  describe("clearWorkerLogs", () => {
+    test("flushes logs for a valid worker", async () => {
+      const mockPm2 = createMockPm2();
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      await service.clearWorkerLogs("whatsapp");
+
+      expect(mockPm2.flush).toHaveBeenCalledWith("whatsapp", expect.any(Function));
+    });
+
+    test("throws for unknown worker", async () => {
+      const service = new WorkerManagerService(projectRoot, createMockPm2());
+      expect(service.clearWorkerLogs("foobar")).rejects.toThrow("Unknown worker");
+    });
+
+    test("throws when PM2 flush fails", async () => {
+      const mockPm2 = createMockPm2();
+      mockPm2.flush = mock((_name: string, cb: (err: Error | null) => void) =>
+        cb(new Error("PM2 flush failed")),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      expect(service.clearWorkerLogs("whatsapp")).rejects.toThrow("PM2 flush failed");
     });
   });
 });
