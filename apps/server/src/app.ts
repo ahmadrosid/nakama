@@ -230,12 +230,12 @@ export function createApp(options: ServerOptions) {
           if (!authService) {
             return errorResponse("Authentication not configured", 500);
           }
-          
+
           const authHeader = request.headers.get("Authorization");
           if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return errorResponse("Authentication required", 401);
           }
-          
+
           const token = authHeader.slice(7);
           try {
             const payload = await authService.verifyToken(token);
@@ -247,7 +247,7 @@ export function createApp(options: ServerOptions) {
 
         // Auth middleware for all other routes
         if (authService) {
-          const isPublicRoute = 
+          const isPublicRoute =
             url.pathname === "/health" ||
             url.pathname === "/docs" ||
             url.pathname === "/docs/" ||
@@ -259,13 +259,13 @@ export function createApp(options: ServerOptions) {
             url.pathname === "/v1/tools" ||
             (request.method === "GET" &&
               /^\/v1\/profiles\/[^/]+\/avatar$/.test(url.pathname));
-          
+
           if (!isPublicRoute) {
             const authHeader = request.headers.get("Authorization");
             if (!authHeader || !authHeader.startsWith("Bearer ")) {
               return errorResponse("Authentication required", 401);
             }
-            
+
             const token = authHeader.slice(7);
             try {
               await authService.verifyToken(token);
@@ -275,35 +275,35 @@ export function createApp(options: ServerOptions) {
           }
         }
 
-if (request.method === "GET" && url.pathname === "/v1/system/status") {
-  return json<SystemStatusResponse>(await systemStatus.getStatus());
-}
+        if (request.method === "GET" && url.pathname === "/v1/system/status") {
+          return json<SystemStatusResponse>(await systemStatus.getStatus());
+        }
 
-const workerActionMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/(start|stop|restart)$/);
+        const workerActionMatch = url.pathname.match(/^\/v1\/workers\/([^/]+)\/(start|stop|restart)$/);
 
-if (workerActionMatch && request.method === "POST") {
-  const name = decodeURIComponent(workerActionMatch[1]!);
-  const action = workerActionMatch[2];
+        if (workerActionMatch && request.method === "POST") {
+          const name = decodeURIComponent(workerActionMatch[1]!);
+          const action = workerActionMatch[2];
 
-  if (!workerManager.isValidWorker(name)) {
-    return errorResponse(`Unknown worker: ${name}`, 400);
-  }
+          if (!workerManager.isValidWorker(name)) {
+            return errorResponse(`Unknown worker: ${name}`, 400);
+          }
 
-  try {
-    if (action === "start") {
-      await workerManager.startWorker(name);
-    } else if (action === "stop") {
-      await workerManager.stopWorker(name);
-    } else {
-      await workerManager.restartWorker(name);
-    }
+          try {
+            if (action === "start") {
+              await workerManager.startWorker(name);
+            } else if (action === "stop") {
+              await workerManager.stopWorker(name);
+            } else {
+              await workerManager.restartWorker(name);
+            }
 
-    return json({ ok: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return errorResponse(message, 500);
-  }
-}
+            return json({ ok: true });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return errorResponse(message, 500);
+          }
+        }
 
         if (request.method === "GET" && url.pathname === "/v1/models") {
           const source = url.searchParams.get("source");
