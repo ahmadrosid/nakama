@@ -1,4 +1,7 @@
 import { describe, expect, test, mock } from "bun:test";
+import { mkdtemp, writeFile, unlink } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { WorkerManagerService } from "./worker-manager-service";
 
 function createMockPm2() {
@@ -10,6 +13,7 @@ function createMockPm2() {
     stop: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     restart: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     list: mock((cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
+    describe: mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
   };
 
   return mockPm2 as unknown as typeof import("pm2");
@@ -229,6 +233,92 @@ describe("WorkerManagerService", () => {
 
       expect(result.telegram.managed).toBe(false);
       expect(result.whatsapp.managed).toBe(false);
+    });
+  });
+
+  describe("getWorkerLogs", () => {
+    test("returns last N lines of stdout and stderr", async () => {
+      const tmpDir = await mkdtemp(join(tmpdir(), "tinyclaw-logs-"));
+      const outPath = join(tmpDir, "out.log");
+      const errPath = join(tmpDir, "err.log");
+      await writeFile(outPath, "line1\nline2\nline3\nline4\nline5\n");
+      await writeFile(errPath, "err1\nerr2\nerr3\n");
+
+      const mockPm2 = createMockPm2();
+      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [
+          {
+            name: "whatsapp",
+            pm2_env: {
+              pm_out_log_path: outPath,
+              pm_err_log_path: errPath,
+            },
+          },
+        ]),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      const logs = await service.getWorkerLogs("whatsapp", 2);
+
+      expect(logs.stdout).toBe("line4\nline5");
+      expect(logs.stderr).toBe("err2\nerr3");
+
+      await unlink(outPath);
+      await unlink(errPath);
+    });
+
+    test("returns empty strings when log files are missing", async () => {
+      const mockPm2 = createMockPm2();
+      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [
+          {
+            name: "whatsapp",
+            pm2_env: {
+              pm_out_log_path: "/nonexistent/out.log",
+              pm_err_log_path: "/nonexistent/err.log",
+            },
+          },
+        ]),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      const logs = await service.getWorkerLogs("whatsapp", 10);
+
+      expect(logs.stdout).toBe("");
+      expect(logs.stderr).toBe("");
+    });
+
+    test("returns empty strings when pm2_env has no log paths", async () => {
+      const mockPm2 = createMockPm2();
+      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [
+          {
+            name: "whatsapp",
+            pm2_env: {},
+          },
+        ]),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      const logs = await service.getWorkerLogs("whatsapp", 10);
+
+      expect(logs.stdout).toBe("");
+      expect(logs.stderr).toBe("");
+    });
+
+    test("throws for unknown worker", async () => {
+      const service = new WorkerManagerService(projectRoot, createMockPm2());
+      expect(service.getWorkerLogs("foobar", 10)).rejects.toThrow("Unknown worker");
+    });
+
+    test("throws when PM2 describe fails", async () => {
+      const mockPm2 = createMockPm2();
+      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(new Error("PM2 describe failed")),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      expect(service.getWorkerLogs("whatsapp", 10)).rejects.toThrow("PM2 describe failed");
     });
   });
 });

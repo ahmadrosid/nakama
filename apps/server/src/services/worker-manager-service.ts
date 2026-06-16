@@ -1,4 +1,5 @@
-import type { WorkerProcessInfo } from "@tinyclaw/core";
+import type { WorkerLogsResponse, WorkerProcessInfo } from "@tinyclaw/core";
+import { readFile } from "node:fs/promises";
 
 const WORKER_SCRIPTS: Record<string, string> = {
   telegram: "apps/platform/telegram/src/index.ts",
@@ -163,10 +164,44 @@ export class WorkerManagerService {
     }
   }
 
+  async getWorkerLogs(name: string, lines: number): Promise<WorkerLogsResponse> {
+    if (!this.isValidWorker(name)) {
+      throw new Error(`Unknown worker: ${name}`);
+    }
+
+    return this.withPm2(async (pm2) => {
+      const descriptions = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
+        pm2.describe(name, cb),
+      );
+      const desc = descriptions[0];
+      const outPath = desc?.pm2_env?.pm_out_log_path as string | undefined;
+      const errPath = desc?.pm2_env?.pm_err_log_path as string | undefined;
+
+      const [stdout, stderr] = await Promise.all([
+        outPath ? readLastLines(outPath, lines) : "",
+        errPath ? readLastLines(errPath, lines) : "",
+      ]);
+
+      return { stdout, stderr };
+    });
+  }
+
   private async listAllPm2Processes(): Promise<Pm2ProcessDescription[]> {
     return this.withPm2(async (pm2) => {
       return promisifyPm2<Pm2ProcessDescription[]>((cb) => pm2.list(cb));
     });
+  }
+}
+
+async function readLastLines(path: string, lineCount: number): Promise<string> {
+  try {
+    const content = await readFile(path, "utf8");
+    const trimmed = content.endsWith("\n") ? content.slice(0, -1) : content;
+    const allLines = trimmed.split("\n");
+    const lastLines = allLines.slice(-lineCount);
+    return lastLines.join("\n");
+  } catch {
+    return "";
   }
 }
 
@@ -178,6 +213,8 @@ interface Pm2ProcessDescription {
   pm2_env?: {
     status?: string;
     pm_uptime?: number;
+    pm_out_log_path?: string;
+    pm_err_log_path?: string;
     [key: string]: unknown;
   };
 }
