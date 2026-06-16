@@ -9,6 +9,7 @@ import type {
 export interface TinyClawClientOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
+  authToken?: string;
 }
 
 export type StreamHandler = (delta: string) => void;

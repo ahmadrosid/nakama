@@ -104,11 +104,17 @@ import type {
 export class TinyClawClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private authToken: string | null;
 
   constructor(options: TinyClawClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
     const fetchFn = options.fetch ?? fetch;
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
+    this.authToken = options.authToken ?? null;
+  }
+
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
   }
 
   async health(): Promise<HealthResponse> {
@@ -569,14 +575,18 @@ export class TinyClawClient {
       ) => {
         const handlers = normalizeStreamHandlers(handler);
         const body = { ...resolveSendMessageBody(input), stream: true };
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        };
+        if (this.authToken) {
+          headers["Authorization"] = `Bearer ${this.authToken}`;
+        }
         const response = await this.fetchImpl(
           `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "text/event-stream",
-            },
+            headers,
             body: JSON.stringify(body),
             signal: options?.signal,
           },
@@ -835,16 +845,33 @@ export class TinyClawClient {
     return this.request<ListTimezonesResponse>("/v1/timezones");
   }
 
+  async login(email: string, password: string): Promise<{ token: string }> {
+    return this.request<{ token: string }>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async getMe(): Promise<{ email: string }> {
+    return this.request<{ email: string }>("/v1/auth/me");
+  }
+
   private async request<T>(
     path: string,
     init?: RequestInit,
   ): Promise<T> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> ?? {}),
+    };
+
+    if (this.authToken) {
+      headers["Authorization"] = `Bearer ${this.authToken}`;
+    }
+
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
+      headers,
     });
 
     if (!response.ok) {
