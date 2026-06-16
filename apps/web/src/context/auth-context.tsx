@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { client } from "@/lib/client";
+import { queryClient } from "@/lib/query-client";
 
 interface AuthContextValue {
   user: { email: string } | null;
@@ -21,6 +22,10 @@ const AUTH_STORAGE_KEY = "tinyclaw_auth_token";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function refreshAuthenticatedQueries(): void {
+  void queryClient.invalidateQueries();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .getMe()
         .then((me) => {
           setUser(me);
+          refreshAuthenticatedQueries();
         })
         .catch(() => {
           localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -52,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.setAuthToken(response.token);
     const me = await client.getMe();
     setUser(me);
+    refreshAuthenticatedQueries();
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -60,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.setAuthToken(response.token);
     const me = await client.getMe();
     setUser(me);
+    refreshAuthenticatedQueries();
   }, []);
 
   const logout = useCallback(() => {

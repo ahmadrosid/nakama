@@ -31,8 +31,8 @@ function AppShell() {
   return (
     <QueryClientProvider client={queryClient}>
       <QueryCacheListener />
-      <AppQueryPrefetch />
       <AuthProvider>
+        <AppQueryPrefetch />
         <AppProvider>
           <Routes>
             <Route path="/setup" element={<SetupWizardPage />} />

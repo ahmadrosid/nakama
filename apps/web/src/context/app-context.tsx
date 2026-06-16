@@ -19,6 +19,7 @@ import {
   useModelsQuery,
   useSetModelMutation,
 } from "@/hooks/use-app-queries";
+import { useAuth } from "@/context/auth-context";
 import { formatError } from "@/lib/client";
 
 interface AppContextValue {
@@ -36,9 +37,13 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const authReady = isAuthenticated && !authLoading;
   const healthQuery = useHealthQuery();
   const providerConfigured = healthQuery.data?.providerConfigured === true;
-  const modelsQuery = useModelsQuery({ enabled: providerConfigured });
+  const modelsQuery = useModelsQuery({
+    enabled: providerConfigured && authReady,
+  });
   const configureProviderMutation = useConfigureProviderMutation();
   const createProviderMutation = useCreateProviderMutation();
   const setModelMutation = useSetModelMutation();

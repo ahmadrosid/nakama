@@ -6,6 +6,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
+import { useAuth } from "@/context/auth-context";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";
@@ -72,10 +73,15 @@ export function prefetchAppData(queryClient: QueryClient): void {
 
 export function AppQueryPrefetch() {
   const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated) {
+      return;
+    }
+
     prefetchAppData(queryClient);
-  }, [queryClient]);
+  }, [queryClient, isAuthenticated, isLoading]);
 
   return null;
 }

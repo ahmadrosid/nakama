@@ -256,7 +256,9 @@ export function createApp(options: ServerOptions) {
             url.pathname === "/v1/auth/login" ||
             url.pathname === "/v1/auth/me" ||
             url.pathname === "/v1/tasks/__capability_probe__/messages" ||
-            url.pathname === "/v1/tools";
+            url.pathname === "/v1/tools" ||
+            (request.method === "GET" &&
+              /^\/v1\/profiles\/[^/]+\/avatar$/.test(url.pathname));
           
           if (!isPublicRoute) {
             const authHeader = request.headers.get("Authorization");
