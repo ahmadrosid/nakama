@@ -254,7 +254,9 @@ export function createApp(options: ServerOptions) {
             url.pathname === "/openapi.json" ||
             url.pathname === "/v1/auth/setup" ||
             url.pathname === "/v1/auth/login" ||
-            url.pathname === "/v1/auth/me";
+            url.pathname === "/v1/auth/me" ||
+            url.pathname === "/v1/tasks/__capability_probe__/messages" ||
+            url.pathname === "/v1/tools";
           
           if (!isPublicRoute) {
             const authHeader = request.headers.get("Authorization");
