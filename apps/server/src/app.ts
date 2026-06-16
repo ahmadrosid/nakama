@@ -245,6 +245,14 @@ export function createApp(options: ServerOptions) {
           }
         }
 
+        if (webDistDir) {
+          const staticResponse = tryServeStaticWeb(request, webDistDir);
+
+          if (staticResponse) {
+            return staticResponse;
+          }
+        }
+
         // Auth middleware for all other routes
         if (authService) {
           const isPublicRoute =
@@ -1104,14 +1112,6 @@ export function createApp(options: ServerOptions) {
             sessionId: result.sessionId,
             messages: result.messages,
           });
-        }
-
-        if (webDistDir) {
-          const staticResponse = tryServeStaticWeb(request, webDistDir);
-
-          if (staticResponse) {
-            return staticResponse;
-          }
         }
 
         return errorResponse("Not found", 404);
