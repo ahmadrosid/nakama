@@ -7,7 +7,7 @@ interface SetupStepProviderProps {
 
 export function SetupStepProvider({ onNext }: SetupStepProviderProps) {
   return (
-    <div className="rounded-md border border-border bg-card">
+    <div className="rounded-md border border-border bg-card p-6">
       <ProviderSetupForm
         submitLabel="Continue"
         showHeading={false}

@@ -204,7 +204,7 @@ export function ProviderSetupForm({
             </p>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button
               type="submit"
               disabled={

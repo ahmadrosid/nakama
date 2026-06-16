@@ -25,14 +25,14 @@ export function FormField({
 
   return (
     <div className={cn(className)}>
-      <div className={cn("flex flex-col", compact ? "gap-2" : "gap-2.5")}>
+      <div className="flex flex-col gap-2.5">
         <label htmlFor={id} className="text-sm font-medium text-foreground">
           {label}
         </label>
         {children}
       </div>
       {footer ? (
-        <div className={cn(compact ? "mt-2 space-y-2" : "mt-2.5 space-y-2.5")}>{footer}</div>
+        <div className={cn(compact ? "mt-3 space-y-2" : "mt-2.5 space-y-2.5")}>{footer}</div>
       ) : null}
     </div>
   );
