@@ -19,6 +19,11 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
 FROM oven/bun:1.3-debian AS runtime
 WORKDIR /app
 
+# Install python3 for custom agent tools (minimal footprint)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 COPY apps/server apps/server
 COPY packages packages
