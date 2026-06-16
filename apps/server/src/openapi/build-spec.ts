@@ -1323,6 +1323,33 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/workers/{name}/logs": {
+        get: {
+          tags: ["Workers"],
+          summary: "Get recent worker logs",
+          operationId: "getWorkerLogs",
+          parameters: [
+            {
+              name: "name",
+              in: "path",
+              required: true,
+              schema: { type: "string", enum: ["telegram", "whatsapp"] },
+            },
+            {
+              name: "lines",
+              in: "query",
+              required: false,
+              schema: { type: "integer", default: 200, minimum: 1, maximum: 2000 },
+              description: "Number of log lines to return",
+            },
+          ],
+          responses: {
+            "200": jsonResponse("WorkerLogsResponse", "Worker logs"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
     },
     components: {
       parameters: openApiParameters,

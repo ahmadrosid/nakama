@@ -89,6 +89,11 @@ export interface WhatsAppWorkerStatus {
   process?: WorkerProcessInfo;
 }
 
+export interface WorkerLogsResponse {
+  stdout: string;
+  stderr: string;
+}
+
 export interface LlmUsageStats {
   requestCount: number;
   inputTokens: number;

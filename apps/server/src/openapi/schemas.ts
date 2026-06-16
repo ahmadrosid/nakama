@@ -1072,6 +1072,14 @@ export const openApiSchemas = {
       process: { $ref: "#/components/schemas/WorkerProcessInfo" },
     },
   },
+  WorkerLogsResponse: {
+    type: "object",
+    required: ["stdout", "stderr"],
+    properties: {
+      stdout: { type: "string" },
+      stderr: { type: "string" },
+    },
+  },
   LlmUsageStats: {
     type: "object",
     required: [
