@@ -1,5 +1,4 @@
-import { rename } from "node:fs/promises";
-import { rm } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { DocumentAttachment, KnowledgeBaseDocument } from "../contract";
 import { createId } from "../ids";

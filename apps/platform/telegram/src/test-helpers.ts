@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
