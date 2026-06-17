@@ -1,5 +1,6 @@
 import {
   areJidsSameUser,
+  extractMessageContent,
   isJidGroup,
   isJidUser,
   isLidUser,
@@ -30,11 +31,39 @@ export function extractInboundText(message: proto.IMessage | null | undefined): 
     return "";
   }
 
+  const extracted = extractMessageContent(message) ?? message;
+  const direct = readTextContent(extracted);
+
+  if (direct) {
+    return direct;
+  }
+
+  const materialized = materializeMessage(extracted);
+  return readTextContent(materialized);
+}
+
+function readTextContent(message: Partial<proto.IMessage> | null | undefined): string {
   return (
-    message.conversation ??
-    message.extendedTextMessage?.text ??
+    message?.conversation ??
+    message?.extendedTextMessage?.text ??
+    message?.imageMessage?.caption ??
+    message?.videoMessage?.caption ??
     ""
   ).trim();
+}
+
+function materializeMessage(
+  message: Partial<proto.IMessage> | null | undefined,
+): Partial<proto.IMessage> | null {
+  if (!message) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(message)) as Partial<proto.IMessage>;
+  } catch {
+    return null;
+  }
 }
 
 export function shouldHandleInboundMessage(

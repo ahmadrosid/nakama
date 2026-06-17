@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extractInboundText,
   isPrivateWhatsAppChat,
   isSelfWhatsAppChat,
   shouldHandleInboundMessage,
@@ -40,5 +41,41 @@ describe("inbound message routing", () => {
         { id: "6281379292556@s.whatsapp.net", lid: "236283431522503@lid" },
       ),
     ).toBe(false);
+  });
+
+  test("extracts text from ephemeral wrapped messages", () => {
+    expect(
+      extractInboundText({
+        ephemeralMessage: {
+          message: {
+            extendedTextMessage: {
+              text: "hello from wrapper",
+            },
+          },
+        },
+      } as any),
+    ).toBe("hello from wrapper");
+  });
+
+  test("extracts text from protobuf-like messages that only expose text via JSON", () => {
+    const payload = {
+      extendedTextMessage: {
+        get text() {
+          return undefined;
+        },
+        toJSON() {
+          return { text: "hi from toJSON" };
+        },
+      },
+      toJSON() {
+        return {
+          extendedTextMessage: {
+            text: "hi from toJSON",
+          },
+        };
+      },
+    };
+
+    expect(extractInboundText(payload as any)).toBe("hi from toJSON");
   });
 });

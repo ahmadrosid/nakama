@@ -1,4 +1,6 @@
 import {
+  extractMessageContent,
+  getContentType,
   type WASocket,
   makeWASocket,
   useMultiFileAuthState,
@@ -10,6 +12,7 @@ import {
 } from "@tinyclaw/core/whatsapp-config";
 import {
   extractInboundText,
+  isPrivateWhatsAppChat,
   shouldHandleInboundMessage,
 } from "./inbound-message";
 
@@ -35,6 +38,7 @@ export async function createWhatsAppSocket(
 
   let socket: WASocket | null = null;
   let stopped = false;
+  let loggedMissingTextPayload = false;
   const baileysLogger = createBaileysLogger();
 
   const handle = {
@@ -52,8 +56,8 @@ export async function createWhatsAppSocket(
         browser: ["TinyClaw", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
         retryRequestDelayMs: 2_000,
-        // ponytail: bridge only needs live messages; skip history + init IQs that race on connect
-        fireInitQueries: false,
+        // Keep history sync disabled, but allow Baileys init queries so the
+        // socket fully subscribes after reconnect/restart.
         shouldSyncHistoryMessage: () => false,
         markOnlineOnConnect: false,
       });
@@ -93,7 +97,13 @@ export async function createWhatsAppSocket(
       socket.ev.on("creds.update", saveCreds);
 
       socket.ev.on("messages.upsert", async (m) => {
-        if (m.type !== "notify") return;
+        console.log(
+          `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`,
+        );
+
+        if (!isSupportedUpsertType(m.type)) {
+          return;
+        }
 
         const me = state.creds.me;
 
@@ -101,6 +111,25 @@ export async function createWhatsAppSocket(
           const remoteJid = msg.key.remoteJid ?? null;
           const text = extractInboundText(msg.message);
           const shouldHandle = shouldHandleInboundMessage(msg, me);
+
+          if (remoteJid) {
+            console.log(
+              `WhatsApp upsert item jid=${remoteJid} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${msg.key.participant ?? "-"} text=${text ? "yes" : "no"} handle=${shouldHandle ? "yes" : "no"}`,
+            );
+          }
+
+          if (
+            remoteJid &&
+            !text &&
+            !loggedMissingTextPayload &&
+            isPrivateWhatsAppChat(remoteJid)
+          ) {
+            loggedMissingTextPayload = true;
+            console.log(
+              "WhatsApp missing-text payload:",
+              summarizeMissingTextPayload(msg),
+            );
+          }
 
           if (!shouldHandle || !remoteJid) continue;
 
@@ -129,6 +158,34 @@ export async function createWhatsAppSocket(
   };
 
   return handle;
+}
+
+function isSupportedUpsertType(type: string): boolean {
+  return type === "notify" || type === "append";
+}
+
+function summarizeMissingTextPayload(msg: {
+  key: { remoteJid?: string | null; fromMe?: boolean | null; participant?: string | null; id?: string | null };
+  message?: Record<string, unknown> | null;
+  messageStubType?: unknown;
+}): string {
+  const extracted = extractMessageContent(msg.message as any);
+  const summary = {
+    key: {
+      remoteJid: msg.key.remoteJid ?? null,
+      fromMe: msg.key.fromMe ?? null,
+      participant: msg.key.participant ?? null,
+      id: msg.key.id ?? null,
+    },
+    topLevelType: getContentType(msg.message as any) ?? null,
+    extractedType: getContentType(extracted as any) ?? null,
+    topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
+    extractedKeys: extracted ? Object.keys(extracted).slice(0, 10) : [],
+    messageStubType: msg.messageStubType ?? null,
+    message: msg.message ?? null,
+  };
+
+  return JSON.stringify(summary);
 }
 
 // ponytail: keep Baileys on silent; worker logs what matters itself

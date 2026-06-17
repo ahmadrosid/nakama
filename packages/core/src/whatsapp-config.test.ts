@@ -394,4 +394,33 @@ describe("syncWhatsAppOwnerPairing", () => {
     expect(saved?.pairedLid).toBe("236283431522503@lid");
     expect(saved?.pairingCode).toBeNull();
   });
+
+  test("preserves an existing paired LID during owner sync", async () => {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+
+    const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "config.ini"),
+      [
+        "# TinyClaw WhatsApp bridge",
+        "phone_number=6281379292556",
+        "profile_id=profile_default",
+        "paired_jid=6281379292556@s.whatsapp.net",
+        "paired_lid=104784384290844@lid",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await syncWhatsAppOwnerPairing({
+      ownerJid: "6281379292556:18@s.whatsapp.net",
+      ownerLid: "128415361462410:18@lid",
+    });
+
+    const saved = await loadWhatsAppConfigFile();
+    expect(saved?.pairedJid).toBe("6281379292556@s.whatsapp.net");
+    expect(saved?.pairedLid).toBe("104784384290844@lid");
+  });
 });

@@ -368,7 +368,9 @@ export async function syncWhatsAppOwnerPairing(options: {
     ...config,
     phoneNumber: ownerPhone || config.phoneNumber,
     pairedJid: config.pairedJid ?? options.ownerJid,
-    pairedLid: ownerLid ?? config.pairedLid,
+    // Preserve an existing chat LID. `me.lid` can be a device/account LID, which
+    // does not always match the private self-chat JID used for inbound messages.
+    pairedLid: config.pairedLid ?? ownerLid,
     pairingCode: null,
   };
 
