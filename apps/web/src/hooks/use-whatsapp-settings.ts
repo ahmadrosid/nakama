@@ -41,3 +41,15 @@ export function useRegenerateWhatsAppPairingCode() {
     },
   });
 }
+
+export function useReconnectWhatsApp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.reconnectWhatsApp(),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData(queryKeys.whatsapp.settings, saved);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+    },
+  });
+}

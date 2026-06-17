@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
+import { parseIni, pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./fs";
 
 export const DEFAULT_WHATSAPP_PROFILE_ID = "profile_default";
 
@@ -64,8 +65,49 @@ function phoneToWhatsAppJid(phone: string): string {
   return `${phoneDigits(phone)}@s.whatsapp.net`;
 }
 
-function whatsAppUserDigits(jid: string): string {
+export function whatsAppUserDigits(jid: string): string {
   return phoneDigits(jid.split("@")[0]?.split(":")[0] ?? "");
+}
+
+function maskPhoneNumberFromJid(jid: string | null): string | null {
+  if (!jid) {
+    return null;
+  }
+
+  const digits = whatsAppUserDigits(jid);
+  return digits ? maskPhoneNumber(digits) : null;
+}
+
+function whatsAppJidServer(jid: string): string {
+  return jid.split("@")[1]?.trim() ?? "";
+}
+
+function normalizeWhatsAppUserJid(jid: string): string {
+  const server = whatsAppJidServer(jid);
+
+  if (server !== "s.whatsapp.net") {
+    return jid.trim();
+  }
+
+  return `${jid.split("@")[0]?.split(":")[0] ?? ""}@${server}`;
+}
+
+function isSameWhatsAppUserJid(left: string, right: string): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  if (normalizeWhatsAppUserJid(left) === normalizeWhatsAppUserJid(right)) {
+    return true;
+  }
+
+  if (whatsAppJidServer(left) !== "s.whatsapp.net" || whatsAppJidServer(right) !== "s.whatsapp.net") {
+    return false;
+  }
+
+  const leftDigits = whatsAppUserDigits(left);
+  const rightDigits = whatsAppUserDigits(right);
+  return Boolean(leftDigits && leftDigits === rightDigits);
 }
 
 export function isWhatsAppUserAuthorized(
@@ -76,7 +118,10 @@ export function isWhatsAppUserAuthorized(
     return false;
   }
 
-  if (jid === config.pairedJid || jid === config.pairedLid) {
+  if (
+    isSameWhatsAppUserJid(jid, config.pairedJid) ||
+    (config.pairedLid ? isSameWhatsAppUserJid(jid, config.pairedLid) : false)
+  ) {
     return true;
   }
 
@@ -96,10 +141,6 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
   const pairingCode = values.pairing_code?.trim() || null;
   const pairedJid = values.paired_jid?.trim() || null;
   const pairedLid = values.paired_lid?.trim() || null;
-
-  if (!phoneNumber) {
-    return null;
-  }
 
   return {
     phoneNumber,
@@ -124,8 +165,9 @@ export function toWhatsAppSettingsPublic(
   }
 
   return {
-    configured: Boolean(file.phoneNumber.trim()),
-    phoneNumberMasked: maskPhoneNumber(file.phoneNumber),
+    configured: true,
+    phoneNumberMasked:
+      maskPhoneNumber(file.phoneNumber) ?? maskPhoneNumberFromJid(file.pairedJid),
     pairingCode: file.pairingCode,
     pairedJid: file.pairedJid,
     profileId: file.profileId,
@@ -139,8 +181,8 @@ export async function loadWhatsAppSettingsPublic(): Promise<WhatsAppSettingsPubl
 async function writeWhatsAppConfigFile(config: WhatsAppConfigFile): Promise<void> {
   const lines = [
     "# TinyClaw WhatsApp bridge",
-    `phone_number=${config.phoneNumber}`,
     `profile_id=${config.profileId}`,
+    ...(config.phoneNumber.trim() ? [`phone_number=${config.phoneNumber}`] : []),
     ...(config.pairingCode ? [`pairing_code=${config.pairingCode}`] : []),
     ...(config.pairedJid ? [`paired_jid=${config.pairedJid}`] : []),
     ...(config.pairedLid ? [`paired_lid=${config.pairedLid}`] : []),
@@ -172,11 +214,11 @@ function resolvePairingCode(
   existing: WhatsAppConfigFile | null,
   pairedJid: string | null,
 ): string | null {
-  if (pairedJid || existing?.pairingCode) {
-    return existing?.pairingCode ?? null;
+  if (pairedJid) {
+    return null;
   }
 
-  return generatePairingCode();
+  return existing?.pairingCode ?? null;
 }
 
 function buildSavedWhatsAppConfig(
@@ -184,11 +226,6 @@ function buildSavedWhatsAppConfig(
   existing: WhatsAppConfigFile | null,
 ): WhatsAppConfigFile {
   const phoneNumber = resolvePhoneNumber(input, existing);
-
-  if (!phoneNumber) {
-    throw new Error("Phone number is required.");
-  }
-
   const pairedJid = existing?.pairedJid ?? null;
 
   return {
@@ -209,11 +246,47 @@ export async function saveWhatsAppConfig(
   return toWhatsAppSettingsPublic(next);
 }
 
+function getWhatsAppAuthDir(): string {
+  return join(getWhatsAppConfigDir(), "auth");
+}
+
+// ponytail: filename mirrors whatsapp-worker.ts QR_CODE_FILENAME
+function getWhatsAppQrCodePath(): string {
+  return join(getWhatsAppConfigDir(), "worker-qr.txt");
+}
+
+export async function resetWhatsAppSessionForReconnect(): Promise<WhatsAppSettingsPublic> {
+  const existing = await loadWhatsAppConfigFile();
+
+  if (!existing) {
+    throw new Error("Enable WhatsApp in Settings before reconnecting.");
+  }
+
+  if (await pathExists(getWhatsAppAuthDir())) {
+    await rm(getWhatsAppAuthDir(), { recursive: true, force: true });
+  }
+
+  const qrPath = getWhatsAppQrCodePath();
+  if (await pathExists(qrPath)) {
+    await removeFile(qrPath);
+  }
+
+  const next: WhatsAppConfigFile = {
+    ...existing,
+    pairingCode: null,
+    pairedJid: null,
+    pairedLid: null,
+  };
+
+  await writeWhatsAppConfigFile(next);
+  return toWhatsAppSettingsPublic(next);
+}
+
 export async function regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsPublic> {
   const existing = await loadWhatsAppConfigFile();
 
-  if (!existing?.phoneNumber.trim()) {
-    throw new Error("Save a phone number before generating a pairing code.");
+  if (!existing) {
+    throw new Error("Enable WhatsApp in Settings before generating a pairing code.");
   }
 
   const next: WhatsAppConfigFile = {
@@ -256,13 +329,16 @@ export async function verifyAndPairWhatsAppUser(
     };
   }
 
-  const pairedJid = jid.endsWith("@lid")
-    ? phoneToWhatsAppJid(config.phoneNumber)
+  const isLid = jid.endsWith("@lid");
+  const phoneFromJid = isLid ? "" : whatsAppUserDigits(jid);
+  const pairedLid = isLid ? jid : config.pairedLid;
+  const pairedJid = isLid
+    ? config.pairedJid ?? (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null)
     : jid;
-  const pairedLid = jid.endsWith("@lid") ? jid : config.pairedLid;
 
   await writeWhatsAppConfigFile({
     ...config,
+    phoneNumber: phoneFromJid || config.phoneNumber,
     pairedJid,
     pairedLid,
     pairingCode: null,
@@ -274,7 +350,7 @@ export async function verifyAndPairWhatsAppUser(
   };
 }
 
-/** After QR link, pair the configured owner and store their LID for inbound routing. */
+/** After QR link, pair the owner and store their LID for inbound routing. */
 export async function syncWhatsAppOwnerPairing(options: {
   ownerJid: string;
   ownerLid?: string | null;
@@ -285,19 +361,15 @@ export async function syncWhatsAppOwnerPairing(options: {
     return;
   }
 
-  const configPhone = phoneDigits(config.phoneNumber);
-  const ownerPhone = whatsAppUserDigits(options.ownerJid);
-
-  if (!configPhone || configPhone !== ownerPhone) {
-    return;
-  }
-
+  const isPhoneJid = whatsAppJidServer(options.ownerJid) === "s.whatsapp.net";
+  const ownerPhone = isPhoneJid ? whatsAppUserDigits(options.ownerJid) : "";
   const ownerLid = options.ownerLid?.trim() || null;
   const next: WhatsAppConfigFile = {
     ...config,
+    phoneNumber: ownerPhone || config.phoneNumber,
     pairedJid: config.pairedJid ?? options.ownerJid,
     pairedLid: ownerLid ?? config.pairedLid,
-    pairingCode: config.pairedJid ? config.pairingCode : null,
+    pairingCode: null,
   };
 
   if (
@@ -317,14 +389,13 @@ export function resolveWhatsAppConfigFromSources(options: {
 }): WhatsAppConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
-  const phoneNumber = env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "";
 
-  if (!phoneNumber) {
+  if (!file && !env.WHATSAPP_PHONE_NUMBER?.trim()) {
     return null;
   }
 
   return {
-    phoneNumber,
+    phoneNumber: env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
       env.TINYCLAW_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||

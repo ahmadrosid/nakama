@@ -1062,12 +1062,13 @@ export const openApiSchemas = {
   },
   WhatsAppWorkerStatus: {
     type: "object",
-    required: ["ok", "configured", "paired", "running"],
+    required: ["ok", "configured", "paired", "running", "connected"],
     properties: {
       ok: { type: "boolean" },
       configured: { type: "boolean" },
       paired: { type: "boolean" },
       running: { type: "boolean" },
+      connected: { type: "boolean" },
       qrCode: { type: "string", nullable: true },
       process: { $ref: "#/components/schemas/WorkerProcessInfo" },
     },

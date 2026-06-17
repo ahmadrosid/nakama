@@ -22,5 +22,8 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3"
+  },
+  "patchedDependencies": {
+    "@whiskeysockets/baileys@6.17.16": "patches/@whiskeysockets%2Fbaileys@6.17.16.patch"
   }
 }

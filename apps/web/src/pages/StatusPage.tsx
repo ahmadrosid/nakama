@@ -134,6 +134,13 @@ function StatusDashboard({ status }: { status: SystemStatusResponse }) {
                 tone={service.tone}
                 worker={whatsappWorker}
                 workerName="whatsapp"
+                footerLink={
+                  whatsappWorker.configured &&
+                  whatsappWorker.running &&
+                  !whatsappWorker.paired
+                    ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
+                    : undefined
+                }
               />
             );
           }
@@ -534,6 +541,7 @@ function WorkerServiceColumn({
   tone,
   worker,
   workerName,
+  footerLink,
 }: {
   icon: LucideIcon;
   title: string;
@@ -541,6 +549,7 @@ function WorkerServiceColumn({
   tone: ServiceStatusTone;
   worker: SystemStatusResponse["telegramWorker"];
   workerName: string;
+  footerLink?: { label: string; to: string };
 }) {
   return (
     <div className="flex flex-col">
@@ -574,6 +583,16 @@ function WorkerServiceColumn({
         pm2Managed={worker.process?.managed ?? false}
         workerName={workerName}
       />
+      {footerLink ? (
+        <div className="border-t border-border px-5 py-2">
+          <Link
+            to={footerLink.to}
+            className="text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/90"
+          >
+            {footerLink.label}
+          </Link>
+        </div>
+      ) : null}
       <MetricsDisplay
         cpuPercent={worker.process?.cpuPercent}
         memoryMb={worker.process?.memoryMb}

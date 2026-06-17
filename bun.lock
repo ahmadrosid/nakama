@@ -114,6 +114,7 @@
       "name": "@tinyclaw/core",
       "dependencies": {
         "@vscode/ripgrep": "^1.18.0",
+        "jose": "^6.2.3",
         "nanoid": "^5.1.11",
         "pdf-parse": "2.4.5",
       },
@@ -133,6 +134,9 @@
         "@tinyclaw/core": "workspace:*",
       },
     },
+  },
+  "patchedDependencies": {
+    "@whiskeysockets/baileys@6.17.16": "patches/@whiskeysockets%2Fbaileys@6.17.16.patch",
   },
   "packages": {
     "@adiwajshing/keyed-db": ["@adiwajshing/keyed-db@0.2.4", "", {}, "sha512-yprSnAtj80/VKuDqRcFFLDYltoNV8tChNwFfIgcf6PGD4sjzWIBgs08pRuTqGH5mk5wgL6PBRSsMCZqtZwzFEw=="],

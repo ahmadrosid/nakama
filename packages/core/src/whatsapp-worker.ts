@@ -10,6 +10,7 @@ import { pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./
 export interface WhatsAppWorkerHeartbeat {
   pid: number;
   updatedAt: string;
+  connected?: boolean;
 }
 
 const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
@@ -28,12 +29,13 @@ export function resolveWhatsAppWorkerStatus(
   settings: WhatsAppSettingsPublic,
   running: boolean,
   qrCode: string | null,
+  connected = false,
 ): WhatsAppWorkerStatus {
   const configured = settings.configured;
   const paired = settings.pairedJid !== null;
   const ok = !configured || running;
 
-  return { configured, paired, running, ok, qrCode };
+  return { configured, paired, running, connected, ok, qrCode };
 }
 
 export function isWhatsAppProcessAlive(pid: number): boolean {
@@ -94,8 +96,9 @@ export function parseWhatsAppWorkerHeartbeat(
 export async function writeWhatsAppWorkerHeartbeat(
   pid = process.pid,
   updatedAt = new Date().toISOString(),
+  connected = false,
 ): Promise<void> {
-  const payload: WhatsAppWorkerHeartbeat = { pid, updatedAt };
+  const payload: WhatsAppWorkerHeartbeat = { pid, updatedAt, connected };
 
   await writePrivateTextFile(
     getWhatsAppWorkerHeartbeatPath(),
@@ -149,8 +152,10 @@ export async function isWhatsAppWorkerRunning(
 
 export async function getWhatsAppWorkerStatus(): Promise<WhatsAppWorkerStatus> {
   const settings = await loadWhatsAppSettingsPublic();
-  const running = await isWhatsAppWorkerRunning();
+  const heartbeat = await readWhatsAppWorkerHeartbeat();
+  const running = isWhatsAppHeartbeatAlive(heartbeat);
   const qrCode = await readWhatsAppQrCode();
+  const connected = heartbeat?.connected === true;
 
-  return resolveWhatsAppWorkerStatus(settings, running, qrCode);
+  return resolveWhatsAppWorkerStatus(settings, running, qrCode, connected);
 }

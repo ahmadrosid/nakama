@@ -349,18 +349,8 @@ export class AgentService {
   async setWhatsAppSettings(
     input: UpdateWhatsAppSettingsRequest,
   ): Promise<WhatsAppSettingsResponse> {
-    const existing = await loadWhatsAppSettingsPublic();
-    const phoneNumber =
-      input.phoneNumber !== undefined && input.phoneNumber.trim()
-        ? input.phoneNumber.trim()
-        : undefined;
-
-    if (!phoneNumber && !existing.configured) {
-      throw new Error("Phone number is required.");
-    }
-
     return saveWhatsAppConfig({
-      ...(phoneNumber ? { phoneNumber } : {}),
+      ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber.trim() } : {}),
       ...(input.profileId !== undefined ? { profileId: input.profileId } : {}),
     });
   }

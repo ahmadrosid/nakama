@@ -853,6 +853,12 @@ export class TinyClawClient {
     });
   }
 
+  async reconnectWhatsApp(): Promise<WhatsAppSettingsResponse> {
+    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp/reconnect", {
+      method: "POST",
+    });
+  }
+
   async listTimezones(): Promise<ListTimezonesResponse> {
     return this.request<ListTimezonesResponse>("/v1/timezones");
   }

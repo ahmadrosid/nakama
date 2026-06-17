@@ -16,6 +16,7 @@ import {
 export interface WhatsAppSocketDeps {
   onMessage: (data: { jid: string; text: string }) => Promise<void>;
   onConnected?: (me: { id: string; lid?: string | null }) => void;
+  onDisconnected?: () => void;
   onQr?: (qr: string) => void;
 }
 
@@ -34,6 +35,7 @@ export async function createWhatsAppSocket(
 
   let socket: WASocket | null = null;
   let stopped = false;
+  const baileysLogger = createBaileysLogger();
 
   const handle = {
     get socket() {
@@ -45,6 +47,7 @@ export async function createWhatsAppSocket(
       socket = makeWASocket({
         version,
         auth: state,
+        logger: baileysLogger,
         printQRInTerminal: false,
         browser: ["TinyClaw", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
@@ -63,7 +66,6 @@ export async function createWhatsAppSocket(
         }
 
         if (connection === "open") {
-          console.log("WhatsApp connected.");
           const me = state.creds.me;
           if (me?.id) {
             deps.onConnected?.({ id: me.id, lid: me.lid ?? null });
@@ -71,6 +73,7 @@ export async function createWhatsAppSocket(
         }
 
         if (connection === "close") {
+          deps.onDisconnected?.();
           const statusCode = lastDisconnect?.error?.message
             ? (lastDisconnect.error as any)?.output?.statusCode
             : lastDisconnect?.statusCode;
@@ -95,12 +98,24 @@ export async function createWhatsAppSocket(
         const me = state.creds.me;
 
         for (const msg of m.messages) {
-          if (!shouldHandleInboundMessage(msg, me)) continue;
-
-          const jid = msg.key.remoteJid!;
+          const remoteJid = msg.key.remoteJid ?? null;
           const text = extractInboundText(msg.message);
+          const shouldHandle = shouldHandleInboundMessage(msg, me);
 
-          await deps.onMessage({ jid, text });
+          if (!shouldHandle || !remoteJid) continue;
+
+          const preview =
+            text.length > 120 ? `${text.slice(0, 120)}…` : text;
+          console.log(`WhatsApp message received from ${remoteJid}: ${preview}`);
+
+          try {
+            await deps.onMessage({ jid: remoteJid, text });
+          } catch (error) {
+            console.error("WhatsApp inbound message handling failed.", {
+              jid: remoteJid,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       });
     },
@@ -114,4 +129,21 @@ export async function createWhatsAppSocket(
   };
 
   return handle;
+}
+
+// ponytail: keep Baileys on silent; worker logs what matters itself
+function createBaileysLogger() {
+  const noop = () => {};
+  const logger = {
+    level: "silent",
+    trace: noop,
+    debug: noop,
+    info: noop,
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+    fatal: console.error.bind(console),
+    child: () => logger,
+  };
+
+  return logger;
 }

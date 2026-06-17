@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FileTextIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckIcon, CopyIcon, FileTextIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,11 +21,51 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
   const { data, error, isLoading, refetch } = useWorkerLogs(workerName, 500);
   const clearLogs = useClearWorkerLogs(workerName);
   const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorMessage = error ? formatError(error) : null;
   const clearErrorMessage = clearLogs.error ? formatError(clearLogs.error) : null;
 
   const content = activeTab === "stdout" ? (data?.stdout ?? "") : (data?.stderr ?? "");
   const isEmpty = !isLoading && !errorMessage && content.length === 0;
+
+  async function copyLogs() {
+    if (!content) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      // Clipboard may be unavailable outside secure contexts.
+    }
+  }
+
+  useEffect(() => {
+    if (open) {
+      void refetch();
+    }
+  }, [open, refetch]);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [activeTab, content]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,7 +96,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               activeTab === "stderr"
-                ? "bg-destructive text-destructive-foreground"
+                ? "bg-destructive text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
@@ -67,6 +107,21 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             variant="outline"
             size="sm"
             className="ml-auto text-xs"
+            disabled={isLoading || isEmpty || clearLogs.isPending}
+            onClick={() => void copyLogs()}
+          >
+            {copied ? (
+              <CheckIcon className="mr-1 size-3 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            ) : (
+              <CopyIcon className="mr-1 size-3" aria-hidden />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-xs"
             disabled={isLoading || clearLogs.isPending}
             onClick={() => void refetch()}
           >
@@ -80,7 +135,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             disabled={isLoading || clearLogs.isPending}
             onClick={() => {
               if (confirm("Are you sure you want to clear the logs?")) {
-                void clearLogs.mutate();
+                void clearLogs.mutateAsync().then(() => refetch());
               }
             }}
           >

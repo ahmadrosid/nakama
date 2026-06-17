@@ -9,6 +9,8 @@ import {
   loadWhatsAppConfigFile,
   maskPhoneNumber,
   normalizePairingCode,
+  regenerateWhatsAppPairingCode,
+  resetWhatsAppSessionForReconnect,
   resolveWhatsAppConfigFromSources,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
@@ -48,6 +50,24 @@ describe("isWhatsAppUserAuthorized", () => {
     expect(
       isWhatsAppUserAuthorized("1234567890@s.whatsapp.net", {
         pairedJid: "1234567890@s.whatsapp.net",
+        pairedLid: null,
+      }),
+    ).toBe(true);
+  });
+
+  test("returns true when inbound JID includes a device suffix", () => {
+    expect(
+      isWhatsAppUserAuthorized("6281379292556:12@s.whatsapp.net", {
+        pairedJid: "6281379292556@s.whatsapp.net",
+        pairedLid: null,
+      }),
+    ).toBe(true);
+  });
+
+  test("returns true when pairedJid includes a device suffix", () => {
+    expect(
+      isWhatsAppUserAuthorized("6281379292556@s.whatsapp.net", {
+        pairedJid: "6281379292556:12@s.whatsapp.net",
         pairedLid: null,
       }),
     ).toBe(true);
@@ -98,25 +118,25 @@ describe("saveWhatsAppConfig", () => {
     await run();
   }
 
-  test("generates a pairing code for a new config", async () => {
+  test("creates config without auto-generating a pairing code", async () => {
     await useTempWhatsAppHome(async () => {
-      const result = await saveWhatsAppConfig({ phoneNumber: "+1234567890" });
+      const result = await saveWhatsAppConfig({ profileId: "profile_custom" });
 
-      expect(result.pairingCode).toMatch(/^[0-9A-F]{8}$/);
+      expect(result.pairingCode).toBeNull();
       expect(result.configured).toBe(true);
-      expect(result.phoneNumberMasked).toBe("+\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u202290");
+      expect(result.phoneNumberMasked).toBeNull();
       expect(result.pairedJid).toBeNull();
 
       const saved = await loadWhatsAppConfigFile();
-      expect(saved?.phoneNumber).toBe("+1234567890");
-      expect(saved?.pairingCode).toBe(result.pairingCode);
+      expect(saved?.phoneNumber).toBe("");
+      expect(saved?.profileId).toBe("profile_custom");
+      expect(saved?.pairingCode).toBeNull();
     });
   });
 
-  test("saves phone number and profile", async () => {
+  test("saves profile without requiring a phone number", async () => {
     await useTempWhatsAppHome(async () => {
       const result = await saveWhatsAppConfig({
-        phoneNumber: "+1234567890",
         profileId: "profile_custom",
       });
 
@@ -156,15 +176,98 @@ describe("saveWhatsAppConfig", () => {
     });
   });
 
-  test("throws if phone number is missing on first save", async () => {
+  test("allows first save with profile only", async () => {
     await useTempWhatsAppHome(async () => {
-      expect(saveWhatsAppConfig({})).rejects.toThrow("Phone number is required.");
+      const result = await saveWhatsAppConfig({ profileId: "profile_default" });
+      expect(result.configured).toBe(true);
+    });
+  });
+});
+
+describe("resetWhatsAppSessionForReconnect", () => {
+  let tempHome = "";
+  let homedirSpy: ReturnType<typeof spyOn<typeof os, "homedir">> | null = null;
+
+  afterEach(async () => {
+    homedirSpy?.mockRestore();
+    homedirSpy = null;
+
+    if (tempHome) {
+      await rm(tempHome, { recursive: true, force: true });
+      tempHome = "";
+    }
+  });
+
+  async function useTempWhatsAppHome(run: () => Promise<void>): Promise<void> {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-reset-"));
+    homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+    await run();
+  }
+
+  test("clears auth dir, pairing fields, and QR while preserving phone and profile", async () => {
+    await useTempWhatsAppHome(async () => {
+      await saveWhatsAppConfig({ phoneNumber: "+1234567890", profileId: "profile_custom" });
+      const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+      const authDir = path.join(dir, "auth");
+      await mkdir(authDir, { recursive: true });
+      await writeFile(path.join(authDir, "creds.json"), "{}", "utf8");
+      await writeFile(path.join(dir, "worker-qr.txt"), "qr-string", "utf8");
+
+      const first = await loadWhatsAppConfigFile();
+      const configWithJid: Record<string, string> = {
+        phone_number: first!.phoneNumber,
+        profile_id: first!.profileId,
+        paired_jid: "1234567890@s.whatsapp.net",
+        paired_lid: "999@lid",
+      };
+      await writeFile(
+        path.join(dir, "config.ini"),
+        ["# TinyClaw WhatsApp bridge", ...Object.entries(configWithJid).map(([k, v]) => `${k}=${v}`), ""].join("\n"),
+        "utf8",
+      );
+
+      const result = await resetWhatsAppSessionForReconnect();
+
+      expect(result.configured).toBe(true);
+      expect(result.profileId).toBe("profile_custom");
+      expect(result.phoneNumberMasked).toBe("+\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u202290");
+      expect(result.pairedJid).toBeNull();
+      expect(result.pairingCode).toBeNull();
+
+      const saved = await loadWhatsAppConfigFile();
+      expect(saved?.pairedJid).toBeNull();
+      expect(saved?.pairedLid).toBeNull();
+      expect(saved?.pairingCode).toBeNull();
+      expect(saved?.phoneNumber).toBe("+1234567890");
+
+      await expect(Bun.file(path.join(authDir, "creds.json")).exists()).resolves.toBe(false);
+      await expect(Bun.file(path.join(dir, "worker-qr.txt")).exists()).resolves.toBe(false);
+    });
+  });
+
+  test("throws when WhatsApp is not configured", async () => {
+    await useTempWhatsAppHome(async () => {
+      expect(resetWhatsAppSessionForReconnect()).rejects.toThrow(
+        "Enable WhatsApp in Settings before reconnecting.",
+      );
+    });
+  });
+
+  test("succeeds when auth dir and QR file are already absent", async () => {
+    await useTempWhatsAppHome(async () => {
+      await saveWhatsAppConfig({ phoneNumber: "+1234567890" });
+
+      const result = await resetWhatsAppSessionForReconnect();
+      expect(result.pairedJid).toBeNull();
+
+      const again = await resetWhatsAppSessionForReconnect();
+      expect(again.pairedJid).toBeNull();
     });
   });
 });
 
 describe("resolveWhatsAppConfigFromSources", () => {
-  test("returns null when no phone number is available", () => {
+  test("returns null when no config file is available", () => {
     expect(
       resolveWhatsAppConfigFromSources({
         env: {},
@@ -200,7 +303,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
     const resolved = resolveWhatsAppConfigFromSources({
       env: {},
       file: {
-        phoneNumber: "+9876543210",
+        phoneNumber: "",
         profileId: "profile_from_file",
         pairingCode: "ABCD1234",
         pairedJid: "9876543210@s.whatsapp.net",
@@ -208,7 +311,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
       },
     });
 
-    expect(resolved?.phoneNumber).toBe("+9876543210");
+    expect(resolved?.phoneNumber).toBe("");
     expect(resolved?.pairedJid).toBe("9876543210@s.whatsapp.net");
   });
 });
@@ -231,7 +334,7 @@ describe("syncWhatsAppOwnerPairing", () => {
     tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
-    await saveWhatsAppConfig({ phoneNumber: "+6281379292556" });
+    await saveWhatsAppConfig({ profileId: "profile_default" });
 
     await syncWhatsAppOwnerPairing({
       ownerJid: "6281379292556:12@s.whatsapp.net",
@@ -239,7 +342,55 @@ describe("syncWhatsAppOwnerPairing", () => {
     });
 
     const saved = await loadWhatsAppConfigFile();
+    expect(saved?.phoneNumber).toBe("6281379292556");
     expect(saved?.pairedJid).toBe("6281379292556:12@s.whatsapp.net");
+    expect(saved?.pairedLid).toBe("236283431522503@lid");
+    expect(saved?.pairingCode).toBeNull();
+  });
+
+  test("overwrites a stale phone number after QR link", async () => {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+
+    await saveWhatsAppConfig({ phoneNumber: "+6281227900622" });
+
+    await syncWhatsAppOwnerPairing({
+      ownerJid: "6281379292556:17@s.whatsapp.net",
+      ownerLid: "128415361462410:17@lid",
+    });
+
+    const saved = await loadWhatsAppConfigFile();
+    expect(saved?.phoneNumber).toBe("6281379292556");
+    expect(saved?.pairedJid).toBe("6281379292556:17@s.whatsapp.net");
+  });
+
+  test("clears stale pairing code when owner pairing sync completes", async () => {
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
+
+    await saveWhatsAppConfig({ phoneNumber: "+6281379292556" });
+
+    const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+    await writeFile(
+      path.join(dir, "config.ini"),
+      [
+        "# TinyClaw WhatsApp bridge",
+        "phone_number=+6281379292556",
+        "profile_id=profile_default",
+        "pairing_code=ABCD1234",
+        "paired_jid=6281379292556@s.whatsapp.net",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await syncWhatsAppOwnerPairing({
+      ownerJid: "6281379292556:12@s.whatsapp.net",
+      ownerLid: "236283431522503@lid",
+    });
+
+    const saved = await loadWhatsAppConfigFile();
+    expect(saved?.pairedJid).toBe("6281379292556@s.whatsapp.net");
     expect(saved?.pairedLid).toBe("236283431522503@lid");
     expect(saved?.pairingCode).toBeNull();
   });

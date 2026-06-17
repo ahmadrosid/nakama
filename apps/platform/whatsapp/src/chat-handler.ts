@@ -24,8 +24,8 @@ const PAIRING_PROMPT =
 
 const NO_CODE_PROMPT =
   "This number is not linked yet.\n\n" +
-  "Open TinyClaw Settings \u2192 WhatsApp, save your phone number, and copy the pairing code. " +
-  "Then send that code here.";
+  "Open TinyClaw Settings \u2192 WhatsApp, generate a pairing code, " +
+  "then send that code here. Or scan the QR code in Settings.";
 
 export interface ChatHandlerDeps {
   client: TinyClawClient;
@@ -49,8 +49,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     await withChatLock(jid, async () => {
       await authStore.reload();
+      const authorized = authStore.isAuthorized(jid);
 
-      if (!authStore.isAuthorized(jid)) {
+      if (!authorized) {
         await handlePairing(jid, trimmed);
         return;
       }
@@ -287,10 +288,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function sendText(jid: string, text: string): Promise<void> {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket) {
+      return;
+    }
 
     const prepared = prepareWhatsAppReply(text);
-    if (!prepared) return;
+    if (!prepared) {
+      return;
+    }
 
     for (const chunk of splitWhatsAppMessage(prepared)) {
       await socket.sendMessage(jid, { text: chunk });

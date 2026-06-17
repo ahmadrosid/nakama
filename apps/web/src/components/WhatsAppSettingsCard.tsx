@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { UpdateWhatsAppSettingsRequest } from "@tinyclaw/core/contract";
-import { ClipboardPasteIcon, CopyIcon, RefreshCwIcon, ScanQrCodeIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, RefreshCwIcon, ScanQrCodeIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import {
   Select,
   SelectContent,
@@ -19,10 +19,12 @@ import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
   useRegenerateWhatsAppPairingCode,
+  useReconnectWhatsApp,
   useSaveWhatsAppSettings,
   useWhatsAppSettings,
 } from "@/hooks/use-whatsapp-settings";
 import { formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppSettingsCardProps {
@@ -53,20 +55,23 @@ function SettingsRow({
 
 export function WhatsAppSettingsCard({
   embedded = false,
-  submitLabel = "Save",
+  submitLabel,
   onSaveSuccess,
 }: WhatsAppSettingsCardProps) {
+  const queryClient = useQueryClient();
   const { data: settings, isLoading, error: loadError } = useWhatsAppSettings();
   const { data: status } = useSystemStatusQuery();
   const { data: profiles = [] } = useProfilesQuery();
   const saveMutation = useSaveWhatsAppSettings();
   const regenerateMutation = useRegenerateWhatsAppPairingCode();
+  const reconnectMutation = useReconnectWhatsApp();
 
-  const phoneInputRef = useRef<HTMLInputElement>(null);
-  const [phoneDraft, setPhoneDraft] = useState("");
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [profileId, setProfileId] = useState("profile_default");
   const [hint, setHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [qrWasVisible, setQrWasVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!settings) {
@@ -77,38 +82,96 @@ export function WhatsAppSettingsCard({
   }, [settings?.profileId]);
 
   const configured = settings?.configured === true;
-  const paired = Boolean(settings?.pairedJid);
-  const pairingCode = settings?.pairingCode ?? null;
   const worker = status?.whatsappWorker;
   const running = worker?.running === true;
+  const connected = worker?.connected === true;
   const qrCode = worker?.qrCode ?? null;
-  const canSave = configured || phoneDraft.trim().length > 0;
-  const showQr = configured && !paired && running && qrCode;
+  const paired = Boolean(worker?.paired || settings?.pairedJid);
+  const pairingCode = settings?.pairingCode ?? null;
+  const linkedNumber = settings?.phoneNumberMasked ?? null;
+
+  useEffect(() => {
+    if (qrCode) {
+      setQrWasVisible(true);
+    }
+    if (paired) {
+      setQrWasVisible(false);
+    }
+  }, [qrCode, paired]);
+
+  useEffect(() => {
+    if (worker?.paired && !settings?.pairedJid) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.whatsapp.settings });
+      return;
+    }
+
+    if (worker?.connected && !paired) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.whatsapp.settings });
+    }
+  }, [worker?.paired, worker?.connected, settings?.pairedJid, paired, queryClient]);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [pairingCode]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const useQrLinking = !pairingCode;
+  const showQr = configured && running && Boolean(qrCode) && useQrLinking;
+  const awaitingQr =
+    configured && !paired && running && !connected && !qrCode && !qrWasVisible && useQrLinking;
+  const bridgeStarting = configured && !paired && running && !connected && Boolean(pairingCode);
+  const linkingAfterScan =
+    configured && !paired && running && !qrCode && (qrWasVisible || connected) && useQrLinking;
+  const showReconnect = configured && !showQr && !awaitingQr;
+  const profileChanged = configured && profileId !== settings?.profileId;
+  const canSave = !configured || profileChanged;
+  const actionLabel = submitLabel ?? (configured ? "Save" : "Enable WhatsApp");
 
   const statusLine =
     hint ?? (formError ? formError : null) ?? (loadError ? formatError(loadError) : null);
 
   const headerSubtitle = !configured
-    ? "Step 1: paste the phone number for your WhatsApp account"
-    : paired && running
+    ? "Choose a profile and enable WhatsApp to get started"
+    : paired && running && !showQr
       ? "WhatsApp is linked and the bridge is running"
-      : paired
+      : paired && !running
         ? "Linked. Start the WhatsApp bridge to receive messages"
         : showQr
           ? "Scan the QR code with WhatsApp to link your device"
-          : pairingCode
-            ? "Step 2: link this number from WhatsApp with the pairing code"
-            : "Step 2: generate a pairing code to finish linking";
+          : linkingAfterScan
+            ? "Linking your WhatsApp account…"
+            : bridgeStarting
+              ? "Bridge starting — enter the pairing code in WhatsApp"
+              : awaitingQr
+                ? "Preparing QR code…"
+                : pairingCode
+                  ? "Enter the pairing code in WhatsApp"
+                  : "Scan the QR code, or generate a pairing code";
 
   const statusBadge = !configured
     ? "Not set up"
-    : paired && running
+    : paired && running && !showQr
       ? "Connected"
-      : paired
+      : paired && !running
         ? "Paired"
-        : pairingCode
-          ? "Awaiting link"
-          : "Needs code";
+        : linkingAfterScan
+          ? "Linking"
+          : bridgeStarting
+            ? "Starting…"
+            : showQr
+              ? "Awaiting scan"
+              : awaitingQr
+                ? "Starting…"
+                : pairingCode
+                  ? "Awaiting link"
+                  : "Not linked";
 
   async function copyPairingCode() {
     if (!pairingCode) {
@@ -117,47 +180,16 @@ export function WhatsAppSettingsCard({
 
     try {
       await navigator.clipboard.writeText(pairingCode);
-      setHint("Code copied.");
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
     } catch {
       setHint("Copy the code manually.");
-    }
-  }
-
-  function readPhoneDraft(): string {
-    return phoneInputRef.current?.value.trim() ?? phoneDraft.trim();
-  }
-
-  function clearPhoneInput() {
-    if (phoneInputRef.current) {
-      phoneInputRef.current.value = "";
-    }
-    setPhoneDraft("");
-  }
-
-  function markPhoneDirty(value: string) {
-    setPhoneDraft(value);
-    setHint(null);
-    if (formError) {
-      setFormError(null);
-    }
-  }
-
-  async function pastePhoneFromClipboard() {
-    try {
-      const text = await navigator.clipboard.readText();
-      const trimmed = text.trim();
-      if (!trimmed) {
-        setHint("Clipboard is empty.");
-        return;
-      }
-
-      if (phoneInputRef.current) {
-        phoneInputRef.current.value = trimmed;
-        phoneInputRef.current.focus();
-      }
-      markPhoneDirty(trimmed);
-    } catch {
-      setHint("Use ⌘V to paste, or allow clipboard access.");
     }
   }
 
@@ -169,18 +201,14 @@ export function WhatsAppSettingsCard({
       profileId: profileId.trim() || "profile_default",
     };
 
-    const phoneNumber = readPhoneDraft();
-    if (phoneNumber) {
-      request.phoneNumber = phoneNumber;
-    }
-
     saveMutation.mutate(request, {
       onSuccess: (saved) => {
-        clearPhoneInput();
         if (saved.pairedJid) {
           setHint("Saved.");
         } else if (saved.pairingCode) {
           setHint("Saved. Use the pairing code in WhatsApp.");
+        } else if (!configured) {
+          setHint("Enabled. Start the bridge and scan the QR code.");
         } else {
           setHint("Saved.");
         }
@@ -199,6 +227,21 @@ export function WhatsAppSettingsCard({
     regenerateMutation.mutate(undefined, {
       onSuccess: () => {
         setHint("New code ready.");
+      },
+      onError: (error) => {
+        setFormError(formatError(error));
+      },
+    });
+  }
+
+  function handleReconnect() {
+    setFormError(null);
+    setHint(null);
+    setQrWasVisible(false);
+
+    reconnectMutation.mutate(undefined, {
+      onSuccess: () => {
+        setHint("Session reset. Scan the QR code when it appears.");
       },
       onError: (error) => {
         setFormError(formatError(error));
@@ -233,7 +276,7 @@ export function WhatsAppSettingsCard({
           <span
             className={cn(
               "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-              paired && running
+              paired && running && !showQr
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
                 : configured
                   ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100"
@@ -245,42 +288,59 @@ export function WhatsAppSettingsCard({
         </div>
       ) : null}
 
-      <SettingsRow
-        label="Phone number"
-        description="Use the number linked to your WhatsApp account"
-      >
-        <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
-          <input
-            ref={phoneInputRef}
-            id="whatsapp-phone-number"
-            data-slot="input-group-control"
-            type="text"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder={
-              configured && settings?.phoneNumberMasked
-                ? `Saved (${settings.phoneNumberMasked})`
-                : "Phone number"
+      {linkedNumber ? (
+        <SettingsRow label="Linked account" description="From your WhatsApp session">
+          <span className="text-sm text-foreground">{linkedNumber}</span>
+        </SettingsRow>
+      ) : null}
+
+      <SettingsRow label="Reply as" description="Which agent answers on WhatsApp">
+        <Select
+          value={profileId}
+          disabled={saveMutation.isPending || profiles.length === 0}
+          onValueChange={(value) => {
+            if (!value) {
+              return;
             }
-            defaultValue=""
-            disabled={saveMutation.isPending}
-            className="h-8 w-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-transparent"
-            onInput={(event) => {
-              markPhoneDirty(event.currentTarget.value);
-            }}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              type="button"
-              aria-label="Paste phone number"
-              disabled={saveMutation.isPending}
-              onClick={() => void pastePhoneFromClipboard()}
-            >
-              <ClipboardPasteIcon className="size-3.5" aria-hidden="true" />
-              Paste
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
+
+            const nextProfileId = String(value);
+            setProfileId(nextProfileId);
+            setHint(null);
+            setFormError(null);
+
+            if (!configured || nextProfileId === settings?.profileId) {
+              return;
+            }
+
+            saveMutation.mutate(
+              { profileId: nextProfileId.trim() || "profile_default" },
+              {
+                onSuccess: () => {
+                  setHint("Reply profile saved.");
+                },
+                onError: (error) => {
+                  setFormError(formatError(error));
+                },
+              },
+            );
+          }}
+        >
+          <SelectTrigger id="whatsapp-profile" className="w-[11rem] sm:w-[13rem]">
+            <SelectValue placeholder="Profile">
+              {profiles.find((profile) => profile.id === profileId)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            {profiles.map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                <span className="flex items-center gap-2">
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <span>{profile.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </SettingsRow>
 
       {configured ? (
@@ -292,7 +352,7 @@ export function WhatsAppSettingsCard({
                 ? "Open Linked Devices in WhatsApp and enter this code."
                 : paired
                   ? "This number is linked. Generate a new code only if you need to relink."
-                  : "Generate a code, then enter it in WhatsApp."
+                  : "Optional — use this instead of scanning the QR code."
             }
           >
             {pairingCode ? (
@@ -306,8 +366,15 @@ export function WhatsAppSettingsCard({
                   variant="outline"
                   onClick={() => void copyPairingCode()}
                 >
-                  <CopyIcon className="size-4" />
-                  Copy
+                  {copied ? (
+                    <CheckIcon
+                      className="size-3.5 text-emerald-600 dark:text-emerald-400"
+                      aria-hidden
+                    />
+                  ) : (
+                    <CopyIcon className="size-3.5" aria-hidden />
+                  )}
+                  {copied ? "Copied" : "Copy"}
                 </Button>
                 <Button
                   type="button"
@@ -347,6 +414,7 @@ export function WhatsAppSettingsCard({
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
                 disabled={regenerateMutation.isPending || saveMutation.isPending}
                 onClick={handleRegeneratePairingCode}
               >
@@ -378,7 +446,7 @@ export function WhatsAppSettingsCard({
               </div>
               <div className="flex justify-center">
                 <div className="inline-flex rounded-xl border border-border bg-white p-3">
-                  <QRCodeSVG value={qrCode} size={180} />
+                  <QRCodeSVG value={qrCode!} size={180} />
                 </div>
               </div>
               <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
@@ -387,59 +455,58 @@ export function WhatsAppSettingsCard({
                 <li>Tap <strong>Link a Device</strong> and scan this code</li>
               </ol>
             </div>
+          ) : linkingAfterScan ? (
+            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              Linking your WhatsApp account…
+            </div>
+          ) : bridgeStarting ? (
+            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              Bridge starting — enter the pairing code in WhatsApp
+            </div>
+          ) : awaitingQr ? (
+            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              Preparing QR code…
+            </div>
+          ) : null}
+
+          {showReconnect ? (
+            <SettingsRow
+              label="Reconnect"
+              description={
+                paired
+                  ? "Unlinks the current session so you can scan a new QR code"
+                  : "Clears a stuck session so you can link again with a QR code"
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  reconnectMutation.isPending ||
+                  saveMutation.isPending ||
+                  regenerateMutation.isPending
+                }
+                onClick={handleReconnect}
+              >
+                {reconnectMutation.isPending ? (
+                  <>
+                    <Spinner className="mr-2" />
+                    Resetting…
+                  </>
+                ) : (
+                  <>
+                    <ScanQrCodeIcon className="size-3.5" aria-hidden="true" />
+                    Reconnect with QR
+                  </>
+                )}
+              </Button>
+            </SettingsRow>
           ) : null}
         </div>
-      ) : null}
-
-      {configured ? (
-        <SettingsRow label="Reply as" description="Which agent answers on WhatsApp">
-          <Select
-            value={profileId}
-            disabled={saveMutation.isPending || profiles.length === 0}
-            onValueChange={(value) => {
-              if (!value) {
-                return;
-              }
-
-              const nextProfileId = String(value);
-              setProfileId(nextProfileId);
-              setHint(null);
-              setFormError(null);
-
-              if (!configured || nextProfileId === settings?.profileId) {
-                return;
-              }
-
-              saveMutation.mutate(
-                { profileId: nextProfileId.trim() || "profile_default" },
-                {
-                  onSuccess: () => {
-                    setHint("Reply profile saved.");
-                  },
-                  onError: (error) => {
-                    setFormError(formatError(error));
-                  },
-                },
-              );
-            }}
-          >
-            <SelectTrigger id="whatsapp-profile" className="w-[11rem] sm:w-[13rem]">
-              <SelectValue placeholder="Profile">
-                {profiles.find((profile) => profile.id === profileId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent align="end">
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  <span className="flex items-center gap-2">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span>{profile.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
       ) : null}
 
       {configured ? (
@@ -481,7 +548,7 @@ export function WhatsAppSettingsCard({
               Saving…
             </>
           ) : (
-            submitLabel
+            actionLabel
           )}
         </Button>
       </div>

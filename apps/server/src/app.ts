@@ -91,6 +91,7 @@ import {
   type UpdateMcpServerRequest,
   type WorkerLogsResponse,
 } from "@tinyclaw/core";
+import { resetWhatsAppSessionForReconnect } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
 import { serializeOpenApiSpec } from "./openapi/build-spec";
 import type { AgentService } from "./services/agent-service";
@@ -484,6 +485,28 @@ export function createApp(options: ServerOptions) {
         if (request.method === "POST" && url.pathname === "/v1/settings/whatsapp/pairing-code") {
           try {
             return json<WhatsAppSettingsResponse>(await agent.regenerateWhatsAppPairingCode());
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return errorResponse(message, 400);
+          }
+        }
+
+        if (request.method === "POST" && url.pathname === "/v1/settings/whatsapp/reconnect") {
+          try {
+            await workerManager.stopWorker("whatsapp").catch(() => {});
+            const settings = await resetWhatsAppSessionForReconnect();
+
+            try {
+              await workerManager.startWorker("whatsapp");
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              return errorResponse(
+                `Session reset, but the WhatsApp worker could not start: ${message}. Start it manually from Settings.`,
+                400,
+              );
+            }
+
+            return json<WhatsAppSettingsResponse>(settings);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return errorResponse(message, 400);

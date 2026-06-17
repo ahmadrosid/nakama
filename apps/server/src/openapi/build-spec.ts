@@ -312,6 +312,18 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      "/v1/settings/whatsapp/reconnect": {
+        post: {
+          tags: ["Models"],
+          summary: "Reset WhatsApp session and restart worker for QR reconnect",
+          operationId: "reconnectWhatsApp",
+          responses: {
+            "200": jsonResponse("WhatsAppSettingsResponse", "WhatsApp session reset for QR reconnect"),
+            "400": errorResponse,
+            "500": errorResponse,
+          },
+        },
+      },
       "/v1/user/context": {
         get: {
           tags: ["User"],

@@ -158,6 +158,36 @@ describe("createChatHandler", () => {
     });
   });
 
+  test("allows device-suffixed inbound JID for a paired phone JID", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        phoneNumber: "6281379292556",
+        pairedJid: "6281379292556@s.whatsapp.net",
+      });
+
+      const authStore = new WhatsAppAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
+      );
+      const { socket } = createMockSocket();
+
+      const handleMessage = createChatHandler({
+        client,
+        config: { phoneNumber: "6281379292556", profileId: "profile_default" },
+        authStore,
+        sessionStore,
+        getSocket: () => socket as any,
+      });
+
+      await handleMessage({ jid: "6281379292556:12@s.whatsapp.net", text: "hello agent" });
+
+      expect(calls.createSession).toBe(1);
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
   test("handles /help command for authorized JID", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

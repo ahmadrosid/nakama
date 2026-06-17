@@ -17,13 +17,7 @@ export async function loadConfig(
   const resolved = resolveWhatsAppConfigFromSources({ env, file });
 
   if (!resolved) {
-    const hasEnvPhone = Boolean(env.WHATSAPP_PHONE_NUMBER?.trim());
-
-    if (!hasEnvPhone && !file) {
-      throw new Error(formatNotConfiguredMessage());
-    }
-
-    throw new Error(`${formatNotConfiguredMessage()}\n\nMissing: phone number.`);
+    throw new Error(formatNotConfiguredMessage());
   }
 
   return {
@@ -39,9 +33,9 @@ function formatNotConfiguredMessage(): string {
     "From the web dashboard:",
     "  1. Run: bun run dev:server  (and bun run dev:web if needed)",
     "  2. Open Settings \u2192 WhatsApp",
-    "  3. Enter your phone number and profile, then Save",
-    "  4. Copy the pairing code, run: bun run dev:whatsapp",
-    "  5. Enter the pairing code in WhatsApp \u2192 Settings \u2192 Linked Devices",
+    "  3. Choose a reply profile and click Enable WhatsApp",
+    "  4. Run: bun run dev:whatsapp",
+    "  5. Scan the QR code, or generate a pairing code in WhatsApp",
     "",
     "Or set env var: WHATSAPP_PHONE_NUMBER",
     `Config file: ${getWhatsAppConfigPath()}`,

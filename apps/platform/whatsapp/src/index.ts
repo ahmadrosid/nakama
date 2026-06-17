@@ -17,7 +17,13 @@ import { WhatsAppAuthStore } from "./auth-store";
 let spawnedChild: Bun.Subprocess | null = null;
 let socketHandle: { stop: () => void } | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let bridgeConnected = false;
 
+function persistWorkerHeartbeat(): void {
+  void writeWhatsAppWorkerHeartbeat(process.pid, new Date().toISOString(), bridgeConnected);
+}
+
+registerProcessLifecycleLogging();
 registerCleanupHandlers(() => {
   socketHandle?.stop();
   if (heartbeatTimer) {
@@ -62,12 +68,18 @@ try {
   const socket = await createWhatsAppSocket({
     onMessage: handleMessage,
     onConnected: (me) => {
-      console.log("WhatsApp bridge is listening for messages.");
+      bridgeConnected = true;
+      persistWorkerHeartbeat();
+      console.log("WhatsApp connected.");
       void clearWhatsAppQrCode();
       void syncWhatsAppOwnerPairing({
         ownerJid: me.id,
         ownerLid: me.lid,
       }).then(() => authStore.reload());
+    },
+    onDisconnected: () => {
+      bridgeConnected = false;
+      persistWorkerHeartbeat();
     },
     onQr: (qr) => {
       void writeWhatsAppQrCode(qr);
@@ -76,19 +88,18 @@ try {
 
   socketHandle = socket;
 
-  console.log("TinyClaw WhatsApp bridge starting.");
-  console.log(`Server: ${serverUrl}`);
-  console.log(`Profile: ${config.profileId}`);
   const authConfig = authStore.getConfig();
   const paired = authConfig?.pairedJid ? "yes" : "no";
   const pendingCode = authConfig?.pairingCode ? "yes" : "no";
-  console.log(`Paired: ${paired} \u00b7 Pending pairing code: ${pendingCode}`);
+  console.log(
+    `TinyClaw WhatsApp bridge · ${serverUrl} · profile ${config.profileId} · paired ${paired} · pairing code ${pendingCode}`,
+  );
 
   await socket.start();
 
-  await writeWhatsAppWorkerHeartbeat();
+  await writeWhatsAppWorkerHeartbeat(process.pid, new Date().toISOString(), bridgeConnected);
   heartbeatTimer = setInterval(() => {
-    void writeWhatsAppWorkerHeartbeat();
+    persistWorkerHeartbeat();
   }, 15_000);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -101,8 +112,23 @@ try {
 function registerCleanupHandlers(cleanup: () => void): void {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
+      console.log(`WhatsApp worker received ${signal}. Shutting down.`);
       cleanup();
       process.exit(0);
     });
   }
+}
+
+function registerProcessLifecycleLogging(): void {
+  process.on("exit", (code) => {
+    console.log(`WhatsApp worker exiting with code ${code}.`);
+  });
+
+  process.on("uncaughtException", (error) => {
+    console.error("WhatsApp worker uncaught exception.", error);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    console.error("WhatsApp worker unhandled rejection.", reason);
+  });
 }

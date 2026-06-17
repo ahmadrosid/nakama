@@ -85,6 +85,7 @@ export interface WhatsAppWorkerStatus {
   configured: boolean;
   paired: boolean;
   running: boolean;
+  connected: boolean;
   qrCode: string | null;
   process?: WorkerProcessInfo;
 }
