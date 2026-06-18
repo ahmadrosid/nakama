@@ -226,7 +226,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (health.providerConfigured) {
         const models = await client.getModels();
-        const profileId = resolveProfileId();
+        const profileId = await resolveProfileId();
         const profiles = await client.listProfiles();
         const profile = profiles.profiles.find((entry) => entry.id === profileId);
         const modelLabel = profile?.model?.includes("::")
@@ -244,13 +244,30 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
   }
 
-  function resolveProfileId(): string {
+  async function resolveProfileId(): Promise<string> {
     const fileConfig = authStore.getConfig();
-    return fileConfig?.profileId?.trim() || config.profileId;
+    const preferredProfileId = fileConfig?.profileId?.trim() || config.profileId;
+    const profiles = await client.listProfiles();
+    const profileIds = new Set(profiles.profiles.map((profile) => profile.id));
+
+    if (profileIds.has(preferredProfileId)) {
+      return preferredProfileId;
+    }
+
+    if (profileIds.has("default")) {
+      return "default";
+    }
+
+    const fallback = profiles.profiles[0]?.id;
+    if (fallback) {
+      return fallback;
+    }
+
+    throw new Error("No profiles exist on the server. Create a profile in the web dashboard first.");
   }
 
   async function resolveSession(jid: string): Promise<RemoteChatSession> {
-    const profileId = resolveProfileId();
+    const profileId = await resolveProfileId();
     const existing = sessionStore.get(jid);
 
     if (existing && existing.profileId === profileId) {
@@ -269,15 +286,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function createAndBindSession(
     jid: string,
-    profileId = resolveProfileId(),
+    profileId?: string,
   ): Promise<RemoteChatSession> {
+    const resolvedProfileId = profileId ?? (await resolveProfileId());
     const session = await client.createSession("whatsapp", {
-      profileId,
+      profileId: resolvedProfileId,
     });
 
     sessionStore.set(jid, {
       sessionId: session.id,
-      profileId,
+      profileId: resolvedProfileId,
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();

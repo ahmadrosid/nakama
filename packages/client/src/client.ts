@@ -581,13 +581,10 @@ export class TinyClawClient {
       ) => {
         const handlers = normalizeStreamHandlers(handler);
         const body = { ...resolveSendMessageBody(input), stream: true };
-        const headers: Record<string, string> = {
+        const headers = this.buildHeaders("POST", {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
-        };
-        if (this.authToken) {
-          headers["Authorization"] = `Bearer ${this.authToken}`;
-        }
+        });
         const response = await this.fetchImpl(
           `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
           {
@@ -595,6 +592,7 @@ export class TinyClawClient {
             headers,
             body: JSON.stringify(body),
             signal: options?.signal,
+            credentials: this.credentials,
           },
         );
 
@@ -885,22 +883,8 @@ export class TinyClawClient {
     path: string,
     init?: RequestInit,
   ): Promise<T> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(init?.headers as Record<string, string> ?? {}),
-    };
-
-    if (this.authToken) {
-      headers["Authorization"] = `Bearer ${this.authToken}`;
-    }
-
     const method = (init?.method ?? "GET").toUpperCase();
-    if (isMutatingMethod(method)) {
-      const csrfToken = readCookie("tinyclaw_csrf");
-      if (csrfToken) {
-        headers["X-CSRF-Token"] = csrfToken;
-      }
-    }
+    const headers = this.buildHeaders(method, init?.headers);
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
@@ -917,6 +901,26 @@ export class TinyClawClient {
     }
 
     return (await response.json()) as T;
+  }
+
+  private buildHeaders(method: string, headers?: HeadersInit): Record<string, string> {
+    const merged: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(headers as Record<string, string> ?? {}),
+    };
+
+    if (this.authToken) {
+      merged["Authorization"] = `Bearer ${this.authToken}`;
+    }
+
+    if (isMutatingMethod(method)) {
+      const csrfToken = readCookie("tinyclaw_csrf");
+      if (csrfToken) {
+        merged["X-CSRF-Token"] = csrfToken;
+      }
+    }
+
+    return merged;
   }
 }
 async function createApiError(response: Response, path: string): Promise<TinyClawApiError> {

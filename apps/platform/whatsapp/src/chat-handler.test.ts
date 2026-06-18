@@ -39,7 +39,42 @@ describe("createChatHandler", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "default",
+            name: "Default",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
@@ -70,7 +105,42 @@ describe("createChatHandler", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "default",
+            name: "Default",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
@@ -101,7 +171,42 @@ describe("createChatHandler", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "default",
+            name: "Default",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
@@ -137,7 +242,42 @@ describe("createChatHandler", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "default",
+            name: "Default",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
@@ -167,7 +307,42 @@ describe("createChatHandler", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "default",
+            name: "Default",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
@@ -379,21 +554,40 @@ describe("createChatHandler", () => {
     });
   });
 
-  test("uses updated profile from config on the next message", async () => {
+  test("falls back to an existing profile when config points to a missing one", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
         phoneNumber: "1234567890",
-        profileId: "default",
+        profileId: "missing_profile",
         pairedJid: PAIRED_JID,
       });
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
-      const { client, calls } = createMockClient();
+      const { client, calls } = createMockClient({
+        profiles: [
+          {
+            id: "profile_tensetutor",
+            name: "Tense Tutor",
+            model: null,
+            thinkingEnabled: null,
+            thinkingEffort: null,
+            effectiveThinkingEnabled: true,
+            effectiveThinkingEffort: "medium",
+            isSuper: false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: false,
+            hasAvatar: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".tinyclaw", "whatsapp", "chat-sessions.json"),
       );
-      const { socket } = createMockSocket();
+      const { socket, sent } = createMockSocket();
 
       const handleMessage = createChatHandler({
         client,
@@ -403,17 +597,11 @@ describe("createChatHandler", () => {
         getSocket: () => socket as any,
       });
 
-      await handleMessage({ jid: PAIRED_JID, text: "hello" });
-      expect(calls.profileIds).toEqual(["default"]);
+      await handleMessage({ jid: PAIRED_JID, text: "/new" });
 
-      await writeWhatsAppConfigIni(homeDir, {
-        phoneNumber: "1234567890",
-        profileId: "profile_tensetutor",
-        pairedJid: PAIRED_JID,
-      });
-
-      await handleMessage({ jid: PAIRED_JID, text: "hello again" });
-      expect(calls.profileIds).toEqual(["default", "profile_tensetutor"]);
+      expect(calls.listProfiles).toBe(1);
+      expect(calls.profileIds).toEqual(["profile_tensetutor"]);
+      expect(sent[0]?.text).toContain("Started a new conversation.");
     });
   });
 });

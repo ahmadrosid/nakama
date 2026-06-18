@@ -3,6 +3,7 @@ import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
 import type { TinyClawClient } from "@tinyclaw/client";
+import type { ProfileSummary } from "@tinyclaw/core/contract";
 import type { StreamHandlers } from "@tinyclaw/client";
 
 export interface MockStreamControl {
@@ -20,13 +21,19 @@ type StreamStep =
   | { type: "resolve"; reply?: string };
 
 export function createMockClient(
-  options: { streaming?: boolean; steps?: StreamStep[]; autoComplete?: boolean } = {},
+  options: {
+    streaming?: boolean;
+    steps?: StreamStep[];
+    autoComplete?: boolean;
+    profiles?: ProfileSummary[];
+  } = {},
 ) {
   const calls = {
     createSession: 0,
     sendStream: 0,
     compact: 0,
     profileIds: [] as string[],
+    listProfiles: 0,
   };
 
   let streamControl: MockStreamControl | null = null;
@@ -133,6 +140,10 @@ export function createMockClient(
   };
 
   const client = {
+    listProfiles: async () => {
+      calls.listProfiles += 1;
+      return { profiles: options.profiles ?? [createDefaultProfileSummary()] };
+    },
     createSession: async (_channel, options = {}) => {
       calls.createSession += 1;
       calls.profileIds.push(options.profileId ?? "default");
@@ -153,6 +164,26 @@ export function createMockClient(
     client,
     calls,
     getStreamControl: () => streamControl,
+  };
+}
+
+function createDefaultProfileSummary(): ProfileSummary {
+  const now = new Date().toISOString();
+  return {
+    id: "default",
+    name: "Default",
+    model: null,
+    thinkingEnabled: null,
+    thinkingEffort: null,
+    effectiveThinkingEnabled: true,
+    effectiveThinkingEffort: "medium",
+    isSuper: false,
+    toolCount: 0,
+    mcpServerCount: 0,
+    soulActive: false,
+    hasAvatar: false,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
