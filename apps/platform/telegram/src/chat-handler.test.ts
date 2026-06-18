@@ -190,6 +190,47 @@ describe("createChatHandler security", () => {
     });
   });
 
+  test("falls back to the default profile when the configured profile is missing", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        handshakeCode: "ABCD1234",
+        profileId: "missing_profile",
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls, getLastCreateSessionProfileId } = createMockClient({
+        profiles: [{ id: "default", model: null }],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "missing_profile" },
+        authStore,
+        sessionStore,
+      });
+
+      const pairAttempt = createMessageContext({
+        userId: 1001,
+        text: "ABCD1234",
+      });
+      await handleMessage(pairAttempt.ctx);
+
+      const chatAttempt = createMessageContext({
+        userId: 1001,
+        text: "hello agent",
+      });
+      await handleMessage(chatAttempt.ctx);
+
+      expect(calls.createSession).toBe(1);
+      expect(getLastCreateSessionProfileId()).toBe("default");
+      expect(chatAttempt.replies.at(-1)).toBe("Agent reply");
+    });
+  });
+
   test("does not allow a second user to reuse a consumed pairing code", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

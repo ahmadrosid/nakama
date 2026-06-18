@@ -59,13 +59,19 @@ type StreamStep =
   | { type: "resolve"; reply?: string };
 
 export function createMockClient(
-  options: { streaming?: boolean; steps?: StreamStep[]; autoComplete?: boolean } = {},
+  options: {
+    streaming?: boolean;
+    steps?: StreamStep[];
+    autoComplete?: boolean;
+    profiles?: Array<{ id: string; model?: string | null }>;
+  } = {},
 ) {
   const calls = {
     createSession: 0,
     sendStream: 0,
     compact: 0,
   };
+  let lastCreateSessionProfileId: string | undefined;
 
   let streamControl: MockStreamControl | null = null;
 
@@ -181,13 +187,19 @@ export function createMockClient(
     createAutomation: async () => ({}),
   };
 
+  const profiles = options.profiles ?? [{ id: "default", model: null }];
+
   const client = {
-    createSession: async () => {
+    createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
+      lastCreateSessionProfileId = input?.profileId;
       return session;
     },
     createChatSession: () => session,
     health: async () => ({ ok: true, providerConfigured: false }),
+    listProfiles: async () => ({
+      profiles,
+    }),
     getModels: async () => ({
       provider: null,
       currentProviderId: null,
@@ -200,6 +212,7 @@ export function createMockClient(
   return {
     client,
     calls,
+    getLastCreateSessionProfileId: () => lastCreateSessionProfileId,
     getStreamControl: () => streamControl,
   };
 }

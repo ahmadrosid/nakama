@@ -1,5 +1,6 @@
 import type { TinyClawClient, RemoteChatSession } from "@tinyclaw/client";
 import type { SendMessageInput } from "@tinyclaw/core";
+import { DEFAULT_TELEGRAM_PROFILE_ID } from "@tinyclaw/core/telegram-config";
 import type { Context } from "grammy";
 import {
   clearActiveStream,
@@ -309,18 +310,38 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function createAndBindSession(chatId: string): Promise<RemoteChatSession> {
+    const profileId = await resolveSessionProfileId();
     const session = await client.createSession("telegram", {
-      profileId: config.profileId,
+      profileId,
     });
 
     sessionStore.set(chatId, {
       sessionId: session.id,
-      profileId: config.profileId,
+      profileId,
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();
 
     return session;
+  }
+
+  async function resolveSessionProfileId(): Promise<string> {
+    const profiles = await client.listProfiles();
+    const availableProfileIds = new Set(profiles.profiles.map((profile) => profile.id));
+
+    if (availableProfileIds.has(config.profileId)) {
+      return config.profileId;
+    }
+
+    if (availableProfileIds.has(DEFAULT_TELEGRAM_PROFILE_ID)) {
+      return DEFAULT_TELEGRAM_PROFILE_ID;
+    }
+
+    if (profiles.profiles.length > 0) {
+      return profiles.profiles[0]!.id;
+    }
+
+    throw new Error("No profiles are available on the server.");
   }
 }
 
