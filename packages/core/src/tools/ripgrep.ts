@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { rgPath } from "@vscode/ripgrep";
 
 export const DEFAULT_MAX_RESULTS = 50;
 export const MAX_RESULTS_LIMIT = 200;
@@ -17,6 +16,8 @@ export interface RipgrepSearchResult {
   matches: RipgrepMatch[];
   truncated: boolean;
 }
+
+let rgCommandPromise: Promise<string> | null = null;
 
 interface MatchParseResult {
   match: RipgrepMatch | null;
@@ -55,8 +56,10 @@ export async function runRipgrep(
   args: string[],
   options: { workspaceRoot: string; searchRoot: string; maxResults: number },
 ): Promise<RipgrepSearchResult> {
+  const command = await resolveRipgrepCommand();
+
   return await new Promise((resolve, reject) => {
-    const child = spawn(rgPath, args, {
+    const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     });
@@ -116,6 +119,14 @@ export async function runRipgrep(
 
     child.on("error", (error) => {
       clearTimeout(timeoutId);
+      if ("code" in error && error.code === "ENOENT") {
+        reject(
+          new Error(
+            'ripgrep binary not found. Install the optional "@vscode/ripgrep" package for this platform or make `rg` available on PATH.',
+          ),
+        );
+        return;
+      }
       reject(error);
     });
 
@@ -156,6 +167,27 @@ export async function runRipgrep(
       );
     });
   });
+}
+
+async function resolveRipgrepCommand(): Promise<string> {
+  if (!rgCommandPromise) {
+    rgCommandPromise = loadRipgrepCommand();
+  }
+
+  return await rgCommandPromise;
+}
+
+async function loadRipgrepCommand(): Promise<string> {
+  try {
+    const ripgrep = await import("@vscode/ripgrep");
+    if (typeof ripgrep.rgPath === "string" && ripgrep.rgPath.trim()) {
+      return ripgrep.rgPath;
+    }
+  } catch {
+    // Fall back to PATH lookup so runtimes that never use search tools do not crash on import.
+  }
+
+  return "rg";
 }
 
 function parseMatchLine(
