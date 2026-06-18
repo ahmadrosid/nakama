@@ -227,18 +227,11 @@ function buildProviderFieldsFromRequest(
 
 export function mergeModelsForConfig(
   providers: ProviderInstance[],
-  currentProviderId: string | null,
-  currentModel: string | null,
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 
   for (const instance of providers) {
-    models.push(
-      ...getModelsForProviderInstance(
-        instance,
-        instance.id === currentProviderId ? currentModel : null,
-      ),
-    );
+    models.push(...getModelsForProviderInstance(instance));
   }
 
   return models;
@@ -285,10 +278,9 @@ export function extractStoredModelId(
 export function resolveProfileProviderSelection(options: {
   providers: ProviderInstance[];
   defaultProviderId: string | null | undefined;
-  defaultModel: string | null | undefined;
   profileModel: string | null | undefined;
 }): ResolvedProfileProviderSelection | null {
-  const { providers, defaultProviderId, defaultModel, profileModel } = options;
+  const { providers, defaultProviderId, profileModel } = options;
   const active = defaultProviderId ? findProviderInstance({ providers }, defaultProviderId) : null;
   const fallbackInstance = active ?? providers[0] ?? null;
 
@@ -338,12 +330,5 @@ export function resolveProfileProviderSelection(options: {
     }
   }
 
-  return {
-    instance: fallbackInstance,
-    model: resolveModel(
-      fallbackInstance.type,
-      defaultModel ?? "",
-      fallbackInstance.customModels,
-    ),
-  };
+  return null;
 }

@@ -257,17 +257,6 @@ export function useConfigureProviderMutation() {
   });
 }
 
-export function useSetModelMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (request: Parameters<typeof client.setModel>[0]) => client.setModel(request),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.models });
-    },
-  });
-}
-
 export function usePrefetchAppData() {
   const queryClient = useQueryClient();
 

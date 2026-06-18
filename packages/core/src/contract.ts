@@ -483,7 +483,6 @@ export interface ProviderInstanceSummary {
 export interface ListProvidersResponse {
   providers: ProviderInstanceSummary[];
   defaultProviderId: string | null;
-  defaultModel: string | null;
 }
 
 export interface CreateProviderRequest {
@@ -498,7 +497,7 @@ export interface CreateProviderRequest {
 export interface CreateProviderResponse {
   provider: ProviderInstanceSummary;
   defaultProviderId: string;
-  defaultModel: string;
+  initialModel: string;
 }
 
 export interface UpdateProviderRequest {
@@ -514,13 +513,10 @@ export interface UpdateProviderResponse {
 
 export interface DeleteProviderResponse {
   defaultProviderId: string | null;
-  defaultModel: string | null;
 }
 
 export interface ModelsResponse {
   currentProviderId: string | null;
-  currentModel: string | null;
-  defaultModel: string | null;
   providers: ProviderInstanceSummary[];
   models: ProviderModelOption[];
   /** Full static model catalog for provider setup and management UIs. */
@@ -534,17 +530,6 @@ export interface ModelsResponse {
 export interface DiscoverModelsRequest {
   baseUrl: string;
   apiKey?: string;
-}
-
-export interface SetModelRequest {
-  providerId: string;
-  model: string;
-}
-
-export interface SetModelResponse {
-  providerId: string;
-  provider: ProviderName;
-  currentModel: string;
 }
 
 export interface ConfigureProviderRequest {

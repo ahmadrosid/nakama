@@ -21,8 +21,6 @@ const profile: ProfileSummary = {
 
 const modelsCache: ModelsResponse = {
   currentProviderId: "provider-a",
-  currentModel: "claude-sonnet-4-20250514",
-  defaultModel: "claude-sonnet-4-20250514",
   providers: [
     {
       id: "provider-a",
@@ -117,6 +115,15 @@ describe("effectiveModelState", () => {
     expect(effectiveModelState(profile, modelsCache)).toEqual({
       modelId: "gpt-4o",
       providerId: "provider-b",
+    });
+  });
+
+  test("returns null model when profile has no model", () => {
+    expect(
+      effectiveModelState({ ...profile, model: null }, modelsCache),
+    ).toEqual({
+      modelId: null,
+      providerId: "provider-a",
     });
   });
 });

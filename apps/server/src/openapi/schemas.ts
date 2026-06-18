@@ -328,14 +328,13 @@ export const openApiSchemas = {
   },
   ListProvidersResponse: {
     type: "object",
-    required: ["providers", "defaultProviderId", "defaultModel"],
+    required: ["providers", "defaultProviderId"],
     properties: {
       providers: {
         type: "array",
         items: { $ref: "#/components/schemas/ProviderInstanceSummary" },
       },
       defaultProviderId: { type: ["string", "null"] },
-      defaultModel: { type: ["string", "null"] },
     },
   },
   CreateProviderRequest: {
@@ -358,11 +357,11 @@ export const openApiSchemas = {
   },
   CreateProviderResponse: {
     type: "object",
-    required: ["provider", "defaultProviderId", "defaultModel"],
+    required: ["provider", "defaultProviderId", "initialModel"],
     properties: {
       provider: { $ref: "#/components/schemas/ProviderInstanceSummary" },
       defaultProviderId: { type: "string" },
-      defaultModel: { type: "string" },
+      initialModel: { type: "string" },
     },
   },
   UpdateProviderRequest: {
@@ -386,10 +385,9 @@ export const openApiSchemas = {
   },
   DeleteProviderResponse: {
     type: "object",
-    required: ["defaultProviderId", "defaultModel"],
+    required: ["defaultProviderId"],
     properties: {
       defaultProviderId: { type: ["string", "null"] },
-      defaultModel: { type: ["string", "null"] },
     },
   },
   ModelsResponse: {
@@ -397,8 +395,6 @@ export const openApiSchemas = {
     required: [
       "currentProviderId",
       "provider",
-      "currentModel",
-      "defaultModel",
       "displayName",
       "providers",
       "models",
@@ -409,8 +405,6 @@ export const openApiSchemas = {
         type: ["string", "null"],
         enum: ["openai", "anthropic", "openrouter", "gemini", "openai_compatible", null],
       },
-      currentModel: { type: ["string", "null"] },
-      defaultModel: { type: ["string", "null"] },
       displayName: { type: ["string", "null"] },
       providers: {
         type: "array",
@@ -424,26 +418,6 @@ export const openApiSchemas = {
         type: "array",
         items: { $ref: "#/components/schemas/ProviderModelOption" },
       },
-    },
-  },
-  SetModelRequest: {
-    type: "object",
-    required: ["providerId", "model"],
-    properties: {
-      providerId: { type: "string" },
-      model: { type: "string" },
-    },
-  },
-  SetModelResponse: {
-    type: "object",
-    required: ["providerId", "provider", "currentModel"],
-    properties: {
-      providerId: { type: "string" },
-      provider: {
-        type: "string",
-        enum: ["openai", "anthropic", "openrouter", "gemini", "openai_compatible"],
-      },
-      currentModel: { type: "string" },
     },
   },
   ConfigureProviderRequest: {

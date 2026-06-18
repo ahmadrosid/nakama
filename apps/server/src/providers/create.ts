@@ -1,3 +1,4 @@
+import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { createGeminiProvider } from "./gemini";
 import {
@@ -113,11 +114,17 @@ export function createProviderFromActiveConfig(
 ): ProviderClient | null {
   const instance = getActiveProviderInstance(userConfig);
 
-  if (!instance || !userConfig?.defaultModel) {
+  if (!instance) {
     return null;
   }
 
-  return createProviderForInstance(instance, userConfig.defaultModel, env);
+  const model = resolveDefaultModelForInstance(instance);
+
+  if (!model) {
+    return null;
+  }
+
+  return createProviderForInstance(instance, model, env);
 }
 
 export function createProviderFromSources(

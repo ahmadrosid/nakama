@@ -31,7 +31,6 @@ describe("user config multi-provider", () => {
 
     await saveUserConfig({
       defaultProviderId: openaiId,
-      defaultModel: "gpt-5.4",
       timezone: "UTC",
       thinkingEnabled: true,
       thinkingEffort: "medium",
@@ -69,7 +68,6 @@ describe("user config multi-provider", () => {
     const loaded = await loadUserConfig();
     expect(loaded?.providers).toHaveLength(2);
     expect(loaded?.defaultProviderId).toBe(openaiId);
-    expect(loaded?.defaultModel).toBe("gpt-5.4");
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("llama3.2");
   });
 

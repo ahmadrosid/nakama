@@ -167,18 +167,6 @@ export function buildOpenApiSpec() {
           },
         },
       },
-      "/v1/settings/model": {
-        put: {
-          tags: ["Models"],
-          summary: "Switch the active model",
-          operationId: "setModel",
-          requestBody: jsonBody("SetModelRequest"),
-          responses: {
-            "200": jsonResponse("SetModelResponse", "Model updated"),
-            "500": errorResponse,
-          },
-        },
-      },
       "/v1/settings/provider": {
         put: {
           tags: ["Models"],

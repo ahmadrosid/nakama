@@ -188,7 +188,13 @@ export function createMockClient(
     },
     createChatSession: () => session,
     health: async () => ({ ok: true, providerConfigured: false }),
-    getModels: async () => ({ provider: null, currentModel: null }),
+    getModels: async () => ({
+      provider: null,
+      currentProviderId: null,
+      providers: [],
+      models: [],
+      displayName: null,
+    }),
   } as unknown as TinyClawClient;
 
   return {

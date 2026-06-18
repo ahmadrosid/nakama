@@ -226,8 +226,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (health.providerConfigured) {
         const models = await client.getModels();
+        const profileId = resolveProfileId();
+        const profiles = await client.listProfiles();
+        const profile = profiles.profiles.find((entry) => entry.id === profileId);
+        const modelLabel = profile?.model?.includes("::")
+          ? profile.model.slice(profile.model.indexOf("::") + 2)
+          : profile?.model ?? "none";
         lines.push(`Provider: ${models.provider ?? "unknown"}`);
-        lines.push(`Model: ${models.currentModel ?? "none"}`);
+        lines.push(`Model: ${modelLabel}`);
       } else {
         lines.push("Chat runs in offline mode without an API key.");
       }

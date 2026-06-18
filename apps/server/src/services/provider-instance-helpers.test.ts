@@ -30,7 +30,6 @@ describe("resolveProfileProviderSelection", () => {
     const resolved = resolveProfileProviderSelection({
       providers,
       defaultProviderId: "zen-1",
-      defaultModel: "opencode-go/kimi-k2.7-code",
       profileModel: "openai-1::gpt-5.4",
     });
 
@@ -56,7 +55,6 @@ describe("resolveProfileProviderSelection", () => {
     const resolved = resolveProfileProviderSelection({
       providers,
       defaultProviderId: "zen-1",
-      defaultModel: "opencode-go/kimi-k2.7-code",
       profileModel: "gpt-5.4",
     });
 
@@ -65,7 +63,7 @@ describe("resolveProfileProviderSelection", () => {
     expect(resolved?.model).toBe("gpt-5.4");
   });
 
-  test("inherits the default provider when the profile does not override the model", () => {
+  test("returns null when the profile does not override the model", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({
         id: "zen-1",
@@ -82,12 +80,9 @@ describe("resolveProfileProviderSelection", () => {
     const resolved = resolveProfileProviderSelection({
       providers,
       defaultProviderId: "zen-1",
-      defaultModel: "opencode-go/glm-5.1",
       profileModel: null,
     });
 
-    expect(resolved).not.toBeNull();
-    expect(resolved?.instance.id).toBe("zen-1");
-    expect(resolved?.model).toBe("opencode-go/glm-5.1");
+    expect(resolved).toBeNull();
   });
 });

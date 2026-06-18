@@ -30,8 +30,6 @@ import {
   effectiveProfileModelSelection,
   extractModelId,
   groupModelsByProvider,
-  INHERIT_MODEL_VALUE,
-  profileModelLabel,
 } from "@/lib/models";
 import { SETUP_PATH } from "@/lib/navigation";
 
@@ -96,29 +94,14 @@ export function ChatPage() {
   );
 
   const currentModelSelection = useMemo(
-    () =>
-      effectiveProfileModelSelection(
-        activeProfile?.model,
-        models?.currentProviderId,
-        models?.currentModel,
-        providerModelGroups,
-      ),
-    [
-      activeProfile?.model,
-      models?.currentProviderId,
-      models?.currentModel,
-      providerModelGroups,
-    ],
+    () => effectiveProfileModelSelection(activeProfile?.model, providerModelGroups),
+    [activeProfile?.model, providerModelGroups],
   );
 
   const renderModelLabel = useCallback(
     (selection: string | null) => {
       if (!selection) {
-        return null;
-      }
-
-      if (selection === INHERIT_MODEL_VALUE) {
-        return profileModelLabel(null, providerModelGroups, models?.currentModel);
+        return "Select model";
       }
 
       const decoded = decodeModelSelection(selection);
@@ -139,7 +122,7 @@ export function ChatPage() {
         decoded.modelId
       );
     },
-    [models?.currentModel, providerModelGroups],
+    [providerModelGroups],
   );
 
   const activeModelSupportsThinking = useMemo(() => {
@@ -173,26 +156,7 @@ export function ChatPage() {
 
   const handleModelChange = useCallback(
     (selection: string) => {
-      if (!profileId) {
-        return;
-      }
-
-      if (selection === INHERIT_MODEL_VALUE) {
-        void updateProfileMutation
-          .mutateAsync({
-            profileId,
-            input: { model: null },
-          })
-          .then(() => {
-            setProfiles((current) =>
-              current.map((profile) =>
-                profile.id === profileId ? { ...profile, model: null } : profile,
-              ),
-            );
-          })
-          .catch((err) => {
-            setError(formatError(err));
-          });
+      if (!profileId || !selection) {
         return;
       }
 
@@ -595,11 +559,6 @@ export function ChatPage() {
       providerConfigured={health?.providerConfigured}
       onNavigateSetup={() => navigate(SETUP_PATH)}
       providerModelGroups={providerModelGroups}
-      inheritModelLabel={profileModelLabel(
-        null,
-        providerModelGroups,
-        models?.defaultModel ?? models?.currentModel,
-      )}
       profileModelId={extractModelId(activeProfile?.model)}
       currentModelSelection={currentModelSelection}
       onModelChange={handleModelChange}

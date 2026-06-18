@@ -31,7 +31,6 @@ describe("loadLocalAuthToken", () => {
 
     await saveUserConfig({
       defaultProviderId: null,
-      defaultModel: null,
       providers: [],
       jwtSecret: "test-secret-key-1234567890",
     });

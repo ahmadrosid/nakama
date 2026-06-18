@@ -29,7 +29,6 @@ export async function resolveJwtSecret(): Promise<string> {
   const generated = crypto.randomUUID().replace(/-/g, "");
   const newConfig = config ?? {
     defaultProviderId: null,
-    defaultModel: null,
     providers: [],
   };
   await saveUserConfig({ ...newConfig, jwtSecret: generated });

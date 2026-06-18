@@ -3,7 +3,6 @@ import type {
   ConfigureProviderResponse,
   CreateProviderRequest,
   CreateProviderResponse,
-  SetModelRequest,
 } from "@tinyclaw/core/contract";
 import {
   createContext,
@@ -17,7 +16,6 @@ import {
   useCreateProviderMutation,
   useHealthQuery,
   useModelsQuery,
-  useSetModelMutation,
 } from "@/hooks/use-app-queries";
 import { useAuth } from "@/context/auth-context";
 import { formatError } from "@/lib/client";
@@ -27,7 +25,6 @@ interface AppContextValue {
   models: ReturnType<typeof useModelsQuery>["data"] | null;
   loading: boolean;
   error: string | null;
-  setModel: (request: SetModelRequest) => Promise<void>;
   createProvider: (request: CreateProviderRequest) => Promise<CreateProviderResponse>;
   configureProvider: (
     request: ConfigureProviderRequest,
@@ -46,14 +43,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const configureProviderMutation = useConfigureProviderMutation();
   const createProviderMutation = useCreateProviderMutation();
-  const setModelMutation = useSetModelMutation();
-
-  const setModel = useCallback(
-    async (request: SetModelRequest) => {
-      await setModelMutation.mutateAsync(request);
-    },
-    [setModelMutation],
-  );
 
   const createProvider = useCallback(
     async (request: CreateProviderRequest) => {
@@ -90,7 +79,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       models: modelsQuery.data ?? null,
       loading,
       error,
-      setModel,
       createProvider,
       configureProvider,
     }),
@@ -99,7 +87,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       modelsQuery.data,
       loading,
       error,
-      setModel,
       createProvider,
       configureProvider,
     ],

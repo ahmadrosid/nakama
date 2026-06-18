@@ -479,12 +479,8 @@ async function runStickyChat(
         return "handled";
       }
 
-      const result = await options.client.setModel({
-        providerId: target.providerId,
-        model: target.modelId,
-      });
       const profileResponse = await options.client.updateProfile(currentProfileId, {
-        model: target.modelId,
+        model: `${target.providerId}::${target.modelId}`,
       });
       currentProfile = profileResponse.profile;
       session = await options.client.createSession(options.channel, {
@@ -493,7 +489,7 @@ async function runStickyChat(
       context.onSessionChange(session);
       lastUserMessage = null;
       await refreshModelsCache();
-      writeOutput(`Model switched to ${result.currentModel}. Chat history reset.`);
+      writeOutput(`Model switched to ${target.modelId}. Chat history reset.`);
     } catch (error) {
       writeOutput(formatError(error));
     }
@@ -909,7 +905,7 @@ async function printCurrentModel(
   const models = cachedModels ?? (await client.getModels());
   const active = profile
     ? effectiveModelState(profile, models)
-    : { modelId: models.currentModel, providerId: models.currentProviderId };
+    : { modelId: null, providerId: models.currentProviderId };
 
   if (!models.provider || !active.modelId) {
     write("No model configured.");
@@ -935,7 +931,7 @@ async function printModels(
 
   const active = profile
     ? effectiveModelState(profile, models)
-    : { modelId: models.currentModel, providerId: models.currentProviderId };
+    : { modelId: null, providerId: models.currentProviderId };
 
   write(`Provider: ${models.provider}`);
   write(`Current: ${active.modelId ?? "none"}`);

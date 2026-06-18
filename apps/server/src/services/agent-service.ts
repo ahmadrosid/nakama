@@ -36,8 +36,6 @@ import type {
   ImageAttachment,
   ListKnowledgeBaseResponse,
   ListProvidersResponse,
-  SetModelRequest,
-  SetModelResponse,
   UpdateProviderRequest,
   UpdateProviderResponse,
   SkillResponse,
@@ -119,7 +117,6 @@ import {
   buildProviderInstanceFromCreateRequest,
   countModelsForInstance,
   mergeModelsForConfig,
-  modelExistsOnInstance,
   resolveProfileProviderSelection,
   resolveDefaultModelForInstance,
   resolveInitialModel,
@@ -190,10 +187,11 @@ export class AgentService {
     this.todoTools = createTodoTools(this.agentTodoState);
     this.superBotTools = createSuperBotTools(this.profileService, this.superBotSessionState);
     this._providerConfigured = isProviderConfigured(userConfig) && provider !== null;
+    const activeInstance = getActiveProviderInstance(userConfig);
     this.harness = this.createHarness({
       provider,
-      providerInstance: getActiveProviderInstance(userConfig),
-      modelId: userConfig?.defaultModel ?? null,
+      providerInstance: activeInstance,
+      modelId: activeInstance ? resolveDefaultModelForInstance(activeInstance) : null,
       thinking: this.resolveWorkspaceThinkingDefaults(),
     });
   }
@@ -279,7 +277,10 @@ export class AgentService {
       {
         provider: createProviderFromSources(process.env, this.userConfig),
         providerInstance: getActiveProviderInstance(this.userConfig),
-        modelId: this.userConfig?.defaultModel ?? null,
+        modelId: (() => {
+          const active = getActiveProviderInstance(this.userConfig);
+          return active ? resolveDefaultModelForInstance(active) : null;
+        })(),
         thinking: this.resolveWorkspaceThinkingDefaults(),
       },
     );
@@ -788,8 +789,6 @@ export class AgentService {
 
     return {
       currentProviderId: null,
-      currentModel: null,
-      defaultModel: entries[0]?.id ?? null,
       providers: [],
       models,
       provider: "openai_compatible",
@@ -806,7 +805,6 @@ export class AgentService {
         toProviderInstanceSummary(instance, countModelsForInstance(instance)),
       ),
       defaultProviderId: this.userConfig?.defaultProviderId ?? null,
-      defaultModel: this.userConfig?.defaultModel ?? null,
     };
   }
 
@@ -819,7 +817,6 @@ export class AgentService {
     const thinking = await this.resolveThinkingSettings();
     const baseConfig = this.userConfig ?? {
       defaultProviderId: null,
-      defaultModel: null,
       providers: [],
       thinkingEnabled: thinking.enabled,
       thinkingEffort: thinking.effort,
@@ -830,7 +827,6 @@ export class AgentService {
       providers,
       defaultProviderId:
         isFirst || !baseConfig.defaultProviderId ? instance.id : baseConfig.defaultProviderId,
-      defaultModel: isFirst || !baseConfig.defaultModel ? model : baseConfig.defaultModel,
     };
 
     await saveUserConfig(this.userConfig);
@@ -843,7 +839,7 @@ export class AgentService {
     return {
       provider: toProviderInstanceSummary(instance, countModelsForInstance(instance)),
       defaultProviderId: this.userConfig.defaultProviderId!,
-      defaultModel: this.userConfig.defaultModel!,
+      initialModel: model,
     };
   }
 
@@ -887,37 +883,26 @@ export class AgentService {
     }
 
     let defaultProviderId = this.userConfig.defaultProviderId;
-    let defaultModel = this.userConfig.defaultModel;
 
     if (defaultProviderId === providerId) {
-      const next = providers[0];
-
-      if (next) {
-        defaultProviderId = next.id;
-        defaultModel = resolveDefaultModelForInstance(next);
-      } else {
-        defaultProviderId = null;
-        defaultModel = null;
-      }
+      defaultProviderId = providers[0]?.id ?? null;
     }
 
     this.userConfig = {
       ...this.userConfig,
       providers,
       defaultProviderId,
-      defaultModel,
     };
 
     await saveUserConfig(this.userConfig);
     this.refreshHarness();
 
-    return { defaultProviderId, defaultModel };
+    return { defaultProviderId };
   }
 
   async getModels(options: { source?: "catalog" | "remote" } = {}): Promise<ModelsResponse> {
     const active = getActiveProviderInstance(this.userConfig);
     const currentProviderId = this.userConfig?.defaultProviderId ?? null;
-    const currentModel = this.userConfig?.defaultModel ?? null;
     const configuredProviders = this.userConfig?.providers ?? [];
     const providers = configuredProviders.map((instance) =>
       toProviderInstanceSummary(instance, countModelsForInstance(instance)),
@@ -927,7 +912,6 @@ export class AgentService {
       return this.buildModelsResponse({
         active: null,
         currentProviderId: null,
-        currentModel: null,
         providers: [],
         models: AVAILABLE_MODELS,
       });
@@ -944,30 +928,22 @@ export class AgentService {
         (this.userConfig?.providers ?? []).map((instance) =>
           instance.id === active.id ? remoteInstance : instance,
         ),
-        currentProviderId,
-        currentModel,
       );
 
       return this.buildModelsResponse({
         active,
         currentProviderId,
-        currentModel,
         providers,
         models,
         customModels: remote,
       });
     }
 
-    const models = mergeModelsForConfig(
-      this.userConfig?.providers ?? [],
-      currentProviderId,
-      currentModel,
-    );
+    const models = mergeModelsForConfig(this.userConfig?.providers ?? []);
 
     return this.buildModelsResponse({
       active,
       currentProviderId,
-      currentModel,
       providers,
       models,
     });
@@ -976,18 +952,14 @@ export class AgentService {
   private buildModelsResponse(options: {
     active: ReturnType<typeof getActiveProviderInstance>;
     currentProviderId: string | null;
-    currentModel: string | null;
     providers: ReturnType<typeof toProviderInstanceSummary>[];
     models: ModelsResponse["models"];
     customModels?: ModelsResponse["customModels"];
   }): ModelsResponse {
-    const { active, currentProviderId, currentModel, providers, models, customModels } =
-      options;
+    const { active, currentProviderId, providers, models, customModels } = options;
 
     return {
       currentProviderId,
-      currentModel,
-      defaultModel: currentModel,
       providers,
       models,
       catalog: AVAILABLE_MODELS,
@@ -1015,39 +987,6 @@ export class AgentService {
     );
   }
 
-  async setModel(request: SetModelRequest): Promise<SetModelResponse> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
-
-    const instance = findProviderInstance(this.userConfig, request.providerId);
-
-    if (!instance) {
-      throw new Error("Provider not found.");
-    }
-
-    const trimmedModel = request.model.trim();
-
-    if (!modelExistsOnInstance(instance, trimmedModel)) {
-      throw new Error(`Unknown model: ${request.model}`);
-    }
-
-    this.userConfig = {
-      ...this.userConfig,
-      defaultProviderId: instance.id,
-      defaultModel: trimmedModel,
-    };
-
-    await saveUserConfig(this.userConfig);
-    this.refreshHarness();
-
-    return {
-      providerId: instance.id,
-      provider: instance.type,
-      currentModel: trimmedModel,
-    };
-  }
-
   async configureProvider(
     request: ConfigureProviderRequest,
   ): Promise<ConfigureProviderResponse> {
@@ -1064,7 +1003,7 @@ export class AgentService {
 
     return {
       provider: result.provider.type,
-      currentModel: result.defaultModel,
+      currentModel: result.initialModel,
       displayName:
         instance?.type === "openai_compatible" ? (instance.label ?? null) : null,
     };
@@ -1072,11 +1011,12 @@ export class AgentService {
 
   private refreshHarness(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
+    const active = getActiveProviderInstance(this.userConfig);
     this._providerConfigured = isProviderConfigured(this.userConfig);
     this.harness = this.createHarness({
       provider,
-      providerInstance: getActiveProviderInstance(this.userConfig),
-      modelId: this.userConfig?.defaultModel ?? null,
+      providerInstance: active,
+      modelId: active ? resolveDefaultModelForInstance(active) : null,
       thinking: this.resolveWorkspaceThinkingDefaults(),
     });
     this.sessions.clear();
@@ -1336,13 +1276,15 @@ export class AgentService {
   getUsageStatusFields(): {
     displayName: string | null;
     costEstimated: boolean;
+    currentModel: string | null;
   } {
     const active = getActiveProviderInstance(this.userConfig);
-    const currentModel = this.userConfig?.defaultModel ?? null;
+    const currentModel = active ? resolveDefaultModelForInstance(active) : null;
 
     return {
       displayName: active?.type === "openai_compatible" ? (active.label ?? null) : null,
       costEstimated: isCostEstimated(active?.type ?? null, currentModel, active),
+      currentModel,
     };
   }
 
@@ -1501,7 +1443,6 @@ export class AgentService {
     const resolved = resolveProfileProviderSelection({
       providers: this.userConfig?.providers ?? [],
       defaultProviderId: this.userConfig?.defaultProviderId,
-      defaultModel: this.userConfig?.defaultModel,
       profileModel: profile.model,
     });
 
@@ -1530,7 +1471,6 @@ export class AgentService {
     const resolved = resolveProfileProviderSelection({
       providers: this.userConfig?.providers ?? [],
       defaultProviderId: this.userConfig?.defaultProviderId,
-      defaultModel: this.userConfig?.defaultModel,
       profileModel: profile.model,
     });
 

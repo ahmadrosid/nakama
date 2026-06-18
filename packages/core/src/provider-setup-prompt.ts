@@ -52,7 +52,7 @@ export async function promptForProviderConfig(
 
     if (provider === "openai_compatible") {
       const instance = await promptForCompatibleProviderInstance(question, writeLine);
-      return buildUserConfigFromInstance(instance, instance.customModels?.[0]?.id);
+      return buildUserConfigFromInstance(instance);
     }
 
     const apiKey = (await question("API key: ")).trim();
@@ -86,17 +86,15 @@ export async function promptForProviderConfig(
       createdAt: new Date().toISOString(),
     };
 
-    return buildUserConfigFromInstance(instance, selectedModel);
+    return buildUserConfigFromInstance(instance);
   }
 }
 
 function buildUserConfigFromInstance(
   instance: ProviderInstance,
-  model: string | undefined,
 ): UserConfig {
   return {
     defaultProviderId: instance.id,
-    defaultModel: model ?? null,
     providers: [instance],
   };
 }

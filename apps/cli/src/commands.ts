@@ -72,22 +72,26 @@ export function effectiveModelState(
   profile: ProfileSummary,
   models: ModelsResponse | null,
 ): { modelId: string | null; providerId: string | null } {
-  const modelId = profile.model ?? models?.currentModel ?? null;
-
-  if (!modelId || !models) {
-    return { modelId, providerId: models?.currentProviderId ?? null };
+  if (!profile.model?.trim()) {
+    return { modelId: null, providerId: models?.currentProviderId ?? null };
   }
 
-  if (profile.model) {
-    const match = models.models.find((model) => model.id === profile.model);
+  const { providerId, modelId } = parseModelCommandArg(profile.model);
 
-    return {
-      modelId,
-      providerId: match?.providerId ?? models.currentProviderId,
-    };
+  if (!modelId) {
+    return { modelId: null, providerId: models?.currentProviderId ?? null };
   }
 
-  return { modelId, providerId: models.currentProviderId };
+  if (providerId) {
+    return { providerId, modelId };
+  }
+
+  const match = models?.models.find((model) => model.id === modelId);
+
+  return {
+    modelId,
+    providerId: match?.providerId ?? models?.currentProviderId ?? null,
+  };
 }
 
 export function isActiveModelOption(

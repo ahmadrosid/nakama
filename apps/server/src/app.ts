@@ -43,8 +43,6 @@ import {
   type SendMessageRequest,
   type SendMessageResponse,
   type SessionMessagesResponse,
-  type SetModelRequest,
-  type SetModelResponse,
   type ConfigureProviderRequest,
   type ConfigureProviderResponse,
   type CreateProviderRequest,
@@ -395,13 +393,6 @@ export function createApp(options: ServerOptions) {
 
         if (providerRoute && request.method === "DELETE") {
           return json<DeleteProviderResponse>(await agent.deleteProvider(providerRoute));
-        }
-
-        if (request.method === "PUT" && url.pathname === "/v1/settings/model") {
-          const body = await readJson<SetModelRequest>(request);
-          const result = await agent.setModel(body);
-
-          return json<SetModelResponse>(result);
         }
 
         if (request.method === "PUT" && url.pathname === "/v1/settings/provider") {

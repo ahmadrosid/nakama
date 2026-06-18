@@ -16,6 +16,9 @@
       "name": "Health"
     },
     {
+      "name": "Workers"
+    },
+    {
       "name": "Chat"
     },
     {
@@ -252,47 +255,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteProviderResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/settings/model": {
-      "put": {
-        "tags": [
-          "Models"
-        ],
-        "summary": "Switch the active model",
-        "operationId": "setModel",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetModelRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Model updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetModelResponse"
                 }
               }
             }
@@ -616,6 +578,168 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TelegramSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settings/whatsapp": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Get WhatsApp bridge settings",
+        "operationId": "getWhatsAppSettings",
+        "responses": {
+          "200": {
+            "description": "WhatsApp settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Update WhatsApp bridge settings",
+        "operationId": "setWhatsAppSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWhatsAppSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "WhatsApp settings updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settings/whatsapp/pairing-code": {
+      "post": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Regenerate WhatsApp pairing code",
+        "operationId": "regenerateWhatsAppPairingCode",
+        "responses": {
+          "200": {
+            "description": "Pairing code regenerated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settings/whatsapp/reconnect": {
+      "post": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Reset WhatsApp session and restart worker for QR reconnect",
+        "operationId": "reconnectWhatsApp",
+        "responses": {
+          "200": {
+            "description": "WhatsApp session reset for QR reconnect",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppSettingsResponse"
                 }
               }
             }
@@ -988,6 +1112,62 @@
         }
       }
     },
+    "/v1/sessions/{sessionId}/branch": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Create a branched chat session from a message checkpoint",
+        "operationId": "branchSession",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created branched session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sessions/{sessionId}/compact": {
       "post": {
         "tags": [
@@ -1197,6 +1377,170 @@
         "responses": {
           "204": {
             "description": "Profile deleted"
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/knowledge-base": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "List knowledge base documents for a profile",
+        "operationId": "listKnowledgeBase",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Knowledge base documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListKnowledgeBaseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Upload a knowledge base document",
+        "operationId": "uploadKnowledgeBaseDocument",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadKnowledgeBaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded knowledge base document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadKnowledgeBaseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profileId}/knowledge-base/{documentId}": {
+      "delete": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Delete a knowledge base document",
+        "operationId": "deleteKnowledgeBaseDocument",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted knowledge base document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteKnowledgeBaseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "description": "Error",
@@ -3147,6 +3491,313 @@
           }
         }
       }
+    },
+    "/v1/workers/{name}/start": {
+      "post": {
+        "tags": [
+          "Workers"
+        ],
+        "summary": "Start a background worker",
+        "operationId": "startWorker",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Worker started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/{name}/stop": {
+      "post": {
+        "tags": [
+          "Workers"
+        ],
+        "summary": "Stop a background worker",
+        "operationId": "stopWorker",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Worker stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/{name}/restart": {
+      "post": {
+        "tags": [
+          "Workers"
+        ],
+        "summary": "Restart a background worker",
+        "operationId": "restartWorker",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Worker restarted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/{name}/logs": {
+      "get": {
+        "tags": [
+          "Workers"
+        ],
+        "summary": "Get recent worker logs",
+        "operationId": "getWorkerLogs",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "description": "Number of log lines to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Worker logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerLogsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/{name}/clear-logs": {
+      "post": {
+        "tags": [
+          "Workers"
+        ],
+        "summary": "Clear worker logs",
+        "operationId": "clearWorkerLogs",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "telegram",
+                "whatsapp"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logs cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3199,6 +3850,7 @@
           "web",
           "cli",
           "telegram",
+          "whatsapp",
           "automation",
           "task"
         ]
@@ -3251,6 +3903,29 @@
         }
       },
       "CreateSessionResponse": {
+        "type": "object",
+        "required": [
+          "sessionId"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "BranchSessionRequest": {
+        "type": "object",
+        "required": [
+          "messageIndex"
+        ],
+        "properties": {
+          "messageIndex": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "BranchSessionResponse": {
         "type": "object",
         "required": [
           "sessionId"
@@ -3341,10 +4016,31 @@
           }
         }
       },
+      "SessionMessageMeta": {
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SessionMessagesResponse": {
         "type": "object",
         "required": [
           "messages",
+          "messageMeta",
           "todos"
         ],
         "properties": {
@@ -3353,6 +4049,12 @@
             "items": {
               "type": "object",
               "additionalProperties": true
+            }
+          },
+          "messageMeta": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionMessageMeta"
             }
           },
           "todos": {
@@ -3783,8 +4485,7 @@
         "type": "object",
         "required": [
           "providers",
-          "defaultProviderId",
-          "defaultModel"
+          "defaultProviderId"
         ],
         "properties": {
           "providers": {
@@ -3794,12 +4495,6 @@
             }
           },
           "defaultProviderId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "defaultModel": {
             "type": [
               "string",
               "null"
@@ -3849,7 +4544,7 @@
         "required": [
           "provider",
           "defaultProviderId",
-          "defaultModel"
+          "initialModel"
         ],
         "properties": {
           "provider": {
@@ -3858,7 +4553,7 @@
           "defaultProviderId": {
             "type": "string"
           },
-          "defaultModel": {
+          "initialModel": {
             "type": "string"
           }
         }
@@ -3897,17 +4592,10 @@
       "DeleteProviderResponse": {
         "type": "object",
         "required": [
-          "defaultProviderId",
-          "defaultModel"
+          "defaultProviderId"
         ],
         "properties": {
           "defaultProviderId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "defaultModel": {
             "type": [
               "string",
               "null"
@@ -3920,8 +4608,6 @@
         "required": [
           "currentProviderId",
           "provider",
-          "currentModel",
-          "defaultModel",
           "displayName",
           "providers",
           "models"
@@ -3947,18 +4633,6 @@
               null
             ]
           },
-          "currentModel": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "defaultModel": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "displayName": {
             "type": [
               "string",
@@ -3976,47 +4650,12 @@
             "items": {
               "$ref": "#/components/schemas/ProviderModelOption"
             }
-          }
-        }
-      },
-      "SetModelRequest": {
-        "type": "object",
-        "required": [
-          "providerId",
-          "model"
-        ],
-        "properties": {
-          "providerId": {
-            "type": "string"
           },
-          "model": {
-            "type": "string"
-          }
-        }
-      },
-      "SetModelResponse": {
-        "type": "object",
-        "required": [
-          "providerId",
-          "provider",
-          "currentModel"
-        ],
-        "properties": {
-          "providerId": {
-            "type": "string"
-          },
-          "provider": {
-            "type": "string",
-            "enum": [
-              "openai",
-              "anthropic",
-              "openrouter",
-              "gemini",
-              "openai_compatible"
-            ]
-          },
-          "currentModel": {
-            "type": "string"
+          "catalog": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderModelOption"
+            }
           }
         }
       },
@@ -4790,6 +5429,108 @@
           }
         }
       },
+      "KnowledgeBaseDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "mediaType",
+          "sizeBytes",
+          "uploadedAt",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "failed"
+            ]
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ListKnowledgeBaseResponse": {
+        "type": "object",
+        "required": [
+          "documents",
+          "profileId"
+        ],
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeBaseDocument"
+            }
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "UploadKnowledgeBaseRequest": {
+        "type": "object",
+        "required": [
+          "document"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentAttachment"
+          }
+        }
+      },
+      "UploadKnowledgeBaseResponse": {
+        "type": "object",
+        "required": [
+          "document",
+          "profileId"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/KnowledgeBaseDocument"
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteKnowledgeBaseResponse": {
+        "type": "object",
+        "required": [
+          "deleted",
+          "profileId",
+          "documentId"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "profileId": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          }
+        }
+      },
       "InitSoulResponse": {
         "type": "object",
         "required": [
@@ -5053,6 +5794,47 @@
           }
         }
       },
+      "WorkerProcessInfo": {
+        "type": "object",
+        "required": [
+          "managed"
+        ],
+        "properties": {
+          "managed": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "online",
+              "stopped",
+              "errored",
+              null
+            ]
+          },
+          "cpuPercent": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "memoryMb": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "uptimeSeconds": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
       "TelegramWorkerStatus": {
         "type": "object",
         "required": [
@@ -5073,6 +5855,58 @@
           },
           "running": {
             "type": "boolean"
+          },
+          "process": {
+            "$ref": "#/components/schemas/WorkerProcessInfo"
+          }
+        }
+      },
+      "WhatsAppWorkerStatus": {
+        "type": "object",
+        "required": [
+          "ok",
+          "configured",
+          "paired",
+          "running",
+          "connected"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "paired": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "qrCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "process": {
+            "$ref": "#/components/schemas/WorkerProcessInfo"
+          }
+        }
+      },
+      "WorkerLogsResponse": {
+        "type": "object",
+        "required": [
+          "stdout",
+          "stderr"
+        ],
+        "properties": {
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
           }
         }
       },
@@ -5165,6 +5999,7 @@
           "automationWorker",
           "taskWorker",
           "telegramWorker",
+          "whatsappWorker",
           "llmUsage",
           "mcp",
           "checkedAt"
@@ -5181,6 +6016,9 @@
           },
           "telegramWorker": {
             "$ref": "#/components/schemas/TelegramWorkerStatus"
+          },
+          "whatsappWorker": {
+            "$ref": "#/components/schemas/WhatsAppWorkerStatus"
           },
           "llmUsage": {
             "$ref": "#/components/schemas/LlmUsageStatus"
@@ -5780,6 +6618,47 @@
             "type": "string"
           },
           "allowedUserIds": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "WhatsAppSettingsResponse": {
+        "type": "object",
+        "required": [
+          "configured",
+          "phoneNumberMasked",
+          "pairingCode",
+          "pairedJid",
+          "profileId"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "phoneNumberMasked": {
+            "type": "string",
+            "nullable": true
+          },
+          "pairingCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "pairedJid": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateWhatsAppSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
             "type": "string"
           },
           "profileId": {

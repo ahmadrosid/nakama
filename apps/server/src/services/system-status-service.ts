@@ -48,7 +48,7 @@ export class SystemStatusService {
       whatsappWorker: whatsappStatus,
       llmUsage: this.getLlmUsage(
         models.provider,
-        models.currentModel,
+        usageFields.currentModel,
         providerConfigured,
         usageFields,
       ),

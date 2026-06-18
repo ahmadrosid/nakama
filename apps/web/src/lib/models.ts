@@ -485,7 +485,7 @@ export function groupModelsByProvider(
   return [...groups.values()];
 }
 
-export const INHERIT_MODEL_VALUE = "__inherit__";
+export const UNSET_MODEL_VALUE = "";
 
 /** Visible rows before a model select list scrolls (~SelectItem py-1 + text-sm). */
 export const MODEL_SELECT_MAX_VISIBLE_ROWS = 25;
@@ -497,7 +497,7 @@ export function profileModelSelectionValue(
   groups: ReturnType<typeof groupModelsByProvider>,
 ): string {
   if (!modelId) {
-    return INHERIT_MODEL_VALUE;
+    return UNSET_MODEL_VALUE;
   }
 
   const decoded = decodeModelSelection(modelId);
@@ -524,10 +524,9 @@ export function profileModelSelectionValue(
 export function profileModelLabel(
   modelId: string | null,
   groups: ReturnType<typeof groupModelsByProvider>,
-  globalModel: string | null | undefined,
 ): string {
   if (!modelId) {
-    return globalModel ? `Inherit global (${globalModel})` : "Inherit global";
+    return "Select model";
   }
 
   const decoded = decodeModelSelection(modelId);
@@ -554,19 +553,13 @@ export function profileModelLabel(
 
 export function effectiveProfileModelSelection(
   profileModel: string | null | undefined,
-  globalProviderId: string | null | undefined,
-  globalModel: string | null | undefined,
   groups: ReturnType<typeof groupModelsByProvider>,
 ): string | null {
-  if (profileModel) {
-    return profileModelSelectionValue(profileModel, groups);
+  if (!profileModel) {
+    return null;
   }
 
-  if (globalProviderId && globalModel) {
-    return encodeModelSelection(globalProviderId, globalModel);
-  }
-
-  return null;
+  return profileModelSelectionValue(profileModel, groups);
 }
 
 export function modelsFromCustomRows(

@@ -73,7 +73,6 @@ import {
   encodeModelSelection,
   extractModelId,
   groupModelsByProvider,
-  INHERIT_MODEL_VALUE,
   modelSelectContentMaxHeightClass,
   profileModelLabel,
   profileModelSelectionValue,
@@ -235,19 +234,8 @@ export function ProfilesPage() {
   );
 
   const effectiveModelSelection = useMemo(
-    () =>
-      effectiveProfileModelSelection(
-        editModel,
-        modelsResponse?.currentProviderId,
-        modelsResponse?.currentModel,
-        providerModelGroups,
-      ),
-    [
-      editModel,
-      modelsResponse?.currentProviderId,
-      modelsResponse?.currentModel,
-      providerModelGroups,
-    ],
+    () => effectiveProfileModelSelection(editModel, providerModelGroups),
+    [editModel, providerModelGroups],
   );
 
   const thinkingMode = useMemo(
@@ -1249,29 +1237,19 @@ export function ProfilesPage() {
                           value={modelSelectionValue}
                           disabled={busy || providerModelGroups.length === 0}
                           onValueChange={(value) => {
-                            const nextValue = value != null ? String(value) : INHERIT_MODEL_VALUE;
-
-                            if (nextValue === INHERIT_MODEL_VALUE) {
-                              handleEditModelChange(null);
+                            if (!value) {
                               return;
                             }
 
-                            handleEditModelChange(nextValue);
+                            handleEditModelChange(String(value));
                           }}
                         >
                           <SelectTrigger id="profile-model" className="w-full">
                             <SelectValue placeholder="Select model">
-                              {profileModelLabel(
-                                editModel,
-                                providerModelGroups,
-                                modelsResponse?.defaultModel,
-                              )}
+                              {profileModelLabel(editModel, providerModelGroups)}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent className={modelSelectContentMaxHeightClass}>
-                            <SelectItem value={INHERIT_MODEL_VALUE}>
-                              {profileModelLabel(null, providerModelGroups, modelsResponse?.defaultModel)}
-                            </SelectItem>
                             {extractModelId(editModel) && !modelInCatalog ? (
                               <SelectItem
                                 value={encodeModelSelection("__unknown__", extractModelId(editModel)!)}

@@ -40,8 +40,6 @@ import type {
   ProfileResponse,
   SendMessageResponse,
   SessionMessagesResponse,
-  SetModelRequest,
-  SetModelResponse,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CompactionResponse,
@@ -200,13 +198,6 @@ export class TinyClawClient {
       `/v1/providers/${encodeURIComponent(providerId)}`,
       { method: "DELETE" },
     );
-  }
-
-  async setModel(request: SetModelRequest): Promise<SetModelResponse> {
-    return this.request<SetModelResponse>("/v1/settings/model", {
-      method: "PUT",
-      body: JSON.stringify(request),
-    });
   }
 
   async configureProvider(

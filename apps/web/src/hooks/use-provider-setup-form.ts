@@ -363,6 +363,6 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     handleOpenRouterBrowseSelect,
     handleSubmit,
     formatSuccessMessage: (result: CreateProviderResponse) =>
-      `${result.provider.label} connected with ${getModelDisplayName(catalog, result.defaultModel)}.`,
+      `${result.provider.label} connected with ${getModelDisplayName(catalog, result.initialModel)}.`,
   };
 }

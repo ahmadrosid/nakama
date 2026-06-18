@@ -37,7 +37,6 @@ export interface ProviderInstance {
 
 export interface UserConfig {
   defaultProviderId: string | null;
-  defaultModel: string | null;
   providers: ProviderInstance[];
   timezone?: string;
   thinkingEnabled?: boolean;
@@ -173,7 +172,6 @@ export async function loadUserConfig(): Promise<UserConfig | null> {
 
   return {
     defaultProviderId: parsed.global.default_provider_id?.trim() || null,
-    defaultModel: parsed.global.default_model?.trim() || null,
     providers,
     ...(timezone ? { timezone } : {}),
     thinkingEnabled: thinking.enabled,
@@ -281,7 +279,6 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
 
   const global: Record<string, string | undefined> = {
     default_provider_id: config.defaultProviderId ?? "",
-    default_model: config.defaultModel ?? "",
     timezone: config.timezone,
     thinking: thinking.enabled ? "on" : "off",
     thinking_effort: thinking.effort,
@@ -428,10 +425,6 @@ function buildConfigIniLines(
 
   if (mergedGlobal.default_provider_id !== undefined) {
     lines.push(`default_provider_id=${mergedGlobal.default_provider_id.trim()}`);
-  }
-
-  if (mergedGlobal.default_model !== undefined) {
-    lines.push(`default_model=${mergedGlobal.default_model.trim()}`);
   }
 
   if (mergedGlobal.timezone?.trim()) {

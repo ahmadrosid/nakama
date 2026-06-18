@@ -49,7 +49,6 @@ import {
 import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
 import { cn } from "@/lib/utils";
 import {
-  INHERIT_MODEL_VALUE,
   encodeModelSelection,
   modelSelectContentMaxHeightClass,
 } from "@/lib/models";
@@ -86,7 +85,6 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
     providerLabel: string;
     models: ProviderModelOption[];
   }>;
-  inheritModelLabel?: string | null;
   profileModelId?: string | null;
   currentModelSelection: string | null;
   onModelChange: (selection: string) => void;
@@ -315,14 +313,6 @@ function ChatComposerFullFooter({
                 modelSelectContentMaxHeightClass,
               )}
             >
-              {props.inheritModelLabel ? (
-                <PromptInputSelectItem
-                  value={INHERIT_MODEL_VALUE}
-                  label={props.inheritModelLabel}
-                >
-                  {props.inheritModelLabel}
-                </PromptInputSelectItem>
-              ) : null}
               {props.profileModelId &&
               !props.providerModelGroups.some((group) =>
                 group.models.some((model) => model.id === props.profileModelId),
