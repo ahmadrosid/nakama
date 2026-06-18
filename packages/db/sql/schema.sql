@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   name TEXT NOT NULL,
   system_prompt TEXT DEFAULT '' NOT NULL,
   model TEXT,
+  thinking_enabled INTEGER,
+  thinking_effort TEXT,
   is_super INTEGER DEFAULT 0 NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

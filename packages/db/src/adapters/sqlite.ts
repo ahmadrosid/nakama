@@ -53,6 +53,8 @@ interface ProfileRow {
   name: string;
   system_prompt: string;
   model: string | null;
+  thinking_enabled: number | null;
+  thinking_effort: string | null;
   is_super: number;
   created_at: string;
   updated_at: string;
@@ -218,12 +220,24 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listProfilesStmt = db.prepare("SELECT * FROM profiles");
   const getProfileStmt = db.prepare("SELECT * FROM profiles WHERE id = ?");
   const upsertProfileStmt = db.prepare(`
-    INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO profiles (
+      id,
+      name,
+      system_prompt,
+      model,
+      thinking_enabled,
+      thinking_effort,
+      is_super,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
       model = excluded.model,
+      thinking_enabled = excluded.thinking_enabled,
+      thinking_effort = excluded.thinking_effort,
       is_super = excluded.is_super,
       updated_at = excluded.updated_at
   `);
@@ -556,6 +570,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.name,
         record.systemPrompt,
         record.model,
+        record.thinkingEnabled == null ? null : record.thinkingEnabled ? 1 : 0,
+        record.thinkingEffort ?? null,
         record.isSuper ? 1 : 0,
         record.createdAt,
         record.updatedAt,
@@ -914,6 +930,9 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     name: row.name,
     systemPrompt: row.system_prompt,
     model: row.model,
+    thinkingEnabled:
+      row.thinking_enabled == null ? null : row.thinking_enabled !== 0,
+    thinkingEffort: row.thinking_effort as StoredProfileRecord["thinkingEffort"],
     isSuper: row.is_super !== 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

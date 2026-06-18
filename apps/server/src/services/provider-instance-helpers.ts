@@ -12,6 +12,7 @@ import type {
 } from "@tinyclaw/core/contract";
 import {
   createProviderInstanceId,
+  findProviderInstance,
   normalizeProviderInstanceLabel,
   type ProviderInstance,
   validateProviderInstanceLabel,
@@ -241,4 +242,108 @@ export function mergeModelsForConfig(
   }
 
   return models;
+}
+
+export interface ResolvedProfileProviderSelection {
+  instance: ProviderInstance;
+  model: string;
+}
+
+export function decodeStoredModelSelection(
+  value: string | null | undefined,
+): { providerId: string; modelId: string } | null {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const separator = trimmed.indexOf("::");
+
+  if (separator <= 0) {
+    return null;
+  }
+
+  return {
+    providerId: trimmed.slice(0, separator),
+    modelId: trimmed.slice(separator + 2),
+  };
+}
+
+export function extractStoredModelId(
+  value: string | null | undefined,
+): string | null {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return decodeStoredModelSelection(trimmed)?.modelId ?? trimmed;
+}
+
+export function resolveProfileProviderSelection(options: {
+  providers: ProviderInstance[];
+  defaultProviderId: string | null | undefined;
+  defaultModel: string | null | undefined;
+  profileModel: string | null | undefined;
+}): ResolvedProfileProviderSelection | null {
+  const { providers, defaultProviderId, defaultModel, profileModel } = options;
+  const active = defaultProviderId ? findProviderInstance({ providers }, defaultProviderId) : null;
+  const fallbackInstance = active ?? providers[0] ?? null;
+
+  if (!fallbackInstance) {
+    return null;
+  }
+
+  const decoded = decodeStoredModelSelection(profileModel);
+
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const explicit = findProviderInstance({ providers }, decoded.providerId);
+
+    if (explicit && modelExistsOnInstance(explicit, decoded.modelId)) {
+      return {
+        instance: explicit,
+        model: resolveModel(explicit.type, decoded.modelId, explicit.customModels),
+      };
+    }
+  }
+
+  const selectedModel = extractStoredModelId(profileModel);
+
+  if (selectedModel) {
+    const matchingProviders = providers.filter((instance) =>
+      modelExistsOnInstance(instance, selectedModel),
+    );
+
+    if (active && matchingProviders.some((instance) => instance.id === active.id)) {
+      return {
+        instance: active,
+        model: resolveModel(active.type, selectedModel, active.customModels),
+      };
+    }
+
+    const catalogProvider = getModelById(selectedModel)?.provider;
+    const preferred =
+      (catalogProvider
+        ? matchingProviders.find((instance) => instance.type === catalogProvider)
+        : null) ??
+      matchingProviders[0];
+
+    if (preferred) {
+      return {
+        instance: preferred,
+        model: resolveModel(preferred.type, selectedModel, preferred.customModels),
+      };
+    }
+  }
+
+  return {
+    instance: fallbackInstance,
+    model: resolveModel(
+      fallbackInstance.type,
+      defaultModel ?? "",
+      fallbackInstance.customModels,
+    ),
+  };
 }

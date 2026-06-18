@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 
 interface ChatMessageListProps {
   messages: ChatListItem[];
+  showThinking?: boolean;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
@@ -48,6 +49,7 @@ type MessageTurn =
 
 export function ChatMessageList({
   messages,
+  showThinking = true,
   branchingMessageId,
   actionsDisabled = false,
   onBranchMessage,
@@ -71,6 +73,7 @@ export function ChatMessageList({
             <AssistantTurn
               key={turn.messages.map(({ message }) => message.id).join(":")}
               messages={turn.messages}
+              showThinking={showThinking}
               branchingMessageId={branchingMessageId}
               actionsDisabled={actionsDisabled}
               onBranchMessage={onBranchMessage}
@@ -112,12 +115,14 @@ function groupMessagesIntoTurns(messages: ChatListItem[]): MessageTurn[] {
 
 function AssistantTurn({
   messages,
+  showThinking,
   branchingMessageId,
   actionsDisabled,
   onBranchMessage,
   onRetryMessage,
 }: {
   messages: IndexedMessage[];
+  showThinking: boolean;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
@@ -138,6 +143,7 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           segment={segment}
+          showThinking={showThinking}
         />
       ))}
       {showActions && anchorMessage ? (

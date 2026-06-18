@@ -7,7 +7,6 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";
 import { useBranchSessionMutation, useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
-import { useThinkingSettings } from "@/hooks/use-thinking-settings";
 import { filePartsToDocumentAttachments, filePartsToImageAttachments } from "@/lib/chat-images";
 import {
   buildChatBasePath,
@@ -29,6 +28,7 @@ import { client, formatError } from "@/lib/client";
 import {
   decodeModelSelection,
   effectiveProfileModelSelection,
+  extractModelId,
   groupModelsByProvider,
   INHERIT_MODEL_VALUE,
   profileModelLabel,
@@ -47,7 +47,6 @@ export function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
-  const { data: thinkingSettings } = useThinkingSettings();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profileId, setProfileId] = useState(
     () => readRequestedProfileFromNewChatSearch(location.search) ?? "",
@@ -143,6 +142,35 @@ export function ChatPage() {
     [models?.currentModel, providerModelGroups],
   );
 
+  const activeModelSupportsThinking = useMemo(() => {
+    if (!currentModelSelection) {
+      return undefined;
+    }
+
+    const decoded = decodeModelSelection(currentModelSelection);
+    const resolvedModelId = decoded?.modelId ?? currentModelSelection;
+
+    if (decoded && decoded.providerId !== "__unknown__") {
+      const group = providerModelGroups.find(
+        (entry) => entry.providerId === decoded.providerId,
+      );
+      return group?.models.find((model) => model.id === resolvedModelId)?.supportsThinking;
+    }
+
+    for (const group of providerModelGroups) {
+      const model = group.models.find((entry) => entry.id === resolvedModelId);
+      if (model) {
+        return model.supportsThinking;
+      }
+    }
+
+    return undefined;
+  }, [currentModelSelection, providerModelGroups]);
+
+  const showThinking =
+    (activeProfile?.effectiveThinkingEnabled ?? true) &&
+    activeModelSupportsThinking !== false;
+
   const handleModelChange = useCallback(
     (selection: string) => {
       if (!profileId) {
@@ -177,13 +205,13 @@ export function ChatPage() {
       void updateProfileMutation
         .mutateAsync({
           profileId,
-          input: { model: decoded.modelId },
+          input: { model: selection },
         })
         .then(() => {
           setProfiles((current) =>
             current.map((profile) =>
               profile.id === profileId
-                ? { ...profile, model: decoded.modelId }
+                ? { ...profile, model: selection }
                 : profile,
             ),
           );
@@ -416,7 +444,7 @@ export function ChatPage() {
           filename: document.filename,
           mediaType: document.mediaType,
         })),
-        { thinkingEnabled: thinkingSettings?.enabled ?? true },
+        { thinkingEnabled: showThinking },
       );
 
       const abortController = new AbortController();
@@ -472,7 +500,7 @@ export function ChatPage() {
         setBusy(false);
       }
     },
-    [session, busy, profileId, syncChatUrl, thinkingSettings?.enabled],
+    [session, busy, profileId, syncChatUrl, showThinking],
   );
 
   const handleTryAgainMessage = useCallback(
@@ -572,7 +600,7 @@ export function ChatPage() {
         providerModelGroups,
         models?.defaultModel ?? models?.currentModel,
       )}
-      profileModelId={activeProfile?.model ?? null}
+      profileModelId={extractModelId(activeProfile?.model)}
       currentModelSelection={currentModelSelection}
       onModelChange={handleModelChange}
       renderModelLabel={renderModelLabel}
@@ -599,6 +627,7 @@ export function ChatPage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatMessageList
             messages={messages}
+            showThinking={showThinking}
             branchingMessageId={branchingMessageId}
             actionsDisabled={busy}
             onBranchMessage={(message) => void handleBranchMessage(message)}

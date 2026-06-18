@@ -1,4 +1,4 @@
-import type { AgentTodo } from "@tinyclaw/core";
+import type { AgentTodo, ThinkingEffort } from "@tinyclaw/core";
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
 
@@ -28,6 +28,8 @@ export interface StoredProfileRecord {
   name: string;
   systemPrompt: string;
   model: string | null;
+  thinkingEnabled?: boolean | null;
+  thinkingEffort?: ThinkingEffort | null;
   isSuper: boolean;
   createdAt: string;
   updatedAt: string;

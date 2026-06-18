@@ -11,12 +11,32 @@ export function migrateDatabase(db: Database): void {
   const sql = readFileSync(schemaPath, "utf8");
 
   db.exec(sql);
+  migrateProfilesTable(db);
   migrateAutomationsTable(db);
   migrateTasksTable(db);
   migrateSessionsTable(db);
   migrateMcpTables(db);
   migrateSkillsTables(db);
   migrateUsersTable(db);
+}
+
+function migrateProfilesTable(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(profiles)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("thinking_enabled")) {
+    db.exec(`
+      ALTER TABLE profiles ADD COLUMN thinking_enabled INTEGER;
+    `);
+  }
+
+  if (!columnNames.has("thinking_effort")) {
+    db.exec(`
+      ALTER TABLE profiles ADD COLUMN thinking_effort TEXT;
+    `);
+  }
 }
 
 function migrateMcpTables(db: Database): void {

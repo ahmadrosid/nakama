@@ -1,4 +1,9 @@
-import type { CreateMcpServerRequest, CreateSkillRequest, ProfileSummary } from "@tinyclaw/core/contract";
+import type {
+  CreateMcpServerRequest,
+  CreateSkillRequest,
+  ProfileSummary,
+  ThinkingEffort,
+} from "@tinyclaw/core/contract";
 import {
   CameraIcon,
   PlusIcon,
@@ -64,7 +69,9 @@ import { fileToImageAttachment } from "@/lib/profile-images";
 import { formatError } from "@/lib/client";
 import {
   decodeModelSelection,
+  effectiveProfileModelSelection,
   encodeModelSelection,
+  extractModelId,
   groupModelsByProvider,
   INHERIT_MODEL_VALUE,
   modelSelectContentMaxHeightClass,
@@ -80,14 +87,19 @@ const profileTextSaveDelayMs = 1000;
 const profileModelSaveDelayMs = 400;
 
 type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
+type ThinkingMode = "inherit" | "off" | "on";
 
 type ProfileEditSnapshot = {
   editName: string;
   editPrompt: string;
   editModel: string | null;
+  editThinkingEnabled: boolean | null;
+  editThinkingEffort: ThinkingEffort | null;
   savedName: string;
   savedPrompt: string;
   savedModel: string | null;
+  savedThinkingEnabled: boolean | null;
+  savedThinkingEffort: ThinkingEffort | null;
 };
 
 function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
@@ -99,8 +111,18 @@ function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
   return (
     name !== snapshot.savedName ||
     snapshot.editPrompt !== snapshot.savedPrompt ||
-    snapshot.editModel !== snapshot.savedModel
+    snapshot.editModel !== snapshot.savedModel ||
+    snapshot.editThinkingEnabled !== snapshot.savedThinkingEnabled ||
+    snapshot.editThinkingEffort !== snapshot.savedThinkingEffort
   );
+}
+
+function thinkingModeFromValue(value: boolean | null | undefined): ThinkingMode {
+  if (value == null) {
+    return "inherit";
+  }
+
+  return value ? "on" : "off";
 }
 
 type RemoveAssignmentTarget =
@@ -160,9 +182,13 @@ export function ProfilesPage() {
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
+  const [editThinkingEnabled, setEditThinkingEnabled] = useState<boolean | null>(null);
+  const [editThinkingEffort, setEditThinkingEffort] = useState<ThinkingEffort | null>(null);
   const [savedName, setSavedName] = useState("");
   const [savedPrompt, setSavedPrompt] = useState("");
   const [savedModel, setSavedModel] = useState<string | null>(null);
+  const [savedThinkingEnabled, setSavedThinkingEnabled] = useState<boolean | null>(null);
+  const [savedThinkingEffort, setSavedThinkingEffort] = useState<ThinkingEffort | null>(null);
   const [saveStatus, setSaveStatus] = useState<ProfileSaveStatus>("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,9 +199,13 @@ export function ProfilesPage() {
     editName,
     editPrompt,
     editModel,
+    editThinkingEnabled,
+    editThinkingEffort,
     savedName,
     savedPrompt,
     savedModel,
+    savedThinkingEnabled,
+    savedThinkingEffort,
     selectedId,
     detail,
   });
@@ -183,9 +213,13 @@ export function ProfilesPage() {
     editName,
     editPrompt,
     editModel,
+    editThinkingEnabled,
+    editThinkingEffort,
     savedName,
     savedPrompt,
     savedModel,
+    savedThinkingEnabled,
+    savedThinkingEffort,
     selectedId,
     detail,
   };
@@ -200,15 +234,56 @@ export function ProfilesPage() {
     [editModel, providerModelGroups],
   );
 
+  const effectiveModelSelection = useMemo(
+    () =>
+      effectiveProfileModelSelection(
+        editModel,
+        modelsResponse?.currentProviderId,
+        modelsResponse?.currentModel,
+        providerModelGroups,
+      ),
+    [
+      editModel,
+      modelsResponse?.currentProviderId,
+      modelsResponse?.currentModel,
+      providerModelGroups,
+    ],
+  );
+
+  const thinkingMode = useMemo(
+    () => thinkingModeFromValue(editThinkingEnabled),
+    [editThinkingEnabled],
+  );
+
   const modelInCatalog = useMemo(() => {
-    if (!editModel) {
+    const resolvedModelId = extractModelId(editModel);
+
+    if (!resolvedModelId) {
       return true;
     }
 
     return providerModelGroups.some((group) =>
-      group.models.some((model) => model.id === editModel),
+      group.models.some((model) => model.id === resolvedModelId),
     );
   }, [editModel, providerModelGroups]);
+
+  const effectiveProviderId = useMemo(
+    () => decodeModelSelection(effectiveModelSelection ?? "")?.providerId ?? null,
+    [effectiveModelSelection],
+  );
+
+  const effectiveProvider = useMemo(
+    () =>
+      effectiveProviderId
+        ? (modelsResponse?.providers.find((provider) => provider.id === effectiveProviderId) ??
+          null)
+        : null,
+    [effectiveProviderId, modelsResponse?.providers],
+  );
+
+  const thinkingSupported = effectiveProvider?.type !== "openai_compatible";
+  const effectiveThinkingEffort =
+    editThinkingEffort ?? detail?.effectiveThinkingEffort ?? "medium";
 
   const busy =
     createMutation.isPending ||
@@ -237,9 +312,23 @@ export function ProfilesPage() {
     return (
       editName.trim() !== savedName ||
       editPrompt !== savedPrompt ||
-      editModel !== savedModel
+      editModel !== savedModel ||
+      editThinkingEnabled !== savedThinkingEnabled ||
+      editThinkingEffort !== savedThinkingEffort
     );
-  }, [detail, editName, editPrompt, editModel, savedName, savedPrompt, savedModel]);
+  }, [
+    detail,
+    editName,
+    editPrompt,
+    editModel,
+    editThinkingEnabled,
+    editThinkingEffort,
+    savedName,
+    savedPrompt,
+    savedModel,
+    savedThinkingEnabled,
+    savedThinkingEffort,
+  ]);
 
   const clearScheduledSave = useCallback(() => {
     if (saveTimerRef.current) {
@@ -288,9 +377,13 @@ export function ProfilesPage() {
       editName: nameDraft,
       editPrompt: promptDraft,
       editModel: modelDraft,
+      editThinkingEnabled: thinkingEnabledDraft,
+      editThinkingEffort: thinkingEffortDraft,
       savedName: baselineName,
       savedPrompt: baselinePrompt,
       savedModel: baselineModel,
+      savedThinkingEnabled: baselineThinkingEnabled,
+      savedThinkingEffort: baselineThinkingEffort,
       selectedId: profileId,
       detail: profileDetail,
     } = editStateRef.current;
@@ -304,7 +397,13 @@ export function ProfilesPage() {
       return false;
     }
 
-    if (name === baselineName && promptDraft === baselinePrompt && modelDraft === baselineModel) {
+    if (
+      name === baselineName &&
+      promptDraft === baselinePrompt &&
+      modelDraft === baselineModel &&
+      thinkingEnabledDraft === baselineThinkingEnabled &&
+      thinkingEffortDraft === baselineThinkingEffort
+    ) {
       setSaveStatus("idle");
       return true;
     }
@@ -322,16 +421,22 @@ export function ProfilesPage() {
           name,
           systemPrompt: promptDraft,
           model: modelDraft,
+          thinkingEnabled: thinkingEnabledDraft,
+          thinkingEffort: thinkingEffortDraft,
         },
       });
       setSavedName(name);
       setSavedPrompt(promptDraft);
       setSavedModel(modelDraft);
+      setSavedThinkingEnabled(thinkingEnabledDraft);
+      setSavedThinkingEffort(thinkingEffortDraft);
       editStateRef.current = {
         ...editStateRef.current,
         savedName: name,
         savedPrompt: promptDraft,
         savedModel: modelDraft,
+        savedThinkingEnabled: thinkingEnabledDraft,
+        savedThinkingEffort: thinkingEffortDraft,
       };
       setSaveStatus("saved");
       savedSuccessfully = true;
@@ -393,6 +498,34 @@ export function ProfilesPage() {
     (model: string | null) => {
       setEditModel(model);
       editStateRef.current.editModel = model;
+      scheduleSave(profileModelSaveDelayMs);
+    },
+    [scheduleSave],
+  );
+
+  const handleEditThinkingModeChange = useCallback(
+    (mode: ThinkingMode) => {
+      const nextEnabled = mode === "inherit" ? null : mode === "on";
+      const nextEffort =
+        mode === "inherit"
+          ? null
+          : editStateRef.current.editThinkingEffort ??
+            detail?.effectiveThinkingEffort ??
+            "medium";
+
+      setEditThinkingEnabled(nextEnabled);
+      setEditThinkingEffort(nextEffort);
+      editStateRef.current.editThinkingEnabled = nextEnabled;
+      editStateRef.current.editThinkingEffort = nextEffort;
+      scheduleSave(profileModelSaveDelayMs);
+    },
+    [detail?.effectiveThinkingEffort, scheduleSave],
+  );
+
+  const handleEditThinkingEffortChange = useCallback(
+    (effort: ThinkingEffort) => {
+      setEditThinkingEffort(effort);
+      editStateRef.current.editThinkingEffort = effort;
       scheduleSave(profileModelSaveDelayMs);
     },
     [scheduleSave],
@@ -463,9 +596,27 @@ export function ProfilesPage() {
     setEditName(detail.name);
     setEditPrompt(detail.systemPrompt);
     setEditModel(detail.model);
+    setEditThinkingEnabled(detail.thinkingEnabled);
+    setEditThinkingEffort(detail.thinkingEffort);
     setSavedName(detail.name);
     setSavedPrompt(detail.systemPrompt);
     setSavedModel(detail.model);
+    setSavedThinkingEnabled(detail.thinkingEnabled);
+    setSavedThinkingEffort(detail.thinkingEffort);
+    editStateRef.current = {
+      ...editStateRef.current,
+      editName: detail.name,
+      editPrompt: detail.systemPrompt,
+      editModel: detail.model,
+      editThinkingEnabled: detail.thinkingEnabled,
+      editThinkingEffort: detail.thinkingEffort,
+      savedName: detail.name,
+      savedPrompt: detail.systemPrompt,
+      savedModel: detail.model,
+      savedThinkingEnabled: detail.thinkingEnabled,
+      savedThinkingEffort: detail.thinkingEffort,
+      detail,
+    };
     setSaveStatus("idle");
   }, [clearScheduledSave, detail?.id]);
 
@@ -524,14 +675,20 @@ export function ProfilesPage() {
       editName: nameDraft,
       editPrompt: promptDraft,
       editModel: modelDraft,
+      editThinkingEnabled: thinkingEnabledDraft,
+      editThinkingEffort: thinkingEffortDraft,
       savedName: baselineName,
       savedPrompt: baselinePrompt,
       savedModel: baselineModel,
+      savedThinkingEnabled: baselineThinkingEnabled,
+      savedThinkingEffort: baselineThinkingEffort,
     } = editStateRef.current;
     const hasPendingEdits =
       nameDraft.trim() !== baselineName ||
       promptDraft !== baselinePrompt ||
-      modelDraft !== baselineModel;
+      modelDraft !== baselineModel ||
+      thinkingEnabledDraft !== baselineThinkingEnabled ||
+      thinkingEffortDraft !== baselineThinkingEffort;
 
     if (hasPendingEdits && nameDraft.trim()) {
       const saved = await performSave();
@@ -995,81 +1152,94 @@ export function ProfilesPage() {
                         uploading={uploadAvatarMutation.isPending}
                         onPick={() => avatarInputRef.current?.click()}
                       />
-                      <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
-                        <div>
-                          <label htmlFor="profile-name" className="sr-only">
-                            Name
-                          </label>
-                          <Input
-                            id="profile-name"
-                            value={editName}
-                            disabled={busy}
-                            className="h-8 min-w-0 font-semibold"
-                            onChange={(event) => handleEditNameChange(event.target.value)}
-                            onBlur={() => void flushSave()}
-                          />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                          <span className="type-body">{profileSubtitle}</span>
-                          {detail.isSuper ? (
-                            <span className="scope-badge bg-muted text-muted-foreground">super</span>
-                          ) : null}
-                          <ProfileSaveIndicator
-                            inline
-                            saveStatus={saveStatus}
-                            nameMissing={isDirty && !editName.trim()}
-                          />
-                        </div>
-                        {!detail.isSuper ? (
-                          <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
-                            <DialogTrigger
-                              render={
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={busy}
-                                  className="w-fit text-destructive hover:text-destructive"
-                                />
-                              }
-                            >
-                              <Trash2Icon className="size-4" aria-hidden />
-                              Delete
-                            </DialogTrigger>
-                            <DialogContent className="gap-6 p-6 sm:max-w-md">
-                              <DialogHeader className="gap-3">
-                                <DialogTitle>Delete profile?</DialogTitle>
-                                <DialogDescription>
-                                  This removes {detail.name} and its chat history. This cannot be
-                                  undone.
-                                </DialogDescription>
-                              </DialogHeader>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <label htmlFor="profile-name" className="sr-only">
+                              Name
+                            </label>
+                            <Input
+                              id="profile-name"
+                              value={editName}
+                              disabled={busy}
+                              className="h-8 min-w-0 font-semibold"
+                              onChange={(event) => handleEditNameChange(event.target.value)}
+                              onBlur={() => void flushSave()}
+                            />
+                            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                              <span className="type-body">{profileSubtitle}</span>
+                              {detail.isSuper ? (
+                                <span className="scope-badge bg-muted text-muted-foreground">super</span>
+                              ) : null}
+                              <ProfileSaveIndicator
+                                inline
+                                saveStatus={saveStatus}
+                                nameMissing={isDirty && !editName.trim()}
+                              />
+                            </div>
+                          </div>
+                          {!detail.isSuper ? (
+                            <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
+                              <DialogTrigger
+                                render={
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={busy}
+                                    className="shrink-0 text-destructive hover:text-destructive"
+                                  />
+                                }
+                              >
+                                <Trash2Icon className="size-4" aria-hidden />
+                                Delete
+                              </DialogTrigger>
+                              <DialogContent className="gap-6 p-6 sm:max-w-md">
+                                <DialogHeader className="gap-3">
+                                  <DialogTitle>Delete profile?</DialogTitle>
+                                  <DialogDescription>
+                                    This removes {detail.name} and its chat history. This cannot be
+                                    undone.
+                                  </DialogDescription>
+                                </DialogHeader>
 
-                              <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  disabled={busy}
-                                  onClick={() => setDeleteOpen(false)}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  disabled={busy}
-                                  onClick={() => void handleDeleteConfirm()}
-                                >
-                                  {deleteMutation.isPending ? (
-                                    <Spinner className="size-4" />
-                                  ) : (
-                                    "Delete"
-                                  )}
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        ) : null}
+                                <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={busy}
+                                    onClick={() => setDeleteOpen(false)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={busy}
+                                    onClick={() => void handleDeleteConfirm()}
+                                  >
+                                    {deleteMutation.isPending ? (
+                                      <Spinner className="size-4" />
+                                    ) : (
+                                      "Delete"
+                                    )}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          ) : null}
+                        </div>
+                        <ExpandableTextarea
+                          label="System prompt"
+                          htmlFor="profile-prompt"
+                          dialogDescription="Instructions sent to the model at the start of each chat."
+                          value={editPrompt}
+                          disabled={busy}
+                          onChange={(event) => handleEditPromptChange(event.target.value)}
+                          onSave={flushSave}
+                          containerClassName="flex min-h-0 flex-1 flex-col gap-1.5"
+                          previewClassName="min-h-16 flex-1"
+                        />
                       </div>
                     </div>
 
@@ -1086,8 +1256,7 @@ export function ProfilesPage() {
                               return;
                             }
 
-                            const decoded = decodeModelSelection(nextValue);
-                            handleEditModelChange(decoded?.modelId ?? null);
+                            handleEditModelChange(nextValue);
                           }}
                         >
                           <SelectTrigger id="profile-model" className="w-full">
@@ -1103,11 +1272,11 @@ export function ProfilesPage() {
                             <SelectItem value={INHERIT_MODEL_VALUE}>
                               {profileModelLabel(null, providerModelGroups, modelsResponse?.defaultModel)}
                             </SelectItem>
-                            {editModel && !modelInCatalog ? (
+                            {extractModelId(editModel) && !modelInCatalog ? (
                               <SelectItem
-                                value={encodeModelSelection("__unknown__", editModel)}
+                                value={encodeModelSelection("__unknown__", extractModelId(editModel)!)}
                               >
-                                {editModel}
+                                {extractModelId(editModel)}
                               </SelectItem>
                             ) : null}
                             {providerModelGroups.flatMap((group) =>
@@ -1123,17 +1292,51 @@ export function ProfilesPage() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <ExpandableTextarea
-                        label="System prompt"
-                        htmlFor="profile-prompt"
-                        dialogDescription="Instructions sent to the model at the start of each chat."
-                        value={editPrompt}
-                        disabled={busy}
-                        onChange={(event) => handleEditPromptChange(event.target.value)}
-                        onSave={flushSave}
-                        containerClassName="flex min-h-0 flex-1 flex-col gap-1.5"
-                        previewClassName="min-h-16 flex-1"
-                      />
+                      <Field label="Extended thinking" htmlFor="profile-thinking-mode">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Select
+                              value={thinkingMode}
+                              disabled={busy || !thinkingSupported}
+                              onValueChange={(value) =>
+                                handleEditThinkingModeChange(value as ThinkingMode)
+                              }
+                            >
+                              <SelectTrigger id="profile-thinking-mode" className="w-[12rem]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="inherit">
+                                  Inherit ({detail?.effectiveThinkingEnabled ? "On" : "Off"})
+                                </SelectItem>
+                                <SelectItem value="off">Off</SelectItem>
+                                <SelectItem value="on">On</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={effectiveThinkingEffort}
+                              disabled={busy || !thinkingSupported || thinkingMode !== "on"}
+                              onValueChange={(value) =>
+                                handleEditThinkingEffortChange(value as ThinkingEffort)
+                              }
+                            >
+                              <SelectTrigger className="w-28">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {thinkingSupported
+                              ? "Show reasoning in chat. Higher effort uses more tokens."
+                              : "Not supported for custom providers."}
+                          </p>
+                        </div>
+                      </Field>
                     </div>
                   </div>
 

@@ -443,6 +443,16 @@ export function decodeModelSelection(
   };
 }
 
+export function extractModelId(
+  value: string | null | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return decodeModelSelection(value)?.modelId ?? value;
+}
+
 export function groupModelsByProvider(
   models: ProviderModelOption[],
 ): Array<{
@@ -490,13 +500,25 @@ export function profileModelSelectionValue(
     return INHERIT_MODEL_VALUE;
   }
 
-  for (const group of groups) {
-    if (group.models.some((model) => model.id === modelId)) {
-      return encodeModelSelection(group.providerId, modelId);
+  const decoded = decodeModelSelection(modelId);
+
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const group = groups.find((entry) => entry.providerId === decoded.providerId);
+
+    if (group?.models.some((model) => model.id === decoded.modelId)) {
+      return modelId;
     }
   }
 
-  return encodeModelSelection("__unknown__", modelId);
+  const resolvedModelId = decoded?.modelId ?? modelId;
+
+  for (const group of groups) {
+    if (group.models.some((model) => model.id === resolvedModelId)) {
+      return encodeModelSelection(group.providerId, resolvedModelId);
+    }
+  }
+
+  return encodeModelSelection("__unknown__", resolvedModelId);
 }
 
 export function profileModelLabel(
@@ -508,14 +530,26 @@ export function profileModelLabel(
     return globalModel ? `Inherit global (${globalModel})` : "Inherit global";
   }
 
-  for (const group of groups) {
-    const match = group.models.find((model) => model.id === modelId);
+  const decoded = decodeModelSelection(modelId);
+  const resolvedModelId = decoded?.modelId ?? modelId;
+
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const group = groups.find((entry) => entry.providerId === decoded.providerId);
+    const match = group?.models.find((model) => model.id === resolvedModelId);
+
     if (match) {
       return match.name;
     }
   }
 
-  return modelId;
+  for (const group of groups) {
+    const match = group.models.find((model) => model.id === resolvedModelId);
+    if (match) {
+      return match.name;
+    }
+  }
+
+  return resolvedModelId;
 }
 
 export function effectiveProfileModelSelection(

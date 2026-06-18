@@ -566,6 +566,10 @@ export interface ProfileSummary {
   id: string;
   name: string;
   model: string | null;
+  thinkingEnabled: boolean | null;
+  thinkingEffort: ThinkingEffort | null;
+  effectiveThinkingEnabled: boolean;
+  effectiveThinkingEffort: ThinkingEffort;
   isSuper: boolean;
   toolCount: number;
   mcpServerCount: number;
@@ -734,6 +738,8 @@ export interface CreateProfileRequest {
   name: string;
   systemPrompt?: string;
   model?: string | null;
+  thinkingEnabled?: boolean | null;
+  thinkingEffort?: ThinkingEffort | null;
   isSuper?: boolean;
 }
 
@@ -741,6 +747,8 @@ export interface UpdateProfileRequest {
   name?: string;
   systemPrompt?: string;
   model?: string | null;
+  thinkingEnabled?: boolean | null;
+  thinkingEffort?: ThinkingEffort | null;
 }
 
 export interface CreateToolRequest {

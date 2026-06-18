@@ -63,6 +63,8 @@ import type {
   UserConfig,
 } from "@tinyclaw/core";
 import {
+  DEFAULT_THINKING_EFFORT,
+  DEFAULT_THINKING_ENABLED,
   buildThinkingProviderOptions,
   composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
@@ -118,6 +120,7 @@ import {
   countModelsForInstance,
   mergeModelsForConfig,
   modelExistsOnInstance,
+  resolveProfileProviderSelection,
   resolveDefaultModelForInstance,
   resolveInitialModel,
   toProviderInstanceSummary,
@@ -177,7 +180,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
-    this.profileService = new ProfileService(db);
+    this.profileService = new ProfileService(db, () => this.resolveWorkspaceThinkingDefaults());
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig,
@@ -187,7 +190,12 @@ export class AgentService {
     this.todoTools = createTodoTools(this.agentTodoState);
     this.superBotTools = createSuperBotTools(this.profileService, this.superBotSessionState);
     this._providerConfigured = isProviderConfigured(userConfig) && provider !== null;
-    this.harness = this.createHarness(provider);
+    this.harness = this.createHarness({
+      provider,
+      providerInstance: getActiveProviderInstance(userConfig),
+      modelId: userConfig?.defaultModel ?? null,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+    });
   }
 
   get profiles(): ProfileService {
@@ -268,7 +276,12 @@ export class AgentService {
     }
 
     this.harness = this.createHarness(
-      createProviderFromSources(process.env, this.userConfig),
+      {
+        provider: createProviderFromSources(process.env, this.userConfig),
+        providerInstance: getActiveProviderInstance(this.userConfig),
+        modelId: this.userConfig?.defaultModel ?? null,
+        thinking: this.resolveWorkspaceThinkingDefaults(),
+      },
     );
     this.sessions.clear();
 
@@ -290,13 +303,17 @@ export class AgentService {
   }
 
   private resolveChatProviderOptions(
+    providerInstance: ReturnType<typeof getActiveProviderInstance>,
+    thinkingSettings: ThinkingSettings,
     overrides?: Partial<ProviderChatOptions>,
   ): ProviderChatOptions | undefined {
-    const active = getActiveProviderInstance(this.userConfig);
     const thinking =
-      active?.type === "openai_compatible"
+      providerInstance?.type === "openai_compatible"
         ? undefined
-        : buildThinkingProviderOptions(this.userConfig);
+        : buildThinkingProviderOptions({
+            thinkingEnabled: thinkingSettings.enabled,
+            thinkingEffort: thinkingSettings.effort,
+          });
     const webSearch = overrides?.webSearch;
     const mergedThinking = overrides?.thinking ?? thinking;
 
@@ -1056,7 +1073,12 @@ export class AgentService {
   private refreshHarness(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
     this._providerConfigured = isProviderConfigured(this.userConfig);
-    this.harness = this.createHarness(provider);
+    this.harness = this.createHarness({
+      provider,
+      providerInstance: getActiveProviderInstance(this.userConfig),
+      modelId: this.userConfig?.defaultModel ?? null,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+    });
     this.sessions.clear();
   }
 
@@ -1274,23 +1296,31 @@ export class AgentService {
     await persistUserContext(request.content);
   }
 
-  private createHarness(provider: ProviderClient | null): AgentHarness {
-    const active = getActiveProviderInstance(this.userConfig);
-    const modelId =
-      provider && active && this.userConfig?.defaultModel
-        ? resolveModel(active.type, this.userConfig.defaultModel, active.customModels)
-        : null;
+  private createHarness(options: {
+    provider: ProviderClient | null;
+    providerInstance?: ReturnType<typeof getActiveProviderInstance>;
+    modelId?: string | null;
+    thinking: ThinkingSettings;
+  }): AgentHarness {
+    const providerInstance = options.providerInstance ?? null;
 
-    this.syncUsagePricingContext(active);
+    this.syncUsagePricingContext(providerInstance);
 
     const trackedProvider =
-      provider && this.llmUsageTracker && modelId
-        ? wrapProviderWithUsageTracking(provider, this.llmUsageTracker, modelId)
-        : provider;
+      options.provider && this.llmUsageTracker && options.modelId
+        ? wrapProviderWithUsageTracking(
+            options.provider,
+            this.llmUsageTracker,
+            options.modelId,
+          )
+        : options.provider;
 
     return createAgentHarness({
       provider: trackedProvider ?? undefined,
-      chatOptions: this.resolveChatProviderOptions(),
+      chatOptions: this.resolveChatProviderOptions(
+        providerInstance,
+        options.thinking,
+      ),
     });
   }
 
@@ -1468,41 +1498,47 @@ export class AgentService {
   }
 
   private createHarnessForProfile(profile: StoredProfileRecord): AgentHarness {
-    const active = getActiveProviderInstance(this.userConfig);
+    const resolved = resolveProfileProviderSelection({
+      providers: this.userConfig?.providers ?? [],
+      defaultProviderId: this.userConfig?.defaultProviderId,
+      defaultModel: this.userConfig?.defaultModel,
+      profileModel: profile.model,
+    });
 
-    if (!active) {
-      return this.createHarness(null);
+    if (!resolved) {
+      return this.createHarness({
+        provider: null,
+        providerInstance: null,
+        modelId: null,
+        thinking: this.resolveProfileThinkingSettings(profile),
+      });
     }
 
-    const modelId = resolveModel(
-      active.type,
-      profile.model ?? this.userConfig?.defaultModel ?? "",
-      active.customModels,
-    );
-    const provider = createProviderForInstance(active, modelId);
+    const provider = createProviderForInstance(resolved.instance, resolved.model);
 
-    return this.createHarness(provider);
+    return this.createHarness({
+      provider,
+      providerInstance: resolved.instance,
+      modelId: resolved.model,
+      thinking: this.resolveProfileThinkingSettings(profile),
+    });
   }
 
   private resolveCompactionConfig(
     profile: StoredProfileRecord,
   ): CompactionConfig | undefined {
-    if (!this.userConfig) {
+    const resolved = resolveProfileProviderSelection({
+      providers: this.userConfig?.providers ?? [],
+      defaultProviderId: this.userConfig?.defaultProviderId,
+      defaultModel: this.userConfig?.defaultModel,
+      profileModel: profile.model,
+    });
+
+    if (!resolved) {
       return undefined;
     }
 
-    const active = getActiveProviderInstance(this.userConfig);
-
-    if (!active) {
-      return undefined;
-    }
-
-    const modelId = resolveModel(
-      active.type,
-      profile.model ?? this.userConfig.defaultModel ?? "",
-      active.customModels,
-    );
-    const model = getModelById(modelId);
+    const model = getModelById(resolved.model);
 
     if (!model) {
       return undefined;
@@ -1511,6 +1547,22 @@ export class AgentService {
     return {
       contextWindow: model.contextWindow,
       maxOutputTokens: model.maxOutputTokens,
+    };
+  }
+
+  private resolveWorkspaceThinkingDefaults(): ThinkingSettings {
+    return {
+      enabled: this.userConfig?.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
+      effort: this.userConfig?.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
+    };
+  }
+
+  private resolveProfileThinkingSettings(profile: StoredProfileRecord): ThinkingSettings {
+    const defaults = this.resolveWorkspaceThinkingDefaults();
+
+    return {
+      enabled: profile.thinkingEnabled ?? defaults.enabled,
+      effort: profile.thinkingEffort ?? defaults.effort,
     };
   }
 }
