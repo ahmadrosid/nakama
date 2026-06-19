@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
+import { loadLocalAuthToken } from "@tinyclaw/core";
 
 function createServerOptions() {
   return {
@@ -143,6 +147,53 @@ function cookieHeaderFromSetCookies(setCookies: string[]): string {
 }
 
 describe("createHonoApp", () => {
+  test("accepts opaque bearer auth for internal clients", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bearer-auth-"));
+    process.env.TINYCLAW_CONFIG_DIR = configDir;
+
+    try {
+      const token = await loadLocalAuthToken();
+      const app = createHonoApp(createServerOptions());
+
+      const profilesResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+
+      expect(profilesResponse.status).toBe(200);
+      await expect(profilesResponse.json()).resolves.toEqual({
+        profiles: [{ id: "default" }],
+      });
+
+      const whatsappResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/settings/whatsapp", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+
+      expect(whatsappResponse.status).toBe(200);
+      await expect(whatsappResponse.json()).resolves.toEqual({ enabled: false });
+    } finally {
+      delete process.env.TINYCLAW_CONFIG_DIR;
+      await rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects invalid bearer auth with 401 instead of 500", async () => {
+    const app = createHonoApp(createServerOptions());
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: { Authorization: "Bearer invalid_token" },
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required",
+    });
+  });
+
   test("serves health through the Hono fetch boundary", async () => {
     const app = createHonoApp(createServerOptions());
     const response = await app.fetch(new Request("http://localhost:4310/health"));

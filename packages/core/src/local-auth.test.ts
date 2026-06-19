@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { jwtVerify } from "jose";
-import { loadLocalAuthToken } from "./local-auth";
-import { saveUserConfig } from "./user-config";
+import { loadLocalAuthToken, verifyLocalAuthToken } from "./local-auth";
+import { getUserConfigDir, getUserConfigPath, saveUserConfig } from "./user-config";
 
 describe("loadLocalAuthToken", () => {
   let configDir = "";
@@ -16,34 +16,65 @@ describe("loadLocalAuthToken", () => {
     }
 
     delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.TINYCLAW_LOCAL_AUTH_TOKEN;
   });
 
-  test("returns null when no jwt secret is configured", async () => {
+  test("generates a token when none is configured", async () => {
     configDir = await mkdtemp(join(tmpdir(), "tinyclaw-local-auth-"));
     process.env.TINYCLAW_CONFIG_DIR = configDir;
 
-    expect(await loadLocalAuthToken()).toBeNull();
+    const token = await loadLocalAuthToken();
+    expect(token).toStartWith("tc_local_");
+
+    const rawConfig = await readFile(getUserConfigPath(), "utf8");
+    expect(rawConfig).toContain("local_auth_token_hash=");
+    expect(rawConfig).not.toContain(token!);
+
+    const storedToken = await readFile(join(getUserConfigDir(), "local-auth-token"), "utf8");
+    expect(storedToken.trim()).toBe(token);
   });
 
-  test("creates a bearer token from the local jwt secret", async () => {
+  test("reuses the token from the private local token file", async () => {
     configDir = await mkdtemp(join(tmpdir(), "tinyclaw-local-auth-"));
     process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const tokenValue = "tc_local_configured_token";
 
     await saveUserConfig({
       defaultProviderId: null,
       providers: [],
-      jwtSecret: "test-secret-key-1234567890",
+      localAuthTokenHash: createHash("sha256").update(tokenValue).digest("hex"),
     });
-
-    const token = await loadLocalAuthToken("whatsapp@tinyclaw.internal");
-    expect(token).not.toBeNull();
-
-    const verified = await jwtVerify(
-      token!,
-      new TextEncoder().encode("test-secret-key-1234567890"),
-      { clockTolerance: 60 },
+    await writeFile(
+      join(getUserConfigDir(), "local-auth-token"),
+      `${tokenValue}\n`,
+      "utf8",
     );
 
-    expect(verified.payload.email).toBe("whatsapp@tinyclaw.internal");
+    const token = await loadLocalAuthToken("whatsapp@tinyclaw.internal");
+    expect(token).toBe(tokenValue);
+
+    const rawConfig = await readFile(getUserConfigPath(), "utf8");
+    expect(rawConfig).toContain("local_auth_token_hash=");
+    expect(rawConfig).not.toContain("local_auth_token=tc_local_configured_token");
+  });
+
+  test("verifies the configured local auth token", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-local-auth-"));
+    process.env.TINYCLAW_CONFIG_DIR = configDir;
+
+    const token = await loadLocalAuthToken();
+
+    await expect(verifyLocalAuthToken(token!)).resolves.toEqual({
+      email: "local-client@tinyclaw.internal",
+    });
+    await expect(verifyLocalAuthToken("wrong-token")).resolves.toBeNull();
+  });
+
+  test("prefers env token for production-style setup", async () => {
+    process.env.TINYCLAW_LOCAL_AUTH_TOKEN = "tc_local_from_env";
+    await expect(loadLocalAuthToken()).resolves.toBe("tc_local_from_env");
+    await expect(verifyLocalAuthToken("tc_local_from_env")).resolves.toEqual({
+      email: "local-client@tinyclaw.internal",
+    });
   });
 });

@@ -28,7 +28,6 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
-    "jose": "^6.2.3",
     "nanoid": "^5.1.11",
     "pdf-parse": "2.4.5"
   },

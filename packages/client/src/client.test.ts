@@ -33,3 +33,20 @@ test("chat stream request includes cookie CSRF protection", async () => {
     (globalThis as typeof globalThis & { document?: { cookie: string } }).document = originalDocument;
   }
 });
+
+test("non-browser clients send local auth as a bearer token", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = createClient({
+    baseUrl: "http://localhost:4310",
+    authToken: "local-auth-token",
+    fetch: async (input, init) => {
+      fetchCalls.push({ input, init });
+      return Response.json({ ok: true });
+    },
+  });
+
+  await client.health();
+
+  const headers = new Headers(fetchCalls[0]!.init?.headers);
+  expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
+});

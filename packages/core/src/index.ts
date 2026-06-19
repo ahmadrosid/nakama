@@ -9,6 +9,7 @@ export * from "./document-content";
 export * from "./normalize-task-prompt";
 export * from "./ids";
 export * from "./knowledge-base";
+export * from "./local-auth";
 export * from "./profile-avatar";
 export * from "./compatible-provider-config";
 export * from "./provider-label";

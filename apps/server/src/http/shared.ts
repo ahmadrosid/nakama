@@ -6,6 +6,7 @@ import {
   type ApiErrorResponse,
   type SendMessageInput,
   type StreamEvent,
+  verifyLocalAuthToken,
 } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
 import type { AuthService } from "../services/auth-service";
@@ -91,7 +92,7 @@ function isSecureCookieRequest(): boolean {
 }
 
 export interface RequestAuthContext {
-  mode: "browser-session";
+  mode: "browser-session" | "local-token";
   user: Pick<StoredUserRecord, "email">;
   session?: StoredBrowserSessionRecord;
 }
@@ -101,6 +102,12 @@ export async function authenticateRequest(
   authService: AuthService,
   databaseAdapter: DatabaseAdapter,
 ): Promise<RequestAuthContext | null> {
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const payload = await verifyLocalAuthToken(authHeader.slice(7).trim());
+    return payload ? { mode: "local-token", user: { email: payload.email } } : null;
+  }
+
   const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
   if (!sessionToken) {
     return null;

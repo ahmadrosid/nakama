@@ -41,7 +41,8 @@ export interface UserConfig {
   timezone?: string;
   thinkingEnabled?: boolean;
   thinkingEffort?: ThinkingEffort;
-  jwtSecret?: string;
+  localAuthTokenHash?: string;
+  localAuthToken?: string;
 }
 
 export const DEFAULT_TIMEZONE = "UTC";
@@ -176,7 +177,12 @@ export async function loadUserConfig(): Promise<UserConfig | null> {
     ...(timezone ? { timezone } : {}),
     thinkingEnabled: thinking.enabled,
     thinkingEffort: thinking.effort,
-    ...(parsed.global.jwt_secret?.trim() ? { jwtSecret: parsed.global.jwt_secret.trim() } : {}),
+    ...(parsed.global.local_auth_token_hash?.trim()
+      ? { localAuthTokenHash: parsed.global.local_auth_token_hash.trim() }
+      : {}),
+    ...(parsed.global.local_auth_token?.trim()
+      ? { localAuthToken: parsed.global.local_auth_token.trim() }
+      : {}),
   };
 }
 
@@ -282,7 +288,7 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
     timezone: config.timezone,
     thinking: thinking.enabled ? "on" : "off",
     thinking_effort: thinking.effort,
-    jwt_secret: config.jwtSecret,
+    local_auth_token_hash: config.localAuthTokenHash,
   };
 
   const sections: Record<string, Record<string, string>> = {};
@@ -442,8 +448,8 @@ function buildConfigIniLines(
   );
   lines.push(`thinking_effort=${effort}`);
 
-  if (mergedGlobal.jwt_secret?.trim()) {
-    lines.push(`jwt_secret=${mergedGlobal.jwt_secret.trim()}`);
+  if (mergedGlobal.local_auth_token_hash?.trim()) {
+    lines.push(`local_auth_token_hash=${mergedGlobal.local_auth_token_hash.trim()}`);
   }
 
   lines.push("");
