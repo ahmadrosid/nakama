@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { getModelsForProviderInstance, mergeOpenRouterCatalog } from "./compatible-models";
+import {
+  compatibleModelSupportsThinking,
+  getModelsForProviderInstance,
+  mergeOpenRouterCatalog,
+} from "./compatible-models";
 
 describe("mergeOpenRouterCatalog", () => {
   test("merges custom display names over static entries", () => {
@@ -95,5 +99,42 @@ describe("getModelsForProviderInstance openrouter", () => {
     expect(models).toHaveLength(1);
     expect(models[0]?.id).toBe("google/gemma-4-31b-it:free");
     expect(models.some((model) => model.id === "openai/gpt-5.4")).toBe(false);
+  });
+});
+
+describe("getModelsForProviderInstance openai_compatible", () => {
+  test("maps supportsThinking from custom models into the catalog", () => {
+    const models = getModelsForProviderInstance({
+      id: "compat-1",
+      type: "openai_compatible",
+      label: "NetraRuntime",
+      apiKey: "",
+      baseUrl: "https://api.example.com/v1",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [
+        { id: "qwen3.6-35b", name: "Qwen 3.6 35B", default: true, supportsThinking: true },
+      ],
+    });
+
+    expect(models[0]?.supportsThinking).toBe(true);
+    expect(models[0]?.providerId).toBe("compat-1");
+  });
+});
+
+describe("compatibleModelSupportsThinking", () => {
+  test("returns true only for models explicitly opted into thinking", () => {
+    expect(
+      compatibleModelSupportsThinking("qwen3.6-35b", [
+        { id: "qwen3.6-35b", supportsThinking: true },
+        { id: "qwen3.6-7b" },
+      ]),
+    ).toBe(true);
+
+    expect(
+      compatibleModelSupportsThinking("qwen3.6-7b", [
+        { id: "qwen3.6-35b", supportsThinking: true },
+        { id: "qwen3.6-7b" },
+      ]),
+    ).toBe(false);
   });
 });

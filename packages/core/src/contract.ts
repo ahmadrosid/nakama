@@ -460,6 +460,7 @@ export interface CustomModelEntry {
   id: string;
   name?: string;
   default?: boolean;
+  supportsThinking?: boolean;
   inputPerMillionUsd?: number;
   outputPerMillionUsd?: number;
 }

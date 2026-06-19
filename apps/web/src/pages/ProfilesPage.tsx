@@ -68,7 +68,6 @@ import { cn } from "@/lib/utils";
 import { fileToImageAttachment } from "@/lib/profile-images";
 import { formatError } from "@/lib/client";
 import {
-  decodeModelSelection,
   effectiveProfileModelSelection,
   encodeModelSelection,
   extractModelId,
@@ -76,6 +75,7 @@ import {
   modelSelectContentMaxHeightClass,
   profileModelLabel,
   profileModelSelectionValue,
+  resolveModelThinkingSupport,
 } from "@/lib/models";
 
 const defaultCreatePrompt = "You are a helpful assistant.";
@@ -255,21 +255,10 @@ export function ProfilesPage() {
     );
   }, [editModel, providerModelGroups]);
 
-  const effectiveProviderId = useMemo(
-    () => decodeModelSelection(effectiveModelSelection ?? "")?.providerId ?? null,
-    [effectiveModelSelection],
+  const thinkingSupported = useMemo(
+    () => resolveModelThinkingSupport(effectiveModelSelection, providerModelGroups) !== false,
+    [effectiveModelSelection, providerModelGroups],
   );
-
-  const effectiveProvider = useMemo(
-    () =>
-      effectiveProviderId
-        ? (modelsResponse?.providers.find((provider) => provider.id === effectiveProviderId) ??
-          null)
-        : null,
-    [effectiveProviderId, modelsResponse?.providers],
-  );
-
-  const thinkingSupported = effectiveProvider?.type !== "openai_compatible";
   const effectiveThinkingEffort =
     editThinkingEffort ?? detail?.effectiveThinkingEffort ?? "medium";
 

@@ -126,3 +126,55 @@ describe("AgentService branching", () => {
     }
   });
 });
+
+describe("AgentService thinking provider options", () => {
+  test("keeps thinking enabled for openai-compatible providers", () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(
+      {
+        defaultProviderId: "compat-1",
+        providers: [
+          {
+            id: "compat-1",
+            type: "openai_compatible",
+            label: "NetraRuntime",
+            apiKey: "",
+            baseUrl: "https://api.example.com/v1",
+            customModels: [{ id: "qwen3.6-35b", default: true, supportsThinking: true }],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        thinkingEnabled: true,
+        thinkingEffort: "high",
+      },
+      null,
+      db,
+    );
+
+    const options = (service as unknown as {
+      resolveChatProviderOptions: (
+        providerInstance: {
+          type: "openai_compatible";
+          id: string;
+          label: string;
+          apiKey: string;
+          baseUrl: string;
+          createdAt: string;
+        },
+        thinkingSettings: { enabled: boolean; effort: "low" | "medium" | "high" },
+      ) => { thinking?: { enabled: boolean; effort: string } } | undefined;
+    }).resolveChatProviderOptions(
+      {
+        id: "compat-1",
+        type: "openai_compatible",
+        label: "NetraRuntime",
+        apiKey: "",
+        baseUrl: "https://api.example.com/v1",
+        createdAt: new Date().toISOString(),
+      },
+      { enabled: true, effort: "high" },
+    );
+
+    expect(options?.thinking).toEqual({ enabled: true, effort: "high" });
+  });
+});

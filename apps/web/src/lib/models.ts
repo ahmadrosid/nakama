@@ -562,6 +562,48 @@ export function effectiveProfileModelSelection(
   return profileModelSelectionValue(profileModel, groups);
 }
 
+export function resolveModelThinkingSupport(
+  selection: string | null | undefined,
+  groups: ReturnType<typeof groupModelsByProvider>,
+): boolean | undefined {
+  if (!selection) {
+    return undefined;
+  }
+
+  const decoded = decodeModelSelection(selection);
+  const resolvedModelId = decoded?.modelId ?? selection;
+
+  const findModel = () => {
+    if (decoded && decoded.providerId !== "__unknown__") {
+      const group = groups.find((entry) => entry.providerId === decoded.providerId);
+      const match = group?.models.find((model) => model.id === resolvedModelId);
+      if (match) {
+        return match;
+      }
+    }
+
+    for (const group of groups) {
+      const match = group.models.find((model) => model.id === resolvedModelId);
+      if (match) {
+        return match;
+      }
+    }
+
+    return undefined;
+  };
+
+  const model = findModel();
+  if (!model) {
+    return undefined;
+  }
+
+  if (model.provider === "openai_compatible") {
+    return model.supportsThinking === true;
+  }
+
+  return model.supportsThinking !== false;
+}
+
 export function modelsFromCustomRows(
   rows: Array<{ id: string; name?: string; default?: boolean; inputPerMillionUsd?: number; outputPerMillionUsd?: number }>,
 ): ProviderModelOption[] {

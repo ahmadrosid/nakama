@@ -30,6 +30,7 @@ import {
   effectiveProfileModelSelection,
   extractModelId,
   groupModelsByProvider,
+  resolveModelThinkingSupport,
 } from "@/lib/models";
 import { SETUP_PATH } from "@/lib/navigation";
 
@@ -126,28 +127,7 @@ export function ChatPage() {
   );
 
   const activeModelSupportsThinking = useMemo(() => {
-    if (!currentModelSelection) {
-      return undefined;
-    }
-
-    const decoded = decodeModelSelection(currentModelSelection);
-    const resolvedModelId = decoded?.modelId ?? currentModelSelection;
-
-    if (decoded && decoded.providerId !== "__unknown__") {
-      const group = providerModelGroups.find(
-        (entry) => entry.providerId === decoded.providerId,
-      );
-      return group?.models.find((model) => model.id === resolvedModelId)?.supportsThinking;
-    }
-
-    for (const group of providerModelGroups) {
-      const model = group.models.find((entry) => entry.id === resolvedModelId);
-      if (model) {
-        return model.supportsThinking;
-      }
-    }
-
-    return undefined;
+    return resolveModelThinkingSupport(currentModelSelection, providerModelGroups);
   }, [currentModelSelection, providerModelGroups]);
 
   const showThinking =

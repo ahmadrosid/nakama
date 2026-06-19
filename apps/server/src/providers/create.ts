@@ -15,6 +15,7 @@ import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
 import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
+import { compatibleModelSupportsThinking } from "./compatible-models";
 
 export interface CreateProviderOptions {
   provider: ProviderName;
@@ -73,6 +74,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride,
         model,
         displayName,
+        supportsThinking: compatibleModelSupportsThinking(model, options.instance?.customModels),
       });
     }
   }

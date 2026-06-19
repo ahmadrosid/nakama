@@ -100,6 +100,9 @@ export function customModelsToCatalog(
     contextWindow: DEFAULT_CONTEXT_WINDOW,
     maxOutputTokens: DEFAULT_MAX_OUTPUT,
     ...(entry.default ? { default: true } : {}),
+    ...(entry.supportsThinking !== undefined
+      ? { supportsThinking: entry.supportsThinking }
+      : {}),
     ...(entry.inputPerMillionUsd !== undefined
       ? { inputPerMillionUsd: entry.inputPerMillionUsd }
       : {}),
@@ -296,4 +299,11 @@ export function isCompatibleModelId(
   customModels: CustomModelEntry[] | undefined,
 ): boolean {
   return Boolean(findCustomModel(customModels, modelId));
+}
+
+export function compatibleModelSupportsThinking(
+  modelId: string,
+  customModels: CustomModelEntry[] | undefined,
+): boolean {
+  return findCustomModel(customModels, modelId)?.supportsThinking === true;
 }

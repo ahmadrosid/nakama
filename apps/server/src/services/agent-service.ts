@@ -308,13 +308,10 @@ export class AgentService {
     thinkingSettings: ThinkingSettings,
     overrides?: Partial<ProviderChatOptions>,
   ): ProviderChatOptions | undefined {
-    const thinking =
-      providerInstance?.type === "openai_compatible"
-        ? undefined
-        : buildThinkingProviderOptions({
-            thinkingEnabled: thinkingSettings.enabled,
-            thinkingEffort: thinkingSettings.effort,
-          });
+    const thinking = buildThinkingProviderOptions({
+      thinkingEnabled: thinkingSettings.enabled,
+      thinkingEffort: thinkingSettings.effort,
+    });
     const webSearch = overrides?.webSearch;
     const mergedThinking = overrides?.thinking ?? thinking;
 

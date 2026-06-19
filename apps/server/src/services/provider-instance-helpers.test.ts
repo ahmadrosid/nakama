@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@tinyclaw/core";
-import { resolveProfileProviderSelection } from "./provider-instance-helpers";
+import {
+  applyProviderInstanceUpdate,
+  resolveProfileProviderSelection,
+} from "./provider-instance-helpers";
 
 function createProviderInstance(
   overrides: Partial<ProviderInstance> & Pick<ProviderInstance, "id" | "type" | "label">,
@@ -84,5 +87,38 @@ describe("resolveProfileProviderSelection", () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe("applyProviderInstanceUpdate", () => {
+  test("preserves supportsThinking on compatible custom models", () => {
+    const instance = createProviderInstance({
+      id: "compatible-1",
+      type: "openai_compatible",
+      label: "NetraRuntime",
+      apiKey: "",
+      baseUrl: "https://api.example.com/v1",
+      customModels: [
+        {
+          id: "qwen3.6-35b",
+          name: "Qwen 3.6 35B",
+          default: true,
+          supportsThinking: true,
+        },
+      ],
+    });
+
+    const updated = applyProviderInstanceUpdate(instance, {
+      customModels: [
+        {
+          id: "qwen3.6-35b",
+          name: "Qwen 3.6 35B",
+          default: true,
+          supportsThinking: true,
+        },
+      ],
+    });
+
+    expect(updated.customModels?.[0]?.supportsThinking).toBe(true);
   });
 });

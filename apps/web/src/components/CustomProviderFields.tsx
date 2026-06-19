@@ -14,6 +14,7 @@ interface CustomProviderFieldsProps {
   disabled?: boolean;
   density?: "default" | "compact";
   showModelsEditor?: boolean;
+  showThinkingToggle?: boolean;
   displayNameError?: string | null;
   baseUrlError?: string | null;
   modelsError?: string | null;
@@ -29,6 +30,7 @@ export function CustomProviderFields({
   disabled,
   density = "default",
   showModelsEditor = true,
+  showThinkingToggle = false,
   displayNameError,
   baseUrlError,
   modelsError,
@@ -137,6 +139,7 @@ export function CustomProviderFields({
               <ModelListEditor
                 models={customModels}
                 disabled={disabled}
+                showThinkingToggle={showThinkingToggle}
                 onBrowse={() => setIsBrowsing(true)}
                 onChange={onCustomModelsChange}
               />

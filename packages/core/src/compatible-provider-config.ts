@@ -78,6 +78,16 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
         ? record.name.trim()
         : undefined;
     const isDefault = record.default === true;
+    const supportsThinking =
+      record.supportsThinking === undefined
+        ? undefined
+        : record.supportsThinking === true
+          ? true
+          : record.supportsThinking === false
+            ? false
+            : (() => {
+                throw new Error(`Model "${id}" has invalid supportsThinking flag.`);
+              })();
 
     if (isDefault) {
       defaultCount += 1;
@@ -99,6 +109,7 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       id,
       ...(name ? { name } : {}),
       ...(isDefault ? { default: true } : {}),
+      ...(supportsThinking !== undefined ? { supportsThinking } : {}),
       ...(inputPerMillionUsd !== undefined ? { inputPerMillionUsd } : {}),
       ...(outputPerMillionUsd !== undefined ? { outputPerMillionUsd } : {}),
     });

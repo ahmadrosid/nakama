@@ -53,6 +53,7 @@ describe("user config multi-provider", () => {
               id: "llama3.2",
               name: "Llama 3.2",
               default: true,
+              supportsThinking: true,
             },
           ],
           createdAt: "2026-06-07T11:00:00.000Z",
@@ -69,6 +70,7 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers).toHaveLength(2);
     expect(loaded?.defaultProviderId).toBe(openaiId);
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("llama3.2");
+    expect(loaded?.providers[1]?.customModels?.[0]?.supportsThinking).toBe(true);
   });
 
   test("repairs literal undefined label on load", async () => {

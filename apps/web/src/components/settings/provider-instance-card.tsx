@@ -306,6 +306,7 @@ export function ProviderInstanceCard({
               apiKey=""
               customModels={manageModels.length ? manageModels : seedManageModelRows(instance.customModels, instanceModels)}
               disabled={busy}
+              showThinkingToggle
               displayNameError={null}
               baseUrlError={null}
               modelsError={null}
@@ -339,6 +340,7 @@ export function ProviderInstanceCard({
               apiKey=""
               customModels={manageModels}
               disabled={busy}
+              showThinkingToggle
               displayNameError={null}
               baseUrlError={null}
               modelsError={null}
