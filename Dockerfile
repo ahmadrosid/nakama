@@ -11,8 +11,7 @@ COPY package.json bun.lock ./
 COPY apps apps
 COPY packages packages
 
-RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
-    bun install --frozen-lockfile \
+RUN bun install --frozen-lockfile \
   && bun run --filter @tinyclaw/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
@@ -34,8 +33,7 @@ COPY apps/platform/telegram/package.json apps/platform/telegram/
 COPY apps/platform/whatsapp/package.json apps/platform/whatsapp/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
-RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
-    bun install --frozen-lockfile --production --filter '@tinyclaw/server'
+RUN bun install --frozen-lockfile --production --filter '@tinyclaw/server'
 
 ENV NODE_ENV=production \
     TINYCLAW_HOST=0.0.0.0 \
