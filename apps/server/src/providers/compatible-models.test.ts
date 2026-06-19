@@ -36,6 +36,36 @@ describe("mergeOpenRouterCatalog", () => {
   });
 });
 
+describe("getModelsForProviderInstance openai", () => {
+  test("uses shortlist when custom models are saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "openai-1",
+      type: "openai",
+      label: "OpenAI",
+      apiKey: "sk-test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [{ id: "gpt-5.4", name: "GPT 5.4", default: true }],
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]?.id).toBe("gpt-5.4");
+    expect(models[0]?.providerId).toBe("openai-1");
+  });
+
+  test("returns full catalog when no shortlist is saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "openai-1",
+      type: "openai",
+      label: "OpenAI",
+      apiKey: "sk-test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+    });
+
+    expect(models.length).toBeGreaterThan(1);
+    expect(models.some((model) => model.id === "gpt-5.4")).toBe(true);
+  });
+});
+
 describe("getModelsForProviderInstance opencode_go", () => {
   test("uses shortlist when custom models are saved", () => {
     const models = getModelsForProviderInstance({

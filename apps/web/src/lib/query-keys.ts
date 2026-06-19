@@ -2,6 +2,8 @@ export const queryKeys = {
   health: ["health"] as const,
   models: ["models"] as const,
   providers: ["providers"] as const,
+  providerModelDiscovery: (providerId: string) =>
+    ["providers", providerId, "modelDiscovery"] as const,
   systemStatus: ["systemStatus"] as const,
   profiles: {
     all: ["profiles"] as const,
@@ -40,6 +42,7 @@ export const queryKeys = {
     settings: ["timezones", "settings"] as const,
   },
   thinkingSettings: ["thinking", "settings"] as const,
+  visionSettings: ["vision", "settings"] as const,
   telegram: {
     settings: ["telegram", "settings"] as const,
   },

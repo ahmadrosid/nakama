@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
+import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
@@ -110,6 +111,12 @@ export function SettingsPage() {
       <LocalAuthTokenCard />
 
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />
+
+      <Card className="w-full shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <VisionSettingsCard />
+        </CardContent>
+      </Card>
 
       {formError ? (
         <p className="text-sm text-destructive" role="alert">

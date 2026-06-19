@@ -11,6 +11,7 @@ import type {
   ProviderChatOptions,
   ThinkingEffort,
   ThinkingSettings,
+  VisionSettings,
 } from "./contract";
 import { readTextOrNull, writePrivateTextFile } from "./fs";
 import {
@@ -41,6 +42,7 @@ export interface UserConfig {
   timezone?: string;
   thinkingEnabled?: boolean;
   thinkingEffort?: ThinkingEffort;
+  visionModel?: string | null;
   localAuthTokenHash?: string;
   localAuthToken?: string;
 }
@@ -177,6 +179,7 @@ export async function loadUserConfig(): Promise<UserConfig | null> {
     ...(timezone ? { timezone } : {}),
     thinkingEnabled: thinking.enabled,
     thinkingEffort: thinking.effort,
+    visionModel: readVisionModel(parsed.global),
     ...(parsed.global.local_auth_token_hash?.trim()
       ? { localAuthTokenHash: parsed.global.local_auth_token_hash.trim() }
       : {}),
@@ -194,6 +197,41 @@ export async function loadUserTimezone(): Promise<string> {
   }
 
   return readTimezone(parseIniWithSections(raw).global) ?? DEFAULT_TIMEZONE;
+}
+
+function readVisionModel(global: Record<string, string>): string | null {
+  const trimmed = global.vision_model?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function loadUserVisionSettings(): Promise<VisionSettings> {
+  const raw = await readTextOrNull(getUserConfigPath());
+
+  if (raw === null) {
+    return { model: null };
+  }
+
+  return { model: readVisionModel(parseIniWithSections(raw).global) };
+}
+
+export async function saveUserVisionSettings(settings: VisionSettings): Promise<void> {
+  const model = settings.model?.trim() || null;
+  const existing = await loadUserConfig();
+
+  if (existing) {
+    await saveUserConfig({ ...existing, visionModel: model });
+    return;
+  }
+
+  const raw = await readTextOrNull(getUserConfigPath());
+  const parsed = raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+    vision_model: model ?? "",
+  });
+
+  await writePrivateTextFile(getUserConfigPath(), lines.join("\n"), {
+    ensureDir: getUserConfigDir(),
+  });
 }
 
 export async function loadUserThinkingSettings(): Promise<ThinkingSettings> {
@@ -288,6 +326,7 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
     timezone: config.timezone,
     thinking: thinking.enabled ? "on" : "off",
     thinking_effort: thinking.effort,
+    vision_model: config.visionModel ?? "",
     local_auth_token_hash: config.localAuthTokenHash,
   };
 

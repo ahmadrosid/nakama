@@ -32,6 +32,7 @@ import type {
   CreateProviderResponse,
   DeleteKnowledgeBaseResponse,
   DeleteProviderResponse,
+  DiscoverModelsRequest,
   DocumentAttachment,
   ImageAttachment,
   ListKnowledgeBaseResponse,
@@ -54,6 +55,9 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   UpdateThinkingRequest,
+  UpdateVisionRequest,
+  VisionSettings,
+  VisionSettingsResponse,
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
   ProviderChatOptions,
@@ -68,6 +72,7 @@ import {
   composeSoulSystemPrompt,
   createId,
   createSessionId,
+  extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
   getProfileSoulDir,
@@ -82,15 +87,20 @@ import {
   loadWhatsAppSettingsPublic,
   loadUserContext,
   loadUserTimezone,
+  loadUserVisionSettings,
+  messageContentHasImages,
   regenerateTelegramHandshake,
   regenerateWhatsAppPairingCode,
+  replaceImagePartsWithDescriptions,
   resolveSoulStackForProfile,
   saveTelegramConfig,
+  saveUserVisionSettings,
   saveWhatsAppConfig,
   loadUserThinkingSettings,
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
+  TinyClawApiError,
   writeSoulFile,
   writeUserContext as persistUserContext,
 } from "@tinyclaw/core";
@@ -107,6 +117,7 @@ import {
   createProviderFromSources,
   fetchRemoteOpenAIModels,
   AVAILABLE_MODELS,
+  catalogCustomModelsToCatalog,
   getModelById,
   getModelsForProviderInstance,
   isCostEstimated,
@@ -143,6 +154,13 @@ import { SuperBotSessionState } from "./super-bot-session-state";
 import { resolveToolsFromStorage } from "./tool-resolver";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import type { LlmUsageTracker } from "./llm-usage-tracker";
+import {
+  createVisionFallbackProvider,
+  describeImagesWithVisionModel,
+  resolvePrimaryModelVisionSupport,
+  resolveVisionProviderSelection,
+  VISION_MODEL_REQUIRED_MESSAGE,
+} from "./image-vision-fallback";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -287,6 +305,53 @@ export class AgentService {
     this.sessions.clear();
 
     return { thinking };
+  }
+
+  async getVisionSettings(): Promise<VisionSettingsResponse> {
+    const vision = await this.resolveVisionSettings();
+    return { vision };
+  }
+
+  async setVisionSettings(input: UpdateVisionRequest): Promise<VisionSettingsResponse> {
+    const model = input.model?.trim() || null;
+
+    if (model) {
+      const resolved = resolveVisionProviderSelection({
+        ...this.userConfig,
+        visionModel: model,
+        providers: this.userConfig?.providers ?? [],
+        defaultProviderId: this.userConfig?.defaultProviderId ?? null,
+      });
+
+      if (!resolved) {
+        throw new TinyClawApiError(
+          "Selected image parsing model is unavailable. Choose a vision-capable model.",
+          400,
+        );
+      }
+    }
+
+    const vision: VisionSettings = { model };
+    await saveUserVisionSettings(vision);
+
+    if (this.userConfig) {
+      this.userConfig = {
+        ...this.userConfig,
+        visionModel: model,
+      };
+    }
+
+    this.sessions.clear();
+
+    return { vision };
+  }
+
+  private async resolveVisionSettings(): Promise<VisionSettings> {
+    if (this.userConfig?.visionModel !== undefined) {
+      return { model: this.userConfig.visionModel ?? null };
+    }
+
+    return loadUserVisionSettings();
   }
 
   private async resolveThinkingSettings(): Promise<ThinkingSettings> {
@@ -772,13 +837,23 @@ export class AgentService {
     );
   }
 
-  async discoverModels(baseUrl: string, apiKey = ""): Promise<ModelsResponse> {
-    const entries = await fetchRemoteOpenAIModels(baseUrl, apiKey);
+  async discoverModels(request: DiscoverModelsRequest): Promise<ModelsResponse> {
+    const providerId = request.providerId?.trim();
+    if (providerId) {
+      return this.discoverModelsForProvider(providerId);
+    }
+
+    const baseUrl = request.baseUrl?.trim();
+    if (!baseUrl) {
+      throw new Error("baseUrl or providerId is required.");
+    }
+
+    const entries = await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
     const probeInstance = {
       id: "discover",
       type: "openai_compatible" as const,
       label: "Discover",
-      apiKey,
+      apiKey: request.apiKey ?? "",
       baseUrl,
       customModels: entries,
       createdAt: new Date(0).toISOString(),
@@ -789,9 +864,43 @@ export class AgentService {
       currentProviderId: null,
       providers: [],
       models,
+      catalog: AVAILABLE_MODELS,
       provider: "openai_compatible",
       displayName: null,
       customModels: entries,
+    };
+  }
+
+  async discoverModelsForProvider(providerId: string): Promise<ModelsResponse> {
+    const instance = findProviderInstance(
+      this.userConfig ?? { providers: [], defaultProviderId: null },
+      providerId,
+    );
+
+    if (!instance) {
+      throw new Error("Provider not found.");
+    }
+
+    if (instance.type !== "openai") {
+      throw new Error(`Remote model discovery is not supported for ${instance.type}.`);
+    }
+
+    if (!instance.apiKey.trim()) {
+      throw new Error("Add an API key before discovering models.");
+    }
+
+    const baseUrl = instance.baseUrl?.trim() || "https://api.openai.com/v1";
+    const entries = await fetchRemoteOpenAIModels(baseUrl, instance.apiKey);
+    const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "openai");
+    const models = catalogCustomModelsToCatalog(entries, staticModels, "openai");
+
+    return {
+      currentProviderId: providerId,
+      providers: [],
+      models,
+      catalog: AVAILABLE_MODELS,
+      provider: "openai",
+      displayName: null,
     };
   }
 
@@ -1416,6 +1525,43 @@ export class AgentService {
         }
 
         return parts.join("\n\n");
+      },
+      preprocessUserContent: async (content) => {
+        if (!messageContentHasImages(content)) {
+          return content;
+        }
+
+        const primarySupportsVision = resolvePrimaryModelVisionSupport(
+          this.userConfig,
+          profile.model,
+        );
+
+        if (primarySupportsVision !== false) {
+          return content;
+        }
+
+        const visionSelection = resolveVisionProviderSelection(this.userConfig);
+
+        if (!visionSelection) {
+          throw new TinyClawApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
+        }
+
+        let visionProvider = createVisionFallbackProvider(visionSelection);
+
+        if (this.llmUsageTracker) {
+          visionProvider = wrapProviderWithUsageTracking(
+            visionProvider,
+            this.llmUsageTracker,
+            visionSelection.model,
+          );
+        }
+
+        const descriptions = await describeImagesWithVisionModel(
+          visionProvider,
+          extractImageParts(content),
+        );
+
+        return replaceImagePartsWithDescriptions(content, descriptions);
       },
     });
 

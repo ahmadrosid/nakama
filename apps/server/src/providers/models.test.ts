@@ -28,11 +28,19 @@ describe("resolveModel", () => {
 
   test("resolves catalog models for OpenAI", () => {
     expect(resolveModel("openai", "gpt-5.4")).toBe("gpt-5.4");
+    expect(resolveModel("openai", "gpt-4o-mini")).toBe("gpt-4o-mini");
   });
 
   test("resolves catalog models for Gemini", () => {
     expect(resolveModel("gemini", "gemini-2.5-pro")).toBe("gemini-2.5-pro");
     expect(getDefaultModel("gemini")).toBe("gemini-2.5-flash");
+  });
+
+  test("resolves custom shortlist models for OpenAI", () => {
+    const customModels = [{ id: "gpt-4o-mini", default: true }];
+    expect(resolveModel("openai", "gpt-4o-mini", customModels)).toBe("gpt-4o-mini");
+    expect(resolveModel("openai", "gpt-5.4", customModels)).toBe("gpt-4o-mini");
+    expect(resolveModel("openai", undefined, customModels)).toBe("gpt-4o-mini");
   });
 
   test("passes through non-catalog models for native providers", () => {

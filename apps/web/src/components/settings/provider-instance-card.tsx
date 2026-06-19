@@ -6,7 +6,10 @@ import type {
 import { useMemo, useState } from "react";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
-import { OpenCodeGoProviderModelFields } from "@/components/OpenCodeGoProviderModelFields";
+import {
+  CatalogProviderModelFields,
+  isCatalogShortlistProvider,
+} from "@/components/CatalogProviderModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { normalizeModelListRows, type ModelListRow } from "@/components/ModelListEditor";
 import { Button } from "@/components/ui/button";
@@ -69,7 +72,7 @@ export function ProviderInstanceCard({
   const providerType = instance.type as SelectedProvider;
   const isCompatible = providerType === "openai_compatible";
   const isOpenRouter = providerType === "openrouter";
-  const isOpenCodeGo = providerType === "opencode_go";
+  const isCatalogShortlist = isCatalogShortlistProvider(providerType);
 
   const catalogModelsForType = useMemo(
     () => catalog.filter((model) => model.provider === providerType),
@@ -105,11 +108,11 @@ export function ProviderInstanceCard({
           instanceModels[0]?.name,
         ),
       );
-    } else if (isOpenCodeGo) {
+    } else if (isCatalogShortlist) {
       setManageModels(
         seedManageModelRows(
           instance.customModels,
-          instanceModels.length ? instanceModels : catalogModelsForType,
+          instance.customModels?.length ? instanceModels : [],
         ),
       );
     }
@@ -202,8 +205,11 @@ export function ProviderInstanceCard({
     );
   };
 
-  const saveOpenCodeGo = async () => {
-    const modelsError = validateOpenCodeGoModelsInput(manageModels);
+  const saveCatalogShortlist = async () => {
+    const modelsError =
+      providerType === "opencode_go"
+        ? validateOpenCodeGoModelsInput(manageModels)
+        : validateCustomModelsInput(manageModels);
 
     if (modelsError) {
       setDialogError(modelsError);
@@ -232,7 +238,7 @@ export function ProviderInstanceCard({
             Edit
           </Button>
         ) : null}
-        {isCompatible || isOpenRouter || isOpenCodeGo ? (
+        {isCompatible || isOpenRouter || isCatalogShortlist ? (
           <Button type="button" size="sm" variant="outline" onClick={openManage}>
             Manage
           </Button>
@@ -392,14 +398,16 @@ export function ProviderInstanceCard({
         </Dialog>
       ) : null}
 
-      {isOpenCodeGo ? (
+      {isCatalogShortlist ? (
         <Dialog open={manageOpen} onOpenChange={setManageOpen}>
           <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>Manage models</DialogTitle>
               <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
             </DialogHeader>
-            <OpenCodeGoProviderModelFields
+            <CatalogProviderModelFields
+              provider={providerType}
+              providerInstanceId={instance.id}
               customModels={manageModels}
               catalogModels={catalogModelsForType}
               disabled={busy}
@@ -415,7 +423,7 @@ export function ProviderInstanceCard({
               <Button type="button" variant="outline" disabled={busy} onClick={() => setManageOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" disabled={busy} onClick={() => void saveOpenCodeGo()}>
+              <Button type="button" disabled={busy} onClick={() => void saveCatalogShortlist()}>
                 Save
               </Button>
             </DialogFooter>

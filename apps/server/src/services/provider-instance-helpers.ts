@@ -1,4 +1,5 @@
 import {
+  findCustomModel,
   isValidBaseUrl,
   normalizeBaseUrl,
   validateCustomModels,
@@ -91,6 +92,17 @@ export function modelExistsOnInstance(
     return true;
   }
 
+  if (
+    instance.type === "openai" ||
+    instance.type === "anthropic" ||
+    instance.type === "gemini"
+  ) {
+    if (instance.customModels?.length) {
+      return findCustomModel(instance.customModels, trimmed) !== undefined;
+    }
+    return Boolean(getModelById(trimmed)?.provider === instance.type);
+  }
+
   return Boolean(getModelById(trimmed)?.provider === instance.type);
 }
 
@@ -158,6 +170,12 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateOpenRouterCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
+    } else if (
+      instance.type === "openai" ||
+      instance.type === "anthropic" ||
+      instance.type === "gemini"
+    ) {
+      next.customModels = validateCustomModels(request.customModels);
     }
   }
 

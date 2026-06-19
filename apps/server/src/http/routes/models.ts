@@ -18,7 +18,9 @@ import {
   type UpdateTelegramSettingsRequest,
   type UpdateThinkingRequest,
   type UpdateTimezoneRequest,
+  type UpdateVisionRequest,
   type UpdateWhatsAppSettingsRequest,
+  type VisionSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@tinyclaw/core";
 import { TinyClawApiError } from "@tinyclaw/core";
@@ -42,14 +44,22 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   const timezonesResponseSchema = z.object({ timezones: z.array(z.object({}).passthrough()) }).passthrough().openapi("ListTimezonesResponse");
   const timezoneSettingsSchema = z.object({ timezone: z.string() }).openapi("TimezoneSettingsResponse");
   const thinkingSettingsSchema = z.object({}).passthrough().openapi("ThinkingSettingsResponse");
+  const visionSettingsSchema = z.object({}).passthrough().openapi("VisionSettingsResponse");
   const telegramSettingsSchema = z.object({}).passthrough().openapi("TelegramSettingsResponse");
   const whatsappSettingsSchema = z.object({}).passthrough().openapi("WhatsAppSettingsResponse");
-  const discoverModelsRequestSchema = z.object({ baseUrl: z.string(), apiKey: z.string().optional() }).openapi("DiscoverModelsRequest");
+  const discoverModelsRequestSchema = z
+    .object({
+      baseUrl: z.string().optional(),
+      apiKey: z.string().optional(),
+      providerId: z.string().optional(),
+    })
+    .openapi("DiscoverModelsRequest");
   const createProviderRequestSchema = z.object({}).passthrough().openapi("CreateProviderRequest");
   const updateProviderRequestSchema = z.object({}).passthrough().openapi("UpdateProviderRequest");
   const configureProviderRequestSchema = z.object({}).passthrough().openapi("ConfigureProviderRequest");
   const updateTimezoneRequestSchema = z.object({ timezone: z.string() }).openapi("UpdateTimezoneRequest");
   const updateThinkingRequestSchema = z.object({}).passthrough().openapi("UpdateThinkingRequest");
+  const updateVisionRequestSchema = z.object({ model: z.string().nullable() }).openapi("UpdateVisionRequest");
   const updateTelegramRequestSchema = z.object({}).passthrough().openapi("UpdateTelegramSettingsRequest");
   const updateWhatsappRequestSchema = z.object({}).passthrough().openapi("UpdateWhatsAppSettingsRequest");
   const modelQuerySchema = z.object({ source: z.enum(["catalog", "remote"]).optional() });
@@ -160,6 +170,26 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   }));
   app.openAPIRegistry.registerPath(createRoute({
     method: "get",
+    path: "/v1/settings/vision",
+    tags: ["Models"],
+    summary: "Get vision settings",
+    operationId: "getVisionSettings",
+    responses: { 200: { description: "Vision settings", content: { "application/json": { schema: visionSettingsSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "put",
+    path: "/v1/settings/vision",
+    tags: ["Models"],
+    summary: "Update vision settings",
+    operationId: "setVisionSettings",
+    request: { body: { required: true, content: { "application/json": { schema: updateVisionRequestSchema } } } },
+    responses: {
+      200: { description: "Vision settings", content: { "application/json": { schema: visionSettingsSchema } } },
+      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "get",
     path: "/v1/settings/telegram",
     tags: ["Models"],
     summary: "Get Telegram settings",
@@ -225,8 +255,14 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
 
   app.post("/v1/models/discover", async (c) => {
     const body = await readJson<DiscoverModelsRequest>(c.req.raw);
-    const result = await agent.discoverModels(body.baseUrl, body.apiKey ?? "");
-    return json<ModelsResponse>(result);
+
+    try {
+      const result = await agent.discoverModels(body);
+      return json<ModelsResponse>(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.get("/v1/providers", async () => {
@@ -278,6 +314,25 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   app.put("/v1/settings/thinking", async (c) => {
     const body = await readJson<UpdateThinkingRequest>(c.req.raw);
     return json<ThinkingSettingsResponse>(await agent.setThinkingSettings(body));
+  });
+
+  app.get("/v1/settings/vision", async () => {
+    return json<VisionSettingsResponse>(await agent.getVisionSettings());
+  });
+
+  app.put("/v1/settings/vision", async (c) => {
+    const body = await readJson<UpdateVisionRequest>(c.req.raw);
+
+    try {
+      return json<VisionSettingsResponse>(await agent.setVisionSettings(body));
+    } catch (error) {
+      if (error instanceof TinyClawApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
   });
 
   app.get("/v1/settings/telegram", async () => {

@@ -15,7 +15,21 @@ export type ProviderModelOption = ContractProviderModelOption & {
   maxOutputTokens: number;
 };
 
-export const AVAILABLE_MODELS: ProviderModelOption[] = [
+function withVisionDefaults(models: ProviderModelOption[]): ProviderModelOption[] {
+  return models.map((model) => ({
+    ...model,
+    supportsVision:
+      model.provider === "opencode_go"
+        ? false
+        : model.provider === "openai" ||
+            model.provider === "anthropic" ||
+            model.provider === "gemini"
+          ? true
+          : model.supportsVision,
+  }));
+}
+
+export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
   {
     id: "claude-sonnet-4-6",
     name: "Sonnet 4.6",
@@ -62,6 +76,15 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = [
     maxOutputTokens: 8_192,
     inputPerMillionUsd: 1.5,
     outputPerMillionUsd: 6,
+  },
+  {
+    id: "gpt-4o-mini",
+    name: "GPT-4o mini",
+    provider: "openai",
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.6,
   },
   {
     id: "gemini-2.5-flash",
@@ -218,7 +241,7 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = [
     inputPerMillionUsd: 0.2,
     outputPerMillionUsd: 1.2,
   },
-];
+]);
 
 const OPENROUTER_MODEL_SLUG_PATTERN = /^[\w.-]+\/[\w.:-]+$/;
 
@@ -284,7 +307,13 @@ export function getDefaultModel(
     return resolveOpenRouterDefaultModel(customModels);
   }
 
-  if (provider === "opencode_go" && customModels?.length) {
+  if (
+    (provider === "openai" ||
+      provider === "anthropic" ||
+      provider === "gemini" ||
+      provider === "opencode_go") &&
+    customModels?.length
+  ) {
     return resolveCompatibleDefaultModel(customModels, undefined);
   }
 
@@ -325,7 +354,14 @@ export function resolveModel(
     return resolveCompatibleDefaultModel(customModels, trimmed);
   }
 
-  if (trimmed && provider === "opencode_go" && customModels?.length) {
+  if (
+    trimmed &&
+    (provider === "openai" ||
+      provider === "anthropic" ||
+      provider === "gemini" ||
+      provider === "opencode_go") &&
+    customModels?.length
+  ) {
     if (findCustomModel(customModels, trimmed)) {
       return trimmed;
     }
@@ -352,4 +388,32 @@ export function resolveModel(
   }
 
   return getDefaultModel(provider, customModels);
+}
+
+export function modelSupportsVision(
+  modelId: string,
+  provider: ProviderName,
+  customModels?: CustomModelEntry[],
+): boolean | undefined {
+  const custom = findCustomModel(customModels, modelId);
+
+  if (custom?.supportsVision !== undefined) {
+    return custom.supportsVision;
+  }
+
+  if (provider === "openai_compatible" || provider === "opencode_go") {
+    return false;
+  }
+
+  const catalog = getModelById(modelId);
+
+  if (catalog?.supportsVision !== undefined) {
+    return catalog.supportsVision;
+  }
+
+  if (provider === "openai" || provider === "anthropic" || provider === "gemini") {
+    return true;
+  }
+
+  return undefined;
 }

@@ -3,6 +3,7 @@ import type {
   AutomationDefinition,
   ChatMessage,
   CompactionResponse,
+  MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
   SendMessageInput,
@@ -85,6 +86,9 @@ export interface AgentChatSessionOptions {
   resolvePromptContext?: (
     context?: ResolvePromptContextInput,
   ) => string | Promise<string>;
+  preprocessUserContent?: (
+    content: string | MessageContentPart[],
+  ) => Promise<string | MessageContentPart[]>;
 }
 
 export function createAgentChatSession(
@@ -155,6 +159,7 @@ export function createAgentChatSession(
         toolContext,
         runCompaction,
         resolvePromptContext: options.resolvePromptContext,
+        preprocessUserContent: options.preprocessUserContent,
       });
     },
     async sendStream(input, handlers) {
@@ -171,6 +176,7 @@ export function createAgentChatSession(
           toolContext,
           runCompaction,
           resolvePromptContext: options.resolvePromptContext,
+          preprocessUserContent: options.preprocessUserContent,
         },
       );
     },
@@ -212,13 +218,21 @@ async function sendMessage(
     resolvePromptContext?: (
       context?: ResolvePromptContextInput,
     ) => string | Promise<string>;
+    preprocessUserContent?: (
+      content: string | MessageContentPart[],
+    ) => Promise<string | MessageContentPart[]>;
   },
 ): Promise<string> {
-  const userContent = normalizeUserContent(
+  let userContent = normalizeUserContent(
     input.message,
     input.images,
     input.documents,
   );
+
+  if (options.preprocessUserContent) {
+    userContent = await options.preprocessUserContent(userContent);
+  }
+
   const userMessage = getUserMessageText(userContent);
   history.push({ role: "user", content: userContent });
   const multimodalTurn =

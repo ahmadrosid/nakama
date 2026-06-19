@@ -88,6 +88,16 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
             : (() => {
                 throw new Error(`Model "${id}" has invalid supportsThinking flag.`);
               })();
+    const supportsVision =
+      record.supportsVision === undefined
+        ? undefined
+        : record.supportsVision === true
+          ? true
+          : record.supportsVision === false
+            ? false
+            : (() => {
+                throw new Error(`Model "${id}" has invalid supportsVision flag.`);
+              })();
 
     if (isDefault) {
       defaultCount += 1;
@@ -110,6 +120,7 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       ...(name ? { name } : {}),
       ...(isDefault ? { default: true } : {}),
       ...(supportsThinking !== undefined ? { supportsThinking } : {}),
+      ...(supportsVision !== undefined ? { supportsVision } : {}),
       ...(inputPerMillionUsd !== undefined ? { inputPerMillionUsd } : {}),
       ...(outputPerMillionUsd !== undefined ? { outputPerMillionUsd } : {}),
     });

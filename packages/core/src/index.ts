@@ -6,6 +6,7 @@ export * from "./contract";
 export * from "./fs";
 export * from "./message-content";
 export * from "./document-content";
+export * from "./image-content";
 export * from "./normalize-task-prompt";
 export * from "./ids";
 export * from "./knowledge-base";

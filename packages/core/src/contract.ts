@@ -401,6 +401,18 @@ export interface UpdateThinkingRequest {
   effort?: ThinkingEffort;
 }
 
+export interface VisionSettings {
+  model: string | null;
+}
+
+export interface VisionSettingsResponse {
+  vision: VisionSettings;
+}
+
+export interface UpdateVisionRequest {
+  model: string | null;
+}
+
 export interface RotateLocalAuthTokenResponse {
   token: string;
 }
@@ -465,6 +477,7 @@ export interface CustomModelEntry {
   name?: string;
   default?: boolean;
   supportsThinking?: boolean;
+  supportsVision?: boolean;
   inputPerMillionUsd?: number;
   outputPerMillionUsd?: number;
 }
@@ -479,6 +492,7 @@ export interface ProviderModelOption {
   maxOutputTokens?: number;
   default?: boolean;
   supportsThinking?: boolean;
+  supportsVision?: boolean;
   inputPerMillionUsd?: number;
   outputPerMillionUsd?: number;
 }
@@ -542,8 +556,9 @@ export interface ModelsResponse {
 }
 
 export interface DiscoverModelsRequest {
-  baseUrl: string;
+  baseUrl?: string;
   apiKey?: string;
+  providerId?: string;
 }
 
 export interface ConfigureProviderRequest {

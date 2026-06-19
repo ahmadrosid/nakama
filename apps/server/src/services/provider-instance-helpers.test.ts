@@ -154,4 +154,23 @@ describe("applyProviderInstanceUpdate", () => {
 
     expect(updated.customModels?.[0]?.supportsThinking).toBe(true);
   });
+
+  test("stores custom model shortlist for OpenAI", () => {
+    const instance = createProviderInstance({
+      id: "openai-1",
+      type: "openai",
+      label: "OpenAI",
+    });
+
+    const updated = applyProviderInstanceUpdate(instance, {
+      customModels: [
+        { id: "gpt-5.4", name: "GPT 5.4", default: true },
+        { id: "gpt-4o-mini", name: "GPT-4o mini" },
+      ],
+    });
+
+    expect(updated.customModels).toHaveLength(2);
+    expect(modelExistsOnInstance(updated, "gpt-5.4")).toBe(true);
+    expect(modelExistsOnInstance(updated, "gpt-5.3-codex")).toBe(false);
+  });
 });

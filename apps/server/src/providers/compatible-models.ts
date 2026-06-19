@@ -30,33 +30,42 @@ export function openRouterCustomModelsToCatalog(
   }));
 }
 
-export function openCodeGoCustomModelsToCatalog(
+export function catalogCustomModelsToCatalog(
   entries: CustomModelEntry[],
   staticModels: ProviderModelOption[],
+  provider: ProviderName,
 ): ProviderModelOption[] {
   const staticById = new Map(staticModels.map((model) => [model.id, model]));
 
   return entries.map((entry) => {
     const existing = staticById.get(entry.id);
-    return {
+    const model: ProviderModelOption = {
       ...(existing ?? {
         id: entry.id,
-        provider: "opencode_go" as const,
+        provider,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
         maxOutputTokens: DEFAULT_MAX_OUTPUT,
       }),
       id: entry.id,
       name: entry.name?.trim() || existing?.name || entry.id,
-      provider: "opencode_go",
-      ...(entry.default ? { default: true } : {}),
-      ...(entry.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: entry.inputPerMillionUsd }
-        : {}),
-      ...(entry.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: entry.outputPerMillionUsd }
-        : {}),
+      provider,
     };
+
+    if (entry.default) model.default = true;
+    if (entry.supportsVision !== undefined) model.supportsVision = entry.supportsVision;
+    if (entry.supportsThinking !== undefined) model.supportsThinking = entry.supportsThinking;
+    if (entry.inputPerMillionUsd !== undefined) model.inputPerMillionUsd = entry.inputPerMillionUsd;
+    if (entry.outputPerMillionUsd !== undefined) model.outputPerMillionUsd = entry.outputPerMillionUsd;
+
+    return model;
   });
+}
+
+export function openCodeGoCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+  staticModels: ProviderModelOption[],
+): ProviderModelOption[] {
+  return catalogCustomModelsToCatalog(entries, staticModels, "opencode_go");
 }
 
 export function mergeOpenRouterCatalog(
@@ -93,23 +102,23 @@ export function mergeOpenRouterCatalog(
 export function customModelsToCatalog(
   entries: CustomModelEntry[],
 ): ProviderModelOption[] {
-  return entries.map((entry) => ({
-    id: entry.id,
-    name: entry.name?.trim() || entry.id,
-    provider: "openai_compatible",
-    contextWindow: DEFAULT_CONTEXT_WINDOW,
-    maxOutputTokens: DEFAULT_MAX_OUTPUT,
-    ...(entry.default ? { default: true } : {}),
-    ...(entry.supportsThinking !== undefined
-      ? { supportsThinking: entry.supportsThinking }
-      : {}),
-    ...(entry.inputPerMillionUsd !== undefined
-      ? { inputPerMillionUsd: entry.inputPerMillionUsd }
-      : {}),
-    ...(entry.outputPerMillionUsd !== undefined
-      ? { outputPerMillionUsd: entry.outputPerMillionUsd }
-      : {}),
-  }));
+  return entries.map((entry) => {
+    const model: ProviderModelOption = {
+      id: entry.id,
+      name: entry.name?.trim() || entry.id,
+      provider: "openai_compatible",
+      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+    };
+
+    if (entry.default) model.default = true;
+    if (entry.supportsThinking !== undefined) model.supportsThinking = entry.supportsThinking;
+    if (entry.supportsVision !== undefined) model.supportsVision = entry.supportsVision;
+    if (entry.inputPerMillionUsd !== undefined) model.inputPerMillionUsd = entry.inputPerMillionUsd;
+    if (entry.outputPerMillionUsd !== undefined) model.outputPerMillionUsd = entry.outputPerMillionUsd;
+
+    return model;
+  });
 }
 
 export function ensureCurrentModelInCatalog(
@@ -165,15 +174,20 @@ export function getModelsForProviderInstance(
     );
   }
 
-  if (instance.type === "opencode_go") {
+  if (
+    instance.type === "openai" ||
+    instance.type === "anthropic" ||
+    instance.type === "gemini" ||
+    instance.type === "opencode_go"
+  ) {
     const entries = instance.customModels ?? [];
     if (entries.length) {
-      const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "opencode_go");
+      const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === instance.type);
       return annotate(
         ensureCurrentModelInCatalog(
-          openCodeGoCustomModelsToCatalog(entries, staticModels),
+          catalogCustomModelsToCatalog(entries, staticModels, instance.type),
           currentModel,
-          "opencode_go",
+          instance.type,
         ),
       );
     }
@@ -306,4 +320,11 @@ export function compatibleModelSupportsThinking(
   customModels: CustomModelEntry[] | undefined,
 ): boolean {
   return findCustomModel(customModels, modelId)?.supportsThinking === true;
+}
+
+export function compatibleModelSupportsVision(
+  modelId: string,
+  customModels: CustomModelEntry[] | undefined,
+): boolean {
+  return findCustomModel(customModels, modelId)?.supportsVision === true;
 }

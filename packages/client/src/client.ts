@@ -66,9 +66,12 @@ import type {
   TimezoneSettingsResponse,
   UpdateAutomationRequest,
   UpdateThinkingRequest,
+  UpdateVisionRequest,
   UpdateTelegramSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
+  VisionSettings,
+  VisionSettingsResponse,
   WhatsAppSettingsResponse,
   ListTimezonesResponse,
   CreateTaskRequest,
@@ -165,8 +168,9 @@ export class TinyClawClient {
   }
 
   async discoverModels(request: {
-    baseUrl: string;
+    baseUrl?: string;
     apiKey?: string;
+    providerId?: string;
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {
       method: "POST",
@@ -807,6 +811,19 @@ export class TinyClawClient {
       body: JSON.stringify(settings satisfies UpdateThinkingRequest),
     });
     return response.thinking;
+  }
+
+  async getVisionSettings(): Promise<VisionSettings> {
+    const response = await this.request<VisionSettingsResponse>("/v1/settings/vision");
+    return response.vision;
+  }
+
+  async setVisionSettings(model: string | null): Promise<VisionSettings> {
+    const response = await this.request<VisionSettingsResponse>("/v1/settings/vision", {
+      method: "PUT",
+      body: JSON.stringify({ model } satisfies UpdateVisionRequest),
+    });
+    return response.vision;
   }
 
   async getTelegramSettings(): Promise<TelegramSettingsResponse> {
