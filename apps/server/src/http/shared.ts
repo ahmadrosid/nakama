@@ -266,6 +266,8 @@ export function parseChannel(value: string | undefined): AgentChannel {
   throw new TinyClawApiError("Invalid channel. Expected cli, web, or telegram.", 400);
 }
 
+const STREAM_TIMEOUT_MS = 120_000;
+
 export function streamMessage(
   session: AgentChatSession,
   input: SendMessageInput,
@@ -282,40 +284,51 @@ export function streamMessage(
 
       const keepalive = setInterval(() => {
         try {
-          controller.enqueue(encoder.encode(": keepalive\n\n"));
+          controller.enqueue(encoder.encode(": ping\n\n"));
         } catch {
           clearInterval(keepalive);
         }
       }, keepaliveIntervalMs);
 
       try {
-        const reply = await session.sendStream(input, {
-          onChunk: (delta) => send({ type: "chunk", delta }),
-          onThinking: (delta) => send({ type: "thinking", delta }),
-          onToolStart: (event) =>
-            send({
-              type: "tool_start",
-              toolCallId: event.toolCallId,
-              tool: event.tool,
-              input: event.input,
-            }),
-          onToolEnd: (event) => {
-            send({
-              type: "tool_end",
-              toolCallId: event.toolCallId,
-              tool: event.tool,
-              result: event.result,
-            });
+        const reply = await Promise.race([
+          session.sendStream(input, {
+            onChunk: (delta) => send({ type: "chunk", delta }),
+            onThinking: (delta) => send({ type: "thinking", delta }),
+            onToolStart: (event) =>
+              send({
+                type: "tool_start",
+                toolCallId: event.toolCallId,
+                tool: event.tool,
+                input: event.input,
+              }),
+            onToolEnd: (event) => {
+              send({
+                type: "tool_end",
+                toolCallId: event.toolCallId,
+                tool: event.tool,
+                result: event.result,
+              });
 
-            if (event.tool === "todo_write") {
-              const todos = readTodosFromToolResult(event.result);
+              if (event.tool === "todo_write") {
+                const todos = readTodosFromToolResult(event.result);
 
-              if (todos) {
-                send({ type: "todos_updated", todos });
+                if (todos) {
+                  send({ type: "todos_updated", todos });
+                }
               }
-            }
-          },
-        });
+            },
+          }),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error(
+                  `Chat timed out after ${Math.round(STREAM_TIMEOUT_MS / 1000)}s waiting for the provider. Try another model or check provider settings.`,
+                ),
+              );
+            }, STREAM_TIMEOUT_MS);
+          }),
+        ]);
 
         send({ type: "done", reply });
       } catch (error) {

@@ -163,3 +163,42 @@ export function normalizeThinkingEffort(
 
   return "medium";
 }
+
+export function formatHttpErrorBody(
+  label: string,
+  status: number,
+  body: string,
+): string {
+  const trimmed = body.trim();
+
+  if (!trimmed) {
+    return `${label} request failed (${status}).`;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const nested = parsed.error;
+
+    if (typeof nested === "object" && nested !== null && !Array.isArray(nested)) {
+      const record = nested as Record<string, unknown>;
+      const message =
+        typeof record.message === "string" ? record.message.trim() : "";
+      const type = typeof record.type === "string" ? record.type.trim() : "";
+
+      if (message) {
+        return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${message}`;
+      }
+    }
+
+    const message =
+      typeof parsed.message === "string" ? parsed.message.trim() : "";
+
+    if (message) {
+      return `${label} request failed (${status}): ${message}`;
+    }
+  } catch {
+    // fall through to raw body
+  }
+
+  return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
+}

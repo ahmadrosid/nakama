@@ -12,8 +12,10 @@ import { normalizeBaseUrl } from "@tinyclaw/core";
 import OpenAI from "openai";
 import {
   buildChatCompletionResult,
+  formatHttpErrorBody,
   normalizeThinkingEffort,
   parseJsonRecord,
+  readSseEvents,
 } from "../shared";
 import {
   parseOpenAIToolCalls,
@@ -40,9 +42,13 @@ export function createOpenAICompatibleProvider(
 ): ProviderClient {
   const label = options.displayName.trim() || "Custom provider";
   const model = options.model;
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const apiKey = options.apiKey || "not-needed";
   const client = new OpenAI({
-    apiKey: options.apiKey || "not-needed",
-    baseURL: normalizeBaseUrl(options.baseUrl),
+    apiKey,
+    baseURL: baseUrl,
+    maxRetries: 0,
+    timeout: 120_000,
   });
 
   return {
@@ -72,7 +78,10 @@ export function createOpenAICompatibleProvider(
       });
     },
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
-      return streamChatCompletion(client, label, {
+      return streamChatCompletion({
+        label,
+        baseUrl,
+        apiKey,
         model,
         system: input.system,
         messages: input.messages,
@@ -86,7 +95,13 @@ export function createOpenAICompatibleProvider(
 
 function formatSdkError(label: string, error: unknown): Error {
   if (error instanceof OpenAI.APIError) {
-    return new Error(`${label} request failed (${error.status}): ${error.message}`);
+    const body =
+      typeof error.error === "string"
+        ? error.error
+        : error.error
+          ? JSON.stringify(error.error)
+          : error.message;
+    return new Error(formatHttpErrorBody(label, error.status ?? 0, body));
   }
 
   if (error instanceof Error) {
@@ -165,20 +180,24 @@ async function requestChatCompletion(
   }
 }
 
-async function streamChatCompletion(
-  client: OpenAI,
-  label: string,
-  options: {
-    model: string;
-    system: string;
-    messages: ChatMessage[];
-    tools?: LlmToolDefinition[];
-    thinking?: GenerateChatInput["providerOptions"]["thinking"];
-    handlers: StreamChatHandlers;
-  },
-): Promise<ChatCompletionResult> {
-  try {
-    const stream = await client.chat.completions.create({
+async function streamChatCompletion(options: {
+  label: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  system: string;
+  messages: ChatMessage[];
+  tools?: LlmToolDefinition[];
+  thinking?: GenerateChatInput["providerOptions"]["thinking"];
+  handlers: StreamChatHandlers;
+}): Promise<ChatCompletionResult> {
+  const response = await fetch(`${options.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
       model: options.model,
       stream: true,
       messages: await buildMessages(options.system, options.messages),
@@ -188,47 +207,82 @@ async function streamChatCompletion(
       ...(options.tools?.length
         ? {
             tools: toOpenAITools(options.tools),
-            tool_choice: "auto" as const,
+            tool_choice: "auto",
           }
         : {}),
-    });
+    }),
+  });
 
-    let content = "";
-    let thinking = "";
-    const pending = new Map<number, PendingToolCall>();
+  const bodyText = response.ok ? null : await response.text();
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-
-      if (delta?.content) {
-        content += delta.content;
-        options.handlers.onChunk(delta.content);
-      }
-
-      const reasoningDelta = readReasoningText(delta);
-
-      if (reasoningDelta) {
-        thinking += reasoningDelta;
-        options.handlers.onThinking?.(reasoningDelta);
-      }
-
-      if (delta?.tool_calls) {
-        for (const toolDelta of delta.tool_calls) {
-          mergePendingToolCall(pending, toolDelta);
-        }
-      }
-    }
-
-    const toolCalls = finalizePendingToolCalls(pending);
-
-    if (!content.trim() && toolCalls.length === 0 && !thinking.trim()) {
-      throw new Error(`${label} returned an empty response.`);
-    }
-
-    return buildChatCompletionResult({ content, toolCalls, thinking });
-  } catch (error) {
-    throw formatSdkError(label, error);
+  if (!response.ok) {
+    throw new Error(
+      formatHttpErrorBody(options.label, response.status, bodyText ?? ""),
+    );
   }
+
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    throw new Error(
+      formatHttpErrorBody(
+        options.label,
+        response.status,
+        await response.text(),
+      ),
+    );
+  }
+
+  if (!response.body) {
+    throw new Error(`${options.label} returned an empty stream.`);
+  }
+
+  let content = "";
+  let thinking = "";
+  const pending = new Map<number, PendingToolCall>();
+
+  await readSseEvents(response.body, ({ data }) => {
+    const payload = JSON.parse(data) as {
+      choices?: Array<{
+        delta?: {
+          content?: string | null;
+          tool_calls?: Array<{
+            index?: number;
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }>;
+        };
+      }>;
+    };
+
+    const delta = payload.choices?.[0]?.delta;
+
+    if (delta?.content) {
+      content += delta.content;
+      options.handlers.onChunk(delta.content);
+    }
+
+    const reasoningDelta = readReasoningText(delta);
+
+    if (reasoningDelta) {
+      thinking += reasoningDelta;
+      options.handlers.onThinking?.(reasoningDelta);
+    }
+
+    if (delta?.tool_calls) {
+      for (const toolDelta of delta.tool_calls) {
+        mergePendingToolCall(pending, toolDelta);
+      }
+    }
+  });
+
+  const toolCalls = finalizePendingToolCalls(pending);
+
+  if (!content.trim() && toolCalls.length === 0 && !thinking.trim()) {
+    throw new Error(`${options.label} returned an empty response.`);
+  }
+
+  return buildChatCompletionResult({ content, toolCalls, thinking });
 }
 
 async function requestCompletion(

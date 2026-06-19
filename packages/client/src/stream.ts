@@ -1,15 +1,20 @@
 import type { SendMessageInput, StreamEvent } from "@tinyclaw/core/contract";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
+const DEFAULT_STREAM_IDLE_MS = 120_000;
+
 export async function readStreamEvents(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  idleMs = DEFAULT_STREAM_IDLE_MS,
 ): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let reply = "";
+  let sawDataEvent = false;
+  let lastDataAt = Date.now();
 
   const abortReader = () => {
     void reader.cancel();
@@ -19,6 +24,12 @@ export async function readStreamEvents(
 
   try {
     while (true) {
+      if (Date.now() - lastDataAt >= idleMs) {
+        throw new Error(
+          `Chat stream timed out after ${Math.round(idleMs / 1000)}s waiting for the model. The provider may be rate-limited, misconfigured, or unavailable — try another model or check Settings.`,
+        );
+      }
+
       const { done, value } = await reader.read();
 
       if (done) {
@@ -38,9 +49,12 @@ export async function readStreamEvents(
         buffer = buffer.slice(boundary + 2);
 
         for (const line of eventBlock.split("\n")) {
-          if (!line.startsWith("data: ")) {
+          if (line.startsWith(":") || !line.startsWith("data: ")) {
             continue;
           }
+
+          sawDataEvent = true;
+          lastDataAt = Date.now();
 
           const payload = JSON.parse(line.slice(6)) as StreamEvent;
 
@@ -89,7 +103,11 @@ export async function readStreamEvents(
     }
 
     if (!reply) {
-      throw new Error("Stream ended without a response.");
+      throw new Error(
+        sawDataEvent
+          ? "Stream ended before the model returned a reply."
+          : "Stream ended without a response. Only server keepalive events were received — the LLM call likely failed or hung before producing output.",
+      );
     }
 
     return reply;

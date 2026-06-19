@@ -123,4 +123,41 @@ describe("OpenAI-compatible provider", () => {
     expect(thinking).toEqual(["Plan"]);
     expect(result.assistantMessage.thinking).toBe("Plan");
   });
+
+  test("surfaces JSON provider errors on stream requests", async () => {
+    const fetchMock = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          error: {
+            type: "FreeUsageLimitError",
+            message: "Rate limit exceeded. Please try again later.",
+          },
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "public",
+      baseUrl: "https://opencode.ai/zen/v1",
+      model: "big-pickle",
+      displayName: "OpenCode Zen",
+      supportsThinking: false,
+    });
+
+    await expect(
+      provider.streamChat(
+        {
+          system: "You are helpful.",
+          messages: [{ role: "user", content: "Hi" }],
+        },
+        { onChunk: () => {} },
+      ),
+    ).rejects.toThrow(
+      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later.",
+    );
+  });
 });

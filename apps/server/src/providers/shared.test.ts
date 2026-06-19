@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   normalizeThinkingEffort,
+  formatHttpErrorBody,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -78,5 +79,23 @@ describe("provider shared helpers", () => {
     expect(normalizeThinkingEffort("low")).toBe("low");
     expect(normalizeThinkingEffort("high")).toBe("high");
     expect(normalizeThinkingEffort(undefined)).toBe("medium");
+  });
+
+  test("formatHttpErrorBody extracts OpenCode-style JSON errors", () => {
+    expect(
+      formatHttpErrorBody(
+        "OpenCode Zen",
+        429,
+        JSON.stringify({
+          type: "error",
+          error: {
+            type: "FreeUsageLimitError",
+            message: "Rate limit exceeded. Please try again later.",
+          },
+        }),
+      ),
+    ).toBe(
+      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later.",
+    );
   });
 });
