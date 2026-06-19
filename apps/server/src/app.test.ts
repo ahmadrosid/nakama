@@ -5,18 +5,10 @@ import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./http/app";
 import { AuthService } from "./services/auth-service";
 
-async function createValidToken(authService: AuthService): Promise<string> {
-  return authService.createToken("test@example.com");
-}
-
 const TEST_DIST_DIR = join(import.meta.dir, "__test_dist__");
 
-const TEST_CONFIG = {
-  jwtSecret: "test-secret-key-for-jwt-signing-1234567890",
-};
-
 function createMockApp(webDistDir: string | null) {
-  const authService = new AuthService(TEST_CONFIG);
+  const authService = new AuthService();
   return createHonoApp({
     agent: {} as any,
     automationService: {} as any,
@@ -36,7 +28,7 @@ function createMockApp(webDistDir: string | null) {
 }
 
 function createBrowserAuthApp() {
-  const authService = new AuthService(TEST_CONFIG);
+  const authService = new AuthService();
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const app = createHonoApp({
     agent: { providerConfigured: true } as any,
@@ -56,6 +48,25 @@ function createBrowserAuthApp() {
   });
 
   return { app, databaseAdapter };
+}
+
+async function createBrowserSession(app: ReturnType<typeof createHonoApp>) {
+  const setupResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+    }),
+  );
+
+  if (setupResponse.status !== 201) {
+    throw new Error(`Failed to create browser session: ${setupResponse.status}`);
+  }
+
+  const setCookies = extractSetCookies(setupResponse);
+  return {
+    cookieHeader: cookieHeaderFromSetCookies(setCookies),
+    csrfToken: cookieValue(setCookies, "tinyclaw_csrf"),
+  };
 }
 
 function extractSetCookies(response: Response): string[] {
@@ -256,8 +267,8 @@ describe("browser session auth", () => {
 
 describe("GET /v1/workers/{name}/logs", () => {
   async function createMockAppWithWorkerManager(workerManager: any) {
-    const authService = new AuthService(TEST_CONFIG);
-    const token = await createValidToken(authService);
+    const authService = new AuthService();
+    const databaseAdapter = createInMemoryDatabaseAdapter();
     const app = createHonoApp({
       agent: {} as any,
       automationService: {} as any,
@@ -268,22 +279,20 @@ describe("GET /v1/workers/{name}/logs", () => {
       workerManager,
       mcpService: {} as any,
       authService,
-      databaseAdapter: {
-        countUsers: async () => 1,
-        getUserByEmail: async () => null,
-      } as any,
+      databaseAdapter,
       webDistDir: null,
     });
-    return { app, token };
+    const session = await createBrowserSession(app);
+    return { app, session };
   }
 
   test("returns logs for a valid worker", async () => {
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: (name: string) => name === "whatsapp",
       getWorkerLogs: async () => ({ stdout: "log1\nlog2", stderr: "err1" }),
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/logs", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: session.cookieHeader },
     });
     const response = await app.fetch(request);
 
@@ -295,20 +304,20 @@ describe("GET /v1/workers/{name}/logs", () => {
 
   test("clamps lines parameter to valid range", async () => {
     const getWorkerLogs = async (_name: string, lines: number) => ({ stdout: String(lines), stderr: "" });
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: (name: string) => name === "whatsapp",
       getWorkerLogs,
     });
 
     const request1 = new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=0", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: session.cookieHeader },
     });
     const response1 = await app.fetch(request1);
     const body1 = await response1.json();
     expect(body1.stdout).toBe("1");
 
     const request2 = new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=99999", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: session.cookieHeader },
     });
     const response2 = await app.fetch(request2);
     const body2 = await response2.json();
@@ -316,11 +325,11 @@ describe("GET /v1/workers/{name}/logs", () => {
   });
 
   test("returns 400 for unknown worker", async () => {
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: () => false,
     });
     const request = new Request("http://localhost:4310/v1/workers/foobar/logs", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: session.cookieHeader },
     });
     const response = await app.fetch(request);
 
@@ -330,14 +339,14 @@ describe("GET /v1/workers/{name}/logs", () => {
   });
 
   test("returns 500 when getWorkerLogs fails", async () => {
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: (name: string) => name === "whatsapp",
       getWorkerLogs: async () => {
         throw new Error("PM2 not available");
       },
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/logs", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: session.cookieHeader },
     });
     const response = await app.fetch(request);
 
@@ -349,8 +358,8 @@ describe("GET /v1/workers/{name}/logs", () => {
 
 describe("POST /v1/workers/{name}/clear-logs", () => {
   async function createMockAppWithWorkerManager(workerManager: any) {
-    const authService = new AuthService(TEST_CONFIG);
-    const token = await createValidToken(authService);
+    const authService = new AuthService();
+    const databaseAdapter = createInMemoryDatabaseAdapter();
     const app = createHonoApp({
       agent: {} as any,
       automationService: {} as any,
@@ -361,24 +370,25 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       workerManager,
       mcpService: {} as any,
       authService,
-      databaseAdapter: {
-        countUsers: async () => 1,
-        getUserByEmail: async () => null,
-      } as any,
+      databaseAdapter,
       webDistDir: null,
     });
-    return { app, token };
+    const session = await createBrowserSession(app);
+    return { app, session };
   }
 
   test("clears logs for a valid worker", async () => {
     const clearWorkerLogs = async () => {};
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: (name: string) => name === "whatsapp",
       clearWorkerLogs,
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Cookie: session.cookieHeader,
+        "X-CSRF-Token": session.csrfToken,
+      },
     });
     const response = await app.fetch(request);
 
@@ -388,12 +398,15 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
   });
 
   test("returns 400 for unknown worker", async () => {
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: () => false,
     });
     const request = new Request("http://localhost:4310/v1/workers/foobar/clear-logs", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Cookie: session.cookieHeader,
+        "X-CSRF-Token": session.csrfToken,
+      },
     });
     const response = await app.fetch(request);
 
@@ -403,7 +416,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
   });
 
   test("returns 500 when clearWorkerLogs fails", async () => {
-    const { app, token } = await createMockAppWithWorkerManager({
+    const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: (name: string) => name === "whatsapp",
       clearWorkerLogs: async () => {
         throw new Error("PM2 flush failed");
@@ -411,7 +424,10 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Cookie: session.cookieHeader,
+        "X-CSRF-Token": session.csrfToken,
+      },
     });
     const response = await app.fetch(request);
 

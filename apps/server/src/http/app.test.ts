@@ -3,10 +3,6 @@ import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 
-const TEST_CONFIG = {
-  jwtSecret: "test-secret-key-for-jwt-signing-1234567890",
-};
-
 function createServerOptions() {
   return {
     agent: {
@@ -119,7 +115,7 @@ function createServerOptions() {
       updateServer: async (_serverId: string, _body: unknown) => ({ id: "mcp_1" }),
       deleteServer: async (_serverId: string) => {},
     } as any,
-    authService: new AuthService(TEST_CONFIG),
+    authService: new AuthService(),
     databaseAdapter: createInMemoryDatabaseAdapter(),
     webDistDir: null,
   };

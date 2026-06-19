@@ -20,8 +20,6 @@ const CSRF_COOKIE_NAME = "tinyclaw_csrf";
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-export const INTERNAL_AUTH_MODE_HEADER = "x-tinyclaw-auth-mode";
-
 function parseCookies(header: string | null): Record<string, string> {
   if (!header) {
     return {};
@@ -93,7 +91,7 @@ function isSecureCookieRequest(): boolean {
 }
 
 export interface RequestAuthContext {
-  mode: "bearer" | "browser-session";
+  mode: "browser-session";
   user: Pick<StoredUserRecord, "email">;
   session?: StoredBrowserSessionRecord;
 }
@@ -103,17 +101,6 @@ export async function authenticateRequest(
   authService: AuthService,
   databaseAdapter: DatabaseAdapter,
 ): Promise<RequestAuthContext | null> {
-  const authHeader = request.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    try {
-      const payload = await authService.verifyToken(token);
-      return { mode: "bearer", user: { email: payload.email } };
-    } catch {
-      return null;
-    }
-  }
-
   const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
   if (!sessionToken) {
     return null;

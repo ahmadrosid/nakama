@@ -1,7 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import {
-  INTERNAL_AUTH_MODE_HEADER,
   assertBrowserCsrf,
   authenticateRequest,
 } from "./shared";
@@ -46,17 +45,6 @@ export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler 
       throw error;
     }
 
-    c.set("trustedAuthMode", auth.mode);
     await next();
   };
-}
-
-export function withTrustedAuthHeader(request: Request, authMode?: string): Request {
-  if (!authMode) {
-    return request;
-  }
-
-  const headers = new Headers(request.headers);
-  headers.set(INTERNAL_AUTH_MODE_HEADER, authMode);
-  return new Request(request, { headers });
 }

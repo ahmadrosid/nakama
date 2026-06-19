@@ -1,5 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { createAuthMiddleware, withTrustedAuthHeader } from "./auth-middleware";
+import { createAuthMiddleware } from "./auth-middleware";
 import type { ServerOptions } from "./context";
 import type { HonoApp } from "./types";
 import { TinyClawApiError, formatServerError } from "@tinyclaw/core";
@@ -20,11 +20,7 @@ import { tryServeStaticWeb } from "../static-web";
 import { serializeHttpOpenApiSpec } from "./openapi";
 
 export function createHonoApp(options: ServerOptions) {
-  const app: HonoApp = new OpenAPIHono<{
-    Variables: {
-      trustedAuthMode?: string;
-    };
-  }>();
+  const app: HonoApp = new OpenAPIHono();
 
   app.onError((err) => {
     if (err instanceof TinyClawApiError) {
