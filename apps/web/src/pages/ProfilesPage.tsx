@@ -166,6 +166,7 @@ export function ProfilesPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [removeConfirm, setRemoveConfirm] = useState<RemoveAssignmentTarget | null>(null);
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
@@ -751,25 +752,41 @@ export function ProfilesPage() {
   }
 
 
+  function openDeleteDialog(profileId: string) {
+    setDeleteTargetId(profileId);
+    setDeleteOpen(true);
+  }
+
   function handleDeleteOpenChange(open: boolean) {
     if (busy) {
       return;
     }
 
     setDeleteOpen(open);
+
+    if (!open) {
+      setDeleteTargetId(null);
+    }
   }
 
   async function handleDeleteConfirm() {
-    if (!selectedId || !detail || detail.isSuper) {
+    const profileId = deleteTargetId;
+    const profile = profileId ? profiles.find((entry) => entry.id === profileId) : null;
+
+    if (!profileId || !profile || profile.isSuper) {
       return;
     }
 
     setError(null);
 
     try {
-      await deleteMutation.mutateAsync(selectedId);
+      await deleteMutation.mutateAsync(profileId);
       setDeleteOpen(false);
-      setSelectedId(null);
+      setDeleteTargetId(null);
+
+      if (selectedId === profileId) {
+        setSelectedId(null);
+      }
     } catch (err) {
       setError(formatError(err));
     }
@@ -945,6 +962,10 @@ export function ProfilesPage() {
     return <PageState message="Loading profiles…" />;
   }
 
+  const deleteTarget = deleteTargetId
+    ? profiles.find((entry) => entry.id === deleteTargetId)
+    : null;
+
   return (
     <>
       <div className="space-y-4">
@@ -1012,7 +1033,7 @@ export function ProfilesPage() {
                   size="sm"
                   disabled={busy}
                   className="shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
+                  onClick={() => openDeleteDialog(selectedId)}
                 >
                   <Trash2Icon className="size-4" aria-hidden />
                   Delete
@@ -1081,26 +1102,13 @@ export function ProfilesPage() {
                       active={selectedId === profile.id}
                       disabled={busy}
                       onClick={() => handleSelectProfile(profile.id)}
+                      onDelete={
+                        profile.isSuper ? undefined : () => openDeleteDialog(profile.id)
+                      }
                     />
                   ))}
                 </div>
               )}
-
-              {selectedId && detail && !detail.isSuper ? (
-                <div className="mt-4 border-t border-border pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    className="w-full text-destructive hover:text-destructive"
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    <Trash2Icon className="size-4" aria-hidden />
-                    Delete
-                  </Button>
-                </div>
-              ) : null}
 
             </aside>
 
@@ -1689,8 +1697,8 @@ export function ProfilesPage() {
           <DialogHeader className="gap-3">
             <DialogTitle>Delete profile?</DialogTitle>
             <DialogDescription>
-              {detail
-                ? `This removes ${detail.name} and its chat history. This cannot be undone.`
+              {deleteTarget
+                ? `This removes ${deleteTarget.name} and its chat history. This cannot be undone.`
                 : "This removes the profile and its chat history. This cannot be undone."}
             </DialogDescription>
           </DialogHeader>
@@ -1857,32 +1865,50 @@ function ProfileScopeButton({
   active,
   disabled,
   onClick,
+  onDelete,
 }: {
   profile: ProfileSummary;
   active: boolean;
   disabled: boolean;
   onClick: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
+    <div
       data-active={active || undefined}
-      className="scope-item disabled:cursor-not-allowed disabled:opacity-50"
+      className={cn(
+        "scope-item group flex items-center gap-2",
+        disabled && "opacity-50",
+      )}
     >
-      <div className="flex items-start gap-3">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-not-allowed"
+      >
         <ProfileAvatar profile={profile} size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">
-            {profile.name}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {profile.toolCount} tools · {profile.mcpServerCount} MCP
-          </p>
+          <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
         </div>
-      </div>
-    </button>
+      </button>
+      {onDelete ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          disabled={disabled}
+          className="shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+          aria-label={`Delete ${profile.name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+        >
+          <Trash2Icon className="size-4" aria-hidden />
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
