@@ -71,7 +71,7 @@ export function modelExistsOnInstance(
     return false;
   }
 
-  const catalog = getModelsForProviderInstance(instance, trimmed);
+  const catalog = getModelsForProviderInstance(instance);
   if (catalog.some((model) => model.id === trimmed)) {
     return true;
   }
@@ -330,5 +330,8 @@ export function resolveProfileProviderSelection(options: {
     }
   }
 
-  return null;
+  return {
+    instance: fallbackInstance,
+    model: resolveDefaultModelForInstance(fallbackInstance),
+  };
 }

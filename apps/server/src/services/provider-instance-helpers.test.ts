@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@tinyclaw/core";
 import {
   applyProviderInstanceUpdate,
+  modelExistsOnInstance,
   resolveProfileProviderSelection,
 } from "./provider-instance-helpers";
 
@@ -66,7 +67,7 @@ describe("resolveProfileProviderSelection", () => {
     expect(resolved?.model).toBe("gpt-5.4");
   });
 
-  test("returns null when the profile does not override the model", () => {
+  test("falls back to the default provider when the profile does not override the model", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({
         id: "zen-1",
@@ -86,7 +87,39 @@ describe("resolveProfileProviderSelection", () => {
       profileModel: null,
     });
 
-    expect(resolved).toBeNull();
+    expect(resolved).not.toBeNull();
+    expect(resolved?.instance.id).toBe("zen-1");
+    expect(resolved?.model).toBe("opencode-go/kimi-k2.7-code");
+  });
+
+  test("does not treat catalog models as available on unrelated compatible providers", () => {
+    const zen = createProviderInstance({
+      id: "zen-1",
+      type: "openai_compatible",
+      label: "OpenCode Zen",
+      apiKey: "public",
+      baseUrl: "https://opencode.ai/zen/v1",
+      customModels: [{ id: "big-pickle", name: "Big Pickle", default: true }],
+    });
+
+    expect(modelExistsOnInstance(zen, "gpt-5.4")).toBe(false);
+    expect(modelExistsOnInstance(zen, "big-pickle")).toBe(true);
+
+    const resolved = resolveProfileProviderSelection({
+      providers: [
+        zen,
+        createProviderInstance({
+          id: "openai-1",
+          type: "openai",
+          label: "OpenAI",
+        }),
+      ],
+      defaultProviderId: "zen-1",
+      profileModel: "gpt-5.4",
+    });
+
+    expect(resolved?.instance.id).toBe("openai-1");
+    expect(resolved?.model).toBe("gpt-5.4");
   });
 });
 
