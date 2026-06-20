@@ -91,7 +91,10 @@ function runShellCommand(
   timeoutMs: number,
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
-    const child = spawn("/bin/bash", ["-lc", command], {
+    const isWindows = process.platform === "win32";
+    const shell = isWindows ? "cmd.exe" : "/bin/bash";
+    const shellArgs = isWindows ? ["/c", command] : ["-lc", command];
+    const child = spawn(shell, shellArgs, {
       cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
