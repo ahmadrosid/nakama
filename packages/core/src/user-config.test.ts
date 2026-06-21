@@ -2,13 +2,37 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { pathExists } from "./fs";
 import {
   createProviderInstanceId,
+  ensureUserConfigDir,
   getUserConfigPath,
   loadUserConfig,
   normalizeProviderInstanceLabel,
   saveUserConfig,
 } from "./user-config";
+
+describe("ensureUserConfigDir", () => {
+  let configDir = "";
+
+  afterEach(async () => {
+    if (configDir) {
+      await rm(configDir, { recursive: true, force: true });
+      configDir = "";
+    }
+
+    delete process.env.TINYCLAW_CONFIG_DIR;
+  });
+
+  test("creates the config directory when missing", async () => {
+    configDir = join(tmpdir(), `tinyclaw-config-${Date.now()}`);
+    process.env.TINYCLAW_CONFIG_DIR = configDir;
+
+    expect(await pathExists(configDir)).toBe(false);
+    await expect(ensureUserConfigDir()).resolves.toBe(configDir);
+    expect(await pathExists(configDir)).toBe(true);
+  });
+});
 
 describe("user config multi-provider", () => {
   let configDir = "";

@@ -13,7 +13,7 @@ import type {
   ThinkingSettings,
   VisionSettings,
 } from "./contract";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { ensureDir, readTextOrNull, writePrivateTextFile } from "./fs";
 import {
   parseProviderName,
   type UserProviderName,
@@ -159,6 +159,12 @@ export function getUserConfigDir(): string {
 
 export function getUserConfigPath(): string {
   return join(getUserConfigDir(), "config.ini");
+}
+
+export async function ensureUserConfigDir(): Promise<string> {
+  const dir = getUserConfigDir();
+  await ensureDir(dir);
+  return dir;
 }
 
 export async function loadUserConfig(): Promise<UserConfig | null> {
