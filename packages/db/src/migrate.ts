@@ -15,6 +15,8 @@ export function migrateDatabase(db: Database): void {
   migrateMcpTables(db);
   migrateSkillsTables(db);
   migrateUsersTable(db);
+  migrateOrgTables(db);
+  migrateTenantOrgScope(db);
   migrateBrowserSessionsTable(db);
   migrateLegacyProfileIds(db);
   migrateWorkspaceSettingsTable(db);
@@ -205,11 +207,131 @@ function migrateUsersTable(db: Database): void {
       id TEXT PRIMARY KEY NOT NULL,
       email TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      name TEXT,
+      phone TEXT,
+      is_platform_admin INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(users)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("is_platform_admin")) {
+    db.exec(`
+      ALTER TABLE users ADD COLUMN is_platform_admin INTEGER DEFAULT 0 NOT NULL;
+    `);
+  }
+
+  if (!columnNames.has("name")) {
+    db.exec(`ALTER TABLE users ADD COLUMN name TEXT;`);
+  }
+
+  if (!columnNames.has("phone")) {
+    db.exec(`ALTER TABLE users ADD COLUMN phone TEXT;`);
+  }
+}
+
+function migrateOrgTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique ON organizations (slug);
+
+    CREATE TABLE IF NOT EXISTS org_members (
+      org_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, user_id),
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS org_invites (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      invited_by_user_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (invited_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
+  `);
+}
+
+const TENANT_ORG_ID_TABLES = [
+  "profiles",
+  "sessions",
+  "automations",
+  "tasks",
+  "tools",
+  "mcp_servers",
+  "skills",
+  "llm_usage_stats",
+  "workspace_settings",
+] as const;
+
+function migrateTenantOrgScope(db: Database): void {
+  for (const tableName of TENANT_ORG_ID_TABLES) {
+    addOrgIdColumnIfMissing(db, tableName);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_org_mappings (
+      channel TEXT NOT NULL,
+      channel_user_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      org_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (channel, channel_user_id),
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+  `);
+
+  db.exec(`
+    DROP INDEX IF EXISTS tools_name_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS tools_org_name_unique ON tools (org_id, name);
+
+    DROP INDEX IF EXISTS mcp_servers_name_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_org_name_unique ON mcp_servers (org_id, name);
+
+    DROP INDEX IF EXISTS skills_source_path_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS skills_org_source_path_unique ON skills (org_id, source_path);
+  `);
+}
+
+function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
+  const columns = db
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all() as Array<{ name: string }>;
+
+  if (columns.length === 0) {
+    return;
+  }
+
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("org_id")) {
+    // ponytail: nullable for legacy rows — no default-org backfill (see plan R13); NOT NULL enforced at adapter layer in T3+
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN org_id TEXT;`);
+  }
 }
 
 function migrateBrowserSessionsTable(db: Database): void {
@@ -223,11 +345,21 @@ function migrateBrowserSessionsTable(db: Database): void {
       expires_at TEXT NOT NULL,
       revoked_at TEXT,
       last_used_at TEXT,
+      active_org_id TEXT,
       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     );
     CREATE UNIQUE INDEX IF NOT EXISTS browser_sessions_token_hash_unique
       ON browser_sessions (session_token_hash);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(browser_sessions)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("active_org_id")) {
+    db.exec(`ALTER TABLE browser_sessions ADD COLUMN active_org_id TEXT;`);
+  }
 }
 
 const LEGACY_PROFILE_ID_MAP = [

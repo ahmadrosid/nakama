@@ -39,6 +39,25 @@ test("chat stream request includes cookie CSRF protection", async () => {
   }
 });
 
+test("clients send org context on authenticated requests", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = createClient({
+    baseUrl: "http://localhost:4310",
+    authToken: "local-auth-token",
+    orgId: "org_test",
+    fetch: async (input, init) => {
+      fetchCalls.push({ input, init });
+      return Response.json({ profiles: [] });
+    },
+  });
+
+  await client.listProfiles();
+
+  const headers = new Headers(fetchCalls[0]!.init?.headers);
+  expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
+  expect(headers.get("X-Org-Id")).toBe("org_test");
+});
+
 test("non-browser clients send local auth as a bearer token", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
   const client = createClient({

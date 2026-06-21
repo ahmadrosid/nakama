@@ -8,12 +8,13 @@ import {
 } from "react";
 import { client } from "@/lib/client";
 import { queryClient } from "@/lib/query-client";
+import type { SetupAuthRequest } from "@tinyclaw/core/contract";
 
 interface AuthContextValue {
   user: { email: string } | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  setup: (email: string, password: string) => Promise<void>;
+  setup: (request: SetupAuthRequest) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -43,8 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  const setup = useCallback(async (email: string, password: string) => {
-    const me = await client.setupUser(email, password);
+  const setup = useCallback(async (request: SetupAuthRequest) => {
+    const me = await client.setupUser(request);
     setUser(me);
     refreshAuthenticatedQueries();
   }, []);

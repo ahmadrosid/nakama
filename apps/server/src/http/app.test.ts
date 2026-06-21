@@ -2,12 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { OrgRole } from "@tinyclaw/core";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
-import { loadLocalAuthToken } from "@tinyclaw/core";
+import { OrgService } from "../services/org-service";
+import { loadLocalAuthToken, verifyLocalAuthToken } from "@tinyclaw/core";
+import {
+  buildSetupAuthBody,
+  seedLocalClientUser,
+  seedOrgForUser,
+  TEST_ORG_ID,
+  withOrgId,
+} from "./test-org-helpers";
 
 function createServerOptions() {
+  const databaseAdapter = createInMemoryDatabaseAdapter();
+  const authService = new AuthService();
   return {
     agent: {
       providerConfigured: true,
@@ -121,8 +132,9 @@ function createServerOptions() {
       updateServer: async (_serverId: string, _body: unknown) => ({ id: "mcp_1" }),
       deleteServer: async (_serverId: string) => {},
     } as any,
-    authService: new AuthService(),
-    databaseAdapter: createInMemoryDatabaseAdapter(),
+    authService,
+    orgService: new OrgService(databaseAdapter, authService),
+    databaseAdapter,
     webDistDir: null,
   };
 }
@@ -148,18 +160,63 @@ function cookieHeaderFromSetCookies(setCookies: string[]): string {
   ].join("; ");
 }
 
+async function authSession(
+  options: ReturnType<typeof createServerOptions>,
+  app: ReturnType<typeof createHonoApp>,
+  email = "admin@example.com",
+  role: OrgRole = "admin",
+) {
+  const setupResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/setup", {
+      method: "POST",
+      body: JSON.stringify(buildSetupAuthBody(email)),
+    }),
+  );
+  const setupBody = (await setupResponse.json()) as { activeOrgId: string };
+  const setCookies = extractSetCookies(setupResponse);
+  const orgId = setupBody.activeOrgId;
+
+  if (role !== "admin") {
+    const user = await options.databaseAdapter.getUserByEmail(email);
+    if (!user) {
+      throw new Error(`User not found: ${email}`);
+    }
+
+    await options.databaseAdapter.upsertOrgMember({
+      orgId,
+      userId: user.id,
+      role,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  return {
+    setupResponse,
+    setCookies,
+    orgId,
+    headers(extra: Record<string, string> = {}) {
+      return withOrgId({ Cookie: cookieHeaderFromSetCookies(setCookies), ...extra }, orgId);
+    },
+  };
+}
+
 describe("createHonoApp", () => {
   test("accepts opaque bearer auth for internal clients", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bearer-auth-"));
     process.env.TINYCLAW_CONFIG_DIR = configDir;
 
     try {
+      const options = createServerOptions();
       const token = await loadLocalAuthToken();
-      const app = createHonoApp(createServerOptions());
+      const payload = await verifyLocalAuthToken(token!);
+      expect(payload).not.toBeNull();
+      await seedLocalClientUser(options.databaseAdapter);
+      await seedOrgForUser(options.databaseAdapter, payload!.email);
+      const app = createHonoApp(options);
 
       const profilesResponse = await app.fetch(
         new Request("http://localhost:4310/v1/profiles", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, "X-Org-Id": TEST_ORG_ID },
         }),
       );
 
@@ -170,7 +227,7 @@ describe("createHonoApp", () => {
 
       const whatsappResponse = await app.fetch(
         new Request("http://localhost:4310/v1/settings/whatsapp", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, "X-Org-Id": TEST_ORG_ID },
         }),
       );
 
@@ -183,7 +240,8 @@ describe("createHonoApp", () => {
   });
 
   test("rejects invalid bearer auth with 401 instead of 500", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
         headers: { Authorization: "Bearer invalid_token" },
@@ -201,32 +259,37 @@ describe("createHonoApp", () => {
     process.env.TINYCLAW_CONFIG_DIR = configDir;
 
     try {
-      const app = createHonoApp(createServerOptions());
+      const options = createServerOptions();
+      const app = createHonoApp(options);
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "admin@example.com", password: "secret123" }),
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
         }),
       );
       const setupCookies = extractSetCookies(setupResponse);
+      const orgId = await seedOrgForUser(options.databaseAdapter, "admin@example.com");
 
       const rotateResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/local-token/rotate", {
           method: "POST",
-          headers: {
-            Cookie: cookieHeaderFromSetCookies(setupCookies),
-            "X-CSRF-Token": cookieValue(setupCookies, "tinyclaw_csrf"),
-          },
+          headers: withOrgId(
+            {
+              Cookie: cookieHeaderFromSetCookies(setupCookies),
+              "X-CSRF-Token": cookieValue(setupCookies, "tinyclaw_csrf"),
+            },
+            orgId,
+          ),
         }),
       );
 
       expect(rotateResponse.status).toBe(200);
-      const payload = (await rotateResponse.json()) as { token: string };
-      expect(payload.token).toStartWith("tc_local_");
+      const rotatePayload = (await rotateResponse.json()) as { token: string };
+      expect(rotatePayload.token).toStartWith("tc_local_");
 
       const oldToken = await loadLocalAuthToken();
-      expect(oldToken).toBe(payload.token);
+      expect(oldToken).toBe(rotatePayload.token);
     } finally {
       delete process.env.TINYCLAW_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
@@ -239,7 +302,9 @@ describe("createHonoApp", () => {
 
     try {
       const token = await loadLocalAuthToken();
-      const app = createHonoApp(createServerOptions());
+      const options = createServerOptions();
+      await seedLocalClientUser(options.databaseAdapter);
+      const app = createHonoApp(options);
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/local-token/rotate", {
           method: "POST",
@@ -258,7 +323,8 @@ describe("createHonoApp", () => {
   });
 
   test("serves health through the Hono fetch boundary", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const response = await app.fetch(new Request("http://localhost:4310/health"));
 
     expect(response.status).toBe(200);
@@ -269,7 +335,8 @@ describe("createHonoApp", () => {
   });
 
   test("preserves auth-protected behavior through the Hono shell", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const response = await app.fetch(new Request("http://localhost:4310/v1/sessions"));
 
     expect(response.status).toBe(401);
@@ -279,11 +346,12 @@ describe("createHonoApp", () => {
   });
 
   test("preserves browser session auth through the Hono middleware", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
 
@@ -300,11 +368,12 @@ describe("createHonoApp", () => {
   });
 
   test("preserves CSRF rejection through the Hono middleware", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
 
@@ -323,17 +392,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves worker logs through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=50", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -345,17 +410,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves model catalog through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/models?source=remote", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -366,17 +427,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves user context through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/user/context?content=true", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -385,22 +442,16 @@ describe("createHonoApp", () => {
   });
 
   test("creates and lists sessions through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
-    const headers = { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) };
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/sessions", {
         method: "POST",
-        headers: {
-          ...headers,
-          "X-CSRF-Token": cookieValue(extractSetCookies(setupResponse), "tinyclaw_csrf"),
-        },
+        headers: session.headers({
+          "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+        }),
         body: JSON.stringify({ channel: "web", profileId: "default" }),
       }),
     );
@@ -410,7 +461,7 @@ describe("createHonoApp", () => {
 
     const listResponse = await app.fetch(
       new Request("http://localhost:4310/v1/sessions?profileId=default&channel=web", {
-        headers,
+        headers: session.headers(),
       }),
     );
 
@@ -421,22 +472,16 @@ describe("createHonoApp", () => {
   });
 
   test("sends non-streaming session messages through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
-    const setCookies = extractSetCookies(setupResponse);
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions/session_1/messages", {
         method: "POST",
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(setCookies),
-          "X-CSRF-Token": cookieValue(setCookies, "tinyclaw_csrf"),
-        },
+        headers: session.headers({
+          "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+        }),
         body: JSON.stringify({ message: "hello" }),
       }),
     );
@@ -446,17 +491,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves profiles through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -465,17 +506,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves mcp servers through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/mcp/servers", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -484,17 +521,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves skills through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/skills", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -503,11 +536,12 @@ describe("createHonoApp", () => {
   });
 
   test("serves tools through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
+    const options = createServerOptions();
+    const app = createHonoApp(options);
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
 
@@ -522,17 +556,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves automations through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/automations", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -541,22 +571,16 @@ describe("createHonoApp", () => {
   });
 
   test("runs automations through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
-    const setCookies = extractSetCookies(setupResponse);
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/automations/automation_1/run", {
         method: "POST",
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(setCookies),
-          "X-CSRF-Token": cookieValue(setCookies, "tinyclaw_csrf"),
-        },
+        headers: session.headers({
+          "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+        }),
       }),
     );
 
@@ -565,17 +589,13 @@ describe("createHonoApp", () => {
   });
 
   test("serves tasks through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tasks", {
-        headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        headers: session.headers(),
       }),
     );
 
@@ -584,26 +604,141 @@ describe("createHonoApp", () => {
   });
 
   test("runs tasks through Hono routes", async () => {
-    const app = createHonoApp(createServerOptions());
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
-      }),
-    );
-    const setCookies = extractSetCookies(setupResponse);
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await authSession(options, app);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tasks/task_1/run", {
         method: "POST",
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(setCookies),
-          "X-CSRF-Token": cookieValue(setCookies, "tinyclaw_csrf"),
-        },
+        headers: session.headers({
+          "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+        }),
       }),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ run: { id: "task_run_1" } });
+  });
+
+  describe("org context middleware", () => {
+    test("setup stores active org on the session", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          method: "POST",
+          body: JSON.stringify(buildSetupAuthBody()),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setupBody = (await setupResponse.json()) as { activeOrgId: string; orgId: string };
+      expect(setupBody.activeOrgId).toStartWith("org_");
+      expect(setupBody.orgId).toBe(setupBody.activeOrgId);
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    test("returns 400 when org context is missing on protected routes", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          method: "POST",
+          body: JSON.stringify(buildSetupAuthBody()),
+        }),
+      );
+
+      const loginResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        }),
+      );
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(loginResponse)) },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "Organization context required",
+      });
+    });
+
+    test("returns 404 when org membership is missing", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const session = await authSession(options, app);
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: withOrgId(session.headers(), "org_other"),
+        }),
+      );
+
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({ error: "Not found" });
+    });
+
+    test("allows authenticated requests with valid org context", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const session = await authSession(options, app);
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: session.headers(),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    test("skips org context for auth routes", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          method: "POST",
+          body: JSON.stringify(buildSetupAuthBody()),
+        }),
+      );
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: { Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)) },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    test("returns 403 when viewers mutate protected routes", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const session = await authSession(options, app, "viewer@example.com", "viewer");
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/workers/whatsapp/start", {
+          method: "POST",
+          headers: session.headers({
+            "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    });
   });
 });

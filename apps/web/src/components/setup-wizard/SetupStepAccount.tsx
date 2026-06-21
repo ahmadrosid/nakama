@@ -2,23 +2,22 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { useAuth } from "@/context/auth-context";
+import type { SetupAccountDraft } from "@/components/setup-wizard/SetupWizard";
 
 interface SetupStepAccountProps {
-  onNext: () => void;
+  onNext: (account: SetupAccountDraft) => void;
 }
 
 export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { setup } = useAuth();
-  // const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
 
     if (password !== confirmPassword) {
@@ -31,21 +30,29 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
       return;
     }
 
-    setIsSubmitting(true);
-
-    try {
-      await setup(email, password);
-      onNext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create account");
-    } finally {
-      setIsSubmitting(false);
-    }
+    onNext({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      password,
+    });
   };
 
   return (
     <Card className="p-6">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="setup-name" className="mb-1 block text-sm font-medium">
+            Your name
+          </label>
+          <Input
+            id="setup-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Jane Admin"
+            required
+          />
+        </div>
         <div>
           <label htmlFor="setup-email" className="mb-1 block text-sm font-medium">
             Email
@@ -54,8 +61,21 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             id="setup-email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => setEmail(event.target.value)}
             placeholder="admin@example.com"
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="setup-phone" className="mb-1 block text-sm font-medium">
+            Phone
+          </label>
+          <Input
+            id="setup-phone"
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="+628123456789"
             required
           />
         </div>
@@ -67,7 +87,7 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             id="setup-password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             placeholder="••••••••"
             required
             minLength={8}
@@ -81,7 +101,7 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             id="setup-confirm"
             type="password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="••••••••"
             required
           />
@@ -91,8 +111,8 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             {error}
           </div>
         )}
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Creating account..." : "Create Account"}
+        <Button type="submit" className="w-full">
+          Continue
         </Button>
       </form>
     </Card>

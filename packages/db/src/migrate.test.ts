@@ -219,10 +219,213 @@ describe("browser session schema", () => {
         "expires_at",
         "revoked_at",
         "last_used_at",
+        "active_org_id",
       ]);
       expect(indexes.some((index) => index.name === "browser_sessions_token_hash_unique")).toBe(
         true,
       );
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("organization schema migration", () => {
+  test("creates org tables and allows org with admin member", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO users (
+          id, email, password_hash, is_platform_admin, created_at, updated_at
+        ) VALUES (
+          'user_admin', 'admin@example.com', 'hash', 1,
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (
+          'org_acme', 'Acme', 'acme',
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (
+          'org_acme', 'user_admin', 'admin', '2026-06-21T00:00:00.000Z'
+        );
+      `);
+
+      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
+      expect(fkCheck).toEqual([]);
+
+      const member = db
+        .prepare("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?")
+        .get("org_acme", "user_admin") as { role: string };
+      expect(member.role).toBe("admin");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects duplicate organization slug", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.prepare(`
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run("org_a", "Org A", "acme", "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+
+      let error: unknown;
+      try {
+        db.prepare(`
+          INSERT INTO organizations (
+            id, name, slug, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+        `).run("org_b", "Org B", "acme", "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeDefined();
+      expect(String(error)).toContain("UNIQUE");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects org_member with unknown org_id", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.prepare(`
+        INSERT INTO users (
+          id, email, password_hash, is_platform_admin, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run("user_1", "user@example.com", "hash", 0, "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+
+      let error: unknown;
+      try {
+        db.prepare(`
+          INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?, ?, ?, ?)
+        `).run("missing_org", "user_1", "admin", "2026-06-21T00:00:00.000Z");
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeDefined();
+      expect(String(error)).toContain("FOREIGN KEY");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("adds is_platform_admin to legacy users table", () => {
+    const db = new Database(":memory:");
+
+    try {
+      db.exec(`
+        CREATE TABLE users (
+          id TEXT PRIMARY KEY NOT NULL,
+          email TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+
+      migrateDatabase(db);
+
+      const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+      expect(columns.map((column) => column.name)).toContain("is_platform_admin");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("adds org_id to tenant tables and composite unique indexes", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      for (const tableName of [
+        "profiles",
+        "sessions",
+        "automations",
+        "tasks",
+        "tools",
+        "mcp_servers",
+        "skills",
+        "llm_usage_stats",
+        "workspace_settings",
+      ]) {
+        const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+        expect(columns.map((column) => column.name)).toContain("org_id");
+      }
+
+      const toolIndexes = db.prepare("PRAGMA index_list(tools)").all() as Array<{ name: string }>;
+      expect(toolIndexes.some((index) => index.name === "tools_org_name_unique")).toBe(true);
+      expect(toolIndexes.some((index) => index.name === "tools_name_unique")).toBe(false);
+
+      db.exec(`
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES
+          ('org_a', 'Org A', 'org-a', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'),
+          ('org_b', 'Org B', 'org-b', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z');
+
+        INSERT INTO tools (
+          id, name, description, handler_type, handler_config, org_id, created_at, updated_at
+        ) VALUES
+          ('tool_a', 'bash', 'bash', 'bash', '{}', 'org_a', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'),
+          ('tool_b', 'bash', 'bash', 'bash', '{}', 'org_b', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z');
+      `);
+
+      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
+      expect(fkCheck).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("creates channel_org_mappings with foreign keys", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO users (
+          id, email, password_hash, is_platform_admin, created_at, updated_at
+        ) VALUES (
+          'user_1', 'user@example.com', 'hash', 0,
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO organizations (
+          id, name, slug, created_at, updated_at
+        ) VALUES (
+          'org_acme', 'Acme', 'acme',
+          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
+        );
+
+        INSERT INTO channel_org_mappings (
+          channel, channel_user_id, user_id, org_id, created_at
+        ) VALUES (
+          'telegram', 'tg_123', 'user_1', 'org_acme', '2026-06-21T00:00:00.000Z'
+        );
+      `);
+
+      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
+      expect(fkCheck).toEqual([]);
     } finally {
       db.close();
     }

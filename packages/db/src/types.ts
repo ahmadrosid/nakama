@@ -1,4 +1,7 @@
-import type { AgentTodo, ThinkingEffort } from "@tinyclaw/core";
+import type { AgentTodo, OrgRole, ThinkingEffort } from "@tinyclaw/core";
+
+export type { OrgRole } from "@tinyclaw/core";
+export type ChannelType = "telegram" | "whatsapp";
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
 
@@ -9,6 +12,7 @@ export interface StoredAutomationRecord {
   definition: unknown;
   profileId: string;
   enabled: boolean;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +35,7 @@ export interface StoredProfileRecord {
   thinkingEnabled?: boolean | null;
   thinkingEffort?: ThinkingEffort | null;
   isSuper: boolean;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,6 +46,7 @@ export interface StoredToolRecord {
   description: string;
   handlerType: string;
   handlerConfig: unknown;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +55,7 @@ export interface StoredSessionRecord {
   id: string;
   profileId: string;
   channel: string;
+  orgId?: string | null;
   createdAt: string;
   title: string | null;
   agentTodos: AgentTodo[];
@@ -66,6 +73,7 @@ export interface StoredSessionSummaryRecord {
   id: string;
   profileId: string;
   channel: string;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -82,6 +90,7 @@ export interface StoredTaskRecord {
   status: string;
   position: number;
   sessionId?: string | null;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,12 +115,14 @@ export interface StoredLlmUsageStatsRecord {
   estimatedCostUsd: number;
   trackedSince: string;
   updatedAt: string;
+  orgId?: string | null;
 }
 
 export interface StoredWorkspaceSettingsRecord {
   id: string;
   visionModel: string | null;
   updatedAt: string;
+  orgId?: string | null;
 }
 
 export interface LlmUsageStatsDelta {
@@ -138,6 +149,7 @@ export interface StoredSkillRecord {
   hasTool: boolean;
   disableModelInvocation: boolean;
   enabled: boolean;
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -151,6 +163,7 @@ export interface StoredMcpServerRecord {
   status: McpServerStatus;
   lastError: string | null;
   cachedTools: CachedMcpTool[];
+  orgId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -159,8 +172,47 @@ export interface StoredUserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  name?: string | null;
+  phone?: string | null;
+  isPlatformAdmin?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StoredOrganizationRecord {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredOrgMemberRecord {
+  orgId: string;
+  userId: string;
+  role: OrgRole;
+  createdAt: string;
+}
+
+export interface StoredOrgInviteRecord {
+  id: string;
+  orgId: string;
+  email: string;
+  role: OrgRole;
+  tokenHash: string;
+  invitedByUserId: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface StoredChannelOrgMappingRecord {
+  channel: ChannelType;
+  channelUserId: string;
+  userId: string;
+  orgId: string;
+  createdAt: string;
 }
 
 export interface StoredBrowserSessionRecord {
@@ -172,12 +224,14 @@ export interface StoredBrowserSessionRecord {
   expiresAt: string;
   revokedAt: string | null;
   lastUsedAt: string | null;
+  activeOrgId?: string | null;
 }
 
 export interface DatabaseAdapter {
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   createUser(record: StoredUserRecord): Promise<void>;
+  updateUserPassword(id: string, passwordHash: string, updatedAt: string): Promise<void>;
   countUsers(): Promise<number>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
@@ -186,6 +240,20 @@ export interface DatabaseAdapter {
   ): Promise<StoredBrowserSessionRecord | null>;
   revokeBrowserSessionBySessionTokenHash(sessionTokenHash: string, revokedAt: string): Promise<boolean>;
   updateBrowserSessionLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
+
+  upsertOrganization(record: StoredOrganizationRecord): Promise<void>;
+  listOrganizations(): Promise<StoredOrganizationRecord[]>;
+  getOrganizationById(id: string): Promise<StoredOrganizationRecord | null>;
+  getOrganizationBySlug(slug: string): Promise<StoredOrganizationRecord | null>;
+  upsertOrgMember(record: StoredOrgMemberRecord): Promise<void>;
+  getOrgMember(orgId: string, userId: string): Promise<StoredOrgMemberRecord | null>;
+  listOrgMembers(orgId: string): Promise<StoredOrgMemberRecord[]>;
+  deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
+
+  createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
+  getOrgInviteByTokenHash(tokenHash: string): Promise<StoredOrgInviteRecord | null>;
+  getPendingOrgInvite(orgId: string, email: string): Promise<StoredOrgInviteRecord | null>;
+  markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;

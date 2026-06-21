@@ -84,6 +84,7 @@ import type {
   ListTaskRunsResponse,
   TaskMessagesResponse,
   AuthUserResponse,
+  SetupAuthRequest,
   StoredTask,
   TaskRunRecord,
   WorkerLogsResponse,
@@ -111,6 +112,7 @@ export class TinyClawClient {
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
   private authToken: string | null;
+  private orgId: string | null;
 
   constructor(options: TinyClawClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
@@ -118,10 +120,15 @@ export class TinyClawClient {
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
     this.credentials = options.credentials ?? "include";
     this.authToken = options.authToken ?? null;
+    this.orgId = options.orgId ?? null;
   }
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+  }
+
+  setOrgId(orgId: string | null): void {
+    this.orgId = orgId?.trim() || null;
   }
 
   async health(): Promise<HealthResponse> {
@@ -874,11 +881,18 @@ export class TinyClawClient {
     return this.request<ListTimezonesResponse>("/v1/timezones");
   }
 
-  async setupUser(email: string, password: string): Promise<AuthUserResponse> {
-    return this.request<AuthUserResponse>("/v1/auth/setup", {
+  async setupUser(request: SetupAuthRequest): Promise<AuthUserResponse> {
+    const response = await this.request<AuthUserResponse>("/v1/auth/setup", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(request),
     });
+
+    const activeOrgId = response.activeOrgId ?? response.orgId ?? null;
+    if (activeOrgId) {
+      this.setOrgId(activeOrgId);
+    }
+
+    return response;
   }
 
   async login(email: string, password: string): Promise<AuthUserResponse> {
@@ -950,6 +964,10 @@ export class TinyClawClient {
 
     if (this.authToken) {
       merged["Authorization"] = `Bearer ${this.authToken}`;
+    }
+
+    if (this.orgId) {
+      merged["X-Org-Id"] = this.orgId;
     }
 
     if (isMutatingMethod(method)) {

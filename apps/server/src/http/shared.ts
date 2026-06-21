@@ -1,3 +1,4 @@
+import type { OrgRole } from "@tinyclaw/core";
 import {
   formatServerError,
   TinyClawApiError,
@@ -9,12 +10,14 @@ import {
   verifyLocalAuthToken,
 } from "@tinyclaw/core";
 import type { AgentChatSession } from "@tinyclaw/agent";
+import type { Context } from "hono";
 import type { AuthService } from "../services/auth-service";
 import type {
   DatabaseAdapter,
   StoredBrowserSessionRecord,
   StoredUserRecord,
 } from "@tinyclaw/db";
+import type { AppEnv } from "./types";
 
 const SESSION_COOKIE_NAME = "tinyclaw_session";
 const CSRF_COOKIE_NAME = "tinyclaw_csrf";
@@ -93,8 +96,24 @@ function isSecureCookieRequest(): boolean {
 
 export interface RequestAuthContext {
   mode: "browser-session" | "local-token";
-  user: Pick<StoredUserRecord, "email">;
+  user: Pick<StoredUserRecord, "id" | "email">;
   session?: StoredBrowserSessionRecord;
+  isPlatformAdmin: boolean;
+  activeOrgId?: string;
+  orgRole?: OrgRole;
+}
+
+function toAuthUser(user: StoredUserRecord): RequestAuthContext["user"] {
+  return { id: user.id, email: user.email };
+}
+
+export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
+  const auth = c.get("auth");
+  if (!auth) {
+    throw new TinyClawApiError("Authentication required", 401);
+  }
+
+  return auth;
 }
 
 export async function authenticateRequest(
@@ -105,7 +124,20 @@ export async function authenticateRequest(
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const payload = await verifyLocalAuthToken(authHeader.slice(7).trim());
-    return payload ? { mode: "local-token", user: { email: payload.email } } : null;
+    if (!payload) {
+      return null;
+    }
+
+    const user = await databaseAdapter.getUserByEmail(payload.email);
+    if (!user) {
+      return null;
+    }
+
+    return {
+      mode: "local-token",
+      user: toAuthUser(user),
+      isPlatformAdmin: Boolean(user.isPlatformAdmin),
+    };
   }
 
   const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
@@ -130,7 +162,12 @@ export async function authenticateRequest(
 
   await databaseAdapter.updateBrowserSessionLastUsedAt(session.id, new Date().toISOString());
 
-  return { mode: "browser-session", user, session };
+  return {
+    mode: "browser-session",
+    user: toAuthUser(user),
+    session,
+    isPlatformAdmin: Boolean(user.isPlatformAdmin),
+  };
 }
 
 export function assertBrowserCsrf(
@@ -187,6 +224,7 @@ export async function createBrowserSessionResponse(
   authService: AuthService,
   databaseAdapter: DatabaseAdapter,
   user: StoredUserRecord,
+  options: { activeOrgId?: string | null } = {},
 ): Promise<{ body: { email: string }; headers: Headers }> {
   const now = new Date().toISOString();
   const session = authService.createBrowserSessionTokens();
@@ -195,6 +233,7 @@ export async function createBrowserSessionResponse(
     userId: user.id,
     sessionTokenHash: authService.hashToken(session.sessionToken),
     csrfTokenHash: authService.hashToken(session.csrfToken),
+    activeOrgId: options.activeOrgId ?? null,
     createdAt: now,
     expiresAt: session.expiresAt,
     revokedAt: null,
