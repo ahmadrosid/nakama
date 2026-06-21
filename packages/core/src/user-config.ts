@@ -316,12 +316,17 @@ export async function saveUserTimezone(timezone: string): Promise<void> {
 }
 
 export async function saveUserConfig(config: UserConfig): Promise<void> {
+  const raw = await readTextOrNull(getUserConfigPath());
+  const existingParsed =
+    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
   const thinking = readThinkingSettings({
     thinking: config.thinkingEnabled === false ? "off" : "on",
     thinking_effort: config.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
   });
 
   const global: Record<string, string | undefined> = {
+    ...existingParsed.global,
     default_provider_id: config.defaultProviderId ?? "",
     timezone: config.timezone,
     thinking: thinking.enabled ? "on" : "off",
@@ -331,6 +336,12 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
   };
 
   const sections: Record<string, Record<string, string>> = {};
+  for (const [sectionName, values] of Object.entries(existingParsed.sections)) {
+    if (!sectionName.startsWith(PROVIDER_SECTION_PREFIX)) {
+      sections[sectionName] = { ...values };
+    }
+  }
+
   const providers = config.providers.map((provider, index) => ({
     ...provider,
     label: normalizeProviderInstanceLabel(
@@ -345,7 +356,15 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
     sections[sectionName] = buildProviderSectionValues(provider);
   }
 
-  const lines = buildConfigIniLines(global, sections);
+  await writeParsedConfigIni(global, sections);
+}
+
+export async function writeParsedConfigIni(
+  global: Record<string, string | undefined>,
+  sections: Record<string, Record<string, string>>,
+  patch: Record<string, string | undefined> = {},
+): Promise<void> {
+  const lines = buildConfigIniLines(global, sections, patch);
   await writePrivateTextFile(getUserConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),
   });

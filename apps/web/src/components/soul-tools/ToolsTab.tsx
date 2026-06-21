@@ -4,10 +4,12 @@ import { BlocksIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ToolDetailDialog } from "@/components/tools/ToolDetailDialog";
+import { EmailSettingsCard } from "@/components/EmailSettingsCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToolsQuery } from "@/hooks/use-app-queries";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { useAuth } from "@/context/auth-context";
 import { useDeleteToolMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { SUPER_BOT_PROFILE_ID } from "@/lib/profiles";
@@ -22,6 +24,8 @@ function isDeletableTool(tool: ToolDetail): boolean {
 
 export function ToolsTab() {
   const { navigateToNewChat } = useAppNavigation();
+  const { activeOrg } = useAuth();
+  const isOrgAdmin = activeOrg?.role === "admin";
   const queryClient = useQueryClient();
   const { data: tools = [], isLoading, error, isFetching } = useToolsQuery();
   const deleteToolMutation = useDeleteToolMutation();
@@ -67,7 +71,12 @@ export function ToolsTab() {
   }
 
   if (loading) {
-    return <PageState message="Loading tools…" />;
+    return (
+      <>
+        <PageState message="Loading tools…" />
+        {isOrgAdmin ? <EmailSettingsCard /> : null}
+      </>
+    );
   }
 
   return (
@@ -217,6 +226,8 @@ export function ToolsTab() {
           </div>
         </div>
       </section>
+
+      {isOrgAdmin ? <EmailSettingsCard /> : null}
 
       <ToolDetailDialog
         toolId={detailToolId}

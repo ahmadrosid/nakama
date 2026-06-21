@@ -84,6 +84,7 @@ Soul files are read by `loadSoulStack()` (`load.ts`) and injected by `composeSou
 - `update_profile_memory` — writes to MEMORY.md
 - `knowledge_base_search` — search uploaded documents
 - `web_search` — web search
+- `email` — list, read, search, and send mail via deployment mailbox settings
 - `search_files` / `ripgrep` — file/content search
 
 ## Key packages

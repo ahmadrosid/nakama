@@ -44,10 +44,14 @@ import type {
   SyncSkillsResponse,
   SoulStatusResponse,
   TelegramSettingsResponse,
+  EmailSettingsResponse,
+  SendEmailTestRequest,
+  SendEmailTestResponse,
   ToolDefinition,
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UpdateTelegramSettingsRequest,
+  UpdateEmailSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateUserContextRequest,
   UserContextStatusResponse,
@@ -85,6 +89,11 @@ import {
   isWritableSoulFileKey,
   loadSoulStack,
   loadTelegramSettingsPublic,
+  loadEmailSettingsPublic,
+  loadEmailConfig,
+  isEmailConfigComplete,
+  emailConfigToMailboxConfig,
+  saveEmailConfig,
   loadWhatsAppSettingsPublic,
   loadUserTimezone,
   loadUserVisionSettings,
@@ -95,6 +104,7 @@ import {
   resolveSoulStackForProfile,
   saveTelegramConfig,
   saveWhatsAppConfig,
+  createSmtpSender,
   loadUserThinkingSettings,
   saveUserConfig,
   saveUserThinkingSettings,
@@ -455,6 +465,41 @@ export class AgentService {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return regenerateTelegramHandshake();
+  }
+
+  async getEmailSettings(): Promise<EmailSettingsResponse> {
+    return loadEmailSettingsPublic();
+  }
+
+  async setEmailSettings(input: UpdateEmailSettingsRequest): Promise<EmailSettingsResponse> {
+    return saveEmailConfig(input);
+  }
+
+  async sendEmailTest(recipient: string): Promise<SendEmailTestResponse> {
+    const config = await loadEmailConfig();
+
+    if (!isEmailConfigComplete(config)) {
+      throw new Error("Complete email settings before sending a test message.");
+    }
+
+    const to = recipient.trim();
+
+    if (!to) {
+      throw new Error("Recipient email is required.");
+    }
+
+    const sender = createSmtpSender(emailConfigToMailboxConfig(config!));
+    const result = await sender.send({
+      to,
+      subject: "TinyClaw test email",
+      text: "This is a test email from your TinyClaw deployment.",
+    });
+
+    return {
+      ok: true,
+      to,
+      messageId: result.messageId,
+    };
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

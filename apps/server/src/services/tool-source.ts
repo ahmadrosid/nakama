@@ -28,6 +28,10 @@ const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: st
     filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
     displayPath: "packages/core/src/tools/web-search.ts",
   },
+  email: {
+    filePath: path.join(corePackageRoot, "src/tools/email.ts"),
+    displayPath: "packages/core/src/tools/email.ts",
+  },
 };
 
 const BASH_SOURCE = {

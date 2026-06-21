@@ -11,11 +11,15 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   type TelegramSettingsResponse,
+  type EmailSettingsResponse,
+  type SendEmailTestRequest,
+  type SendEmailTestResponse,
   type ThinkingSettingsResponse,
   type TimezoneSettingsResponse,
   type UpdateProviderRequest,
   type UpdateProviderResponse,
   type UpdateTelegramSettingsRequest,
+  type UpdateEmailSettingsRequest,
   type UpdateThinkingRequest,
   type UpdateTimezoneRequest,
   type UpdateVisionRequest,
@@ -28,6 +32,7 @@ import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json, readJson } from "../shared";
+import { requireOrgAdminFromContext } from "../org-guards";
 
 export function registerModelRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, workerManager } = options;
@@ -46,6 +51,10 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   const thinkingSettingsSchema = z.object({}).passthrough().openapi("ThinkingSettingsResponse");
   const visionSettingsSchema = z.object({}).passthrough().openapi("VisionSettingsResponse");
   const telegramSettingsSchema = z.object({}).passthrough().openapi("TelegramSettingsResponse");
+  const emailSettingsSchema = z.object({}).passthrough().openapi("EmailSettingsResponse");
+  const sendEmailTestRequestSchema = z.object({ to: z.string().optional() }).openapi("SendEmailTestRequest");
+  const sendEmailTestResponseSchema = z.object({ ok: z.literal(true), to: z.string(), messageId: z.string() }).openapi("SendEmailTestResponse");
+  const updateEmailRequestSchema = z.object({}).passthrough().openapi("UpdateEmailSettingsRequest");
   const whatsappSettingsSchema = z.object({}).passthrough().openapi("WhatsAppSettingsResponse");
   const discoverModelsRequestSchema = z
     .object({
@@ -215,6 +224,32 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   }));
   app.openAPIRegistry.registerPath(createRoute({
     method: "get",
+    path: "/v1/settings/email",
+    tags: ["Models"],
+    summary: "Get email settings",
+    operationId: "getEmailSettings",
+    responses: { 200: { description: "Email settings", content: { "application/json": { schema: emailSettingsSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "put",
+    path: "/v1/settings/email",
+    tags: ["Models"],
+    summary: "Update email settings",
+    operationId: "setEmailSettings",
+    request: { body: { required: true, content: { "application/json": { schema: updateEmailRequestSchema } } } },
+    responses: { 200: { description: "Email settings", content: { "application/json": { schema: emailSettingsSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "post",
+    path: "/v1/settings/email/test",
+    tags: ["Models"],
+    summary: "Send test email",
+    operationId: "sendEmailTest",
+    request: { body: { required: false, content: { "application/json": { schema: sendEmailTestRequestSchema } } } },
+    responses: { 200: { description: "Test email sent", content: { "application/json": { schema: sendEmailTestResponseSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "get",
     path: "/v1/settings/whatsapp",
     tags: ["Models"],
     summary: "Get WhatsApp settings",
@@ -330,6 +365,43 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
         return errorResponse(error.message, error.status);
       }
 
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.get("/v1/settings/email", async (c) => {
+    requireOrgAdminFromContext(c);
+    return json<EmailSettingsResponse>(await agent.getEmailSettings());
+  });
+
+  app.put("/v1/settings/email", async (c) => {
+    requireOrgAdminFromContext(c);
+    const body = await readJson<UpdateEmailSettingsRequest>(c.req.raw);
+
+    try {
+      return json<EmailSettingsResponse>(await agent.setEmailSettings(body));
+    } catch (error) {
+      if (error instanceof TinyClawApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/email/test", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const body = await readJson<SendEmailTestRequest>(c.req.raw).catch(() => ({} as SendEmailTestRequest));
+
+    try {
+      return json<SendEmailTestResponse>(
+        await agent.sendEmailTest(body.to?.trim() || auth.user.email),
+      );
+    } catch (error) {
+      if (error instanceof TinyClawApiError) {
+        return errorResponse(error.message, error.status);
+      }
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);
     }

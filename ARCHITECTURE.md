@@ -157,6 +157,8 @@ See the [system overview](#system-overview) diagram for the full topology. At a 
 
 **Configuration** — API key and model live in `~/.tinyclaw/config.ini`, or via `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (OpenAI preferred when both are set). Provider is inferred automatically. Loaded through `@tinyclaw/core`. The server writes `~/.tinyclaw/runtime/server-url.txt` so clients can find it.
 
+Deployment mailbox settings for the built-in `email` tool live in the `[email]` section of the same `config.ini` file (`imap_host`, `smtp_host`, shared `username`/`password`, TLS flags, and `from`). Org admins manage them from the web System page under the Tools tab. This mailbox is deployment-global, like Telegram/WhatsApp bridge credentials — not per-org database state.
+
 **IDs** — Entities use prefixed IDs via `createId()` (e.g. `org_…`, `session_…`, `profile_…`).
 
 **Multi-tenancy** — Flat org-as-tenant model. First-time setup (`POST /v1/auth/setup`) creates the initial org and admin user. Platform admins provision additional orgs via `/v1/platform/orgs`. Org admins invite members through `/v1/orgs/{orgId}/members` and `/v1/orgs/{orgId}/invites`. Users with multiple org memberships switch via the web org switcher or `POST /v1/auth/active-org`. Shared channel bots (Telegram/WhatsApp) will route via `channel_org_mappings`; schema is in place.

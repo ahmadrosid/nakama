@@ -61,6 +61,9 @@ import type {
   StoredAutomation,
   SystemStatusResponse,
   TelegramSettingsResponse,
+  EmailSettingsResponse,
+  SendEmailTestRequest,
+  SendEmailTestResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
@@ -68,6 +71,7 @@ import type {
   UpdateThinkingRequest,
   UpdateVisionRequest,
   UpdateTelegramSettingsRequest,
+  UpdateEmailSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
   VisionSettings,
@@ -866,6 +870,28 @@ export class TinyClawClient {
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return this.request<TelegramSettingsResponse>("/v1/settings/telegram/handshake", {
       method: "POST",
+    });
+  }
+
+  async getEmailSettings(): Promise<EmailSettingsResponse> {
+    return this.request<EmailSettingsResponse>("/v1/settings/email");
+  }
+
+  async setEmailSettings(
+    request: UpdateEmailSettingsRequest,
+  ): Promise<EmailSettingsResponse> {
+    return this.request<EmailSettingsResponse>("/v1/settings/email", {
+      method: "PUT",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async sendEmailTest(
+    request: SendEmailTestRequest = {},
+  ): Promise<SendEmailTestResponse> {
+    return this.request<SendEmailTestResponse>("/v1/settings/email/test", {
+      method: "POST",
+      body: JSON.stringify(request),
     });
   }
 

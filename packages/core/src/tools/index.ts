@@ -7,3 +7,4 @@ export * from "./search-files";
 export * from "./schema";
 export * from "./web-search";
 export * from "./profile-memory";
+export * from "./email";

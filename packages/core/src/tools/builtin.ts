@@ -7,6 +7,7 @@ import { searchFilesTool } from "./search-files";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import { webSearchTool } from "./web-search";
 import { updateProfileMemoryTool } from "./profile-memory";
+import { emailTool } from "./email";
 
 export interface WriteFileInput {
   path: string;
@@ -191,6 +192,7 @@ export const builtinTools: ToolDefinition[] = [
   knowledgeBaseSearchTool,
   webSearchTool,
   updateProfileMemoryTool,
+  emailTool,
 ];
 
 function readRequiredString(input: unknown, key: string): string {

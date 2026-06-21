@@ -18,6 +18,7 @@
     "./ensure-server": "./src/ensure-server.ts",
     "./local-auth": "./src/local-auth.ts",
     "./telegram-config": "./src/telegram-config.ts",
+    "./email-config": "./src/email-config.ts",
     "./telegram-worker": "./src/telegram-worker.ts",
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",
@@ -29,10 +30,14 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
+    "imapflow": "^1.4.2",
+    "mailparser": "^3.9.11",
     "nanoid": "^5.1.11",
+    "nodemailer": "^9.0.1",
     "pdf-parse": "2.4.5"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
     "@types/pdf-parse": "^1.1.5"
   }
 }
