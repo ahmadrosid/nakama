@@ -50,6 +50,8 @@ export function VisionSettingsCard() {
     [providerModelGroups],
   );
 
+  const visionUnavailable = visionModelGroups.length === 0;
+
   const selectionValue = useMemo(() => {
     if (!selection) {
       return CLEAR_VISION_MODEL_VALUE;
@@ -77,6 +79,9 @@ export function VisionSettingsCard() {
         <p className="text-sm font-medium text-foreground">Image parsing model</p>
         <p className="text-xs text-muted-foreground">
           Fallback when your chat model can't see images.
+          {visionUnavailable
+            ? " Add OpenAI, Anthropic, or Gemini in LLM providers above to configure it."
+            : null}
         </p>
         {savedHint ? (
           <p className="text-xs text-emerald-200" role="status">
@@ -93,7 +98,7 @@ export function VisionSettingsCard() {
       <div className="w-72 shrink-0">
         <Select
           value={selectionValue}
-          disabled={saveVisionMutation.isPending || visionModelGroups.length === 0}
+          disabled={saveVisionMutation.isPending || visionUnavailable}
           onValueChange={(value) => {
             if (!value) {
               return;
@@ -130,7 +135,9 @@ export function VisionSettingsCard() {
             <SelectValue placeholder="Select vision model">
               {selection
                 ? profileModelLabel(selection, visionModelGroups)
-                : "Not configured"}
+                : visionUnavailable
+                  ? "No vision providers"
+                  : "Not configured"}
             </SelectValue>
           </SelectTrigger>
           <SelectContent
