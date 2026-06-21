@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./http/app";
 import { AuthService } from "./services/auth-service";
+import { seedOrgForUser, TEST_ORG_ID, withOrgId, buildSetupAuthBody } from "./http/test-org-helpers";
+import { OrgService } from "./services/org-service";
 
 const TEST_DIST_DIR = join(import.meta.dir, "__test_dist__");
 
@@ -19,6 +21,7 @@ function createMockApp(webDistDir: string | null) {
     workerManager: {} as any,
     mcpService: {} as any,
     authService,
+    orgService: {} as any,
     databaseAdapter: {
       countUsers: async () => 1,
       getUserByEmail: async () => null,
@@ -43,6 +46,7 @@ function createBrowserAuthApp() {
     } as any,
     mcpService: {} as any,
     authService,
+    orgService: new OrgService(databaseAdapter, authService),
     databaseAdapter,
     webDistDir: null,
   });
@@ -50,11 +54,14 @@ function createBrowserAuthApp() {
   return { app, databaseAdapter };
 }
 
-async function createBrowserSession(app: ReturnType<typeof createHonoApp>) {
+async function createBrowserSession(
+  app: ReturnType<typeof createHonoApp>,
+  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
+) {
   const setupResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/setup", {
       method: "POST",
-      body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+      body: JSON.stringify(buildSetupAuthBody()),
     }),
   );
 
@@ -62,10 +69,18 @@ async function createBrowserSession(app: ReturnType<typeof createHonoApp>) {
     throw new Error(`Failed to create browser session: ${setupResponse.status}`);
   }
 
+  const setupBody = (await setupResponse.json()) as { activeOrgId: string };
   const setCookies = extractSetCookies(setupResponse);
+  const orgId = setupBody.activeOrgId;
+  const cookieHeader = cookieHeaderFromSetCookies(setCookies);
+
   return {
-    cookieHeader: cookieHeaderFromSetCookies(setCookies),
+    cookieHeader,
     csrfToken: cookieValue(setCookies, "tinyclaw_csrf"),
+    orgId,
+    headers(extra: Record<string, string> = {}) {
+      return withOrgId({ Cookie: cookieHeader, ...extra }, orgId);
+    },
   };
 }
 
@@ -169,11 +184,13 @@ describe("browser session auth", () => {
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
 
     expect(setupResponse.status).toBe(201);
+    const setupBody = (await setupResponse.json()) as { activeOrgId: string; email: string };
+    expect(setupBody.activeOrgId).toStartWith("org_");
     const setCookies = extractSetCookies(setupResponse);
     expect(setCookies.some((cookie) => cookie.startsWith("tinyclaw_session="))).toBe(true);
     expect(setCookies.some((cookie) => cookie.startsWith("tinyclaw_csrf="))).toBe(true);
@@ -186,7 +203,16 @@ describe("browser session auth", () => {
     );
 
     expect(meResponse.status).toBe(200);
-    await expect(meResponse.json()).resolves.toEqual({ email: "admin@example.com" });
+    const meBody = (await meResponse.json()) as {
+      email: string;
+      activeOrgId?: string;
+      isPlatformAdmin?: boolean;
+      orgId?: string;
+    };
+    expect(meBody.email).toBe("admin@example.com");
+    expect(meBody.activeOrgId).toStartWith("org_");
+    expect(meBody.orgId).toBe(meBody.activeOrgId);
+    expect(meBody.isPlatformAdmin).toBe(true);
   });
 
   test("login sets a fresh session and logout revokes it", async () => {
@@ -195,7 +221,7 @@ describe("browser session auth", () => {
     await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
 
@@ -232,14 +258,15 @@ describe("browser session auth", () => {
   });
 
   test("browser sessions require CSRF on mutating routes", async () => {
-    const { app } = createBrowserAuthApp();
+    const { app, databaseAdapter } = createBrowserAuthApp();
 
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         method: "POST",
-        body: JSON.stringify({ email: "admin@example.com", password: "password123" }),
+        body: JSON.stringify(buildSetupAuthBody()),
       }),
     );
+    const setupBody = (await setupResponse.json()) as { activeOrgId: string };
     const setCookies = extractSetCookies(setupResponse);
     const cookieHeader = cookieHeaderFromSetCookies(setCookies);
     const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
@@ -255,13 +282,54 @@ describe("browser session auth", () => {
     const allowed = await app.fetch(
       new Request("http://localhost:4310/v1/workers/whatsapp/start", {
         method: "POST",
-        headers: {
-          Cookie: cookieHeader,
-          "X-CSRF-Token": csrfToken,
-        },
+        headers: withOrgId(
+          {
+            Cookie: cookieHeader,
+            "X-CSRF-Token": csrfToken,
+          },
+          setupBody.activeOrgId,
+        ),
       }),
     );
     expect(allowed.status).toBe(200);
+  });
+
+  test("platform admins can create organizations", async () => {
+    const { app } = createBrowserAuthApp();
+
+    const setupResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup", {
+        method: "POST",
+        body: JSON.stringify(buildSetupAuthBody()),
+      }),
+    );
+    const setCookies = extractSetCookies(setupResponse);
+    const cookieHeader = cookieHeaderFromSetCookies(setCookies);
+    const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        method: "POST",
+        headers: {
+          Cookie: cookieHeader,
+          "X-CSRF-Token": csrfToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "Second Org", slug: "second-org" }),
+      }),
+    );
+
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as { organization: { id: string; name: string } };
+    expect(created.organization.name).toBe("Second Org");
+
+    const listResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: { Cookie: cookieHeader },
+      }),
+    );
+    const listed = (await listResponse.json()) as { orgs: Array<{ id: string; name: string }> };
+    expect(listed.orgs.some((org) => org.id === created.organization.id)).toBe(true);
   });
 });
 
@@ -279,10 +347,11 @@ describe("GET /v1/workers/{name}/logs", () => {
       workerManager,
       mcpService: {} as any,
       authService,
+      orgService: new OrgService(databaseAdapter, authService),
       databaseAdapter,
       webDistDir: null,
     });
-    const session = await createBrowserSession(app);
+    const session = await createBrowserSession(app, databaseAdapter);
     return { app, session };
   }
 
@@ -292,7 +361,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       getWorkerLogs: async () => ({ stdout: "log1\nlog2", stderr: "err1" }),
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/logs", {
-      headers: { Cookie: session.cookieHeader },
+      headers: session.headers(),
     });
     const response = await app.fetch(request);
 
@@ -310,14 +379,14 @@ describe("GET /v1/workers/{name}/logs", () => {
     });
 
     const request1 = new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=0", {
-      headers: { Cookie: session.cookieHeader },
+      headers: session.headers(),
     });
     const response1 = await app.fetch(request1);
     const body1 = await response1.json();
     expect(body1.stdout).toBe("1");
 
     const request2 = new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=99999", {
-      headers: { Cookie: session.cookieHeader },
+      headers: session.headers(),
     });
     const response2 = await app.fetch(request2);
     const body2 = await response2.json();
@@ -329,7 +398,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       isValidWorker: () => false,
     });
     const request = new Request("http://localhost:4310/v1/workers/foobar/logs", {
-      headers: { Cookie: session.cookieHeader },
+      headers: session.headers(),
     });
     const response = await app.fetch(request);
 
@@ -346,7 +415,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       },
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/logs", {
-      headers: { Cookie: session.cookieHeader },
+      headers: session.headers(),
     });
     const response = await app.fetch(request);
 
@@ -370,10 +439,11 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       workerManager,
       mcpService: {} as any,
       authService,
+      orgService: new OrgService(databaseAdapter, authService),
       databaseAdapter,
       webDistDir: null,
     });
-    const session = await createBrowserSession(app);
+    const session = await createBrowserSession(app, databaseAdapter);
     return { app, session };
   }
 
@@ -385,10 +455,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
       method: "POST",
-      headers: {
-        Cookie: session.cookieHeader,
-        "X-CSRF-Token": session.csrfToken,
-      },
+      headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
     });
     const response = await app.fetch(request);
 
@@ -403,10 +470,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     });
     const request = new Request("http://localhost:4310/v1/workers/foobar/clear-logs", {
       method: "POST",
-      headers: {
-        Cookie: session.cookieHeader,
-        "X-CSRF-Token": session.csrfToken,
-      },
+      headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
     });
     const response = await app.fetch(request);
 
@@ -424,10 +488,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     });
     const request = new Request("http://localhost:4310/v1/workers/whatsapp/clear-logs", {
       method: "POST",
-      headers: {
-        Cookie: session.cookieHeader,
-        "X-CSRF-Token": session.csrfToken,
-      },
+      headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
     });
     const response = await app.fetch(request);
 

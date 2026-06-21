@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { createAuthMiddleware } from "./auth-middleware";
+import { createOrgContextMiddleware } from "./org-middleware";
 import type { ServerOptions } from "./context";
 import type { HonoApp } from "./types";
 import { TinyClawApiError, formatServerError } from "@tinyclaw/core";
@@ -16,6 +17,8 @@ import { registerSkillRoutes } from "./routes/skills";
 import { registerToolRoutes } from "./routes/tools";
 import { registerAutomationRoutes } from "./routes/automations";
 import { registerTaskRoutes } from "./routes/tasks";
+import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
+import { registerOrgMemberRoutes } from "./routes/org-members";
 import { tryServeStaticWeb } from "../static-web";
 import { serializeHttpOpenApiSpec } from "./openapi";
 
@@ -46,6 +49,7 @@ export function createHonoApp(options: ServerOptions) {
   });
 
   app.use("*", createAuthMiddleware(options));
+  app.use("*", createOrgContextMiddleware(options));
   registerSystemRoutes(app, options);
   registerAuthRoutes(app, options);
   registerWorkerRoutes(app, options);
@@ -58,6 +62,8 @@ export function createHonoApp(options: ServerOptions) {
   registerToolRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerTaskRoutes(app, options);
+  registerPlatformOrgRoutes(app, options);
+  registerOrgMemberRoutes(app, options);
 
   app.get("/openapi.json", (c) => {
     const serverUrl = new URL(c.req.url).origin;

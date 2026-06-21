@@ -134,8 +134,156 @@ export interface AuthCredentialsRequest {
   password: string;
 }
 
+export interface SetupAuthRequest {
+  organization: {
+    name: string;
+    slug: string;
+  };
+  admin: {
+    name: string;
+    email: string;
+    phone?: string;
+    password: string;
+  };
+}
+
 export interface AuthUserResponse {
   email: string;
+  isPlatformAdmin?: boolean;
+  activeOrgId?: string | null;
+  orgId?: string | null;
+}
+
+export type OrgRole = "admin" | "member" | "viewer";
+export type ChannelType = "telegram" | "whatsapp";
+
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOrganizationRequest {
+  name: string;
+  slug: string;
+  admin?: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+}
+
+export interface ListOrganizationsResponse {
+  organizations: OrganizationSummary[];
+}
+
+export interface OrganizationResponse {
+  organization: OrganizationSummary;
+}
+
+export interface OrgInviteCreatedResponse {
+  invite: OrgInviteSummary;
+  token: string;
+}
+
+export interface AddOrgMemberResponse {
+  member: OrgMemberSummary;
+  temporaryPassword: string | null;
+}
+
+export interface CreateOrganizationResponse {
+  organization: OrganizationSummary;
+  adminMember?: AddOrgMemberResponse;
+}
+
+export interface UserOrgSummary extends OrganizationSummary {
+  role: OrgRole;
+}
+
+export interface ListUserOrgsResponse {
+  orgs: UserOrgSummary[];
+}
+
+export interface SetActiveOrgRequest {
+  orgId: string;
+}
+
+export interface OrgMemberSummary {
+  userId: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  role: OrgRole;
+  createdAt: string;
+}
+
+export interface ListOrgMembersResponse {
+  members: OrgMemberSummary[];
+}
+
+export interface AddOrgMemberRequest {
+  name: string;
+  email: string;
+  phone: string;
+  role: OrgRole;
+}
+
+export interface UpdateOrgMemberRoleRequest {
+  role: OrgRole;
+}
+
+export interface OrgMemberResponse {
+  member: OrgMemberSummary;
+}
+
+export interface InviteOrgMemberRequest {
+  email: string;
+  role: OrgRole;
+}
+
+export interface OrgInviteSummary {
+  id: string;
+  orgId: string;
+  email: string;
+  role: OrgRole;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface AcceptOrgInviteRequest {
+  token: string;
+  password?: string;
+}
+
+export interface AcceptOrgInviteResponse {
+  email: string;
+  orgId: string;
+  role: OrgRole;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ChannelOrgMappingSummary {
+  channel: ChannelType;
+  channelUserId: string;
+  userId: string;
+  orgId: string;
+  createdAt: string;
+}
+
+export interface CreateChannelOrgMappingRequest {
+  channel: ChannelType;
+  channelUserId: string;
+  userId: string;
+}
+
+export interface ListChannelOrgMappingsResponse {
+  mappings: ChannelOrgMappingSummary[];
 }
 
 export interface CreateSessionRequest {

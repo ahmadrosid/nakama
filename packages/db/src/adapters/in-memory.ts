@@ -9,6 +9,10 @@ import type {
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
   StoredSkillRecord,
+  StoredOrgMemberRecord,
+  StoredOrgInviteRecord,
+  StoredOrganizationRecord,
+  StoredUserOrganizationRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
@@ -41,6 +45,11 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const usersById = new Map<string, StoredUserRecord>();
   const usersByEmail = new Map<string, StoredUserRecord>();
   const browserSessionsByHash = new Map<string, StoredBrowserSessionRecord>();
+  const organizations = new Map<string, StoredOrganizationRecord>();
+  const organizationsBySlug = new Map<string, StoredOrganizationRecord>();
+  const orgMembers = new Map<string, StoredOrgMemberRecord>();
+  const orgInvites = new Map<string, StoredOrgInviteRecord>();
+  const orgInvitesByTokenHash = new Map<string, StoredOrgInviteRecord>();
   let llmUsageStats: StoredLlmUsageStatsRecord | null = null;
   let workspaceSettings: StoredWorkspaceSettingsRecord | null = null;
 
@@ -56,6 +65,17 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
     async createUser(record) {
       usersById.set(record.id, record);
       usersByEmail.set(record.email, record);
+    },
+
+    async updateUserPassword(id, passwordHash, updatedAt) {
+      const user = usersById.get(id);
+      if (!user) {
+        return;
+      }
+
+      const updated = { ...user, passwordHash, updatedAt };
+      usersById.set(id, updated);
+      usersByEmail.set(updated.email, updated);
     },
 
     async countUsers() {
@@ -88,6 +108,107 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
           return;
         }
       }
+    },
+
+    async updateBrowserSessionActiveOrgId(id, activeOrgId) {
+      for (const [hash, session] of browserSessionsByHash.entries()) {
+        if (session.id === id) {
+          browserSessionsByHash.set(hash, { ...session, activeOrgId });
+          return;
+        }
+      }
+    },
+
+    async upsertOrganization(record) {
+      organizations.set(record.id, record);
+      organizationsBySlug.set(record.slug, record);
+    },
+
+    async listOrganizations() {
+      return Array.from(organizations.values()).sort((left, right) =>
+        left.name.localeCompare(right.name),
+      );
+    },
+
+    async getOrganizationById(id) {
+      return organizations.get(id) ?? null;
+    },
+
+    async getOrganizationBySlug(slug) {
+      return organizationsBySlug.get(slug) ?? null;
+    },
+
+    async upsertOrgMember(record) {
+      orgMembers.set(`${record.orgId}:${record.userId}`, record);
+    },
+
+    async getOrgMember(orgId, userId) {
+      return orgMembers.get(`${orgId}:${userId}`) ?? null;
+    },
+
+    async listOrgMembers(orgId) {
+      return Array.from(orgMembers.values())
+        .filter((member) => member.orgId === orgId)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    },
+
+    async listUserOrganizations(userId) {
+      return Array.from(orgMembers.values())
+        .filter((member) => member.userId === userId)
+        .map((member) => {
+          const organization = organizations.get(member.orgId);
+          if (!organization) {
+            return null;
+          }
+
+          return {
+            organization,
+            role: member.role,
+            joinedAt: member.createdAt,
+          } satisfies StoredUserOrganizationRecord;
+        })
+        .filter((record): record is StoredUserOrganizationRecord => record !== null)
+        .sort((left, right) => left.organization.name.localeCompare(right.organization.name));
+    },
+
+    async deleteOrgMember(orgId, userId) {
+      return orgMembers.delete(`${orgId}:${userId}`);
+    },
+
+    async createOrgInvite(record) {
+      orgInvites.set(record.id, record);
+      orgInvitesByTokenHash.set(record.tokenHash, record);
+    },
+
+    async getOrgInviteByTokenHash(tokenHash) {
+      return orgInvitesByTokenHash.get(tokenHash) ?? null;
+    },
+
+    async getPendingOrgInvite(orgId, email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      for (const invite of orgInvites.values()) {
+        if (
+          invite.orgId === orgId &&
+          invite.email === normalizedEmail &&
+          !invite.acceptedAt &&
+          !invite.revokedAt
+        ) {
+          return invite;
+        }
+      }
+
+      return null;
+    },
+
+    async markOrgInviteAccepted(id, acceptedAt) {
+      const invite = orgInvites.get(id);
+      if (!invite) {
+        return;
+      }
+
+      const updated = { ...invite, acceptedAt };
+      orgInvites.set(id, updated);
+      orgInvitesByTokenHash.set(updated.tokenHash, updated);
     },
 
     async listAutomations() {

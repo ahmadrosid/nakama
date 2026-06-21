@@ -3,6 +3,9 @@ export const DEFAULT_PROFILE_ID = "default";
 export const LLM_USAGE_STATS_ID = "default";
 export const WORKSPACE_SETTINGS_ID = "default";
 
+export const ORG_ROLES = ["admin", "member", "viewer"] as const;
+export const ORG_INVITE_EXPIRY_DAYS = 7;
+
 export const SUPER_BOT_SYSTEM_PROMPT = `You are Super Bot, the TinyClaw orchestrator.
 
 Your job is to manage bot profiles, tools, and one-off tasks on the host.

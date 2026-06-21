@@ -53,7 +53,7 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
   return (
     <>
       <Card className="w-full shadow-none">
-        <CardHeader className="border-b border-border pb-3">
+        <CardHeader className="border-b border-border px-4 py-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>LLM providers</CardTitle>

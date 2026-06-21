@@ -13,3 +13,7 @@ export function createProfileId(): ID {
 export function createSessionId(): ID {
   return nanoid();
 }
+
+export function generateTemporaryPassword(size = 12): string {
+  return nanoid(size);
+}

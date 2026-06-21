@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import type { AppEnv } from "./types";
 import type { ServerOptions } from "./context";
 import {
   assertBrowserCsrf,
@@ -6,7 +7,7 @@ import {
 } from "./shared";
 import { isPublicRouteRequest } from "./public-routes";
 
-export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler {
+export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const { authService, databaseAdapter } = options;
 
@@ -45,6 +46,7 @@ export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler 
       throw error;
     }
 
+    c.set("auth", auth);
     await next();
   };
 }

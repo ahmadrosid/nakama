@@ -53,4 +53,5 @@ export const queryKeys = {
   modelsDev: ["modelsDev"] as const,
   openRouterModels: ["openRouterModels"] as const,
   workerLogs: ["workerLogs"] as const,
+  orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
 } as const;

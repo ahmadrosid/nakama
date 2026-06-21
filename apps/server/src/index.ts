@@ -16,6 +16,7 @@ import { McpClientManager } from "./services/mcp-client-manager";
 import { McpService } from "./services/mcp-service";
 import { SkillsService } from "./services/skills-service";
 import { AuthService } from "./services/auth-service";
+import { OrgService } from "./services/org-service";
 import { createAutomationTools } from "./tools/automation-tools";
 import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
 import {
@@ -106,6 +107,8 @@ agent.setTaskRunner(taskRunner);
 
 const workerManager = new WorkerManagerService(projectRoot);
 
+const orgService = new OrgService(database.adapter, authService);
+
 const systemStatus = new SystemStatusService(
   agent,
   automationScheduler,
@@ -124,6 +127,7 @@ const app = createHonoApp({
   workerManager,
   mcpService,
   authService,
+  orgService,
   databaseAdapter: database.adapter,
   webDistDir,
 });

@@ -2,28 +2,40 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   LocalAuthTokenManagedExternallyError,
   rotateLocalAuthToken,
+  type AcceptOrgInviteResponse,
+  type AuthUserResponse,
+  type CreateOrganizationRequest,
+  type CreateOrganizationResponse,
+  type ListUserOrgsResponse,
   type RotateLocalAuthTokenResponse,
+  type SetActiveOrgRequest,
+  type SetupAuthRequest,
 } from "@tinyclaw/core";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
+import { requirePlatformAdminFromContext } from "../org-guards";
 import {
   assertBrowserCsrf,
   authenticateRequest,
   clearBrowserSessionCookies,
   createBrowserSessionResponse,
   errorResponse,
+  getRequestAuth,
   json,
   readJson,
 } from "../shared";
 
 export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
-  const { authService, databaseAdapter } = options;
+  const { authService, databaseAdapter, orgService } = options;
   const authCredentialsSchema = z.object({
     email: z.string(),
     password: z.string(),
   }).openapi("AuthCredentialsRequest");
   const authUserSchema = z.object({
     email: z.string(),
+    isPlatformAdmin: z.boolean().optional(),
+    activeOrgId: z.string().nullable().optional(),
+    orgId: z.string().nullable().optional(),
   }).openapi("AuthUserResponse");
   const loggedOutSchema = z.object({
     ok: z.boolean(),
@@ -34,12 +46,29 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     method: "post",
     path: "/v1/auth/setup",
     tags: ["Auth"],
-    summary: "Create the first admin account and browser session",
+    summary: "Create the first organization, admin account, and browser session",
     operationId: "setupAuth",
     request: {
       body: {
         required: true,
-        content: { "application/json": { schema: authCredentialsSchema } },
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                organization: z.object({
+                  name: z.string(),
+                  slug: z.string(),
+                }),
+                admin: z.object({
+                  name: z.string(),
+                  email: z.string(),
+                  phone: z.string().optional(),
+                  password: z.string(),
+                }),
+              })
+              .openapi("SetupAuthRequest"),
+          },
+        },
       },
     },
     responses: {
@@ -96,6 +125,71 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     },
   });
 
+  const acceptInviteSchema = z
+    .object({
+      token: z.string(),
+      password: z.string().optional(),
+    })
+    .openapi("AcceptOrgInviteRequest");
+  const acceptInviteResponseSchema = z
+    .object({
+      email: z.string(),
+      orgId: z.string(),
+      role: z.enum(["admin", "member", "viewer"]),
+    })
+    .openapi("AcceptOrgInviteResponse");
+  const changePasswordSchema = z
+    .object({
+      currentPassword: z.string(),
+      newPassword: z.string(),
+    })
+    .openapi("ChangePasswordRequest");
+  const changePasswordRoute = createRoute({
+    method: "post",
+    path: "/v1/auth/change-password",
+    tags: ["Auth"],
+    summary: "Change the current user's password",
+    operationId: "changePassword",
+    request: {
+      body: {
+        required: true,
+        content: { "application/json": { schema: changePasswordSchema } },
+      },
+    },
+    responses: {
+      200: { description: "Password changed", content: { "application/json": { schema: z.object({ ok: z.boolean() }) } } },
+      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      401: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  });
+
+  const acceptInviteRoute = createRoute({
+    method: "post",
+    path: "/v1/auth/accept-invite",
+    tags: ["Auth"],
+    summary: "Accept an organization invite and create a browser session",
+    operationId: "acceptOrgInvite",
+    request: {
+      body: {
+        required: true,
+        content: { "application/json": { schema: acceptInviteSchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: "Invite accepted",
+        content: { "application/json": { schema: acceptInviteResponseSchema } },
+      },
+      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      401: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  });
+
   const rotateLocalAuthTokenSchema = z
     .object({ token: z.string() })
     .openapi("RotateLocalAuthTokenResponse");
@@ -120,7 +214,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.openAPIRegistry.registerPath(setupRoute);
   app.post("/v1/auth/setup", async (c) => {
-    if (!authService || !databaseAdapter) {
+    if (!authService || !databaseAdapter || !orgService) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -129,29 +223,50 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Admin user already exists", 409);
     }
 
-    const body = await readJson<{ email: string; password: string }>(c.req.raw);
-    if (!body.email?.trim() || !body.password?.trim()) {
-      return errorResponse("Email and password are required.", 400);
+    const body = await readJson<SetupAuthRequest>(c.req.raw);
+    const password = body.admin?.password?.trim() ?? "";
+    if (
+      !body.organization?.name?.trim() ||
+      !body.organization?.slug?.trim() ||
+      !body.admin?.name?.trim() ||
+      !body.admin?.email?.trim() ||
+      !password
+    ) {
+      return errorResponse("Organization and admin details are required.", 400);
     }
 
-    const hash = await authService.hashPassword(body.password);
-    const now = new Date().toISOString();
-    const user = {
-      id: "user_admin",
-      email: body.email,
-      passwordHash: hash,
-      createdAt: now,
-      updatedAt: now,
-    };
+    if (password.length < 8) {
+      return errorResponse("Password must be at least 8 characters.", 400);
+    }
 
-    await databaseAdapter.createUser(user);
-    const response = await createBrowserSessionResponse(authService, databaseAdapter, user);
-    return json(response.body, 201, response.headers);
+    const { user, organization } = await orgService.bootstrapInitialSetup({
+      organization: {
+        name: body.organization.name,
+        slug: body.organization.slug,
+      },
+      admin: {
+        name: body.admin.name,
+        email: body.admin.email,
+        phone: body.admin.phone ?? "",
+        passwordHash: await authService.hashPassword(password),
+      },
+    });
+
+    const response = await createBrowserSessionResponse(authService, databaseAdapter, user, {
+      activeOrgId: organization.id,
+    });
+    const authBody = await orgService.buildAuthUserResponse(
+      user,
+      response.session.id,
+      organization.id,
+    );
+
+    return json<AuthUserResponse>(authBody, 201, response.headers);
   });
 
   app.openAPIRegistry.registerPath(loginRoute);
   app.post("/v1/auth/login", async (c) => {
-    if (!authService || !databaseAdapter) {
+    if (!authService || !databaseAdapter || !orgService) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -167,11 +282,16 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const response = await createBrowserSessionResponse(authService, databaseAdapter, user);
-    return json(response.body, 200, response.headers);
+    const authBody = await orgService.buildAuthUserResponse(
+      user,
+      response.session.id,
+      response.session.activeOrgId,
+    );
+    return json<AuthUserResponse>(authBody, 200, response.headers);
   });
 
   app.openapi(meRoute, async (c) => {
-    if (!authService || !databaseAdapter) {
+    if (!authService || !databaseAdapter || !orgService) {
       return errorResponse("Authentication not configured", 500);
     }
 
@@ -180,7 +300,17 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication required", 401);
     }
 
-    return json({ email: auth.user.email }, 200);
+    const user = await databaseAdapter.getUserById(auth.user.id);
+    if (!user) {
+      return errorResponse("Authentication required", 401);
+    }
+
+    const authBody = await orgService.buildAuthUserResponse(
+      user,
+      auth.session?.id,
+      auth.session?.activeOrgId,
+    );
+    return json<AuthUserResponse>(authBody, 200);
   });
 
   app.openapi(logoutRoute, async (c) => {
@@ -206,6 +336,51 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     const headers = new Headers();
     clearBrowserSessionCookies(headers);
     return json({ ok: true }, 200, headers);
+  });
+
+  app.openAPIRegistry.registerPath(changePasswordRoute);
+  app.post("/v1/auth/change-password", async (c) => {
+    if (!authService || !orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<{ currentPassword: string; newPassword: string }>(c.req.raw);
+    await orgService.changePassword({
+      userId: auth.user.id,
+      currentPassword: body.currentPassword,
+      newPassword: body.newPassword,
+    });
+
+    return json({ ok: true });
+  });
+
+  app.openAPIRegistry.registerPath(acceptInviteRoute);
+  app.post("/v1/auth/accept-invite", async (c) => {
+    if (!authService || !databaseAdapter || !orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const body = await readJson<{ token: string; password?: string }>(c.req.raw);
+    const accepted = await orgService.acceptInvite(body);
+    const response = await createBrowserSessionResponse(
+      authService,
+      databaseAdapter,
+      accepted.user,
+      { activeOrgId: accepted.orgId },
+    );
+
+    return json<AcceptOrgInviteResponse>(
+      {
+        email: accepted.user.email,
+        orgId: accepted.orgId,
+        role: accepted.role,
+      },
+      200,
+      response.headers,
+    );
   });
 
   app.openAPIRegistry.registerPath(rotateLocalAuthTokenRoute);
@@ -238,5 +413,52 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
       throw error;
     }
+  });
+
+  app.get("/v1/auth/orgs", async (c) => {
+    if (!orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    const orgs = await orgService.listUserOrgs(auth.user.id);
+    return json<ListUserOrgsResponse>(orgs);
+  });
+
+  app.post("/v1/auth/orgs", async (c) => {
+    if (!authService || !orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = requirePlatformAdminFromContext(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<CreateOrganizationRequest>(c.req.raw);
+    const result = await orgService.createOrganization(body, auth.user.id);
+    return json<CreateOrganizationResponse>(result, 201);
+  });
+
+  app.post("/v1/auth/active-org", async (c) => {
+    if (!authService || !databaseAdapter || !orgService) {
+      return errorResponse("Authentication not configured", 500);
+    }
+
+    const auth = getRequestAuth(c);
+    assertBrowserCsrf(c.req.raw, auth, authService);
+
+    const body = await readJson<SetActiveOrgRequest>(c.req.raw);
+    await orgService.setActiveOrg({
+      userId: auth.user.id,
+      orgId: body.orgId,
+      sessionId: auth.session?.id,
+    });
+
+    const user = await databaseAdapter.getUserById(auth.user.id);
+    if (!user) {
+      return errorResponse("Authentication required", 401);
+    }
+
+    const authBody = await orgService.buildAuthUserResponse(user, auth.session?.id, body.orgId);
+    return json<AuthUserResponse>(authBody);
   });
 }

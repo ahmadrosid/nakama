@@ -60,28 +60,33 @@ export function profileQueryOptions(profileId: string) {
   });
 }
 
-export function prefetchAppData(queryClient: QueryClient): void {
+export function prefetchAppData(
+  queryClient: QueryClient,
+  options?: { isPlatformAdmin?: boolean },
+): void {
   prefetchTimezoneData(queryClient);
   void queryClient.prefetchQuery(telegramSettingsQueryOptions);
   void queryClient.prefetchQuery(whatsappSettingsQueryOptions);
   void queryClient.prefetchQuery(healthQueryOptions);
   void queryClient.prefetchQuery(modelsQueryOptions);
   void queryClient.prefetchQuery(profilesQueryOptions);
-  void queryClient.prefetchQuery(toolsQueryOptions);
-  void queryClient.prefetchQuery(skillsQueryOptions);
+  if (options?.isPlatformAdmin) {
+    void queryClient.prefetchQuery(toolsQueryOptions);
+    void queryClient.prefetchQuery(skillsQueryOptions);
+  }
 }
 
 export function AppQueryPrefetch() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) {
       return;
     }
 
-    prefetchAppData(queryClient);
-  }, [queryClient, isAuthenticated, isLoading]);
+    prefetchAppData(queryClient, { isPlatformAdmin: user?.isPlatformAdmin });
+  }, [queryClient, isAuthenticated, isLoading, user?.isPlatformAdmin]);
 
   return null;
 }
@@ -259,8 +264,9 @@ export function useConfigureProviderMutation() {
 
 export function usePrefetchAppData() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useCallback(() => {
-    prefetchAppData(queryClient);
-  }, [queryClient]);
+    prefetchAppData(queryClient, { isPlatformAdmin: user?.isPlatformAdmin });
+  }, [queryClient, user?.isPlatformAdmin]);
 }

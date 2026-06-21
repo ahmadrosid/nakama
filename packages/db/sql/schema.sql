@@ -171,11 +171,62 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY NOT NULL,
   email TEXT NOT NULL,
   password_hash TEXT NOT NULL,
+  name TEXT,
+  phone TEXT,
+  is_platform_admin INTEGER DEFAULT 0 NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email);
+
+CREATE TABLE IF NOT EXISTS organizations (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique ON organizations (slug);
+
+CREATE TABLE IF NOT EXISTS org_members (
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id),
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS org_invites (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  invited_by_user_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (invited_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
+
+CREATE TABLE IF NOT EXISTS channel_org_mappings (
+  channel TEXT NOT NULL,
+  channel_user_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (channel, channel_user_id),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS browser_sessions (
   id TEXT PRIMARY KEY NOT NULL,
@@ -186,6 +237,7 @@ CREATE TABLE IF NOT EXISTS browser_sessions (
   expires_at TEXT NOT NULL,
   revoked_at TEXT,
   last_used_at TEXT,
+  active_org_id TEXT,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 

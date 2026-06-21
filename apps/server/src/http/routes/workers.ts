@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json } from "../shared";
+import { requireNotViewerFromContext } from "../org-guards";
 import type { WorkerLogsResponse } from "@tinyclaw/core";
 
 export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void {
@@ -64,6 +65,7 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
   }));
 
   app.post("/v1/workers/:name/:action{start|stop|restart}", async (c) => {
+    requireNotViewerFromContext(c);
     const name = decodeURIComponent(c.req.param("name"));
     const action = c.req.param("action");
 
@@ -110,6 +112,7 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
   });
 
   app.post("/v1/workers/:name/clear-logs", async (c) => {
+    requireNotViewerFromContext(c);
     const name = decodeURIComponent(c.req.param("name"));
 
     if (!workerManager.isValidWorker(name)) {

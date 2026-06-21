@@ -84,6 +84,19 @@ import type {
   ListTaskRunsResponse,
   TaskMessagesResponse,
   AuthUserResponse,
+  SetupAuthRequest,
+  CreateOrganizationRequest,
+  CreateOrganizationResponse,
+  ListOrganizationsResponse,
+  ListUserOrgsResponse,
+  SetActiveOrgRequest,
+  AddOrgMemberRequest,
+  AddOrgMemberResponse,
+  InviteOrgMemberRequest,
+  OrgInviteCreatedResponse,
+  ListOrgMembersResponse,
+  UpdateOrgMemberRoleRequest,
+  OrgMemberResponse,
   StoredTask,
   TaskRunRecord,
   WorkerLogsResponse,
@@ -111,6 +124,7 @@ export class TinyClawClient {
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
   private authToken: string | null;
+  private orgId: string | null;
 
   constructor(options: TinyClawClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
@@ -118,10 +132,20 @@ export class TinyClawClient {
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
     this.credentials = options.credentials ?? "include";
     this.authToken = options.authToken ?? null;
+    this.orgId = options.orgId ?? null;
   }
 
   setAuthToken(token: string | null): void {
     this.authToken = token;
+  }
+
+  setOrgId(orgId: string | null): void {
+    this.orgId = orgId?.trim() || null;
+  }
+
+  private applyAuthUserResponse(response: AuthUserResponse): void {
+    const activeOrgId = response.activeOrgId ?? response.orgId ?? null;
+    this.setOrgId(activeOrgId);
   }
 
   async health(): Promise<HealthResponse> {
@@ -874,22 +898,119 @@ export class TinyClawClient {
     return this.request<ListTimezonesResponse>("/v1/timezones");
   }
 
-  async setupUser(email: string, password: string): Promise<AuthUserResponse> {
-    return this.request<AuthUserResponse>("/v1/auth/setup", {
+  async setupUser(request: SetupAuthRequest): Promise<AuthUserResponse> {
+    const response = await this.request<AuthUserResponse>("/v1/auth/setup", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(request),
     });
+
+    this.applyAuthUserResponse(response);
+    return response;
   }
 
   async login(email: string, password: string): Promise<AuthUserResponse> {
-    return this.request<AuthUserResponse>("/v1/auth/login", {
+    const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+
+    this.applyAuthUserResponse(response);
+    return response;
   }
 
   async getMe(): Promise<AuthUserResponse> {
-    return this.request<AuthUserResponse>("/v1/auth/me");
+    const response = await this.request<AuthUserResponse>("/v1/auth/me");
+    this.applyAuthUserResponse(response);
+    return response;
+  }
+
+  async listUserOrgs(): Promise<ListUserOrgsResponse> {
+    return this.request<ListUserOrgsResponse>("/v1/auth/orgs");
+  }
+
+  async createUserOrganization(
+    request: Pick<CreateOrganizationRequest, "name" | "slug">,
+  ): Promise<CreateOrganizationResponse> {
+    return this.request<CreateOrganizationResponse>("/v1/auth/orgs", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async setActiveOrg(orgId: string): Promise<AuthUserResponse> {
+    const response = await this.request<AuthUserResponse>("/v1/auth/active-org", {
+      method: "POST",
+      body: JSON.stringify({ orgId } satisfies SetActiveOrgRequest),
+    });
+
+    this.applyAuthUserResponse(response);
+    return response;
+  }
+
+  async listPlatformOrganizations(): Promise<ListOrganizationsResponse> {
+    return this.request<ListOrganizationsResponse>("/v1/platform/orgs");
+  }
+
+  async createPlatformOrganization(
+    request: CreateOrganizationRequest,
+  ): Promise<CreateOrganizationResponse> {
+    return this.request<CreateOrganizationResponse>("/v1/platform/orgs", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
+    return this.request<ListOrgMembersResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/members`,
+    );
+  }
+
+  async addOrgMember(
+    orgId: string,
+    request: AddOrgMemberRequest,
+  ): Promise<AddOrgMemberResponse> {
+    return this.request<AddOrgMemberResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async inviteOrgMember(
+    orgId: string,
+    request: InviteOrgMemberRequest,
+  ): Promise<OrgInviteCreatedResponse> {
+    return this.request<OrgInviteCreatedResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/invites`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async updateOrgMemberRole(
+    orgId: string,
+    userId: string,
+    request: UpdateOrgMemberRoleRequest,
+  ): Promise<OrgMemberResponse> {
+    return this.request<OrgMemberResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async removeOrgMember(orgId: string, userId: string): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
   }
 
   async logout(): Promise<void> {
@@ -950,6 +1071,10 @@ export class TinyClawClient {
 
     if (this.authToken) {
       merged["Authorization"] = `Bearer ${this.authToken}`;
+    }
+
+    if (this.orgId) {
+      merged["X-Org-Id"] = this.orgId;
     }
 
     if (isMutatingMethod(method)) {

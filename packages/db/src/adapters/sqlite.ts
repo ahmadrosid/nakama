@@ -13,6 +13,10 @@ import type {
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
   StoredSkillRecord,
+  StoredOrgMemberRecord,
+  StoredOrgInviteRecord,
+  StoredOrganizationRecord,
+  StoredUserOrganizationRecord,
   StoredProfileRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
@@ -168,6 +172,9 @@ interface UserRow {
   id: string;
   email: string;
   password_hash: string;
+  name?: string | null;
+  phone?: string | null;
+  is_platform_admin?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -181,6 +188,28 @@ interface BrowserSessionRow {
   expires_at: string;
   revoked_at: string | null;
   last_used_at: string | null;
+  active_org_id?: string | null;
+}
+
+interface OrganizationRow {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface OrgInviteRow {
+  id: string;
+  org_id: string;
+  email: string;
+  role: string;
+  token_hash: string;
+  invited_by_user_id: string;
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
 }
 
 export async function createSqliteDatabase(databaseUrl: string): Promise<SqliteDatabase> {
@@ -497,8 +526,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getUserByEmailStmt = db.prepare("SELECT * FROM users WHERE email = ?");
   const getUserByIdStmt = db.prepare("SELECT * FROM users WHERE id = ?");
   const createUserStmt = db.prepare(`
-    INSERT INTO users (id, email, password_hash, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO users (
+      id, email, password_hash, name, phone, is_platform_admin, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateUserPasswordStmt = db.prepare(`
+    UPDATE users
+    SET password_hash = ?, updated_at = ?
+    WHERE id = ?
   `);
   const countUsersStmt = db.prepare("SELECT COUNT(*) as count FROM users");
 
@@ -511,9 +547,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       expires_at,
       revoked_at,
-      last_used_at
+      last_used_at,
+      active_org_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getBrowserSessionByTokenHashStmt = db.prepare(`
     SELECT * FROM browser_sessions
@@ -529,6 +566,99 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     UPDATE browser_sessions
     SET last_used_at = ?
     WHERE id = ?
+  `);
+  const updateBrowserSessionActiveOrgIdStmt = db.prepare(`
+    UPDATE browser_sessions
+    SET active_org_id = ?
+    WHERE id = ?
+  `);
+  const upsertOrganizationStmt = db.prepare(`
+    INSERT INTO organizations (id, name, slug, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      slug = excluded.slug,
+      updated_at = excluded.updated_at
+  `);
+  const listOrganizationsStmt = db.prepare(`
+    SELECT id, name, slug, created_at, updated_at
+    FROM organizations
+    ORDER BY name ASC
+  `);
+  const getOrganizationBySlugStmt = db.prepare(`
+    SELECT id, name, slug, created_at, updated_at
+    FROM organizations
+    WHERE slug = ?
+    LIMIT 1
+  `);
+  const getOrganizationByIdStmt = db.prepare(`
+    SELECT id, name, slug, created_at, updated_at
+    FROM organizations
+    WHERE id = ?
+    LIMIT 1
+  `);
+  const createOrgInviteStmt = db.prepare(`
+    INSERT INTO org_invites (
+      id, org_id, email, role, token_hash, invited_by_user_id,
+      expires_at, accepted_at, revoked_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const getOrgInviteByTokenHashStmt = db.prepare(`
+    SELECT
+      id, org_id, email, role, token_hash, invited_by_user_id,
+      expires_at, accepted_at, revoked_at, created_at
+    FROM org_invites
+    WHERE token_hash = ?
+    LIMIT 1
+  `);
+  const getPendingOrgInviteStmt = db.prepare(`
+    SELECT
+      id, org_id, email, role, token_hash, invited_by_user_id,
+      expires_at, accepted_at, revoked_at, created_at
+    FROM org_invites
+    WHERE org_id = ? AND email = ? AND accepted_at IS NULL AND revoked_at IS NULL
+    LIMIT 1
+  `);
+  const markOrgInviteAcceptedStmt = db.prepare(`
+    UPDATE org_invites
+    SET accepted_at = ?
+    WHERE id = ?
+  `);
+  const getOrgMemberStmt = db.prepare(`
+    SELECT org_id, user_id, role, created_at
+    FROM org_members
+    WHERE org_id = ? AND user_id = ?
+    LIMIT 1
+  `);
+  const upsertOrgMemberStmt = db.prepare(`
+    INSERT INTO org_members (org_id, user_id, role, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(org_id, user_id) DO UPDATE SET
+      role = excluded.role
+  `);
+  const listOrgMembersStmt = db.prepare(`
+    SELECT org_id, user_id, role, created_at
+    FROM org_members
+    WHERE org_id = ?
+    ORDER BY created_at ASC
+  `);
+  const listUserOrganizationsStmt = db.prepare(`
+    SELECT
+      o.id,
+      o.name,
+      o.slug,
+      o.created_at,
+      o.updated_at,
+      om.role,
+      om.created_at AS joined_at
+    FROM org_members om
+    INNER JOIN organizations o ON o.id = om.org_id
+    WHERE om.user_id = ?
+    ORDER BY o.name ASC
+  `);
+  const deleteOrgMemberStmt = db.prepare(`
+    DELETE FROM org_members
+    WHERE org_id = ? AND user_id = ?
   `);
 
   return {
@@ -547,9 +677,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.id,
         record.email,
         record.passwordHash,
+        record.name ?? null,
+        record.phone ?? null,
+        record.isPlatformAdmin ? 1 : 0,
         record.createdAt,
         record.updatedAt,
       );
+    },
+
+    async updateUserPassword(id, passwordHash, updatedAt) {
+      updateUserPasswordStmt.run(passwordHash, updatedAt, id);
     },
 
     async countUsers() {
@@ -567,6 +704,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.expiresAt,
         record.revokedAt,
         record.lastUsedAt,
+        record.activeOrgId ?? null,
       );
     },
 
@@ -582,6 +720,138 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async updateBrowserSessionLastUsedAt(id, lastUsedAt) {
       updateBrowserSessionLastUsedAtStmt.run(lastUsedAt, id);
+    },
+
+    async updateBrowserSessionActiveOrgId(id, activeOrgId) {
+      updateBrowserSessionActiveOrgIdStmt.run(activeOrgId, id);
+    },
+
+    async upsertOrganization(record) {
+      upsertOrganizationStmt.run(
+        record.id,
+        record.name,
+        record.slug,
+        record.createdAt,
+        record.updatedAt,
+      );
+    },
+
+    async listOrganizations() {
+      return listOrganizationsStmt.all().map((row) => toOrganizationRecord(row as OrganizationRow));
+    },
+
+    async getOrganizationBySlug(slug) {
+      const row = getOrganizationBySlugStmt.get(slug) as OrganizationRow | null;
+      return row ? toOrganizationRecord(row) : null;
+    },
+
+    async getOrganizationById(id) {
+      const row = getOrganizationByIdStmt.get(id) as OrganizationRow | null;
+      return row ? toOrganizationRecord(row) : null;
+    },
+
+    async upsertOrgMember(record) {
+      upsertOrgMemberStmt.run(record.orgId, record.userId, record.role, record.createdAt);
+    },
+
+    async getOrgMember(orgId, userId) {
+      const row = getOrgMemberStmt.get(orgId, userId) as
+        | {
+            org_id: string;
+            user_id: string;
+            role: string;
+            created_at: string;
+          }
+        | null;
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        orgId: row.org_id,
+        userId: row.user_id,
+        role: row.role as StoredOrgMemberRecord["role"],
+        createdAt: row.created_at,
+      };
+    },
+
+    async listOrgMembers(orgId) {
+      return listOrgMembersStmt.all(orgId).map((row) => {
+        const member = row as {
+          org_id: string;
+          user_id: string;
+          role: string;
+          created_at: string;
+        };
+
+        return {
+          orgId: member.org_id,
+          userId: member.user_id,
+          role: member.role as StoredOrgMemberRecord["role"],
+          createdAt: member.created_at,
+        };
+      });
+    },
+
+    async listUserOrganizations(userId) {
+      return listUserOrganizationsStmt.all(userId).map((row) => {
+        const record = row as {
+          id: string;
+          name: string;
+          slug: string;
+          created_at: string;
+          updated_at: string;
+          role: string;
+          joined_at: string;
+        };
+
+        return {
+          organization: {
+            id: record.id,
+            name: record.name,
+            slug: record.slug,
+            createdAt: record.created_at,
+            updatedAt: record.updated_at,
+          },
+          role: record.role as StoredUserOrganizationRecord["role"],
+          joinedAt: record.joined_at,
+        };
+      });
+    },
+
+    async deleteOrgMember(orgId, userId) {
+      const result = deleteOrgMemberStmt.run(orgId, userId);
+      return result.changes > 0;
+    },
+
+    async createOrgInvite(record) {
+      createOrgInviteStmt.run(
+        record.id,
+        record.orgId,
+        record.email,
+        record.role,
+        record.tokenHash,
+        record.invitedByUserId,
+        record.expiresAt,
+        record.acceptedAt,
+        record.revokedAt,
+        record.createdAt,
+      );
+    },
+
+    async getOrgInviteByTokenHash(tokenHash) {
+      const row = getOrgInviteByTokenHashStmt.get(tokenHash) as OrgInviteRow | null;
+      return row ? toOrgInviteRecord(row) : null;
+    },
+
+    async getPendingOrgInvite(orgId, email) {
+      const row = getPendingOrgInviteStmt.get(orgId, email.trim().toLowerCase()) as OrgInviteRow | null;
+      return row ? toOrgInviteRecord(row) : null;
+    },
+
+    async markOrgInviteAccepted(id, acceptedAt) {
+      markOrgInviteAcceptedStmt.run(acceptedAt, id);
     },
 
     async listAutomations() {
@@ -1212,8 +1482,36 @@ function toUserRecord(row: UserRow): StoredUserRecord {
     id: row.id,
     email: row.email,
     passwordHash: row.password_hash,
+    name: row.name ?? null,
+    phone: row.phone ?? null,
+    isPlatformAdmin: Boolean(row.is_platform_admin),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    email: row.email,
+    role: row.role as StoredOrgInviteRecord["role"],
+    tokenHash: row.token_hash,
+    invitedByUserId: row.invited_by_user_id,
+    expiresAt: row.expires_at,
+    acceptedAt: row.accepted_at,
+    revokedAt: row.revoked_at,
+    createdAt: row.created_at,
   };
 }
 
@@ -1227,6 +1525,7 @@ function toBrowserSessionRecord(row: BrowserSessionRow): StoredBrowserSessionRec
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
     lastUsedAt: row.last_used_at,
+    activeOrgId: row.active_org_id ?? null,
   };
 }
 
