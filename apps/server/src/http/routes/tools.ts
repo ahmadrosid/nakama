@@ -8,6 +8,7 @@ import type {
   ToolSourceResponse,
 } from "@tinyclaw/core";
 import { json, readJson } from "../shared";
+import { requirePlatformAdminFromContext } from "../org-guards";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 
@@ -132,32 +133,38 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/tools", async (c) => {
+    requirePlatformAdminFromContext(c);
     const body = await readJson<CreateToolRequest>(c.req.raw);
     return json(await agent.createTool(body), 201);
   });
 
   app.get("/v1/tools/:toolId/source", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ToolSourceResponse>(
       await agent.getToolSource(decodeURIComponent(c.req.param("toolId"))),
     );
   });
 
   app.get("/v1/tools/:toolId", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ToolResponse>(await agent.getTool(decodeURIComponent(c.req.param("toolId"))));
   });
 
   app.delete("/v1/tools/:toolId", async (c) => {
+    requirePlatformAdminFromContext(c);
     await agent.deleteTool(decodeURIComponent(c.req.param("toolId")));
     return new Response(null, { status: 204 });
   });
 
   app.get("/v1/profiles/:profileId/tools", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ListToolsResponse>(
       await agent.listProfileTools(decodeURIComponent(c.req.param("profileId"))),
     );
   });
 
   app.post("/v1/profiles/:profileId/tools", async (c) => {
+    requirePlatformAdminFromContext(c);
     const body = await readJson<AssignToolRequest>(c.req.raw);
     return json<ProfileResponse>(
       await agent.assignTool(decodeURIComponent(c.req.param("profileId")), body),
@@ -165,6 +172,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.delete("/v1/profiles/:profileId/tools/:toolId", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ProfileResponse>(
       await agent.unassignTool(
         decodeURIComponent(c.req.param("profileId")),

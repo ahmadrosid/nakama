@@ -8,6 +8,7 @@ import type {
   SyncSkillsResponse,
 } from "@tinyclaw/core";
 import { json, readJson } from "../shared";
+import { requirePlatformAdminFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
 
@@ -103,29 +104,35 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
     },
   }));
 
-  app.get("/v1/skills", async () => {
+  app.get("/v1/skills", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ListSkillsResponse>(await agent.listSkills());
   });
 
   app.post("/v1/skills", async (c) => {
+    requirePlatformAdminFromContext(c);
     const body = await readJson<CreateSkillRequest>(c.req.raw);
     return json<SkillResponse>(await agent.createSkill(body));
   });
 
-  app.post("/v1/skills/sync", async () => {
+  app.post("/v1/skills/sync", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<SyncSkillsResponse>(await agent.syncSkills());
   });
 
   app.get("/v1/skills/:skillId", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<SkillResponse>(await agent.getSkill(decodeURIComponent(c.req.param("skillId"))));
   });
 
   app.delete("/v1/skills/:skillId", async (c) => {
+    requirePlatformAdminFromContext(c);
     await agent.deleteSkill(decodeURIComponent(c.req.param("skillId")));
     return new Response(null, { status: 204 });
   });
 
   app.post("/v1/profiles/:profileId/skills", async (c) => {
+    requirePlatformAdminFromContext(c);
     const body = await readJson<AssignSkillRequest>(c.req.raw);
     return json<ProfileResponse>(
       await agent.assignSkill(decodeURIComponent(c.req.param("profileId")), body),
@@ -133,6 +140,7 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
   });
 
   app.delete("/v1/profiles/:profileId/skills/:skillId", async (c) => {
+    requirePlatformAdminFromContext(c);
     return json<ProfileResponse>(
       await agent.unassignSkill(
         decodeURIComponent(c.req.param("profileId")),

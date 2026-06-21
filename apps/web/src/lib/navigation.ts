@@ -109,6 +109,8 @@ export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
 
 export const SETUP_PATH = "/setup";
 
+export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set(["profiles", "soul"]);
+
 export const PAGE_PATHS: Record<PageId, string> = {
   status: "/status",
   chat: "/chat",

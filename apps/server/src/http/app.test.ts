@@ -10,6 +10,7 @@ import { OrgService } from "../services/org-service";
 import { loadLocalAuthToken, verifyLocalAuthToken } from "@tinyclaw/core";
 import {
   buildSetupAuthBody,
+  createPlatformAdminUser,
   seedLocalClientUser,
   seedOrgForUser,
   TEST_ORG_ID,
@@ -748,6 +749,94 @@ describe("createHonoApp", () => {
 
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    });
+  });
+
+  describe("platform admin routes", () => {
+    test("allows profile list for org members but blocks profile management", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      await createPlatformAdminUser(options.databaseAdapter, options.authService);
+
+      const platformLogin = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email: "platform@example.com", password: "password123" }),
+        }),
+      );
+      expect(platformLogin.status).toBe(200);
+      const platformCookies = extractSetCookies(platformLogin);
+
+      const createOrgResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/orgs", {
+          method: "POST",
+          headers: withOrgId(
+            {
+              Cookie: cookieHeaderFromSetCookies(platformCookies),
+              "X-CSRF-Token": cookieValue(platformCookies, "tinyclaw_csrf"),
+            },
+            "",
+          ),
+          body: JSON.stringify({
+            name: "Acme",
+            slug: "acme-platform-admin",
+            admin: {
+              name: "Acme Admin",
+              email: "admin@acme.com",
+              phone: "+628123456789",
+            },
+          }),
+        }),
+      );
+      expect(createOrgResponse.status).toBe(201);
+      const created = (await createOrgResponse.json()) as {
+        organization: { id: string };
+        adminMember: { temporaryPassword: string };
+      };
+
+      const orgAdminLogin = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            email: "admin@acme.com",
+            password: created.adminMember.temporaryPassword,
+          }),
+        }),
+      );
+      expect(orgAdminLogin.status).toBe(200);
+      const orgAdminCookies = extractSetCookies(orgAdminLogin);
+      const orgHeaders = {
+        Cookie: cookieHeaderFromSetCookies(orgAdminCookies),
+        "X-Org-Id": created.organization.id,
+      };
+
+      const listResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", { headers: orgHeaders }),
+      );
+      expect(listResponse.status).toBe(200);
+
+      const createProfileResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          method: "POST",
+          headers: {
+            ...orgHeaders,
+            "Content-Type": "application/json",
+            "X-CSRF-Token": cookieValue(orgAdminCookies, "tinyclaw_csrf"),
+          },
+          body: JSON.stringify({ name: "Blocked", systemPrompt: "nope" }),
+        }),
+      );
+      expect(createProfileResponse.status).toBe(403);
+
+      const soulResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles/default/soul", { headers: orgHeaders }),
+      );
+      expect(soulResponse.status).toBe(403);
+
+      const skillsResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/skills", { headers: orgHeaders }),
+      );
+      expect(skillsResponse.status).toBe(403);
     });
   });
 });

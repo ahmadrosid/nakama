@@ -5,6 +5,7 @@ import {
   LogOutIcon,
 } from "lucide-react";
 import type { SVGProps } from "react";
+import { useMemo } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ import {
   navHrefForPage,
   NAV_GROUPS,
   NAV_ITEM_ICONS,
+  PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
   SETTINGS_NAV_ITEM,
   type NavItem,
@@ -41,6 +43,17 @@ export function Layout() {
   const prefetchAppData = usePrefetchAppData();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
+  const navGroups = useMemo(
+    () =>
+      NAV_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) =>
+            !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || user?.isPlatformAdmin === true,
+        ),
+      })).filter((group) => group.items.length > 0),
+    [user?.isPlatformAdmin],
+  );
 
   return (
     <TooltipProvider delay={0}>
@@ -81,7 +94,7 @@ export function Layout() {
               collapsed ? "p-2" : "p-3",
             )}
           >
-            {NAV_GROUPS.map((group, groupIndex) => (
+            {navGroups.map((group, groupIndex) => (
               <div key={group.id}>
                 {groupIndex > 0 ? (
                   <div className="sidebar-nav-divider" aria-hidden="true" />

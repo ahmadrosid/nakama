@@ -7,6 +7,7 @@ import { AppQueryPrefetch } from "@/hooks/use-app-queries";
 import { queryClient, onGlobalQueryError } from "@/lib/query-client";
 import { Layout } from "@/components/Layout";
 import { AuthGuard } from "@/components/AuthGuard";
+import { PlatformAdminGuard } from "@/components/PlatformAdminGuard";
 import { SetupGuard } from "@/components/SetupGuard";
 import { AutomationsPage } from "@/pages/AutomationsPage";
 import { ChatPage } from "@/pages/ChatPage";
@@ -45,8 +46,10 @@ function AppShell() {
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/chat/:profileId/:sessionId" element={<ChatPage />} />
                   <Route path="/history" element={<HistoryPage />} />
-                  <Route path="/profiles" element={<ProfilesPage />} />
-                  <Route path="/system" element={<SoulPage />} />
+                  <Route element={<PlatformAdminGuard />}>
+                    <Route path="/profiles" element={<ProfilesPage />} />
+                    <Route path="/system" element={<SoulPage />} />
+                  </Route>
                   <Route path="/automations" element={<AutomationsPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
