@@ -3,27 +3,7 @@ import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
-import { createPlatformAdminUser } from "./test-org-helpers";
-
-function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
-}
-
-function cookieHeaderFromSetCookies(setCookies: string[]): string {
-  const session = setCookies.find((entry) => entry.startsWith("tinyclaw_session="));
-  const csrf = setCookies.find((entry) => entry.startsWith("tinyclaw_csrf="));
-  return [session, csrf].filter(Boolean).map((entry) => entry!.split(";")[0]).join("; ");
-}
-
-function cookieValue(setCookies: string[], name: string): string {
-  const cookie = setCookies.find((entry) => entry.startsWith(`${name}=`));
-  if (!cookie) {
-    throw new Error(`Missing cookie: ${name}`);
-  }
-
-  return cookie.split(";")[0]!.split("=", 2)[1]!;
-}
+import { loginPlatformAdminSession, loginUserSession } from "./test-session-helpers";
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -48,61 +28,16 @@ function createApp() {
   };
 }
 
-async function loginPlatformAdmin(
-  app: ReturnType<typeof createHonoApp>,
-  authService: AuthService,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
-) {
-  await createPlatformAdminUser(databaseAdapter, authService);
-  const loginResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email: "platform@example.com", password: "password123" }),
-    }),
-  );
-
-  expect(loginResponse.status).toBe(200);
-  const setCookies = extractSetCookies(loginResponse);
-  return {
-    setCookies,
-    headers(extra: Record<string, string> = {}) {
-      return { Cookie: cookieHeaderFromSetCookies(setCookies), ...extra };
-    },
-  };
-}
-
-async function loginUser(app: ReturnType<typeof createHonoApp>, email: string, password: string) {
-  const loginResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-  );
-
-  expect(loginResponse.status).toBe(200);
-  const setCookies = extractSetCookies(loginResponse);
-  return {
-    setCookies,
-    headers(orgId: string, extra: Record<string, string> = {}) {
-      return {
-        Cookie: cookieHeaderFromSetCookies(setCookies),
-        "X-Org-Id": orgId,
-        ...extra,
-      };
-    },
-  };
-}
-
 describe("org member management (AE2)", () => {
   test("viewer can read org data but not list or manage members", async () => {
     const { app, authService, databaseAdapter } = createApp();
-    const platformSession = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: platformSession.headers({
-          "X-CSRF-Token": cookieValue(platformSession.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": platformSession.csrfToken,
         }),
         body: JSON.stringify({
           name: "Acme",
@@ -123,7 +58,7 @@ describe("org member management (AE2)", () => {
     };
     const orgId = created.organization.id;
 
-    const adminSession = await loginUser(
+    const adminSession = await loginUserSession(
       app,
       "admin@acme.com",
       created.adminMember.temporaryPassword,
@@ -132,9 +67,12 @@ describe("org member management (AE2)", () => {
     const addViewerResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
         method: "POST",
-        headers: adminSession.headers(orgId, {
-          "X-CSRF-Token": cookieValue(adminSession.setCookies, "tinyclaw_csrf"),
-        }),
+        headers: adminSession.headers(
+          {
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId,
+        ),
         body: JSON.stringify({
           name: "Viewer One",
           email: "viewer@acme.com",
@@ -146,7 +84,7 @@ describe("org member management (AE2)", () => {
 
     expect(addViewerResponse.status).toBe(201);
     const viewerProvisioned = (await addViewerResponse.json()) as { temporaryPassword: string };
-    const viewerSession = await loginUser(
+    const viewerSession = await loginUserSession(
       app,
       "viewer@acme.com",
       viewerProvisioned.temporaryPassword,
@@ -154,14 +92,14 @@ describe("org member management (AE2)", () => {
 
     const profilesResponse = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
-        headers: viewerSession.headers(orgId),
+        headers: viewerSession.headers({}, orgId),
       }),
     );
     expect(profilesResponse.status).toBe(200);
 
     const listMembersResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        headers: viewerSession.headers(orgId),
+        headers: viewerSession.headers({}, orgId),
       }),
     );
     expect(listMembersResponse.status).toBe(403);
@@ -169,9 +107,12 @@ describe("org member management (AE2)", () => {
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
         method: "POST",
-        headers: viewerSession.headers(orgId, {
-          "X-CSRF-Token": cookieValue(viewerSession.setCookies, "tinyclaw_csrf"),
-        }),
+        headers: viewerSession.headers(
+          {
+            "X-CSRF-Token": viewerSession.csrfToken,
+          },
+          orgId,
+        ),
         body: JSON.stringify({
           name: "Blocked",
           email: "blocked@acme.com",
@@ -185,13 +126,13 @@ describe("org member management (AE2)", () => {
 
   test("org admin can list, change role, and remove members", async () => {
     const { app, authService, databaseAdapter } = createApp();
-    const platformSession = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: platformSession.headers({
-          "X-CSRF-Token": cookieValue(platformSession.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": platformSession.csrfToken,
         }),
         body: JSON.stringify({
           name: "Acme",
@@ -210,7 +151,7 @@ describe("org member management (AE2)", () => {
       adminMember: { temporaryPassword: string };
     };
     const orgId = created.organization.id;
-    const adminSession = await loginUser(
+    const adminSession = await loginUserSession(
       app,
       "admin-mgmt@acme.com",
       created.adminMember.temporaryPassword,
@@ -219,9 +160,12 @@ describe("org member management (AE2)", () => {
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
         method: "POST",
-        headers: adminSession.headers(orgId, {
-          "X-CSRF-Token": cookieValue(adminSession.setCookies, "tinyclaw_csrf"),
-        }),
+        headers: adminSession.headers(
+          {
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId,
+        ),
         body: JSON.stringify({
           name: "Member One",
           email: "member-mgmt@acme.com",
@@ -234,7 +178,7 @@ describe("org member management (AE2)", () => {
 
     const listResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        headers: adminSession.headers(orgId),
+        headers: adminSession.headers({}, orgId),
       }),
     );
     expect(listResponse.status).toBe(200);
@@ -244,9 +188,12 @@ describe("org member management (AE2)", () => {
     const patchResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members/${added.member.userId}`, {
         method: "PATCH",
-        headers: adminSession.headers(orgId, {
-          "X-CSRF-Token": cookieValue(adminSession.setCookies, "tinyclaw_csrf"),
-        }),
+        headers: adminSession.headers(
+          {
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId,
+        ),
         body: JSON.stringify({ role: "member" }),
       }),
     );
@@ -257,16 +204,19 @@ describe("org member management (AE2)", () => {
     const deleteResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members/${added.member.userId}`, {
         method: "DELETE",
-        headers: adminSession.headers(orgId, {
-          "X-CSRF-Token": cookieValue(adminSession.setCookies, "tinyclaw_csrf"),
-        }),
+        headers: adminSession.headers(
+          {
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId,
+        ),
       }),
     );
     expect(deleteResponse.status).toBe(204);
 
     const afterDelete = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        headers: adminSession.headers(orgId),
+        headers: adminSession.headers({}, orgId),
       }),
     );
     const remaining = (await afterDelete.json()) as { members: Array<{ email: string }> };

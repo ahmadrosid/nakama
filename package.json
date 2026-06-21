@@ -21,5 +21,8 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3"
+  },
+  "overrides": {
+    "libsignal": "6.0.0"
   }
 }

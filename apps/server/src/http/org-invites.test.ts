@@ -3,27 +3,7 @@ import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
-import { createPlatformAdminUser } from "./test-org-helpers";
-
-function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
-}
-
-function cookieHeaderFromSetCookies(setCookies: string[]): string {
-  const session = setCookies.find((entry) => entry.startsWith("tinyclaw_session="));
-  const csrf = setCookies.find((entry) => entry.startsWith("tinyclaw_csrf="));
-  return [session, csrf].filter(Boolean).map((entry) => entry!.split(";")[0]).join("; ");
-}
-
-function cookieValue(setCookies: string[], name: string): string {
-  const cookie = setCookies.find((entry) => entry.startsWith(`${name}=`));
-  if (!cookie) {
-    throw new Error(`Missing cookie: ${name}`);
-  }
-
-  return cookie.split(";")[0]!.split("=", 2)[1]!;
-}
+import { browserSessionFromResponse, loginPlatformAdminSession } from "./test-session-helpers";
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -48,39 +28,16 @@ function createApp() {
   };
 }
 
-async function loginPlatformAdmin(
-  app: ReturnType<typeof createHonoApp>,
-  authService: AuthService,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
-) {
-  await createPlatformAdminUser(databaseAdapter, authService);
-  const loginResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email: "platform@example.com", password: "password123" }),
-    }),
-  );
-
-  expect(loginResponse.status).toBe(200);
-  const setCookies = extractSetCookies(loginResponse);
-  return {
-    setCookies,
-    headers(extra: Record<string, string> = {}) {
-      return { Cookie: cookieHeaderFromSetCookies(setCookies), ...extra };
-    },
-  };
-}
-
 describe("direct org member provisioning", () => {
   test("platform admin cannot access org data before the provisioned admin signs in", async () => {
     const { app, authService, databaseAdapter } = createApp();
-    const platformSession = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: platformSession.headers({
-          "X-CSRF-Token": cookieValue(platformSession.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": platformSession.csrfToken,
         }),
         body: JSON.stringify({
           name: "Acme",
@@ -119,14 +76,11 @@ describe("direct org member provisioning", () => {
     );
 
     expect(loginResponse.status).toBe(200);
-    const orgAdminCookies = extractSetCookies(loginResponse);
+    const orgAdminSession = browserSessionFromResponse(loginResponse, created.organization.id);
 
     const allowed = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(orgAdminCookies),
-          "X-Org-Id": created.organization.id,
-        },
+        headers: orgAdminSession.headers(),
       }),
     );
 
@@ -135,13 +89,13 @@ describe("direct org member provisioning", () => {
 
   test("org admin can add a member and the member can change password", async () => {
     const { app, authService, databaseAdapter } = createApp();
-    const platformSession = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: platformSession.headers({
-          "X-CSRF-Token": cookieValue(platformSession.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": platformSession.csrfToken,
         }),
         body: JSON.stringify({
           name: "Acme",
@@ -168,16 +122,14 @@ describe("direct org member provisioning", () => {
         }),
       }),
     );
-    const adminCookies = extractSetCookies(adminLogin);
+    const adminSession = browserSessionFromResponse(adminLogin, created.organization.id);
 
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${created.organization.id}/members`, {
         method: "POST",
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(adminCookies),
-          "X-Org-Id": created.organization.id,
-          "X-CSRF-Token": cookieValue(adminCookies, "tinyclaw_csrf"),
-        },
+        headers: adminSession.headers({
+          "X-CSRF-Token": adminSession.csrfToken,
+        }),
         body: JSON.stringify({
           name: "Member One",
           email: "member@acme.com",
@@ -204,15 +156,14 @@ describe("direct org member provisioning", () => {
         }),
       }),
     );
-    const memberCookies = extractSetCookies(memberLogin);
+    const memberSession = browserSessionFromResponse(memberLogin);
 
     const changePasswordResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/change-password", {
         method: "POST",
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(memberCookies),
-          "X-CSRF-Token": cookieValue(memberCookies, "tinyclaw_csrf"),
-        },
+        headers: memberSession.headers({
+          "X-CSRF-Token": memberSession.csrfToken,
+        }),
         body: JSON.stringify({
           currentPassword: added.temporaryPassword,
           newPassword: "member-new-password",

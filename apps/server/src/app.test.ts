@@ -5,6 +5,12 @@ import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./http/app";
 import { AuthService } from "./services/auth-service";
 import { seedOrgForUser, TEST_ORG_ID, withOrgId, buildSetupAuthBody } from "./http/test-org-helpers";
+import {
+  cookieHeaderFromSetCookies,
+  cookieValue,
+  extractSetCookies,
+  setupFreshInstallSession,
+} from "./http/test-session-helpers";
 import { OrgService } from "./services/org-service";
 
 const TEST_DIST_DIR = join(import.meta.dir, "__test_dist__");
@@ -52,57 +58,6 @@ function createBrowserAuthApp() {
   });
 
   return { app, databaseAdapter };
-}
-
-async function createBrowserSession(
-  app: ReturnType<typeof createHonoApp>,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
-) {
-  const setupResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/setup", {
-      method: "POST",
-      body: JSON.stringify(buildSetupAuthBody()),
-    }),
-  );
-
-  if (setupResponse.status !== 201) {
-    throw new Error(`Failed to create browser session: ${setupResponse.status}`);
-  }
-
-  const setupBody = (await setupResponse.json()) as { activeOrgId: string };
-  const setCookies = extractSetCookies(setupResponse);
-  const orgId = setupBody.activeOrgId;
-  const cookieHeader = cookieHeaderFromSetCookies(setCookies);
-
-  return {
-    cookieHeader,
-    csrfToken: cookieValue(setCookies, "tinyclaw_csrf"),
-    orgId,
-    headers(extra: Record<string, string> = {}) {
-      return withOrgId({ Cookie: cookieHeader, ...extra }, orgId);
-    },
-  };
-}
-
-function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
-}
-
-function cookieValue(setCookies: string[], name: string): string {
-  const cookie = setCookies.find((entry) => entry.startsWith(`${name}=`));
-  if (!cookie) {
-    throw new Error(`Missing cookie: ${name}`);
-  }
-
-  return cookie.split(";")[0]!.split("=", 2)[1]!;
-}
-
-function cookieHeaderFromSetCookies(setCookies: string[]): string {
-  return [
-    `tinyclaw_session=${cookieValue(setCookies, "tinyclaw_session")}`,
-    `tinyclaw_csrf=${cookieValue(setCookies, "tinyclaw_csrf")}`,
-  ].join("; ");
 }
 
 describe("static web serving before auth", () => {
@@ -335,7 +290,7 @@ describe("browser session auth", () => {
   test("non-platform users cannot create organizations", async () => {
     const { app, databaseAdapter } = createBrowserAuthApp();
     const authService = new AuthService();
-    const session = await createBrowserSession(app, databaseAdapter);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
     const now = new Date().toISOString();
 
     await databaseAdapter.createUser({
@@ -395,7 +350,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       databaseAdapter,
       webDistDir: null,
     });
-    const session = await createBrowserSession(app, databaseAdapter);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
     return { app, session };
   }
 
@@ -487,7 +442,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       databaseAdapter,
       webDistDir: null,
     });
-    const session = await createBrowserSession(app, databaseAdapter);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
     return { app, session };
   }
 

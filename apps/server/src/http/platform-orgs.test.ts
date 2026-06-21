@@ -3,30 +3,8 @@ import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
-import {
-  createPlatformAdminUser,
-  withOrgId,
-} from "./test-org-helpers";
-
-function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
-}
-
-function cookieHeaderFromSetCookies(setCookies: string[]): string {
-  const session = setCookies.find((entry) => entry.startsWith("tinyclaw_session="));
-  const csrf = setCookies.find((entry) => entry.startsWith("tinyclaw_csrf="));
-  return [session, csrf].filter(Boolean).map((entry) => entry!.split(";")[0]).join("; ");
-}
-
-function cookieValue(setCookies: string[], name: string): string {
-  const cookie = setCookies.find((entry) => entry.startsWith(`${name}=`));
-  if (!cookie) {
-    throw new Error(`Missing cookie: ${name}`);
-  }
-
-  return cookie.split(";")[0]!.split("=", 2)[1]!;
-}
+import { withOrgId } from "./test-org-helpers";
+import { browserSessionFromResponse, loginPlatformAdminSession } from "./test-session-helpers";
 
 function createPlatformApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -51,39 +29,16 @@ function createPlatformApp() {
   };
 }
 
-async function loginPlatformAdmin(
-  app: ReturnType<typeof createHonoApp>,
-  authService: AuthService,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
-) {
-  await createPlatformAdminUser(databaseAdapter, authService);
-  const loginResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email: "platform@example.com", password: "password123" }),
-    }),
-  );
-
-  expect(loginResponse.status).toBe(200);
-  const setCookies = extractSetCookies(loginResponse);
-  return {
-    setCookies,
-    headers(extra: Record<string, string> = {}) {
-      return { Cookie: cookieHeaderFromSetCookies(setCookies), ...extra };
-    },
-  };
-}
-
 describe("platform org routes", () => {
   test("platform admin can create and list organizations", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
-    const session = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const session = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: session.headers({
-          "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": session.csrfToken,
         }),
         body: JSON.stringify({ name: "Acme Corp", slug: "acme-corp" }),
       }),
@@ -125,13 +80,13 @@ describe("platform org routes", () => {
 
   test("non-platform users cannot manage organizations", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
-    const platformSession = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
         headers: platformSession.headers({
-          "X-CSRF-Token": cookieValue(platformSession.setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": platformSession.csrfToken,
         }),
         body: JSON.stringify({
           name: "Acme Corp",
@@ -160,18 +115,14 @@ describe("platform org routes", () => {
       }),
     );
     expect(orgAdminLogin.status).toBe(200);
-    const orgAdminCookies = extractSetCookies(orgAdminLogin);
+    const orgAdminSession = browserSessionFromResponse(orgAdminLogin, created.organization.id);
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
         method: "POST",
-        headers: withOrgId(
-          {
-            Cookie: cookieHeaderFromSetCookies(orgAdminCookies),
-            "X-CSRF-Token": cookieValue(orgAdminCookies, "tinyclaw_csrf"),
-          },
-          created.organization.id,
-        ),
+        headers: orgAdminSession.headers({
+          "X-CSRF-Token": orgAdminSession.csrfToken,
+        }),
         body: JSON.stringify({ name: "Beta Corp", slug: "beta-corp" }),
       }),
     );
@@ -182,9 +133,9 @@ describe("platform org routes", () => {
 
   test("returns 409 for duplicate organization slugs", async () => {
     const { app, authService, databaseAdapter } = createPlatformApp();
-    const session = await loginPlatformAdmin(app, authService, databaseAdapter);
+    const session = await loginPlatformAdminSession(app, authService, databaseAdapter);
     const headers = session.headers({
-      "X-CSRF-Token": cookieValue(session.setCookies, "tinyclaw_csrf"),
+      "X-CSRF-Token": session.csrfToken,
     });
 
     const first = await app.fetch(
