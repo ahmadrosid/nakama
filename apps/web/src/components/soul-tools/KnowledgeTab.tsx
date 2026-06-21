@@ -1,13 +1,8 @@
 import type { KnowledgeBaseDocument } from "@tinyclaw/core/contract";
-import {
-  BookOpenIcon,
-  FileTextIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-  UploadIcon,
-} from "lucide-react";
+import { FileTextIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +24,7 @@ import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useDeleteKnowledgeBaseDocumentMutation,
   useKnowledgeBaseQuery,
+  useSoulStatusQuery,
   useUploadKnowledgeBaseDocumentMutation,
 } from "@/hooks/use-resource-mutations";
 import {
@@ -42,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatError } from "@/lib/client";
 
 const sectionClass = "rounded-md border border-border bg-card";
+const KNOWLEDGE_BASE_SUBDIR = "data/knowledge-base";
 
 function resolveDefaultProfileId(
   profiles: Array<{ id: string }>,
@@ -67,6 +64,14 @@ function formatUploadedAt(value: string): string {
   return date.toLocaleString();
 }
 
+function formatDocumentCount(count: number): string {
+  if (count === 0) {
+    return "No documents";
+  }
+
+  return count === 1 ? "1 document" : `${count} documents`;
+}
+
 export function KnowledgeTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -85,15 +90,25 @@ export function KnowledgeTab() {
     error: knowledgeError,
     refetch: refetchKnowledgeBase,
   } = useKnowledgeBaseQuery(profileId);
+  const {
+    data: soulStatus = null,
+    isFetching: soulStatusFetching,
+    refetch: refetchSoulStatus,
+  } = useSoulStatusQuery(profileId);
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<KnowledgeBaseDocument | null>(null);
 
+  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? null;
   const documents = knowledgeBase?.documents ?? [];
+  const readyCount = documents.filter((document) => document.status === "ready").length;
   const loading = knowledgeLoading && !knowledgeBase;
-  const refreshing = profilesFetching || knowledgeFetching;
+  const refreshing = profilesFetching || knowledgeFetching || soulStatusFetching;
   const busy = uploadMutation.isPending || deleteMutation.isPending;
+  const knowledgeBaseDirectory = soulStatus
+    ? `${soulStatus.directory}/${KNOWLEDGE_BASE_SUBDIR}`
+    : null;
 
   const setProfileId = useCallback(
     (nextProfileId: string) => {
@@ -139,7 +154,7 @@ export function KnowledgeTab() {
 
   async function refresh() {
     setError(null);
-    await Promise.all([refetchProfiles(), refetchKnowledgeBase()]);
+    await Promise.all([refetchProfiles(), refetchKnowledgeBase(), refetchSoulStatus()]);
   }
 
   async function handleUpload(files: FileList | null) {
@@ -199,152 +214,192 @@ export function KnowledgeTab() {
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className={cn(sectionClass, "flex flex-wrap items-center justify-between gap-3 p-4")}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <BookOpenIcon className="size-4" strokeWidth={1.75} aria-hidden />
-            Knowledge Base
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Upload project docs here. The agent looks up facts with knowledge_base_search.
-          </p>
-        </div>
+  if (loading && !knowledgeBase) {
+    return <PageState message="Loading knowledge base…" />;
+  }
 
-        <div className="flex flex-wrap items-center gap-2">
+  return (
+    <>
+      {error ? (
+        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <section className={cn(sectionClass, "overflow-hidden")}>
+        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
           <Select
             value={profileId ?? undefined}
+            disabled={busy || refreshing || !profileId}
             onValueChange={(value) => {
               if (value) {
-                setProfileId(value);
+                setProfileId(String(value));
               }
             }}
           >
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Select profile" />
+            <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
+              <SelectValue placeholder="Select profile">
+                {selectedProfile?.name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {profiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
+                  <span className="flex items-center gap-2">
+                    <ProfileAvatar profile={profile} size="sm" />
+                    <span>{profile.name}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void refresh()}
-            disabled={refreshing}
-          >
-            {refreshing ? <Spinner className="size-4" /> : <RefreshCwIcon className="size-4" />}
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {error ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      <div className={cn(sectionClass, "p-4")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium">Documents</h3>
-            <p className="text-sm text-muted-foreground">
-              Text and PDF files up to 5 MB. Content is extracted and searched on demand.
-            </p>
-          </div>
-
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={KNOWLEDGE_BASE_ACCEPT}
-              multiple
-              className="hidden"
-              onChange={(event) => void handleUpload(event.target.files)}
-            />
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!profileId || busy}
+              variant="ghost"
+              size="icon-sm"
+              disabled={busy || refreshing}
+              aria-label="Refresh knowledge base"
+              onClick={() => void refresh()}
             >
-              {uploadMutation.isPending ? <Spinner className="size-4" /> : <UploadIcon className="size-4" />}
-              Upload
+              {refreshing ? (
+                <Spinner className="size-4" />
+              ) : (
+                <RefreshCwIcon className="size-4" aria-hidden />
+              )}
             </Button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-            <Spinner className="size-4" />
-            Loading documents…
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            No documents yet. Upload reference files for this profile.
-          </div>
-        ) : (
-          <ul className="mt-4 divide-y divide-border">
-            {documents.map((document) => (
-              <li
-                key={document.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <FileTextIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{document.filename}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatBytes(document.sizeBytes)} · {formatUploadedAt(document.uploadedAt)}
-                    </p>
-                    {document.status === "failed" && document.error ? (
-                      <p className="mt-1 text-xs text-destructive">{document.error}</p>
-                    ) : null}
-                  </div>
-                </div>
+        <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
+            <h2 className="type-section-title mb-4">Profiles</h2>
 
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
-                      document.status === "ready"
-                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "bg-destructive/10 text-destructive",
-                    )}
-                  >
-                    {document.status}
-                  </span>
+            <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
+              {profiles.map((profile) => (
+                <ScopeButton
+                  key={profile.id}
+                  active={profile.id === profileId}
+                  title={profile.name}
+                  leading={<ProfileAvatar profile={profile} size="sm" />}
+                  onClick={() => setProfileId(profile.id)}
+                />
+              ))}
+            </div>
+          </aside>
+
+          <div className="min-w-0 p-4 sm:p-5">
+            <div className="mb-4 min-w-0">
+              <h2 className="type-section-title">{selectedProfile?.name ?? "Profile"}</h2>
+              <p className="type-body mt-1 text-xs">Knowledge base · one library per profile</p>
+              {knowledgeBaseDirectory ? (
+                <p
+                  className="type-code mt-2 truncate text-muted-foreground"
+                  title={knowledgeBaseDirectory}
+                >
+                  {knowledgeBaseDirectory}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="rounded-md border border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {formatDocumentCount(documents.length)}
+                  {readyCount !== documents.length ? ` · ${readyCount} ready` : ""}
+                  {" · "}txt, md, csv, pdf · 5 MB max
+                </p>
+
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={KNOWLEDGE_BASE_ACCEPT}
+                    multiple
+                    className="hidden"
+                    onChange={(event) => void handleUpload(event.target.files)}
+                  />
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${document.filename}`}
-                    onClick={() => setDeleteTarget(document)}
-                    disabled={busy}
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!profileId || busy}
                   >
-                    <Trash2Icon className="size-4" />
+                    {uploadMutation.isPending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <UploadIcon className="size-4" />
+                    )}
+                    Upload
                   </Button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+              </div>
+
+              {documents.length === 0 ? (
+                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  No documents yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {documents.map((document) => (
+                    <li
+                      key={document.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <FileTextIcon
+                          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{document.filename}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(document.sizeBytes)} · {formatUploadedAt(document.uploadedAt)}
+                          </p>
+                          {document.status === "failed" && document.error ? (
+                            <p className="mt-1 text-xs text-destructive">{document.error}</p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-xs font-medium",
+                            document.status === "ready"
+                              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                              : "bg-destructive/10 text-destructive",
+                          )}
+                        >
+                          {document.status}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Delete ${document.filename}`}
+                          onClick={() => setDeleteTarget(document)}
+                          disabled={busy}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete document</DialogTitle>
             <DialogDescription>
-              Remove {deleteTarget?.filename} from this profile&apos;s knowledge base?
+              Remove {deleteTarget?.filename} from {selectedProfile?.name ?? "this profile"}?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -363,6 +418,55 @@ export function KnowledgeTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+function ScopeButton({
+  active,
+  title,
+  leading,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  leading?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-active={active || undefined}
+      className="scope-item"
+    >
+      <div className="flex items-center gap-3">
+        {leading}
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "truncate text-sm font-medium",
+              active ? "text-primary" : "text-foreground",
+            )}
+          >
+            {title}
+          </p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function PageState({ message }: { message: string }) {
+  return (
+    <div
+      className={cn(
+        sectionClass,
+        "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+      )}
+    >
+      <Spinner className="size-5" />
+      {message}
     </div>
   );
 }

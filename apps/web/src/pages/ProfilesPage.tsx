@@ -1328,11 +1328,11 @@ export function ProfilesPage() {
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="type-section-title">MCP servers</h3>
-                          <p className="type-body mt-1 text-xs">
-                            {detail.mcpServers.length === 0
-                              ? "No MCP servers assigned to this profile."
-                              : `${detail.mcpServers.length} assigned`}
-                          </p>
+                          {detail.mcpServers.length > 0 ? (
+                            <p className="type-body mt-1 text-xs">
+                              {detail.mcpServers.length} assigned
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
@@ -1355,15 +1355,10 @@ export function ProfilesPage() {
                       </div>
 
                       {allMcpServers.length === 0 ? (
-                        <p className="type-body text-xs">
-                          No MCP servers registered yet. Use Add MCP server to connect an HTTP or
-                          command-based server for this profile.
+                        <p className="type-body text-xs text-muted-foreground">
+                          Connect HTTP or command-based MCP servers.
                         </p>
-                      ) : detail.mcpServers.length === 0 ? (
-                        <p className="type-body text-xs">
-                          No MCP servers assigned. Add a new server or assign an existing one.
-                        </p>
-                      ) : (
+                      ) : detail.mcpServers.length === 0 ? null : (
                         <ul className="divide-y divide-border rounded-md border border-border">
                           {detail.mcpServers.map((server) => (
                             <li
@@ -1402,11 +1397,11 @@ export function ProfilesPage() {
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <h3 className="type-section-title">Skills</h3>
-                          <p className="type-body mt-1 text-xs">
-                            {detail.skills.length === 0
-                              ? "No workflow skills assigned to this profile."
-                              : `${detail.skills.length} assigned`}
-                          </p>
+                          {detail.skills.length > 0 ? (
+                            <p className="type-body mt-1 text-xs">
+                              {detail.skills.length} assigned
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
@@ -1430,16 +1425,12 @@ export function ProfilesPage() {
                       </div>
 
                       {allSkills.length === 0 ? (
-                        <p className="type-body text-xs">
-                          No skills discovered yet. Use Add skill to create one for this profile, or
-                          add folders with{" "}
-                          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> under{" "}
-                          <code className="rounded bg-muted px-1 py-0.5">~/.tinyclaw/agent/skills/</code>
-                          .
+                        <p className="type-body text-xs text-muted-foreground">
+                          Create one above, or add{" "}
+                          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> folders to{" "}
+                          <code className="rounded bg-muted px-1 py-0.5">agent/skills</code>.
                         </p>
-                      ) : detail.skills.length === 0 ? (
-                        null
-                      ) : (
+                      ) : detail.skills.length === 0 ? null : (
                         <ul className="divide-y divide-border rounded-md border border-border">
                           {detail.skills.map((skill) => (
                             <li
