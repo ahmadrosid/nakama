@@ -206,7 +206,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
-    this.profileService = new ProfileService(db, () => this.resolveWorkspaceThinkingDefaults());
+    this.profileService = new ProfileService(db);
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig,

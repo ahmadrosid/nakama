@@ -66,7 +66,6 @@ import { cn } from "@/lib/utils";
 import { fileToImageAttachment } from "@/lib/profile-images";
 import { formatError } from "@/lib/client";
 import {
-  effectiveProfileModelSelection,
   encodeModelSelection,
   extractModelId,
   groupModelsByProvider,
@@ -201,11 +200,6 @@ export function ProfilesPage() {
 
   const modelSelectionValue = useMemo(
     () => profileModelSelectionValue(editModel, providerModelGroups),
-    [editModel, providerModelGroups],
-  );
-
-  const effectiveModelSelection = useMemo(
-    () => effectiveProfileModelSelection(editModel, providerModelGroups),
     [editModel, providerModelGroups],
   );
 

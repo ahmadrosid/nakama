@@ -25,8 +25,6 @@ New custom profiles start with their own soul directory and only the builtin `cr
 | `name` | Human-friendly label shown in the UI |
 | `model` | Optional model selection for this profile |
 | `systemPrompt` | Base instructions stored in the database |
-| `thinkingEnabled` | Optional per-profile thinking override for the selected model |
-| `thinkingEffort` | Optional per-profile thinking effort for the selected model |
 | `isSuper` | Marks the profile as a super profile with elevated behavior |
 | `tools` | Builtin or custom tools the profile is allowed to use |
 | `mcpServers` | MCP servers available to the profile |
@@ -80,17 +78,13 @@ Supported soul files:
 
 If you want richer personality and clearer long-term behavior, use soul files. If you only need a quick setup, the stored `systemPrompt` may be enough.
 
-## Model and thinking
+## Model selection
 
-Each profile can optionally select a model and override that model's thinking behavior.
+Each profile can optionally select its own model.
 
 | Field | Meaning |
 |------|---------|
 | `model` | Uses a specific model for this profile instead of the workspace default |
-| `thinkingEnabled` | Turns the profile's thinking override on or off |
-| `thinkingEffort` | Sets the effort level for the profile when thinking is on |
-
-If a profile leaves them unset, TinyClaw falls back to the deployment defaults.
 
 ## Knowledge base and memory
 
@@ -120,7 +114,7 @@ Create separate profiles when you need different:
 - Safety or operating rules
 - Tool access
 - Knowledge bases
-- Models or thinking settings
+- Models
 
 ## Next steps
 

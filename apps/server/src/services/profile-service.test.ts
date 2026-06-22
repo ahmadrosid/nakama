@@ -153,35 +153,24 @@ describe("profile service createProfile", () => {
     expect(tools.map((tool) => tool.name)).toContain("create_skill");
   });
 
-  test("stores profile thinking overrides and resolves inherited defaults", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-thinking-"));
+  test("stores profile model selection", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-model-"));
     process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
 
-    const service = new ProfileService(createInMemoryDatabaseAdapter(), () => ({
-      enabled: false,
-      effort: "high",
-    }));
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
 
     const created = await service.createProfile({
-      name: "Thinking Bot",
-      thinkingEnabled: null,
-      thinkingEffort: null,
+      name: "Model Bot",
+      model: "openai:gpt-5",
     });
 
-    expect(created.profile.thinkingEnabled).toBeNull();
-    expect(created.profile.thinkingEffort).toBeNull();
-    expect(created.profile.effectiveThinkingEnabled).toBe(false);
-    expect(created.profile.effectiveThinkingEffort).toBe("high");
+    expect(created.profile.model).toBe("openai:gpt-5");
 
     const updated = await service.updateProfile(created.profile.id, {
-      thinkingEnabled: true,
-      thinkingEffort: "low",
+      model: "anthropic:claude-sonnet-4",
     });
 
-    expect(updated.profile.thinkingEnabled).toBe(true);
-    expect(updated.profile.thinkingEffort).toBe("low");
-    expect(updated.profile.effectiveThinkingEnabled).toBe(true);
-    expect(updated.profile.effectiveThinkingEffort).toBe("low");
+    expect(updated.profile.model).toBe("anthropic:claude-sonnet-4");
   });
 });
 
