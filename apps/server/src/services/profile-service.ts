@@ -21,8 +21,6 @@ import type {
   UploadKnowledgeBaseResponse,
 } from "@tinyclaw/core";
 import {
-  DEFAULT_THINKING_EFFORT,
-  DEFAULT_THINKING_ENABLED,
   createId,
   nanoid,
   deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
@@ -46,19 +44,8 @@ import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
-type ThinkingDefaults = {
-  enabled: boolean;
-  effort: ProfileSummary["effectiveThinkingEffort"];
-};
-
 export class ProfileService {
-  constructor(
-    private readonly db: DatabaseAdapter,
-    private readonly resolveThinkingDefaults: () => ThinkingDefaults = () => ({
-      enabled: DEFAULT_THINKING_ENABLED,
-      effort: DEFAULT_THINKING_EFFORT,
-    }),
-  ) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   async listProfiles(): Promise<ListProfilesResponse> {
     const profiles = await this.db.listProfiles();
@@ -93,8 +80,6 @@ export class ProfileService {
       name: request.name.trim(),
       systemPrompt: request.systemPrompt?.trim() ?? "You are a helpful personal assistant.",
       model: request.model ?? null,
-      thinkingEnabled: request.thinkingEnabled ?? null,
-      thinkingEffort: request.thinkingEnabled === null ? null : (request.thinkingEffort ?? null),
       isSuper: request.isSuper ?? false,
       createdAt: now,
       updatedAt: now,
@@ -123,16 +108,6 @@ export class ProfileService {
       name: request.name?.trim() ?? profile.name,
       systemPrompt: request.systemPrompt?.trim() ?? profile.systemPrompt,
       model: request.model === undefined ? profile.model : request.model,
-      thinkingEnabled:
-        request.thinkingEnabled === undefined
-          ? profile.thinkingEnabled ?? null
-          : request.thinkingEnabled,
-      thinkingEffort:
-        request.thinkingEnabled === null
-          ? null
-          : request.thinkingEffort === undefined
-            ? profile.thinkingEffort ?? null
-            : request.thinkingEffort,
       updatedAt: now,
     });
 
@@ -424,16 +399,11 @@ export class ProfileService {
     const tools = await this.db.listToolsForProfile(profile.id);
     const mcpServers = await this.db.listMcpServersForProfile(profile.id);
     const soulStack = await resolveSoulStackForProfile(profile.id);
-    const defaults = this.resolveThinkingDefaults();
 
     return {
       id: profile.id,
       name: profile.name,
       model: profile.model,
-      thinkingEnabled: profile.thinkingEnabled ?? null,
-      thinkingEffort: profile.thinkingEffort ?? null,
-      effectiveThinkingEnabled: profile.thinkingEnabled ?? defaults.enabled,
-      effectiveThinkingEffort: profile.thinkingEffort ?? defaults.effort,
       isSuper: profile.isSuper,
       toolCount: tools.length,
       mcpServerCount: mcpServers.length,

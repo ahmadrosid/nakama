@@ -1739,7 +1739,7 @@ export class AgentService {
         provider: null,
         providerInstance: null,
         modelId: null,
-        thinking: this.resolveProfileThinkingSettings(profile),
+        thinking: this.resolveWorkspaceThinkingDefaults(),
       });
     }
 
@@ -1755,7 +1755,7 @@ export class AgentService {
       provider: resolvedProvider,
       providerInstance: resolved.instance,
       modelId: resolved.model,
-      thinking: this.resolveProfileThinkingSettings(profile),
+      thinking: this.resolveWorkspaceThinkingDefaults(),
     });
   }
 
@@ -1791,14 +1791,6 @@ export class AgentService {
     };
   }
 
-  private resolveProfileThinkingSettings(profile: StoredProfileRecord): ThinkingSettings {
-    const defaults = this.resolveWorkspaceThinkingDefaults();
-
-    return {
-      enabled: profile.thinkingEnabled ?? defaults.enabled,
-      effort: profile.thinkingEffort ?? defaults.effort,
-    };
-  }
 }
 
 function parseAgentChannel(value: string): AgentChannel | null {

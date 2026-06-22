@@ -139,9 +139,7 @@ export function ChatPage() {
     return resolveModelVisionSupport(currentModelSelection, providerModelGroups);
   }, [currentModelSelection, providerModelGroups]);
 
-  const showThinking =
-    (activeProfile?.effectiveThinkingEnabled ?? true) &&
-    activeModelSupportsThinking !== false;
+  const showThinking = activeModelSupportsThinking !== false;
 
   const handleModelChange = useCallback(
     (selection: string) => {

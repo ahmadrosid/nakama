@@ -23,10 +23,10 @@ New custom profiles start with their own soul directory and only the builtin `cr
 |------|----------------|
 | `id` | Stable profile ID such as `default` or `super_bot` |
 | `name` | Human-friendly label shown in the UI |
-| `model` | Optional model override for this profile |
+| `model` | Optional model selection for this profile |
 | `systemPrompt` | Base instructions stored in the database |
-| `thinkingEnabled` | Whether this profile explicitly enables or disables thinking |
-| `thinkingEffort` | Optional thinking level such as low, medium, or high |
+| `thinkingEnabled` | Optional per-profile thinking override for the selected model |
+| `thinkingEffort` | Optional per-profile thinking effort for the selected model |
 | `isSuper` | Marks the profile as a super profile with elevated behavior |
 | `tools` | Builtin or custom tools the profile is allowed to use |
 | `mcpServers` | MCP servers available to the profile |
@@ -80,14 +80,15 @@ Supported soul files:
 
 If you want richer personality and clearer long-term behavior, use soul files. If you only need a quick setup, the stored `systemPrompt` may be enough.
 
-## Thinking settings
+## Model and thinking
 
-Each profile can override model thinking behavior.
+Each profile can optionally select a model and override that model's thinking behavior.
 
 | Field | Meaning |
 |------|---------|
-| `thinkingEnabled` | Turns profile-level thinking override on or off |
-| `thinkingEffort` | Sets the effort level when thinking is enabled |
+| `model` | Uses a specific model for this profile instead of the workspace default |
+| `thinkingEnabled` | Turns the profile's thinking override on or off |
+| `thinkingEffort` | Sets the effort level for the profile when thinking is on |
 
 If a profile leaves them unset, TinyClaw falls back to the deployment defaults.
 

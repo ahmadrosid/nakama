@@ -2,7 +2,6 @@ import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
   ProfileSummary,
-  ThinkingEffort,
 } from "@tinyclaw/core/contract";
 import {
   CameraIcon,
@@ -74,7 +73,6 @@ import {
   modelSelectContentMaxHeightClass,
   profileModelLabel,
   profileModelSelectionValue,
-  resolveModelThinkingSupport,
 } from "@/lib/models";
 
 const defaultCreatePrompt = "You are a helpful assistant.";
@@ -85,19 +83,14 @@ const profileTextSaveDelayMs = 1000;
 const profileModelSaveDelayMs = 400;
 
 type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
-type ThinkingMode = "inherit" | "off" | "on";
 
 type ProfileEditSnapshot = {
   editName: string;
   editPrompt: string;
   editModel: string | null;
-  editThinkingEnabled: boolean | null;
-  editThinkingEffort: ThinkingEffort | null;
   savedName: string;
   savedPrompt: string;
   savedModel: string | null;
-  savedThinkingEnabled: boolean | null;
-  savedThinkingEffort: ThinkingEffort | null;
 };
 
 function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
@@ -109,18 +102,8 @@ function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
   return (
     name !== snapshot.savedName ||
     snapshot.editPrompt !== snapshot.savedPrompt ||
-    snapshot.editModel !== snapshot.savedModel ||
-    snapshot.editThinkingEnabled !== snapshot.savedThinkingEnabled ||
-    snapshot.editThinkingEffort !== snapshot.savedThinkingEffort
+    snapshot.editModel !== snapshot.savedModel
   );
-}
-
-function thinkingModeFromValue(value: boolean | null | undefined): ThinkingMode {
-  if (value == null) {
-    return "inherit";
-  }
-
-  return value ? "on" : "off";
 }
 
 type RemoveAssignmentTarget =
@@ -181,13 +164,9 @@ export function ProfilesPage() {
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
-  const [editThinkingEnabled, setEditThinkingEnabled] = useState<boolean | null>(null);
-  const [editThinkingEffort, setEditThinkingEffort] = useState<ThinkingEffort | null>(null);
   const [savedName, setSavedName] = useState("");
   const [savedPrompt, setSavedPrompt] = useState("");
   const [savedModel, setSavedModel] = useState<string | null>(null);
-  const [savedThinkingEnabled, setSavedThinkingEnabled] = useState<boolean | null>(null);
-  const [savedThinkingEffort, setSavedThinkingEffort] = useState<ThinkingEffort | null>(null);
   const [saveStatus, setSaveStatus] = useState<ProfileSaveStatus>("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,13 +177,9 @@ export function ProfilesPage() {
     editName,
     editPrompt,
     editModel,
-    editThinkingEnabled,
-    editThinkingEffort,
     savedName,
     savedPrompt,
     savedModel,
-    savedThinkingEnabled,
-    savedThinkingEffort,
     selectedId,
     detail,
   });
@@ -212,13 +187,9 @@ export function ProfilesPage() {
     editName,
     editPrompt,
     editModel,
-    editThinkingEnabled,
-    editThinkingEffort,
     savedName,
     savedPrompt,
     savedModel,
-    savedThinkingEnabled,
-    savedThinkingEffort,
     selectedId,
     detail,
   };
@@ -238,11 +209,6 @@ export function ProfilesPage() {
     [editModel, providerModelGroups],
   );
 
-  const thinkingMode = useMemo(
-    () => thinkingModeFromValue(editThinkingEnabled),
-    [editThinkingEnabled],
-  );
-
   const modelInCatalog = useMemo(() => {
     const resolvedModelId = extractModelId(editModel);
 
@@ -254,13 +220,6 @@ export function ProfilesPage() {
       group.models.some((model) => model.id === resolvedModelId),
     );
   }, [editModel, providerModelGroups]);
-
-  const thinkingSupported = useMemo(
-    () => resolveModelThinkingSupport(effectiveModelSelection, providerModelGroups) !== false,
-    [effectiveModelSelection, providerModelGroups],
-  );
-  const effectiveThinkingEffort =
-    editThinkingEffort ?? detail?.effectiveThinkingEffort ?? "medium";
 
   const busy =
     createMutation.isPending ||
@@ -289,22 +248,16 @@ export function ProfilesPage() {
     return (
       editName.trim() !== savedName ||
       editPrompt !== savedPrompt ||
-      editModel !== savedModel ||
-      editThinkingEnabled !== savedThinkingEnabled ||
-      editThinkingEffort !== savedThinkingEffort
+      editModel !== savedModel
     );
   }, [
     detail,
     editName,
     editPrompt,
     editModel,
-    editThinkingEnabled,
-    editThinkingEffort,
     savedName,
     savedPrompt,
     savedModel,
-    savedThinkingEnabled,
-    savedThinkingEffort,
   ]);
 
   const clearScheduledSave = useCallback(() => {
@@ -354,13 +307,9 @@ export function ProfilesPage() {
       editName: nameDraft,
       editPrompt: promptDraft,
       editModel: modelDraft,
-      editThinkingEnabled: thinkingEnabledDraft,
-      editThinkingEffort: thinkingEffortDraft,
       savedName: baselineName,
       savedPrompt: baselinePrompt,
       savedModel: baselineModel,
-      savedThinkingEnabled: baselineThinkingEnabled,
-      savedThinkingEffort: baselineThinkingEffort,
       selectedId: profileId,
       detail: profileDetail,
     } = editStateRef.current;
@@ -377,9 +326,7 @@ export function ProfilesPage() {
     if (
       name === baselineName &&
       promptDraft === baselinePrompt &&
-      modelDraft === baselineModel &&
-      thinkingEnabledDraft === baselineThinkingEnabled &&
-      thinkingEffortDraft === baselineThinkingEffort
+      modelDraft === baselineModel
     ) {
       setSaveStatus("idle");
       return true;
@@ -398,22 +345,16 @@ export function ProfilesPage() {
           name,
           systemPrompt: promptDraft,
           model: modelDraft,
-          thinkingEnabled: thinkingEnabledDraft,
-          thinkingEffort: thinkingEffortDraft,
         },
       });
       setSavedName(name);
       setSavedPrompt(promptDraft);
       setSavedModel(modelDraft);
-      setSavedThinkingEnabled(thinkingEnabledDraft);
-      setSavedThinkingEffort(thinkingEffortDraft);
       editStateRef.current = {
         ...editStateRef.current,
         savedName: name,
         savedPrompt: promptDraft,
         savedModel: modelDraft,
-        savedThinkingEnabled: thinkingEnabledDraft,
-        savedThinkingEffort: thinkingEffortDraft,
       };
       setSaveStatus("saved");
       savedSuccessfully = true;
@@ -480,34 +421,6 @@ export function ProfilesPage() {
     [scheduleSave],
   );
 
-  const handleEditThinkingModeChange = useCallback(
-    (mode: ThinkingMode) => {
-      const nextEnabled = mode === "inherit" ? null : mode === "on";
-      const nextEffort =
-        mode === "inherit"
-          ? null
-          : editStateRef.current.editThinkingEffort ??
-            detail?.effectiveThinkingEffort ??
-            "medium";
-
-      setEditThinkingEnabled(nextEnabled);
-      setEditThinkingEffort(nextEffort);
-      editStateRef.current.editThinkingEnabled = nextEnabled;
-      editStateRef.current.editThinkingEffort = nextEffort;
-      scheduleSave(profileModelSaveDelayMs);
-    },
-    [detail?.effectiveThinkingEffort, scheduleSave],
-  );
-
-  const handleEditThinkingEffortChange = useCallback(
-    (effort: ThinkingEffort) => {
-      setEditThinkingEffort(effort);
-      editStateRef.current.editThinkingEffort = effort;
-      scheduleSave(profileModelSaveDelayMs);
-    },
-    [scheduleSave],
-  );
-
   const setSelectedId = useCallback(
     (nextProfileId: string | null) => {
       setSelectedIdState(nextProfileId);
@@ -568,25 +481,17 @@ export function ProfilesPage() {
     setEditName(detail.name);
     setEditPrompt(detail.systemPrompt);
     setEditModel(detail.model);
-    setEditThinkingEnabled(detail.thinkingEnabled);
-    setEditThinkingEffort(detail.thinkingEffort);
     setSavedName(detail.name);
     setSavedPrompt(detail.systemPrompt);
     setSavedModel(detail.model);
-    setSavedThinkingEnabled(detail.thinkingEnabled);
-    setSavedThinkingEffort(detail.thinkingEffort);
     editStateRef.current = {
       ...editStateRef.current,
       editName: detail.name,
       editPrompt: detail.systemPrompt,
       editModel: detail.model,
-      editThinkingEnabled: detail.thinkingEnabled,
-      editThinkingEffort: detail.thinkingEffort,
       savedName: detail.name,
       savedPrompt: detail.systemPrompt,
       savedModel: detail.model,
-      savedThinkingEnabled: detail.thinkingEnabled,
-      savedThinkingEffort: detail.thinkingEffort,
       detail,
     };
     setSaveStatus("idle");
@@ -647,20 +552,14 @@ export function ProfilesPage() {
       editName: nameDraft,
       editPrompt: promptDraft,
       editModel: modelDraft,
-      editThinkingEnabled: thinkingEnabledDraft,
-      editThinkingEffort: thinkingEffortDraft,
       savedName: baselineName,
       savedPrompt: baselinePrompt,
       savedModel: baselineModel,
-      savedThinkingEnabled: baselineThinkingEnabled,
-      savedThinkingEffort: baselineThinkingEffort,
     } = editStateRef.current;
     const hasPendingEdits =
       nameDraft.trim() !== baselineName ||
       promptDraft !== baselinePrompt ||
-      modelDraft !== baselineModel ||
-      thinkingEnabledDraft !== baselineThinkingEnabled ||
-      thinkingEffortDraft !== baselineThinkingEffort;
+      modelDraft !== baselineModel;
 
     if (hasPendingEdits && nameDraft.trim()) {
       const saved = await performSave();
@@ -1221,51 +1120,6 @@ export function ProfilesPage() {
                             )}
                           </SelectContent>
                         </Select>
-                      </Field>
-                      <Field label="Extended thinking" htmlFor="profile-thinking-mode">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Select
-                              value={thinkingMode}
-                              disabled={busy || !thinkingSupported}
-                              onValueChange={(value) =>
-                                handleEditThinkingModeChange(value as ThinkingMode)
-                              }
-                            >
-                              <SelectTrigger id="profile-thinking-mode" className="w-[12rem]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="inherit">
-                                  Inherit ({detail?.effectiveThinkingEnabled ? "On" : "Off"})
-                                </SelectItem>
-                                <SelectItem value="off">Off</SelectItem>
-                                <SelectItem value="on">On</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={effectiveThinkingEffort}
-                              disabled={busy || !thinkingSupported || thinkingMode !== "on"}
-                              onValueChange={(value) =>
-                                handleEditThinkingEffortChange(value as ThinkingEffort)
-                              }
-                            >
-                              <SelectTrigger className="w-28">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {thinkingSupported
-                              ? "Show reasoning in chat. Higher effort uses more tokens."
-                              : "Not supported for custom providers."}
-                          </p>
-                        </div>
                       </Field>
                     </div>
                   </div>
