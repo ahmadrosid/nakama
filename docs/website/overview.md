@@ -92,3 +92,4 @@ It is less about writing prompts manually and more about operating a small agent
 - [Multi-tenancy](/multi-tenancy) — org model, members, and roles
 - [Profiles](/profiles) — how each bot is defined
 - [Builtin tools](/builtin-tools) — what profiles can do
+- [MCP servers](/mcp) — extend profiles with external tools

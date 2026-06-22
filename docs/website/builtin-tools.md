@@ -233,5 +233,6 @@ All nine builtin tool IDs are protected and cannot be deleted from the dashboard
 
 ## Next steps
 
+- [MCP servers](/mcp) — extend a profile with external tools via the Model Context Protocol
 - [Profiles](/profiles) — how to design each bot
 - [Multi-tenancy](/multi-tenancy) — who can assign tools and manage access

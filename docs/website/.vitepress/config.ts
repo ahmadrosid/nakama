@@ -20,6 +20,7 @@ export default withMermaid(
             { text: 'Multi-tenancy', link: '/multi-tenancy' },
             { text: 'Profiles', link: '/profiles' },
             { text: 'Builtin tools', link: '/builtin-tools' },
+            { text: 'MCP servers', link: '/mcp' },
           ],
         },
       ],

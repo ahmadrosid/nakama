@@ -119,4 +119,5 @@ Create separate profiles when you need different:
 ## Next steps
 
 - [Builtin tools](/builtin-tools) — what each profile can do
+- [MCP servers](/mcp) — extend a profile with external tools
 - [Multi-tenancy](/multi-tenancy) — who can manage profiles and members

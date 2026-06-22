@@ -86,3 +86,4 @@ Enable Telegram or WhatsApp from the web app settings when you are ready.
 - [Multi-tenancy](/multi-tenancy) — how orgs, members, and roles work
 - [Profiles](/profiles) — how to define each bot
 - [Builtin tools](/builtin-tools) — what bots can do
+- [MCP servers](/mcp) — extend bots with external tools
