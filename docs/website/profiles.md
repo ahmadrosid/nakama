@@ -4,35 +4,39 @@ A **profile** is the bot definition TinyClaw runs for a session.
 
 It answers one practical question: **which bot should respond, and how should it behave?**
 
+## Fresh install defaults
+
+On a fresh installation, TinyClaw creates **two profiles by default**:
+
+| Profile | Purpose | Default access |
+|---------|---------|----------------|
+| `super_bot` | Built-in admin-style bot | Highest permissions, including super-bot-only capabilities |
+| `default` | Normal starter bot | General seeded tool set for everyday use |
+
+### New custom profiles
+
+New custom profiles start with their own soul directory and only the builtin `create_skill` tool. Platform admins can assign more tools, MCP servers, and skills later.
+
 ## What a profile contains
 
-Each profile combines:
-
-- A **name**
-- An optional **model override**
-- Optional **thinking settings**
-- A base **system prompt**
-- A **soul** file stack
-- Assigned **tools**
-- Assigned **MCP servers**
-- Assigned **skills**
-- Optional **avatar**
-- Optional **knowledge base** documents
-
-In practice, a profile is where you shape one bot for one job.
+| Field | What it means |
+|------|----------------|
+| `id` | Stable profile ID such as `default` or `super_bot` |
+| `name` | Human-friendly label shown in the UI |
+| `model` | Optional model override for this profile |
+| `systemPrompt` | Base instructions stored in the database |
+| `thinkingEnabled` | Whether this profile explicitly enables or disables thinking |
+| `thinkingEffort` | Optional thinking level such as low, medium, or high |
+| `isSuper` | Marks the profile as a super profile with elevated behavior |
+| `tools` | Builtin or custom tools the profile is allowed to use |
+| `mcpServers` | MCP servers available to the profile |
+| `skills` | Reusable instructions assigned to the profile |
+| `hasAvatar` | Whether the profile has a custom avatar |
+| `soulActive` | Whether soul files are present and active |
 
 ## What a good profile usually represents
 
-In most setups, one profile maps to one clear purpose.
-
-Examples:
-
-- Customer support bot
-- Research assistant
-- Internal operations bot
-- Brand voice writing bot
-
-If one bot needs a different role, tone, tool access, or knowledge base, create another profile.
+One profile should map to one clear purpose. Create another profile when you need different instructions, tools, tone, or knowledge.
 
 ## How profiles affect replies
 
@@ -53,8 +57,10 @@ So a profile is not just a name. It controls both:
 
 Profiles support two layers of instruction:
 
-- **`systemPrompt`**: quick base instructions stored in the database
-- **Soul files**: richer identity files on disk
+| Layer | Best for |
+|------|----------|
+| `systemPrompt` | Quick base instructions stored in the database |
+| Soul files | Richer identity, style, operating rules, and memory on disk |
 
 Soul files live under:
 
@@ -64,31 +70,24 @@ Soul files live under:
 
 Supported soul files:
 
-- `SOUL.md` for identity
-- `STYLE.md` for writing voice
-- `INSTRUCTIONS.md` for operating rules
-- `MEMORY.md` for continuity across sessions
-- `examples/*.md` for calibration examples
+| File | Purpose |
+|------|---------|
+| `SOUL.md` | Identity |
+| `STYLE.md` | Writing voice |
+| `INSTRUCTIONS.md` | Operating rules |
+| `MEMORY.md` | Continuity across sessions |
+| `examples/*.md` | Calibration examples |
 
 If you want richer personality and clearer long-term behavior, use soul files. If you only need a quick setup, the stored `systemPrompt` may be enough.
 
-## Default behavior
-
-System profiles such as `default` and `super_bot` are seeded by the app.
-
-New custom profiles start with:
-
-- Their own soul directory
-- Only the builtin `create_skill` tool assigned by default
-
-Platform admins can then assign more tools, MCP servers, and skills to make the bot more capable.
-
 ## Thinking settings
 
-Each profile can override model thinking behavior:
+Each profile can override model thinking behavior.
 
-- `thinkingEnabled`
-- `thinkingEffort`
+| Field | Meaning |
+|------|---------|
+| `thinkingEnabled` | Turns profile-level thinking override on or off |
+| `thinkingEffort` | Sets the effort level when thinking is enabled |
 
 If a profile leaves them unset, TinyClaw falls back to the deployment defaults.
 
@@ -99,7 +98,7 @@ Profiles keep their own context on disk:
 - **Knowledge base** documents for searchable reference material
 - **`MEMORY.md`** for facts and continuity saved by the agent
 
-This matters because one profile's knowledge and memory do not automatically carry into another profile.
+This data does not carry across profiles.
 
 ## Multi-tenant behavior
 
@@ -110,7 +109,7 @@ Profiles are tenant-owned data inside an organization. In practice:
 - Tool access is scoped per profile
 - Profile admin actions are platform-admin only
 
-Org admins manage org members, but they do not create or change profiles.
+Org admins manage members, not profiles.
 
 ## When to create multiple profiles
 
@@ -121,13 +120,6 @@ Create separate profiles when you need different:
 - Tool access
 - Knowledge bases
 - Models or thinking settings
-
-Examples:
-
-- A general support bot
-- A research bot with web search and knowledge base access
-- A private internal ops bot with email and file tools
-- A brand voice bot with strict style files
 
 ## Next steps
 
