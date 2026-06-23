@@ -278,8 +278,12 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.get("/v1/tasks/:taskId/messages", async (c) => {
-    const orgId = requireActiveOrgIdFromContext(c);
     const taskId = decodeURIComponent(c.req.param("taskId"));
+    if (taskId === "__capability_probe__") {
+      return errorResponse("Task not found.", 404);
+    }
+
+    const orgId = requireActiveOrgIdFromContext(c);
     const result = await agent.getTaskChatMessages(taskId, orgId);
     if (!result) {
       return errorResponse("Task not found.", 404);

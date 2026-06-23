@@ -294,6 +294,19 @@ describe("createHonoApp", () => {
     });
   });
 
+  test("serves task chat capability probe without auth", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/tasks/__capability_probe__/messages"),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "Task not found.",
+    });
+  });
+
   test("preserves auth-protected behavior through the Hono shell", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

@@ -298,6 +298,40 @@ const TENANT_ORG_ID_TABLES = [
   "workspace_settings",
 ] as const;
 
+type TenantOrgIdTable = (typeof TENANT_ORG_ID_TABLES)[number];
+
+const TENANT_ORG_ID_TABLE_SET = new Set<string>(TENANT_ORG_ID_TABLES);
+
+const PROFILE_JOIN_TABLE_COLUMNS = {
+  profile_tools: "tool_id",
+  profile_mcp_servers: "server_id",
+  profile_skills: "skill_id",
+} as const;
+
+type ProfileJoinTable = keyof typeof PROFILE_JOIN_TABLE_COLUMNS;
+
+function quoteSqliteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll(`"`, `""`)}"`;
+}
+
+function assertTenantOrgIdTable(tableName: string): asserts tableName is TenantOrgIdTable {
+  if (!TENANT_ORG_ID_TABLE_SET.has(tableName)) {
+    throw new Error(`Unsupported tenant org table: ${tableName}`);
+  }
+}
+
+function assertProfileJoinTarget(
+  tableName: string,
+  relatedColumn: string,
+): asserts tableName is ProfileJoinTable & string {
+  if (
+    !(tableName in PROFILE_JOIN_TABLE_COLUMNS) ||
+    PROFILE_JOIN_TABLE_COLUMNS[tableName as ProfileJoinTable] !== relatedColumn
+  ) {
+    throw new Error(`Unsupported profile join target: ${tableName}.${relatedColumn}`);
+  }
+}
+
 function migrateTenantOrgScope(db: Database): void {
   for (const tableName of TENANT_ORG_ID_TABLES) {
     addOrgIdColumnIfMissing(db, tableName);
@@ -394,9 +428,11 @@ function migrateProfileOrgColumns(db: Database): void {
   `).run();
 }
 
-function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
+export function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
+  assertTenantOrgIdTable(tableName);
+  const quotedTableName = quoteSqliteIdentifier(tableName);
   const columns = db
-    .prepare(`PRAGMA table_info(${tableName})`)
+    .prepare(`PRAGMA table_info(${quotedTableName})`)
     .all() as Array<{ name: string }>;
 
   if (columns.length === 0) {
@@ -407,7 +443,7 @@ function addOrgIdColumnIfMissing(db: Database, tableName: string): void {
 
   if (!columnNames.has("org_id")) {
     // ponytail: nullable for legacy rows — no default-org backfill (see plan R13); NOT NULL enforced at adapter layer in T3+
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN org_id TEXT;`);
+    db.exec(`ALTER TABLE ${quotedTableName} ADD COLUMN org_id TEXT;`);
   }
 }
 
@@ -526,21 +562,24 @@ function moveProfileReferences(db: Database, legacyId: string, canonicalId: stri
   moveProfileJoinReferences(db, "profile_skills", "skill_id", legacyId, canonicalId);
 }
 
-function moveProfileJoinReferences(
+export function moveProfileJoinReferences(
   db: Database,
   tableName: "profile_tools" | "profile_mcp_servers" | "profile_skills",
   relatedColumn: "tool_id" | "server_id" | "skill_id",
   legacyId: string,
   canonicalId: string,
 ): void {
+  assertProfileJoinTarget(tableName, relatedColumn);
+  const quotedTableName = quoteSqliteIdentifier(tableName);
+  const quotedRelatedColumn = quoteSqliteIdentifier(relatedColumn);
   db.prepare(`
-    INSERT OR IGNORE INTO ${tableName} (profile_id, ${relatedColumn})
-    SELECT ?, ${relatedColumn}
-    FROM ${tableName}
+    INSERT OR IGNORE INTO ${quotedTableName} (profile_id, ${quotedRelatedColumn})
+    SELECT ?, ${quotedRelatedColumn}
+    FROM ${quotedTableName}
     WHERE profile_id = ?
   `).run(canonicalId, legacyId);
 
-  db.prepare(`DELETE FROM ${tableName} WHERE profile_id = ?`).run(legacyId);
+  db.prepare(`DELETE FROM ${quotedTableName} WHERE profile_id = ?`).run(legacyId);
 }
 
 function migrateSessionsTable(db: Database): void {

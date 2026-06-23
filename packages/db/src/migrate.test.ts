@@ -1,8 +1,14 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { existsSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { migrateDatabase, resolveSchemaPath } from "./migrate";
+import {
+  addOrgIdColumnIfMissing,
+  migrateDatabase,
+  moveProfileJoinReferences,
+  resolveSchemaPath,
+} from "./migrate";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -433,6 +439,56 @@ describe("organization schema migration", () => {
 
       const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
       expect(fkCheck).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("migration SQL hardening", () => {
+  test("rejects unexpected tenant table names before SQLite can run injected ATTACH statements", () => {
+    const db = new Database(":memory:");
+    const attachPath = "/tmp/tinyclaw-migrate-attach-test.sqlite";
+
+    rmSync(attachPath, { force: true });
+
+    try {
+      db.exec("CREATE TABLE profiles (id TEXT PRIMARY KEY NOT NULL);");
+
+      expect(() =>
+        addOrgIdColumnIfMissing(
+          db,
+          `profiles ADD COLUMN hacked TEXT; ATTACH DATABASE '${attachPath}' AS injected; --`,
+        ),
+      ).toThrow("Unsupported tenant org table");
+      expect(existsSync(attachPath)).toBe(false);
+    } finally {
+      rmSync(attachPath, { force: true });
+      db.close();
+    }
+  });
+
+  test("rejects unexpected profile join targets before building dynamic SQL", () => {
+    const db = new Database(":memory:");
+
+    try {
+      db.exec(`
+        CREATE TABLE profile_tools (
+          profile_id TEXT NOT NULL,
+          tool_id TEXT NOT NULL,
+          PRIMARY KEY (profile_id, tool_id)
+        );
+      `);
+
+      expect(() =>
+        moveProfileJoinReferences(
+          db,
+          "profile_tools",
+          "tool_id; ATTACH DATABASE '/tmp/ignored.sqlite' AS injected; --" as "tool_id",
+          "legacy",
+          "canonical",
+        ),
+      ).toThrow("Unsupported profile join target");
     } finally {
       db.close();
     }
