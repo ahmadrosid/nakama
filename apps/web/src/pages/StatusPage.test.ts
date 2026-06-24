@@ -1,12 +1,33 @@
+import type { SystemStatusResponse } from "@tinyclaw/core/contract";
 import { describe, expect, test } from "bun:test";
 import { buildServiceColumns, deriveSummary } from "./StatusPage";
 
-const healthyStatus = {
+const healthyStatus: SystemStatusResponse = {
   checkedAt: "2026-06-22T10:00:00.000Z",
-  server: { ok: true, providerConfigured: true },
-  automationWorker: { ok: true, providerConfigured: true, scheduledJobs: 1, activeRuns: 0 },
-  telegramWorker: { configured: true, running: true, paired: true, process: null },
-  whatsappWorker: { configured: true, running: true, paired: true, process: null },
+  server: {
+    ok: true,
+    apiVersion: 1,
+    providerConfigured: true,
+    userConfigured: true,
+  },
+  automationWorker: {
+    ok: true,
+    running: true,
+    providerConfigured: true,
+    scheduledJobs: 1,
+    activeRuns: 0,
+  },
+  taskWorker: { ok: true, activeRuns: 0, providerConfigured: true },
+  telegramWorker: { ok: true, configured: true, running: true, paired: true },
+  whatsappWorker: {
+    ok: true,
+    configured: true,
+    running: true,
+    paired: true,
+    connected: true,
+    qrCode: null,
+  },
+  mcp: { serverCount: 0, connectedCount: 0, assignedProfileCount: 0 },
   llmUsage: {
     providerConfigured: true,
     provider: "openai",
@@ -20,7 +41,7 @@ const healthyStatus = {
     totalTokens: 0,
     trackedSince: "2026-06-22T10:00:00.000Z",
   },
-} as const;
+};
 
 describe("StatusPage helpers", () => {
   test("summarizes the overall system state", () => {
