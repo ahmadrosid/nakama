@@ -41,13 +41,13 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         id: "chat",
-        label: "Chat",
-        description: "Talk to the agent with streaming replies",
+        label: "New chat",
+        description: "New chat",
       },
       {
         id: "history",
-        label: "History",
-        description: "Browse and reopen saved chat sessions",
+        label: "Chats",
+        description: "Browse and reopen saved chats",
       },
     ],
   },
