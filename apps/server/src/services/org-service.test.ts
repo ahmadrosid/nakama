@@ -314,11 +314,13 @@ describe("OrgService", () => {
       "viewer@acme.com",
     ]);
 
-    const updated = await orgService.updateMemberRole(
-      created.organization.id,
-      added.member.userId,
-      "member",
-    );
+    const updated = await orgService.updateMember(created.organization.id, added.member.userId, {
+      name: "Viewer Prime",
+      phone: "+628222333444",
+      role: "member",
+    });
+    expect(updated.member.name).toBe("Viewer Prime");
+    expect(updated.member.phone).toBe("+628222333444");
     expect(updated.member.role).toBe("member");
 
     await orgService.removeMember(created.organization.id, added.member.userId);
@@ -361,7 +363,7 @@ describe("OrgService", () => {
     });
 
     await expect(
-      orgService.updateMemberRole(created.organization.id, localClientUserId!, "member"),
+      orgService.updateMember(created.organization.id, localClientUserId!, { role: "member" }),
     ).rejects.toMatchObject({
       status: 409,
       message: "Cannot change role of the last org admin.",

@@ -240,6 +240,11 @@ export interface DatabaseAdapter {
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   createUser(record: StoredUserRecord): Promise<void>;
+  updateUserProfile(
+    id: string,
+    profile: { name: string | null; phone: string | null },
+    updatedAt: string,
+  ): Promise<void>;
   updateUserPassword(id: string, passwordHash: string, updatedAt: string): Promise<void>;
   getUserContext(userId: string): Promise<string | null>;
   setUserContext(userId: string, content: string, updatedAt: string): Promise<void>;

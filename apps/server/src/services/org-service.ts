@@ -13,6 +13,7 @@ import type {
   AcceptOrgInviteRequest,
   AuthUserResponse,
   ListUserOrgsResponse,
+  UpdateOrgMemberRequest,
   UserOrgSummary,
 } from "@tinyclaw/core/contract";
 import {
@@ -350,15 +351,33 @@ export class OrgService {
     }
   }
 
-  async updateMemberRole(orgId: string, userId: string, role: OrgRole): Promise<OrgMemberResponse> {
-    if (!ORG_ROLES.includes(role)) {
+  async updateMember(
+    orgId: string,
+    userId: string,
+    input: UpdateOrgMemberRequest,
+  ): Promise<OrgMemberResponse> {
+    const nextRole = input.role;
+    if (nextRole !== undefined && !ORG_ROLES.includes(nextRole)) {
       throw new TinyClawApiError("Invalid org role.", 400);
     }
 
-    const member = await this.assertCanChangeAdminMembership(orgId, userId, role);
+    const member = await this.assertCanChangeAdminMembership(orgId, userId, nextRole);
     const user = await this.databaseAdapter.getUserById(userId);
     if (!user) {
       throw new TinyClawApiError("Not found", 404);
+    }
+
+    const now = new Date().toISOString();
+    const name = input.name !== undefined ? normalizeOptionalName(input.name) : (user.name ?? null);
+    const phone = input.phone !== undefined ? normalizeOptionalPhone(input.phone) : (user.phone ?? null);
+    const role = nextRole ?? member.role;
+
+    if (user.name !== name || user.phone !== phone) {
+      await this.databaseAdapter.updateUserProfile(
+        userId,
+        { name, phone },
+        now,
+      );
     }
 
     if (member.role !== role) {
@@ -370,7 +389,13 @@ export class OrgService {
       });
     }
 
-    return { member: toOrgMemberSummary(user, role, member.createdAt) };
+    return {
+      member: toOrgMemberSummary(
+        { ...user, name, phone, updatedAt: now },
+        role,
+        member.createdAt,
+      ),
+    };
   }
 
   async createInvite(input: {
@@ -621,6 +646,11 @@ function normalizeOptionalPhone(phone: string): string | null {
   }
 
   return trimmed;
+}
+
+function normalizeOptionalName(name: string | null): string | null {
+  const trimmed = name?.trim() ?? "";
+  return trimmed || null;
 }
 
 function generateInviteToken(): string {

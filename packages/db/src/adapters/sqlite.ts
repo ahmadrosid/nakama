@@ -571,6 +571,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const updateUserProfileStmt = db.prepare(`
+    UPDATE users
+    SET name = ?, phone = ?, updated_at = ?
+    WHERE id = ?
+  `);
   const updateUserPasswordStmt = db.prepare(`
     UPDATE users
     SET password_hash = ?, updated_at = ?
@@ -731,6 +736,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.updatedAt,
       );
+    },
+
+    async updateUserProfile(id, profile, updatedAt) {
+      updateUserProfileStmt.run(profile.name, profile.phone, updatedAt, id);
     },
 
     async updateUserPassword(id, passwordHash, updatedAt) {

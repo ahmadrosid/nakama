@@ -6,9 +6,7 @@ import type {
   ListOrgMembersResponse,
   OrgInviteCreatedResponse,
   OrgMemberResponse,
-  OrganizationResponse,
-  UpdateOrgMemberRoleRequest,
-  UpdateOrganizationRequest,
+  UpdateOrgMemberRequest,
 } from "@tinyclaw/core/contract";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
@@ -42,11 +40,13 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
     .passthrough()
     .openapi("ListOrgMembersResponse");
   const orgMemberResponseSchema = z.object({}).passthrough().openapi("OrgMemberResponse");
-  const updateOrgMemberRoleSchema = z
+  const updateOrgMemberSchema = z
     .object({
-      role: z.enum(["admin", "member", "viewer"]),
+      name: z.string().nullable().optional(),
+      phone: z.string().nullable().optional(),
+      role: z.enum(["admin", "member", "viewer"]).optional(),
     })
-    .openapi("UpdateOrgMemberRoleRequest");
+    .openapi("UpdateOrgMemberRequest");
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { name: "userId", in: "path" } }),
   });
@@ -194,13 +194,13 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
       method: "patch",
       path: "/v1/orgs/{orgId}/members/{userId}",
       tags: ["Organizations"],
-      summary: "Change a member role",
-      operationId: "updateOrgMemberRole",
+      summary: "Update a member profile or role",
+      operationId: "updateOrgMember",
       request: {
         params: orgMemberParams,
         body: {
           required: true,
-          content: { "application/json": { schema: updateOrgMemberRoleSchema } },
+          content: { "application/json": { schema: updateOrgMemberSchema } },
         },
       },
       responses: {
@@ -230,8 +230,8 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<UpdateOrgMemberRoleRequest>(c.req.raw);
-    const member = await orgService.updateMemberRole(orgId, userId, body.role);
+    const body = await readJson<UpdateOrgMemberRequest>(c.req.raw);
+    const member = await orgService.updateMember(orgId, userId, body);
     return json<OrgMemberResponse>(member);
   });
 

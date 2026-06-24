@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { OrgRole } from "@tinyclaw/core/contract";
-import { CopyIcon, PlusIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import type { OrgMemberSummary, OrgRole } from "@tinyclaw/core/contract";
+import { CopyIcon, PencilIcon, PlusIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -25,7 +25,7 @@ import {
   useInviteOrgMember,
   useOrgMembers,
   useRemoveOrgMember,
-  useUpdateOrgMemberRole,
+  useUpdateOrgMember,
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
 
@@ -77,17 +77,22 @@ export function OrgMembersCard() {
   );
   const inviteMutation = useInviteOrgMember(orgId ?? "");
   const addMutation = useAddOrgMember(orgId ?? "");
-  const updateRoleMutation = useUpdateOrgMemberRole(orgId ?? "");
+  const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
   const removeMutation = useRemoveOrgMember(orgId ?? "");
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<OrgMemberSummary | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("member");
   const [addName, setAddName] = useState("");
   const [addEmail, setAddEmail] = useState("");
   const [addPhone, setAddPhone] = useState("");
   const [addRole, setAddRole] = useState<OrgRole>("member");
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editRole, setEditRole] = useState<OrgRole>("member");
   const [formError, setFormError] = useState<string | null>(null);
   const [secretHint, setSecretHint] = useState<string | null>(null);
   const [secretValue, setSecretValue] = useState<string | null>(null);
@@ -109,6 +114,14 @@ export function OrgMembersCard() {
     setAddEmail("");
     setAddPhone("");
     setAddRole("member");
+    setFormError(null);
+  }
+
+  function resetEditForm() {
+    setEditingMember(null);
+    setEditName("");
+    setEditPhone("");
+    setEditRole("member");
     setFormError(null);
   }
 
@@ -176,9 +189,44 @@ export function OrgMembersCard() {
   }
 
   function handleRoleChange(userId: string, role: OrgRole) {
-    updateRoleMutation.mutate(
-      { userId, role },
+    updateMemberMutation.mutate(
+      { userId, request: { role } },
       { onError: (err) => setFormError(formatError(err)) },
+    );
+  }
+
+  function openEditDialog(member: OrgMemberSummary) {
+    setEditingMember(member);
+    setEditName(member.name ?? "");
+    setEditPhone(member.phone ?? "");
+    setEditRole(member.role);
+    setFormError(null);
+    setEditOpen(true);
+  }
+
+  function handleEditSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingMember) {
+      return;
+    }
+
+    setFormError(null);
+    updateMemberMutation.mutate(
+      {
+        userId: editingMember.userId,
+        request: {
+          name: editName,
+          phone: editPhone,
+          role: editRole,
+        },
+      },
+      {
+        onSuccess: () => {
+          setEditOpen(false);
+          resetEditForm();
+        },
+        onError: (err) => setFormError(formatError(err)),
+      },
     );
   }
 
@@ -309,22 +357,35 @@ export function OrgMembersCard() {
                           <td className="px-3 py-2">
                             <RoleSelect
                               value={member.role}
-                              disabled={updateRoleMutation.isPending}
+                              disabled={updateMemberMutation.isPending}
                               onChange={(role) => handleRoleChange(member.userId, role)}
                             />
                           </td>
-                          <td className="px-3 py-2 text-right">
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              className="text-muted-foreground hover:text-destructive"
-                              aria-label={`Remove ${displayName}`}
-                              disabled={removeMutation.isPending}
-                              onClick={() => handleRemove(member.userId, member.email)}
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </Button>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                className="text-muted-foreground"
+                                aria-label={`Edit ${displayName}`}
+                                disabled={updateMemberMutation.isPending}
+                                onClick={() => openEditDialog(member)}
+                              >
+                                <PencilIcon className="size-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                className="text-muted-foreground hover:text-destructive"
+                                aria-label={`Remove ${displayName}`}
+                                disabled={removeMutation.isPending}
+                                onClick={() => handleRemove(member.userId, member.email)}
+                              >
+                                <Trash2Icon className="size-3.5" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -453,6 +514,72 @@ export function OrgMembersCard() {
             <DialogFooter>
               <Button type="submit" disabled={addMutation.isPending}>
                 {addMutation.isPending ? "Adding…" : "Add member"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            resetEditForm();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit member</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="edit-name" className="mb-1 block text-sm font-medium">
+                Name
+              </label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-email" className="mb-1 block text-sm font-medium">
+                Email
+              </label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editingMember?.email ?? ""}
+                readOnly
+                disabled
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-phone" className="mb-1 block text-sm font-medium">
+                Phone
+              </label>
+              <Input
+                id="edit-phone"
+                value={editPhone}
+                onChange={(event) => setEditPhone(event.target.value)}
+                placeholder="+1234567890"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-role" className="mb-1 block text-sm font-medium">
+                Role
+              </label>
+              <RoleSelect value={editRole} onChange={setEditRole} />
+            </div>
+            {formError ? (
+              <p className="text-sm text-destructive">{formError}</p>
+            ) : null}
+            <DialogFooter>
+              <Button type="submit" disabled={updateMemberMutation.isPending}>
+                {updateMemberMutation.isPending ? "Saving…" : "Save changes"}
               </Button>
             </DialogFooter>
           </form>

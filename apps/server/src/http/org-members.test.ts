@@ -125,7 +125,7 @@ describe("org member management (AE2)", () => {
     expect(addMemberResponse.status).toBe(403);
   });
 
-  test("org admin can list, change role, and remove members", async () => {
+  test("org admin can list, edit, change role, and remove members", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
 
@@ -200,11 +200,19 @@ describe("org member management (AE2)", () => {
           },
           orgId,
         ),
-        body: JSON.stringify({ role: "member" }),
+        body: JSON.stringify({
+          name: "Member Prime",
+          phone: "+628111222333",
+          role: "member",
+        }),
       }),
     );
     expect(patchResponse.status).toBe(200);
-    const patched = (await patchResponse.json()) as { member: { role: string } };
+    const patched = (await patchResponse.json()) as {
+      member: { role: string; name: string; phone: string };
+    };
+    expect(patched.member.name).toBe("Member Prime");
+    expect(patched.member.phone).toBe("+628111222333");
     expect(patched.member.role).toBe("member");
 
     const deleteResponse = await app.fetch(

@@ -68,6 +68,22 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       usersByEmail.set(record.email, record);
     },
 
+    async updateUserProfile(id, profile, updatedAt) {
+      const user = usersById.get(id);
+      if (!user) {
+        return;
+      }
+
+      const updated = {
+        ...user,
+        name: profile.name,
+        phone: profile.phone,
+        updatedAt,
+      };
+      usersById.set(id, updated);
+      usersByEmail.set(updated.email, updated);
+    },
+
     async updateUserPassword(id, passwordHash, updatedAt) {
       const user = usersById.get(id);
       if (!user) {

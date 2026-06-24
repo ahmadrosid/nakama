@@ -235,12 +235,14 @@ export interface AddOrgMemberRequest {
   role: OrgRole;
 }
 
-export interface UpdateOrgMemberRoleRequest {
-  role: OrgRole;
-}
-
 export interface OrgMemberResponse {
   member: OrgMemberSummary;
+}
+
+export interface UpdateOrgMemberRequest {
+  name?: string | null;
+  phone?: string | null;
+  role?: OrgRole;
 }
 
 export interface InviteOrgMemberRequest {

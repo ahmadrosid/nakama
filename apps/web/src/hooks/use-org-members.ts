@@ -7,7 +7,7 @@ import {
 import type {
   AddOrgMemberRequest,
   InviteOrgMemberRequest,
-  OrgRole,
+  UpdateOrgMemberRequest,
 } from "@tinyclaw/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -45,12 +45,17 @@ export function useAddOrgMember(orgId: string) {
   });
 }
 
-export function useUpdateOrgMemberRole(orgId: string) {
+export function useUpdateOrgMember(orgId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: OrgRole }) =>
-      client.updateOrgMemberRole(orgId, userId, { role }),
+    mutationFn: ({
+      userId,
+      request,
+    }: {
+      userId: string;
+      request: UpdateOrgMemberRequest;
+    }) => client.updateOrgMember(orgId, userId, request),
     onSuccess: () => invalidateOrgMembers(queryClient, orgId),
   });
 }

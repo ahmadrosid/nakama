@@ -103,7 +103,7 @@ import type {
   InviteOrgMemberRequest,
   OrgInviteCreatedResponse,
   ListOrgMembersResponse,
-  UpdateOrgMemberRoleRequest,
+  UpdateOrgMemberRequest,
   UpdateOrganizationRequest,
   OrganizationResponse,
   OrgMemberResponse,
@@ -1071,10 +1071,10 @@ export class TinyClawClient {
     );
   }
 
-  async updateOrgMemberRole(
+  async updateOrgMember(
     orgId: string,
     userId: string,
-    request: UpdateOrgMemberRoleRequest,
+    request: UpdateOrgMemberRequest,
   ): Promise<OrgMemberResponse> {
     return this.request<OrgMemberResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
