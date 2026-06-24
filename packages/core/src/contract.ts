@@ -51,12 +51,21 @@ export interface HealthResponse {
   userConfigured: boolean;
 }
 
+export interface AutomationSchedule {
+  id: string;
+  cron: string;
+  timezone: string | null;
+  orgId: string;
+  profileId: string;
+}
+
 export interface AutomationWorkerStatus {
   ok: boolean;
   running: boolean;
   scheduledJobs: number;
   activeRuns: number;
   providerConfigured: boolean;
+  process?: WorkerProcessInfo;
 }
 
 export interface TaskWorkerStatus {

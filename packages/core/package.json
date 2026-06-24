@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
+    "croner": "^10.0.1",
     "imapflow": "^1.4.2",
     "mailparser": "^3.9.11",
     "nanoid": "^5.1.11",
