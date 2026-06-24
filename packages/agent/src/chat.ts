@@ -39,7 +39,7 @@ import {
 } from "./history-compaction";
 import { executeToolCall, serializeToolResult } from "./tool-loop";
 
-const MAX_TOOL_ITERATIONS = 50;
+const MAX_TOOL_ITERATIONS = 100;
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
