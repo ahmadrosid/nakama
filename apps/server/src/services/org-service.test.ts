@@ -16,7 +16,7 @@ function createOrgService() {
 
 describe("OrgService", () => {
   test("bootstrapInitialSetup creates org and admin membership", async () => {
-    const { orgService, authService } = createOrgService();
+    const { orgService, authService, databaseAdapter } = createOrgService();
 
     const bootstrapped = await orgService.bootstrapInitialSetup({
       organization: { name: "Acme", slug: "acme" },
@@ -34,6 +34,10 @@ describe("OrgService", () => {
     const members = await orgService.listMembers(bootstrapped.organization.id);
     expect(members.members).toHaveLength(1);
     expect(members.members[0]?.role).toBe("admin");
+
+    const profiles = await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id);
+    expect(profiles.some((profile) => profile.isDefault)).toBe(true);
+    expect(profiles.some((profile) => profile.isSuper)).toBe(true);
   });
 
   test("bootstrapInitialSetup allows admin without phone", async () => {
@@ -98,7 +102,7 @@ describe("OrgService", () => {
   });
 
   test("creates and lists organizations", async () => {
-    const { orgService } = createOrgService();
+    const { orgService, databaseAdapter } = createOrgService();
 
     const created = await orgService.createOrganization({
       name: "Acme Corp",
@@ -112,6 +116,9 @@ describe("OrgService", () => {
 
     const organizations = await orgService.listOrganizations();
     expect(organizations).toEqual([created.organization]);
+
+    const profiles = await databaseAdapter.listProfilesForOrg(created.organization.id);
+    expect(profiles.some((profile) => profile.isSuper && profile.name === "Super Bot")).toBe(true);
   });
 
   test("provisions a first admin when admin details are provided", async () => {

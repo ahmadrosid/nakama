@@ -15,7 +15,12 @@ import type {
   ListUserOrgsResponse,
   UserOrgSummary,
 } from "@tinyclaw/core/contract";
-import { ORG_INVITE_EXPIRY_DAYS, ORG_ROLES, seedOrgDefaultProfile } from "@tinyclaw/db";
+import {
+  ORG_INVITE_EXPIRY_DAYS,
+  ORG_ROLES,
+  seedOrgDefaultProfile,
+  seedOrgSuperBotProfile,
+} from "@tinyclaw/db";
 import type {
   DatabaseAdapter,
   StoredOrganizationRecord,
@@ -586,13 +591,16 @@ export class OrgService {
     };
 
     await this.databaseAdapter.upsertOrganization(record);
-    await this.seedDefaultProfile(record.id);
+    await this.seedOrgProfiles(record.id);
     return toOrganizationSummary(record);
   }
 
-  private async seedDefaultProfile(orgId: string): Promise<void> {
-    const profile = await seedOrgDefaultProfile(this.databaseAdapter, orgId);
-    await initSoulDirectory(getProfileSoulDir(orgId, profile.id));
+  private async seedOrgProfiles(orgId: string): Promise<void> {
+    const defaultProfile = await seedOrgDefaultProfile(this.databaseAdapter, orgId);
+    await initSoulDirectory(getProfileSoulDir(orgId, defaultProfile.id));
+
+    const superBotProfile = await seedOrgSuperBotProfile(this.databaseAdapter, orgId);
+    await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
   }
 }
 

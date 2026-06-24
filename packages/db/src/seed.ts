@@ -1,5 +1,6 @@
 import { builtinTools } from "@tinyclaw/core";
 import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
+import { ensureOrgSuperBotProfiles } from "./org-profiles";
 import type { DatabaseAdapter } from "./types";
 
 const LEGACY_BUILTIN_TOOL_NAMES = new Set(["echo", "log", "delay", "search_workspace"]);
@@ -9,6 +10,7 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeLegacyBuiltinTools(db);
   await removeUnsupportedTools(db);
   await ensureBuiltinToolDefinitions(db);
+  await ensureOrgSuperBotProfiles(db);
 }
 
 export async function removeLegacyBuiltinTools(db: DatabaseAdapter): Promise<void> {
