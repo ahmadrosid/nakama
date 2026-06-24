@@ -1,10 +1,9 @@
 import type { ToolDetail } from "@tinyclaw/core/contract";
 import { BUILTIN_TOOL_IDS, isProtectedToolId } from "@tinyclaw/core/tools/protected";
-import { PlusIcon, RefreshCwIcon, Trash2Icon, WrenchIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ToolDetailDialog } from "@/components/tools/ToolDetailDialog";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -38,7 +37,6 @@ export function ToolsTab() {
   const superBotProfile = findSuperBotProfile(profiles);
   const deleteToolMutation = useDeleteToolMutation();
   const [actionError, setActionError] = useState<string | null>(null);
-  const [detailToolId, setDetailToolId] = useState<string | null>(null);
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
 
   const loading = isLoading && tools.length === 0;
@@ -81,7 +79,6 @@ export function ToolsTab() {
 
     try {
       await deleteToolMutation.mutateAsync(toolId);
-      setDetailToolId(null);
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -220,8 +217,11 @@ export function ToolsTab() {
                       key={tool.id}
                       tool={tool}
                       busy={busy}
-                      showPlayground={canUsePlayground && tool.handlerType === "javascript"}
-                      onView={() => setDetailToolId(tool.id)}
+                      playgroundHref={
+                        canUsePlayground && isDeletableTool(tool)
+                          ? toolPlaygroundPath(tool.id)
+                          : undefined
+                      }
                       onDelete={() => void handleDeleteTool(tool.id, tool.name)}
                       onConfigure={
                         isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
@@ -240,18 +240,6 @@ export function ToolsTab() {
       {isOrgAdmin ? (
         <EmailSettingsDialog open={emailConfigOpen} onOpenChange={setEmailConfigOpen} />
       ) : null}
-
-      <ToolDetailDialog
-        toolId={detailToolId}
-        busy={busy}
-        canUsePlayground={canUsePlayground}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailToolId(null);
-          }
-        }}
-        onDelete={(toolId, toolName) => void handleDeleteTool(toolId, toolName)}
-      />
     </>
   );
 }
@@ -259,62 +247,50 @@ export function ToolsTab() {
 function ToolListItem({
   tool,
   busy,
-  showPlayground = false,
-  onView,
+  playgroundHref,
   onDelete,
   onConfigure,
 }: {
   tool: ToolDetail;
   busy: boolean;
-  showPlayground?: boolean;
-  onView: () => void;
+  playgroundHref?: string;
   onDelete: () => void;
   onConfigure?: () => void;
 }) {
   const deletable = isDeletableTool(tool);
 
+  const summary = (
+    <div className="min-w-0">
+      <p className="text-sm font-medium text-foreground">{tool.name}</p>
+      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        {tool.description}
+      </p>
+    </div>
+  );
+
   return (
     <li className="group flex items-start justify-between gap-3 px-4 py-3 first:rounded-t-md last:rounded-b-md hover:bg-muted/40">
-      <button
-        type="button"
-        disabled={busy}
-        className="min-w-0 flex-1 text-left disabled:opacity-50"
-        aria-label={`View details for ${tool.name}`}
-        onClick={onView}
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{tool.name}</p>
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-            {tool.description}
-          </p>
-        </div>
-      </button>
-
-      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        <span
+      {playgroundHref ? (
+        <Link
+          to={playgroundHref}
+          aria-label={`Open playground for ${tool.name}`}
           className={cn(
-            "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
-            deletable
-              ? "bg-muted text-muted-foreground"
-              : "scope-badge scope-badge-active",
+            "min-w-0 flex-1 text-left",
+            busy && "pointer-events-none opacity-50",
           )}
         >
-          {deletable ? tool.handlerType : "built-in"}
-        </span>
+          {summary}
+        </Link>
+      ) : (
+        <div className="min-w-0 flex-1">{summary}</div>
+      )}
 
-        {showPlayground ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            render={<Link to={toolPlaygroundPath(tool.id)} />}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <WrenchIcon className="size-4" aria-hidden />
-            Playground
-          </Button>
-        ) : null}
+      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+        {deletable ? (
+          <span className="scope-badge bg-muted text-muted-foreground">custom tool</span>
+        ) : (
+          <span className="scope-badge scope-badge-active">built-in</span>
+        )}
 
         {onConfigure ? (
           <Button
@@ -344,7 +320,7 @@ function ToolListItem({
             }}
           >
             <Trash2Icon className="size-4" aria-hidden />
-            Remove
+            Delete
           </Button>
         ) : null}
       </div>

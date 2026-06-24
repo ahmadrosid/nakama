@@ -1,6 +1,13 @@
-import { BlocksIcon, ChevronLeftIcon } from "lucide-react";
+import type { ToolDetail } from "@tinyclaw/core/contract";
+import { ChevronLeftIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { ToolPlaygroundPanel } from "@/components/tools/ToolPlaygroundPanel";
+import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
+import {
+  ToolPlaygroundOutput,
+  ToolPlaygroundRunForm,
+  useToolPlaygroundRun,
+} from "@/components/tools/ToolPlaygroundPanel";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/auth-context";
@@ -13,8 +20,6 @@ import {
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
-
-const sectionClass = "rounded-md border border-border bg-card";
 
 export function ToolPlaygroundPage() {
   const { toolId } = useParams<{ toolId: string }>();
@@ -49,7 +54,7 @@ export function ToolPlaygroundPage() {
 
   if (toolError && !tool) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4 p-6">
         <BackLink />
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {formatError(toolError)}
@@ -62,50 +67,137 @@ export function ToolPlaygroundPage() {
     return <Navigate to={toolsTabPath()} replace />;
   }
 
+  return (
+    <ToolPlaygroundPageContent
+      tool={tool}
+      superBotProfileId={superBotProfileId}
+    />
+  );
+}
+
+function ToolPlaygroundPageContent({
+  tool,
+  superBotProfileId,
+}: {
+  tool: ToolDetail;
+  superBotProfileId: string | null;
+}) {
   const isJavascriptTool = tool.handlerType === "javascript";
+  const run = useToolPlaygroundRun(tool, superBotProfileId);
+  const [mainTab, setMainTab] = useState<"output" | "detail">("output");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <BackLink />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6">
+        <BackLink />
+      </div>
 
-      <header className={cn(sectionClass, "space-y-3 p-5 sm:p-6")}>
-        <div className="flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted/30 text-emerald-700 dark:text-emerald-300">
-            <BlocksIcon className="size-4" aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1 space-y-1">
-            <h2 className="type-section-title">{tool.name}</h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">{tool.description}</p>
-          </div>
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {isJavascriptTool ? (
+          <aside className="order-2 shrink-0 overflow-y-auto border-t border-border bg-muted/10 lg:order-1 lg:w-80 lg:border-t-0 lg:border-r xl:w-96">
+            <ToolPlaygroundRunForm tool={tool} run={run} />
+          </aside>
+        ) : null}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {tool.handlerType}
-          </span>
-          <span className="type-code text-xs text-muted-foreground">{tool.id}</span>
-        </div>
-      </header>
+        <main className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-2">
+          {isJavascriptTool ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                role="tablist"
+                aria-label="Tool playground"
+                className="flex shrink-0 border-b border-border px-4 sm:px-6"
+              >
+                <PlaygroundTab
+                  id="tool-playground-tab-output"
+                  active={mainTab === "output"}
+                  controls="tool-playground-panel-output"
+                  onSelect={() => setMainTab("output")}
+                >
+                  Run output
+                  {run.running ? <Spinner className="size-3.5" /> : null}
+                </PlaygroundTab>
+                <PlaygroundTab
+                  id="tool-playground-tab-detail"
+                  active={mainTab === "detail"}
+                  controls="tool-playground-panel-detail"
+                  onSelect={() => setMainTab("detail")}
+                >
+                  Tool detail
+                </PlaygroundTab>
+              </div>
 
-      {isJavascriptTool ? (
-        <ToolPlaygroundPanel
-          tool={tool}
-          superBotProfileId={superBotProfileId}
-          showHeader={false}
-        />
-      ) : (
-        <p
-          className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
-          role="status"
-        >
-          Playground is available for custom JavaScript tools only. Built-in and MCP tools cannot
-          be run here.{" "}
-          <Link to={toolsTabPath()} className="font-medium underline underline-offset-2">
-            Back to tools
-          </Link>
-        </p>
-      )}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+                {mainTab === "output" ? (
+                  <div
+                    id="tool-playground-panel-output"
+                    role="tabpanel"
+                    aria-labelledby="tool-playground-tab-output"
+                  >
+                    <ToolPlaygroundOutput run={run} superBotProfileId={superBotProfileId} />
+                  </div>
+                ) : (
+                  <div
+                    id="tool-playground-panel-detail"
+                    role="tabpanel"
+                    aria-labelledby="tool-playground-tab-detail"
+                  >
+                    <ToolDetailSections tool={tool} showHeader />
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+              <p
+                className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+                role="status"
+              >
+                Playground is available for custom JavaScript tools only. Built-in and MCP tools
+                cannot be run here.{" "}
+                <Link to={toolsTabPath()} className="font-medium underline underline-offset-2">
+                  Back to tools
+                </Link>
+              </p>
+              <ToolDetailSections tool={tool} showHeader />
+            </div>
+          )}
+        </main>
+      </div>
     </div>
+  );
+}
+
+function PlaygroundTab({
+  id,
+  active,
+  controls,
+  onSelect,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  controls: string;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={controls}
+      data-active={active || undefined}
+      className={cn(
+        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+        active
+          ? "border-foreground text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -122,8 +214,7 @@ function PageState({ message }: { message: string }) {
   return (
     <div
       className={cn(
-        sectionClass,
-        "mx-auto flex min-h-64 max-w-3xl flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+        "mx-auto flex min-h-64 max-w-3xl flex-col items-center justify-center gap-3 rounded-md border border-border bg-card p-8 text-sm text-muted-foreground",
       )}
     >
       <Spinner className="size-5" />

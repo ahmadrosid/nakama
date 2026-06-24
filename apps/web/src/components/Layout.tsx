@@ -27,6 +27,7 @@ import {
   NAV_GROUPS,
   NAV_ITEM_ICONS,
   canAccessSystemPage,
+  PAGE_PATHS,
   PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
   SETTINGS_NAV_ITEM,
@@ -186,7 +187,9 @@ export function Layout() {
 
           <main
             className={
-              page === "chat" || page === "tasks"
+              page === "chat" ||
+              page === "tasks" ||
+              location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
                 ? "flex min-h-0 flex-1 flex-col overflow-hidden"
                 : "min-h-0 flex-1 overflow-y-auto p-6"
             }

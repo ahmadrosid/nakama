@@ -1,5 +1,5 @@
 import type { ToolDetail } from "@tinyclaw/core/contract";
-import { PlayIcon, SparklesIcon, WrenchIcon } from "lucide-react";
+import { PlayIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,19 +8,27 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { client, formatError } from "@/lib/client";
 import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
-import { cn } from "@/lib/utils";
 
-interface ToolPlaygroundPanelProps {
-  tool: ToolDetail;
-  superBotProfileId: string | null;
-  showHeader?: boolean;
-}
-
-type RunState =
+export type ToolPlaygroundRunState =
   | { status: "idle" }
   | { status: "running" }
   | { status: "success"; result: unknown; parameters: Record<string, unknown> }
   | { status: "error"; error: string; parameters: Record<string, unknown> };
+
+export interface ToolPlaygroundRunControls {
+  parametersJson: string;
+  setParametersJson: (value: string) => void;
+  jsonError: string | null;
+  assistPrompt: string;
+  setAssistPrompt: (value: string) => void;
+  suggesting: boolean;
+  runState: ToolPlaygroundRunState;
+  actionError: string | null;
+  running: boolean;
+  handleSuggestParams: () => Promise<void>;
+  handleRun: () => Promise<void>;
+  handleFixWithSuperBot: () => void;
+}
 
 function parseParametersJson(raw: string): Record<string, unknown> | null {
   try {
@@ -44,17 +52,16 @@ function formatResult(value: unknown): string {
   }
 }
 
-export function ToolPlaygroundPanel({
-  tool,
-  superBotProfileId,
-  showHeader = true,
-}: ToolPlaygroundPanelProps) {
+export function useToolPlaygroundRun(
+  tool: ToolDetail,
+  superBotProfileId: string | null,
+): ToolPlaygroundRunControls {
   const { navigateToNewChat } = useAppNavigation();
-  const [parametersJson, setParametersJson] = useState("{}");
+  const [parametersJson, setParametersJsonState] = useState("{}");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [assistPrompt, setAssistPrompt] = useState("");
   const [suggesting, setSuggesting] = useState(false);
-  const [runState, setRunState] = useState<RunState>({ status: "idle" });
+  const [runState, setRunState] = useState<ToolPlaygroundRunState>({ status: "idle" });
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleSuggestParams() {
@@ -71,7 +78,6 @@ export function ToolPlaygroundPanel({
     try {
       const response = await client.suggestToolParams(tool.id, { prompt });
       setParametersJson(JSON.stringify(response.parameters ?? {}, null, 2));
-      setJsonError(null);
     } catch (error) {
       setActionError(formatError(error));
     } finally {
@@ -127,51 +133,67 @@ export function ToolPlaygroundPanel({
     navigateToNewChat(superBotProfileId, { draft });
   }
 
+  function setParametersJson(value: string) {
+    setParametersJsonState(value);
+    setJsonError(null);
+  }
+
+  return {
+    parametersJson,
+    setParametersJson,
+    jsonError,
+    assistPrompt,
+    setAssistPrompt,
+    suggesting,
+    runState,
+    actionError,
+    running: runState.status === "running",
+    handleSuggestParams,
+    handleRun,
+    handleFixWithSuperBot,
+  };
+}
+
+export function ToolPlaygroundRunForm({
+  tool,
+  run,
+}: {
+  tool: ToolDetail;
+  run: ToolPlaygroundRunControls;
+}) {
   return (
-    <div className="space-y-4 rounded-md border border-border bg-muted/20 p-4">
-      {showHeader ? (
-        <>
-          <div className="flex items-center gap-2">
-            <WrenchIcon className="size-4 text-muted-foreground" aria-hidden />
-            <p className="text-sm font-medium text-foreground">Playground</p>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Run this tool outside chat with real execution. Side effects apply.
-          </p>
-        </>
-      ) : null}
-
-      <p className="text-xs text-muted-foreground">
-        Relative paths resolve against the assigned profile workspace under{" "}
-        <code className="type-code">~/.tinyclaw/orgs/…/profiles/…/</code>, not the server
-        process directory.
-      </p>
+    <div className="space-y-4 p-4 sm:p-5">
+      <div>
+        <h3 className="text-sm font-medium text-foreground">Run</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Execute this tool outside chat with real side effects. Relative paths resolve against the
+          assigned profile workspace under{" "}
+          <code className="type-code">~/.tinyclaw/orgs/…/profiles/…/</code>.
+        </p>
+      </div>
 
       <div className="flex flex-col gap-2.5">
         <label className="text-xs font-medium text-foreground" htmlFor={`${tool.id}-assist`}>
           Describe test (optional)
         </label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            id={`${tool.id}-assist`}
-            value={assistPrompt}
-            onChange={(event) => setAssistPrompt(event.target.value)}
-            placeholder="e.g. search for tinyclaw docs"
-            disabled={suggesting || runState.status === "running"}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={suggesting || runState.status === "running"}
-            onClick={() => void handleSuggestParams()}
-          >
-            {suggesting ? <Spinner className="size-4" /> : <SparklesIcon className="size-4" />}
-            Suggest params
-          </Button>
-        </div>
+        <Input
+          id={`${tool.id}-assist`}
+          value={run.assistPrompt}
+          onChange={(event) => run.setAssistPrompt(event.target.value)}
+          placeholder="e.g. convert sample.mp4 to sample.mp3"
+          disabled={run.suggesting || run.running}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={run.suggesting || run.running}
+          onClick={() => void run.handleSuggestParams()}
+        >
+          {run.suggesting ? <Spinner className="size-4" /> : <SparklesIcon className="size-4" />}
+          Suggest params
+        </Button>
       </div>
 
       <div className="flex flex-col gap-2.5">
@@ -180,66 +202,72 @@ export function ToolPlaygroundPanel({
         </label>
         <Textarea
           id={`${tool.id}-params`}
-          value={parametersJson}
+          value={run.parametersJson}
           onChange={(event) => {
-            setParametersJson(event.target.value);
-            setJsonError(null);
+            run.setParametersJson(event.target.value);
           }}
-          rows={6}
+          rows={10}
           className="font-mono text-xs"
           spellCheck={false}
-          disabled={runState.status === "running"}
+          disabled={run.running}
         />
-        {jsonError ? <p className="text-xs text-destructive">{jsonError}</p> : null}
+        {run.jsonError ? <p className="text-xs text-destructive">{run.jsonError}</p> : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          disabled={runState.status === "running"}
-          onClick={() => void handleRun()}
-        >
-          {runState.status === "running" ? (
-            <Spinner className="size-4" />
-          ) : (
-            <PlayIcon className="size-4" />
-          )}
-          Run
-        </Button>
+      <Button
+        type="button"
+        size="sm"
+        className="w-full"
+        disabled={run.running}
+        onClick={() => void run.handleRun()}
+      >
+        {run.running ? <Spinner className="size-4" /> : <PlayIcon className="size-4" />}
+        Run
+      </Button>
 
-        {runState.status === "error" && superBotProfileId ? (
-          <Button type="button" size="sm" variant="outline" onClick={handleFixWithSuperBot}>
-            Fix with Super Bot
-          </Button>
-        ) : null}
-      </div>
-
-      {actionError ? (
+      {run.actionError ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {actionError}
+          {run.actionError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function ToolPlaygroundOutput({
+  run,
+  superBotProfileId,
+}: {
+  run: ToolPlaygroundRunControls;
+  superBotProfileId: string | null;
+}) {
+  return (
+    <div className="min-h-32">
+      {run.runState.status === "idle" ? (
+        <p className="text-sm text-muted-foreground">
+          Run the tool to see raw JSON output or errors here.
         </p>
       ) : null}
 
-      {runState.status === "success" ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-foreground">Result</p>
-          <pre
-            className={cn(
-              "max-h-56 overflow-auto rounded-md border border-border bg-background p-3 text-xs leading-relaxed",
-            )}
-          >
-            {formatResult(runState.result)}
-          </pre>
+      {run.runState.status === "running" ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner className="size-4" />
+          Executing tool…
         </div>
       ) : null}
 
-      {runState.status === "error" ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-destructive">Error</p>
-          <pre className="max-h-56 overflow-auto rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
-            {runState.error}
-          </pre>
+      {run.runState.status === "success" ? (
+        <pre className="text-xs leading-relaxed">{formatResult(run.runState.result)}</pre>
+      ) : null}
+
+      {run.runState.status === "error" ? (
+        <div className="space-y-3">
+          <pre className="text-xs leading-relaxed text-destructive">{run.runState.error}</pre>
+          {superBotProfileId ? (
+            <Button type="button" size="sm" variant="outline" onClick={run.handleFixWithSuperBot}>
+              Fix with Super Bot
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </div>
