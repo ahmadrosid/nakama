@@ -6,8 +6,9 @@ export default withMermaid(
     title: 'TinyClaw',
     description: 'Deploy your own AI Agent platform as easily as spinning up WordPress.',
     base: '/tinyclaw/',
-    head: [['link', { rel: 'icon', href: '/tinyclaw/favicon.ico' }]],
+    head: [['link', { rel: 'icon', type: 'image/png', href: '/tinyclaw/favicon.png' }]],
     themeConfig: {
+      logo: '/tinyclaw/favicon.png',
       nav: [
         { text: 'Docs', link: '/getting-started' },
       ],
