@@ -1,7 +1,8 @@
 import { generateSessionTitleFromMessages } from "@tinyclaw/agent";
 import type { ChatMessage, UserConfig } from "@tinyclaw/core";
 import type { DatabaseAdapter } from "@tinyclaw/db";
-import { createProviderFromSources } from "../providers";
+import { createProviderForInstance } from "../providers/create";
+import { resolveProfileProviderSelection } from "./provider-instance-helpers";
 
 export const SESSION_TITLE_FALLBACK = "Untitled";
 
@@ -11,7 +12,6 @@ export class SessionTitleService {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly getUserConfig: () => UserConfig | null,
-    private readonly isProviderConfigured: () => boolean,
   ) {}
 
   scheduleSessionTitleGeneration(sessionId: string): void {
@@ -41,20 +41,50 @@ export class SessionTitleService {
         return;
       }
 
-      if (!this.isProviderConfigured()) {
+      const userConfig = this.getUserConfig();
+      const provider = await this.resolveProviderForProfile(
+        session.profileId,
+        userConfig,
+      );
+
+      if (!provider) {
         await this.db.updateSessionTitle(sessionId, SESSION_TITLE_FALLBACK);
         return;
       }
 
-      const provider = createProviderFromSources(process.env, this.getUserConfig());
-      const title = provider
-        ? await generateSessionTitleFromMessages(messages, { provider })
-        : null;
+      const title = await generateSessionTitleFromMessages(messages, { provider });
 
       await this.db.updateSessionTitle(sessionId, title ?? SESSION_TITLE_FALLBACK);
     } finally {
       this.inFlight.delete(sessionId);
     }
+  }
+
+  private async resolveProviderForProfile(
+    profileId: string,
+    userConfig: UserConfig | null,
+  ) {
+    if (!userConfig) {
+      return null;
+    }
+
+    const profile = await this.db.getProfile(profileId);
+
+    if (!profile) {
+      return null;
+    }
+
+    const selection = resolveProfileProviderSelection({
+      providers: userConfig.providers,
+      defaultProviderId: userConfig.defaultProviderId,
+      profileModel: profile.model,
+    });
+
+    if (!selection) {
+      return null;
+    }
+
+    return createProviderForInstance(selection.instance, selection.model, process.env);
   }
 }
 

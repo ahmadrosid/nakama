@@ -108,7 +108,8 @@ export async function generateSessionTitleFromMessages(
     });
 
     return normalizeSessionTitle(raw);
-  } catch {
+  } catch (error) {
+    console.error("Failed to generate session title from provider:", error);
     return null;
   }
 }

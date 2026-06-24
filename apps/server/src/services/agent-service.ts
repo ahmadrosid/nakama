@@ -221,11 +221,7 @@ export class AgentService {
     this.userConfig = userConfig;
     this.db = db;
     this.profileService = new ProfileService(db);
-    this.sessionTitleService = new SessionTitleService(
-      db,
-      () => this.userConfig,
-      () => this._providerConfigured,
-    );
+    this.sessionTitleService = new SessionTitleService(db, () => this.userConfig);
     this.agentTodoState = new AgentTodoState(db);
     this.agentQuestionnaireState = new AgentQuestionnaireState(db);
     this.questionTools = createAskUserQuestionTools(this.agentQuestionnaireState);
