@@ -7,7 +7,13 @@ import {
   prepareChannelOrgContext,
   type ChannelOrgStore,
 } from "@tinyclaw/core/channel-org";
-import { pickProfileForOrg } from "@tinyclaw/core/profiles";
+import {
+  filterProfilesForChatAccess,
+  formatProfileSelectionPrompt,
+  formatProfileSwitchConfirmation,
+  pickProfileForOrg,
+  resolveProfileInput,
+} from "@tinyclaw/core/profiles";
 import type { Context } from "grammy";
 import {
   clearActiveStream,
@@ -162,6 +168,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function handleCommand(ctx: Context, text: string, chatId: string): Promise<void> {
     const command = parseTelegramCommand(text);
+    const userId = ctx.from?.id;
 
     switch (command) {
       case "/start":
@@ -192,11 +199,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       case "/status":
-        await replyStatus(ctx);
+        await replyStatus(ctx, chatId);
         return;
 
       case "/org":
+        if (userId === undefined) {
+          return;
+        }
+
         await handleOrgCommand(ctx, text, userId, chatId);
+        return;
+
+      case "/profile":
+        await handleProfileCommand(ctx, text, chatId);
         return;
 
       default:
@@ -366,7 +381,47 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     await ctx.reply(formatOrgSwitchConfirmation(picked.name));
   }
 
-  async function replyStatus(ctx: Context): Promise<void> {
+  async function handleProfileCommand(
+    ctx: Context,
+    text: string,
+    chatId: string,
+  ): Promise<void> {
+    const profiles = await listSelectableProfiles();
+
+    if (profiles.length === 0) {
+      await ctx.reply("No profiles are available.");
+      return;
+    }
+
+    const arg = text.trim().split(/\s+/).slice(1).join(" ");
+    const currentProfileId = await resolveSessionProfileId(chatId);
+
+    if (!arg) {
+      await replyChunks(ctx, formatProfileSelectionPrompt(profiles, currentProfileId));
+      return;
+    }
+
+    const picked = resolveProfileInput(profiles, arg);
+    if (!picked) {
+      await ctx.reply("Unknown profile. Send /profile to see the list.");
+      return;
+    }
+
+    if (picked.id === currentProfileId) {
+      await ctx.reply(`Already using ${picked.name}.`);
+      return;
+    }
+
+    await createAndBindSession(chatId, picked.id);
+    await ctx.reply(formatProfileSwitchConfirmation(picked.name));
+  }
+
+  async function listSelectableProfiles() {
+    const { profiles } = await client.listProfiles();
+    return filterProfilesForChatAccess(profiles, { excludeSuperBot: true });
+  }
+
+  async function replyStatus(ctx: Context, chatId: string): Promise<void> {
     try {
       const health = await client.health();
       const lines = [
@@ -376,11 +431,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (health.providerConfigured) {
         const models = await client.getModels();
-        const profiles = await client.listProfiles();
-        const profile = profiles.profiles.find((entry) => entry.id === config.profileId);
+        const profiles = await listSelectableProfiles();
+        const profileId = await resolveSessionProfileId(chatId);
+        const profile = profiles.find((entry) => entry.id === profileId);
         const modelLabel = profile?.model?.includes("::")
           ? profile.model.slice(profile.model.indexOf("::") + 2)
           : profile?.model ?? "none";
+        lines.push(`Profile: ${profile?.name ?? profileId}`);
         lines.push(`Provider: ${models.provider ?? "unknown"}`);
         lines.push(`Model: ${modelLabel}`);
       } else {
@@ -410,15 +467,18 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     return createAndBindSession(chatId);
   }
 
-  async function createAndBindSession(chatId: string): Promise<RemoteChatSession> {
-    const profileId = await resolveSessionProfileId();
+  async function createAndBindSession(
+    chatId: string,
+    profileId?: string,
+  ): Promise<RemoteChatSession> {
+    const resolvedProfileId = profileId ?? (await resolveSessionProfileId(chatId));
     const session = await client.createSession("telegram", {
-      profileId,
+      profileId: resolvedProfileId,
     });
 
     sessionStore.set(chatId, {
       sessionId: session.id,
-      profileId,
+      profileId: resolvedProfileId,
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();
@@ -426,9 +486,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     return session;
   }
 
-  async function resolveSessionProfileId(): Promise<string> {
-    const profiles = await client.listProfiles();
-    return pickProfileForOrg(profiles.profiles, config.profileId).id;
+  async function resolveSessionProfileId(chatId: string): Promise<string> {
+    const profiles = await listSelectableProfiles();
+    const storedProfileId = sessionStore.get(chatId)?.profileId;
+
+    if (storedProfileId) {
+      const match = profiles.find((profile) => profile.id === storedProfileId);
+
+      if (match) {
+        return match.id;
+      }
+    }
+
+    return pickProfileForOrg(profiles, config.profileId).id;
   }
 }
 

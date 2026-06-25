@@ -36,6 +36,8 @@ Optional env vars:
 | `/clear` | Clear chat history |
 | `/compact` | Compact conversation history |
 | `/new` | Start a new conversation |
+| `/org` | Choose or switch organization |
+| `/profile` | Choose or switch bot profile |
 | `/status` | Server and model status |
 
 Send plain text or a photo (optional caption) to chat with the agent.

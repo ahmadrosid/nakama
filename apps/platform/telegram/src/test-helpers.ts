@@ -105,7 +105,13 @@ export function createMockClient(
     streaming?: boolean;
     steps?: StreamStep[];
     autoComplete?: boolean;
-    profiles?: Array<{ id: string; model?: string | null }>;
+    profiles?: Array<{
+      id: string;
+      name?: string;
+      model?: string | null;
+      isDefault?: boolean;
+      isSuper?: boolean;
+    }>;
     orgs?: UserOrgSummary[];
   } = {},
 ) {
@@ -250,8 +256,10 @@ export function createMockClient(
       return parseListProfilesResponse({
         profiles: profiles.map((profile) => ({
           id: profile.id,
-          name: profile.id,
+          name: profile.name ?? profile.id,
           model: profile.model ?? null,
+          isDefault: profile.isDefault ?? false,
+          isSuper: profile.isSuper ?? false,
         })),
       });
     },

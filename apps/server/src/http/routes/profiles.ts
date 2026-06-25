@@ -15,6 +15,7 @@ import type {
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
 } from "@tinyclaw/core";
+import { filterProfilesForChatAccess } from "@tinyclaw/core/profiles";
 import { json, readJson, getRequestAuth } from "../shared";
 import { requirePlatformAdminFromContext, requireActiveOrgIdFromContext } from "../org-guards";
 import type { HonoApp } from "../types";
@@ -236,8 +237,16 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
   }));
 
   app.get("/v1/profiles", async (c) => {
+    const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    return json<ListProfilesResponse>(await agent.listProfiles(orgId));
+    const response = await agent.listProfiles(orgId);
+
+    return json<ListProfilesResponse>({
+      profiles: filterProfilesForChatAccess(response.profiles, {
+        orgRole: auth.orgRole,
+        isPlatformAdmin: auth.isPlatformAdmin,
+      }),
+    });
   });
 
   app.post("/v1/profiles", async (c) => {

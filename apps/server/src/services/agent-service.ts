@@ -117,7 +117,9 @@ import {
   saveUserTimezone,
   TinyClawApiError,
   writeSoulFile,
+  type OrgRole,
 } from "@tinyclaw/core";
+import { canAccessSuperBotProfile } from "@tinyclaw/core/profiles";
 import {
   SUPER_BOT_TOOL_AUTHORING_RULES,
   WORKSPACE_SETTINGS_ID,
@@ -188,6 +190,12 @@ interface StoredSession {
   channel: AgentChannel;
   profileId: string;
   session: AgentChatSession;
+}
+
+export interface SessionAccessOptions {
+  orgRole?: OrgRole | null;
+  isPlatformAdmin?: boolean;
+  excludeSuperBot?: boolean;
 }
 
 export class AgentService {
@@ -714,8 +722,22 @@ export class AgentService {
     channel: AgentChannel,
     profileId?: string,
     userId?: string | null,
+    access?: SessionAccessOptions,
   ): Promise<string> {
     const resolvedProfileId = await this.resolveSessionProfile(orgId, profileId);
+    const profile = await this.requireProfile(orgId, resolvedProfileId);
+
+    if (
+      profile.isSuper &&
+      (access?.excludeSuperBot ||
+        !canAccessSuperBotProfile({
+          orgRole: access?.orgRole,
+          isPlatformAdmin: access?.isPlatformAdmin,
+        }))
+    ) {
+      throw new TinyClawApiError("Super Bot is only available to org admins.", 403);
+    }
+
     const sessionId = nanoid();
 
     await this.db.upsertSession({

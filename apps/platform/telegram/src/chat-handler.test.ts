@@ -976,4 +976,125 @@ describe("bridge API integration", () => {
       expect(calls.sendStream).toBe(1);
     });
   });
+
+  test("/profile lists profiles for the active org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "research", name: "Research Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createMessageContext({ userId: 1001, text: "/profile" });
+      await handleMessage(ctx);
+
+      expect(replies.join("\n")).toContain("Choose a profile");
+      expect(replies.join("\n")).toContain("Default Bot");
+      expect(replies.join("\n")).toContain("Research Bot");
+    });
+  });
+
+  test("/profile hides super bot from channel profile switches", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "super_bot", name: "Super Bot", isSuper: true },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createMessageContext({ userId: 1001, text: "/profile" });
+      await handleMessage(ctx);
+
+      const text = replies.join("\n");
+      expect(text).toContain("Default Bot");
+      expect(text).not.toContain("Super Bot");
+    });
+  });
+
+  test("/profile switches bot and starts a fresh session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls, getLastCreateSessionProfileId } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "research", name: "Research Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const chat = createMessageContext({ userId: 1001, text: "hello" });
+      await handleMessage(chat.ctx);
+      expect(getLastCreateSessionProfileId()).toBe("default");
+
+      const switchProfile = createMessageContext({
+        userId: 1001,
+        text: "/profile research",
+      });
+      await handleMessage(switchProfile.ctx);
+
+      expect(calls.createSession).toBe(2);
+      expect(getLastCreateSessionProfileId()).toBe("research");
+      expect(switchProfile.replies).toEqual([
+        "Now using Research Bot. Chat history reset.",
+      ]);
+      expect(sessionStore.get("1001")?.profileId).toBe("research");
+    });
+  });
 });

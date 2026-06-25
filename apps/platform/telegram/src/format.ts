@@ -164,6 +164,7 @@ export const HELP_TEXT = `TinyClaw Telegram commands:
 /compact — compact conversation history
 /new — start a new conversation
 /org — choose or switch organization
+/profile — choose or switch bot profile
 /status — server and model status
 
 Send text or a photo (optional caption) to chat with the agent.`;

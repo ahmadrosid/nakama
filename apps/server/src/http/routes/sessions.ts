@@ -193,11 +193,17 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateSessionRequest>(c.req.raw);
+    const channel = parseChannel(body.channel);
     const sessionId = await agent.createSession(
       orgId,
-      parseChannel(body.channel),
+      channel,
       body.profileId,
       auth.user.id,
+      {
+        orgRole: auth.orgRole,
+        isPlatformAdmin: auth.isPlatformAdmin,
+        excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
+      },
     );
     return json<CreateSessionResponse>({ sessionId }, 201);
   });
