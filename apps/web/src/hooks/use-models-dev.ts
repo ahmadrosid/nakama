@@ -27,6 +27,7 @@ const OFFICIAL_PROVIDER_IDS = new Set([
   "google",
   "openrouter",
   "opencode",
+  "deepseek",
 ]);
 
 const NPM_MAP: Record<string, SelectedProvider> = {
@@ -38,6 +39,7 @@ const NPM_MAP: Record<string, SelectedProvider> = {
 const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
   openrouter: "openrouter",
   opencode: "openai_compatible",
+  deepseek: "deepseek",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {

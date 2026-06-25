@@ -58,6 +58,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   anthropic: "Anthropic",
   openrouter: "OpenRouter",
   gemini: "Gemini",
+  deepseek: "DeepSeek",
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
 };

@@ -17,6 +17,8 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 import { compatibleModelSupportsThinking } from "./compatible-models";
 
+const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+
 export interface CreateProviderOptions {
   provider: ProviderName;
   apiKey: string;
@@ -59,6 +61,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         model,
         ...(baseUrlOverride ? { baseUrl: baseUrlOverride } : {}),
       });
+    case "deepseek":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        model,
+        baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
+        providerName: "deepseek",
+      });
     case "opencode_go":
       return createOpenCodeGoProvider({
         apiKey: options.apiKey,
@@ -90,7 +99,12 @@ function readApiKeyForInstance(
     return instance.apiKey;
   }
 
-  return readEnvValue(env, apiKeyEnvVarForProvider(instance.type));
+  const envVar = apiKeyEnvVarForProvider(instance.type);
+  if (!envVar) {
+    return undefined;
+  }
+
+  return readEnvValue(env, envVar);
 }
 
 export function createProviderForInstance(

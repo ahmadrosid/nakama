@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "anthropic",
   "openrouter",
   "gemini",
+  "deepseek",
   "openai_compatible",
   "opencode_go",
 ] as const;
@@ -21,6 +22,7 @@ export function parseProviderName(value: string | undefined): UserProviderName |
     normalized === "anthropic" ||
     normalized === "openrouter" ||
     normalized === "gemini" ||
+    normalized === "deepseek" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go"
   ) {
@@ -30,7 +32,7 @@ export function parseProviderName(value: string | undefined): UserProviderName |
   return null;
 }
 
-export function apiKeyEnvVarForProvider(provider: UserProviderName): string {
+export function apiKeyEnvVarForProvider(provider: UserProviderName): string | null {
   switch (provider) {
     case "openai":
       return "OPENAI_API_KEY";
@@ -38,6 +40,8 @@ export function apiKeyEnvVarForProvider(provider: UserProviderName): string {
       return "ANTHROPIC_API_KEY";
     case "gemini":
       return "GEMINI_API_KEY";
+    case "deepseek":
+      return null;
     case "openrouter":
       return "OPENROUTER_API_KEY";
     case "openai_compatible":
@@ -67,9 +71,10 @@ export function resolveProvider(options: ResolveProviderOptions = {}): UserProvi
     return explicitConfiguredProvider;
   }
 
-  const providersWithEnvKeys = USER_PROVIDER_NAMES.filter((provider) =>
-    readEnvValue(env, apiKeyEnvVarForProvider(provider)),
-  );
+  const providersWithEnvKeys = USER_PROVIDER_NAMES.filter((provider) => {
+    const envVar = apiKeyEnvVarForProvider(provider);
+    return envVar && readEnvValue(env, envVar);
+  });
 
   if (providersWithEnvKeys.length === 1) {
     return providersWithEnvKeys[0]!;

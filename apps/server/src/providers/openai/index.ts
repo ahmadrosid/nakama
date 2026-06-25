@@ -125,6 +125,10 @@ function providerLabel(providerName: ProviderName): string {
     return "OpenCode Go";
   }
 
+  if (providerName === "deepseek") {
+    return "DeepSeek";
+  }
+
   return "OpenAI";
 }
 

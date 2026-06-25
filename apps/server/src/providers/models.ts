@@ -19,7 +19,7 @@ function withVisionDefaults(models: ProviderModelOption[]): ProviderModelOption[
   return models.map((model) => ({
     ...model,
     supportsVision:
-      model.provider === "opencode_go"
+      model.provider === "opencode_go" || model.provider === "deepseek"
         ? false
         : model.provider === "openai" ||
             model.provider === "anthropic" ||
@@ -105,6 +105,27 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
     maxOutputTokens: 8_192,
     inputPerMillionUsd: 1.25,
     outputPerMillionUsd: 5,
+  },
+  {
+    id: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
+    provider: "deepseek",
+    contextWindow: 1_000_000,
+    maxOutputTokens: 384_000,
+    default: true,
+    supportsThinking: true,
+    inputPerMillionUsd: 0.14,
+    outputPerMillionUsd: 0.28,
+  },
+  {
+    id: "deepseek-v4-pro",
+    name: "DeepSeek V4 Pro",
+    provider: "deepseek",
+    contextWindow: 1_000_000,
+    maxOutputTokens: 384_000,
+    supportsThinking: true,
+    inputPerMillionUsd: 0.435,
+    outputPerMillionUsd: 0.87,
   },
   {
     id: "opencode-go/glm-5.1",
@@ -312,6 +333,7 @@ export function getDefaultModel(
     (provider === "openai" ||
       provider === "anthropic" ||
       provider === "gemini" ||
+      provider === "deepseek" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -326,6 +348,8 @@ export function getDefaultModel(
         ? "claude-sonnet-4-6"
         : provider === "gemini"
           ? "gemini-2.5-flash"
+          : provider === "deepseek"
+            ? "deepseek-v4-flash"
           : provider === "opencode_go"
             ? "opencode-go/kimi-k2.7-code"
             : "gpt-5.4";
@@ -360,6 +384,7 @@ export function resolveModel(
     (provider === "openai" ||
       provider === "anthropic" ||
       provider === "gemini" ||
+      provider === "deepseek" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -402,7 +427,7 @@ export function modelSupportsVision(
     return custom.supportsVision;
   }
 
-  if (provider === "openai_compatible" || provider === "opencode_go") {
+  if (provider === "openai_compatible" || provider === "opencode_go" || provider === "deepseek") {
     return false;
   }
 

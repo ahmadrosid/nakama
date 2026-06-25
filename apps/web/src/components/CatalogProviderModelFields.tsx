@@ -14,9 +14,11 @@ import { client } from "@/lib/client";
 import { filterModelsByProvider, formatProviderLabel, type SelectedProvider } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
-const CATALOG_SHORTLIST_PROVIDERS = ["openai", "anthropic", "gemini", "opencode_go"] as const;
+const CATALOG_SHORTLIST_PROVIDERS = ["openai", "anthropic", "gemini", "deepseek", "opencode_go"] as const;
 
 export type CatalogShortlistProvider = (typeof CATALOG_SHORTLIST_PROVIDERS)[number];
+
+const CATALOG_THINKING_TOGGLE_PROVIDERS = new Set<CatalogShortlistProvider>(["deepseek"]);
 
 export function isCatalogShortlistProvider(
   provider: SelectedProvider,
@@ -129,6 +131,9 @@ export function CatalogProviderModelFields({
         ...(model.outputPerMillionUsd !== undefined
           ? { outputPerMillionUsd: model.outputPerMillionUsd }
           : {}),
+        ...(model.supportsThinking !== undefined
+          ? { supportsThinking: model.supportsThinking }
+          : {}),
       },
     ]);
     setIsBrowsing(false);
@@ -186,6 +191,9 @@ export function CatalogProviderModelFields({
                     ...(model.outputPerMillionUsd !== undefined
                       ? { outputPerMillionUsd: model.outputPerMillionUsd }
                       : {}),
+                    ...(model.supportsThinking !== undefined
+                      ? { supportsThinking: model.supportsThinking }
+                      : {}),
                   })),
                 )
               }
@@ -208,6 +216,7 @@ export function CatalogProviderModelFields({
           models={customModels}
           disabled={disabled}
           showPricing
+          showThinkingToggle={CATALOG_THINKING_TOGGLE_PROVIDERS.has(provider)}
           browseLabel={`Browse ${providerLabel}`}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}

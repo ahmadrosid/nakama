@@ -46,6 +46,7 @@ export function formatProviderLabel(
     provider === "anthropic" ||
     provider === "openrouter" ||
     provider === "gemini" ||
+    provider === "deepseek" ||
     provider === "openai_compatible" ||
     provider === "opencode_go"
   ) {
@@ -60,6 +61,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = 
   { id: "anthropic", label: "Anthropic" },
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
+  { id: "deepseek", label: "DeepSeek" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
@@ -597,7 +599,11 @@ export function resolveModelThinkingSupport(
     return undefined;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "openrouter") {
+  if (
+    model.provider === "openai_compatible" ||
+    model.provider === "openrouter" ||
+    model.provider === "deepseek"
+  ) {
     return model.supportsThinking === true;
   }
 
@@ -639,7 +645,7 @@ export function resolveModelVisionSupport(
     return undefined;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "opencode_go") {
+  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek") {
     return model.supportsVision === true;
   }
 

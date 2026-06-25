@@ -62,6 +62,9 @@ export function seedManageModelRows(
     id: model.id,
     name: model.name ?? model.id,
     default: model.default,
+    supportsThinking: model.supportsThinking,
+    inputPerMillionUsd: model.inputPerMillionUsd,
+    outputPerMillionUsd: model.outputPerMillionUsd,
   }));
 }
 

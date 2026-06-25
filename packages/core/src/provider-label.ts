@@ -8,6 +8,7 @@ const BUILTIN_LABELS: Record<
   anthropic: "Anthropic",
   openrouter: "OpenRouter",
   gemini: "Gemini",
+  deepseek: "DeepSeek",
   opencode_go: "OpenCode Go",
 };
 

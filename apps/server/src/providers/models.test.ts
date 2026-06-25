@@ -73,4 +73,9 @@ describe("resolveModel", () => {
       "opencode-go/future-model",
     );
   });
+
+  test("resolves catalog models for DeepSeek", () => {
+    expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
+    expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
+  });
 });

@@ -1113,6 +1113,7 @@ export type ProviderName =
   | "anthropic"
   | "openrouter"
   | "gemini"
+  | "deepseek"
   | "openai_compatible"
   | "opencode_go";
 

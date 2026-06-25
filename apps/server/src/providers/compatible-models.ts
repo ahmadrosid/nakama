@@ -63,7 +63,11 @@ export function catalogCustomModelsToCatalog(
 
     if (entry.default) model.default = true;
     if (entry.supportsVision !== undefined) model.supportsVision = entry.supportsVision;
-    if (entry.supportsThinking !== undefined) model.supportsThinking = entry.supportsThinking;
+    if (entry.supportsThinking !== undefined) {
+      model.supportsThinking = entry.supportsThinking;
+    } else if (provider === "deepseek") {
+      model.supportsThinking = false;
+    }
     if (entry.inputPerMillionUsd !== undefined) model.inputPerMillionUsd = entry.inputPerMillionUsd;
     if (entry.outputPerMillionUsd !== undefined) model.outputPerMillionUsd = entry.outputPerMillionUsd;
 
@@ -192,6 +196,7 @@ export function getModelsForProviderInstance(
     instance.type === "openai" ||
     instance.type === "anthropic" ||
     instance.type === "gemini" ||
+    instance.type === "deepseek" ||
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];

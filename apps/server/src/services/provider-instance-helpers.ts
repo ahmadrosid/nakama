@@ -95,7 +95,8 @@ export function modelExistsOnInstance(
   if (
     instance.type === "openai" ||
     instance.type === "anthropic" ||
-    instance.type === "gemini"
+    instance.type === "gemini" ||
+    instance.type === "deepseek"
   ) {
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
@@ -173,7 +174,8 @@ export function applyProviderInstanceUpdate(
     } else if (
       instance.type === "openai" ||
       instance.type === "anthropic" ||
-      instance.type === "gemini"
+      instance.type === "gemini" ||
+      instance.type === "deepseek"
     ) {
       next.customModels = validateCustomModels(request.customModels);
     }

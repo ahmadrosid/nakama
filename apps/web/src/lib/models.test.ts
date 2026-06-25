@@ -3,7 +3,7 @@ import { encodeModelSelection, resolveModelThinkingSupport, resolveModelVisionSu
 
 function group(
   providerId: string,
-  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter",
+  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek",
   flags?: { supportsThinking?: boolean; supportsVision?: boolean },
 ) {
   return [
@@ -72,6 +72,22 @@ describe("resolveModelThinkingSupport", () => {
       resolveModelThinkingSupport(
         encodeModelSelection("or-1", "model-1"),
         group("or-1", "openrouter", { supportsThinking: true }),
+      ),
+    ).toBe(true);
+  });
+
+  test("treats deepseek models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("ds-1", "model-1"),
+        group("ds-1", "deepseek"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("ds-1", "model-1"),
+        group("ds-1", "deepseek", { supportsThinking: true }),
       ),
     ).toBe(true);
   });

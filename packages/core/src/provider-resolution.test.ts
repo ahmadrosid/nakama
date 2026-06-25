@@ -12,6 +12,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName(" GEMINI ")).toBe("gemini");
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
+    expect(parseProviderName("deepseek")).toBe("deepseek");
   });
 
   test("rejects unknown values", () => {
@@ -78,5 +79,16 @@ describe("apiKeyEnvVarForProvider", () => {
       "OPENAI_COMPATIBLE_API_KEY",
     );
     expect(apiKeyEnvVarForProvider("opencode_go")).toBe("OPENCODE_GO_API_KEY");
+    expect(apiKeyEnvVarForProvider("deepseek")).toBeNull();
+  });
+
+  test("does not auto-resolve DeepSeek from env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        DEEPSEEK_API_KEY: "sk-test",
+      },
+    });
+
+    expect(provider).toBeNull();
   });
 });
