@@ -22,6 +22,9 @@ import {
   extractSetCookies,
   setupFreshInstallSession,
 } from "./test-session-helpers";
+import { setupTestConfigDir } from "../test-config-dir";
+
+setupTestConfigDir("tinyclaw-http-app-test-");
 
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();

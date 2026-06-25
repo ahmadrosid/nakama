@@ -47,6 +47,10 @@ export function parseSuggestedParams(raw: string): Record<string, unknown> | nul
   return null;
 }
 
+function readGenerateTextContent(result: { content: string } | string): string {
+  return typeof result === "string" ? result : result.content;
+}
+
 export async function suggestToolParamsFromPrompt(
   input: SuggestToolParamsInput,
   options: { provider?: ProviderClient },
@@ -68,7 +72,7 @@ export async function suggestToolParamsFromPrompt(
       format: "text",
     });
 
-    return parseSuggestedParams(result.content) ?? {};
+    return parseSuggestedParams(readGenerateTextContent(result)) ?? {};
   } catch {
     return {};
   }

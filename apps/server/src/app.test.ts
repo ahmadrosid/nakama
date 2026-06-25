@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { createHonoApp } from "./http/app";
@@ -14,6 +15,25 @@ import {
 import { OrgService } from "./services/org-service";
 
 const TEST_DIST_DIR = join(import.meta.dir, "__test_dist__");
+const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+let testConfigDir = "";
+
+beforeAll(() => {
+  testConfigDir = mkdtempSync(join(tmpdir(), "tinyclaw-app-test-"));
+  process.env.TINYCLAW_CONFIG_DIR = testConfigDir;
+});
+
+afterAll(() => {
+  if (originalConfigDir === undefined) {
+    delete process.env.TINYCLAW_CONFIG_DIR;
+  } else {
+    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+  }
+
+  if (testConfigDir) {
+    rmSync(testConfigDir, { recursive: true, force: true });
+  }
+});
 
 function createMockApp(webDistDir: string | null) {
   const authService = new AuthService();

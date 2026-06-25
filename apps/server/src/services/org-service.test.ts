@@ -4,6 +4,9 @@ import { LOCAL_CLIENT_EMAIL } from "@tinyclaw/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { AuthService } from "./auth-service";
 import { OrgService } from "./org-service";
+import { setupTestConfigDir } from "../test-config-dir";
+
+setupTestConfigDir("tinyclaw-org-service-test-");
 
 function createOrgService() {
   const databaseAdapter = createInMemoryDatabaseAdapter();

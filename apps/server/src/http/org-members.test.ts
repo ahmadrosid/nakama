@@ -5,6 +5,9 @@ import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { loginPlatformAdminSession, loginUserSession } from "./test-session-helpers";
+import { setupTestConfigDir } from "../test-config-dir";
+
+setupTestConfigDir("tinyclaw-org-members-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
