@@ -74,13 +74,13 @@ describe("createOpenRouterProvider", () => {
 
     expect(provider.name).toBe("openrouter");
 
-    const content = await provider.generateText({
+    const result = await provider.generateText({
       system: "You are helpful.",
       prompt: "Say hi",
       format: "text",
     });
 
-    expect(content).toBe("Hello from OpenRouter");
+    expect(result.content).toBe("Hello from OpenRouter");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

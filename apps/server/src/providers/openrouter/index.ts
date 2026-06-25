@@ -15,6 +15,7 @@ import type {
   ChatMessage,
   CustomModelEntry,
   GenerateChatInput,
+  GenerateTextResult,
   GenerateTextInput,
   LlmToolDefinition,
   ProviderChatOptions,
@@ -371,12 +372,18 @@ export function createOpenRouterProvider(
         });
 
         const content = result.choices?.[0]?.message?.content?.trim();
+        const usage = extractOpenAITokenUsage(
+          (result as { usage?: Record<string, unknown> }).usage,
+        );
 
         if (!content) {
           throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
         }
 
-        return content;
+        return {
+          content,
+          ...(usage ? { usage } : {}),
+        } satisfies GenerateTextResult;
       });
     },
     generateChat(input: GenerateChatInput) {

@@ -64,7 +64,7 @@ describe("session title generation", () => {
     const provider: ProviderClient = {
       name: "mock",
       async generateText() {
-        return '"Database Migration Plan"';
+        return { content: '"Database Migration Plan"' };
       },
       async generateChat() {
         throw new Error("unused");

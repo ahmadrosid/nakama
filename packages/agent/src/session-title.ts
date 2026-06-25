@@ -101,13 +101,13 @@ export async function generateSessionTitleFromMessages(
   }
 
   try {
-    const raw = await options.provider.generateText({
+    const result = await options.provider.generateText({
       system: SESSION_TITLE_SYSTEM,
       prompt,
       format: "text",
     });
 
-    return normalizeSessionTitle(raw);
+    return normalizeSessionTitle(result.content);
   } catch (error) {
     console.error("Failed to generate session title from provider:", error);
     return null;

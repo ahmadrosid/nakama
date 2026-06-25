@@ -2,6 +2,7 @@ import { ApiError, GoogleGenAI, type GenerateContentResponse, type Part } from "
 import type {
   ChatCompletionResult,
   GenerateChatInput,
+  GenerateTextResult,
   GenerateTextInput,
   ProviderClient,
   StreamChatHandlers,
@@ -212,12 +213,18 @@ export function createGeminiProvider(
         });
 
         const content = response.text?.trim();
+        const usage = extractGeminiTokenUsage(
+          (response as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata,
+        );
 
         if (!content) {
           throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
         }
 
-        return content;
+        return {
+          content,
+          ...(usage ? { usage } : {}),
+        } satisfies GenerateTextResult;
       });
     },
     generateChat(input: GenerateChatInput) {

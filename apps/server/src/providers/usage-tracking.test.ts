@@ -10,7 +10,7 @@ describe("usage tracking", () => {
     const provider: ProviderClient = {
       name: "openai",
       async generateText() {
-        return "unused";
+        return { content: "unused" };
       },
       async generateChat() {
         return {
@@ -41,6 +41,43 @@ describe("usage tracking", () => {
       inputTokens: 123,
       outputTokens: 45,
       totalTokens: 168,
+    });
+  });
+
+  test("prefers provider-reported usage for text calls", async () => {
+    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const provider: ProviderClient = {
+      name: "openai",
+      async generateText() {
+        return {
+          content: "Hello",
+          usage: { inputTokens: 40, outputTokens: 10, totalTokens: 50 },
+        };
+      },
+      async generateChat() {
+        throw new Error("unused");
+      },
+      async streamChat() {
+        throw new Error("unused");
+      },
+    };
+
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const result = await wrapped.generateText({
+      system: "system",
+      prompt: "hi",
+      format: "text",
+    });
+
+    expect(result).toEqual({
+      content: "Hello",
+      usage: { inputTokens: 40, outputTokens: 10, totalTokens: 50 },
+    });
+    expect(tracker.getStats()).toMatchObject({
+      requestCount: 1,
+      inputTokens: 40,
+      outputTokens: 10,
+      totalTokens: 50,
     });
   });
 });

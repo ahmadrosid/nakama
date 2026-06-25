@@ -78,13 +78,13 @@ describe("createGeminiProvider", () => {
 
       expect(provider.name).toBe("gemini");
 
-      const content = await provider.generateText({
+      const result = await provider.generateText({
         system: "You are helpful.",
         prompt: "Say hi",
         format: "text",
       });
 
-      expect(content).toBe("Hello from Gemini");
+      expect(result.content).toBe("Hello from Gemini");
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });

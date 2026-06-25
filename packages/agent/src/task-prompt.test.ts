@@ -46,7 +46,10 @@ describe("task prompt drafting", () => {
     const provider: ProviderClient = {
       name: "mock",
       async generateText() {
-        return 'Here is the prompt:\n{"prompt":"Open Gmail and clean up obvious promotional emails."}';
+        return {
+          content:
+            'Here is the prompt:\n{"prompt":"Open Gmail and clean up obvious promotional emails."}',
+        };
       },
       async generateChat() {
         throw new Error("unused");

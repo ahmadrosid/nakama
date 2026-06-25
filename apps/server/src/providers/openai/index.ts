@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   CustomModelEntry,
   GenerateChatInput,
+  GenerateTextResult,
   GenerateTextInput,
   LlmToolDefinition,
   ProviderClient,
@@ -405,7 +406,7 @@ async function requestCompletion(
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     responseFormat?: { type: "json_object" };
   },
-): Promise<string> {
+): Promise<GenerateTextResult> {
   const response = await fetch(chatCompletionsUrl(client), {
     method: "POST",
     headers: buildRequestHeaders(client),
@@ -429,12 +430,16 @@ async function requestCompletion(
   };
 
   const content = payload.choices?.[0]?.message?.content?.trim();
+  const usage = extractOpenAITokenUsage((payload as { usage?: Record<string, unknown> }).usage);
 
   if (!content) {
     throw new Error(`${client.label} returned an empty response.`);
   }
 
-  return content;
+  return {
+    content,
+    ...(usage ? { usage } : {}),
+  };
 }
 
 interface PendingToolCall {

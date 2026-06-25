@@ -1172,6 +1172,15 @@ export interface ChatCompletionResult {
   };
 }
 
+export interface GenerateTextResult {
+  content: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+}
+
 export interface ProviderChatOptions {
   /** Use the active provider's hosted web search instead of executing web_search locally. */
   webSearch?: boolean;
@@ -1205,7 +1214,7 @@ export interface StreamChatHandlers {
 
 export interface ProviderClient {
   name: ProviderName;
-  generateText(input: GenerateTextInput): Promise<string>;
+  generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
   generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
   streamChat(
     input: GenerateChatInput,

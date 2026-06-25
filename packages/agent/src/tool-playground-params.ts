@@ -62,13 +62,13 @@ export async function suggestToolParamsFromPrompt(
   }
 
   try {
-    const raw = await options.provider.generateText({
+    const result = await options.provider.generateText({
       system: SUGGEST_PARAMS_SYSTEM,
       prompt: buildSuggestParamsUserPrompt(input),
       format: "text",
     });
 
-    return parseSuggestedParams(raw) ?? {};
+    return parseSuggestedParams(result.content) ?? {};
   } catch {
     return {};
   }

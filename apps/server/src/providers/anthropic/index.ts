@@ -1,12 +1,14 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
 import type {
   GenerateChatInput,
+  GenerateTextResult,
   GenerateTextInput,
   ProviderClient,
   ProviderName,
   StreamChatHandlers,
 } from "@tinyclaw/core";
 import { continueAnthropicUntilDone } from "./web-search";
+import { buildTokenUsage } from "../shared";
 
 const DEFAULT_PROVIDER_LABEL = "Anthropic";
 
@@ -91,7 +93,15 @@ export function createAnthropicProvider(
           throw new Error(`${label} returned an empty response.`);
         }
 
-        return content;
+        const usage = buildTokenUsage({
+          inputTokens: message.usage?.input_tokens,
+          outputTokens: message.usage?.output_tokens,
+        });
+
+        return {
+          content,
+          ...(usage ? { usage } : {}),
+        } satisfies GenerateTextResult;
       }, label);
     },
     generateChat(input: GenerateChatInput) {

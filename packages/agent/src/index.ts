@@ -32,12 +32,12 @@ export function createAgentHarness(
         throw new Error("Provider is not configured.");
       }
 
-      const raw = await dependencies.provider.generateText({
+      const result = await dependencies.provider.generateText({
         system: buildAutomationSystemPrompt(tools),
         prompt: buildAutomationUserPrompt(request.prompt, request.channel),
       });
 
-      return parseAutomationResponse(raw, {
+      return parseAutomationResponse(result.content, {
         prompt: request.prompt,
         tools,
       });

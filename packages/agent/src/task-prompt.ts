@@ -63,12 +63,12 @@ export async function draftTaskPromptFromFields(
   }
 
   try {
-    const raw = await options.provider.generateText({
+    const result = await options.provider.generateText({
       system: TASK_PROMPT_SYSTEM,
       prompt: buildTaskPromptUserPrompt(title, input.description),
       format: "text",
     });
-    const prompt = normalizeTaskPrompt(raw);
+    const prompt = normalizeTaskPrompt(result.content);
 
     return prompt || fallback();
   } catch {

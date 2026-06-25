@@ -16,7 +16,7 @@ function createMockProvider(
   return {
     name: "openai",
     generateText() {
-      return Promise.resolve("{}");
+      return Promise.resolve({ content: "{}" });
     },
     generateChat(input: GenerateChatInput) {
       return Promise.resolve(takeResponse(responses, callIndex++, input));
@@ -182,7 +182,7 @@ describe("agent chat tool loop", () => {
     const provider: ProviderClient = {
       name: "openai",
       generateText() {
-        return Promise.resolve("{}");
+        return Promise.resolve({ content: "{}" });
       },
       generateChat(input) {
         systems.push(input.system);

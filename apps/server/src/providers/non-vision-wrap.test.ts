@@ -8,7 +8,7 @@ describe("wrapProviderForNonVision", () => {
     const provider: ProviderClient = {
       name: "openai_compatible",
       async generateText() {
-        return "unused";
+        return { content: "unused" };
       },
       async generateChat(input) {
         seen.push(input.messages.at(-1)?.content);

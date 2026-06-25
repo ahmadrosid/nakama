@@ -97,7 +97,7 @@ describe("history compaction", () => {
     const provider: ProviderClient = {
       name: "openai",
       generateText() {
-        return Promise.resolve("summary");
+        return Promise.resolve({ content: "summary" });
       },
       generateChat() {
         return Promise.resolve({
@@ -142,7 +142,7 @@ describe("history compaction", () => {
     const provider: ProviderClient = {
       name: "openai",
       generateText() {
-        return Promise.resolve("summary");
+        return Promise.resolve({ content: "summary" });
       },
       generateChat() {
         throw new Error("should not summarize");

@@ -2,6 +2,7 @@ import type {
   ChatCompletionResult,
   GenerateChatInput,
   GenerateTextInput,
+  GenerateTextResult,
   ProviderClient,
   StreamChatHandlers,
 } from "@tinyclaw/core";
@@ -90,10 +91,10 @@ export function wrapProviderWithUsageTracking(
       recordChat(input, result);
       return result;
     },
-    async generateText(input: GenerateTextInput): Promise<string> {
+    async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const result = await provider.generateText(input);
-      const inputTokens = estimateTextInputTokens(input);
-      const outputTokens = estimateTokens(result);
+      const inputTokens = result.usage?.inputTokens ?? estimateTextInputTokens(input);
+      const outputTokens = result.usage?.outputTokens ?? estimateTokens(result.content);
       tracker.record(modelId, inputTokens, outputTokens);
       return result;
     },

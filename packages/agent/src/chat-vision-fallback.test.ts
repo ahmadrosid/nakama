@@ -15,7 +15,7 @@ describe("preprocessUserContent vision fallback", () => {
     const provider: ProviderClient = {
       name: "openai_compatible",
       async generateText() {
-        return "unused";
+        return { content: "unused" };
       },
       async generateChat(input) {
         calls.push(input.messages.at(-1)?.content ?? "");

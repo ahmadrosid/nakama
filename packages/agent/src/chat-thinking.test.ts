@@ -8,7 +8,7 @@ function createCapturingProvider(
   const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
     name: "anthropic",
     generateText() {
-      return Promise.resolve("{}");
+      return Promise.resolve({ content: "{}" });
     },
     generateChat(input) {
       provider.lastInput = input;

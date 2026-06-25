@@ -2,6 +2,7 @@ import type {
   ChatCompletionResult,
   ChatMessage,
   GenerateChatInput,
+  GenerateTextResult,
   GenerateTextInput,
   LlmToolDefinition,
   ProviderChatOptions,
@@ -319,7 +320,7 @@ async function requestCompletion(
     messages: Array<{ role: "system" | "user"; content: string }>;
     responseFormat?: { type: "json_object" };
   },
-): Promise<string> {
+): Promise<GenerateTextResult> {
   try {
     const completion = await client.chat.completions.create({
       model: options.model,
@@ -335,7 +336,11 @@ async function requestCompletion(
       throw new Error(`${label} returned an empty response.`);
     }
 
-    return content;
+    const usage = extractOpenAITokenUsage(completion.usage);
+    return {
+      content,
+      ...(usage ? { usage } : {}),
+    };
   } catch (error) {
     throw formatSdkError(label, error);
   }
