@@ -93,7 +93,8 @@ function resolveDefaultProfileId(
   return resolveInitialProfileId(profiles);
 }
 
-export function SoulTab() {
+export function SoulTab({ profileId: controlledProfileId }: { profileId?: string | null } = {}) {
+  const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     data: profiles = [],
@@ -101,8 +102,9 @@ export function SoulTab() {
     isFetching: profilesFetching,
     refetch: refetchProfiles,
   } = useProfilesQuery();
-  const [profileId, setProfileIdState] = useState<string | null>(null);
+  const [internalProfileId, setProfileIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
+  const profileId = embedded ? controlledProfileId : internalProfileId;
   const {
     data: status = null,
     isLoading: statusLoading,
@@ -161,6 +163,10 @@ export function SoulTab() {
   );
 
   useEffect(() => {
+    if (embedded) {
+      return;
+    }
+
     const nextProfileId = resolveDefaultProfileId(profiles, searchParams.get("profile"));
 
     if (!profileInitializedRef.current) {
@@ -169,12 +175,12 @@ export function SoulTab() {
       return;
     }
 
-    if (profileId && profiles.some((profile) => profile.id === profileId)) {
+    if (internalProfileId && profiles.some((profile) => profile.id === internalProfileId)) {
       return;
     }
 
     setProfileIdState(nextProfileId);
-  }, [profiles, profileId, searchParams]);
+  }, [embedded, profiles, internalProfileId, searchParams]);
 
   useEffect(() => {
     const queryError = profilesError ?? statusError;
@@ -236,7 +242,7 @@ export function SoulTab() {
     await Promise.all([refetchProfiles(), refetchStatus()]);
   }
 
-  if (profiles.length === 0 && !profilesFetching) {
+  if (!embedded && profiles.length === 0 && !profilesFetching) {
     return (
       <div className={cn(sectionClass, "p-8 text-sm text-muted-foreground")}>
         Create a profile first to configure soul files.
@@ -244,9 +250,94 @@ export function SoulTab() {
     );
   }
 
-  if (loading && !status) {
-    return <PageState message="Loading soul stack…" />;
+  if (embedded && !profileId) {
+    return (
+      <p className="text-sm text-muted-foreground">Select a profile to edit soul files.</p>
+    );
   }
+
+  if (loading && !status) {
+    return <PageState message="Loading soul stack…" embedded={embedded} />;
+  }
+
+  const soulPanel = (
+    <div className={embedded ? undefined : "min-w-0 p-4 sm:p-5"}>
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {!embedded ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="type-section-title">{selectedProfile?.name ?? "Profile soul"}</h2>
+              {selectedProfile?.soulActive ? (
+                <span className="scope-badge scope-badge-active">active</span>
+              ) : null}
+            </div>
+          ) : null}
+          <p className={cn("type-body text-xs", !embedded && "mt-1")}>
+            Profile soul · one stack per bot
+          </p>
+          {status ? (
+            <p
+              className="type-code mt-2 truncate text-muted-foreground"
+              title={status.directory}
+            >
+              {status.directory}
+            </p>
+          ) : null}
+        </div>
+
+        <div className={cn("flex shrink-0 items-center gap-2", !embedded && "hidden lg:flex")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy || refreshing}
+            onClick={() => void refresh()}
+          >
+            {refreshing ? (
+              <Spinner className="size-4" />
+            ) : (
+              <RefreshCwIcon className="size-4" aria-hidden />
+            )}
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {status
+            ? `${presentCount} of ${SOUL_FILES.length} files present`
+            : "Checking files…"}
+        </p>
+        <p className="text-xs text-muted-foreground lg:hidden">
+          Tap a file to view or edit
+        </p>
+      </div>
+
+      <ul className="divide-y divide-border rounded-md border border-border">
+        {SOUL_FILES.map((file) => (
+          <FileStatusListItem
+            key={file.key}
+            label={file.label}
+            description={file.description}
+            writable={file.writable}
+            present={status?.files[file.key] ?? false}
+            onClick={() => handleOpenFile(file.key)}
+          />
+        ))}
+      </ul>
+
+      {!embedded ? (
+        <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs lg:hidden dark:bg-muted/30">
+          <p className="font-medium text-foreground">How it works</p>
+          <p className="mt-2">
+            Soul files shape the agent&apos;s identity and voice. Start a new chat session
+            after editing so changes take effect.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <>
@@ -256,148 +347,83 @@ export function SoulTab() {
         </p>
       ) : null}
 
-      <section className={cn(sectionClass, "overflow-hidden")}>
-        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
-          <Select
-            value={profileId ?? undefined}
-            disabled={busy || refreshing || !profileId}
-            onValueChange={(value) => {
-              if (value) {
-                setProfileId(String(value));
-              }
-            }}
-          >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
-              <SelectValue placeholder="Select profile">
-                {profiles.find((profile) => profile.id === profileId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  <span className="flex items-center gap-2">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span>{profile.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={busy || refreshing}
-              aria-label="Refresh soul stack"
-              onClick={() => void refresh()}
+      {embedded ? (
+        soulPanel
+      ) : (
+        <section className={cn(sectionClass, "overflow-hidden")}>
+          <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
+            <Select
+              value={profileId ?? undefined}
+              disabled={busy || refreshing || !profileId}
+              onValueChange={(value) => {
+                if (value) {
+                  setProfileId(String(value));
+                }
+              }}
             >
-              {refreshing ? (
-                <Spinner className="size-4" />
-              ) : (
-                <RefreshCwIcon className="size-4" aria-hidden />
-              )}
-            </Button>
-          </div>
-        </div>
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
+                <SelectValue placeholder="Select profile">
+                  {profiles.find((profile) => profile.id === profileId)?.name}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {profiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar profile={profile} size="sm" />
+                      <span>{profile.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
-            <div className="mb-4">
-              <h2 className="type-section-title">Profiles</h2>
-              <p className="type-body mt-1 text-xs">
-                Each profile has its own soul stack under ~/.tinyclaw/profiles/.
-              </p>
-            </div>
-
-            <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
-              {profiles.map((profile) => (
-                <ScopeButton
-                  key={profile.id}
-                  active={profile.id === profileId}
-                  title={profile.name}
-                  subtitle={profile.soulActive ? "soul active" : "soul inactive"}
-                  activeLabel={profile.soulActive ? "active" : undefined}
-                  leading={<ProfileAvatar profile={profile} size="sm" />}
-                  onClick={() => setProfileId(profile.id)}
-                />
-              ))}
-            </div>
-          </aside>
-
-          <div className="min-w-0 p-4 sm:p-5">
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="type-section-title">{selectedProfile?.name ?? "Profile soul"}</h2>
-                  {selectedProfile?.soulActive ? (
-                    <span className="scope-badge scope-badge-active">active</span>
-                  ) : null}
-                </div>
-                <p className="type-body mt-1 text-xs">Profile soul · one stack per bot</p>
-                {status ? (
-                  <p
-                    className="type-code mt-2 truncate text-muted-foreground"
-                    title={status.directory}
-                  >
-                    {status.directory}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || refreshing}
-                  onClick={() => void refresh()}
-                >
-                  {refreshing ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <RefreshCwIcon className="size-4" aria-hidden />
-                  )}
-                  Refresh
-                </Button>
-              </div>
-            </div>
-
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {status
-                  ? `${presentCount} of ${SOUL_FILES.length} files present`
-                  : "Checking files…"}
-              </p>
-              <p className="text-xs text-muted-foreground lg:hidden">
-                Tap a file to view or edit
-              </p>
-            </div>
-
-            <ul className="divide-y divide-border rounded-md border border-border">
-              {SOUL_FILES.map((file) => (
-                <FileStatusListItem
-                  key={file.key}
-                  label={file.label}
-                  description={file.description}
-                  writable={file.writable}
-                  present={status?.files[file.key] ?? false}
-                  onClick={() => handleOpenFile(file.key)}
-                />
-              ))}
-            </ul>
-
-            <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs lg:hidden dark:bg-muted/30">
-              <p className="font-medium text-foreground">How it works</p>
-              <p className="mt-2">
-                Soul files shape the agent&apos;s identity and voice. Start a new chat session
-                after editing so changes take effect.
-              </p>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={busy || refreshing}
+                aria-label="Refresh soul stack"
+                onClick={() => void refresh()}
+              >
+                {refreshing ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <RefreshCwIcon className="size-4" aria-hidden />
+                )}
+              </Button>
             </div>
           </div>
-        </div>
-      </section>
+
+          <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
+              <div className="mb-4">
+                <h2 className="type-section-title">Profiles</h2>
+                <p className="type-body mt-1 text-xs">
+                  Each profile has its own soul stack under ~/.tinyclaw/profiles/.
+                </p>
+              </div>
+
+              <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
+                {profiles.map((profile) => (
+                  <ScopeButton
+                    key={profile.id}
+                    active={profile.id === profileId}
+                    title={profile.name}
+                    subtitle={profile.soulActive ? "soul active" : "soul inactive"}
+                    activeLabel={profile.soulActive ? "active" : undefined}
+                    leading={<ProfileAvatar profile={profile} size="sm" />}
+                    onClick={() => setProfileId(profile.id)}
+                  />
+                ))}
+              </div>
+            </aside>
+
+            {soulPanel}
+          </div>
+        </section>
+      )}
 
       <Dialog open={openFile !== null} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="flex min-h-[min(82dvh,38rem)] max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
@@ -592,12 +618,16 @@ function FileStatusListItem({
   );
 }
 
-function PageState({ message }: { message: string }) {
+function PageState({ message, embedded = false }: { message: string; embedded?: boolean }) {
   return (
     <div
       className={cn(
-        sectionClass,
-        "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+        embedded
+          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+          : cn(
+              sectionClass,
+              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+            ),
       )}
     >
       <Spinner className="size-5" />

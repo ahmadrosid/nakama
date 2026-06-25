@@ -72,7 +72,8 @@ function formatDocumentCount(count: number): string {
   return count === 1 ? "1 document" : `${count} documents`;
 }
 
-export function KnowledgeTab() {
+export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: string | null } = {}) {
+  const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     data: profiles = [],
@@ -80,8 +81,9 @@ export function KnowledgeTab() {
     isFetching: profilesFetching,
     refetch: refetchProfiles,
   } = useProfilesQuery();
-  const [profileId, setProfileIdState] = useState<string | null>(null);
+  const [internalProfileId, setProfileIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
+  const profileId = embedded ? controlledProfileId : internalProfileId;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     data: knowledgeBase = null,
@@ -131,6 +133,10 @@ export function KnowledgeTab() {
   );
 
   useEffect(() => {
+    if (embedded) {
+      return;
+    }
+
     const nextProfileId = resolveDefaultProfileId(profiles, searchParams.get("profile"));
 
     if (!profileInitializedRef.current) {
@@ -139,12 +145,12 @@ export function KnowledgeTab() {
       return;
     }
 
-    if (profileId && profiles.some((profile) => profile.id === profileId)) {
+    if (internalProfileId && profiles.some((profile) => profile.id === internalProfileId)) {
       return;
     }
 
     setProfileIdState(nextProfileId);
-  }, [profiles, profileId, searchParams]);
+  }, [embedded, profiles, internalProfileId, searchParams]);
 
   useEffect(() => {
     const queryError = profilesError ?? knowledgeError;
@@ -207,7 +213,7 @@ export function KnowledgeTab() {
     }
   }
 
-  if (profiles.length === 0 && !profilesFetching) {
+  if (!embedded && profiles.length === 0 && !profilesFetching) {
     return (
       <div className={cn(sectionClass, "p-8 text-sm text-muted-foreground")}>
         Create a profile first to add knowledge base documents.
@@ -215,185 +221,208 @@ export function KnowledgeTab() {
     );
   }
 
-  if (loading && !knowledgeBase) {
-    return <PageState message="Loading knowledge base…" />;
+  if (embedded && !profileId) {
+    return (
+      <p className="text-sm text-muted-foreground">Select a profile to manage knowledge base documents.</p>
+    );
   }
 
-  return (
-    <>
-      {error ? (
-        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
+  if (loading && !knowledgeBase) {
+    return <PageState message="Loading knowledge base…" embedded={embedded} />;
+  }
+
+  const knowledgePanel = (
+    <div className={embedded ? undefined : "min-w-0 p-4 sm:p-5"}>
+      <div className="mb-4 min-w-0">
+        {!embedded ? (
+          <h2 className="type-section-title">{selectedProfile?.name ?? "Profile"}</h2>
+        ) : null}
+        <p className={cn("type-body text-xs", !embedded && "mt-1")}>
+          Knowledge base · one library per profile
         </p>
-      ) : null}
-
-      <section className={cn(sectionClass, "overflow-hidden")}>
-        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
-          <Select
-            value={profileId ?? undefined}
-            disabled={busy || refreshing || !profileId}
-            onValueChange={(value) => {
-              if (value) {
-                setProfileId(String(value));
-              }
-            }}
+        {knowledgeBaseDirectory ? (
+          <p
+            className="type-code mt-2 truncate text-muted-foreground"
+            title={knowledgeBaseDirectory}
           >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
-              <SelectValue placeholder="Select profile">
-                {selectedProfile?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {profiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  <span className="flex items-center gap-2">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span>{profile.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {knowledgeBaseDirectory}
+          </p>
+        ) : null}
+      </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+      <div className="rounded-md border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {formatDocumentCount(documents.length)}
+            {readyCount !== documents.length ? ` · ${readyCount} ready` : ""}
+            {" · "}txt, md, csv, pdf · 5 MB max
+          </p>
+
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={KNOWLEDGE_BASE_ACCEPT}
+              multiple
+              className="hidden"
+              onChange={(event) => void handleUpload(event.target.files)}
+            />
             <Button
               type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={busy || refreshing}
-              aria-label="Refresh knowledge base"
-              onClick={() => void refresh()}
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!profileId || busy}
             >
-              {refreshing ? (
+              {uploadMutation.isPending ? (
                 <Spinner className="size-4" />
               ) : (
-                <RefreshCwIcon className="size-4" aria-hidden />
+                <UploadIcon className="size-4" />
               )}
+              Upload
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
-            <h2 className="type-section-title mb-4">Profiles</h2>
-
-            <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
-              {profiles.map((profile) => (
-                <ScopeButton
-                  key={profile.id}
-                  active={profile.id === profileId}
-                  title={profile.name}
-                  leading={<ProfileAvatar profile={profile} size="sm" />}
-                  onClick={() => setProfileId(profile.id)}
-                />
-              ))}
-            </div>
-          </aside>
-
-          <div className="min-w-0 p-4 sm:p-5">
-            <div className="mb-4 min-w-0">
-              <h2 className="type-section-title">{selectedProfile?.name ?? "Profile"}</h2>
-              <p className="type-body mt-1 text-xs">Knowledge base · one library per profile</p>
-              {knowledgeBaseDirectory ? (
-                <p
-                  className="type-code mt-2 truncate text-muted-foreground"
-                  title={knowledgeBaseDirectory}
-                >
-                  {knowledgeBaseDirectory}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="rounded-md border border-border">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-                <p className="text-xs text-muted-foreground tabular-nums">
-                  {formatDocumentCount(documents.length)}
-                  {readyCount !== documents.length ? ` · ${readyCount} ready` : ""}
-                  {" · "}txt, md, csv, pdf · 5 MB max
-                </p>
-
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={KNOWLEDGE_BASE_ACCEPT}
-                    multiple
-                    className="hidden"
-                    onChange={(event) => void handleUpload(event.target.files)}
+        {documents.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No documents yet.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {documents.map((document) => (
+              <li
+                key={document.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <FileTextIcon
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                    aria-hidden
                   />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{document.filename}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatBytes(document.sizeBytes)} · {formatUploadedAt(document.uploadedAt)}
+                    </p>
+                    {document.status === "failed" && document.error ? (
+                      <p className="mt-1 text-xs text-destructive">{document.error}</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                      document.status === "ready"
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "bg-destructive/10 text-destructive",
+                    )}
+                  >
+                    {document.status}
+                  </span>
                   <Button
                     type="button"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!profileId || busy}
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete ${document.filename}`}
+                    onClick={() => setDeleteTarget(document)}
+                    disabled={busy}
                   >
-                    {uploadMutation.isPending ? (
-                      <Spinner className="size-4" />
-                    ) : (
-                      <UploadIcon className="size-4" />
-                    )}
-                    Upload
+                    <Trash2Icon className="size-4" />
                   </Button>
                 </div>
-              </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 
-              {documents.length === 0 ? (
-                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No documents yet.
-                </div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {documents.map((document) => (
-                    <li
-                      key={document.id}
-                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                    >
-                      <div className="flex min-w-0 items-start gap-3">
-                        <FileTextIcon
-                          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{document.filename}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatBytes(document.sizeBytes)} · {formatUploadedAt(document.uploadedAt)}
-                          </p>
-                          {document.status === "failed" && document.error ? (
-                            <p className="mt-1 text-xs text-destructive">{document.error}</p>
-                          ) : null}
-                        </div>
-                      </div>
+  return (
+    <>
+      {error ? (
+        <p
+          className={cn(
+            "rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive",
+            !embedded && "mb-4",
+          )}
+        >
+          {error}
+        </p>
+      ) : null}
 
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-xs font-medium",
-                            document.status === "ready"
-                              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                              : "bg-destructive/10 text-destructive",
-                          )}
-                        >
-                          {document.status}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete ${document.filename}`}
-                          onClick={() => setDeleteTarget(document)}
-                          disabled={busy}
-                        >
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+      {embedded ? (
+        knowledgePanel
+      ) : (
+        <section className={cn(sectionClass, "overflow-hidden")}>
+          <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
+            <Select
+              value={profileId ?? undefined}
+              disabled={busy || refreshing || !profileId}
+              onValueChange={(value) => {
+                if (value) {
+                  setProfileId(String(value));
+                }
+              }}
+            >
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
+                <SelectValue placeholder="Select profile">
+                  {selectedProfile?.name}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {profiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar profile={profile} size="sm" />
+                      <span>{profile.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={busy || refreshing}
+                aria-label="Refresh knowledge base"
+                onClick={() => void refresh()}
+              >
+                {refreshing ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <RefreshCwIcon className="size-4" aria-hidden />
+                )}
+              </Button>
             </div>
           </div>
-        </div>
-      </section>
+
+          <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
+              <h2 className="type-section-title mb-4">Profiles</h2>
+
+              <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
+                {profiles.map((profile) => (
+                  <ScopeButton
+                    key={profile.id}
+                    active={profile.id === profileId}
+                    title={profile.name}
+                    leading={<ProfileAvatar profile={profile} size="sm" />}
+                    onClick={() => setProfileId(profile.id)}
+                  />
+                ))}
+              </div>
+            </aside>
+
+            {knowledgePanel}
+          </div>
+        </section>
+      )}
 
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
@@ -458,12 +487,16 @@ function ScopeButton({
   );
 }
 
-function PageState({ message }: { message: string }) {
+function PageState({ message, embedded = false }: { message: string; embedded?: boolean }) {
   return (
     <div
       className={cn(
-        sectionClass,
-        "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+        embedded
+          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+          : cn(
+              sectionClass,
+              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+            ),
       )}
     >
       <Spinner className="size-5" />

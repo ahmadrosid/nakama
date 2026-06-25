@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
+import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
@@ -95,6 +97,16 @@ const profileTextSaveDelayMs = 1000;
 const profileModelSaveDelayMs = 400;
 
 type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
+
+type ProfileDetailTab = "profile" | "soul" | "knowledge";
+
+function resolveProfileDetailTab(value: string | null): ProfileDetailTab {
+  if (value === "soul" || value === "knowledge") {
+    return value;
+  }
+
+  return "profile";
+}
 
 type ProfileEditSnapshot = {
   editName: string;
@@ -248,6 +260,7 @@ export function ProfilesPage() {
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
   const refreshing = profilesRefreshing || (detailLoading && Boolean(selectedId));
+  const detailTab = resolveProfileDetailTab(searchParams.get("tab"));
 
   const isDirty = useMemo(() => {
     if (!detail) {
@@ -440,6 +453,24 @@ export function ProfilesPage() {
             next.set("profile", nextProfileId);
           } else {
             next.delete("profile");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setDetailTab = useCallback(
+    (nextTab: ProfileDetailTab) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (nextTab === "profile") {
+            next.delete("tab");
+          } else {
+            next.set("tab", nextTab);
           }
           return next;
         },
@@ -1034,21 +1065,63 @@ export function ProfilesPage() {
 
             </aside>
 
-            <div className="min-w-0 p-4 sm:p-5">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               {profiles.length === 0 ? (
-                <ProfilesEmptyState
-                  variant="full"
-                  disabled={busy}
-                  onCreate={() => setCreateOpen(true)}
-                />
+                <div className="p-4 sm:p-5">
+                  <ProfilesEmptyState
+                    variant="full"
+                    disabled={busy}
+                    onCreate={() => setCreateOpen(true)}
+                  />
+                </div>
               ) : detailLoading && !detail ? (
-                <PageState message="Loading profile…" embedded />
+                <div className="p-4 sm:p-5">
+                  <PageState message="Loading profile…" embedded />
+                </div>
               ) : !selectedId || !detail ? (
-                <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+                <div className="flex min-h-48 items-center justify-center p-4 text-sm text-muted-foreground sm:p-5">
                   Select a profile to edit.
                 </div>
               ) : (
                 <>
+                  <div
+                    role="tablist"
+                    aria-label="Profile settings"
+                    className="flex shrink-0 border-b border-border px-4 sm:px-5"
+                  >
+                    <ProfileDetailTabButton
+                      id="profile-detail-tab-profile"
+                      active={detailTab === "profile"}
+                      controls="profile-detail-panel-profile"
+                      onSelect={() => setDetailTab("profile")}
+                    >
+                      Profile
+                    </ProfileDetailTabButton>
+                    <ProfileDetailTabButton
+                      id="profile-detail-tab-soul"
+                      active={detailTab === "soul"}
+                      controls="profile-detail-panel-soul"
+                      onSelect={() => setDetailTab("soul")}
+                    >
+                      Soul
+                    </ProfileDetailTabButton>
+                    <ProfileDetailTabButton
+                      id="profile-detail-tab-knowledge"
+                      active={detailTab === "knowledge"}
+                      controls="profile-detail-panel-knowledge"
+                      onSelect={() => setDetailTab("knowledge")}
+                    >
+                      Knowledge
+                    </ProfileDetailTabButton>
+                  </div>
+
+                  <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                    {detailTab === "profile" ? (
+                      <div
+                        id="profile-detail-panel-profile"
+                        role="tabpanel"
+                        aria-labelledby="profile-detail-tab-profile"
+                      >
                   <div className="mb-3">
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <input
@@ -1354,7 +1427,25 @@ export function ProfilesPage() {
                         </ul>
                       )}
                     </div>
-
+                      </div>
+                    ) : detailTab === "soul" ? (
+                      <div
+                        id="profile-detail-panel-soul"
+                        role="tabpanel"
+                        aria-labelledby="profile-detail-tab-soul"
+                      >
+                        <SoulTab profileId={selectedId} />
+                      </div>
+                    ) : (
+                      <div
+                        id="profile-detail-panel-knowledge"
+                        role="tabpanel"
+                        aria-labelledby="profile-detail-tab-knowledge"
+                      >
+                        <KnowledgeTab profileId={selectedId} />
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -1668,6 +1759,40 @@ export function ProfilesPage() {
   );
 }
 
+function ProfileDetailTabButton({
+  id,
+  active,
+  controls,
+  onSelect,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  controls: string;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={controls}
+      data-active={active || undefined}
+      className={cn(
+        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+        active
+          ? "border-foreground text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ProfileSaveIndicator({
   saveStatus,
   nameMissing,
@@ -1850,8 +1975,8 @@ const profileEmptySteps = [
     description: "Control which capabilities this bot can use.",
   },
   {
-    title: "Customize in Soul",
-    description: "Set voice and identity per profile when you are ready.",
+    title: "Customize soul & knowledge",
+    description: "Set voice, identity, and documents per profile.",
   },
 ] as const;
 
