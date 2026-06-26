@@ -61,6 +61,28 @@ describe("AutomationService", () => {
     );
   });
 
+  test("computes nextRunAt for future runAt triggers", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "Asia/Jakarta",
+    });
+    const at = new Date(Date.now() + 60_000).toISOString();
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        name: "Reminder",
+        description: "One-time",
+        prompt: "Send reminder",
+        trigger: { type: "runAt", at },
+      },
+      PROFILE_ID,
+    );
+
+    expect(automation.trigger.type).toBe("runAt");
+    expect(automation.nextRunAt).toBe(new Date(at).toISOString());
+  });
+
   test("lists automations only for the active org", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {
@@ -184,5 +206,37 @@ describe("AutomationRunner", () => {
     const runs = await service.listRuns(automation.id);
     expect(runs[0]?.status).toBe("failed");
     expect(runs[0]?.error).toBe("Provider offline");
+  });
+
+  test("disables runAt automations before executing", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const at = new Date(Date.now() + 60_000).toISOString();
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        name: "Reminder",
+        description: "One-time",
+        prompt: "Send reminder",
+        trigger: { type: "runAt", at },
+      },
+      PROFILE_ID,
+    );
+
+    const agentService = {
+      runAutomationPrompt: async () => "Reminder sent",
+    };
+
+    const runner = new AutomationRunner(service, agentService as never);
+    const result = await runner.run(automation.id);
+
+    expect(result.output).toBe("Reminder sent");
+
+    const updated = await service.get(automation.id, ORG_ID);
+    expect(updated?.enabled).toBe(false);
+    expect(updated?.nextRunAt).toBeNull();
   });
 });

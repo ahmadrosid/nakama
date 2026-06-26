@@ -1,4 +1,4 @@
-import type { StoredAutomation } from "@tinyclaw/core";
+import { isWorkerSchedulable, type StoredAutomation } from "@tinyclaw/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationService } from "./automation-service";
 
@@ -25,16 +25,19 @@ export class AutomationRunner {
       return { skipped: true, error: "Automation is disabled." };
     }
 
+    const orgId = automation.orgId?.trim();
+    if (!orgId) {
+      throw new Error("Automation organization is missing.");
+    }
+
+    if (automation.trigger.type === "runAt") {
+      await this.automationService.update(automationId, orgId, { enabled: false });
+    }
+
     this.running.add(automationId);
     const run = await this.automationService.createRun(automationId);
 
     try {
-      const orgId = automation.orgId?.trim();
-
-      if (!orgId) {
-        throw new Error("Automation organization is missing.");
-      }
-
       const output = await this.agentService.runAutomationPrompt(
         orgId,
         automation.profileId,
@@ -62,5 +65,5 @@ export class AutomationRunner {
 }
 
 export function shouldSchedule(automation: StoredAutomation): boolean {
-  return automation.enabled && automation.trigger.type === "schedule";
+  return isWorkerSchedulable(automation);
 }

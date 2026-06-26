@@ -1,6 +1,7 @@
 export type AutomationTrigger =
   | { type: "manual" }
-  | { type: "schedule"; cron: string; timezone?: string };
+  | { type: "schedule"; cron: string; timezone?: string }
+  | { type: "runAt"; at: string; timezone?: string };
 
 export interface AutomationStep {
   id: string;
@@ -53,7 +54,10 @@ export interface HealthResponse {
 
 export interface AutomationSchedule {
   id: string;
-  cron: string;
+  /** Recurring cron trigger — mutually exclusive with runAt. */
+  cron?: string;
+  /** One-shot ISO-8601 datetime — mutually exclusive with cron. */
+  runAt?: string;
   timezone: string | null;
   orgId: string;
   profileId: string;

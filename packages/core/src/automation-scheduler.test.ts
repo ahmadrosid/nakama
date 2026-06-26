@@ -107,4 +107,19 @@ describe("AutomationScheduler", () => {
 
     expect(scheduler.getStatus()).toEqual({ running: false, scheduledJobs: 0 });
   });
+
+  test("registers runAt schedules as timers", async () => {
+    const at = new Date(Date.now() + 60_000).toISOString();
+    const delegate = createDelegate({
+      listScheduledAutomations: async () => [
+        schedule({ id: "a1", cron: undefined, runAt: at }),
+      ],
+    });
+
+    const scheduler = new AutomationScheduler(delegate);
+    await scheduler.start();
+
+    expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 1 });
+    scheduler.stop();
+  });
 });

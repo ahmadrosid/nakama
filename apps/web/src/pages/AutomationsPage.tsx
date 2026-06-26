@@ -630,7 +630,10 @@ function AutomationListItem({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const TriggerIcon = automation.trigger.type === "schedule" ? CalendarClockIcon : HandIcon;
+  const TriggerIcon =
+    automation.trigger.type === "schedule" || automation.trigger.type === "runAt"
+      ? CalendarClockIcon
+      : HandIcon;
 
   return (
     <button
@@ -1271,6 +1274,10 @@ function ListSkeleton({ rows = 4 }: { rows?: number }) {
 function formatTrigger(trigger: AutomationTrigger): string {
   if (trigger.type === "manual") {
     return "Manual trigger";
+  }
+
+  if (trigger.type === "runAt") {
+    return `One-time · ${trigger.at}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
   }
 
   return `Schedule · ${trigger.cron}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;

@@ -10,7 +10,7 @@ export function createAutomationTools(
     {
       name: "create_automation",
       description:
-        "Create and save an automation that re-runs a prompt on a schedule or manually. Use when the user wants a recurring or saved task.",
+        "Create and save an automation that runs a prompt on a schedule, at a specific time once, or manually. Use for recurring tasks and one-time reminders.",
       parameters: {
         type: "object",
         properties: {
@@ -21,12 +21,13 @@ export function createAutomationTools(
           },
           prompt: {
             type: "string",
-            description: "The task prompt to execute each time the automation runs.",
+            description:
+              "The task prompt to execute when the automation runs. For reminders, include delivery instructions (e.g. send email) because scheduled runs do not reply in chat.",
           },
           trigger: {
             type: "object",
             description:
-              'Either { "type": "manual" } or { "type": "schedule", "cron": "0 8 * * *", "timezone": "America/Los_Angeles" }.',
+              'Manual: { "type": "manual" }. Recurring: { "type": "schedule", "cron": "0 8 * * *", "timezone": "America/Los_Angeles" }. One-time: { "type": "runAt", "at": "2026-06-27T13:00:00.000Z", "timezone": "Asia/Jakarta" }.',
             additionalProperties: true,
           },
         },
@@ -193,7 +194,11 @@ function readString(input: unknown, key: string): string | null {
 function readTrigger(
   input: unknown,
   key: string,
-): { type: "manual" } | { type: "schedule"; cron: string; timezone?: string } | null {
+):
+  | { type: "manual" }
+  | { type: "schedule"; cron: string; timezone?: string }
+  | { type: "runAt"; at: string; timezone?: string }
+  | null {
   if (!input || typeof input !== "object") {
     return null;
   }
@@ -214,6 +219,15 @@ function readTrigger(
     return {
       type: "schedule",
       cron: trigger.cron.trim(),
+      timezone:
+        typeof trigger.timezone === "string" ? trigger.timezone.trim() : undefined,
+    };
+  }
+
+  if (trigger.type === "runAt" && typeof trigger.at === "string") {
+    return {
+      type: "runAt",
+      at: trigger.at.trim(),
       timezone:
         typeof trigger.timezone === "string" ? trigger.timezone.trim() : undefined,
     };

@@ -1,4 +1,4 @@
-import type { AutomationSchedule } from "@tinyclaw/core";
+import { isWorkerSchedulable, type AutomationSchedule } from "@tinyclaw/core";
 import { errorResponse, json } from "../shared";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
@@ -14,14 +14,30 @@ export function registerInternalAutomationRoutes(app: HonoApp, options: ServerOp
 
     const automations = await automationService.listAll();
     const schedules: AutomationSchedule[] = automations
-      .filter((automation) => automation.enabled && automation.trigger.type === "schedule")
-      .map((automation) => ({
-        id: automation.id,
-        cron: automation.trigger.cron,
-        timezone: automation.trigger.timezone ?? null,
-        orgId: automation.orgId,
-        profileId: automation.profileId,
-      }));
+      .filter((automation) => isWorkerSchedulable(automation))
+      .map((automation) => {
+        if (automation.trigger.type === "runAt") {
+          return {
+            id: automation.id,
+            runAt: automation.trigger.at,
+            timezone: automation.trigger.timezone ?? null,
+            orgId: automation.orgId ?? "",
+            profileId: automation.profileId,
+          };
+        }
+
+        if (automation.trigger.type === "schedule") {
+          return {
+            id: automation.id,
+            cron: automation.trigger.cron,
+            timezone: automation.trigger.timezone ?? null,
+            orgId: automation.orgId ?? "",
+            profileId: automation.profileId,
+          };
+        }
+
+        throw new Error(`Unexpected schedulable trigger for automation ${automation.id}.`);
+      });
 
     return json(schedules);
   });

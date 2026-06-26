@@ -88,6 +88,15 @@ function parseTrigger(value: unknown): AutomationTrigger {
     };
   }
 
+  if (trigger.type === "runAt" && typeof trigger.at === "string") {
+    return {
+      type: "runAt",
+      at: trigger.at.trim(),
+      timezone:
+        typeof trigger.timezone === "string" ? trigger.timezone.trim() : undefined,
+    };
+  }
+
   return { type: "manual" };
 }
 

@@ -1,4 +1,3 @@
-import { Cron } from "croner";
 import type {
   AutomationRunRecord,
   AutomationTrigger,
@@ -7,8 +6,10 @@ import type {
   UpdateAutomationRequest,
 } from "@tinyclaw/core";
 import {
+  computeAutomationNextRunAt,
   createId,
   DEFAULT_TIMEZONE,
+  isWorkerSchedulable,
   resolveScheduleTimezone,
   validateAutomationInput,
 } from "@tinyclaw/core";
@@ -214,17 +215,7 @@ export class AutomationService {
     trigger: AutomationTrigger,
     userTimezone = DEFAULT_TIMEZONE,
   ): string | null {
-    if (trigger.type !== "schedule" || !trigger.cron.trim()) {
-      return null;
-    }
-
-    const timezone = trigger.timezone ?? userTimezone;
-    const next = new Cron(trigger.cron, {
-      timezone,
-      paused: true,
-    }).nextRun();
-
-    return next ? next.toISOString() : null;
+    return computeAutomationNextRunAt(trigger, userTimezone);
   }
 
   private async resolveProfileId(orgId: string, profileId?: string): Promise<string> {
@@ -253,10 +244,9 @@ export class AutomationService {
 
     return {
       ...automation,
-      nextRunAt:
-        automation.enabled && automation.trigger.type === "schedule"
-          ? this.computeNextRunAt(automation.trigger, userTimezone)
-          : null,
+      nextRunAt: isWorkerSchedulable(automation)
+        ? this.computeNextRunAt(automation.trigger, userTimezone)
+        : null,
       lastRunAt: runs[0]?.startedAt ?? null,
     };
   }

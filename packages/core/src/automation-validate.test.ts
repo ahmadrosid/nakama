@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   isValidCronExpression,
+  isWorkerSchedulable,
   resolveScheduleTimezone,
   validateAutomationInput,
   validateTimezone,
@@ -25,6 +26,26 @@ describe("validateAutomationInput", () => {
         trigger: { type: "schedule", cron: "every morning" },
       }),
     ).toThrow(/Invalid cron/);
+  });
+
+  test("accepts runAt automations", () => {
+    expect(() =>
+      validateAutomationInput({
+        name: "Reminder",
+        prompt: "Send reminder email",
+        trigger: { type: "runAt", at: "2026-06-27T13:00:00.000Z" },
+      }),
+    ).not.toThrow();
+  });
+
+  test("rejects invalid runAt", () => {
+    expect(() =>
+      validateAutomationInput({
+        name: "Reminder",
+        prompt: "Send reminder email",
+        trigger: { type: "runAt", at: "not-a-date" },
+      }),
+    ).toThrow(/Invalid runAt/);
   });
 
   test("rejects empty prompt", () => {
@@ -74,5 +95,39 @@ describe("resolveScheduleTimezone", () => {
       cron: "0 8 * * *",
       timezone: "Asia/Jakarta",
     });
+  });
+
+  test("fills runAt timezone from user preference", () => {
+    expect(
+      resolveScheduleTimezone(
+        { type: "runAt", at: "2026-06-27T13:00:00.000Z" },
+        "Asia/Jakarta",
+      ),
+    ).toEqual({
+      type: "runAt",
+      at: "2026-06-27T13:00:00.000Z",
+      timezone: "Asia/Jakarta",
+    });
+  });
+});
+
+describe("isWorkerSchedulable", () => {
+  test("includes future runAt automations", () => {
+    const at = new Date(Date.now() + 60_000).toISOString();
+    expect(
+      isWorkerSchedulable({
+        enabled: true,
+        trigger: { type: "runAt", at },
+      }),
+    ).toBe(true);
+  });
+
+  test("excludes past runAt automations", () => {
+    expect(
+      isWorkerSchedulable({
+        enabled: true,
+        trigger: { type: "runAt", at: "2020-01-01T00:00:00.000Z" },
+      }),
+    ).toBe(false);
   });
 });
