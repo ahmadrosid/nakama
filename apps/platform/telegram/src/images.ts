@@ -1,6 +1,7 @@
 import type { Context } from "grammy";
 import type { ImageAttachment } from "@tinyclaw/core/contract";
 import { MAX_IMAGE_BYTES } from "@tinyclaw/core/message-content";
+import { downloadTelegramFile, OversizedTelegramFileError } from "./attachments";
 
 export interface TelegramImageInput {
   message: string;
@@ -35,32 +36,21 @@ export async function downloadTelegramImage(
   ctx: Context,
   fileId: string,
 ): Promise<ImageAttachment> {
-  const file = await ctx.api.getFile(fileId);
+  try {
+    const downloaded = await downloadTelegramFile(ctx, fileId, MAX_IMAGE_BYTES);
+    const mediaType = inferMediaType(downloaded.filePath, downloaded.contentType);
 
-  if (!file.file_path) {
-    throw new Error("Telegram did not return a file path.");
+    return {
+      mediaType,
+      data: Buffer.from(downloaded.bytes).toString("base64"),
+    };
+  } catch (error) {
+    if (error instanceof OversizedTelegramFileError) {
+      throw new Error("Image is too large. Maximum size is 5 MB.");
+    }
+
+    throw error;
   }
-
-  const token = ctx.api.token;
-  const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`Failed to download image (${response.status}).`);
-  }
-
-  const bytes = await response.arrayBuffer();
-
-  if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    throw new Error("Image is too large. Maximum size is 5 MB.");
-  }
-
-  const mediaType = inferMediaType(file.file_path, response.headers.get("content-type"));
-
-  return {
-    mediaType,
-    data: Buffer.from(bytes).toString("base64"),
-  };
 }
 
 function inferMediaType(filePath: string, headerType: string | null): string {

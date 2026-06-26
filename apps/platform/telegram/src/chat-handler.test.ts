@@ -1,7 +1,8 @@
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, spyOn, afterEach } from "bun:test";
 import { TelegramAuthStore } from "./auth-store";
 import { createChatHandler } from "./chat-handler";
+import { UNSUPPORTED_DOCUMENT_TYPES_REPLY, UNSUPPORTED_MEDIA_REPLY } from "./attachments";
 import { SessionStore } from "./session-store";
 import {
   createMessageContext,
@@ -1191,6 +1192,164 @@ describe("bridge API integration", () => {
       expect(switchProfile.replies).toEqual([
         "Now using Research Bot. Chat history reset.",
       ]);
+    });
+  });
+});
+
+describe("createChatHandler document attachments", () => {
+  let fetchSpy: ReturnType<typeof spyOn> | undefined;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  function createDocumentContext(options: {
+    userId: number;
+    fileName: string;
+    mimeType: string;
+    caption?: string;
+  }) {
+    const base = createMessageContext({ userId: options.userId });
+    (base.ctx as { message: Record<string, unknown> }).message = {
+      document: {
+        file_id: "doc-1",
+        file_name: options.fileName,
+        mime_type: options.mimeType,
+      },
+      caption: options.caption,
+    };
+    (base.ctx as { api: Record<string, unknown> }).api = {
+      ...((base.ctx as { api?: Record<string, unknown> }).api ?? {}),
+      token: "test-token",
+      getFile: async () => ({ file_path: `documents/${options.fileName}` }),
+    };
+
+    return base;
+  }
+
+  test("forwards supported pdf documents to sendStream", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response("pdf-content", {
+          headers: { "content-type": "application/pdf" },
+        }),
+      );
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls, getLastStreamInput } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createDocumentContext({
+        userId: 4242,
+        fileName: "report.pdf",
+        mimeType: "application/pdf",
+        caption: "Summarize",
+      });
+
+      await handleMessage(ctx);
+
+      expect(calls.sendStream).toBe(1);
+      expect(getLastStreamInput()).toEqual({
+        message: "Summarize",
+        documents: [
+          expect.objectContaining({
+            filename: "report.pdf",
+            mediaType: "application/pdf",
+          }),
+        ],
+      });
+      expect(replies.at(-1)).toBe("Agent reply");
+    });
+  });
+
+  test("rejects unsupported documents without calling sendStream", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      fetchSpy = spyOn(globalThis, "fetch");
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createDocumentContext({
+        userId: 4242,
+        fileName: "sheet.xlsx",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      await handleMessage(ctx);
+
+      expect(calls.sendStream).toBe(0);
+      expect(replies).toEqual([UNSUPPORTED_DOCUMENT_TYPES_REPLY]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  test("replies with supported media guidance for other non-text messages", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        allowedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createMessageContext({ userId: 4242 });
+      (ctx as { message: Record<string, unknown> }).message = {
+        voice: { file_id: "voice-1" },
+      };
+
+      await handleMessage(ctx);
+
+      expect(calls.sendStream).toBe(0);
+      expect(replies).toEqual([UNSUPPORTED_MEDIA_REPLY]);
     });
   });
 });

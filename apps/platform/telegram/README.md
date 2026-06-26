@@ -40,7 +40,7 @@ Optional env vars:
 | `/profile` | Choose or switch bot profile |
 | `/status` | Server and model status |
 
-Send plain text or a photo (optional caption) to chat with the agent.
+Send plain text, a photo (optional caption), or a document (pdf, docx, txt, csv — max 5 MB) to chat with the agent.
 
 **Stopping a reply:** While the bot is working on an answer, send `/stop`. Any text already generated is sent first, then the bot replies `Stopped.`. If nothing is in progress, you get `Nothing to stop.`
 

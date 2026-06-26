@@ -24,6 +24,12 @@ import {
   registerActiveStream,
   stopActiveStream,
 } from "./active-stream";
+import {
+  buildTelegramDocumentInput,
+  DOWNLOAD_FAILED_REPLY,
+  hasTelegramDocument,
+  UNSUPPORTED_MEDIA_REPLY,
+} from "./attachments";
 import { buildTelegramImageInput } from "./images";
 import { normalizeHandshakeInput } from "@tinyclaw/core/telegram-config";
 import type { TelegramBridgeConfig } from "./config";
@@ -91,6 +97,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             return;
           }
 
+          if (hasTelegramDocument(ctx)) {
+            await ctx.reply("Send your pairing code as text to link this chat.");
+            return;
+          }
+
           await ctx.reply("Text messages only.");
           return;
         }
@@ -116,10 +127,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      const documentInput = await tryBuildDocumentInput(ctx);
+
+      if (documentInput) {
+        await handleChatMessage(ctx, documentInput, chatId);
+        return;
+      }
+
+      if (hasTelegramDocument(ctx)) {
+        return;
+      }
+
       if (!text) {
-        await ctx.reply(
-          "Send text or a photo (with optional caption). Other media is not supported yet.",
-        );
+        await ctx.reply(UNSUPPORTED_MEDIA_REPLY);
         return;
       }
 
@@ -231,6 +251,26 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return await buildTelegramImageInput(ctx);
     } catch (error) {
       await ctx.reply(formatError(error));
+      return null;
+    }
+  }
+
+  async function tryBuildDocumentInput(ctx: Context): Promise<SendMessageInput | null> {
+    try {
+      const result = await buildTelegramDocumentInput(ctx);
+
+      if (!result) {
+        return null;
+      }
+
+      if (result.kind === "reject") {
+        await ctx.reply(result.message);
+        return null;
+      }
+
+      return result.input;
+    } catch {
+      await ctx.reply(DOWNLOAD_FAILED_REPLY);
       return null;
     }
   }

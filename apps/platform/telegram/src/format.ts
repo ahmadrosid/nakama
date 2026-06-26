@@ -167,4 +167,4 @@ export const HELP_TEXT = `TinyClaw Telegram commands:
 /profile — choose or switch bot profile
 /status — server and model status
 
-Send text or a photo (optional caption) to chat with the agent.`;
+Send text, a photo, or a supported document (pdf, docx, txt, csv — max 5 MB) to chat with the agent.`;

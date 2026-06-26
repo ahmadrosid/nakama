@@ -135,15 +135,17 @@ export function createMockClient(
   };
   const orgIds: string[] = [];
   let lastCreateSessionProfileId: string | undefined;
+  let lastStreamInput: unknown;
 
   let streamControl: MockStreamControl | null = null;
 
   const sendStream = async (
-    _input: unknown,
+    input: unknown,
     handlers: unknown,
     streamOptions?: { signal?: AbortSignal },
   ) => {
     calls.sendStream += 1;
+    lastStreamInput = input;
 
     if (!options.streaming) {
       return "Agent reply";
@@ -302,6 +304,7 @@ export function createMockClient(
     calls,
     orgIds,
     getLastCreateSessionProfileId: () => lastCreateSessionProfileId,
+    getLastStreamInput: () => lastStreamInput,
     getStreamControl: () => streamControl,
   };
 }
