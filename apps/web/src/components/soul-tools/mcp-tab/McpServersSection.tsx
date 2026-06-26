@@ -1,4 +1,5 @@
 import type { McpServerSummary } from "@tinyclaw/core/contract";
+import { isPreinstalledMcpServerId } from "@tinyclaw/core/mcp/preinstalled";
 import {
   EllipsisVerticalIcon,
   EyeIcon,
@@ -59,9 +60,11 @@ function McpServerActions({
   onDelete: () => void;
 }) {
   const assignedProfileCount = server.assignedProfileCount ?? 0;
-  const deleteBlocked = assignedProfileCount > 0;
-  const deleteTooltip =
-    assignedProfileCount === 1
+  const preinstalled = isPreinstalledMcpServerId(server.id);
+  const deleteBlocked = preinstalled || assignedProfileCount > 0;
+  const deleteTooltip = preinstalled
+    ? "Preinstalled MCP servers cannot be deleted."
+    : assignedProfileCount === 1
       ? "Assigned to 1 profile. Unassign on the Profiles page before deleting."
       : `Assigned to ${assignedProfileCount} profiles. Unassign on the Profiles page before deleting.`;
 

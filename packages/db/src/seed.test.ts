@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
+import { PREINSTALLED_MCP_SERVER_IDS } from "@tinyclaw/core/mcp/preinstalled";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-import { ensureBuiltinToolDefinitions, removeUnsupportedTools, seedDatabase } from "./seed";
+import { ensureBuiltinToolDefinitions, ensurePreinstalledMcpServers, removeUnsupportedTools, seedDatabase } from "./seed";
 
 describe("seed cleanup", () => {
   test("removes unsupported tool handler types", async () => {
@@ -67,5 +68,30 @@ describe("seed built-in tools", () => {
     await ensureBuiltinToolDefinitions(db);
 
     expect(await db.getTool(BUILTIN_TOOL_IDS.create_skill)).not.toBeNull();
+  });
+});
+
+describe("seed preinstalled MCP servers", () => {
+  test("ensurePreinstalledMcpServers registers exa and currency-conversion", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    await ensurePreinstalledMcpServers(db);
+
+    const exa = await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa);
+    const currency = await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.currency_conversion);
+
+    expect(exa?.name).toBe("exa");
+    expect(exa?.transport).toBe("http");
+    expect(currency?.name).toBe("currency-conversion");
+    expect(currency?.transport).toBe("http");
+  });
+
+  test("ensurePreinstalledMcpServers upserts idempotently", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    await ensurePreinstalledMcpServers(db);
+    await ensurePreinstalledMcpServers(db);
+
+    expect((await db.listMcpServers()).length).toBe(2);
   });
 });

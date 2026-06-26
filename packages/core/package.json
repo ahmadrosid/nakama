@@ -32,7 +32,8 @@
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",
     "./tools/protected": "./src/tools/protected.ts",
-    "./tools/email": "./src/tools/email.ts"
+    "./tools/email": "./src/tools/email.ts",
+    "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
   },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir dist --target bun",

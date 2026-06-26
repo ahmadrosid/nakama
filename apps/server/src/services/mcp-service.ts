@@ -13,6 +13,7 @@ import type {
   UpdateMcpServerRequest,
 } from "@tinyclaw/core";
 import { createId, TinyClawApiError } from "@tinyclaw/core";
+import { isPreinstalledMcpServerId } from "@tinyclaw/core/mcp/preinstalled";
 import type { CachedMcpTool, DatabaseAdapter, StoredMcpServerRecord, StoredProfileRecord } from "@tinyclaw/db";
 import {
   McpClientManager,
@@ -146,7 +147,11 @@ export class McpService {
   }
 
   async deleteServer(serverId: string): Promise<void> {
-    await this.requireServer(serverId);
+    const server = await this.requireServer(serverId);
+
+    if (isPreinstalledMcpServerId(server.id)) {
+      throw new Error(`Preinstalled MCP server "${server.name}" cannot be deleted.`);
+    }
 
     const profiles = await this.db.listProfilesForMcpServer(serverId);
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { nanoid } from "@tinyclaw/core";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { PREINSTALLED_MCP_SERVER_IDS } from "@tinyclaw/core/mcp/preinstalled";
+import { createInMemoryDatabaseAdapter, ensurePreinstalledMcpServers } from "@tinyclaw/db";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 
@@ -270,6 +271,19 @@ describe("McpService", () => {
     await service.deleteServer(created.server.id);
 
     expect(await db.getMcpServer(created.server.id)).toBeNull();
+  });
+
+  test("blocks delete for preinstalled MCP servers", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new McpService(db, new McpClientManager());
+
+    await ensurePreinstalledMcpServers(db);
+
+    await expect(service.deleteServer(PREINSTALLED_MCP_SERVER_IDS.exa)).rejects.toThrow(
+      'Preinstalled MCP server "exa" cannot be deleted.',
+    );
+
+    expect(await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa)).not.toBeNull();
   });
 
   test("lists assigned profile counts on MCP servers", async () => {

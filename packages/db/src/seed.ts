@@ -1,4 +1,5 @@
 import { builtinTools } from "@tinyclaw/core";
+import { preinstalledMcpServers } from "@tinyclaw/core/mcp/preinstalled";
 import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import { ensureLocalClientAccess } from "./local-client";
 import { ensureOrgSuperBotProfiles } from "./org-profiles";
@@ -11,6 +12,7 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeLegacyBuiltinTools(db);
   await removeUnsupportedTools(db);
   await ensureBuiltinToolDefinitions(db);
+  await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
   await ensureOrgSuperBotProfiles(db);
 }
@@ -67,6 +69,27 @@ export async function ensureBuiltinToolDefinitions(db: DatabaseAdapter): Promise
       description: tool.description,
       handlerType: "builtin",
       handlerConfig: { name: tool.name },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+}
+
+export async function ensurePreinstalledMcpServers(db: DatabaseAdapter): Promise<void> {
+  const now = new Date().toISOString();
+
+  for (const server of preinstalledMcpServers) {
+    const existing = await db.getMcpServer(server.id);
+
+    await db.upsertMcpServer({
+      id: server.id,
+      name: server.name,
+      transport: server.transport,
+      config: server.config,
+      enabled: true,
+      status: existing?.status ?? "disconnected",
+      lastError: existing?.lastError ?? null,
+      cachedTools: existing?.cachedTools ?? [],
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
