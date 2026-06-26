@@ -72,6 +72,22 @@ export interface StoredSessionMessageRecord {
   createdAt: string;
 }
 
+export type AttachmentKind = "image" | "document";
+
+export interface StoredAttachmentRecord {
+  id: string;
+  orgId: string | null;
+  profileId: string;
+  sessionId: string | null;
+  channel: string;
+  kind: AttachmentKind;
+  filename: string | null;
+  mediaType: string;
+  sizeBytes: number;
+  storagePath: string;
+  createdAt: string;
+}
+
 export interface StoredSessionSummaryRecord {
   id: string;
   profileId: string;
@@ -340,6 +356,10 @@ export interface DatabaseAdapter {
     messages: StoredSessionMessageRecord[],
   ): Promise<void>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
+
+  insertAttachment(record: StoredAttachmentRecord): Promise<void>;
+  getAttachment(id: string): Promise<StoredAttachmentRecord | null>;
+  deleteAttachment(id: string): Promise<boolean>;
 
   listTasks(): Promise<StoredTaskRecord[]>;
   listTasksForOrg(orgId: string): Promise<StoredTaskRecord[]>;

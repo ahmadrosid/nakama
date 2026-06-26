@@ -40,6 +40,7 @@ export async function downloadTelegramImage(
     const downloaded = await downloadTelegramFile(ctx, fileId, MAX_IMAGE_BYTES);
     const mediaType = inferMediaType(downloaded.filePath, downloaded.contentType);
 
+    // Base64 here is transport-only; the server persists bytes and stores image_ref in session history.
     return {
       mediaType,
       data: Buffer.from(downloaded.bytes).toString("base64"),

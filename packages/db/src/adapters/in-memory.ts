@@ -15,6 +15,7 @@ import type {
   StoredOrganizationRecord,
   StoredUserOrganizationRecord,
   StoredProfileRecord,
+  StoredAttachmentRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
@@ -43,6 +44,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const profileSkills = new Map<string, Set<string>>();
   const sessions = new Map<string, StoredSessionRecord>();
   const sessionMessages = new Map<string, StoredSessionMessageRecord[]>();
+  const attachments = new Map<string, StoredAttachmentRecord>();
   const usersById = new Map<string, StoredUserRecord>();
   const usersByEmail = new Map<string, StoredUserRecord>();
   const userContextByUserId = new Map<string, string>();
@@ -498,6 +500,18 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async deleteMessagesForSession(sessionId) {
       sessionMessages.delete(sessionId);
+    },
+
+    async insertAttachment(record) {
+      attachments.set(record.id, { ...record });
+    },
+
+    async getAttachment(id) {
+      return attachments.get(id) ?? null;
+    },
+
+    async deleteAttachment(id) {
+      return attachments.delete(id);
     },
 
     async listTasks() {

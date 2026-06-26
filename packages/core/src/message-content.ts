@@ -214,7 +214,7 @@ export function countUserImages(content: string | MessageContentPart[]): number 
     return 0;
   }
 
-  return content.filter((part) => part.type === "image").length;
+  return content.filter((part) => part.type === "image" || part.type === "image_ref").length;
 }
 
 export function countUserDocuments(content: string | MessageContentPart[]): number {
@@ -222,7 +222,7 @@ export function countUserDocuments(content: string | MessageContentPart[]): numb
     return 0;
   }
 
-  return content.filter((part) => part.type === "document").length;
+  return content.filter((part) => part.type === "document" || part.type === "document_ref").length;
 }
 
 export function messageContentHasImages(content: string | MessageContentPart[]): boolean {

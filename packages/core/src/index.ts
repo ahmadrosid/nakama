@@ -8,6 +8,8 @@ export * from "./config";
 export * from "./contract";
 export * from "./fs";
 export * from "./message-content";
+export * from "./attachments/store";
+export * from "./attachments/content";
 export * from "./document-content";
 export * from "./image-content";
 export * from "./normalize-task-prompt";

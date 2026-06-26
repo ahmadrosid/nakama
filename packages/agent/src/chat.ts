@@ -89,6 +89,9 @@ export interface AgentChatSessionOptions {
   preprocessUserContent?: (
     content: string | MessageContentPart[],
   ) => Promise<string | MessageContentPart[]>;
+  rehydrateMessagesForProvider?: (
+    messages: readonly ChatMessage[],
+  ) => Promise<ChatMessage[]>;
 }
 
 export function createAgentChatSession(
@@ -160,6 +163,7 @@ export function createAgentChatSession(
         runCompaction,
         resolvePromptContext: options.resolvePromptContext,
         preprocessUserContent: options.preprocessUserContent,
+        rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
       });
     },
     async sendStream(input, handlers) {
@@ -177,6 +181,7 @@ export function createAgentChatSession(
           runCompaction,
           resolvePromptContext: options.resolvePromptContext,
           preprocessUserContent: options.preprocessUserContent,
+          rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
         },
       );
     },
@@ -221,6 +226,9 @@ async function sendMessage(
     preprocessUserContent?: (
       content: string | MessageContentPart[],
     ) => Promise<string | MessageContentPart[]>;
+    rehydrateMessagesForProvider?: (
+      messages: readonly ChatMessage[],
+    ) => Promise<ChatMessage[]>;
   },
 ): Promise<string> {
   let userContent = normalizeUserContent(
@@ -294,6 +302,7 @@ async function sendMessage(
       providerOptions,
       options.handlers,
       options.toolContext,
+      options.rehydrateMessagesForProvider,
     );
 
     return reply;
@@ -336,6 +345,9 @@ async function runConversation(
   providerOptions: ProviderChatOptions | undefined,
   handlers?: StreamHandlers,
   toolContext?: ToolContext,
+  rehydrateMessagesForProvider?: (
+    messages: readonly ChatMessage[],
+  ) => Promise<ChatMessage[]>,
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     const result = await generateReply(
@@ -346,6 +358,7 @@ async function runConversation(
       providerOptions,
       mode,
       handlers,
+      rehydrateMessagesForProvider,
     );
 
     history.push(result.assistantMessage);
@@ -414,11 +427,18 @@ async function generateReply(
   providerOptions: ProviderChatOptions | undefined,
   mode: "send" | "stream",
   handlers?: StreamHandlers,
+  rehydrateMessagesForProvider?: (
+    messages: readonly ChatMessage[],
+  ) => Promise<ChatMessage[]>,
 ) {
   const dateLine = `Today is ${formatCurrentDate()}.`;
+  const messages =
+    rehydrateMessagesForProvider !== undefined
+      ? await rehydrateMessagesForProvider(history)
+      : history;
   const input = {
     system: `${systemPrompt}\n\n${dateLine}`,
-    messages: history,
+    messages,
     tools,
     providerOptions,
   };

@@ -14,6 +14,8 @@
     "./profiles": "./src/profiles.ts",
     "./thinking-content": "./src/thinking-content.ts",
     "./message-content": "./src/message-content.ts",
+    "./attachments/store": "./src/attachments/store.ts",
+    "./attachments/content": "./src/attachments/content.ts",
     "./image-content": "./src/image-content.ts",
     "./normalize-task-prompt": "./src/normalize-task-prompt.ts",
     "./provider-inference": "./src/provider-inference.ts",

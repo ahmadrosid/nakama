@@ -104,6 +104,9 @@ import {
   loadUserTimezone,
   loadUserVisionSettings,
   messageContentHasImages,
+  persistInlineAttachmentsInContent,
+  rehydrateAttachmentRefsInContent,
+  rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   regenerateTelegramHandshake,
   regenerateWhatsAppPairingCode,
   replaceImagePartsWithDescriptions,
@@ -185,6 +188,10 @@ import {
   resolveVisionProviderSelection,
   VISION_MODEL_REQUIRED_MESSAGE,
 } from "./image-vision-fallback";
+import {
+  createAttachmentLoader,
+  createAttachmentSaver,
+} from "./attachment-service";
 
 interface StoredSession {
   channel: AgentChannel;
@@ -1846,6 +1853,13 @@ export class AgentService {
     const userContext = await this.loadUserContextForUser(userId);
     const compaction = this.resolveCompactionConfig(profile);
     const harness = this.createHarnessForProfile(profile);
+    const saveAttachment = createAttachmentSaver(this.db, {
+      orgId,
+      profileId,
+      sessionId,
+      channel,
+    });
+    const loadAttachment = createAttachmentLoader(this.db, { orgId, profileId });
 
     const session = harness.createChatSession({
       channel,
@@ -1886,9 +1900,13 @@ export class AgentService {
         return parts.join("\n\n");
       },
       preprocessUserContent: async (content) => {
+        content = await persistInlineAttachmentsInContent(content, saveAttachment);
+
         if (!messageContentHasImages(content)) {
           return content;
         }
+
+        const forVision = await rehydrateAttachmentRefsInContent(content, loadAttachment);
 
         const primarySupportsVision = resolvePrimaryModelVisionSupport(
           this.userConfig,
@@ -1917,11 +1935,13 @@ export class AgentService {
 
         const descriptions = await describeImagesWithVisionModel(
           visionProvider,
-          extractImageParts(content),
+          extractImageParts(forVision),
         );
 
-        return replaceImagePartsWithDescriptions(content, descriptions);
+        return replaceImagePartsWithDescriptions(forVision, descriptions);
       },
+      rehydrateMessagesForProvider: (messages) =>
+        rehydrateAttachmentMessages(messages, loadAttachment),
     });
 
     return wrapPersistedSession(sessionId, session, this.db, {

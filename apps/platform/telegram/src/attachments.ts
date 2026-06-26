@@ -116,6 +116,7 @@ export async function buildTelegramDocumentInput(
       return { kind: "reject", message: UNSUPPORTED_DOCUMENT_TYPES_REPLY };
     }
 
+    // Base64 here is transport-only; the server persists bytes and stores document_ref in session history.
     return {
       kind: "input",
       input: {

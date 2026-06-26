@@ -19,6 +19,7 @@ import type {
   StoredOrganizationRecord,
   StoredUserOrganizationRecord,
   StoredProfileRecord,
+  StoredAttachmentRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
@@ -96,6 +97,20 @@ interface SessionMessageRow {
   session_id: string;
   seq: number;
   payload: string;
+  created_at: string;
+}
+
+interface AttachmentRow {
+  id: string;
+  org_id: string | null;
+  profile_id: string;
+  session_id: string | null;
+  channel: string;
+  kind: string;
+  filename: string | null;
+  media_type: string;
+  size_bytes: number;
+  storage_path: string;
   created_at: string;
 }
 
@@ -399,6 +414,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteMessagesForSessionStmt = db.prepare(
     "DELETE FROM session_messages WHERE session_id = ?",
   );
+  const insertAttachmentStmt = db.prepare(`
+    INSERT INTO attachments (
+      id, org_id, profile_id, session_id, channel, kind, filename,
+      media_type, size_bytes, storage_path, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const getAttachmentStmt = db.prepare("SELECT * FROM attachments WHERE id = ?");
+  const deleteAttachmentStmt = db.prepare("DELETE FROM attachments WHERE id = ?");
   const listSessionSummariesStmt = db.prepare(`
     SELECT
       s.id,
@@ -1224,6 +1248,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       deleteMessagesForSessionStmt.run(sessionId);
     },
 
+    async insertAttachment(record) {
+      insertAttachmentStmt.run(
+        record.id,
+        record.orgId,
+        record.profileId,
+        record.sessionId,
+        record.channel,
+        record.kind,
+        record.filename,
+        record.mediaType,
+        record.sizeBytes,
+        record.storagePath,
+        record.createdAt,
+      );
+    },
+
+    async getAttachment(id) {
+      const row = getAttachmentStmt.get(id) as AttachmentRow | null;
+      return row ? toAttachmentRecord(row) : null;
+    },
+
+    async deleteAttachment(id) {
+      const result = deleteAttachmentStmt.run(id);
+      return result.changes > 0;
+    },
+
     async listTasks() {
       return listTasksStmt.all().map((row) => toTaskRecord(row as TaskRow));
     },
@@ -1653,6 +1703,22 @@ function toSessionMessageRecord(row: SessionMessageRow): StoredSessionMessageRec
     sessionId: row.session_id,
     seq: row.seq,
     payload: parseJson(row.payload),
+    createdAt: row.created_at,
+  };
+}
+
+function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sessionId: row.session_id,
+    channel: row.channel,
+    kind: row.kind as StoredAttachmentRecord["kind"],
+    filename: row.filename,
+    mediaType: row.media_type,
+    sizeBytes: row.size_bytes,
+    storagePath: row.storage_path,
     createdAt: row.created_at,
   };
 }

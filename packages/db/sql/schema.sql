@@ -60,6 +60,25 @@ CREATE TABLE IF NOT EXISTS session_messages (
 CREATE INDEX IF NOT EXISTS session_messages_session_seq
   ON session_messages (session_id, seq);
 
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT,
+  profile_id TEXT NOT NULL,
+  session_id TEXT,
+  channel TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  filename TEXT,
+  media_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  storage_path TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
+
 CREATE TABLE IF NOT EXISTS automations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
