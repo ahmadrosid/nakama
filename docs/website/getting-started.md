@@ -92,9 +92,22 @@ TinyClaw can expose the same agent runtime through:
 
 Enable Telegram or WhatsApp from the web app settings when you are ready.
 
+### Telegram group setup
+
+If you want to use TinyClaw in Telegram groups:
+
+1. Link your Telegram account to the bot in a private chat first.
+2. In `@BotFather`, disable **Group Privacy** for the bot if you want `@mentions` to work reliably.
+3. If you changed Group Privacy, remove the bot from the group and add it back so Telegram applies the new setting.
+
+TinyClaw still filters group messages locally, so even with privacy disabled it only responds to slash commands, replies to the bot, and real bot mentions.
+
+For the full Telegram guide, see [Telegram](/telegram).
+
 ## Next steps
 
 - [Overview](/overview) — what TinyClaw is and how to think about it
+- [Telegram](/telegram) — use cases, setup, groups, and troubleshooting
 - [Multi-tenancy](/multi-tenancy) — how orgs, members, and roles work
 - [Profiles](/profiles) — how to define each bot
 - [Builtin tools](/builtin-tools) — what bots can do

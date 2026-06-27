@@ -22,9 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
-import { usePurgeSessionMutation, useSessionsQuery } from "@/hooks/use-resource-mutations";
+import { usePurgeSessionMutation, useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import {
+  formatSessionChannelLabel,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
@@ -48,7 +49,7 @@ export function HistoryPage() {
     isFetching: refreshing,
     error: sessionsError,
     refetch: refetchSessions,
-  } = useSessionsQuery(profileId);
+  } = useHistorySessionsQuery(profileId);
   const purgeMutation = usePurgeSessionMutation();
   const busy = purgeMutation.isPending;
   const trimmedSearch = searchQuery.trim();
@@ -145,6 +146,7 @@ export function HistoryPage() {
       await purgeMutation.mutateAsync({
         profileId,
         sessionId: deleteTarget.id,
+        channel: deleteTarget.channel,
       });
       setDeleteTarget(null);
     } catch (err) {
@@ -343,6 +345,12 @@ function SessionRow({
       >
         <p className="truncate text-sm text-foreground">{title}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
+          {session.channel !== "web" ? (
+            <>
+              <span>{formatSessionChannelLabel(session.channel)}</span>
+              {" · "}
+            </>
+          ) : null}
           <time dateTime={session.updatedAt} title={formatSessionTimestamp(session.updatedAt)}>
             {formatSessionRelativeTime(session.updatedAt)}
           </time>

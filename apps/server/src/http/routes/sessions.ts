@@ -79,6 +79,7 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     questions: z.array(agentQuestionItemSchema),
   }).openapi("AgentQuestionnaire");
   const sessionMessagesResponseSchema = z.object({
+    channel: agentChannelSchema,
     messages: z.array(z.object({}).passthrough()),
     messageMeta: z.array(sessionMessageMetaSchema),
     todos: z.array(agentTodoSchema),
@@ -259,6 +260,7 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     const todos = (await agent.getSessionTodos(sessionId)) ?? [];
     const questionnaire = (await agent.getSessionQuestionnaire(sessionId)) ?? null;
     return json<SessionMessagesResponse>({
+      channel: result.channel,
       messages: result.messages,
       messageMeta: result.messageMeta,
       todos,

@@ -10,6 +10,7 @@ export function buildChatSystemPrompt(
     soul?: boolean;
     userTimezone?: string;
     channel?: AgentRequest["channel"];
+    chatKind?: "private" | "group";
   } = {},
 ): string {
   const sections = [
@@ -79,19 +80,27 @@ export function buildChatSystemPrompt(
   }
 
   if (options.channel === "telegram" || options.channel === "whatsapp") {
-    appendPrivateChatPrompt(sections, options.channel);
+    appendMessagingChannelPrompt(sections, options.channel, options.chatKind ?? "private");
   }
 
   return sections.join("\n");
 }
 
-function appendPrivateChatPrompt(
+function appendMessagingChannelPrompt(
   sections: string[],
   channel: "telegram" | "whatsapp",
+  chatKind: "private" | "group",
 ): void {
   const platform = channel === "telegram" ? "Telegram" : "WhatsApp";
 
-  sections.push("", `You are replying in a private ${platform} chat.`);
+  if (chatKind === "group" && channel === "telegram") {
+    sections.push(
+      "",
+      "You are replying in a Telegram group chat. Everyone in the group can see your messages.",
+    );
+  } else {
+    sections.push("", `You are replying in a private ${platform} chat.`);
+  }
 
   if (channel === "telegram") {
     sections.push(

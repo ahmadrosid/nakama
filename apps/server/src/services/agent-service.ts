@@ -792,6 +792,7 @@ export class AgentService {
   }
 
   async getSessionMessages(sessionId: string): Promise<{
+    channel: AgentChannel;
     messages: ChatMessage[];
     messageMeta: Array<{ id: string; seq: number; createdAt: string }>;
   } | null> {
@@ -801,9 +802,16 @@ export class AgentService {
       return null;
     }
 
+    const channel = parseAgentChannel(record.channel);
+
+    if (!channel) {
+      return null;
+    }
+
     const storedMessages = await this.db.listMessagesForSession(sessionId);
 
     return {
+      channel,
       messages: storedMessages.map((message) => message.payload as ChatMessage),
       messageMeta: storedMessages.map((message) => ({
         id: message.id,

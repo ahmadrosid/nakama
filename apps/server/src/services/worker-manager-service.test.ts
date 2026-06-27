@@ -79,6 +79,7 @@ describe("WorkerManagerService", () => {
 
       await service.startWorker("telegram");
 
+      expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
       expect(mockPm2.delete).toHaveBeenCalledWith("telegram", expect.any(Function));
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
@@ -203,13 +204,15 @@ describe("WorkerManagerService", () => {
   });
 
   describe("restartWorker", () => {
-    test("restarts worker by deleting and starting fresh", async () => {
+    test("restarts worker by removing from pm2 and starting fresh", async () => {
       const mockPm2 = createMockPm2();
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
       await service.restartWorker("telegram");
 
+      expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
       expect(mockPm2.delete).toHaveBeenCalledWith("telegram", expect.any(Function));
+      expect(mockPm2.restart).not.toHaveBeenCalled();
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
     });
 

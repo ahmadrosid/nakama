@@ -45,7 +45,11 @@ function createServerOptions() {
       clearSession: async (_sessionId: string) => true,
       purgeSession: async (_sessionId: string) => true,
       compactSession: async (_sessionId: string, body: { force: boolean }) => ({ action: body.force ? "summarized" : "none", messagesBefore: 2, messagesAfter: 1 }),
-      getSessionMessages: async (_sessionId: string) => ({ messages: [{ role: "assistant", content: "hi" }], messageMeta: [{ id: "m1", seq: 0, createdAt: new Date().toISOString() }] }),
+      getSessionMessages: async (_sessionId: string) => ({
+        channel: "web",
+        messages: [{ role: "assistant", content: "hi" }],
+        messageMeta: [{ id: "m1", seq: 0, createdAt: new Date().toISOString() }],
+      }),
       getSessionTodos: async (_sessionId: string) => [],
       branchSession: async (_sessionId: string, messageIndex: number) => ({ sessionId: `branched-${messageIndex}` }),
       resolveSession: async (_sessionId: string) => ({ send: async (input: { message: string }) => `reply:${input.message}` }),

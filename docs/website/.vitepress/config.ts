@@ -18,6 +18,7 @@ export default withMermaid(
           items: [
             { text: 'Overview', link: '/overview' },
             { text: 'Getting Started', link: '/getting-started' },
+            { text: 'Telegram', link: '/telegram' },
             { text: 'Multi-tenancy', link: '/multi-tenancy' },
             { text: 'Profiles', link: '/profiles' },
             { text: 'Builtin tools', link: '/builtin-tools' },

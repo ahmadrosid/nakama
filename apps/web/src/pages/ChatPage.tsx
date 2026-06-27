@@ -1,5 +1,6 @@
 import { formatAgentQuestionnaireAnswersMessage } from "@tinyclaw/core/agent-questionnaire";
 import type {
+  AgentChannel,
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
@@ -22,6 +23,8 @@ import {
   buildChatBasePath,
   buildChatPath,
   chatMessagesToListItems,
+  formatSessionChannelLabel,
+  isReadOnlySessionChannel,
   parseChatRouteParams,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
@@ -67,6 +70,7 @@ export function ChatPage() {
     () => readRequestedProfileFromNewChatSearch(location.search) ?? "",
   );
   const [session, setSession] = useState<RemoteChatSession | null>(null);
+  const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
   const [agentQuestionnaire, setAgentQuestionnaire] = useState<AgentQuestionnaire | null>(null);
@@ -153,6 +157,7 @@ export function ChatPage() {
   }, [currentModelSelection, providerModelGroups]);
 
   const showThinking = activeModelSupportsThinking !== false;
+  const readOnlySession = isReadOnlySessionChannel(sessionChannel);
 
   const handleModelChange = useCallback(
     (selection: string) => {
@@ -215,6 +220,7 @@ export function ChatPage() {
       skipNextProfileSessionRef.current = true;
       loadedRouteRef.current = null;
       setSession(null);
+      setSessionChannel("web");
       setMessages([]);
       setError(null);
       setAgentTodos([]);
@@ -236,13 +242,15 @@ export function ChatPage() {
         localStorage.setItem(sessionStorageKey(nextProfileId), sessionId);
         skipNextProfileSessionRef.current = nextProfileId !== profileId;
         const {
+          channel,
           messages: storedMessages,
           messageMeta,
           todos,
           questionnaire,
         } = await client.getSessionMessages(sessionId);
-        const nextSession = client.createChatSession(sessionId, "web");
+        const nextSession = client.createChatSession(sessionId, channel);
         setProfileId(nextProfileId);
+        setSessionChannel(channel);
         setSession(nextSession);
         setMessages(chatMessagesToListItems(storedMessages, messageMeta));
         setAgentTodos(todos);
@@ -379,6 +387,10 @@ export function ChatPage() {
 
   const sendMessage = useCallback(
     async (text: string, files: FileUIPart[] = [], options: SendMessageOptions = {}) => {
+      if (readOnlySession) {
+        return;
+      }
+
       const images = filePartsToImageAttachments(files);
       const documents = filePartsToDocumentAttachments(files);
       const displayDocuments = filePartsToDisplayDocuments(files);
@@ -402,6 +414,7 @@ export function ChatPage() {
         try {
           activeSession = await client.createSession("web", { profileId });
           localStorage.setItem(sessionStorageKey(profileId), activeSession.id);
+          setSessionChannel("web");
           setSession(activeSession);
           syncChatUrl(profileId, activeSession.id);
         } catch (err) {
@@ -471,6 +484,7 @@ export function ChatPage() {
           try {
             const nextSession = await client.createSession("web", { profileId });
             localStorage.setItem(sessionStorageKey(profileId), nextSession.id);
+            setSessionChannel("web");
             setSession(nextSession);
             setError("Chat session expired. Started a new session — please send again.");
             setMessages((current) => current.filter((message) => !message.streaming));
@@ -491,7 +505,7 @@ export function ChatPage() {
         setBusy(false);
       }
     },
-    [session, busy, profileId, syncChatUrl, showThinking, activeModelSupportsVision],
+    [session, busy, profileId, syncChatUrl, showThinking, activeModelSupportsVision, readOnlySession],
   );
 
   const handleTryAgainMessage = useCallback(
@@ -569,15 +583,24 @@ export function ChatPage() {
   );
 
   const isEmptyState = messages.length === 0 && !busy;
+  const composerDisabled = !profileId || readOnlySession;
+
+  const readOnlyBanner = readOnlySession ? (
+    <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+      View-only {formatSessionChannelLabel(sessionChannel)} conversation. Reply from{" "}
+      {formatSessionChannelLabel(sessionChannel)}.
+    </p>
+  ) : null;
 
   const composer = (
     <PromptInputProvider key={composerDraft || "empty"} initialInput={composerDraft}>
+      {readOnlyBanner}
       <ChatComposer
         className={isEmptyState && !error ? "py-0 [&>p:first-child]:min-h-0" : "py-0"}
         chatStatus={chatStatus}
         busy={busy}
         canStop={canStop}
-        disabled={!profileId}
+        disabled={composerDisabled}
         error={error}
         profileId={profileId}
         profiles={profiles}
@@ -628,7 +651,7 @@ export function ChatPage() {
             messages={messages}
             showThinking={showThinking}
             branchingMessageId={branchingMessageId}
-            actionsDisabled={busy}
+            actionsDisabled={busy || readOnlySession}
             onBranchMessage={(message) => void handleBranchMessage(message)}
             onRetryMessage={(message) => void handleTryAgainMessage(message)}
           />

@@ -1,4 +1,5 @@
 import type {
+  AgentChannel,
   AgentQuestionAnswer,
   ChatMessage,
   SessionMessageMeta,
@@ -117,6 +118,25 @@ export interface ChatListItem {
 
 export function sessionStorageKey(profileId: string): string {
   return `tinyclaw:session:${profileId}`;
+}
+
+export const HISTORY_SESSION_CHANNELS = ["web", "telegram", "whatsapp"] as const satisfies readonly AgentChannel[];
+
+export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
+  return channel === "telegram" || channel === "whatsapp";
+}
+
+export function formatSessionChannelLabel(channel: AgentChannel): string {
+  switch (channel) {
+    case "telegram":
+      return "Telegram";
+    case "whatsapp":
+      return "WhatsApp";
+    case "web":
+      return "Web";
+    default:
+      return channel;
+  }
 }
 
 function parseToolResult(content: string): unknown {

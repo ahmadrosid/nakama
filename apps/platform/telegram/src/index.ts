@@ -4,6 +4,8 @@ import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-se
 import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
 import {
   clearTelegramWorkerHeartbeat,
+  isHeartbeatAlive,
+  readTelegramWorkerHeartbeat,
   writeTelegramWorkerHeartbeat,
 } from "@tinyclaw/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
@@ -25,6 +27,20 @@ registerCleanupHandlers(() => {
 });
 
 try {
+  const existingHeartbeat = await readTelegramWorkerHeartbeat();
+
+  if (
+    existingHeartbeat &&
+    existingHeartbeat.pid !== process.pid &&
+    isHeartbeatAlive(existingHeartbeat)
+  ) {
+    console.error(
+      `Another TinyClaw Telegram bridge is already running (pid ${existingHeartbeat.pid}). ` +
+        "Stop the existing bridge worker or disable it in the dashboard before starting a new one.",
+    );
+    process.exit(1);
+  }
+
   const config = await loadConfig();
   const { serverUrl, spawnedChild: child } = await ensureServerRunning();
   spawnedChild = child;
@@ -62,7 +78,12 @@ try {
   const authStore = new TelegramAuthStore();
   await authStore.reload();
 
-  const bot = createBot(config, { client, sessionStore, authStore, orgStore });
+  const bot = await createBot(config, {
+    client,
+    sessionStore,
+    authStore,
+    orgStore,
+  });
 
   console.log("TinyClaw Telegram bridge running (long polling).");
   console.log(`Server: ${serverUrl}`);

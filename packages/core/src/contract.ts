@@ -368,6 +368,7 @@ export interface SessionMessageMeta {
 }
 
 export interface SessionMessagesResponse {
+  channel: AgentChannel;
   messages: ChatMessage[];
   messageMeta: SessionMessageMeta[];
   todos: AgentTodo[];

@@ -102,3 +102,11 @@ test("buildChatSystemPrompt adds private chat guidance for telegram and whatsapp
   expect(whatsapp).toContain("Write like texting a friend");
   expect(whatsapp).toContain("*bold* and _italic_");
 });
+
+test("buildChatSystemPrompt adds group chat guidance for telegram", () => {
+  const prompt = buildChatSystemPrompt([], { channel: "telegram", chatKind: "group" });
+
+  expect(prompt).toContain("Telegram group chat");
+  expect(prompt).toContain("Everyone in the group");
+  expect(prompt).toContain("plain text only");
+});

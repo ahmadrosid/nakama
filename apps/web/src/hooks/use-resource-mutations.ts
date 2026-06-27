@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentChannel,
   CreateProfileRequest,
@@ -10,6 +10,7 @@ import type {
 } from "@tinyclaw/core/contract";
 import { TinyClawApiError } from "@tinyclaw/core/api-error";
 import { client } from "@/lib/client";
+import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { queryKeys } from "@/lib/query-keys";
 
 const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
@@ -348,6 +349,28 @@ export function useSessionsQuery(profileId: string, channel: AgentChannel = "web
   });
 }
 
+export function useHistorySessionsQuery(profileId: string) {
+  const results = useQueries({
+    queries: HISTORY_SESSION_CHANNELS.map((channel) => ({
+      queryKey: queryKeys.sessions(profileId, channel),
+      queryFn: async () => (await client.listSessions(profileId, channel)).sessions,
+      enabled: Boolean(profileId),
+    })),
+  });
+
+  const sessions = results
+    .flatMap((result) => result.data ?? [])
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  return {
+    data: sessions,
+    isLoading: results.some((result) => result.isLoading),
+    isFetching: results.some((result) => result.isFetching),
+    error: results.find((result) => result.error)?.error ?? null,
+    refetch: () => Promise.all(results.map((result) => result.refetch())),
+  };
+}
+
 export function useSoulStatusQuery(profileId: string | null) {
   return useQuery({
     queryKey: queryKeys.soul.profile(profileId ?? ""),
@@ -392,9 +415,13 @@ export function usePurgeSessionMutation() {
       channel?: AgentChannel;
     }) => client.createChatSession(sessionId, channel).purge(),
     onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId, variables.channel ?? "web"),
-      });
+      await Promise.all(
+        HISTORY_SESSION_CHANNELS.map((channel) =>
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions(variables.profileId, channel),
+          }),
+        ),
+      );
     },
   });
 }

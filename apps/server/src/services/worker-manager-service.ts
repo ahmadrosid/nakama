@@ -78,12 +78,25 @@ export class WorkerManagerService {
   }
 
   private resolveWorkerScript(name: string): string {
+    const srcScript = WORKER_SCRIPTS[name];
+    if (srcScript && existsSync(join(this.projectRoot, srcScript))) {
+      return srcScript;
+    }
+
     const distScript = WORKER_DIST_SCRIPTS[name];
     if (distScript && existsSync(join(this.projectRoot, distScript))) {
       return distScript;
     }
 
-    return WORKER_SCRIPTS[name]!;
+    return srcScript!;
+  }
+
+  private async removeWorkerFromPm2(
+    pm2: NonNullable<typeof import("pm2")>,
+    name: string,
+  ): Promise<void> {
+    await promisifyPm2<void>((cb) => pm2.stop(name, cb)).catch(() => {});
+    await promisifyPm2<void>((cb) => pm2.delete(name, cb)).catch(() => {});
   }
 
   async startWorker(name: string): Promise<void> {
@@ -95,7 +108,7 @@ export class WorkerManagerService {
 
     await this.withPm2(async (pm2) => {
       const script = this.resolveWorkerScript(name);
-      await promisifyPm2<void>((cb) => pm2.delete(name, cb)).catch(() => {});
+      await this.removeWorkerFromPm2(pm2, name);
       await promisifyPm2<void>((cb) =>
         pm2.start(
           {

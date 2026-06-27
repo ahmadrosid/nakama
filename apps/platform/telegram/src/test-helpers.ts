@@ -12,6 +12,9 @@ import {
 import { ChannelOrgStore } from "@tinyclaw/core/channel-org";
 import type { StreamHandlers } from "@tinyclaw/client";
 import type { Context } from "grammy";
+import type { TelegramBotInfo } from "./group-message";
+
+export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 
 export interface MockMessageContext {
   ctx: Context;
@@ -24,16 +27,30 @@ export function createMessageContext(options: {
   chatId?: number;
   text?: string;
   chatType?: "private" | "group" | "supergroup";
+  entities?: Array<{ type: "mention"; offset: number; length: number }>;
+  replyToBot?: boolean;
+  replyToBotId?: number;
 }): MockMessageContext {
   const replies: string[] = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
   let nextMessageId = 1;
+  const replyFrom =
+    options.replyToBot || options.replyToBotId !== undefined
+      ? {
+          id: options.replyToBotId ?? 999,
+          is_bot: true as const,
+        }
+      : undefined;
   const ctx = {
     chat: options.chatType
       ? { id: options.chatId ?? -100, type: options.chatType }
       : { id: options.chatId ?? options.userId ?? 1, type: "private" as const },
     from: options.userId !== undefined ? { id: options.userId } : undefined,
-    message: options.text !== undefined ? { text: options.text } : {},
+    message: {
+      ...(options.text !== undefined ? { text: options.text } : {}),
+      ...(options.entities ? { entities: options.entities } : {}),
+      ...(replyFrom ? { reply_to_message: { from: replyFrom } } : {}),
+    },
     reply: async (text: string) => {
       replies.push(text);
       return { message_id: nextMessageId++ };

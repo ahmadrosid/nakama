@@ -9,12 +9,92 @@ import {
   createMockClient,
   createMultiTestOrgs,
   createTestOrgStore,
+  TEST_BOT_INFO,
   withTempHome,
   writeTelegramConfigIni,
 } from "./test-helpers";
 
-describe("createChatHandler security", () => {
-  test("ignores non-private chats", async () => {
+describe("createChatHandler group chats", () => {
+  test("ignores plain group messages without mention", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const { ctx, replies } = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "hello",
+        chatType: "supergroup",
+      });
+
+      await handleMessage(ctx);
+
+      expect(replies).toEqual([]);
+      expect(calls.createSession).toBe(0);
+      expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("group @mention triggers agent when user is paired", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const { ctx, replies } = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+      });
+
+      await handleMessage(ctx);
+
+      expect(calls.createSession).toBe(1);
+      expect(calls.sendStream).toBe(1);
+      expect(replies.at(-1)).toBe("Agent reply");
+    });
+  });
+
+  test("unpaired @mention redirects to private chat without pairing", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
@@ -35,22 +115,66 @@ describe("createChatHandler security", () => {
         authStore,
         sessionStore,
         orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
       });
 
       const { ctx, replies } = createMessageContext({
-        userId: 42,
-        text: "hello",
-        chatType: "group",
+        userId: 1001,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
       });
 
       await handleMessage(ctx);
 
-      expect(replies).toEqual([]);
-      expect(calls.createSession).toBe(0);
+      expect(replies).toEqual([
+        "Link your account in a private chat with this bot first.",
+      ]);
       expect(calls.sendStream).toBe(0);
+      expect(authStore.isAuthorized(1001)).toBe(false);
     });
   });
 
+  test("/org in group stores selection under group org key", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({ orgs: createMultiTestOrgs() });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const { ctx } = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/org 1",
+        chatType: "supergroup",
+      });
+
+      await handleMessage(ctx);
+
+      expect(orgStore.get("g:-100123")?.orgId).toBe("org_a");
+    });
+  });
+});
+
+describe("createChatHandler security", () => {
   test("ignores messages without a sender id", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
@@ -905,7 +1029,7 @@ describe("bridge API integration", () => {
       await handleMessage(ctx);
 
       expect(replies.some((reply) => reply.includes("Choose an organization"))).toBe(false);
-      expect(orgStore.get("1001")?.orgId).toBe("org_test");
+      expect(orgStore.get("u:1001")?.orgId).toBe("org_test");
     });
   });
 
@@ -1120,7 +1244,7 @@ describe("bridge API integration", () => {
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
-      orgStore.set("1001", "org_a");
+      orgStore.set("u:1001", "org_a");
       await orgStore.save();
       const handleMessage = createChatHandler({
         client,
@@ -1136,7 +1260,7 @@ describe("bridge API integration", () => {
       });
       await handleMessage(switchProfile.ctx);
 
-      expect(orgStore.get("1001")?.orgId).toBe("org_b");
+      expect(orgStore.get("u:1001")?.orgId).toBe("org_b");
       expect(getLastCreateSessionProfileId()).toBe("gary");
       expect(switchProfile.replies).toEqual([
         "Now using Gary Vee. Chat history reset. (Beta)",
@@ -1171,7 +1295,7 @@ describe("bridge API integration", () => {
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
-      orgStore.set("1001", "org_a");
+      orgStore.set("u:1001", "org_a");
       await orgStore.save();
       const handleMessage = createChatHandler({
         client,
@@ -1187,7 +1311,7 @@ describe("bridge API integration", () => {
       });
       await handleMessage(switchProfile.ctx);
 
-      expect(orgStore.get("1001")?.orgId).toBe("org_a");
+      expect(orgStore.get("u:1001")?.orgId).toBe("org_a");
       expect(getLastCreateSessionProfileId()).toBe("research");
       expect(switchProfile.replies).toEqual([
         "Now using Research Bot. Chat history reset.",
