@@ -59,6 +59,17 @@ test("buildChatSystemPrompt includes update_profile_memory guidance when tool is
   expect(prompt).toContain("create_skill");
 });
 
+test("buildChatSystemPrompt includes archive_profile_memory guidance when tool is available", () => {
+  const prompt = buildChatSystemPrompt(
+    [{ name: "archive_profile_memory", description: "Archive memory", parameters: { type: "object", properties: {} } }],
+    { enableToolLoop: true },
+  );
+
+  expect(prompt).toContain("archive_profile_memory");
+  expect(prompt).toContain("data/memory-archive/");
+  expect(prompt).toContain("search_files");
+});
+
 test("buildChatSystemPrompt includes create_skill guidance when tool is available", () => {
   const prompt = buildChatSystemPrompt(
     [{ name: "create_skill", description: "Skill", parameters: { type: "object", properties: {} } }],

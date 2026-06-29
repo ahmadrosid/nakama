@@ -37,6 +37,7 @@ import {
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
 import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
+import { ensureBuiltinToolDefinitions } from "@tinyclaw/db";
 import { loadJavascriptTool, validateJavascriptToolModule } from "./javascript-tool-loader";
 import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
@@ -146,6 +147,7 @@ export class ProfileService {
   }
 
   async listTools(): Promise<ListToolsResponse> {
+    await ensureBuiltinToolDefinitions(this.db);
     const tools = await this.db.listTools();
     return { tools: tools.map(toToolDetail) };
   }

@@ -7,6 +7,15 @@ const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS).filter(
   (toolId) => toolId !== BUILTIN_TOOL_IDS.create_skill,
 );
 
+export async function ensureProfileDefaultBuiltinTools(
+  db: DatabaseAdapter,
+  profileId: string,
+): Promise<void> {
+  for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
+    await db.assignToolToProfile(profileId, toolId);
+  }
+}
+
 export async function seedOrgDefaultProfile(
   db: DatabaseAdapter,
   orgId: string,
@@ -14,6 +23,7 @@ export async function seedOrgDefaultProfile(
   const existing = await db.getDefaultProfileForOrg(orgId);
 
   if (existing) {
+    await ensureProfileDefaultBuiltinTools(db, existing.id);
     return existing;
   }
 
@@ -46,6 +56,7 @@ export async function seedOrgSuperBotProfile(
   const existing = (await db.listProfilesForOrg(orgId)).find((profile) => profile.isSuper);
 
   if (existing) {
+    await ensureProfileDefaultBuiltinTools(db, existing.id);
     await ensureSuperBotBashTool(db, existing.id);
     return existing;
   }

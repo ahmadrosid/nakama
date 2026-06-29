@@ -37,6 +37,7 @@ TinyClaw includes these builtins:
 | `web_search` | Yes | No | |
 | `web_fetch` | Yes | No | |
 | `update_profile_memory` | Yes | No | |
+| `archive_profile_memory` | Yes | No | |
 | `email` | Yes | No | Omitted at runtime when mailbox is unconfigured |
 | `create_skill` | Yes | Yes | Only builtin assigned to new custom profiles by default |
 
@@ -189,6 +190,21 @@ Record a fact, preference, or decision in the profile's `MEMORY.md`.
 **Behavior:** Appends under a dated `## YYYY-MM-DD` section in `~/.tinyclaw/profiles/{profileId}/MEMORY.md`.
 
 **Limits:** 4096 bytes total file size.
+
+**Availability:** When assigned to the profile.
+
+### `archive_profile_memory`
+
+Move facts out of active `MEMORY.md` into `data/memory-archive/` without deleting them.
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `entries` | string[] | Yes | Exact bullet texts to archive (1–20 items) |
+| `reason` | string | No | Optional note stored as an HTML comment in the archive file |
+
+**Returns:** `{ archived, activeBytes, archivePath }`
+
+**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/data/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
 
 **Availability:** When assigned to the profile.
 

@@ -106,7 +106,7 @@ describe("update_profile_memory tool", () => {
 
     await expect(
       runUpdateProfileMemory({ content: largeContent }, PROFILE_CONTEXT),
-    ).rejects.toThrow("MEMORY.md would exceed the maximum size");
+    ).rejects.toThrow("Archive old entries with archive_profile_memory");
   });
 
   test("throws when profileId is missing from context", async () => {

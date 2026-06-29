@@ -8,13 +8,23 @@ const serverEntry = join(projectRoot, "apps/server/src/index.ts");
 await killListenersOnPort(DEFAULT_SERVER_PORT);
 clearRuntimeServerUrl();
 
-const child = Bun.spawn(["bun", "--watch", serverEntry], {
+const child = Bun.spawn(
+  [
+    "bun",
+    "--watch",
+    serverEntry,
+    join(projectRoot, "packages/core/src"),
+    join(projectRoot, "packages/db/src"),
+    join(projectRoot, "packages/agent/src"),
+  ],
+  {
   cwd: projectRoot,
   stdout: "inherit",
   stderr: "inherit",
   stdin: "inherit",
   env: process.env,
-});
+  },
+);
 
 const exitCode = await child.exited;
 process.exit(exitCode ?? 0);

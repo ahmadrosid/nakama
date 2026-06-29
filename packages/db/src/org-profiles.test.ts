@@ -86,6 +86,19 @@ describe("seedOrgSuperBotProfile", () => {
     expect(second.id).toBe(first.id);
     expect(await db.listProfilesForOrg("org_a")).toHaveLength(1);
   });
+
+  test("backfills newly added builtins on existing super bot", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+
+    const profile = await seedOrgSuperBotProfile(db, "org_a");
+    await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.archive_profile_memory);
+
+    await seedOrgSuperBotProfile(db, "org_a");
+
+    const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
+    expect(toolIds).toContain(BUILTIN_TOOL_IDS.archive_profile_memory);
+  });
 });
 
 describe("ensureOrgSuperBotProfiles", () => {

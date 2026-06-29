@@ -32,6 +32,14 @@ const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: st
     filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
     displayPath: "packages/core/src/tools/web-search.ts",
   },
+  update_profile_memory: {
+    filePath: path.join(corePackageRoot, "src/tools/profile-memory.ts"),
+    displayPath: "packages/core/src/tools/profile-memory.ts",
+  },
+  archive_profile_memory: {
+    filePath: path.join(corePackageRoot, "src/tools/archive-profile-memory.ts"),
+    displayPath: "packages/core/src/tools/archive-profile-memory.ts",
+  },
   email: {
     filePath: path.join(corePackageRoot, "src/tools/email.ts"),
     displayPath: "packages/core/src/tools/email.ts",

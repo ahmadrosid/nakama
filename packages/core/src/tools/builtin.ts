@@ -8,6 +8,7 @@ import { searchFilesTool } from "./search-files";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
+import { archiveProfileMemoryTool } from "./archive-profile-memory";
 import { updateProfileMemoryTool } from "./profile-memory";
 import { emailTool } from "./email";
 import {
@@ -263,6 +264,7 @@ export const builtinTools: ToolDefinition[] = [
   webSearchTool,
   webFetchTool,
   updateProfileMemoryTool,
+  archiveProfileMemoryTool,
   emailTool,
 ];
 

@@ -84,7 +84,7 @@ export async function runUpdateProfileMemory(
   const totalBytes = Buffer.byteLength(newContent, "utf8");
   if (totalBytes > MEMORY_MAX_BYTES) {
     throw new Error(
-      `MEMORY.md would exceed the maximum size of ${MEMORY_MAX_BYTES} bytes (${totalBytes} bytes).`,
+      `MEMORY.md would exceed the maximum size of ${MEMORY_MAX_BYTES} bytes (${totalBytes} bytes). Archive old entries with archive_profile_memory to free space.`,
     );
   }
 
