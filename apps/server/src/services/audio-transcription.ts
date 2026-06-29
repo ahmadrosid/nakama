@@ -7,7 +7,6 @@ import {
 import { modelSupportsTranscription } from "../providers/models";
 import {
   decodeStoredModelSelection,
-  resolveProfileProviderSelection,
   type ResolvedProfileProviderSelection,
 } from "./provider-instance-helpers";
 
@@ -51,27 +50,19 @@ export function resolveTranscriptionProviderSelection(
     );
   }
 
-  const resolved = resolveProfileProviderSelection({
-    providers: userConfig?.providers ?? [],
-    defaultProviderId: userConfig?.defaultProviderId,
-    profileModel: transcriptionModel,
-  });
+  const modelId = decoded.modelId.trim();
 
-  if (!resolved) {
+  if (!modelSupportsTranscription(modelId, instance.type)) {
     throw new TinyClawApiError(
-      "Configured audio transcription model is unavailable. Update it in Settings.",
+      `Configured audio transcription model "${modelId}" is not supported.`,
       400,
     );
   }
 
-  if (!modelSupportsTranscription(resolved.model, resolved.instance.type)) {
-    throw new TinyClawApiError(
-      `Configured audio transcription model "${resolved.model}" is not supported.`,
-      400,
-    );
-  }
-
-  return resolved;
+  return {
+    instance,
+    model: modelId,
+  };
 }
 
 export async function transcribeAudioWithOpenAI(
