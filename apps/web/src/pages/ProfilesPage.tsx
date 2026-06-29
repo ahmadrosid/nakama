@@ -1103,7 +1103,7 @@ export function ProfilesPage() {
                       controls="profile-detail-panel-soul"
                       onSelect={() => setDetailTab("soul")}
                     >
-                      Soul
+                      Prompt
                     </ProfileDetailTabButton>
                     <ProfileDetailTabButton
                       id="profile-detail-tab-knowledge"

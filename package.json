@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": ["apps/*", "apps/platform/*", "packages/*"],
   "scripts": {
+    "postinstall": "bun install --cwd docs/website",
     "start": "bun run apps/server/dist/index.js",
     "dev": "bun run dev:web",
     "dev:server": "bun run apps/server/src/dev.ts",
