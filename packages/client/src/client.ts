@@ -61,6 +61,7 @@ import type {
   CreateAutomationRequest,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
+  MarkAutomationRunsReadResponse,
   AutomationResponse,
   RunAutomationResponse,
   StoredAutomation,
@@ -727,9 +728,8 @@ export class TinyClawClient {
     return response.automation;
   }
 
-  async listAutomations(): Promise<StoredAutomation[]> {
-    const response = await this.request<ListAutomationsResponse>("/v1/automations");
-    return response.automations;
+  async listAutomations(): Promise<ListAutomationsResponse> {
+    return this.request<ListAutomationsResponse>("/v1/automations");
   }
 
   async getAutomation(automationId: string): Promise<StoredAutomation> {
@@ -790,6 +790,14 @@ export class TinyClawClient {
       `/v1/automations/${encodeURIComponent(automationId)}/runs`,
     );
     return response.runs;
+  }
+
+  async markAutomationRunsRead(automationId: string): Promise<string> {
+    const response = await this.request<MarkAutomationRunsReadResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}/runs/mark-read`,
+      { method: "POST" },
+    );
+    return response.readThroughAt;
   }
 
   async listTasks(): Promise<StoredTask[]> {

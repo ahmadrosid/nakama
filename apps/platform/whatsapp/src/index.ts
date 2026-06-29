@@ -12,11 +12,13 @@ import { syncWhatsAppOwnerPairing } from "@tinyclaw/core/whatsapp-config";
 import { createWhatsAppSocket } from "./socket";
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
+import { startWhatsAppOutboundServer } from "./outbound-server";
 import { SessionStore } from "./session-store";
 import { WhatsAppAuthStore } from "./auth-store";
 
 let spawnedChild: Bun.Subprocess | null = null;
-let socketHandle: { stop: () => void } | null = null;
+let socketHandle: { stop: () => void; socket: { sendMessage: (jid: string, content: { text: string }) => Promise<unknown> } | null } | null = null;
+let outboundServer: { port: number; stop: () => void } | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let bridgeConnected = false;
 
@@ -26,6 +28,7 @@ function persistWorkerHeartbeat(): void {
 
 registerProcessLifecycleLogging();
 registerCleanupHandlers(() => {
+  outboundServer?.stop();
   socketHandle?.stop();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
@@ -92,6 +95,22 @@ try {
   });
 
   socketHandle = socket;
+
+  outboundServer = await startWhatsAppOutboundServer({
+    getSendHandle: () => {
+      const activeSocket = socketHandle?.socket;
+
+      if (!activeSocket) {
+        return null;
+      }
+
+      return {
+        sendMessage: (jid, content) => activeSocket.sendMessage(jid, content),
+      };
+    },
+  });
+
+  console.log(`WhatsApp outbound server listening on 127.0.0.1:${outboundServer.port}`);
 
   const authConfig = authStore.getConfig();
   const paired = authConfig?.pairedJid ? "yes" : "no";

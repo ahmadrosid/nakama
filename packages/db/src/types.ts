@@ -25,6 +25,13 @@ export interface StoredAutomationRunRecord {
   completedAt: string | null;
   output: string | null;
   error: string | null;
+  deliveryStatus?: string | null;
+  deliveryError?: string | null;
+}
+
+export interface AutomationUnreadCountRecord {
+  automationId: string;
+  unreadCount: number;
 }
 
 export interface StoredProfileRecord {
@@ -311,6 +318,22 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(automationId: string): Promise<StoredAutomationRunRecord | null>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   updateAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+
+  getAutomationRunReadThrough(
+    userId: string,
+    orgId: string,
+    automationId: string,
+  ): Promise<string | null>;
+  upsertAutomationRunReadThrough(
+    userId: string,
+    orgId: string,
+    automationId: string,
+    readThroughAt: string,
+  ): Promise<void>;
+  countUnreadAutomationRunsByOrg(
+    userId: string,
+    orgId: string,
+  ): Promise<AutomationUnreadCountRecord[]>;
 
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;

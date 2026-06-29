@@ -21,16 +21,17 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
 
 export function composeMatchedSkillsPrompt(
   skills: DiscoveredSkill[],
-  options: { includeBody?: boolean } = {},
+  options: { explicitInvocation?: boolean } = {},
 ): string {
   if (skills.length === 0) {
     return "";
   }
 
-  const includeBody = options.includeBody ?? false;
+  const explicitInvocation = options.explicitInvocation ?? false;
   const sections = skills.map((skill) => {
     const header = `# Active Skill: ${skill.name}`;
     const description = skill.description.trim();
+    const includeBody = explicitInvocation || skill.includeBodyOnMatch;
     const body = includeBody ? skill.body.trim() : "";
 
     return [header, description, "", body].filter(Boolean).join("\n");

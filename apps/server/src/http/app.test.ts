@@ -117,7 +117,10 @@ function createServerOptions() {
       regenerateWhatsAppPairingCode: async () => ({ enabled: false }),
     } as any,
     automationService: {
-      listForOrg: async (_orgId: string) => [{ id: "automation_1" }],
+      listForOrg: async (_orgId: string, _userId?: string) => ({
+        automations: [{ id: "automation_1" }],
+        unread: { totalUnread: 0, byAutomationId: {} },
+      }),
       create: async (_orgId: string, _body: unknown, _profileId?: string) => ({
         id: "automation_1",
       }),
@@ -619,7 +622,10 @@ describe("createHonoApp", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ automations: [{ id: "automation_1" }] });
+    await expect(response.json()).resolves.toEqual({
+      automations: [{ id: "automation_1" }],
+      unread: { totalUnread: 0, byAutomationId: {} },
+    });
   });
 
   test("runs automations through Hono routes", async () => {

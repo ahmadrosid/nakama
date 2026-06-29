@@ -48,6 +48,7 @@ export async function discoverSkills(
           name: parsed.frontmatter.name,
           description: parsed.frontmatter.description,
           disableModelInvocation: parsed.frontmatter.disableModelInvocation ?? false,
+          includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
           directory,
           skillFilePath,
           body: parsed.body,

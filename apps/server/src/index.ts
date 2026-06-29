@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createHonoApp } from "./http/app";
 import { AgentService } from "./services/agent-service";
 import { AutomationRunner } from "./services/automation-runner";
+import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationService } from "./services/automation-service";
 import { TaskRunner } from "./services/task-runner";
 import { TaskService } from "./services/task-service";
@@ -27,7 +28,8 @@ import {
   writeRuntimeServerUrl,
 } from "@tinyclaw/core";
 import { serverHasTaskChat } from "@tinyclaw/core/ensure-server";
-import { createDatabase, seedDatabase, type Database } from "@tinyclaw/db";
+import { ensureBundledSkillFiles } from "@tinyclaw/core";
+import { createDatabase, ensureBundledSkillsAssigned, seedDatabase, type Database } from "@tinyclaw/db";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -74,7 +76,14 @@ try {
 }
 
 try {
+  await ensureBundledSkillFiles();
+} catch (error) {
+  console.warn("Could not install bundled skills:", error);
+}
+
+try {
   await skillsService.syncDiscoveredSkills();
+  await ensureBundledSkillsAssigned(database.adapter);
 } catch (error) {
   console.warn("Could not sync skills:", error);
 }
@@ -88,7 +97,12 @@ try {
 const automationService = new AutomationService(database.adapter, {
   getUserTimezone: () => agent.getUserTimezone(),
 });
-const automationRunner = new AutomationRunner(automationService, agent);
+const automationDeliveryService = new AutomationDeliveryService(automationService);
+const automationRunner = new AutomationRunner(
+  automationService,
+  agent,
+  automationDeliveryService,
+);
 
 agent.setAutomationTools(createAutomationTools(automationService, automationRunner));
 agent.setAutomationRunner(automationRunner);

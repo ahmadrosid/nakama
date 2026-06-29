@@ -270,7 +270,7 @@
   }
 
   .sidebar-nav-group-items {
-    @apply flex flex-col gap-0.5;
+    @apply flex flex-col gap-0.5 overflow-visible;
   }
 
   aside[data-collapsed] .sidebar-nav-group-items {

@@ -1,4 +1,4 @@
-import { nanoid } from "@tinyclaw/core";
+import { nanoid, BUNDLED_SKILL_NAMES } from "@tinyclaw/core";
 import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
@@ -16,6 +16,27 @@ export async function ensureProfileDefaultBuiltinTools(
   }
 }
 
+export async function ensureProfileDefaultBundledSkills(
+  db: DatabaseAdapter,
+  profileId: string,
+): Promise<void> {
+  for (const name of BUNDLED_SKILL_NAMES) {
+    const skill = await db.getSkillByName(name);
+
+    if (skill) {
+      await db.assignSkillToProfile(profileId, skill.id);
+    }
+  }
+}
+
+export async function ensureBundledSkillsAssigned(db: DatabaseAdapter): Promise<void> {
+  const profiles = await db.listProfiles();
+
+  for (const profile of profiles) {
+    await ensureProfileDefaultBundledSkills(db, profile.id);
+  }
+}
+
 export async function seedOrgDefaultProfile(
   db: DatabaseAdapter,
   orgId: string,
@@ -24,6 +45,7 @@ export async function seedOrgDefaultProfile(
 
   if (existing) {
     await ensureProfileDefaultBuiltinTools(db, existing.id);
+    await ensureProfileDefaultBundledSkills(db, existing.id);
     return existing;
   }
 
@@ -46,6 +68,8 @@ export async function seedOrgDefaultProfile(
     await db.assignToolToProfile(profile.id, toolId);
   }
 
+  await ensureProfileDefaultBundledSkills(db, profile.id);
+
   return profile;
 }
 
@@ -57,6 +81,7 @@ export async function seedOrgSuperBotProfile(
 
   if (existing) {
     await ensureProfileDefaultBuiltinTools(db, existing.id);
+    await ensureProfileDefaultBundledSkills(db, existing.id);
     await ensureSuperBotBashTool(db, existing.id);
     return existing;
   }
@@ -81,6 +106,7 @@ export async function seedOrgSuperBotProfile(
   }
 
   await ensureSuperBotBashTool(db, profile.id);
+  await ensureProfileDefaultBundledSkills(db, profile.id);
 
   return profile;
 }

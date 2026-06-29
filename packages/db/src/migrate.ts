@@ -23,6 +23,8 @@ export function migrateDatabase(db: Database): void {
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
   migrateAttachmentsTable(db);
+  migrateAutomationRunsTable(db);
+  migrateAutomationRunReadStateTable(db);
 }
 
 export function resolveSchemaPath(options: {
@@ -648,6 +650,40 @@ function migrateWorkspaceSettingsTable(db: Database): void {
       ALTER TABLE workspace_settings ADD COLUMN transcription_model TEXT;
     `);
   }
+}
+
+function migrateAutomationRunsTable(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(automation_runs)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("delivery_status")) {
+    db.exec(`
+      ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT;
+    `);
+  }
+
+  if (!columnNames.has("delivery_error")) {
+    db.exec(`
+      ALTER TABLE automation_runs ADD COLUMN delivery_error TEXT;
+    `);
+  }
+}
+
+function migrateAutomationRunReadStateTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_run_read_state (
+      user_id TEXT NOT NULL,
+      org_id TEXT NOT NULL,
+      automation_id TEXT NOT NULL,
+      read_through_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, org_id, automation_id),
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
+    );
+  `);
 }
 
 function migrateAttachmentsTable(db: Database): void {

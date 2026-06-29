@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { ensureBundledSkillFiles } from "@tinyclaw/core";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -92,6 +93,54 @@ describe("SkillsService", () => {
 
     expect(matched).toContain("Active Skill: weather");
     expect(matched).toContain("Call the `weather` tool");
+  });
+
+  test("includes full body for bundled create-automation matches", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+
+    const skill = (await service.listSkills()).skills.find(
+      (entry) => entry.name === "create-automation",
+    );
+
+    expect(skill).toBeDefined();
+
+    await db.assignSkillToProfile(PROFILE_ID, skill!.id);
+
+    const matched = await service.formatMatchedSkillsForPrompt(
+      ORG_ID,
+      PROFILE_ID,
+      "Schedule a daily summary at 9am",
+    );
+
+    expect(matched).toContain("Active Skill: create-automation");
+    expect(matched).toContain("runAt");
+    expect(matched).toContain("5-field cron syntax");
+  });
+
+  test("does not include create-automation body for unrelated messages", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+
+    const skill = (await service.listSkills()).skills.find(
+      (entry) => entry.name === "create-automation",
+    );
+
+    expect(skill).toBeDefined();
+
+    await db.assignSkillToProfile(PROFILE_ID, skill!.id);
+
+    const matched = await service.formatMatchedSkillsForPrompt(
+      ORG_ID,
+      PROFILE_ID,
+      "Explain how TLS works",
+    );
+
+    expect(matched).toBe("");
   });
 
   test("creates profile skills and syncs them to the database", async () => {

@@ -29,6 +29,10 @@ import type {
 export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const automations = new Map<string, StoredAutomationRecord>();
   const automationRuns = new Map<string, StoredAutomationRunRecord[]>();
+  const automationRunReadState = new Map<
+    string,
+    { userId: string; orgId: string; automationId: string; readThroughAt: string }
+  >();
   const tasks = new Map<string, StoredTaskRecord>();
   const taskRuns = new Map<string, StoredTaskRunRecord[]>();
   const profiles = new Map<string, StoredProfileRecord>();
@@ -296,6 +300,46 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         record.automationId,
         existing.map((run) => (run.id === record.id ? record : run)),
       );
+    },
+
+    async getAutomationRunReadThrough(userId, orgId, automationId) {
+      const key = `${userId}:${orgId}:${automationId}`;
+      return automationRunReadState.get(key)?.readThroughAt ?? null;
+    },
+
+    async upsertAutomationRunReadThrough(userId, orgId, automationId, readThroughAt) {
+      const key = `${userId}:${orgId}:${automationId}`;
+      automationRunReadState.set(key, { userId, orgId, automationId, readThroughAt });
+    },
+
+    async countUnreadAutomationRunsByOrg(userId, orgId) {
+      const orgAutomations = Array.from(automations.values()).filter(
+        (automation) => automation.orgId === orgId,
+      );
+      const counts = new Map<string, number>();
+
+      for (const automation of orgAutomations) {
+        const readThroughAt =
+          automationRunReadState.get(`${userId}:${orgId}:${automation.id}`)?.readThroughAt ??
+          "1970-01-01T00:00:00.000Z";
+        const runs = automationRuns.get(automation.id) ?? [];
+
+        for (const run of runs) {
+          if (run.status !== "completed" && run.status !== "failed") {
+            continue;
+          }
+
+          const timestamp = run.completedAt ?? run.startedAt;
+          if (timestamp > readThroughAt) {
+            counts.set(automation.id, (counts.get(automation.id) ?? 0) + 1);
+          }
+        }
+      }
+
+      return Array.from(counts.entries()).map(([automationId, unreadCount]) => ({
+        automationId,
+        unreadCount,
+      }));
     },
 
     async listProfiles() {

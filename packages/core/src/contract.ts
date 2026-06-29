@@ -9,6 +9,19 @@ export interface AutomationStep {
   input: Record<string, unknown>;
 }
 
+export type AutomationDeliveryChannel = "telegram" | "whatsapp" | "email";
+
+export type AutomationDeliveryNotifyOn = "success" | "failure" | "both";
+
+export interface AutomationDelivery {
+  channel: AutomationDeliveryChannel;
+  /** Required when channel is email. */
+  to?: string;
+  /** Optional Telegram chat override; defaults to all paired users. */
+  chatId?: number;
+  notifyOn?: AutomationDeliveryNotifyOn;
+}
+
 export interface AutomationDefinition {
   id: string;
   name: string;
@@ -17,6 +30,7 @@ export interface AutomationDefinition {
   trigger: AutomationTrigger;
   steps: AutomationStep[];
   version: number;
+  delivery?: AutomationDelivery;
 }
 
 export interface StoredAutomation extends AutomationDefinition {
@@ -31,6 +45,8 @@ export interface StoredAutomation extends AutomationDefinition {
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
 
+export type AutomationDeliveryStatus = "sent" | "failed" | "skipped";
+
 export interface AutomationRunRecord {
   id: string;
   automationId: string;
@@ -39,6 +55,15 @@ export interface AutomationRunRecord {
   completedAt: string | null;
   output: string | null;
   error: string | null;
+  deliveryStatus?: AutomationDeliveryStatus | null;
+  deliveryError?: string | null;
+  /** Present when the API resolves read state for the current user. */
+  read?: boolean;
+}
+
+export interface AutomationUnreadSummary {
+  totalUnread: number;
+  byAutomationId: Record<string, number>;
 }
 
 export type AgentChannel = "web" | "cli" | "telegram" | "whatsapp" | "automation" | "task";
@@ -473,6 +498,7 @@ export interface DraftAutomationResponse {
 
 export interface ListAutomationsResponse {
   automations: StoredAutomation[];
+  unread?: AutomationUnreadSummary;
 }
 
 export interface AutomationResponse {
@@ -486,6 +512,7 @@ export interface CreateAutomationRequest {
   trigger: AutomationTrigger;
   profileId?: string;
   enabled?: boolean;
+  delivery?: AutomationDelivery;
 }
 
 export interface UpdateAutomationRequest {
@@ -494,6 +521,7 @@ export interface UpdateAutomationRequest {
   prompt?: string;
   trigger?: AutomationTrigger;
   enabled?: boolean;
+  delivery?: AutomationDelivery | null;
 }
 
 export interface RunAutomationResponse {
@@ -502,6 +530,10 @@ export interface RunAutomationResponse {
 
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
+}
+
+export interface MarkAutomationRunsReadResponse {
+  readThroughAt: string;
 }
 
 export const TASK_STATUSES = [

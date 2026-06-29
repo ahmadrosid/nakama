@@ -1,4 +1,6 @@
 import type {
+  AutomationDelivery,
+  AutomationDeliveryChannel,
   AutomationRunRecord,
   AutomationRunStatus,
   AutomationTrigger,
@@ -47,6 +49,7 @@ import {
   useAutomationRunsQuery,
   useAutomationsQuery,
   useDeleteAutomationMutation,
+  useMarkAutomationRunsReadMutation,
   useRunAutomationMutation,
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
@@ -67,23 +70,27 @@ const runHistoryScrollClass =
 export function AutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
   const {
-    data: automations = [],
+    data: automationsData,
     isLoading: initialLoading,
     isFetching: automationsRefreshing,
     error: automationsError,
     refetch: refetchAutomations,
   } = useAutomationsQuery();
+  const automations = automationsData?.automations ?? [];
+  const unreadByAutomationId = automationsData?.unread?.byAutomationId ?? {};
   const { data: profiles = [] } = useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
     data: runs = [],
     isLoading: runsLoading,
+    isSuccess: runsLoaded,
     refetch: refetchRuns,
   } = useAutomationRunsQuery(selectedId);
   const updateMutation = useUpdateAutomationMutation();
   const deleteMutation = useDeleteAutomationMutation();
   const runMutation = useRunAutomationMutation();
+  const markReadMutation = useMarkAutomationRunsReadMutation();
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +137,20 @@ export function AutomationsPage() {
     }
   }, [automations, selectedId]);
 
+  useEffect(() => {
+    if (!selectedId || !runsLoaded) {
+      return;
+    }
+
+    const hasUnreadRuns = runs.some((run) => run.read === false);
+    const hasListUnread = (unreadByAutomationId[selectedId] ?? 0) > 0;
+    if (!hasUnreadRuns && !hasListUnread) {
+      return;
+    }
+
+    void markReadMutation.mutate(selectedId);
+  }, [runs, runsLoaded, selectedId, unreadByAutomationId, markReadMutation.mutate]);
+
   async function handleSaveEdit() {
     if (!editDraft || busy) {
       return;
@@ -146,6 +167,7 @@ export function AutomationsPage() {
           prompt: editDraft.prompt,
           trigger: editDraft.trigger,
           enabled: editDraft.enabled,
+          delivery: editDraft.delivery ?? null,
         },
       });
       setEditDraft(null);
@@ -269,6 +291,9 @@ export function AutomationsPage() {
                   {filteredAutomations.map((automation) => (
                     <SelectItem key={automation.id} value={automation.id}>
                       {automation.name}
+                      {(unreadByAutomationId[automation.id] ?? 0) > 0
+                        ? ` (${unreadByAutomationId[automation.id]})`
+                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -357,6 +382,7 @@ export function AutomationsPage() {
                         <AutomationListItem
                           automation={automation}
                           selected={selectedId === automation.id}
+                          unreadCount={unreadByAutomationId[automation.id] ?? 0}
                           onSelect={() => setSelectedId(automation.id)}
                         />
                       </li>
@@ -624,10 +650,12 @@ function AutomationDetailActions({
 function AutomationListItem({
   automation,
   selected,
+  unreadCount,
   onSelect,
 }: {
   automation: StoredAutomation;
   selected: boolean;
+  unreadCount: number;
   onSelect: () => void;
 }) {
   const TriggerIcon =
@@ -649,7 +677,17 @@ function AutomationListItem({
       <TriggerIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
 
       <div className="min-w-0 flex-1 space-y-1">
-        <p className="truncate text-sm font-medium text-foreground">{automation.name}</p>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-foreground">{automation.name}</p>
+          {unreadCount > 0 ? (
+            <span
+              className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
+              aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          ) : null}
+        </div>
         <p className="truncate text-xs text-muted-foreground">
           {formatTrigger(automation.trigger)}
         </p>
@@ -851,6 +889,12 @@ function AutomationEditorForm({
         </div>
       ) : null}
 
+      <DeliverySettingsFields
+        delivery={automation.delivery}
+        busy={busy}
+        onChange={(delivery) => onChange({ delivery })}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <MetaRow
           label="Next run"
@@ -966,6 +1010,7 @@ function RunHistoryItem({
   onToggle: () => void;
 }) {
   const isRunning = run.status === "running";
+  const isUnread = run.read === false;
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
   const hasBody = hasOutput || hasError || isRunning;
@@ -1020,6 +1065,19 @@ function RunHistoryItem({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <RunStatusBadge status={run.status} />
+              {isUnread ? (
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  New
+                </span>
+              ) : null}
+              {run.deliveryStatus ? (
+                <>
+                  <span className="text-xs text-muted-foreground" aria-hidden>
+                    ·
+                  </span>
+                  <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
+                </>
+              ) : null}
               <span className="text-xs text-muted-foreground" aria-hidden>
                 ·
               </span>
@@ -1228,6 +1286,123 @@ function formatRunDuration(startedAt: string, completedAt: string | null): strin
   const remainder = seconds % 60;
 
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function DeliverySettingsFields({
+  delivery,
+  busy,
+  onChange,
+}: {
+  delivery?: AutomationDelivery;
+  busy: boolean;
+  onChange: (delivery: AutomationDelivery | undefined) => void;
+}) {
+  const channel = delivery?.channel ?? "none";
+
+  return (
+    <div className="grid gap-4 rounded-md border border-border bg-muted/20 p-4">
+      <Field label="Send results to">
+        <Select
+          value={channel}
+          disabled={busy}
+          onValueChange={(value) => {
+            const next = String(value);
+
+            if (next === "none") {
+              onChange(undefined);
+              return;
+            }
+
+            onChange({
+              channel: next as AutomationDeliveryChannel,
+              ...(next === "email" && delivery?.to ? { to: delivery.to } : {}),
+              ...(delivery?.notifyOn ? { notifyOn: delivery.notifyOn } : {}),
+            });
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None (run history only)</SelectItem>
+            <SelectItem value="telegram">Telegram</SelectItem>
+            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            <SelectItem value="email">Email</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+
+      {delivery?.channel === "email" ? (
+        <Field label="Email recipient">
+          <Input
+            type="email"
+            value={delivery.to ?? ""}
+            disabled={busy}
+            placeholder="you@example.com"
+            onChange={(event) =>
+              onChange({
+                ...delivery,
+                to: event.target.value,
+              })
+            }
+          />
+        </Field>
+      ) : null}
+
+      {delivery ? (
+        <Field label="Notify on">
+          <Select
+            value={delivery.notifyOn ?? "success"}
+            disabled={busy}
+            onValueChange={(value) =>
+              onChange({
+                ...delivery,
+                notifyOn: String(value) as AutomationDelivery["notifyOn"],
+              })
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="success">Successful runs</SelectItem>
+              <SelectItem value="failure">Failed runs</SelectItem>
+              <SelectItem value="both">Success and failure</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      ) : null}
+    </div>
+  );
+}
+
+function DeliveryStatusBadge({
+  status,
+  error,
+}: {
+  status: NonNullable<AutomationRunRecord["deliveryStatus"]>;
+  error?: string | null;
+}) {
+  const label =
+    status === "sent"
+      ? "Delivered"
+      : status === "failed"
+        ? "Delivery failed"
+        : "Delivery skipped";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+        status === "sent" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        status === "failed" && "bg-destructive/10 text-destructive",
+        status === "skipped" && "bg-muted text-muted-foreground",
+      )}
+      title={error ?? undefined}
+    >
+      {label}
+    </span>
+  );
 }
 
 function Field({

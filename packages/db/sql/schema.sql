@@ -101,11 +101,24 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   completed_at TEXT,
   output TEXT,
   error TEXT,
+  delivery_status TEXT,
+  delivery_error TEXT,
   FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS automation_runs_automation_started
   ON automation_runs (automation_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS automation_run_read_state (
+  user_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  automation_id TEXT NOT NULL,
+  read_through_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, org_id, automation_id),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY NOT NULL,

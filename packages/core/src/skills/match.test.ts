@@ -6,6 +6,7 @@ const weatherSkill: DiscoveredSkill = {
   name: "weather",
   description: "Get weather forecasts. Use when the user asks about weather.",
   disableModelInvocation: false,
+  includeBodyOnMatch: false,
   directory: "/tmp/weather",
   skillFilePath: "/tmp/weather/SKILL.md",
   body: "Use the weather tool.",

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { AutomationService } from "./automation-service";
 import { AutomationRunner } from "./automation-runner";
+import { AutomationDeliveryService } from "./automation-delivery-service";
 
 const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
@@ -135,10 +136,54 @@ describe("AutomationService", () => {
     );
 
     const listed = await service.listForOrg(ORG_ID);
-    expect(listed.map((entry) => entry.id)).toEqual([orgAutomation.id]);
+    expect(listed.automations.map((entry) => entry.id)).toEqual([orgAutomation.id]);
 
     expect(await service.get(orgAutomation.id, ORG_ID)).not.toBeNull();
     expect(await service.get(orgAutomation.id, otherOrgId)).toBeNull();
+  });
+
+  test("tracks unread runs per user and marks them read", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const userId = "user_test";
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        name: "Digest",
+        description: "Daily digest",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID,
+    );
+
+    await db.insertAutomationRun({
+      id: "run_unread_1",
+      automationId: automation.id,
+      status: "completed",
+      startedAt: "2026-06-29T10:00:00.000Z",
+      completedAt: "2026-06-29T10:01:00.000Z",
+      output: "Summary",
+      error: null,
+    });
+
+    const unread = await service.getUnreadSummary(ORG_ID, userId);
+    expect(unread.totalUnread).toBe(1);
+    expect(unread.byAutomationId[automation.id]).toBe(1);
+
+    const runsBeforeRead = await service.listRuns(automation.id, ORG_ID, 20, userId);
+    expect(runsBeforeRead[0]?.read).toBe(false);
+
+    await service.markRunsRead(automation.id, ORG_ID, userId);
+
+    const unreadAfter = await service.getUnreadSummary(ORG_ID, userId);
+    expect(unreadAfter.totalUnread).toBe(0);
+
+    const runsAfterRead = await service.listRuns(automation.id, ORG_ID, 20, userId);
+    expect(runsAfterRead[0]?.read).toBe(true);
   });
 });
 
@@ -238,5 +283,52 @@ describe("AutomationRunner", () => {
     const updated = await service.get(automation.id, ORG_ID);
     expect(updated?.enabled).toBe(false);
     expect(updated?.nextRunAt).toBeNull();
+  });
+
+  test("records delivery status after successful runs", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const now = new Date().toISOString();
+    await db.upsertAutomation({
+      id: "automation_delivery_test",
+      name: "Digest",
+      version: 1,
+      definition: {
+        description: "Daily digest",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+        steps: [],
+        version: 1,
+        delivery: { channel: "telegram" },
+      },
+      profileId: PROFILE_ID,
+      orgId: ORG_ID,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const agentService = {
+      runAutomationPrompt: async () => "News summary",
+    };
+
+    const deliveryService = new AutomationDeliveryService(service, {
+      telegram: {
+        send: async () => ({ ok: true }),
+      },
+    });
+
+    const runner = new AutomationRunner(
+      service,
+      agentService as never,
+      deliveryService,
+    );
+    await runner.run("automation_delivery_test");
+
+    const runs = await service.listRuns("automation_delivery_test");
+    expect(runs[0]?.deliveryStatus).toBe("sent");
   });
 });

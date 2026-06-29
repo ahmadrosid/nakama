@@ -166,7 +166,7 @@ export class SkillsService {
     const matched = matchSkillsForMessage(assigned, userMessage);
     const explicitSkillName = extractExplicitSkillName(userMessage);
     return composeMatchedSkillsPrompt(matched, {
-      includeBody: explicitSkillName !== null,
+      explicitInvocation: explicitSkillName !== null,
     });
   }
 

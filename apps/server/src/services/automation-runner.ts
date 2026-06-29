@@ -1,5 +1,6 @@
 import { isWorkerSchedulable, type StoredAutomation } from "@tinyclaw/core";
 import type { AgentService } from "./agent-service";
+import type { AutomationDeliveryService } from "./automation-delivery-service";
 import type { AutomationService } from "./automation-service";
 
 export class AutomationRunner {
@@ -8,6 +9,7 @@ export class AutomationRunner {
   constructor(
     private readonly automationService: AutomationService,
     private readonly agentService: AgentService,
+    private readonly deliveryService?: AutomationDeliveryService,
   ) {}
 
   async run(automationId: string): Promise<{ output?: string; error?: string; skipped?: boolean }> {
@@ -44,14 +46,33 @@ export class AutomationRunner {
         automation.prompt,
       );
 
-      await this.automationService.completeRun(run.id, automationId, { output });
+      const completedRun = await this.automationService.completeRun(run.id, automationId, { output });
+      await this.tryDeliver(automation, completedRun);
       return { output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.automationService.completeRun(run.id, automationId, { error: message });
+      const completedRun = await this.automationService.completeRun(run.id, automationId, {
+        error: message,
+      });
+      await this.tryDeliver(automation, completedRun);
       return { error: message };
     } finally {
       this.running.delete(automationId);
+    }
+  }
+
+  private async tryDeliver(
+    automation: StoredAutomation,
+    run: Awaited<ReturnType<AutomationService["completeRun"]>>,
+  ): Promise<void> {
+    if (!this.deliveryService || !automation.delivery) {
+      return;
+    }
+
+    try {
+      await this.deliveryService.deliver(automation, run);
+    } catch (error) {
+      console.error("Automation delivery failed:", error);
     }
   }
 

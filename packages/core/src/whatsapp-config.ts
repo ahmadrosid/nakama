@@ -12,6 +12,7 @@ export interface WhatsAppConfigFile {
   pairingCode: string | null;
   pairedJid: string | null;
   pairedLid: string | null;
+  outboundPort?: string | null;
 }
 
 export interface WhatsAppSettingsPublic {
@@ -141,6 +142,7 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
   const pairingCode = values.pairing_code?.trim() || null;
   const pairedJid = values.paired_jid?.trim() || null;
   const pairedLid = values.paired_lid?.trim() || null;
+  const outboundPort = values.outbound_port?.trim() || null;
 
   return {
     phoneNumber,
@@ -148,6 +150,7 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
     pairingCode,
     pairedJid,
     pairedLid,
+    outboundPort,
   };
 }
 

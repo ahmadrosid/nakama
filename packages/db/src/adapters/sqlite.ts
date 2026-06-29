@@ -55,6 +55,8 @@ interface AutomationRunRow {
   completed_at: string | null;
   output: string | null;
   error: string | null;
+  delivery_status: string | null;
+  delivery_error: string | null;
 }
 
 interface ProfileRow {
@@ -294,13 +296,38 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
   const insertAutomationRunStmt = db.prepare(`
-    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateAutomationRunStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?
+    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?
     WHERE id = ?
+  `);
+
+  const getAutomationRunReadThroughStmt = db.prepare(`
+    SELECT read_through_at
+    FROM automation_run_read_state
+    WHERE user_id = ? AND org_id = ? AND automation_id = ?
+  `);
+  const upsertAutomationRunReadThroughStmt = db.prepare(`
+    INSERT INTO automation_run_read_state (user_id, org_id, automation_id, read_through_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id, org_id, automation_id) DO UPDATE SET
+      read_through_at = excluded.read_through_at
+  `);
+  const countUnreadAutomationRunsByOrgStmt = db.prepare(`
+    SELECT ar.automation_id AS automation_id, COUNT(*) AS unread_count
+    FROM automation_runs ar
+    INNER JOIN automations a ON a.id = ar.automation_id
+    LEFT JOIN automation_run_read_state rs
+      ON rs.automation_id = ar.automation_id
+      AND rs.user_id = ?
+      AND rs.org_id = ?
+    WHERE a.org_id = ?
+      AND ar.status IN ('completed', 'failed')
+      AND COALESCE(ar.completed_at, ar.started_at) > COALESCE(rs.read_through_at, '1970-01-01T00:00:00.000Z')
+    GROUP BY ar.automation_id
   `);
 
   const listProfilesStmt = db.prepare("SELECT * FROM profiles");
@@ -1047,6 +1074,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.completedAt,
         record.output,
         record.error,
+        record.deliveryStatus ?? null,
+        record.deliveryError ?? null,
       );
     },
 
@@ -1056,8 +1085,29 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.completedAt,
         record.output,
         record.error,
+        record.deliveryStatus ?? null,
+        record.deliveryError ?? null,
         record.id,
       );
+    },
+
+    async getAutomationRunReadThrough(userId, orgId, automationId) {
+      const row = getAutomationRunReadThroughStmt.get(userId, orgId, automationId) as
+        | { read_through_at: string }
+        | null
+        | undefined;
+      return row?.read_through_at ?? null;
+    },
+
+    async upsertAutomationRunReadThrough(userId, orgId, automationId, readThroughAt) {
+      upsertAutomationRunReadThroughStmt.run(userId, orgId, automationId, readThroughAt);
+    },
+
+    async countUnreadAutomationRunsByOrg(userId, orgId) {
+      return countUnreadAutomationRunsByOrgStmt.all(userId, orgId, orgId).map((row) => ({
+        automationId: (row as { automation_id: string }).automation_id,
+        unreadCount: Number((row as { unread_count: number }).unread_count),
+      }));
     },
 
     async listProfiles() {
@@ -1549,6 +1599,8 @@ function toAutomationRunRecord(row: AutomationRunRow): StoredAutomationRunRecord
     completedAt: row.completed_at,
     output: row.output,
     error: row.error,
+    deliveryStatus: row.delivery_status,
+    deliveryError: row.delivery_error,
   };
 }
 

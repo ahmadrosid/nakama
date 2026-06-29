@@ -6,10 +6,11 @@ import type {
   DraftAutomationResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
+  MarkAutomationRunsReadResponse,
   RunAutomationResponse,
   UpdateAutomationRequest,
 } from "@tinyclaw/core";
-import { errorResponse, json, parseChannel, readJson } from "../shared";
+import { errorResponse, getRequestAuth, json, parseChannel, readJson } from "../shared";
 import { requireActiveOrgIdFromContext } from "../org-guards";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
@@ -28,6 +29,10 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   const updateAutomationSchema = z.object({}).passthrough().openapi("UpdateAutomationRequest");
   const runAutomationSchema = z.object({}).passthrough().openapi("RunAutomationResponse");
   const listAutomationRunsSchema = z.object({}).passthrough().openapi("ListAutomationRunsResponse");
+  const markAutomationRunsReadSchema = z
+    .object({})
+    .passthrough()
+    .openapi("MarkAutomationRunsReadResponse");
 
   app.openAPIRegistry.registerPath(createRoute({
     method: "post",
@@ -130,6 +135,22 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
       500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
     },
   }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "post",
+    path: "/v1/automations/{automationId}/runs/mark-read",
+    tags: ["Automations"],
+    summary: "Mark automation runs as read for the current user",
+    operationId: "markAutomationRunsRead",
+    request: { params: automationIdParam },
+    responses: {
+      200: {
+        description: "Automation runs marked read",
+        content: { "application/json": { schema: markAutomationRunsReadSchema } },
+      },
+      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
 
   app.post("/v1/automations/draft", async (c) => {
     const body = await readJson<DraftAutomationRequest>(c.req.raw);
@@ -139,8 +160,9 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
 
   app.get("/v1/automations", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const automations = await automationService.listForOrg(orgId);
-    return json<ListAutomationsResponse>({ automations });
+    const auth = getRequestAuth(c);
+    const result = await automationService.listForOrg(orgId, auth.user.id);
+    return json<ListAutomationsResponse>(result);
   });
 
   app.post("/v1/automations", async (c) => {
@@ -192,6 +214,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
 
   app.post("/v1/automations/:automationId/run", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const automation = await automationService.get(automationId, orgId);
 
@@ -205,7 +228,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
       return errorResponse(result.error ?? "Automation run skipped.", 409);
     }
 
-    const runs = await automationService.listRuns(automationId, orgId, 1);
+    const runs = await automationService.listRuns(automationId, orgId, 1, auth.user.id);
     const run = runs[0];
     if (!run) {
       return errorResponse("Automation run record not found.", 500);
@@ -216,11 +239,28 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
 
   app.get("/v1/automations/:automationId/runs", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
 
     try {
-      const runs = await automationService.listRuns(automationId, orgId);
+      const runs = await automationService.listRuns(automationId, orgId, 20, auth.user.id);
       return json<ListAutomationRunsResponse>({ runs });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Automation not found.") {
+        return errorResponse(error.message, 404);
+      }
+      throw error;
+    }
+  });
+
+  app.post("/v1/automations/:automationId/runs/mark-read", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
+    const automationId = decodeURIComponent(c.req.param("automationId"));
+
+    try {
+      const result = await automationService.markRunsRead(automationId, orgId, auth.user.id);
+      return json<MarkAutomationRunsReadResponse>(result);
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);

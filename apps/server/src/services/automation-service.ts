@@ -1,6 +1,8 @@
 import type {
+  AutomationDeliveryStatus,
   AutomationRunRecord,
   AutomationTrigger,
+  AutomationUnreadSummary,
   CreateAutomationRequest,
   StoredAutomation,
   UpdateAutomationRequest,
@@ -9,8 +11,12 @@ import {
   computeAutomationNextRunAt,
   createId,
   DEFAULT_TIMEZONE,
+  isAutomationRunUnread,
   isWorkerSchedulable,
+  normalizeAutomationDelivery,
   resolveScheduleTimezone,
+  summarizeAutomationUnreadCounts,
+  validateAutomationDelivery,
   validateAutomationInput,
 } from "@tinyclaw/core";
 import { DatabaseAutomationStore, type DatabaseAdapter } from "@tinyclaw/db";
@@ -43,9 +49,17 @@ export class AutomationService {
     return Promise.all(automations.map((automation) => this.enrichAutomation(automation)));
   }
 
-  async listForOrg(orgId: string): Promise<StoredAutomation[]> {
+  async listForOrg(orgId: string, userId?: string): Promise<{
+    automations: StoredAutomation[];
+    unread?: AutomationUnreadSummary;
+  }> {
     const automations = await this.store.listForOrg(orgId);
-    return Promise.all(automations.map((automation) => this.enrichAutomation(automation)));
+    const enriched = await Promise.all(
+      automations.map((automation) => this.enrichAutomation(automation)),
+    );
+    const unread = userId ? await this.getUnreadSummary(orgId, userId) : undefined;
+
+    return { automations: enriched, unread };
   }
 
   async get(id: string, orgId?: string): Promise<StoredAutomation | null> {
@@ -71,6 +85,9 @@ export class AutomationService {
       trigger,
     });
 
+    const delivery = normalizeAutomationDelivery(input.delivery);
+    await validateAutomationDelivery(delivery);
+
     const profileId = await this.resolveProfileId(
       orgId,
       profileIdOverride ?? input.profileId,
@@ -88,6 +105,7 @@ export class AutomationService {
       profileId,
       orgId,
       enabled: input.enabled ?? true,
+      ...(delivery ? { delivery } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -119,6 +137,16 @@ export class AutomationService {
       trigger,
     });
 
+    let delivery = existing.delivery;
+
+    if (input.delivery === null) {
+      delivery = undefined;
+    } else if (input.delivery !== undefined) {
+      delivery = normalizeAutomationDelivery(input.delivery);
+    }
+
+    await validateAutomationDelivery(delivery);
+
     const updated: StoredAutomation = {
       ...existing,
       name: input.name?.trim() || existing.name,
@@ -126,6 +154,7 @@ export class AutomationService {
       prompt: input.prompt?.trim() || existing.prompt,
       trigger,
       enabled: input.enabled ?? existing.enabled,
+      delivery,
       version: existing.version + 1,
       updatedAt: new Date().toISOString(),
     };
@@ -154,6 +183,7 @@ export class AutomationService {
     automationId: string,
     orgId?: string,
     limit = 20,
+    userId?: string,
   ): Promise<AutomationRunRecord[]> {
     const automation = orgId
       ? await this.get(automationId, orgId)
@@ -164,7 +194,33 @@ export class AutomationService {
     }
 
     const runs = await this.db.listAutomationRuns(automationId, limit);
-    return runs.map(toRunRecord);
+    const readThroughAt =
+      userId && orgId
+        ? await this.db.getAutomationRunReadThrough(userId, orgId, automationId)
+        : null;
+
+    return runs.map((run) => toRunRecord(run, readThroughAt));
+  }
+
+  async markRunsRead(
+    automationId: string,
+    orgId: string,
+    userId: string,
+  ): Promise<{ readThroughAt: string }> {
+    const automation = await this.get(automationId, orgId);
+
+    if (!automation) {
+      throw new Error("Automation not found.");
+    }
+
+    const readThroughAt = new Date().toISOString();
+    await this.db.upsertAutomationRunReadThrough(userId, orgId, automationId, readThroughAt);
+    return { readThroughAt };
+  }
+
+  async getUnreadSummary(orgId: string, userId: string): Promise<AutomationUnreadSummary> {
+    const counts = await this.db.countUnreadAutomationRunsByOrg(userId, orgId);
+    return summarizeAutomationUnreadCounts(counts);
   }
 
   async getActiveRun(automationId: string): Promise<AutomationRunRecord | null> {
@@ -205,6 +261,31 @@ export class AutomationService {
       completedAt: new Date().toISOString(),
       output: result.output ?? null,
       error: result.error ?? null,
+    };
+
+    await this.db.updateAutomationRun(updated);
+    return toRunRecord(updated);
+  }
+
+  async updateRunDelivery(
+    runId: string,
+    automationId: string,
+    result: {
+      deliveryStatus: AutomationDeliveryStatus;
+      deliveryError: string | null;
+    },
+  ): Promise<AutomationRunRecord> {
+    const runs = await this.db.listAutomationRuns(automationId, 100);
+    const run = runs.find((entry) => entry.id === runId);
+
+    if (!run) {
+      throw new Error("Automation run not found.");
+    }
+
+    const updated = {
+      ...run,
+      deliveryStatus: result.deliveryStatus,
+      deliveryError: result.deliveryError,
     };
 
     await this.db.updateAutomationRun(updated);
@@ -260,16 +341,21 @@ function automationBelongsToOrg(automation: StoredAutomation, orgId: string): bo
   return automation.orgId === orgId;
 }
 
-function toRunRecord(run: {
-  id: string;
-  automationId: string;
-  status: AutomationRunRecord["status"];
-  startedAt: string;
-  completedAt: string | null;
-  output: string | null;
-  error: string | null;
-}): AutomationRunRecord {
-  return {
+function toRunRecord(
+  run: {
+    id: string;
+    automationId: string;
+    status: AutomationRunRecord["status"];
+    startedAt: string;
+    completedAt: string | null;
+    output: string | null;
+    error: string | null;
+    deliveryStatus?: string | null;
+    deliveryError?: string | null;
+  },
+  readThroughAt?: string | null,
+): AutomationRunRecord {
+  const record: AutomationRunRecord = {
     id: run.id,
     automationId: run.automationId,
     status: run.status,
@@ -277,5 +363,13 @@ function toRunRecord(run: {
     completedAt: run.completedAt,
     output: run.output,
     error: run.error,
+    deliveryStatus: (run.deliveryStatus as AutomationRunRecord["deliveryStatus"]) ?? null,
+    deliveryError: run.deliveryError ?? null,
   };
+
+  if (readThroughAt !== undefined) {
+    record.read = !isAutomationRunUnread(record, readThroughAt);
+  }
+
+  return record;
 }

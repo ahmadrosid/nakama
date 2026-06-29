@@ -1,12 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UpdateAutomationRequest } from "@tinyclaw/core/contract";
+import { useAuth } from "@/context/auth-context";
+import { automationsQueryOptions } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useAutomationsQuery() {
+  const { isAuthenticated, isLoading } = useAuth();
+
   return useQuery({
-    queryKey: queryKeys.automations.all,
-    queryFn: () => client.listAutomations(),
+    ...automationsQueryOptions,
+    enabled: isAuthenticated && !isLoading,
+  });
+}
+
+export function useAutomationUnreadTotal() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  return useQuery({
+    ...automationsQueryOptions,
+    enabled: isAuthenticated && !isLoading,
+    select: (data) => data.unread?.totalUnread ?? 0,
   });
 }
 
@@ -15,6 +29,20 @@ export function useAutomationRunsQuery(automationId: string | null) {
     queryKey: queryKeys.automations.runs(automationId ?? ""),
     queryFn: () => client.listAutomationRuns(automationId!),
     enabled: Boolean(automationId),
+  });
+}
+
+export function useMarkAutomationRunsReadMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (automationId: string) => client.markAutomationRunsRead(automationId),
+    onSuccess: async (_readThroughAt, automationId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.automations.runs(automationId) }),
+      ]);
+    },
   });
 }
 

@@ -6,3 +6,5 @@ export * from "./parse";
 export * from "./paths";
 export * from "./types";
 export * from "./write";
+export * from "./bundled/install";
+export { BUNDLED_SKILL_NAMES } from "./bundled/index";

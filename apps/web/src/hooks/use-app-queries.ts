@@ -51,6 +51,13 @@ export const skillsQueryOptions = queryOptions({
   staleTime: defaultStaleTime,
 });
 
+export const automationsQueryOptions = queryOptions({
+  queryKey: queryKeys.automations.all,
+  queryFn: () => client.listAutomations(),
+  staleTime: defaultStaleTime,
+  refetchInterval: 30_000,
+});
+
 export function profileQueryOptions(profileId: string) {
   return queryOptions({
     queryKey: queryKeys.profiles.detail(profileId),
@@ -70,6 +77,7 @@ export function prefetchAppData(
   void queryClient.prefetchQuery(healthQueryOptions);
   void queryClient.prefetchQuery(modelsQueryOptions);
   void queryClient.prefetchQuery(profilesQueryOptions);
+  void queryClient.prefetchQuery(automationsQueryOptions);
   if (options?.isPlatformAdmin) {
     void queryClient.prefetchQuery(toolsQueryOptions);
     void queryClient.prefetchQuery(skillsQueryOptions);

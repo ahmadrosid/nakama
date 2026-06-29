@@ -67,6 +67,7 @@ function parseFrontmatter(raw: string, sourcePath: string): SkillFrontmatter {
     name,
     description,
     disableModelInvocation: parseBooleanField(fields.get("disable-model-invocation")),
+    includeBodyOnMatch: parseBooleanField(fields.get("include-body-on-match")),
   };
 }
 

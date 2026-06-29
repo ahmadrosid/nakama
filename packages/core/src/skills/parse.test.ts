@@ -39,4 +39,18 @@ description: Test skill.
 
     expect(parsed.frontmatter.name).toBe("opencode");
   });
+
+  test("parses include-body-on-match frontmatter", () => {
+    const parsed = parseSkillMarkdown(
+      `---
+name: create-automation
+description: Schedule automations.
+include-body-on-match: true
+---
+`,
+      "/tmp/skills/create-automation/SKILL.md",
+    );
+
+    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
+  });
 });

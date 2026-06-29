@@ -18,6 +18,7 @@ import { useAppContext } from "@/context/app-context";
 import { useAuth } from "@/context/auth-context";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
+import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
 import { cn } from "@/lib/utils";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
@@ -43,6 +44,7 @@ export function Layout() {
   const { error } = useAppContext();
   const { logout, user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
+  const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
   const navGroups = useMemo(
@@ -126,6 +128,7 @@ export function Layout() {
                         icon={NAV_ITEM_ICONS[item.id]}
                         active={item.id === page}
                         collapsed={collapsed}
+                        badge={item.id === "automations" ? automationUnreadTotal : undefined}
                         to={
                           item.id === "soul"
                             ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
@@ -265,6 +268,7 @@ function SidebarNavButton({
   collapsed,
   to,
   onPrefetch,
+  badge,
   className,
 }: {
   item: NavItem;
@@ -273,13 +277,19 @@ function SidebarNavButton({
   collapsed: boolean;
   to: string;
   onPrefetch?: () => void;
+  badge?: number;
   className?: string;
 }) {
+  const showBadge = Boolean(badge && badge > 0);
+  const badgeLabel = badge && badge > 99 ? "99+" : String(badge ?? "");
+
   const link = (
     <Link
       to={to}
       title={collapsed ? undefined : item.description}
-      aria-label={item.label}
+      aria-label={
+        showBadge ? `${item.label}, ${badge} unread automation run${badge === 1 ? "" : "s"}` : item.label
+      }
       aria-current={active ? "page" : undefined}
       onMouseEnter={onPrefetch}
       onFocus={onPrefetch}
@@ -290,13 +300,33 @@ function SidebarNavButton({
         className,
       )}
     >
-      <Icon
-        className="sidebar-nav-icon"
-        strokeWidth={1.75}
-        aria-hidden="true"
-      />
+      <span className="relative shrink-0">
+        <Icon
+          className="sidebar-nav-icon"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        {showBadge && collapsed ? (
+          <span
+            className="absolute right-0 top-0 inline-flex min-w-4 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground"
+            aria-hidden
+          >
+            {badgeLabel}
+          </span>
+        ) : null}
+      </span>
       {!collapsed ? (
-        <span className="min-w-0 truncate">{item.label}</span>
+        <>
+          <span className="min-w-0 truncate">{item.label}</span>
+          {showBadge ? (
+            <span
+              className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
+              aria-hidden
+            >
+              {badgeLabel}
+            </span>
+          ) : null}
+        </>
       ) : null}
     </Link>
   );
@@ -305,11 +335,15 @@ function SidebarNavButton({
     return link;
   }
 
+  const tooltipLabel = showBadge
+    ? `${item.label} (${badge} unread)`
+    : item.label;
+
   return (
     <Tooltip>
       <TooltipTrigger render={link} />
       <TooltipContent side="right" sideOffset={8}>
-        {item.label}
+        {tooltipLabel}
       </TooltipContent>
     </Tooltip>
   );
