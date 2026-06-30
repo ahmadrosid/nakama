@@ -31,6 +31,13 @@ describe("seedOrgDefaultProfile", () => {
     expect(orgBList[0]?.id).toBe(orgBProfile.id);
   });
 
+  test("seeds empty systemPrompt so soul stack defines identity", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = await seedOrgDefaultProfile(db, "org_a");
+
+    expect(profile.systemPrompt).toBe("");
+  });
+
   test("is idempotent for the same org", async () => {
     const db = createInMemoryDatabaseAdapter();
     const first = await seedOrgDefaultProfile(db, "org_a");

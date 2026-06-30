@@ -53,7 +53,7 @@ export async function seedOrgDefaultProfile(
   const profile: StoredProfileRecord = {
     id: nanoid(),
     name: "Default Bot",
-    systemPrompt: "You are a helpful personal assistant.",
+    systemPrompt: "",
     model: null,
     isSuper: false,
     orgId,

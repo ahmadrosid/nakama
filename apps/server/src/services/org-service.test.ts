@@ -1,5 +1,8 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { TinyClawApiError } from "@tinyclaw/core";
+import { getProfileSoulDir } from "@tinyclaw/core";
 import { LOCAL_CLIENT_EMAIL } from "@tinyclaw/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
 import { AuthService } from "./auth-service";
@@ -45,6 +48,16 @@ describe("OrgService", () => {
     const profiles = await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id);
     expect(profiles.some((profile) => profile.isDefault)).toBe(true);
     expect(profiles.some((profile) => profile.isSuper)).toBe(true);
+
+    const defaultProfile = profiles.find((profile) => profile.isDefault);
+    expect(defaultProfile).toBeTruthy();
+    const soulPath = join(
+      getProfileSoulDir(bootstrapped.organization.id, defaultProfile!.id),
+      "SOUL.md",
+    );
+    const soulContent = await readFile(soulPath, "utf8");
+    expect(soulContent).toContain("# Default Bot");
+    expect(soulContent).not.toContain("# Your Name");
   });
 
   test("bootstrapInitialSetup allows admin without phone", async () => {

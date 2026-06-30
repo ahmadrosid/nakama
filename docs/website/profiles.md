@@ -98,6 +98,12 @@ Profile-scoped skills are stored at:
 
 If you want richer personality and clearer long-term behavior, use soul files. If you only need a quick setup, the stored `systemPrompt` may be enough.
 
+### Default Bot soul stack
+
+New organizations receive a **pre-filled** soul stack for Default Bot — identity, voice, operating rules, and calibration examples — not blank placeholders. Customize files in the dashboard Soul tab. The database `systemPrompt` field is for optional operational overrides when it differs from `SOUL.md`; fresh installs leave it empty so identity lives in soul files alone.
+
+Existing profiles keep customized soul files. On server startup, `ensureSoulScaffolded()` fills **missing or empty** soul files and upgrades **legacy placeholder** `SOUL.md` content (the old `# Your Name` scaffold) to the current Default Bot template. Customized souls are not overwritten.
+
 ## Model selection
 
 Each profile can optionally select its own model.

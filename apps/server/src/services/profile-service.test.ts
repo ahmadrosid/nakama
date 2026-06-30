@@ -133,7 +133,7 @@ describe("profile service createProfile", () => {
     const soulDir = path.join(tempConfigDir, "orgs", ORG_ID, "profiles", created.profile.id);
     const soulContent = await readFile(path.join(soulDir, "SOUL.md"), "utf8");
 
-    expect(soulContent).toContain("# Your Name");
+    expect(soulContent).toContain("# Default Bot");
     await expect(readFile(path.join(soulDir, "STYLE.md"), "utf8")).resolves.toContain(
       "# Voice & Style",
     );
