@@ -4,7 +4,7 @@
 # Run:   docker run -d -p 4310:4310 -v tinyclaw-config:/root/.tinyclaw tinyclaw
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
-FROM --platform=linux/amd64 oven/bun:1.3-debian AS web-builder
+FROM --platform=linux/amd64 oven/bun:1.3-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -15,13 +15,12 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @tinyclaw/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM --platform=linux/amd64 oven/bun:1.3-debian AS runtime
+FROM --platform=linux/amd64 oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
-# Install python3 for custom agent tools (minimal footprint)
+# Install runtime interpreters only. PM2 comes from production dependencies.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 npm \
-  && npm install -g pm2 \
+  && apt-get install -y --no-install-recommends nodejs procps python3 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
@@ -42,7 +41,8 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@tinyclaw/whatsapp' \
   && bun run --filter @tinyclaw/automation build \
   && bun run --filter @tinyclaw/telegram build \
-  && bun run --filter @tinyclaw/whatsapp build
+  && bun run --filter @tinyclaw/whatsapp build \
+  && ln -s "/app/$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" /usr/local/bin/pm2-runtime
 
 ENV NODE_ENV=production \
     TINYCLAW_HOST=0.0.0.0 \
