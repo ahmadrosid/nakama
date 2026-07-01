@@ -200,6 +200,7 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
       active: true,
       text: "",
     };
+    this.layout.beginMessage("assistant");
     this.layout.beginStream();
   }
 
@@ -217,6 +218,7 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
       text: "",
     };
     this.layout.endStream();
+    this.layout.endMessage();
   }
 
   appendStreamChunk(text: string): void {
@@ -230,7 +232,9 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
         kind: "output",
         text,
       });
+      this.layout.beginMessage("output");
       this.layout.writelnScroll(text);
+      this.layout.endMessage();
       return;
     }
 
@@ -239,7 +243,9 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
       kind: "output",
       text: plainText,
     });
+    this.layout.beginMessage("output");
     this.layout.writelnScroll(text);
+    this.layout.endMessage();
   }
 
   appendUserMessage(line: string, options: UserMessageOptions = {}): void {
@@ -247,6 +253,7 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
     const placement = options.placement ?? "scroll";
     const lines = line.split("\n");
 
+    this.layout.beginMessage("user");
     for (let index = 0; index < lines.length; index += 1) {
       const linePrefix = index === 0 ? prefix : " ".repeat(prefix.length);
       const text = `${linePrefix}${lines[index] ?? ""}`;
@@ -262,6 +269,7 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
         this.layout.writelnScroll(text);
       }
     }
+    this.layout.endMessage();
   }
 
   getState(): TerminalRendererState {

@@ -14,6 +14,8 @@ import {
   type StyledLine,
 } from "./styled-text";
 import { wrapText } from "./text-measure";
+import type { MessageKind } from "./virtual-message-list";
+import { VirtualMessageList } from "./virtual-message-list";
 
 export function computeReservedRows(options: {
   pendingLineCount: number;
@@ -78,19 +80,13 @@ function wrapPlainTextToLines(text: string, width: number): string[] {
   return wrappedLines.length > 0 ? wrappedLines : [""];
 }
 
-function wrapStyledLineToPlainRows(line: StyledLine, width: number): StyledLine[] {
-  const text = styledLineText(line);
-  const rows = wrapPlainTextToLines(text, width);
-  return rows.map((row) => plainLine(row));
-}
-
 export class TerminalLayout {
   private enabled = false;
   private reservedRows = 1;
   private anchored = false;
   private anchorRow = 1;
   private viewportTopRow = 1;
-  private transcriptLines: StyledLine[] = [];
+  private messages = new VirtualMessageList();
   private streamBuffer = "";
   private statusLine: StyledLine | null = null;
   private inputLines: StyledLine[] = [plainLine("")];
@@ -137,8 +133,16 @@ export class TerminalLayout {
     return this.anchored;
   }
 
+  beginMessage(kind: MessageKind): void {
+    this.messages.beginMessage(kind);
+  }
+
+  endMessage(): void {
+    this.messages.sealMessage();
+  }
+
   getLastOutputLine(): number {
-    return this.transcriptLines.length;
+    return this.messages.totalLines(getTerminalColumns());
   }
 
   reset(): void {
@@ -160,6 +164,10 @@ export class TerminalLayout {
     this.historyOffset = 0;
     this.followOutput = true;
     this.contentWindowRows = 1;
+    this.messages.clear();
+    this.streamBuffer = "";
+    this.statusLine = null;
+    this.inputLines = [plainLine("")];
     this.previousFrame = null;
   }
 
@@ -255,7 +263,7 @@ export class TerminalLayout {
     }
 
     this.flushStreamBuffer();
-    this.transcriptLines.push(line);
+    this.messages.appendLine(plain);
     if (this.followOutput) {
       this.historyOffset = 0;
     }
@@ -308,7 +316,7 @@ export class TerminalLayout {
 
     const lines = wrapPlainTextToLines(this.streamBuffer, getTerminalColumns());
     for (const line of lines) {
-      this.transcriptLines.push(plainLine(line));
+      this.messages.appendLine(line);
     }
     this.streamBuffer = "";
   }
@@ -330,12 +338,12 @@ export class TerminalLayout {
 
     const rows = getTerminalRows();
     const cols = getTerminalColumns();
-    const fullContent = [...this.transcriptLines, ...this.streamLines()].flatMap((line) =>
-      wrapStyledLineToPlainRows(line, cols),
-    );
+    const transcriptCount = this.messages.totalLines(cols);
+    const streamContent = this.streamLines();
+    const fullLength = transcriptCount + streamContent.length;
     const statusRows = this.statusLine ? 1 : 0;
     const debugRows = this.debugOverlay ? 1 : 0;
-    const neededRows = Math.max(1, fullContent.length + statusRows + this.reservedRows + debugRows);
+    const neededRows = Math.max(1, fullLength + statusRows + this.reservedRows + debugRows);
     const anchor = Math.min(rows, Math.max(1, this.anchorRow));
     const initialViewportRows = Math.max(1, rows - anchor + 1);
     const targetViewportRows = Math.min(rows, Math.max(initialViewportRows, neededRows));
@@ -346,19 +354,23 @@ export class TerminalLayout {
     const viewportRows = Math.max(1, rows - viewportTop + 1);
     const visibleInputRows = getVisiblePinnedInputRows(this.reservedRows, viewportRows);
     const visibleInput = this.inputLines.slice(-visibleInputRows);
-    const pinned = fullContent.length + statusRows + debugRows + visibleInput.length > viewportRows;
+    const pinned = fullLength + statusRows + debugRows + visibleInput.length > viewportRows;
     const contentCapacity = pinned
       ? Math.max(0, viewportRows - visibleInput.length - statusRows - debugRows)
-      : fullContent.length;
+      : fullLength;
     this.contentWindowRows = Math.max(1, contentCapacity);
-    const maxOffset = Math.max(0, fullContent.length - contentCapacity);
+    const maxOffset = Math.max(0, fullLength - contentCapacity);
     this.historyOffset = Math.max(0, Math.min(maxOffset, this.historyOffset));
     if (this.historyOffset === 0) {
       this.followOutput = true;
     }
-    const endExclusive = Math.max(0, fullContent.length - this.historyOffset);
+    const endExclusive = Math.max(0, fullLength - this.historyOffset);
     const startInclusive = Math.max(0, endExclusive - contentCapacity);
-    const visibleContent = fullContent.slice(startInclusive, endExclusive);
+    const visibleTranscript = this.messages.getLines(startInclusive, Math.min(endExclusive, transcriptCount), cols);
+    const streamStart = Math.max(0, startInclusive - transcriptCount);
+    const streamEnd = Math.max(0, Math.min(endExclusive - transcriptCount, streamContent.length));
+    const visibleStream = streamContent.slice(streamStart, streamEnd);
+    const visibleContent = [...visibleTranscript, ...visibleStream];
 
     const lines: StyledLine[] = Array.from({ length: viewportRows }, () => plainLine(""));
     let row = 0;
@@ -366,7 +378,8 @@ export class TerminalLayout {
     if (this.debugOverlay && viewportRows > 0) {
       const debugText =
         `dbg a:${anchor} top:${viewportTop} vr:${viewportRows} ` +
-        `cap:${contentCapacity} full:${fullContent.length} off:${this.historyOffset} ` +
+        `cap:${contentCapacity} full:${fullLength} off:${this.historyOffset} ` +
+        `msgs:${this.messages.messageCount} ` +
         `follow:${this.followOutput ? "1" : "0"} pin:${pinned ? "1" : "0"} dtop:${desiredTop} ` +
         `sr:${viewportTop}-${pinned ? Math.max(viewportTop, rows - visibleInput.length) : rows}`;
       lines[0] = styledLine(debugText.slice(0, Math.max(1, cols)), { dim: true, color: "yellow" });
