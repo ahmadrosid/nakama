@@ -247,17 +247,13 @@ function readString(input: unknown, key: string): string | null {
 }
 
 function readLimit(input: unknown): number {
-  if (!input || typeof input !== "object") {
-    return 5;
-  }
+  const value =
+    input && typeof input === "object"
+      ? (input as Record<string, unknown>).limit
+      : undefined;
+  const limit = typeof value === "number" && Number.isFinite(value) ? value : 5;
 
-  const value = (input as Record<string, unknown>).limit;
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 5;
-  }
-
-  return Math.min(20, Math.max(1, Math.trunc(value)));
+  return Math.min(20, Math.max(1, Math.trunc(limit)));
 }
 
 function readTrigger(
