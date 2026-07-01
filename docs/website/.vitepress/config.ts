@@ -14,17 +14,25 @@ export default withMermaid(
       ],
       sidebar: [
         {
-          text: 'Guide',
+          text: 'Concepts',
           items: [
             { text: 'Overview', link: '/overview' },
+            { text: 'How Multi-tenancy Works', link: '/multi-tenancy' },
+            { text: 'Profiles', link: '/profiles' },
+            { text: 'How Agent Prompts Work', link: '/agent-prompt' },
+          ],
+        },
+        {
+          text: 'Guides',
+          items: [
             { text: 'Getting Started', link: '/getting-started' },
             { text: 'Telegram', link: '/telegram' },
-            { text: 'Multi-tenancy', link: '/multi-tenancy' },
-            { text: 'Profiles', link: '/profiles' },
-            { text: 'Agent prompt', link: '/agent-prompt' },
-            { text: 'Builtin tools', link: '/builtin-tools' },
             { text: 'MCP servers', link: '/mcp' },
           ],
+        },
+        {
+          text: 'Reference',
+          items: [{ text: 'Builtin Tools', link: '/builtin-tools' }],
         },
       ],
       socialLinks: [
