@@ -101,6 +101,7 @@ TinyClaw can expose the same agent runtime through:
 Enable Telegram or WhatsApp from the web app settings when you are ready.
 
 Telegram replies support normal Markdown for emphasis, code, headings, short lists, and simple links.
+WhatsApp supports direct-chat setup through the linked-device flow with QR or pairing code.
 
 ### Telegram group setup
 
@@ -113,11 +114,13 @@ If you want to use TinyClaw in Telegram groups:
 TinyClaw still filters group messages locally, so even with privacy disabled it only responds to slash commands, replies to the bot, and real bot mentions.
 
 For the full Telegram guide, see [Telegram](/telegram).
+For the full WhatsApp guide, see [WhatsApp](/whatsapp).
 
 ## Next steps
 
 - [Overview](/overview) — what TinyClaw is and how to think about it
 - [Telegram](/telegram) — use cases, setup, groups, and troubleshooting
+- [WhatsApp](/whatsapp) — direct chat setup, pairing, and troubleshooting
 - [Multi-tenancy](/multi-tenancy) — how orgs, members, and roles work
 - [Profiles](/profiles) — how to define each bot
 - [Builtin tools](/builtin-tools) — what bots can do

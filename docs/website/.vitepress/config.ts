@@ -18,6 +18,7 @@ export default withMermaid(
           items: [
             { text: 'Getting Started', link: '/getting-started' },
             { text: 'Telegram', link: '/telegram' },
+            { text: 'WhatsApp', link: '/whatsapp' },
           ],
         },
         {
