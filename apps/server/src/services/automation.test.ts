@@ -220,6 +220,59 @@ describe("AutomationRunner", () => {
     expect(runs[0]?.output).toBe("Hello from automation");
   });
 
+  test("passes automation scope to the agent prompt", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        name: "Scoped task",
+        description: "Run with history scope",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID,
+    );
+
+    let received:
+      | {
+          orgId: string;
+          profileId: string;
+          prompt: string;
+          automationId?: string;
+          automationRunId?: string;
+        }
+      | undefined;
+
+    const agentService = {
+      runAutomationPrompt: async (
+        orgId: string,
+        profileId: string,
+        prompt: string,
+        automationId?: string,
+        automationRunId?: string,
+      ) => {
+        received = { orgId, profileId, prompt, automationId, automationRunId };
+        return "Hello from automation";
+      },
+    };
+
+    const runner = new AutomationRunner(service, agentService as never);
+    await runner.run(automation.id);
+
+    const runs = await service.listRuns(automation.id);
+    expect(received).toEqual({
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      prompt: "Say hello",
+      automationId: automation.id,
+      automationRunId: runs[0]?.id,
+    });
+  });
+
   test("writes failed run records", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

@@ -226,6 +226,7 @@ export class AgentService {
   private readonly agentQuestionnaireState: AgentQuestionnaireState;
   private readonly superBotTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
+  private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
   private todoTools: ToolDefinition[] = [];
   private automationRunner: AutomationRunner | null = null;
@@ -271,6 +272,10 @@ export class AgentService {
   setAutomationTools(tools: ToolDefinition[]): void {
     this.automationTools = tools;
     this.sessions.clear();
+  }
+
+  setAutomationRunHistoryTools(tools: ToolDefinition[]): void {
+    this.automationRunHistoryTools = tools;
   }
 
   setAutomationRunner(runner: AutomationRunner): void {
@@ -708,16 +713,21 @@ export class AgentService {
     orgId: string,
     profileId: string,
     prompt: string,
+    automationId?: string,
+    automationRunId?: string,
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
     }
 
     const profile = await this.requireProfile(orgId, profileId);
-    const tools = await this.resolveProfileTools(profile, {
-      includeAutomationTools: false,
-      includeTodoTools: false,
-    });
+    const tools = [
+      ...(await this.resolveProfileTools(profile, {
+        includeAutomationTools: false,
+        includeTodoTools: false,
+      })),
+      ...this.automationRunHistoryTools,
+    ];
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
       profileId,
@@ -736,6 +746,8 @@ export class AgentService {
       soul: soulActive,
       userTimezone,
       toolContext: buildToolExecutionContext({
+        automationId,
+        automationRunId,
         orgId,
         profileId,
       }),

@@ -181,6 +181,52 @@ export function createAutomationTools(
   ];
 }
 
+export function createAutomationRunHistoryTools(
+  automationService: AutomationService,
+): ToolDefinition[] {
+  return [
+    {
+      name: "list_previous_automation_runs",
+      description:
+        "List recent previous runs for the currently running automation. Use this only when past outputs or failures would help complete the current automation run.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "number",
+            description: "Maximum number of previous runs to return. Defaults to 5, max 20.",
+          },
+        },
+        additionalProperties: false,
+      },
+      async run(input, context) {
+        const orgId = requireOrgId(context);
+        const automationId = context.automationId?.trim();
+
+        if (!automationId) {
+          throw new Error("automationId is required.");
+        }
+
+        const limit = readLimit(input);
+        const fetchLimit = context.automationRunId ? limit + 1 : limit;
+        const runs = await automationService.listRuns(automationId, orgId, fetchLimit);
+
+        return runs
+          .filter((run) => run.id !== context.automationRunId)
+          .slice(0, limit)
+          .map((run) => ({
+            id: run.id,
+            status: run.status,
+            startedAt: run.startedAt,
+            completedAt: run.completedAt,
+            output: run.output,
+            error: run.error,
+          }));
+      },
+    },
+  ];
+}
+
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
 
@@ -198,6 +244,16 @@ function readString(input: unknown, key: string): string | null {
 
   const value = (input as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readLimit(input: unknown): number {
+  const value =
+    input && typeof input === "object"
+      ? (input as Record<string, unknown>).limit
+      : undefined;
+  const limit = typeof value === "number" && Number.isFinite(value) ? value : 5;
+
+  return Math.min(20, Math.max(1, Math.trunc(limit)));
 }
 
 function readTrigger(

@@ -17,7 +17,10 @@ import { McpService } from "./services/mcp-service";
 import { SkillsService } from "./services/skills-service";
 import { AuthService } from "./services/auth-service";
 import { OrgService } from "./services/org-service";
-import { createAutomationTools } from "./tools/automation-tools";
+import {
+  createAutomationRunHistoryTools,
+  createAutomationTools,
+} from "./tools/automation-tools";
 import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
 import {
   DEFAULT_SERVER_HOST,
@@ -105,6 +108,7 @@ const automationRunner = new AutomationRunner(
 );
 
 agent.setAutomationTools(createAutomationTools(automationService, automationRunner));
+agent.setAutomationRunHistoryTools(createAutomationRunHistoryTools(automationService));
 agent.setAutomationRunner(automationRunner);
 
 const taskService = new TaskService(database.adapter);

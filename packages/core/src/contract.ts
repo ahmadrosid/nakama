@@ -1332,6 +1332,7 @@ export interface ProviderClient {
 
 export interface ToolContext {
   automationId?: string;
+  automationRunId?: string;
   userId?: string;
   orgId?: string;
   profileId?: string;

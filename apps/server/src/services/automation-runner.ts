@@ -44,6 +44,8 @@ export class AutomationRunner {
         orgId,
         automation.profileId,
         automation.prompt,
+        automationId,
+        run.id,
       );
 
       const completedRun = await this.automationService.completeRun(run.id, automationId, { output });
