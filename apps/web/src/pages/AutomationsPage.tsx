@@ -383,7 +383,9 @@ export function AutomationsPage() {
                           automation={automation}
                           selected={selectedId === automation.id}
                           unreadCount={unreadByAutomationId[automation.id] ?? 0}
+                          busy={busy}
                           onSelect={() => setSelectedId(automation.id)}
+                          onDelete={setDeleteTarget}
                         />
                       </li>
                     ))}
@@ -651,12 +653,16 @@ function AutomationListItem({
   automation,
   selected,
   unreadCount,
+  busy,
   onSelect,
+  onDelete,
 }: {
   automation: StoredAutomation;
   selected: boolean;
   unreadCount: number;
+  busy: boolean;
   onSelect: () => void;
+  onDelete: (automation: StoredAutomation) => void;
 }) {
   const TriggerIcon =
     automation.trigger.type === "schedule" || automation.trigger.type === "runAt"
@@ -664,45 +670,61 @@ function AutomationListItem({
       : HandIcon;
 
   return (
-    <button
-      type="button"
-      aria-current={selected ? "true" : undefined}
+    <div
       className={cn(
-        "flex w-full items-start gap-3 rounded-md px-3 py-3 text-left transition-colors",
-        "hover:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/40",
+        "group flex w-full items-start gap-1 rounded-md transition-colors",
+        "hover:bg-muted/40 focus-within:bg-muted/40",
         selected && "bg-muted/40",
       )}
-      onClick={onSelect}
     >
-      <TriggerIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <button
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        className="flex min-w-0 flex-1 items-start gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-none"
+        onClick={onSelect}
+      >
+        <TriggerIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
 
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-foreground">{automation.name}</p>
-          {unreadCount > 0 ? (
-            <span
-              className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
-              aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
-            >
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          ) : null}
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-foreground">{automation.name}</p>
+            {unreadCount > 0 ? (
+              <span
+                className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
+                aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
+          </div>
+          <p className="truncate text-xs text-muted-foreground">
+            {formatTrigger(automation.trigger)}
+          </p>
+          <p
+            className={cn(
+              "text-xs font-medium",
+              automation.enabled
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-muted-foreground",
+            )}
+          >
+            {automation.enabled ? "Enabled" : "Disabled"}
+          </p>
         </div>
-        <p className="truncate text-xs text-muted-foreground">
-          {formatTrigger(automation.trigger)}
-        </p>
-        <p
-          className={cn(
-            "text-xs font-medium",
-            automation.enabled
-              ? "text-emerald-700 dark:text-emerald-300"
-              : "text-muted-foreground",
-          )}
-        >
-          {automation.enabled ? "Enabled" : "Disabled"}
-        </p>
-      </div>
-    </button>
+      </button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        disabled={busy}
+        aria-label={`Delete ${automation.name}`}
+        className="mt-2 mr-2 shrink-0 text-destructive opacity-70 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={() => onDelete(automation)}
+      >
+        <Trash2Icon className="size-3.5" aria-hidden />
+      </Button>
+    </div>
   );
 }
 
@@ -1457,4 +1479,3 @@ function formatTrigger(trigger: AutomationTrigger): string {
 
   return `Schedule · ${trigger.cron}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
 }
-
