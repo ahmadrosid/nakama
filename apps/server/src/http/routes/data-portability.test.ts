@@ -131,6 +131,56 @@ describe("data portability routes", () => {
     );
   });
 
+  test("platform admin can run data folder migration", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const session = await loginPlatformAdminSession(app, authService, databaseAdapter);
+    const profileDir = join(getUserConfigDir(), "orgs", "org_test", "profiles", "profile_one");
+    await mkdir(join(profileDir, "data", "knowledge-base", "uploads", "kb_doc"), { recursive: true });
+    await mkdir(join(profileDir, "data", "knowledge-base", "extracted"), { recursive: true });
+    await writeFile(
+      join(profileDir, "data", "knowledge-base", "manifest.json"),
+      JSON.stringify({
+        documents: [
+          {
+            id: "kb_doc",
+            filename: "notes.txt",
+            mediaType: "text/plain",
+            sizeBytes: 11,
+            uploadedAt: "2026-07-01T00:00:00.000Z",
+            status: "ready",
+          },
+        ],
+      }),
+    );
+    await writeFile(
+      join(profileDir, "data", "knowledge-base", "uploads", "kb_doc", "notes.txt"),
+      "hello world",
+    );
+    await writeFile(
+      join(profileDir, "data", "knowledge-base", "extracted", "kb_doc.txt"),
+      "# source: notes.txt\n\nhello world",
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/migrate-folders", {
+        method: "POST",
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      profilesScanned: 1,
+      profilesChanged: 1,
+    });
+    await expect(
+      readFile(join(profileDir, "knowledge-base", "kb_doc--notes.txt"), "utf8"),
+    ).resolves.toBe("hello world");
+  });
+
   test("non-platform users cannot export or import data", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);

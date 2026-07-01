@@ -27,7 +27,7 @@ export const archiveProfileMemoryTool: ToolDefinition<
 > = {
   name: "archive_profile_memory",
   description:
-    "Move facts out of the active profile MEMORY.md into data/memory-archive/ for long-term storage. Use when the user wants to forget, remove, or clean up old memory without deleting it. Archived entries are not loaded into chat context; use search_files or read_file to retrieve them later.",
+    "Move facts out of the active profile MEMORY.md into memory-archive/ for long-term storage. Use when the user wants to forget, remove, or clean up old memory without deleting it. Archived entries are not loaded into chat context; use search_files or read_file to retrieve them later.",
   parameters: jsonSchemaFromZod(archiveProfileMemoryInputSchema),
   run(input, context) {
     return runArchiveProfileMemory(input, context);

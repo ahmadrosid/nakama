@@ -84,7 +84,7 @@ Soul files are read by `loadSoulStack()` (`load.ts`) and injected by `composeSou
 Builtin tool implementations and shared helpers live here. See **Tool execution & workspace** below for how paths and context work at runtime.
 
 - `update_profile_memory` — writes to MEMORY.md
-- `archive_profile_memory` — moves bullets from MEMORY.md to data/memory-archive/
+- `archive_profile_memory` — moves bullets from MEMORY.md to memory-archive/
 - `knowledge_base_search` — search uploaded documents
 - `web_search` — web search
 - `email` — list, read, search, and send mail via deployment mailbox settings

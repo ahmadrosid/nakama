@@ -2,7 +2,11 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
-import { getKnowledgeBaseDir, getKnowledgeBaseExtractedPath } from "../knowledge-base/paths";
+import {
+  getKnowledgeBaseDir,
+  getKnowledgeBaseExtractedPath,
+  KNOWLEDGE_BASE_EXTRACTED_SUFFIX,
+} from "../knowledge-base/paths";
 import { ensureKnowledgeBaseDirs, listKnowledgeBaseDocuments } from "../knowledge-base/store";
 import { getProfileSoulDir } from "../soul/resolve";
 import { buildRipgrepArgs, runRipgrep, type RipgrepMatch } from "./ripgrep";
@@ -119,7 +123,7 @@ async function resolveSearchTarget(
   const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
 
   if (!filename) {
-    return { kind: "dir", root: knowledgeBaseDir, glob: "*" };
+    return { kind: "dir", root: knowledgeBaseDir, glob: `*${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}` };
   }
 
   const documents = await listKnowledgeBaseDocuments(orgId, profileId);

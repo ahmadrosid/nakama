@@ -73,9 +73,8 @@ async function ensureSoulTemplateFile(
 export async function initSoulDirectory(directory: string): Promise<InitSoulResult> {
   await ensureDir(directory);
   await ensureDir(join(directory, "examples"));
-  await ensureDir(join(directory, "data"));
-  await ensureDir(join(directory, "data", "knowledge-base", "uploads"));
-  await ensureDir(join(directory, "data", "knowledge-base", "extracted"));
+  await ensureDir(join(directory, "knowledge-base"));
+  await ensureDir(join(directory, "memory-archive"));
 
   const created: string[] = [];
 

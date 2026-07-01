@@ -77,7 +77,7 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "archive_profile_memory")) {
       sections.push(
-        "Use archive_profile_memory when the user wants to forget, remove, or clean up old memory without deleting it. Archived facts live under data/memory-archive/ and are not loaded automatically; use search_files or read_file to retrieve them when relevant.",
+        "Use archive_profile_memory when the user wants to forget, remove, or clean up old memory without deleting it. Archived facts live under memory-archive/ and are not loaded automatically; use search_files or read_file to retrieve them when relevant.",
       );
     }
 

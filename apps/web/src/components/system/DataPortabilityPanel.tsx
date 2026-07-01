@@ -1,9 +1,15 @@
-import type { DataImportPreviewResponse } from "@tinyclaw/core/contract";
+import type {
+  DataFolderMigrationLogEntry,
+  DataFolderMigrationResponse,
+  DataImportPreviewResponse,
+} from "@tinyclaw/core/contract";
 import {
   AlertTriangleIcon,
   DatabaseBackupIcon,
   DownloadIcon,
   FileArchiveIcon,
+  InfoIcon,
+  RefreshCwIcon,
   RotateCcwIcon,
   UploadIcon,
 } from "lucide-react";
@@ -15,6 +21,7 @@ import {
   formatDataPortabilityBytes,
   canRestoreDataImport,
   useExportData,
+  useMigrateDataFolders,
   usePreviewDataImport,
   useRestoreDataImport,
 } from "@/hooks/use-data-portability";
@@ -27,11 +34,17 @@ export function DataPortabilityPanel() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<DataImportPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
+  const [migrationResult, setMigrationResult] = useState<DataFolderMigrationResponse | null>(null);
+  const migrateMutation = useMigrateDataFolders();
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
   const isBusy =
-    exportMutation.isPending || previewMutation.isPending || restoreMutation.isPending;
+    migrateMutation.isPending ||
+    exportMutation.isPending ||
+    previewMutation.isPending ||
+    restoreMutation.isPending;
   const restoreAvailable = canRestoreDataImport({
     selectedFile,
     previewReady: Boolean(preview),
@@ -46,6 +59,21 @@ export function DataPortabilityPanel() {
       toast("Export ready.");
     } catch (err) {
       setError(formatError(err));
+    }
+  }
+
+  async function handleMigrateFolders() {
+    setMigrationError(null);
+    try {
+      const result = await migrateMutation.mutateAsync();
+      setMigrationResult(result);
+      toast(
+        result.profilesChanged > 0
+          ? "Folder migration finished."
+          : "No folder migration needed.",
+      );
+    } catch (err) {
+      setMigrationError(formatError(err));
     }
   }
 
@@ -86,6 +114,43 @@ export function DataPortabilityPanel() {
 
   return (
     <div className="space-y-0">
+      <section className="border-b border-border p-4 sm:p-5">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                <RefreshCwIcon className="size-4 text-muted-foreground" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-foreground">Migrate data folder pattern</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Move old profile data folders into the new layout, flatten knowledge-base files,
+                  and remove empty legacy folders.
+                </p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void handleMigrateFolders()} disabled={isBusy}>
+              {migrateMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                <RefreshCwIcon className="size-4" aria-hidden />
+              )}
+              Migrate folders
+            </Button>
+          </div>
+
+          {migrationError ? (
+            <StatusMessage tone="danger" icon={AlertTriangleIcon}>
+              {migrationError}
+            </StatusMessage>
+          ) : null}
+
+          {migrationResult ? (
+            <MigrationResultPanel result={migrationResult} />
+          ) : null}
+        </div>
+      </section>
+
       <section className="border-b border-border p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -198,6 +263,45 @@ function PreviewStat({ label, value }: { label: string; value: string }) {
     <div className="bg-card p-3">
       <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
       <dd className="mt-1 truncate text-sm font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function MigrationResultPanel({ result }: { result: DataFolderMigrationResponse }) {
+  return (
+    <div className="rounded-md border border-border bg-background">
+      <dl className="grid gap-px overflow-hidden rounded-md bg-border text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <PreviewStat label="Profiles scanned" value={String(result.profilesScanned)} />
+        <PreviewStat label="Profiles changed" value={String(result.profilesChanged)} />
+        <PreviewStat label="Files moved" value={String(result.filesMoved)} />
+        <PreviewStat label="Folders removed" value={String(result.foldersRemoved)} />
+      </dl>
+      <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+        Root: {result.configRoot}
+      </div>
+      <div className="max-h-80 space-y-2 overflow-auto border-t border-border p-3">
+        {result.logs.map((entry, index) => (
+          <MigrationLogRow key={`${index}-${entry.message}`} entry={entry} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MigrationLogRow({ entry }: { entry: DataFolderMigrationLogEntry }) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-3 py-2 text-sm",
+        entry.level === "success" && "border-emerald-200 bg-emerald-50 text-emerald-900",
+        entry.level === "warn" && "border-amber-200 bg-amber-50 text-amber-900",
+        entry.level === "info" && "border-border bg-card text-foreground",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span>{entry.message}</span>
+      </div>
     </div>
   );
 }

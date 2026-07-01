@@ -146,7 +146,7 @@ Search uploaded knowledge base documents for relevant facts. The Knowledge tab c
 
 **Returns:** `{ query, root, matches, matchCount, truncated }` — empty matches when no ready document matches the filter.
 
-**Scope:** Extracted text under `~/.tinyclaw/profiles/{profileId}/data/knowledge-base/extracted/`.
+**Scope:** Extracted text files stored under `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
 
 **Availability:** When assigned **and** at least one uploaded document has `status: "ready"`. Inherited URL sources do not require `knowledge_base_search`; they require `web_fetch` or `web_search`.
 
@@ -195,7 +195,7 @@ Record a fact, preference, or decision in the profile's `MEMORY.md`.
 
 ### `archive_profile_memory`
 
-Move facts out of active `MEMORY.md` into `data/memory-archive/` without deleting them.
+Move facts out of active `MEMORY.md` into `memory-archive/` without deleting them.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -204,7 +204,7 @@ Move facts out of active `MEMORY.md` into `data/memory-archive/` without deletin
 
 **Returns:** `{ archived, activeBytes, archivePath }`
 
-**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/data/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
+**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
 
 **Availability:** When assigned to the profile.
 
@@ -247,7 +247,7 @@ Requires an OpenAI or Anthropic provider with a configured API key.
 
 ### Knowledge base
 
-Upload documents via the profile dashboard or API. Search only indexes extracted text from documents with `status: "ready"`. Upload path: `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/data/knowledge-base/`.
+Upload documents via the profile dashboard or API. Search only indexes extracted text from documents with `status: "ready"`. Upload path: `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
 
 ### Data portability
 

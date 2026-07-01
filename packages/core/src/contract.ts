@@ -213,6 +213,23 @@ export interface RestoreDataImportResponse {
   restoredFileCount: number;
 }
 
+export interface DataFolderMigrationLogEntry {
+  level: "info" | "success" | "warn";
+  message: string;
+}
+
+export interface DataFolderMigrationResponse {
+  startedAt: string;
+  finishedAt: string;
+  configRoot: string;
+  organizationsScanned: number;
+  profilesScanned: number;
+  profilesChanged: number;
+  filesMoved: number;
+  foldersRemoved: number;
+  logs: DataFolderMigrationLogEntry[];
+}
+
 export interface AuthCredentialsRequest {
   email: string;
   password: string;

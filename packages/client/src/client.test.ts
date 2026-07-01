@@ -143,6 +143,41 @@ test("data import helpers upload base64 archive data", async () => {
   );
 });
 
+test("data folder migration calls the platform migration endpoint", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = createClient({
+    baseUrl: "http://localhost:4310",
+    authToken: "local-auth-token",
+    fetch: async (input, init) => {
+      fetchCalls.push({ input, init });
+      return Response.json({
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: "2026-07-01T00:00:01.000Z",
+        configRoot: "/tmp/.tinyclaw",
+        organizationsScanned: 1,
+        profilesScanned: 2,
+        profilesChanged: 1,
+        filesMoved: 3,
+        foldersRemoved: 2,
+        logs: [{ level: "success", message: "Done." }],
+      });
+    },
+  });
+
+  await expect(client.migrateDataFolders()).resolves.toMatchObject({
+    profilesScanned: 2,
+    profilesChanged: 1,
+  });
+
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://localhost:4310/v1/platform/data/migrate-folders",
+  );
+  expect(fetchCalls[0]!.init?.method).toBe("POST");
+  expect(new Headers(fetchCalls[0]!.init?.headers).get("Authorization")).toBe(
+    "Bearer local-auth-token",
+  );
+});
+
 test("non-browser clients reload the local auth token once after a 401", async () => {
   const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-client-auth-reload-"));
   process.env.TINYCLAW_CONFIG_DIR = configDir;

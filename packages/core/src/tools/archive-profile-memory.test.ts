@@ -48,7 +48,7 @@ describe("archive_profile_memory tool", () => {
 
     expect(result.archived).toBe(1);
     expect(result.activeBytes).toBeGreaterThan(0);
-    expect(result.archivePath).toContain("data/memory-archive");
+    expect(result.archivePath).toContain("memory-archive");
 
     const active = await readFile(
       path.join(tempDir, "orgs", "org_test", "profiles", "profile_test", "MEMORY.md"),

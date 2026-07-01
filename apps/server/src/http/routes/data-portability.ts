@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
+  type DataFolderMigrationResponse,
   type DataImportPreviewResponse,
   type PreviewDataImportRequest,
   type RestoreDataImportRequest,
@@ -10,6 +11,7 @@ import {
   previewTinyClawDataImport,
   restoreTinyClawDataImport,
 } from "../../services/data-portability";
+import { runDataFolderMigration } from "../../services/data-folder-migration";
 import { errorResponse, json, readJson } from "../shared";
 import { requirePlatformAdminFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";
@@ -30,6 +32,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
     .openapi("RestoreDataImportRequest");
   const previewResponseSchema = z.object({}).passthrough().openapi("DataImportPreviewResponse");
   const restoreResponseSchema = z.object({}).passthrough().openapi("RestoreDataImportResponse");
+  const migrationResponseSchema = z.object({}).passthrough().openapi("DataFolderMigrationResponse");
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -81,6 +84,24 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
+      path: "/v1/platform/data/migrate-folders",
+      tags: ["Platform"],
+      summary: "Migrate legacy profile data folders",
+      operationId: "migratePlatformDataFolders",
+      responses: {
+        200: {
+          description: "Migration completed",
+          content: { "application/json": { schema: migrationResponseSchema } },
+        },
+        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      },
+    }),
+  );
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
       path: "/v1/platform/data/import/restore",
       tags: ["Platform"],
       summary: "Restore Tinyclaw data import",
@@ -123,6 +144,17 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
+    }
+  });
+
+  app.post("/v1/platform/data/migrate-folders", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    try {
+      const result = await runDataFolderMigration();
+      return json<DataFolderMigrationResponse>(result);
+    } catch (error) {
+      return errorResponse(formatImportError(error), 500);
     }
   });
 

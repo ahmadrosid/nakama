@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { formatError } from "@/lib/client";
 
 const sectionClass = "rounded-md border border-border bg-card";
-const KNOWLEDGE_BASE_SUBDIR = "data/knowledge-base";
+const KNOWLEDGE_BASE_SUBDIR = "knowledge-base";
 
 function resolveDefaultProfileId(
   profiles: Array<{ id: string }>,

@@ -111,7 +111,7 @@ describe("memory archive", () => {
     expect(append).toContain("- Old preference.");
   });
 
-  test("archiveProfileMemoryBullets moves entries to data/memory-archive", async () => {
+  test("archiveProfileMemoryBullets moves entries to memory-archive", async () => {
     await setupProfileMemory(`# Memory Log
 
 ---
@@ -133,7 +133,7 @@ describe("memory archive", () => {
     expect(result.archived).toBe(1);
     expect(result.activeBytes).toBeGreaterThan(0);
     expect(result.archivePath).toEndWith(
-      path.join("data", "memory-archive", "2026-06.md"),
+      path.join("memory-archive", "2026-06.md"),
     );
 
     const active = await readFile(
@@ -190,5 +190,36 @@ describe("memory archive", () => {
     await expect(
       archiveProfileMemoryBullets(PROFILE.orgId, PROFILE.profileId, ["Missing fact."]),
     ).rejects.toThrow("Memory entries not found: Missing fact.");
+  });
+
+  test("archiveProfileMemoryBullets migrates legacy data/memory-archive", async () => {
+    const soulDir = await setupProfileMemory(`# Memory Log
+
+---
+
+## 2026-06-29
+
+- Move this.
+`);
+    const legacyArchiveDir = path.join(soulDir, "data", "memory-archive");
+    await mkdir(legacyArchiveDir, { recursive: true });
+    await writeFile(
+      path.join(legacyArchiveDir, "2026-06.md"),
+      "# Archived Memory\n\n---\n\n<!-- archived: 2026-06-01T00:00:00.000Z -->\n",
+      "utf8",
+    );
+
+    const result = await archiveProfileMemoryBullets(
+      PROFILE.orgId,
+      PROFILE.profileId,
+      ["Move this."],
+      { archivedAt: new Date("2026-06-29T16:00:00.000Z") },
+    );
+
+    expect(result.archivePath).toEndWith(path.join("memory-archive", "2026-06.md"));
+    const archive = await readFile(result.archivePath, "utf8");
+    expect(archive).toContain("<!-- archived: 2026-06-01T00:00:00.000Z -->");
+    expect(archive).toContain("- Move this.");
+    await expect(readFile(path.join(legacyArchiveDir, "2026-06.md"), "utf8")).rejects.toThrow();
   });
 });

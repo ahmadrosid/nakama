@@ -1,4 +1,4 @@
-import { rename, rm } from "node:fs/promises";
+import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { DocumentAttachment, KnowledgeBaseDocument } from "../contract";
 import { createId } from "../ids";
@@ -17,17 +17,85 @@ import {
   isSupportedKnowledgeBaseMediaType,
   normalizeKnowledgeBaseMediaType,
 } from "./extract";
+import { getProfileSoulDir } from "../soul/resolve";
 import {
   getKnowledgeBaseDir,
-  getKnowledgeBaseExtractedDir,
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
-  getKnowledgeBaseUploadDir,
-  getKnowledgeBaseUploadsDir,
+  getKnowledgeBaseStoredDocumentPath,
 } from "./paths";
 
 interface KnowledgeBaseManifest {
   documents: KnowledgeBaseDocument[];
+}
+
+async function migrateLegacyKnowledgeBaseDir(orgId: string, profileId: string): Promise<void> {
+  const profileDir = getProfileSoulDir(orgId, profileId);
+  const legacyDir = join(profileDir, "data", "knowledge-base");
+  const currentDir = getKnowledgeBaseDir(orgId, profileId);
+
+  if (!(await pathExists(legacyDir)) || (await pathExists(currentDir))) {
+    return;
+  }
+
+  await rename(legacyDir, currentDir);
+}
+
+async function moveIfPresent(from: string, to: string): Promise<void> {
+  if (!(await pathExists(from)) || (await pathExists(to))) {
+    return;
+  }
+
+  await rename(from, to);
+}
+
+async function flattenKnowledgeBaseLayout(
+  orgId: string,
+  profileId: string,
+): Promise<void> {
+  const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
+  const uploadsDir = join(knowledgeBaseDir, "uploads");
+  const extractedDir = join(knowledgeBaseDir, "extracted");
+
+  if (await pathExists(extractedDir)) {
+    const entries = await readdir(extractedDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const legacyPath = join(extractedDir, entry.name);
+      const documentId = entry.name.replace(/\.txt$/i, "");
+      await moveIfPresent(
+        legacyPath,
+        getKnowledgeBaseExtractedPath(orgId, profileId, documentId),
+      );
+    }
+    await rm(extractedDir, { recursive: true, force: true });
+  }
+
+  if (await pathExists(uploadsDir)) {
+    const documentDirs = await readdir(uploadsDir, { withFileTypes: true });
+    for (const documentDir of documentDirs) {
+      if (!documentDir.isDirectory()) {
+        continue;
+      }
+
+      const legacyDocumentDir = join(uploadsDir, documentDir.name);
+      const files = await readdir(legacyDocumentDir, { withFileTypes: true });
+      for (const file of files) {
+        if (!file.isFile()) {
+          continue;
+        }
+
+        await moveIfPresent(
+          join(legacyDocumentDir, file.name),
+          getKnowledgeBaseStoredDocumentPath(orgId, profileId, documentDir.name, file.name),
+        );
+      }
+    }
+    await rm(uploadsDir, { recursive: true, force: true });
+  }
 }
 
 function decodeDocumentBytes(data: string): Buffer {
@@ -43,6 +111,8 @@ function sanitizeFilename(filename: string): string {
 }
 
 async function readManifest(orgId: string, profileId: string): Promise<KnowledgeBaseManifest> {
+  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
+  await flattenKnowledgeBaseLayout(orgId, profileId);
   const manifestPath = getKnowledgeBaseManifestPath(orgId, profileId);
   const raw = await readTextOrNull(manifestPath);
 
@@ -71,6 +141,8 @@ async function writeManifest(
   profileId: string,
   manifest: KnowledgeBaseManifest,
 ): Promise<void> {
+  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
+  await flattenKnowledgeBaseLayout(orgId, profileId);
   const manifestPath = getKnowledgeBaseManifestPath(orgId, profileId);
   const tempPath = `${manifestPath}.tmp`;
   const content = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -80,9 +152,9 @@ async function writeManifest(
 }
 
 export async function ensureKnowledgeBaseDirs(orgId: string, profileId: string): Promise<void> {
+  await migrateLegacyKnowledgeBaseDir(orgId, profileId);
+  await flattenKnowledgeBaseLayout(orgId, profileId);
   await ensureDir(getKnowledgeBaseDir(orgId, profileId));
-  await ensureDir(getKnowledgeBaseUploadsDir(orgId, profileId));
-  await ensureDir(getKnowledgeBaseExtractedDir(orgId, profileId));
 }
 
 export async function listKnowledgeBaseDocuments(
@@ -128,11 +200,9 @@ export async function uploadKnowledgeBaseDocument(
 
   const documentId = createId("kb");
   const uploadedAt = new Date().toISOString();
-  const uploadDir = getKnowledgeBaseUploadDir(orgId, profileId, documentId);
   const safeFilename = sanitizeFilename(filename);
-  const originalPath = join(uploadDir, safeFilename);
+  const originalPath = getKnowledgeBaseStoredDocumentPath(orgId, profileId, documentId, safeFilename);
 
-  await ensureDir(uploadDir);
   await writePrivateBytesFile(originalPath, bytes);
 
   let status: KnowledgeBaseDocument["status"] = "ready";
@@ -184,14 +254,20 @@ export async function deleteKnowledgeBaseDocument(
     return false;
   }
 
+  const document = manifest.documents[index]!;
   manifest.documents.splice(index, 1);
   await writeManifest(orgId, profileId, manifest);
 
-  const uploadDir = getKnowledgeBaseUploadDir(orgId, profileId, documentId);
+  const storedPath = getKnowledgeBaseStoredDocumentPath(
+    orgId,
+    profileId,
+    documentId,
+    document.filename,
+  );
   const extractedPath = getKnowledgeBaseExtractedPath(orgId, profileId, documentId);
 
-  if (await pathExists(uploadDir)) {
-    await rm(uploadDir, { recursive: true, force: true });
+  if (await pathExists(storedPath)) {
+    await removeFile(storedPath);
   }
 
   if (await pathExists(extractedPath)) {

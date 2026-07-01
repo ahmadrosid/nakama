@@ -93,7 +93,7 @@ test("buildChatSystemPrompt includes archive_profile_memory guidance when tool i
   );
 
   expect(prompt).toContain("archive_profile_memory");
-  expect(prompt).toContain("data/memory-archive/");
+  expect(prompt).toContain("memory-archive/");
   expect(prompt).toContain("search_files");
 });
 

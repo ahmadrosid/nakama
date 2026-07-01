@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
-  getKnowledgeBaseUploadDir,
+  getKnowledgeBaseStoredDocumentPath,
 } from "./paths";
 import {
   deleteKnowledgeBaseDocument,
@@ -66,8 +66,14 @@ describe("knowledge base store", () => {
     const manifest = await readFile(getKnowledgeBaseManifestPath(ORG_ID, profileId), "utf8");
     expect(manifest).toContain(uploaded.id);
 
-    const uploadDir = getKnowledgeBaseUploadDir(ORG_ID, profileId, uploaded.id);
-    expect(uploadDir).toContain(uploaded.id);
+    const storedPath = getKnowledgeBaseStoredDocumentPath(
+      ORG_ID,
+      profileId,
+      uploaded.id,
+      uploaded.filename,
+    );
+    expect(storedPath).toContain(uploaded.id);
+    expect(await readFile(storedPath, "utf8")).toContain("needle in haystack");
 
     const deleted = await deleteKnowledgeBaseDocument(ORG_ID, profileId, uploaded.id);
     expect(deleted).toBe(true);
@@ -85,5 +91,98 @@ describe("knowledge base store", () => {
         data: Buffer.from("zip").toString("base64"),
       }),
     ).rejects.toThrow(/Unsupported knowledge base document type/);
+  });
+
+  test("migrates legacy data/knowledge-base on first use", async () => {
+    const profileId = "profile_kb_legacy";
+    await setupProfile(profileId);
+
+    const legacyDir = path.join(
+      tempConfigDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      profileId,
+      "data",
+      "knowledge-base",
+    );
+    await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
+    await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), { recursive: true });
+    await writeFile(
+      path.join(legacyDir, "manifest.json"),
+      JSON.stringify(
+        {
+          documents: [
+            {
+              id: "kb_legacy",
+              filename: "legacy.txt",
+              mediaType: "text/plain",
+              sizeBytes: 11,
+              uploadedAt: "2026-06-13T00:00:00.000Z",
+              status: "ready",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await writeFile(
+      path.join(legacyDir, "extracted", "kb_legacy.txt"),
+      "# source: legacy.txt\n\nlegacy body\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(legacyDir, "uploads", "kb_legacy", "legacy.txt"),
+      "legacy body\n",
+      "utf8",
+    );
+
+    await listKnowledgeBaseDocuments(ORG_ID, profileId);
+
+    expect(
+      await readFile(
+        path.join(
+          tempConfigDir,
+          "orgs",
+          ORG_ID,
+          "profiles",
+          profileId,
+          "knowledge-base",
+          "manifest.json",
+        ),
+        "utf8",
+      ),
+    ).toContain("\"documents\"");
+    expect(
+      await readFile(
+        path.join(
+          tempConfigDir,
+          "orgs",
+          ORG_ID,
+          "profiles",
+          profileId,
+          "knowledge-base",
+          "kb_legacy.extracted.txt",
+        ),
+        "utf8",
+      ),
+    ).toContain("legacy body");
+    expect(
+      await readFile(
+        path.join(
+          tempConfigDir,
+          "orgs",
+          ORG_ID,
+          "profiles",
+          profileId,
+          "knowledge-base",
+          "kb_legacy--legacy.txt",
+        ),
+        "utf8",
+      ),
+    ).toContain("legacy body");
+    await expect(readFile(path.join(legacyDir, "manifest.json"), "utf8")).rejects.toThrow();
   });
 });

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { getProfileSoulDir } from "./resolve";
 
-export const MEMORY_ARCHIVE_RELATIVE_DIR = join("data", "memory-archive");
+export const MEMORY_ARCHIVE_RELATIVE_DIR = "memory-archive";
 
 export function getMemoryArchiveDir(orgId: string, profileId: string): string {
   return join(getProfileSoulDir(orgId, profileId), MEMORY_ARCHIVE_RELATIVE_DIR);

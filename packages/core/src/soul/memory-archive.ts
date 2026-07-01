@@ -1,3 +1,4 @@
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists, readText, readTextIfExists, writePrivateTextFile } from "../fs";
 import {
@@ -155,6 +156,18 @@ export function formatArchiveAppend(
   return `${lines.join("\n")}\n`;
 }
 
+async function migrateLegacyMemoryArchiveDir(orgId: string, profileId: string): Promise<void> {
+  const soulDir = getProfileSoulDir(orgId, profileId);
+  const legacyDir = join(soulDir, "data", "memory-archive");
+  const currentDir = join(soulDir, "memory-archive");
+
+  if (!(await pathExists(legacyDir)) || (await pathExists(currentDir))) {
+    return;
+  }
+
+  await rename(legacyDir, currentDir);
+}
+
 export async function archiveProfileMemoryBullets(
   orgId: string,
   profileId: string,
@@ -184,6 +197,7 @@ export async function archiveProfileMemoryBullets(
   }
 
   const archivedAt = options.archivedAt ?? new Date();
+  await migrateLegacyMemoryArchiveDir(orgId, profileId);
   const archivePath = getMemoryArchiveFilePath(
     orgId,
     profileId,

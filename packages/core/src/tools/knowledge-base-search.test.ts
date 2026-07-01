@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { getKnowledgeBaseDir } from "../knowledge-base/paths";
+import {
+  getKnowledgeBaseDir,
+  getKnowledgeBaseExtractedPath,
+} from "../knowledge-base/paths";
 import { runKnowledgeBaseSearch } from "./knowledge-base-search";
 
 describe("knowledge_base_search tool", () => {
@@ -25,17 +28,14 @@ describe("knowledge_base_search tool", () => {
     process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
 
     const profileDir = path.join(tempConfigDir, "orgs", orgId, "profiles", profileId);
-    const extractedDir = path.join(profileDir, "data", "knowledge-base", "extracted");
-    const uploadsDir = path.join(profileDir, "data", "knowledge-base", "uploads");
-    await mkdir(extractedDir, { recursive: true });
-    await mkdir(uploadsDir, { recursive: true });
+    await mkdir(path.join(profileDir, "knowledge-base"), { recursive: true });
 
     const docId = "kb_test_doc";
-    const extractedPath = path.join(extractedDir, `${docId}.txt`);
+    const extractedPath = getKnowledgeBaseExtractedPath(orgId, profileId, docId);
     const header = `# source: ${filename}\n# mediaType: text/plain\n# uploadedAt: 2026-06-13T00:00:00.000Z\n\n`;
     await writeFile(extractedPath, `${header}${body}`, "utf8");
 
-    const manifestPath = path.join(profileDir, "data", "knowledge-base", "manifest.json");
+    const manifestPath = path.join(profileDir, "knowledge-base", "manifest.json");
     await writeFile(
       manifestPath,
       JSON.stringify(
