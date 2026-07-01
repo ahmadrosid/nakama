@@ -19,6 +19,7 @@ With Telegram enabled, users can:
 
 - chat with a TinyClaw profile in a private Telegram chat
 - use TinyClaw in a Telegram group
+- receive rich text replies with formatting such as emphasis, code, headings, and links
 - switch org and profile with Telegram commands
 - send photos
 - send supported documents such as `pdf`, `docx`, `txt`, and `csv`

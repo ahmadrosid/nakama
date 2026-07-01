@@ -19,7 +19,9 @@ export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 export interface MockMessageContext {
   ctx: Context;
   replies: string[];
+  replyOptions: unknown[];
   edits: Array<{ chatId: number; messageId: number; text: string }>;
+  editOptions: unknown[];
 }
 
 export function createMessageContext(options: {
@@ -32,7 +34,9 @@ export function createMessageContext(options: {
   replyToBotId?: number;
 }): MockMessageContext {
   const replies: string[] = [];
+  const replyOptions: unknown[] = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
+  const editOptions: unknown[] = [];
   let nextMessageId = 1;
   const replyFrom =
     options.replyToBot || options.replyToBotId !== undefined
@@ -51,19 +55,26 @@ export function createMessageContext(options: {
       ...(options.entities ? { entities: options.entities } : {}),
       ...(replyFrom ? { reply_to_message: { from: replyFrom } } : {}),
     },
-    reply: async (text: string) => {
+    reply: async (text: string, options?: unknown) => {
       replies.push(text);
+      replyOptions.push(options);
       return { message_id: nextMessageId++ };
     },
     replyWithChatAction: async () => {},
     api: {
-      editMessageText: async (chatId: number, messageId: number, text: string) => {
+      editMessageText: async (
+        chatId: number,
+        messageId: number,
+        text: string,
+        options?: unknown,
+      ) => {
         edits.push({ chatId, messageId, text });
+        editOptions.push(options);
       },
     },
   } as unknown as Context;
 
-  return { ctx, replies, edits };
+  return { ctx, replies, replyOptions, edits, editOptions };
 }
 
 export interface MockStreamControl {

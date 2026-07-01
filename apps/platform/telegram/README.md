@@ -60,4 +60,4 @@ Telegram’s default **Group Privacy** limits what group messages reach the bot.
 
 Session mapping is stored in `~/.tinyclaw/telegram/chat-sessions.json`.
 
-Replies are tuned for chat UX: the agent uses Telegram-specific prompting, shows a typing indicator while working, and may split longer answers into several short messages.
+Replies are tuned for chat UX: the agent uses Telegram-specific prompting, preserves rich text formatting such as emphasis, code, and links, shows a typing indicator while working, and may split longer answers into several short messages.

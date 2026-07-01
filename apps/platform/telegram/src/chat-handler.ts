@@ -42,6 +42,7 @@ import type { TelegramAuthStore } from "./auth-store";
 import { formatError, HELP_TEXT, splitTelegramMessage } from "./format";
 import { replyAsChat } from "./reply";
 import { TelegramTodoStatusMessage } from "./todo-status-message";
+import { createTelegramRichMessenger, type TelegramRichMessenger } from "./rich-message";
 import { createTypingLoop } from "./typing-indicator";
 import type { SessionStore } from "./session-store";
 import {
@@ -89,6 +90,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
+    const telegram = createTelegramRichMessenger(ctx);
     const chatId = String(ctx.chat.id);
     const userId = ctx.from?.id;
 
@@ -109,7 +111,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (text && isStopCommand(text)) {
       if (!stopActiveStream(chatId)) {
-        await ctx.reply("Nothing to stop.");
+        await telegram.send("Nothing to stop.");
       }
 
       return;
@@ -121,33 +123,33 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (!isAuthorized) {
         if (isGroup) {
-          await ctx.reply(LINK_IN_PRIVATE_REPLY);
+          await telegram.send(LINK_IN_PRIVATE_REPLY);
           return;
         }
 
         if (!text) {
-          const imageInput = await tryBuildImageInput(ctx);
+          const imageInput = await tryBuildImageInput(ctx, telegram);
 
           if (imageInput) {
-            await ctx.reply("Send your pairing code as text to link this chat.");
+            await telegram.send("Send your pairing code as text to link this chat.");
             return;
           }
 
           if (hasTelegramDocument(ctx) || hasTelegramAudio(ctx)) {
-            await ctx.reply("Send your pairing code as text to link this chat.");
+            await telegram.send("Send your pairing code as text to link this chat.");
             return;
           }
 
-          await ctx.reply("Text messages only.");
+          await telegram.send("Text messages only.");
           return;
         }
 
-        await handlePairing(ctx, text, userId);
+        await handlePairing(ctx, text, userId, telegram);
         return;
       }
 
       if (isGroup && text && looksLikeHandshakeAttempt(text)) {
-        await ctx.reply(LINK_IN_PRIVATE_REPLY);
+        await telegram.send(LINK_IN_PRIVATE_REPLY);
         return;
       }
 
@@ -159,30 +161,30 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           isGroup && text && botInfo?.username
             ? stripBotMention(text, botInfo.username)
             : text;
-        const orgReady = await ensureOrgReady(ctx, channelOrgKey, orgGateText);
+        const orgReady = await ensureOrgReady(telegram, channelOrgKey, orgGateText);
         if (!orgReady) {
           return;
         }
       }
 
-      const imageInput = await tryBuildImageInput(ctx);
+      const imageInput = await tryBuildImageInput(ctx, telegram);
 
       if (imageInput) {
-        await handleChatMessage(ctx, withGroupContext(imageInput, isGroup), chatId);
+        await handleChatMessage(ctx, withGroupContext(imageInput, isGroup), chatId, telegram);
         return;
       }
 
-      const documentInput = await tryBuildDocumentInput(ctx);
+      const documentInput = await tryBuildDocumentInput(ctx, telegram);
 
       if (documentInput) {
-        await handleChatMessage(ctx, withGroupContext(documentInput, isGroup), chatId);
+        await handleChatMessage(ctx, withGroupContext(documentInput, isGroup), chatId, telegram);
         return;
       }
 
-      const audioInput = await tryBuildAudioInput(ctx);
+      const audioInput = await tryBuildAudioInput(ctx, telegram);
 
       if (audioInput) {
-        await handleChatMessage(ctx, withGroupContext(audioInput, isGroup), chatId);
+        await handleChatMessage(ctx, withGroupContext(audioInput, isGroup), chatId, telegram);
         return;
       }
 
@@ -191,12 +193,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       if (!text) {
-        await ctx.reply(UNSUPPORTED_MEDIA_REPLY);
+        await telegram.send(UNSUPPORTED_MEDIA_REPLY);
         return;
       }
 
       if (text.startsWith("/")) {
-        await handleCommand(ctx, text, chatId, channelOrgKey);
+        await handleCommand(ctx, text, chatId, channelOrgKey, telegram);
         return;
       }
 
@@ -207,6 +209,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         ctx,
         withGroupContext({ message: messageText }, isGroup),
         chatId,
+        telegram,
       );
     });
   };
@@ -215,36 +218,34 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     ctx: Context,
     text: string,
     userId: number,
+    telegram: TelegramRichMessenger,
   ): Promise<void> {
     const command = parseTelegramCommand(text);
     const fileConfig = authStore.getConfig();
     const hasHandshake = Boolean(fileConfig?.handshakeCode);
 
     if (command === "/help") {
-      await replyChunks(
-        ctx,
-        `${PAIRING_PROMPT}\n\n${HELP_TEXT}`,
-      );
+      await replyChunks(telegram, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
       return;
     }
 
     if (command === "/start") {
-      await ctx.reply(hasHandshake ? PAIRING_PROMPT : NO_CODE_PROMPT);
+      await telegram.send(hasHandshake ? PAIRING_PROMPT : NO_CODE_PROMPT);
       return;
     }
 
     if (!hasHandshake) {
-      await ctx.reply(NO_CODE_PROMPT);
+      await telegram.send(NO_CODE_PROMPT);
       return;
     }
 
     if (!looksLikeHandshakeAttempt(text)) {
-      await ctx.reply(PAIRING_PROMPT);
+      await telegram.send(PAIRING_PROMPT);
       return;
     }
 
     const result = await authStore.tryPair(text, userId);
-    await ctx.reply(result.message);
+    await telegram.send(result.message);
     // Pairing messages stay out of agent session history — only Telegram + config.ini.
   }
 
@@ -253,64 +254,69 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     text: string,
     chatId: string,
     channelOrgKey: string,
+    telegram: TelegramRichMessenger,
   ): Promise<void> {
     const command = parseTelegramCommand(text);
 
     switch (command) {
       case "/start":
       case "/help":
-        await replyChunks(ctx, HELP_TEXT);
+        await replyChunks(telegram, HELP_TEXT);
         return;
 
       case "/clear": {
         const session = await resolveSession(chatId);
         await session.clear();
-        await ctx.reply("History cleared.");
+        await telegram.send("History cleared.");
         return;
       }
 
       case "/compact": {
         const session = await resolveSession(chatId);
         const result = await session.compact({ force: true });
-        await ctx.reply(
-          `Compacted (${result.action}). Messages: ${result.messagesAfter}.`,
-        );
+        await telegram.send(`Compacted (${result.action}). Messages: ${result.messagesAfter}.`);
         return;
       }
 
       case "/new": {
         await createAndBindSession(chatId);
-        await ctx.reply("Started a new conversation.");
+        await telegram.send("Started a new conversation.");
         return;
       }
 
       case "/status":
-        await replyStatus(ctx, chatId);
+        await replyStatus(telegram, chatId);
         return;
 
       case "/org":
-        await handleOrgCommand(ctx, text, channelOrgKey, chatId);
+        await handleOrgCommand(text, channelOrgKey, chatId, telegram);
         return;
 
       case "/profile":
-        await handleProfileCommand(ctx, text, chatId, channelOrgKey);
+        await handleProfileCommand(text, chatId, channelOrgKey, telegram);
         return;
 
       default:
-        await ctx.reply(`Unknown command. Try /help`);
+        await telegram.send(`Unknown command. Try /help`);
     }
   }
 
-  async function tryBuildImageInput(ctx: Context) {
+  async function tryBuildImageInput(
+    ctx: Context,
+    telegram: TelegramRichMessenger,
+  ): Promise<SendMessageInput | null> {
     try {
       return await buildTelegramImageInput(ctx);
     } catch (error) {
-      await ctx.reply(formatError(error));
+      await telegram.send(formatError(error));
       return null;
     }
   }
 
-  async function tryBuildDocumentInput(ctx: Context): Promise<SendMessageInput | null> {
+  async function tryBuildDocumentInput(
+    ctx: Context,
+    telegram: TelegramRichMessenger,
+  ): Promise<SendMessageInput | null> {
     try {
       const result = await buildTelegramDocumentInput(ctx);
 
@@ -319,18 +325,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       if (result.kind === "reject") {
-        await ctx.reply(result.message);
+        await telegram.send(result.message);
         return null;
       }
 
       return result.input;
     } catch {
-      await ctx.reply(DOWNLOAD_FAILED_REPLY);
+      await telegram.send(DOWNLOAD_FAILED_REPLY);
       return null;
     }
   }
 
-  async function tryBuildAudioInput(ctx: Context): Promise<SendMessageInput | null> {
+  async function tryBuildAudioInput(
+    ctx: Context,
+    telegram: TelegramRichMessenger,
+  ): Promise<SendMessageInput | null> {
     if (!hasTelegramAudio(ctx)) {
       return null;
     }
@@ -338,7 +347,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     try {
       return await buildTelegramAudioInput(ctx, client);
     } catch (error) {
-      await ctx.reply(formatTelegramAudioError(error));
+      await telegram.send(formatTelegramAudioError(error));
       return null;
     }
   }
@@ -347,10 +356,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     ctx: Context,
     input: SendMessageInput,
     chatId: string,
+    telegram: TelegramRichMessenger,
   ): Promise<void> {
     const session = await resolveSession(chatId);
     const typingLoop = createTypingLoop(ctx);
-    const todoStatus = new TelegramTodoStatusMessage(ctx);
+    const todoStatus = new TelegramTodoStatusMessage(telegram);
     const signal = registerActiveStream(chatId);
     let reply = "";
 
@@ -384,25 +394,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       if (signal.aborted) {
         if (reply.trim()) {
-          await replyAsChat(ctx, reply);
+          await replyAsChat(telegram, reply);
         }
 
-        await ctx.reply("Stopped.");
+        await telegram.send("Stopped.");
         return;
       }
     } catch (error) {
       if (isAbortError(error)) {
         await todoStatus.stop();
         if (reply.trim()) {
-          await replyAsChat(ctx, reply);
+          await replyAsChat(telegram, reply);
         }
 
-        await ctx.reply("Stopped.");
+        await telegram.send("Stopped.");
         return;
       }
 
       await todoStatus.fail();
-      await ctx.reply(formatError(error));
+      await telegram.send(formatError(error));
       return;
     } finally {
       clearActiveStream(chatId);
@@ -410,15 +420,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (reply.trim()) {
-      await replyAsChat(ctx, reply);
+      await replyAsChat(telegram, reply);
       return;
     }
 
-    await ctx.reply("(empty reply)");
+    await telegram.send("(empty reply)");
   }
 
   async function ensureOrgReady(
-    ctx: Context,
+    telegram: TelegramRichMessenger,
     channelOrgKey: string,
     messageText: string | undefined,
   ): Promise<boolean> {
@@ -433,19 +443,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
 
     if (orgContext.status === "empty") {
-      await ctx.reply("No organizations are configured yet.");
+      await telegram.send("No organizations are configured yet.");
       return false;
     }
 
     if (orgContext.status === "prompt") {
-      await replyChunks(ctx, orgContext.message);
+      await replyChunks(telegram, orgContext.message);
       return false;
     }
 
     client.setOrgId(orgContext.orgId);
 
     if (orgContext.justSelected) {
-      await ctx.reply(formatOrgSwitchConfirmation(orgContext.orgName));
+      await telegram.send(formatOrgSwitchConfirmation(orgContext.orgName));
       return false;
     }
 
@@ -453,22 +463,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function handleOrgCommand(
-    ctx: Context,
     text: string,
     channelOrgKey: string,
     chatId: string,
+    telegram: TelegramRichMessenger,
   ): Promise<void> {
     const { orgs } = await client.listUserOrgs();
 
     if (orgs.length === 0) {
-      await ctx.reply("No organizations are configured yet.");
+      await telegram.send("No organizations are configured yet.");
       return;
     }
 
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
     if (!arg) {
       await replyChunks(
-        ctx,
+        telegram,
         formatOrgSelectionPrompt(orgs, getOrgSelection(orgStore, channelOrgKey)?.orgId),
       );
       return;
@@ -476,7 +486,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const picked = findOrgBySelectionInput(arg, orgs);
     if (!picked) {
-      await ctx.reply("Unknown organization. Send /org to see the list.");
+      await telegram.send("Unknown organization. Send /org to see the list.");
       return;
     }
 
@@ -490,14 +500,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await sessionStore.save();
     }
 
-    await ctx.reply(formatOrgSwitchConfirmation(picked.name));
+    await telegram.send(formatOrgSwitchConfirmation(picked.name));
   }
 
   async function handleProfileCommand(
-    ctx: Context,
     text: string,
     chatId: string,
     channelOrgKey: string,
+    telegram: TelegramRichMessenger,
   ): Promise<void> {
     const { orgs } = await client.listUserOrgs();
     const currentOrgId = getOrgSelection(orgStore, channelOrgKey)?.orgId;
@@ -509,12 +519,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const profiles = await listSelectableProfiles();
 
       if (profiles.length === 0) {
-        await ctx.reply("No profiles are available.");
+        await telegram.send("No profiles are available.");
         return;
       }
 
       await replyChunks(
-        ctx,
+        telegram,
         formatProfileSelectionPrompt(profiles, currentProfileId, currentOrg?.name),
       );
       return;
@@ -538,12 +548,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         : resolveProfileInScopes(await listProfileScopes(orgs, currentOrgId), arg);
 
     if (!resolved) {
-      await ctx.reply("Unknown profile. Send /profile to see the list.");
+      await telegram.send("Unknown profile. Send /profile to see the list.");
       return;
     }
 
     if ("ambiguous" in resolved) {
-      await ctx.reply(
+      await telegram.send(
         `That profile exists in multiple orgs (${resolved.ambiguous}). Send /org first, then /profile.`,
       );
       return;
@@ -560,13 +570,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (picked.id === currentProfileId && scope.orgId === currentOrgId) {
-      await ctx.reply(`Already using ${picked.name}.`);
+      await telegram.send(`Already using ${picked.name}.`);
       return;
     }
 
     await createAndBindSession(chatId, picked.id);
     const orgNote = scope.orgId !== currentOrgId ? ` (${scope.orgName})` : "";
-    await ctx.reply(`${formatProfileSwitchConfirmation(picked.name)}${orgNote}`);
+    await telegram.send(`${formatProfileSwitchConfirmation(picked.name)}${orgNote}`);
   }
 
   async function listProfileScopes(
@@ -596,7 +606,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     return filterProfilesForChatAccess(profiles, { excludeSuperBot: true });
   }
 
-  async function replyStatus(ctx: Context, chatId: string): Promise<void> {
+  async function replyStatus(telegram: TelegramRichMessenger, chatId: string): Promise<void> {
     try {
       const health = await client.health();
       const lines = [
@@ -619,9 +629,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         lines.push("Chat runs in offline mode without an API key.");
       }
 
-      await replyChunks(ctx, lines.join("\n"));
+      await replyChunks(telegram, lines.join("\n"));
     } catch (error) {
-      await ctx.reply(formatError(error));
+      await telegram.send(formatError(error));
     }
   }
 
@@ -709,9 +719,12 @@ function getOrgSelection(
   return undefined;
 }
 
-async function replyChunks(ctx: Context, text: string): Promise<void> {
+async function replyChunks(
+  telegram: TelegramRichMessenger,
+  text: string,
+): Promise<void> {
   for (const chunk of splitTelegramMessage(text)) {
-    await ctx.reply(chunk);
+    await telegram.send(chunk);
   }
 }
 

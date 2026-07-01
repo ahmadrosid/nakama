@@ -25,7 +25,48 @@ export function stripMarkdownForTelegram(text: string): string {
 }
 
 export function prepareTelegramReply(text: string): string {
+  return text.trim();
+}
+
+export function prepareTelegramFallbackReply(text: string): string {
   return stripMarkdownForTelegram(text);
+}
+
+export function renderTelegramRichText(text: string): string {
+  const fencedBlocks: string[] = [];
+  let result = text.trim().replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => {
+    const token = `@@TCTOKEN${fencedBlocks.length}@@`;
+    fencedBlocks.push(`<pre><code>${escapeTelegramHtml(code.trim())}</code></pre>`);
+    return token;
+  });
+
+  result = escapeTelegramHtml(result);
+  result = result.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
+  result = result.replace(/`([^`]+)`/g, "<code>$1</code>");
+  result = result.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  result = result.replace(/__([^_]+)__/g, "<u>$1</u>");
+  result = result.replace(/\*([^*]+)\*/g, "<i>$1</i>");
+  result = result.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    (_, label: string, url: string) => `<a href="${escapeTelegramAttribute(url)}">${label}</a>`,
+  );
+
+  for (let index = 0; index < fencedBlocks.length; index++) {
+    result = result.replace(`@@TCTOKEN${index}@@`, fencedBlocks[index]!);
+  }
+
+  return result.trim();
+}
+
+function escapeTelegramHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeTelegramAttribute(text: string): string {
+  return text.replace(/"/g, "&quot;");
 }
 
 export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {

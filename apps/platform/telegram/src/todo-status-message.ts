@@ -1,5 +1,5 @@
 import type { AgentTodo } from "@tinyclaw/core/contract";
-import type { Context } from "grammy";
+import type { TelegramRichMessenger } from "./rich-message";
 import { renderTelegramTodoStatus } from "./format";
 
 type TelegramTodoRunState = "working" | "completed" | "stopped" | "failed";
@@ -14,7 +14,7 @@ export class TelegramTodoStatusMessage {
   private lastTodos: AgentTodo[] = [];
   private pending = Promise.resolve();
 
-  constructor(private readonly ctx: Context) {}
+  constructor(private readonly messenger: TelegramRichMessenger) {}
 
   async update(todos: AgentTodo[]): Promise<void> {
     if (todos.length === 0) {
@@ -59,10 +59,10 @@ export class TelegramTodoStatusMessage {
 
     try {
       if (this.messageId === null) {
-        const message = (await this.ctx.reply(next)) as TelegramReplyMessage | undefined;
+        const message = await this.messenger.send(next);
         this.messageId = message?.message_id ?? null;
       } else {
-        await this.ctx.api.editMessageText(this.ctx.chat!.id, this.messageId, next);
+        await this.messenger.edit(this.messageId, next);
       }
 
       this.lastRendered = next;
