@@ -27,12 +27,14 @@ export default withMermaid(
           items: [
             { text: 'Getting Started', link: '/getting-started' },
             { text: 'Telegram', link: '/telegram' },
-            { text: 'MCP servers', link: '/mcp' },
           ],
         },
         {
-          text: 'Reference',
-          items: [{ text: 'Builtin Tools', link: '/builtin-tools' }],
+          text: 'Operations',
+          items: [
+            { text: 'Builtin Tools', link: '/builtin-tools' },
+            { text: 'MCP Servers', link: '/mcp' },
+          ],
         },
       ],
       socialLinks: [

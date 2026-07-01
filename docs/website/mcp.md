@@ -1,4 +1,4 @@
-# MCP servers
+# MCP Servers
 
 An **MCP server** is an external tool provider that extends what a profile can do, beyond the [builtin tools](/builtin-tools).
 

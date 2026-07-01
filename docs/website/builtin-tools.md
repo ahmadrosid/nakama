@@ -1,4 +1,4 @@
-# Builtin tools
+# Builtin Tools
 
 Builtin tools are the actions a profile is allowed to take.
 

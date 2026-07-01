@@ -1,4 +1,4 @@
-# Agent prompt
+# How Agent Prompts Work
 
 When a user starts chatting with a profile, TinyClaw builds one system prompt from several sources.
 

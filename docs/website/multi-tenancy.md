@@ -1,4 +1,4 @@
-# Multi-tenancy
+# How Multi-tenancy Works
 
 TinyClaw is built for running more than one team or customer on the same deployment.
 
