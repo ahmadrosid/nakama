@@ -18,11 +18,6 @@ RUN bun install --frozen-lockfile --ignore-scripts \
 FROM --platform=linux/amd64 oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
-# Install runtime interpreters only. PM2 comes from production dependencies.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends nodejs procps python3 \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY package.json bun.lock ./
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
@@ -39,10 +34,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@tinyclaw/automation' \
       --filter '@tinyclaw/telegram' \
       --filter '@tinyclaw/whatsapp' \
-  && bun run --filter @tinyclaw/automation build \
-  && bun run --filter @tinyclaw/telegram build \
-  && bun run --filter @tinyclaw/whatsapp build \
-  && ln -s "/app/$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" /usr/local/bin/pm2-runtime
+  && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)"
 
 ENV NODE_ENV=production \
     TINYCLAW_HOST=0.0.0.0 \
@@ -56,4 +48,4 @@ VOLUME ["/root/.tinyclaw"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://127.0.0.1:4310/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["pm2-runtime", "start", "apps/server/ecosystem.config.cjs"]
+CMD ["bun", "run", "apps/server/src/index.ts"]
