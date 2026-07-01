@@ -49,6 +49,7 @@ import {
   useAutomationRunsQuery,
   useAutomationsQuery,
   useDeleteAutomationMutation,
+  useDeleteAutomationRunMutation,
   useMarkAutomationRunsReadMutation,
   useRunAutomationMutation,
   useUpdateAutomationMutation,
@@ -89,15 +90,17 @@ export function AutomationsPage() {
   } = useAutomationRunsQuery(selectedId);
   const updateMutation = useUpdateAutomationMutation();
   const deleteMutation = useDeleteAutomationMutation();
+  const deleteRunMutation = useDeleteAutomationRunMutation();
   const runMutation = useRunAutomationMutation();
   const markReadMutation = useMarkAutomationRunsReadMutation();
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StoredAutomation | null>(null);
+  const [deleteRunTarget, setDeleteRunTarget] = useState<AutomationRunRecord | null>(null);
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
 
-  const busy = updateMutation.isPending || deleteMutation.isPending;
+  const busy = updateMutation.isPending || deleteMutation.isPending || deleteRunMutation.isPending;
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
   const loading = initialLoading && automations.length === 0;
@@ -189,6 +192,24 @@ export function AutomationsPage() {
       if (editDraft?.id === deleteTarget.id) {
         setEditDraft(null);
       }
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleDeleteRunConfirm() {
+    if (!selectedId || !deleteRunTarget || busy) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteRunMutation.mutateAsync({
+        automationId: selectedId,
+        runId: deleteRunTarget.id,
+      });
+      setDeleteRunTarget(null);
     } catch (err) {
       setError(formatError(err));
     }
@@ -489,7 +510,11 @@ export function AutomationsPage() {
                           <p className="type-body text-xs text-muted-foreground">No runs yet.</p>
                         </div>
                       ) : (
-                        <RunHistoryList runs={runs} />
+                        <RunHistoryList
+                          runs={runs}
+                          busy={busy}
+                          onDeleteRun={setDeleteRunTarget}
+                        />
                       )}
                     </div>
                   </div>
@@ -581,6 +606,47 @@ export function AutomationsPage() {
               variant="destructive"
               disabled={busy}
               onClick={() => void handleDeleteConfirm()}
+            >
+              {busy ? <Spinner className="size-4" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteRunTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setDeleteRunTarget(null);
+          }
+        }}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete run history item?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the run from{" "}
+              <span className="font-medium text-foreground">
+                {deleteRunTarget ? formatSessionTimestamp(deleteRunTarget.startedAt) : ""}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setDeleteRunTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void handleDeleteRunConfirm()}
             >
               {busy ? <Spinner className="size-4" /> : "Delete"}
             </Button>
@@ -992,7 +1058,15 @@ function AutomationsEmptyState() {
   );
 }
 
-function RunHistoryList({ runs }: { runs: AutomationRunRecord[] }) {
+function RunHistoryList({
+  runs,
+  busy,
+  onDeleteRun,
+}: {
+  runs: AutomationRunRecord[];
+  busy: boolean;
+  onDeleteRun: (run: AutomationRunRecord) => void;
+}) {
   const [expandedId, setExpandedId] = useState<string | null>(() => {
     const running = runs.find((run) => run.status === "running");
     return running?.id ?? runs[0]?.id ?? null;
@@ -1013,9 +1087,11 @@ function RunHistoryList({ runs }: { runs: AutomationRunRecord[] }) {
           key={run.id}
           run={run}
           expanded={expandedId === run.id}
+          busy={busy}
           onToggle={() => {
             setExpandedId((current) => (current === run.id ? null : run.id));
           }}
+          onDelete={() => onDeleteRun(run)}
         />
       ))}
     </ul>
@@ -1025,11 +1101,15 @@ function RunHistoryList({ runs }: { runs: AutomationRunRecord[] }) {
 function RunHistoryItem({
   run,
   expanded,
+  busy,
   onToggle,
+  onDelete,
 }: {
   run: AutomationRunRecord;
   expanded: boolean;
+  busy: boolean;
   onToggle: () => void;
+  onDelete: () => void;
 }) {
   const isRunning = run.status === "running";
   const isUnread = run.read === false;
@@ -1062,86 +1142,99 @@ function RunHistoryItem({
           runHistoryShellClass(run.status),
         )}
       >
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors",
-            hasBody && "hover:bg-muted/40",
-            !hasBody && "cursor-default",
-          )}
-          disabled={!hasBody}
-          aria-expanded={hasBody ? expanded : undefined}
-          aria-label={
-            hasBody
-              ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
-              : `Run from ${formatSessionRelativeTime(run.startedAt)}`
-          }
-          onClick={() => {
-            if (hasBody) {
-              onToggle();
+        <div className="flex items-start gap-2 px-3 py-3 transition-colors hover:bg-muted/40">
+          <button
+            type="button"
+            className={cn(
+              "flex min-w-0 flex-1 items-start gap-3 text-left",
+              !hasBody && "cursor-default",
+            )}
+            disabled={!hasBody}
+            aria-expanded={hasBody ? expanded : undefined}
+            aria-label={
+              hasBody
+                ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
+                : `Run from ${formatSessionRelativeTime(run.startedAt)}`
             }
-          }}
-        >
-          <RunStatusIcon status={run.status} />
+            onClick={() => {
+              if (hasBody) {
+                onToggle();
+              }
+            }}
+          >
+            <RunStatusIcon status={run.status} />
 
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <RunStatusBadge status={run.status} />
-              {isUnread ? (
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                  New
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <RunStatusBadge status={run.status} />
+                {isUnread ? (
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    New
+                  </span>
+                ) : null}
+                {run.deliveryStatus ? (
+                  <>
+                    <span className="text-xs text-muted-foreground" aria-hidden>
+                      ·
+                    </span>
+                    <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
+                  </>
+                ) : null}
+                <span className="text-xs text-muted-foreground" aria-hidden>
+                  ·
                 </span>
-              ) : null}
-              {run.deliveryStatus ? (
-                <>
-                  <span className="text-xs text-muted-foreground" aria-hidden>
-                    ·
-                  </span>
-                  <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
-                </>
-              ) : null}
-              <span className="text-xs text-muted-foreground" aria-hidden>
-                ·
-              </span>
-              <time
-                className="text-xs text-muted-foreground"
-                dateTime={run.startedAt}
-                title={formatSessionTimestamp(run.startedAt)}
-              >
-                {formatSessionRelativeTime(run.startedAt)}
-              </time>
-              {duration ? (
-                <>
-                  <span className="text-xs text-muted-foreground" aria-hidden>
-                    ·
-                  </span>
-                  <span className="text-xs text-muted-foreground">{duration}</span>
-                </>
+                <time
+                  className="text-xs text-muted-foreground"
+                  dateTime={run.startedAt}
+                  title={formatSessionTimestamp(run.startedAt)}
+                >
+                  {formatSessionRelativeTime(run.startedAt)}
+                </time>
+                {duration ? (
+                  <>
+                    <span className="text-xs text-muted-foreground" aria-hidden>
+                      ·
+                    </span>
+                    <span className="text-xs text-muted-foreground">{duration}</span>
+                  </>
+                ) : null}
+              </div>
+
+              {previewText ? (
+                <p
+                  className={cn(
+                    "line-clamp-2 text-sm leading-relaxed",
+                    run.status === "failed" ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {previewText}
+                </p>
               ) : null}
             </div>
 
-            {previewText ? (
-              <p
+            {hasBody ? (
+              <ChevronRightIcon
                 className={cn(
-                  "line-clamp-2 text-sm leading-relaxed",
-                  run.status === "failed" ? "text-destructive" : "text-muted-foreground",
+                  "mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                  expanded && "rotate-90",
                 )}
-              >
-                {previewText}
-              </p>
+                aria-hidden
+              />
             ) : null}
-          </div>
+          </button>
 
-          {hasBody ? (
-            <ChevronRightIcon
-              className={cn(
-                "mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                expanded && "rotate-90",
-              )}
-              aria-hidden
-            />
-          ) : null}
-        </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+            disabled={busy}
+            aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
+            onClick={onDelete}
+          >
+            <Trash2Icon className="size-4" aria-hidden />
+          </Button>
+        </div>
 
         <div
           className={cn(

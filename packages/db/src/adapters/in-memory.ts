@@ -302,6 +302,13 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       );
     },
 
+    async deleteAutomationRun(automationId, runId) {
+      const existing = automationRuns.get(automationId) ?? [];
+      const filtered = existing.filter((run) => run.id !== runId);
+      automationRuns.set(automationId, filtered);
+      return filtered.length !== existing.length;
+    },
+
     async getAutomationRunReadThrough(userId, orgId, automationId) {
       const key = `${userId}:${orgId}:${automationId}`;
       return automationRunReadState.get(key)?.readThroughAt ?? null;

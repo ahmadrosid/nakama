@@ -21,6 +21,9 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   const automationIdParam = z.object({
     automationId: z.string().openapi({ param: { name: "automationId", in: "path" } }),
   });
+  const automationRunParam = automationIdParam.extend({
+    runId: z.string().openapi({ param: { name: "runId", in: "path" } }),
+  });
   const draftAutomationSchema = z.object({}).passthrough().openapi("DraftAutomationRequest");
   const draftAutomationResponseSchema = z.object({}).passthrough().openapi("DraftAutomationResponse");
   const listAutomationsSchema = z.object({}).passthrough().openapi("ListAutomationsResponse");
@@ -151,6 +154,19 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
       500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
     },
   }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "delete",
+    path: "/v1/automations/{automationId}/runs/{runId}",
+    tags: ["Automations"],
+    summary: "Delete an automation run history item",
+    operationId: "deleteAutomationRun",
+    request: { params: automationRunParam },
+    responses: {
+      204: { description: "Automation run deleted" },
+      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
 
   app.post("/v1/automations/draft", async (c) => {
     const body = await readJson<DraftAutomationRequest>(c.req.raw);
@@ -245,6 +261,25 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     try {
       const runs = await automationService.listRuns(automationId, orgId, 20, auth.user.id);
       return json<ListAutomationRunsResponse>({ runs });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Automation not found.") {
+        return errorResponse(error.message, 404);
+      }
+      throw error;
+    }
+  });
+
+  app.delete("/v1/automations/:automationId/runs/:runId", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const automationId = decodeURIComponent(c.req.param("automationId"));
+    const runId = decodeURIComponent(c.req.param("runId"));
+
+    try {
+      const deleted = await automationService.deleteRun(automationId, runId, orgId);
+      if (!deleted) {
+        return errorResponse("Automation run not found.", 404);
+      }
+      return new Response(null, { status: 204 });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);

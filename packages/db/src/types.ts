@@ -318,6 +318,7 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(automationId: string): Promise<StoredAutomationRunRecord | null>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   updateAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+  deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
 
   getAutomationRunReadThrough(
     userId: string,

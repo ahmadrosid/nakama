@@ -304,6 +304,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?
     WHERE id = ?
   `);
+  const deleteAutomationRunStmt = db.prepare(`
+    DELETE FROM automation_runs
+    WHERE automation_id = ? AND id = ?
+  `);
 
   const getAutomationRunReadThroughStmt = db.prepare(`
     SELECT read_through_at
@@ -1089,6 +1093,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.deliveryError ?? null,
         record.id,
       );
+    },
+
+    async deleteAutomationRun(automationId, runId) {
+      const result = deleteAutomationRunStmt.run(automationId, runId);
+      return result.changes > 0;
     },
 
     async getAutomationRunReadThrough(userId, orgId, automationId) {
