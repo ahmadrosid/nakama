@@ -65,12 +65,6 @@ const SOUL_FILES = [
     description: "Continuity and context to carry forward",
     writable: true,
   },
-  {
-    key: "examples" as const,
-    label: "examples/",
-    description: "Calibration examples (read-only aggregate)",
-    writable: false,
-  },
 ] satisfies Array<{
   key: keyof SoulStackFiles;
   label: string;
