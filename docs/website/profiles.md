@@ -65,6 +65,8 @@ So a profile is not just a name. It controls both:
 - **How the agent behaves**
 - **What the agent is allowed to do**
 
+For the full prompt assembly flow, see [Agent prompt](/agent-prompt).
+
 ## Soul vs system prompt
 
 Profiles support two layers of instruction:

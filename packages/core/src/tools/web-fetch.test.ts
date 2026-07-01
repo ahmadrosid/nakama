@@ -256,4 +256,20 @@ describe("convertHtmlToMarkdown", () => {
     expect(md).toContain("## Sub");
     expect(md).toContain("**b**");
   });
+
+  test("removes framework comment noise", async () => {
+    const md = await convertHtmlToMarkdown(`
+      <!--[-->
+      <nav><!--]--><a href="#content">Skip to content</a><!--[--></nav>
+      <!---->
+      <!--[--><main id="content"><h1>TinyClaw</h1><p>Self-hosted AI agents</p></main><!--]-->
+    `);
+
+    expect(md).not.toContain("<!--[-->");
+    expect(md).not.toContain("<!--]-->");
+    expect(md).not.toContain("<!---->");
+    expect(md).toContain("[Skip to content](#content)");
+    expect(md).toContain("# TinyClaw");
+    expect(md).toContain("Self-hosted AI agents");
+  });
 });

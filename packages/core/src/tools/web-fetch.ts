@@ -357,13 +357,17 @@ async function readBoundedBody(
 }
 
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
-  return String(
+  const removeCommentNoise = (value: string) =>
+    value.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+  const cleanedHtml = removeCommentNoise(html);
+  const markdown = String(
     await unified()
       .use(rehypeParse, { fragment: true })
       .use(rehypeRemark)
       .use(remarkStringify, { bullet: "-", fences: true })
-      .process(html),
+      .process(cleanedHtml),
   );
+  return removeCommentNoise(markdown).replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {

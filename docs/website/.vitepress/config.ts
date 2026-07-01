@@ -21,6 +21,7 @@ export default withMermaid(
             { text: 'Telegram', link: '/telegram' },
             { text: 'Multi-tenancy', link: '/multi-tenancy' },
             { text: 'Profiles', link: '/profiles' },
+            { text: 'Agent prompt', link: '/agent-prompt' },
             { text: 'Builtin tools', link: '/builtin-tools' },
             { text: 'MCP servers', link: '/mcp' },
           ],
