@@ -104,17 +104,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const groupDecision = isGroup ? explainGroupMessageHandling(ctx, botInfo) : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
-      if (process.env.TELEGRAM_DEBUG_GROUPS === "1") {
-        console.log(
-          [
-            "Ignored Telegram group message",
-            `reason=${groupDecision.reason}`,
-            `bot=@${botInfo?.username ?? "unknown"}`,
-            `botId=${botInfo?.id ?? "unknown"}`,
-            `text=${JSON.stringify(text ?? "")}`,
-          ].join(" "),
-        );
-      }
+      console.log(
+        [
+          "Ignored Telegram group message",
+          `reason=${groupDecision.reason}`,
+          `bot=@${botInfo?.username ?? "unknown"}`,
+          `botId=${botInfo?.id ?? "unknown"}`,
+          `text=${JSON.stringify(text ?? "")}`,
+        ].join(" "),
+      );
       return;
     }
 
