@@ -1,7 +1,7 @@
-import { plainLine, type StyledLine } from "./styled-text";
-import { wrapText } from "./text-measure";
+import { plainLine, styledLine, type StyledLine } from "./styled-text";
+import { visibleLength, wrapText } from "./text-measure";
 
-export type MessageKind = "user" | "output" | "assistant";
+export type MessageKind = "user" | "output" | "assistant" | "tool";
 
 export interface VirtualMessage {
   text: string;
@@ -29,7 +29,7 @@ export class VirtualMessageList {
   private static readonly MESSAGE_GAP_LINES = 1;
   private messages: VirtualMessage[] = [];
   private currentText: string[] = [];
-  private currentKind: MessageKind = "user";
+  private currentKind: MessageKind = "output";
   private hasOpenMessage = false;
 
   // Cached line offsets at cachedWidth: offsets[i] = starting line of msg i.
@@ -62,7 +62,7 @@ export class VirtualMessageList {
     }
 
     // Implicit single-line message
-    this.messages.push({ text, kind: this.currentKind });
+    this.messages.push({ text, kind: "output" });
     this.invalidateOffsets();
   }
 
@@ -81,7 +81,7 @@ export class VirtualMessageList {
   clear(): void {
     this.messages = [];
     this.currentText = [];
-    this.currentKind = "user";
+    this.currentKind = "output";
     this.hasOpenMessage = false;
     this.cachedWidth = 0;
     this.offsets = [0];
@@ -132,6 +132,7 @@ export class VirtualMessageList {
           this.messages[i].text,
           width,
           this.shouldInsertLeadingGap(i, this.messages[i].kind),
+          this.messages[i].kind,
         );
         this.wrappedCache.set(i, lines);
       }
@@ -163,8 +164,28 @@ export class VirtualMessageList {
     return `${" ".repeat(VirtualMessageList.HORIZONTAL_PADDING)}${text}${" ".repeat(VirtualMessageList.HORIZONTAL_PADDING)}`;
   }
 
-  private formatMessageLines(text: string, width: number, withLeadingGap: boolean): string[] {
-    const lines = this.wrapMessageText(text, width).map((line) => this.padLine(line));
+  private surfaceLine(text: string, width: number): string {
+    return `${text}${" ".repeat(Math.max(0, Math.max(1, width) - visibleLength(text)))}`;
+  }
+
+  private formatUserMessageLines(text: string, width: number): string[] {
+    const contentWidth = Math.max(1, width);
+    const lines = this.wrapMessageText(text, width + VirtualMessageList.HORIZONTAL_PADDING * 2).map(
+      (line) => this.surfaceLine(line, contentWidth),
+    );
+    return [this.surfaceLine("", contentWidth), ...lines, this.surfaceLine("", contentWidth)];
+  }
+
+  private formatMessageLines(
+    text: string,
+    width: number,
+    withLeadingGap: boolean,
+    kind: MessageKind,
+  ): string[] {
+    const lines =
+      kind === "user"
+        ? this.formatUserMessageLines(text, width)
+        : this.wrapMessageText(text, width).map((line) => this.padLine(line));
     if (!withLeadingGap) {
       return lines;
     }
@@ -177,7 +198,7 @@ export class VirtualMessageList {
       return false;
     }
 
-    return kind === "assistant" || kind === "user";
+    return kind === "assistant" || kind === "user" || kind === "tool";
   }
 
   private openMessageLines(width: number): string[] {
@@ -189,6 +210,7 @@ export class VirtualMessageList {
       this.currentText.join("\n"),
       width,
       this.shouldInsertLeadingGap(this.messages.length, this.currentKind),
+      this.currentKind,
     );
   }
 
@@ -222,6 +244,7 @@ export class VirtualMessageList {
           this.messages[i].text,
           width,
           this.shouldInsertLeadingGap(i, this.messages[i].kind),
+          this.messages[i].kind,
         );
         this.wrappedCache.set(i, lines);
       }
@@ -229,7 +252,7 @@ export class VirtualMessageList {
       const localStart = Math.max(0, start - msgStart);
       const localEnd = Math.min(lines.length, end - msgStart);
       for (let j = localStart; j < localEnd; j++) {
-        result.push(plainLine(lines[j]));
+        result.push(this.styledMessageLine(this.messages[i].kind, lines[j]));
       }
     }
 
@@ -247,7 +270,7 @@ export class VirtualMessageList {
     const localStart = Math.max(0, start - openStart);
     const localEnd = Math.min(openLines.length, end - openStart);
     for (let i = localStart; i < localEnd; i++) {
-      result.push(plainLine(openLines[i]));
+      result.push(this.styledMessageLine(this.currentKind, openLines[i]));
     }
 
     return result;
@@ -325,8 +348,17 @@ export class VirtualMessageList {
       this.messages[index].text,
       width,
       this.shouldInsertLeadingGap(index, this.messages[index].kind),
+      this.messages[index].kind,
     );
     this.wrappedCache.set(index, lines);
     return lines;
+  }
+
+  private styledMessageLine(kind: MessageKind, line: string): StyledLine {
+    if (kind === "user" && line !== "") {
+      return styledLine(line, { background: "surface" });
+    }
+
+    return plainLine(line);
   }
 }

@@ -6,7 +6,7 @@ const FRAME_INTERVAL_MS = 80;
 
 export function formatThinkingIndicator(frameIndex: number): StyledLine {
   const frame = THINKING_FRAMES[frameIndex % THINKING_FRAMES.length] ?? THINKING_FRAMES[0];
-  return styledLine(`${frame} Thinking`, { dim: true });
+  return styledLine(` ${frame} Thinking `, { dim: true });
 }
 
 export class ThinkingIndicator {

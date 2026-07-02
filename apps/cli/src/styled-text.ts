@@ -1,12 +1,14 @@
 import { visibleLength } from "./text-measure";
 
 export type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
+export type NamedBackgroundColor = "surface";
 
 export interface TextStyle {
   bold?: boolean;
   dim?: boolean;
   blink?: boolean;
   color?: NamedColor;
+  background?: NamedBackgroundColor;
 }
 
 export interface StyledSegment {
@@ -24,6 +26,10 @@ const COLOR_CODES: Record<NamedColor, string> = {
   yellow: "33",
   red: "31",
   green: "32",
+};
+
+const BACKGROUND_CODES: Record<NamedBackgroundColor, string> = {
+  surface: "48;5;236",
 };
 
 export function plainLine(text: string): StyledLine {
@@ -71,6 +77,7 @@ export function serializeStyledLine(line: StyledLine): string {
     if (style?.dim) codes.push("2");
     if (style?.blink) codes.push("5");
     if (style?.color) codes.push(COLOR_CODES[style.color]);
+    if (style?.background) codes.push(BACKGROUND_CODES[style.background]);
 
     if (codes.length > 0) {
       chunks.push(`\x1b[${codes.join(";")}m${segment.text}`);

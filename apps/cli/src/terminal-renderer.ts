@@ -59,22 +59,33 @@ export function buildComposerLines(
   state: Pick<TerminalRendererState, "composer" | "pendingMessages">,
   width = getTerminalColumns(),
 ): StyledLine[] {
+  const composerWidth = Math.max(1, width);
+  const composerSurfaceLine = (content: string) => {
+    const padding = " ".repeat(Math.max(0, composerWidth - visibleLength(content)));
+    return styledLine(`${content}${padding}`, { background: "surface" });
+  };
   const pendingLines = formatPendingDisplayLines(state.pendingMessages, width).map((line) =>
     styledLine(line, { dim: true }),
   );
   const display = formatInputForDisplay(state.composer.value);
-  const inputLines = splitInputDisplayLines(display, state.composer.prefix.length, width);
+  const inputWidth = state.composer.cursorVisible ? Math.max(1, composerWidth - 1) : composerWidth;
+  const inputLines = splitInputDisplayLines(display, state.composer.prefix.length, inputWidth);
   const continuationPrefix = " ".repeat(state.composer.prefix.length);
   const lines: StyledLine[] = [...pendingLines];
+
+  lines.push(composerSurfaceLine(""));
 
   for (let index = 0; index < inputLines.length; index += 1) {
     const lineText = inputLines[index] ?? "";
     const linePrefix = index === 0 ? state.composer.prefix : continuationPrefix;
     const isLastInputLine = index === inputLines.length - 1;
     const cursor = state.composer.cursorVisible && isLastInputLine ? "▌" : "";
+    const content = `${linePrefix}${lineText}${cursor}`;
 
-    lines.push(plainLine(`${linePrefix}${lineText}${cursor}`));
+    lines.push(composerSurfaceLine(content));
   }
+
+  lines.push(composerSurfaceLine(""));
 
   const labelWidth = 14;
   const suggestionPrefixWidth = labelWidth + 3;
@@ -94,7 +105,8 @@ export function buildComposerLines(
 
   if (lines.length === 0) {
     const cursor = state.composer.cursorVisible ? "▌" : "";
-    return [plainLine(`${state.composer.prefix}${cursor}`)];
+    const content = `${state.composer.prefix}${cursor}`;
+    return [composerSurfaceLine(""), composerSurfaceLine(content), composerSurfaceLine("")];
   }
 
   return lines;
@@ -244,6 +256,18 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
       text: plainText,
     });
     this.layout.beginMessage("output");
+    this.layout.writelnScroll(text);
+    this.layout.endMessage();
+  }
+
+  appendToolLine(text: string | StyledLine): void {
+    const plainText =
+      typeof text === "string" ? text : text.segments.map((segment) => segment.text).join("");
+    this.state.transcript.push({
+      kind: "output",
+      text: plainText,
+    });
+    this.layout.beginMessage("tool");
     this.layout.writelnScroll(text);
     this.layout.endMessage();
   }

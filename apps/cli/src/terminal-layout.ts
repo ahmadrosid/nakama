@@ -325,10 +325,7 @@ export class TerminalLayout {
       return;
     }
 
-    const lines = wrapPaddedTranscriptLines(this.streamBuffer, getTerminalColumns());
-    for (const line of lines) {
-      this.messages.appendLine(line);
-    }
+    this.messages.appendLine(this.streamBuffer);
     this.streamBuffer = "";
   }
 
@@ -337,9 +334,10 @@ export class TerminalLayout {
       return [];
     }
 
-    return wrapPaddedTranscriptLines(this.streamBuffer, getTerminalColumns()).map((line) =>
+    const lines = wrapPaddedTranscriptLines(this.streamBuffer, getTerminalColumns()).map((line) =>
       plainLine(line),
     );
+    return this.messages.messageCount > 0 ? [plainLine(""), ...lines] : lines;
   }
 
   private render(): void {
@@ -353,7 +351,8 @@ export class TerminalLayout {
     const transcriptCount = this.messages.totalLines(cols);
     const streamContent = this.streamLines();
     const fullLength = transcriptCount + streamContent.length;
-    const statusRows = this.statusLine ? 1 : 0;
+    const statusLeadingGapRows = this.statusLine && fullLength > 0 ? 1 : 0;
+    const statusRows = this.statusLine ? statusLeadingGapRows + 1 : 0;
     const debugRows = this.debugOverlay ? 1 : 0;
     const neededRows = Math.max(1, fullLength + statusRows + GAP_ROWS + this.reservedRows + debugRows);
     const anchor = Math.min(rows, Math.max(1, this.anchorRow));
@@ -407,7 +406,7 @@ export class TerminalLayout {
     if (this.statusLine) {
       const statusRow = pinned
         ? Math.max(0, viewportRows - visibleInput.length - 1 - GAP_ROWS)
-        : Math.min(viewportRows - 1, row);
+        : Math.min(viewportRows - 1, row + statusLeadingGapRows);
       lines[statusRow] = this.statusLine;
     }
 

@@ -175,10 +175,10 @@ async function runStickyChat(
       },
       onToolStart: (event) => {
         thinkingIndicator.stop();
-        renderer.appendOutputLine(styledLine(`[tool: ${event.tool}]`, { dim: true }));
+        renderer.appendToolLine(styledLine(` [tool: ${event.tool}] `, { dim: true }));
       },
       onToolEnd: (event) => {
-        renderer.appendOutputLine(styledLine(`[tool: ${event.tool} done]`, { dim: true }));
+        renderer.appendToolLine(styledLine(` [tool: ${event.tool} done] `, { dim: true }));
       },
     };
   }
@@ -779,10 +779,10 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       },
       onToolStart: (event) => {
         thinkingIndicator.stop();
-        process.stdout.write(`\n\x1b[2m[tool: ${event.tool}]\x1b[0m\n`);
+        process.stdout.write(`\n\x1b[2m [tool: ${event.tool}] \x1b[0m\n`);
       },
       onToolEnd: (event) => {
-        process.stdout.write(`\x1b[2m[tool: ${event.tool} done]\x1b[0m\n`);
+        process.stdout.write(`\x1b[2m [tool: ${event.tool} done] \x1b[0m\n`);
       },
     };
   }

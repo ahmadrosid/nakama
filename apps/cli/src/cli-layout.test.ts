@@ -141,6 +141,25 @@ describe("VirtualMessageList", () => {
     ]);
   });
 
+  test("adds a blank line before tool message blocks", () => {
+    const messages = new VirtualMessageList();
+
+    messages.beginMessage("user");
+    messages.appendLine("> hello");
+    messages.sealMessage();
+    messages.beginMessage("tool");
+    messages.appendLine(" [tool: search] ");
+    messages.sealMessage();
+
+    expect(messages.getLines(0, messages.totalLines(30), 30).map(styledLineText)).toEqual([
+      "                              ",
+      "> hello                       ",
+      "                              ",
+      "",
+      "  [tool: search]  ",
+    ]);
+  });
+
   test("pads wrapped transcript lines on both sides", () => {
     const messages = new VirtualMessageList();
 
@@ -397,6 +416,110 @@ describe("TerminalLayout frame pipeline", () => {
     }
   });
 
+  test("adds a blank row between submitted input and active stream", () => {
+    captureStdout();
+    setTerminalSize(20, 12);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      enabled: true,
+      anchored: true,
+      anchorRow: 8,
+      viewportTopRow: 8,
+    });
+
+    layout.setReservedRows(1, [plainLine("> ")]);
+    layout.beginMessage("user");
+    layout.writelnScroll("> hello");
+    layout.endMessage();
+    layout.beginMessage("assistant");
+    layout.writeScroll("response");
+
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
+    const renderedLines =
+      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+
+    expect(renderedLines).toContain("> hello             ");
+    expect(renderedLines).toContain("");
+    expect(renderedLines).toContain(" response ");
+    expect(renderedLines.indexOf("")).toBeLessThan(renderedLines.indexOf(" response "));
+  });
+
+  test("adds a blank row between submitted input and thinking status", () => {
+    captureStdout();
+    setTerminalSize(20, 12);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      enabled: true,
+      anchored: true,
+      anchorRow: 8,
+      viewportTopRow: 8,
+    });
+
+    layout.setReservedRows(1, [plainLine("> ")]);
+    layout.beginMessage("user");
+    layout.writelnScroll("> hello");
+    layout.endMessage();
+    layout.writeStatusLine(styledLine(" ⠋ Thinking ", { dim: true }));
+
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
+    const renderedLines =
+      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+
+    expect(renderedLines).toEqual([
+      "                    ",
+      "> hello             ",
+      "                    ",
+      "",
+      " ⠋ Thinking ",
+      "",
+      "> ",
+    ]);
+  });
+
+  test("keeps streamed text wrapping stable after sealing the message", () => {
+    captureStdout();
+    setTerminalSize(20, 12);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      enabled: true,
+      anchored: true,
+      anchorRow: 8,
+      viewportTopRow: 8,
+    });
+
+    layout.setReservedRows(1, [plainLine("> ")]);
+    layout.beginMessage("assistant");
+    layout.writeScroll("1234567890 1234567890 1234567890");
+
+    const frameBeforeSeal = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
+    const streamedLines =
+      frameBeforeSeal?.lines
+        .map((line) => line.segments.map((segment) => segment.text).join(""))
+        .filter((line) => line.includes("1234567890") || line.includes("890 ")) ?? [];
+
+    layout.endStream();
+    layout.endMessage();
+
+    const frameAfterSeal = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
+    const sealedLines =
+      frameAfterSeal?.lines
+        .map((line) => line.segments.map((segment) => segment.text).join(""))
+        .filter((line) => line.includes("1234567890") || line.includes("890 ")) ?? [];
+
+    expect(sealedLines).toEqual(streamedLines);
+  });
+
   test("grows viewport one line at a time", () => {
     captureStdout();
     setTerminalSize(80, 12);
@@ -419,14 +542,13 @@ describe("TerminalLayout frame pipeline", () => {
     layout.writelnScroll("line-3");
     layout.writelnScroll("line-4");
     layout.writelnScroll("line-5");
-    // With a blank separator between message blocks, 5 messages occupy
-    // 9 transcript rows; with the gap and input row the viewport grows to row 2.
+    // Implicit output writes stay compact: 5 messages occupy 5 transcript rows.
     frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
-    expect(frame?.topRow).toBe(2);
+    expect(frame?.topRow).toBe(6);
 
     layout.writelnScroll("line-6");
     frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
-    expect(frame?.topRow).toBe(1);
+    expect(frame?.topRow).toBe(5);
   });
 
   test("uses wrapped row count to grow into free space", () => {
