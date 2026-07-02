@@ -100,10 +100,18 @@ To add users from the dashboard:
 
 1. Open **Integrations → Telegram**
 2. In **Allowed users**, click **Manage**
-3. Add each numeric Telegram user ID to the list
-4. Click **Save**
+3. Paste a numeric Telegram user ID and click **Add**
+
+To paste raw Telegram update JSON instead:
+
+1. Open **Integrations → Telegram**
+2. In **Allowed users**, click **Manage**
+3. Click **Import JSON**
+4. Paste the raw Telegram update JSON
+5. Click **Add user**
 
 Use the Telegram user's `from.id`, not their `@username`.
+When you paste raw JSON, TinyClaw reads `message.from.id` and shows the username when it is present.
 
 For example, in this Telegram update payload:
 
