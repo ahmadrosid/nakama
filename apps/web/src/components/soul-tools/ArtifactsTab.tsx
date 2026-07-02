@@ -132,7 +132,6 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
                       disabled={deleteMutation.isPending}
                     >
                       <Trash2Icon className="mr-2 size-4" aria-hidden />
-                      Delete
                     </Button>
                   </div>
                 </li>
