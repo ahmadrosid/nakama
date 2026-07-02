@@ -156,6 +156,15 @@ In a group, the bot responds only when the message is:
 
 This keeps group chats usable without making the bot noisy.
 
+### Group topics and profiles
+
+In Telegram supergroup topics, each topic can use its own TinyClaw profile.
+
+- `/profile` inside a topic changes only that topic
+- new topics use the default Telegram profile until you switch them
+- `/profile` in the main group chat changes the group-level profile
+- `/org` stays group-level, so switch org first if a topic needs a profile from another org
+
 ## Step 6: Configure Telegram privacy mode for groups
 
 Telegram bots start with **Group Privacy** enabled. This is the most common reason a bot seems fine in private chat but not in groups.

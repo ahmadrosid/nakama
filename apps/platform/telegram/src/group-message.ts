@@ -30,6 +30,26 @@ export function resolveChannelOrgKey(
   return isGroup ? `g:${chatId}` : `u:${userId}`;
 }
 
+export function resolveConversationKey(ctx: Context, chatId: string, isGroup: boolean): string {
+  if (!isGroup) {
+    return chatId;
+  }
+
+  const topicId = getTelegramTopicId(ctx);
+  return topicId === undefined ? chatId : `g:${chatId}:t:${topicId}`;
+}
+
+export function isTelegramTopicMessage(ctx: Context): boolean {
+  return getTelegramTopicId(ctx) !== undefined;
+}
+
+function getTelegramTopicId(ctx: Context): number | undefined {
+  const value = (ctx.message as { message_thread_id?: unknown } | undefined)
+    ?.message_thread_id;
+
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function resolveBotInfo(
   ctx: Context,
   storedBotInfo?: TelegramBotInfo | undefined,

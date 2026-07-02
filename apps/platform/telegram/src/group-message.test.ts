@@ -4,6 +4,7 @@ import {
   isTelegramGroupChat,
   resolveBotInfo,
   resolveChannelOrgKey,
+  resolveConversationKey,
   shouldHandleGroupMessage,
   stripBotMention,
   type TelegramBotInfo,
@@ -17,6 +18,7 @@ function groupContext(
     entities?: Array<{ type: "mention"; offset: number; length: number }>;
     replyToBot?: boolean;
     chatType?: "group" | "supergroup";
+    messageThreadId?: number;
   } = {},
 ): Context {
   const text = options.text ?? "";
@@ -29,6 +31,7 @@ function groupContext(
     message: {
       text,
       entities: options.entities,
+      message_thread_id: options.messageThreadId,
       reply_to_message: replyFrom ? { from: replyFrom } : undefined,
     },
   } as unknown as Context;
@@ -113,5 +116,39 @@ describe("group-message helpers", () => {
   test("resolveChannelOrgKey scopes org store by group or user", () => {
     expect(resolveChannelOrgKey("-100123", 42, true)).toBe("g:-100123");
     expect(resolveChannelOrgKey("42", 42, false)).toBe("u:42");
+  });
+
+  test("resolveConversationKey preserves private and group keys without topics", () => {
+    expect(
+      resolveConversationKey(
+        {
+          chat: { id: 42, type: "private" },
+          message: { text: "hello" },
+        } as unknown as Context,
+        "42",
+        false,
+      ),
+    ).toBe("42");
+    expect(resolveConversationKey(groupContext(), "-100123", true)).toBe("-100123");
+  });
+
+  test("resolveConversationKey isolates group topics", () => {
+    expect(
+      resolveConversationKey(groupContext({ messageThreadId: 10 }), "-100123", true),
+    ).toBe("g:-100123:t:10");
+    expect(
+      resolveConversationKey(groupContext({ messageThreadId: 11 }), "-100123", true),
+    ).toBe("g:-100123:t:11");
+  });
+
+  test("resolveConversationKey tolerates missing message or chat", () => {
+    expect(resolveConversationKey({} as Context, "-100123", true)).toBe("-100123");
+    expect(
+      resolveConversationKey(
+        { chat: { id: -100123, type: "supergroup" } } as Context,
+        "-100123",
+        true,
+      ),
+    ).toBe("-100123");
   });
 });

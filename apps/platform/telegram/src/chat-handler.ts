@@ -48,6 +48,8 @@ import type { SessionStore } from "./session-store";
 import {
   explainGroupMessageHandling,
   isTelegramGroupChat,
+  isTelegramTopicMessage,
+  resolveConversationKey,
   resolveChannelOrgKey,
   resolveBotInfo,
   stripBotMention,
@@ -117,16 +119,18 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     const channelOrgKey = resolveChannelOrgKey(chatId, userId, isGroup);
+    const conversationKey = resolveConversationKey(ctx, chatId, isGroup);
+    const isTopic = isTelegramTopicMessage(ctx);
 
     if (text && isStopCommand(text)) {
-      if (!stopActiveStream(chatId)) {
+      if (!stopActiveStream(conversationKey)) {
         await telegram.send("Nothing to stop.");
       }
 
       return;
     }
 
-    await withChatLock(chatId, async () => {
+    await withChatLock(conversationKey, async () => {
       await authStore.reload();
       const isAuthorized = authStore.isAuthorized(userId);
 
@@ -179,21 +183,36 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const imageInput = await tryBuildImageInput(ctx, telegram);
 
       if (imageInput) {
-        await handleChatMessage(ctx, withGroupContext(imageInput, isGroup), chatId, telegram);
+        await handleChatMessage(
+          ctx,
+          withGroupContext(imageInput, isGroup),
+          conversationKey,
+          telegram,
+        );
         return;
       }
 
       const documentInput = await tryBuildDocumentInput(ctx, telegram);
 
       if (documentInput) {
-        await handleChatMessage(ctx, withGroupContext(documentInput, isGroup), chatId, telegram);
+        await handleChatMessage(
+          ctx,
+          withGroupContext(documentInput, isGroup),
+          conversationKey,
+          telegram,
+        );
         return;
       }
 
       const audioInput = await tryBuildAudioInput(ctx, telegram);
 
       if (audioInput) {
-        await handleChatMessage(ctx, withGroupContext(audioInput, isGroup), chatId, telegram);
+        await handleChatMessage(
+          ctx,
+          withGroupContext(audioInput, isGroup),
+          conversationKey,
+          telegram,
+        );
         return;
       }
 
@@ -207,7 +226,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       if (text.startsWith("/")) {
-        await handleCommand(ctx, text, chatId, channelOrgKey, telegram);
+        await handleCommand(ctx, text, conversationKey, channelOrgKey, isTopic, telegram);
         return;
       }
 
@@ -217,7 +236,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await handleChatMessage(
         ctx,
         withGroupContext({ message: messageText }, isGroup),
-        chatId,
+        conversationKey,
         telegram,
       );
     });
@@ -261,8 +280,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function handleCommand(
     ctx: Context,
     text: string,
-    chatId: string,
+    conversationKey: string,
     channelOrgKey: string,
+    isTopic: boolean,
     telegram: TelegramRichMessenger,
   ): Promise<void> {
     const command = parseTelegramCommand(text);
@@ -274,35 +294,35 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
 
       case "/clear": {
-        const session = await resolveSession(chatId);
+        const session = await resolveSession(conversationKey);
         await session.clear();
         await telegram.send("History cleared.");
         return;
       }
 
       case "/compact": {
-        const session = await resolveSession(chatId);
+        const session = await resolveSession(conversationKey);
         const result = await session.compact({ force: true });
         await telegram.send(`Compacted (${result.action}). Messages: ${result.messagesAfter}.`);
         return;
       }
 
       case "/new": {
-        await createAndBindSession(chatId);
+        await createAndBindSession(conversationKey);
         await telegram.send("Started a new conversation.");
         return;
       }
 
       case "/status":
-        await replyStatus(telegram, chatId);
+        await replyStatus(telegram, conversationKey);
         return;
 
       case "/org":
-        await handleOrgCommand(text, channelOrgKey, chatId, telegram);
+        await handleOrgCommand(text, channelOrgKey, conversationKey, telegram);
         return;
 
       case "/profile":
-        await handleProfileCommand(text, chatId, channelOrgKey, telegram);
+        await handleProfileCommand(text, conversationKey, channelOrgKey, isTopic, telegram);
         return;
 
       default:
@@ -364,13 +384,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function handleChatMessage(
     ctx: Context,
     input: SendMessageInput,
-    chatId: string,
+    conversationKey: string,
     telegram: TelegramRichMessenger,
   ): Promise<void> {
-    const session = await resolveSession(chatId);
+    const session = await resolveSession(conversationKey);
     const typingLoop = createTypingLoop(ctx);
     const todoStatus = new TelegramTodoStatusMessage(telegram);
-    const signal = registerActiveStream(chatId);
+    const signal = registerActiveStream(conversationKey);
     let reply = "";
 
     typingLoop.start();
@@ -424,7 +444,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await telegram.send(formatError(error));
       return;
     } finally {
-      clearActiveStream(chatId);
+      clearActiveStream(conversationKey);
       typingLoop.stop();
     }
 
@@ -474,7 +494,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function handleOrgCommand(
     text: string,
     channelOrgKey: string,
-    chatId: string,
+    conversationKey: string,
     telegram: TelegramRichMessenger,
   ): Promise<void> {
     const { orgs } = await client.listUserOrgs();
@@ -505,7 +525,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     client.setOrgId(picked.id);
 
     if (previousOrgId && previousOrgId !== picked.id) {
-      sessionStore.delete(chatId);
+      sessionStore.delete(conversationKey);
       await sessionStore.save();
     }
 
@@ -514,15 +534,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function handleProfileCommand(
     text: string,
-    chatId: string,
+    conversationKey: string,
     channelOrgKey: string,
+    isTopic: boolean,
     telegram: TelegramRichMessenger,
   ): Promise<void> {
     const { orgs } = await client.listUserOrgs();
     const currentOrgId = getOrgSelection(orgStore, channelOrgKey)?.orgId;
     const currentOrg = currentOrgId ? orgs.find((org) => org.id === currentOrgId) : undefined;
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
-    const currentProfileId = await resolveSessionProfileId(chatId);
+    const currentProfileId = await resolveSessionProfileId(conversationKey);
 
     if (!arg) {
       const profiles = await listSelectableProfiles();
@@ -544,19 +565,37 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       currentOrgId && isProfileSelectionIndexInput(arg, currentOrgProfiles.length)
         ? resolveProfileInput(currentOrgProfiles, arg)
         : undefined;
+    const currentOrgProfilePick =
+      currentOrgId && isTopic
+        ? resolveProfileInput(currentOrgProfiles, arg)
+        : undefined;
     const resolved =
-      currentOrgId && currentOrgNumericPick
+      currentOrgId && (currentOrgNumericPick || currentOrgProfilePick)
         ? {
             scope: {
               orgId: currentOrgId,
               orgName: currentOrg?.name ?? "Current org",
               profiles: currentOrgProfiles,
             },
-            profile: currentOrgNumericPick,
+            profile: currentOrgNumericPick ?? currentOrgProfilePick!,
           }
-        : resolveProfileInScopes(await listProfileScopes(orgs, currentOrgId), arg);
+        : isTopic
+          ? null
+          : resolveProfileInScopes(await listProfileScopes(orgs, currentOrgId), arg);
 
     if (!resolved) {
+      if (isTopic && currentOrgId) {
+        const crossOrgMatch = resolveProfileInScopes(
+          await listProfileScopes(orgs, currentOrgId),
+          arg,
+        );
+
+        if (crossOrgMatch) {
+          await telegram.send("That profile is in another org. Send /org first, then /profile.");
+          return;
+        }
+      }
+
       await telegram.send("Unknown profile. Send /profile to see the list.");
       return;
     }
@@ -574,7 +613,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       orgStore.set(channelOrgKey, scope.orgId);
       await orgStore.save();
       client.setOrgId(scope.orgId);
-      sessionStore.delete(chatId);
+      sessionStore.delete(conversationKey);
       await sessionStore.save();
     }
 
@@ -583,7 +622,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    await createAndBindSession(chatId, picked.id);
+    await createAndBindSession(conversationKey, picked.id);
     const orgNote = scope.orgId !== currentOrgId ? ` (${scope.orgName})` : "";
     await telegram.send(`${formatProfileSwitchConfirmation(picked.name)}${orgNote}`);
   }

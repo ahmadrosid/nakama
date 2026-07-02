@@ -14,6 +14,21 @@ import {
   writeTelegramConfigIni,
 } from "./test-helpers";
 
+async function waitForCondition(
+  condition: () => boolean,
+  message: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (condition()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error(message);
+}
+
 describe("createChatHandler group chats", () => {
   test("ignores plain group messages without mention", async () => {
     await withTempHome(async (homeDir) => {
@@ -92,6 +107,398 @@ describe("createChatHandler group chats", () => {
       expect(calls.sendStream).toBe(1);
       expect(replies.at(-1)).toBe("Agent reply");
       expect(replyOptions.at(-1)).toEqual({ parse_mode: "HTML" });
+    });
+  });
+
+  test("group topics create isolated sessions and fall back to the configured profile", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+        profileId: "research",
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls, getLastCreateSessionProfileId } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "research", name: "Research Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "research" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const topic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+        messageThreadId: 10,
+      });
+      await handleMessage(topic10.ctx);
+
+      const topic20 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+        messageThreadId: 20,
+      });
+      await handleMessage(topic20.ctx);
+
+      expect(calls.createSession).toBe(2);
+      expect(getLastCreateSessionProfileId()).toBe("research");
+      expect(sessionStore.get("g:-100123:t:10")?.profileId).toBe("research");
+      expect(sessionStore.get("g:-100123:t:20")?.profileId).toBe("research");
+      expect(sessionStore.get("-100123")).toBeUndefined();
+    });
+  });
+
+  test("/profile in a group topic only switches that topic", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, getLastCreateSessionProfileId } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "research", name: "Research Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const switchTopic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile research",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(switchTopic10.ctx);
+
+      const topic20 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+        messageThreadId: 20,
+      });
+      await handleMessage(topic20.ctx);
+
+      expect(switchTopic10.replies).toEqual([
+        "Now using Research Bot. Chat history reset.",
+      ]);
+      expect(sessionStore.get("g:-100123:t:10")?.profileId).toBe("research");
+      expect(sessionStore.get("g:-100123:t:20")?.profileId).toBe("default");
+      expect(getLastCreateSessionProfileId()).toBe("default");
+      expect(orgStore.get("g:-100123")?.orgId).toBe("org_test");
+    });
+  });
+
+  test("/profile list in a group topic shows that topic current profile", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "research", name: "Research Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const switchTopic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile research",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(switchTopic10.ctx);
+
+      const listTopic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(listTopic10.ctx);
+
+      expect(listTopic10.replies.join("\n")).toContain("Current: Research Bot");
+    });
+  });
+
+  test("/status in a group topic reports that topic profile", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({
+        providerConfigured: true,
+        profiles: [
+          { id: "default", name: "Default Bot", model: "local::base", isDefault: true },
+          { id: "research", name: "Research Bot", model: "local::research" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const switchTopic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile research",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(switchTopic10.ctx);
+
+      const statusTopic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/status",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(statusTopic10.ctx);
+
+      const statusText = statusTopic10.replies.join("\n");
+      expect(statusText).toContain("Profile: Research Bot");
+      expect(statusText).toContain("Model: research");
+    });
+  });
+
+  test("/profile outside a topic keeps switching the group-level profile", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, getLastCreateSessionProfileId } = createMockClient({
+        profiles: [
+          { id: "default", name: "Default Bot", isDefault: true },
+          { id: "support", name: "Support Bot" },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const switchGroup = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile support",
+        chatType: "supergroup",
+      });
+      await handleMessage(switchGroup.ctx);
+
+      expect(getLastCreateSessionProfileId()).toBe("support");
+      expect(sessionStore.get("-100123")?.profileId).toBe("support");
+      expect(sessionStore.get("g:-100123:t:10")).toBeUndefined();
+    });
+  });
+
+  test("/profile in a topic asks for /org before switching to another org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({
+        orgs: createMultiTestOrgs(),
+        profilesByOrgId: {
+          org_a: [{ id: "default", name: "Default Bot", isDefault: true }],
+          org_b: [{ id: "gary", name: "Gary Vee", isDefault: true }],
+        },
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      orgStore.set("g:-100123", "org_a");
+      await orgStore.save();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const switchTopic = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "/profile garry-vee",
+        chatType: "supergroup",
+        messageThreadId: 10,
+      });
+      await handleMessage(switchTopic.ctx);
+
+      expect(switchTopic.replies).toEqual([
+        "That profile is in another org. Send /org first, then /profile.",
+      ]);
+      expect(orgStore.get("g:-100123")?.orgId).toBe("org_a");
+      expect(sessionStore.get("g:-100123:t:10")).toBeUndefined();
+      expect(calls.createSession).toBe(0);
+    });
+  });
+
+  test("/stop in a group topic aborts only that topic stream", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, getStreamControls } = createMockClient({
+        streaming: true,
+        autoComplete: false,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const topic20 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+        messageThreadId: 20,
+      });
+      const topic10 = createMessageContext({
+        userId: 42,
+        chatId: -100123,
+        text: "@mybot hello",
+        chatType: "supergroup",
+        entities: [{ type: "mention", offset: 0, length: 6 }],
+        messageThreadId: 10,
+      });
+
+      const topic20Promise = handleMessage(topic20.ctx);
+      await waitForCondition(
+        () => getStreamControls().length === 1,
+        "Expected topic 20 stream to start",
+      );
+      const topic10Promise = handleMessage(topic10.ctx);
+
+      try {
+        await waitForCondition(
+          () => getStreamControls().length === 2,
+          "Expected two active topic streams",
+        );
+
+        const stopTopic10 = createMessageContext({
+          userId: 42,
+          chatId: -100123,
+          text: "/stop",
+          chatType: "supergroup",
+          messageThreadId: 10,
+        });
+        await handleMessage(stopTopic10.ctx);
+
+        expect(getStreamControls()[0]?.signal?.aborted).toBe(false);
+        expect(getStreamControls()[1]?.signal?.aborted).toBe(true);
+        expect(stopTopic10.replies).toEqual([]);
+      } finally {
+        getStreamControls()[0]?.complete();
+        getStreamControls()[1]?.complete();
+        await topic10Promise;
+        await topic20Promise;
+      }
     });
   });
 

@@ -34,6 +34,7 @@ export function createMessageContext(options: {
   replyToBotId?: number;
   failRichReply?: boolean;
   failRichEdit?: boolean;
+  messageThreadId?: number;
 }): MockMessageContext {
   const replies: string[] = [];
   const replyOptions: unknown[] = [];
@@ -55,6 +56,9 @@ export function createMessageContext(options: {
     message: {
       ...(options.text !== undefined ? { text: options.text } : {}),
       ...(options.entities ? { entities: options.entities } : {}),
+      ...(options.messageThreadId !== undefined
+        ? { message_thread_id: options.messageThreadId }
+        : {}),
       ...(replyFrom ? { reply_to_message: { from: replyFrom } } : {}),
     },
     reply: async (text: string, replyOptionsArg?: unknown) => {
@@ -152,6 +156,7 @@ export function createMockClient(
     streaming?: boolean;
     steps?: StreamStep[];
     autoComplete?: boolean;
+    providerConfigured?: boolean;
     profiles?: Array<{
       id: string;
       name?: string;
@@ -186,6 +191,7 @@ export function createMockClient(
   let lastStreamInput: unknown;
 
   let streamControl: MockStreamControl | null = null;
+  const streamControls: MockStreamControl[] = [];
 
   const sendStream = async (
     input: unknown,
@@ -223,6 +229,7 @@ export function createMockClient(
           reject(error);
         },
       };
+      streamControls.push(streamControl);
 
       streamOptions?.signal?.addEventListener(
         "abort",
@@ -311,7 +318,7 @@ export function createMockClient(
       return session;
     },
     createChatSession: () => session,
-    health: async () => ({ ok: true, providerConfigured: false }),
+    health: async () => ({ ok: true, providerConfigured: options.providerConfigured ?? false }),
     listProfiles: async () => {
       calls.listProfiles += 1;
       const scopedProfiles =
@@ -358,6 +365,7 @@ export function createMockClient(
     getLastCreateSessionProfileId: () => lastCreateSessionProfileId,
     getLastStreamInput: () => lastStreamInput,
     getStreamControl: () => streamControl,
+    getStreamControls: () => streamControls,
   };
 }
 
