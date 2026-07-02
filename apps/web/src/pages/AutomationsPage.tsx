@@ -8,11 +8,9 @@ import type {
 } from "@tinyclaw/core/contract";
 import {
   BotIcon,
-  CalendarClockIcon,
   CheckCircle2Icon,
   ChevronRightIcon,
   CopyIcon,
-  HandIcon,
   Loader2Icon,
   MessageSquareIcon,
   PencilIcon,
@@ -36,6 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -110,18 +109,23 @@ export function AutomationsPage() {
 
   const filteredAutomations = useMemo(() => {
     const query = trimmedSearch.toLowerCase();
-    if (!query) {
-      return automations;
-    }
-
     return automations.filter((automation) => {
       return (
+        !query ||
         automation.name.toLowerCase().includes(query) ||
         automation.description.toLowerCase().includes(query) ||
         automation.id.toLowerCase().includes(query)
       );
     });
   }, [automations, searchQuery]);
+
+  const selectedRunSummary = useMemo(() => {
+    const completed = runs.filter((run) => run.status === "completed").length;
+    const failed = runs.filter((run) => run.status === "failed").length;
+    const running = runs.filter((run) => run.status === "running").length;
+    const unread = runs.filter((run) => run.read === false).length;
+    return { completed, failed, running, unread };
+  }, [runs]);
 
   useEffect(() => {
     if (automationsError) {
@@ -353,10 +357,13 @@ export function AutomationsPage() {
 
           <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
             <aside className="hidden min-h-0 min-w-0 flex-col border-b border-border lg:flex lg:border-r lg:border-b-0">
-              <div className="shrink-0 space-y-3 border-b border-border p-3">
+              <div className="shrink-0 space-y-3 border-b border-border px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    {automations.length} automation{automations.length === 1 ? "" : "s"}
+                    {filteredAutomations.length} shown
+                    {filteredAutomations.length !== automations.length
+                      ? ` of ${automations.length}`
+                      : ""}
                   </p>
                   <Button
                     type="button"
@@ -383,7 +390,7 @@ export function AutomationsPage() {
                 />
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 {initialLoading ? (
                   <AutomationListSkeleton />
                 ) : automations.length === 0 ? (
@@ -435,11 +442,7 @@ export function AutomationsPage() {
                     <div className="min-h-[4.75rem] min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="type-section-title">{selected.name}</h2>
-                        {selected.enabled ? (
-                          <span className="scope-badge scope-badge-active">enabled</span>
-                        ) : (
-                          <span className="scope-badge bg-muted text-muted-foreground">disabled</span>
-                        )}
+                        <AutomationStateBadge enabled={selected.enabled} />
                       </div>
                       <p
                         className={cn(
@@ -472,6 +475,38 @@ export function AutomationsPage() {
                     onDelete={setDeleteTarget}
                     className="mb-5 lg:hidden"
                   />
+
+                  <div className="mb-5 grid gap-3 rounded-lg border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetaStat
+                      label="Trigger"
+                      value={selected.trigger.type === "manual" ? "Manual" : "Scheduled"}
+                      tone="default"
+                    />
+                    <MetaStat
+                      label="Next run"
+                      value={selected.nextRunAt ? formatFutureRelativeTime(selected.nextRunAt) : "Not scheduled"}
+                      tone="default"
+                    />
+                    <MetaStat
+                      label="Last run"
+                      value={selected.lastRunAt ? formatSessionRelativeTime(selected.lastRunAt) : "No runs yet"}
+                      tone="default"
+                    />
+                    <MetaStat
+                      label="Unread runs"
+                      value={String(selectedRunSummary.unread)}
+                      tone={selectedRunSummary.unread > 0 ? "attention" : "default"}
+                    />
+                  </div>
+
+                  <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+                    <SoftPill label={`${runs.length} total`} />
+                    <SoftPill label={`${selectedRunSummary.completed} success`} tone="success" />
+                    <SoftPill label={`${selectedRunSummary.failed} failed`} tone="danger" />
+                    {selectedRunSummary.running > 0 ? (
+                      <SoftPill label={`${selectedRunSummary.running} running`} tone="default" />
+                    ) : null}
+                  </div>
 
                   <div className="flex min-h-0 flex-1 flex-col border-t border-border pt-5">
                     <div className="mb-4 flex h-10 shrink-0 items-center justify-between gap-3">
@@ -678,7 +713,7 @@ function AutomationDetailActions({
     <div className={cn("flex shrink-0 items-center gap-1", className)}>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon-sm"
         disabled={busy || runningId !== null}
         aria-label="Run now"
@@ -692,7 +727,7 @@ function AutomationDetailActions({
       </Button>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon-sm"
         disabled={busy}
         aria-label="Edit"
@@ -702,7 +737,7 @@ function AutomationDetailActions({
       </Button>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon-sm"
         disabled={busy}
         aria-label="Delete"
@@ -730,27 +765,20 @@ function AutomationListItem({
   onSelect: () => void;
   onDelete: (automation: StoredAutomation) => void;
 }) {
-  const TriggerIcon =
-    automation.trigger.type === "schedule" || automation.trigger.type === "runAt"
-      ? CalendarClockIcon
-      : HandIcon;
-
   return (
     <div
       className={cn(
-        "group flex w-full items-start gap-1 rounded-md transition-colors",
-        "hover:bg-muted/40 focus-within:bg-muted/40",
-        selected && "bg-muted/40",
+        "group flex w-full items-start gap-2 border-b border-border/70 transition-colors",
+        "hover:bg-muted/25 focus-within:bg-muted/25",
+        selected && "bg-muted/35",
       )}
     >
       <button
         type="button"
         aria-current={selected ? "true" : undefined}
-        className="flex min-w-0 flex-1 items-start gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-none"
+        className="flex min-w-0 flex-1 items-start gap-3 px-3 py-3 text-left focus-visible:outline-none"
         onClick={onSelect}
       >
-        <TriggerIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-foreground">{automation.name}</p>
@@ -764,18 +792,18 @@ function AutomationListItem({
             ) : null}
           </div>
           <p className="truncate text-xs text-muted-foreground">
-            {formatTrigger(automation.trigger)}
+            {summarizeAutomationListMeta(automation)}
           </p>
-          <p
-            className={cn(
-              "text-xs font-medium",
-              automation.enabled
-                ? "text-emerald-700 dark:text-emerald-300"
-                : "text-muted-foreground",
-            )}
-          >
-            {automation.enabled ? "Enabled" : "Disabled"}
-          </p>
+          <div className="flex items-center gap-2">
+            <AutomationStateDot enabled={automation.enabled} />
+            <p className="text-[11px] text-muted-foreground">
+              {automation.nextRunAt
+                ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
+                : automation.lastRunAt
+                  ? `Last ${formatSessionRelativeTime(automation.lastRunAt)}`
+                  : "No runs yet"}
+            </p>
+          </div>
         </div>
       </button>
 
@@ -785,7 +813,7 @@ function AutomationListItem({
         size="icon-sm"
         disabled={busy}
         aria-label={`Delete ${automation.name}`}
-        className="mt-2 mr-2 shrink-0 text-destructive opacity-70 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+        className="mt-2 mr-2 shrink-0 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
         onClick={() => onDelete(automation)}
       >
         <Trash2Icon className="size-3.5" aria-hidden />
@@ -1080,21 +1108,34 @@ function RunHistoryList({
     }
   }, [runs]);
 
+  const groups = useMemo(() => groupRunsByDay(runs), [runs]);
+
   return (
-    <ul className="space-y-2">
-      {runs.map((run) => (
-        <RunHistoryItem
-          key={run.id}
-          run={run}
-          expanded={expandedId === run.id}
-          busy={busy}
-          onToggle={() => {
-            setExpandedId((current) => (current === run.id ? null : run.id));
-          }}
-          onDelete={() => onDeleteRun(run)}
-        />
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <section key={group.label} className="space-y-2">
+          <div className="sticky top-0 z-10 -mx-1 bg-card/95 px-1 pb-1 pt-0.5 backdrop-blur">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              {group.label}
+            </p>
+          </div>
+          <ul className="space-y-2">
+            {group.runs.map((run) => (
+              <RunHistoryItem
+                key={run.id}
+                run={run}
+                expanded={expandedId === run.id}
+                busy={busy}
+                onToggle={() => {
+                  setExpandedId((current) => (current === run.id ? null : run.id));
+                }}
+                onDelete={() => onDeleteRun(run)}
+              />
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -1115,6 +1156,7 @@ function RunHistoryItem({
   const isUnread = run.read === false;
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
+  const hasDeliveryError = Boolean(run.deliveryError?.trim());
   const hasBody = hasOutput || hasError || isRunning;
   const previewText = runPreviewText(run);
   const duration = formatRunDuration(run.startedAt, run.completedAt);
@@ -1138,11 +1180,11 @@ function RunHistoryItem({
     <li>
       <article
         className={cn(
-          "overflow-hidden rounded-md border bg-card shadow-sm transition-shadow",
+          "overflow-hidden rounded-lg border bg-card/90 transition-all",
           runHistoryShellClass(run.status),
         )}
       >
-        <div className="flex items-start gap-2 px-3 py-3 transition-colors hover:bg-muted/40">
+        <div className="flex items-start gap-2 px-4 py-3.5 transition-colors hover:bg-muted/25">
           <button
             type="button"
             className={cn(
@@ -1167,18 +1209,13 @@ function RunHistoryItem({
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <RunStatusBadge status={run.status} />
+                {run.deliveryStatus ? (
+                  <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
+                ) : null}
                 {isUnread ? (
                   <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                     New
                   </span>
-                ) : null}
-                {run.deliveryStatus ? (
-                  <>
-                    <span className="text-xs text-muted-foreground" aria-hidden>
-                      ·
-                    </span>
-                    <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
-                  </>
                 ) : null}
                 <span className="text-xs text-muted-foreground" aria-hidden>
                   ·
@@ -1203,7 +1240,7 @@ function RunHistoryItem({
               {previewText ? (
                 <p
                   className={cn(
-                    "line-clamp-2 text-sm leading-relaxed",
+                    "line-clamp-2 pr-2 text-sm leading-relaxed",
                     run.status === "failed" ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
@@ -1223,17 +1260,19 @@ function RunHistoryItem({
             ) : null}
           </button>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
-            disabled={busy}
-            aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-            onClick={onDelete}
-          >
-            <Trash2Icon className="size-4" aria-hidden />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+              disabled={busy}
+              aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
+              onClick={onDelete}
+            >
+              <Trash2Icon className="size-4" aria-hidden />
+            </Button>
+          </div>
         </div>
 
         <div
@@ -1243,7 +1282,7 @@ function RunHistoryItem({
           )}
         >
           <div className="overflow-hidden">
-            <div className="border-t border-border px-3 py-3">
+            <div className="border-t border-border/60 bg-muted/10 px-4 py-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="type-code text-muted-foreground" title={formatSessionTimestamp(run.startedAt)}>
                   {formatSessionTimestamp(run.startedAt)}
@@ -1269,6 +1308,29 @@ function RunHistoryItem({
                   </Button>
                 ) : null}
               </div>
+
+              {(run.deliveryStatus || hasError || hasOutput) && (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  {run.deliveryStatus ? (
+                    <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
+                  ) : null}
+                  {hasError ? <SoftPill label="Has error" tone="danger" /> : null}
+                  {hasOutput ? <SoftPill label="Has output" tone="default" /> : null}
+                </div>
+              )}
+
+              <Separator className="mb-4 bg-border/60" />
+
+              {hasDeliveryError ? (
+                <div className="mb-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-3">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-destructive">
+                    Delivery error
+                  </p>
+                  <p className="whitespace-pre-wrap break-words text-sm text-destructive">
+                    {run.deliveryError}
+                  </p>
+                </div>
+              ) : null}
 
               {isRunning && !hasOutput && !hasError ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1318,10 +1380,10 @@ function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
   return (
     <span
       className={cn(
-        "text-xs font-medium capitalize",
-        status === "completed" && "text-emerald-700 dark:text-emerald-300",
-        status === "failed" && "text-destructive",
-        status === "running" && "text-muted-foreground",
+        "rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
+        status === "completed" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        status === "failed" && "bg-destructive/10 text-destructive",
+        status === "running" && "bg-muted text-muted-foreground",
       )}
     >
       {status}
@@ -1329,8 +1391,16 @@ function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
   );
 }
 
-function runHistoryShellClass(_status: AutomationRunStatus): string {
-  return "border-border";
+function runHistoryShellClass(status: AutomationRunStatus): string {
+  if (status === "failed") {
+    return "border-destructive/30";
+  }
+
+  if (status === "running") {
+    return "border-border/80";
+  }
+
+  return "border-border/60";
 }
 
 function runPreviewText(run: AutomationRunRecord): string | null {
@@ -1520,6 +1590,77 @@ function DeliveryStatusBadge({
   );
 }
 
+function AutomationStateBadge({ enabled }: { enabled: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium",
+        enabled ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", enabled ? "bg-emerald-500" : "bg-muted-foreground/70")} />
+      {enabled ? "Enabled" : "Disabled"}
+    </span>
+  );
+}
+
+function AutomationStateDot({ enabled }: { enabled: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-block size-2 rounded-full",
+        enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
+      )}
+      aria-hidden
+    />
+  );
+}
+
+function MetaStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "default" | "attention";
+}) {
+  return (
+    <div className="rounded-md bg-background/75 px-3 py-3">
+      <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-sm font-medium",
+          tone === "attention" ? "text-primary" : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SoftPill({
+  label,
+  tone = "default",
+}: {
+  label: string;
+  tone?: "default" | "success" | "danger";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-1 text-[11px] font-medium",
+        tone === "default" && "bg-muted text-muted-foreground",
+        tone === "success" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        tone === "danger" && "bg-destructive/10 text-destructive",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 function Field({
   label,
   hint,
@@ -1571,4 +1712,59 @@ function formatTrigger(trigger: AutomationTrigger): string {
   }
 
   return `Schedule · ${trigger.cron}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
+}
+
+function summarizeAutomationListMeta(automation: StoredAutomation): string {
+  if (automation.trigger.type === "manual") {
+    return "Manual run";
+  }
+
+  if (automation.trigger.type === "runAt") {
+    return "One-time run";
+  }
+
+  return "Scheduled automation";
+}
+
+function groupRunsByDay(runs: AutomationRunRecord[]): Array<{ label: string; runs: AutomationRunRecord[] }> {
+  const buckets = new Map<string, AutomationRunRecord[]>();
+
+  for (const run of runs) {
+    const label = formatRunDayLabel(run.startedAt);
+    const bucket = buckets.get(label);
+    if (bucket) {
+      bucket.push(run);
+    } else {
+      buckets.set(label, [run]);
+    }
+  }
+
+  return Array.from(buckets, ([label, groupedRuns]) => ({ label, runs: groupedRuns }));
+}
+
+function formatRunDayLabel(value: string): string {
+  const date = new Date(value);
+  const now = new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return "Earlier";
+  }
+
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diffDays = Math.round((startOfToday - startOfDate) / 86_400_000);
+
+  if (diffDays === 0) {
+    return "Today";
+  }
+
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  });
 }
