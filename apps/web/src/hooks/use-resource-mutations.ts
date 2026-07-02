@@ -395,6 +395,25 @@ export function useArtifactsQuery(profileId: string | null) {
   });
 }
 
+export function useDeleteArtifactMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      filename,
+    }: {
+      profileId: string;
+      filename: string;
+    }) => client.deleteProfileArtifact(profileId, filename),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.artifacts.profile(variables.profileId),
+      });
+    },
+  });
+}
+
 export function useSoulFileQuery(
   profileId: string | null,
   fileKey: string | null,

@@ -17,6 +17,7 @@ import type {
   ChatMessage,
   CompactionResponse,
   CreateProfileRequest,
+  DeleteArtifactResponse,
   CreateSkillRequest,
   CreateToolRequest,
   InitSoulResponse,
@@ -93,6 +94,7 @@ import {
   findProviderInstance,
   getActiveProviderInstance,
   getProfileSoulDir,
+  deleteArtifactFile,
   readArtifactFile,
   getResolvedSoulStatus,
   buildUserContextStatus,
@@ -1826,6 +1828,15 @@ export class AgentService {
   async readProfileArtifact(orgId: string, profileId: string, filename: string) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({ orgId, profileId, filename });
+  }
+
+  async deleteProfileArtifact(
+    orgId: string,
+    profileId: string,
+    filename: string,
+  ): Promise<DeleteArtifactResponse> {
+    await this.requireProfile(orgId, profileId);
+    return deleteArtifactFile({ orgId, profileId, filename });
   }
 
   async getUserContext(

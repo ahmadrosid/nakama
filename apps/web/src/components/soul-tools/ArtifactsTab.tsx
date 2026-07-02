@@ -1,7 +1,17 @@
-import { FileDownIcon, FileTextIcon, ImageIcon } from "lucide-react";
+import type { ArtifactFile } from "@tinyclaw/core/contract";
+import { FileDownIcon, FileTextIcon, ImageIcon, Trash2Icon } from "lucide-react";
+import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { useArtifactsQuery } from "@/hooks/use-resource-mutations";
+import { useArtifactsQuery, useDeleteArtifactMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { client } from "@/lib/client";
 import { formatBytes } from "@/lib/knowledge-base-files";
@@ -34,6 +44,7 @@ function ArtifactIcon({ mimeType }: { mimeType: string }) {
 }
 
 export function ArtifactsTab({ profileId }: { profileId: string | null }) {
+  const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
   const {
     data,
     isLoading,
@@ -41,68 +52,120 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
     error,
     refetch,
   } = useArtifactsQuery(profileId);
+  const deleteMutation = useDeleteArtifactMutation();
 
   if (!profileId) {
     return null;
   }
 
-  return (
-    <div className="space-y-4">
-      <section className={sectionClass}>
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
-            <p className="text-xs text-muted-foreground">
-              Persistent files saved by the agent under `artifacts/`.
-            </p>
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
-            {isFetching ? <Spinner className="mr-2 size-4" /> : null}
-            Refresh
-          </Button>
-        </div>
+  async function handleDelete() {
+    if (!profileId || !deleteTarget) {
+      return;
+    }
 
-        {isLoading ? (
-          <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
-            <Spinner className="size-4" />
-            Loading artifacts…
+    await deleteMutation.mutateAsync({
+      profileId,
+      filename: deleteTarget.filename,
+    });
+    setDeleteTarget(null);
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <section className={sectionClass}>
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
+              <p className="text-xs text-muted-foreground">
+                Persistent files saved by the agent under `artifacts/`.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+              {isFetching ? <Spinner className="mr-2 size-4" /> : null}
+              Refresh
+            </Button>
           </div>
-        ) : error ? (
-          <div className="px-4 py-6 text-sm text-destructive">{formatError(error)}</div>
-        ) : !data || data.artifacts.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-muted-foreground">
-            No artifacts yet.
-          </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {data.artifacts.map((artifact) => (
-              <li
-                key={artifact.filename}
-                className="flex items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <ArtifactIcon mimeType={artifact.mimeType} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {artifact.filename}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {artifact.mimeType} · {formatBytes(artifact.sizeBytes)} · {formatTimestamp(artifact.updatedAt)}
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href={getArtifactDownloadUrl(profileId, artifact.filename)}
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              Loading artifacts…
+            </div>
+          ) : error ? (
+            <div className="px-4 py-6 text-sm text-destructive">{formatError(error)}</div>
+          ) : !data || data.artifacts.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground">
+              No artifacts yet.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {data.artifacts.map((artifact) => (
+                <li
+                  key={artifact.filename}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
                 >
-                  <FileDownIcon className="mr-2 size-4" aria-hidden />
-                  Download
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <ArtifactIcon mimeType={artifact.mimeType} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {artifact.filename}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {artifact.mimeType} · {formatBytes(artifact.sizeBytes)} · {formatTimestamp(artifact.updatedAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={getArtifactDownloadUrl(profileId, artifact.filename)}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                    >
+                      <FileDownIcon className="mr-2 size-4" aria-hidden />
+                      Download
+                    </a>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setDeleteTarget(artifact)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2Icon className="mr-2 size-4" aria-hidden />
+                      Delete
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete artifact</DialogTitle>
+            <DialogDescription>
+              Remove {deleteTarget?.filename} from this profile?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDelete()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? <Spinner className="size-4" /> : null}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

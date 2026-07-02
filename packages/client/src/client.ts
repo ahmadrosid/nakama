@@ -15,6 +15,7 @@ import type {
   CreateSkillRequest,
   CreateSessionResponse,
   CreateToolRequest,
+  DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
   DocumentAttachment,
   DraftAutomationResponse,
@@ -623,6 +624,17 @@ export class TinyClawClient {
   async listProfileArtifacts(profileId: string): Promise<ListArtifactsResponse> {
     return this.request<ListArtifactsResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts`,
+    );
+  }
+
+  async deleteProfileArtifact(
+    profileId: string,
+    filename: string,
+  ): Promise<DeleteArtifactResponse> {
+    const query = new URLSearchParams({ path: filename });
+    return this.request<DeleteArtifactResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts?${query.toString()}`,
+      { method: "DELETE" },
     );
   }
 

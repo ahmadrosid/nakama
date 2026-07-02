@@ -1186,6 +1186,12 @@ export interface ListArtifactsResponse {
   artifacts: ArtifactFile[];
 }
 
+export interface DeleteArtifactResponse {
+  deleted: boolean;
+  profileId: string;
+  filename: string;
+}
+
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
 export interface KnowledgeBaseDocument {

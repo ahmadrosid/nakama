@@ -1,8 +1,9 @@
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { readFile, readdir, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type {
   ArtifactFile,
+  DeleteArtifactResponse,
   ListArtifactsResponse,
   SaveArtifactMode,
   SaveArtifactOutput,
@@ -180,5 +181,37 @@ export async function readArtifactFile(input: {
     bytes,
     contentType: metadata.mimeType,
     filePath,
+  };
+}
+
+export async function deleteArtifactFile(input: {
+  orgId: string;
+  profileId: string;
+  filename: string;
+}): Promise<DeleteArtifactResponse> {
+  const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
+  const resolvedArtifactsDir = await realpath(artifactsDir);
+  const guarded = await guardFilePath(input.filename, null, undefined, {
+    allowedDirs: [resolvedArtifactsDir],
+    cwd: resolvedArtifactsDir,
+  });
+  const filePath = guarded.resolved;
+  const fileStat = await stat(filePath);
+
+  if (!fileStat.isFile()) {
+    throw new Error(`Artifact not found: ${input.filename}`);
+  }
+
+  await unlink(filePath);
+
+  const metaPath = getArtifactMetaPath(filePath);
+  if (await pathExists(metaPath)) {
+    await unlink(metaPath);
+  }
+
+  return {
+    deleted: true,
+    profileId: input.profileId,
+    filename: path.relative(resolvedArtifactsDir, filePath),
   };
 }

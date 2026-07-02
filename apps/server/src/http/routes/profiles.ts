@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
   CreateProfileRequest,
+  DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
   ImageAttachment,
   InitSoulResponse,
@@ -51,6 +52,7 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
   const initSoulSchema = z.object({}).passthrough().openapi("InitSoulResponse");
   const updateSoulFileSchema = z.object({}).passthrough().openapi("UpdateSoulFileRequest");
   const listArtifactsSchema = z.object({}).passthrough().openapi("ListArtifactsResponse");
+  const deleteArtifactSchema = z.object({}).passthrough().openapi("DeleteArtifactResponse");
   const listKnowledgeBaseSchema = z.object({}).passthrough().openapi("ListKnowledgeBaseResponse");
   const uploadKnowledgeBaseSchema = z.object({}).passthrough().openapi("UploadKnowledgeBaseRequest");
   const uploadKnowledgeBaseResponseSchema = z.object({}).passthrough().openapi("UploadKnowledgeBaseResponse");
@@ -182,6 +184,18 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
     request: { params: profileIdParam, query: artifactPathQuery },
     responses: {
       200: { description: "Artifact bytes", content: { "*/*": { schema: z.string() } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "delete",
+    path: "/v1/profiles/{profileId}/artifacts",
+    tags: ["Profiles"],
+    summary: "Delete an artifact for a profile",
+    operationId: "deleteProfileArtifact",
+    request: { params: profileIdParam, query: artifactPathQuery },
+    responses: {
+      200: { description: "Deleted artifact", content: { "application/json": { schema: deleteArtifactSchema } } },
       500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
     },
   }));
@@ -348,6 +362,21 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
         "Content-Disposition": `attachment; filename="${downloadName}"`,
       },
     });
+  });
+
+  app.delete("/v1/profiles/:profileId/artifacts", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const artifactPath = c.req.query("path");
+
+    if (!artifactPath) {
+      return json({ error: "path is required" }, 400);
+    }
+
+    return json<DeleteArtifactResponse>(
+      await agent.deleteProfileArtifact(orgId, profileId, artifactPath),
+    );
   });
 
   app.get("/v1/profiles/:profileId/knowledge-base", async (c) => {
