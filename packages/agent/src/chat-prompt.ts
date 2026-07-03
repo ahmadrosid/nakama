@@ -15,7 +15,7 @@ export function buildChatSystemPrompt(
 ): string {
   const sections = [
     options.basePrompt?.trim() ||
-      "You are TinyClaw, a helpful personal AI assistant.",
+    "You are TinyClaw, a helpful personal AI assistant.",
   ];
 
   if (options.userContext?.trim()) {
