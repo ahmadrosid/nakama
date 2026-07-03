@@ -501,10 +501,11 @@ export function useWriteSoulFileMutation() {
   });
 }
 
-export function useUserContextQuery(options: { includeContent?: boolean } = {}) {
+export function useUserContextQuery(options: { includeContent?: boolean; orgId?: string | null } = {}) {
   return useQuery({
-    queryKey: [...queryKeys.userContext, options.includeContent ? "content" : "status"] as const,
+    queryKey: [...queryKeys.userContext, options.orgId ?? "no-org", options.includeContent ? "content" : "status"] as const,
     queryFn: () => fetchUserContext(options.includeContent),
+    enabled: options.orgId !== null,
   });
 }
 

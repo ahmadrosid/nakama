@@ -33,12 +33,12 @@ function createServerOptions() {
   return {
     agent: {
       providerConfigured: true,
-      getUserContext: async (_userId: string, includeContent: boolean) => ({
+      getUserContext: async (_orgId: string, _userId: string, includeContent: boolean) => ({
         active: includeContent,
         ...(includeContent ? { content: "ctx" } : {}),
       }),
-      writeUserContext: async (_userId: string, _body: unknown) => {},
-      initUserContext: async (_userId: string) => ({ created: true }),
+      writeUserContext: async (_orgId: string, _userId: string, _body: unknown) => {},
+      initUserContext: async (_orgId: string, _userId: string) => ({ created: true }),
       createSession: async (_orgId: string, _channel: string, _profileId?: string) => "session_1",
       listSessions: async (_orgId: string, profileId: string, channel: string) => ({
         sessions: [{ id: `${profileId}-${channel}` }],

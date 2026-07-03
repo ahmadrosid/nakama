@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS org_members (
   org_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   role TEXT NOT NULL,
+  user_context TEXT,
   created_at TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id),
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,

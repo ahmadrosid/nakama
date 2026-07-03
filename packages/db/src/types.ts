@@ -229,6 +229,7 @@ export interface StoredOrgMemberRecord {
   orgId: string;
   userId: string;
   role: OrgRole;
+  userContext?: string | null;
   createdAt: string;
 }
 
@@ -281,8 +282,8 @@ export interface DatabaseAdapter {
     updatedAt: string,
   ): Promise<void>;
   updateUserPassword(id: string, passwordHash: string, updatedAt: string): Promise<void>;
-  getUserContext(userId: string): Promise<string | null>;
-  setUserContext(userId: string, content: string, updatedAt: string): Promise<void>;
+  getUserContext(orgId: string, userId: string): Promise<string | null>;
+  setUserContext(orgId: string, userId: string, content: string, updatedAt: string): Promise<void>;
   countUsers(): Promise<number>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;

@@ -19,7 +19,7 @@ export function buildChatSystemPrompt(
   ];
 
   if (options.userContext?.trim()) {
-    sections.push("", "# About the User (USER.md)", options.userContext.trim());
+    sections.push("", "# Personalisation (USER.md)", options.userContext.trim());
   }
 
   if (options.soul) {

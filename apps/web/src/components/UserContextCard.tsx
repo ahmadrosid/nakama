@@ -16,6 +16,7 @@ import {
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
+import { useAuth } from "@/context/auth-context";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -34,12 +35,13 @@ interface UserContextSettingsProps {
 
 /** USER.md editor row for Settings — render inside a parent card. */
 export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserContextSettingsProps = {}) {
+  const { activeOrg } = useAuth();
   const {
     data: status,
     isLoading,
     error: loadError,
     refetch,
-  } = useUserContextQuery({ includeContent: true });
+  } = useUserContextQuery({ includeContent: true, orgId: activeOrg?.id ?? null });
   const initMutation = useInitUserContextMutation();
   const writeMutation = useWriteUserContextMutation();
 
@@ -153,7 +155,7 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="text-sm font-medium text-foreground">About you</p>
+          <p className="text-sm font-medium text-foreground">Personalisation</p>
           {statusLine ? (
             <p
               className={cn(
@@ -165,7 +167,7 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
               {statusLine}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">USER.md — who you are</p>
+            <p className="text-xs text-muted-foreground">USER.md — personalisation for this org</p>
           )}
         </div>
 
@@ -215,9 +217,9 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
       <Dialog open={editorOpen} onOpenChange={handleEditorOpenChange}>
         <DialogContent className="flex max-h-[min(90dvh,40rem)] w-[calc(100%-1.5rem)] flex-col sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>About you (USER.md)</DialogTitle>
+            <DialogTitle>Personalisation (USER.md)</DialogTitle>
             <DialogDescription>
-              A quick note so the agent knows who you are.
+              A quick note so the agent knows who you are in this org.
             </DialogDescription>
           </DialogHeader>
 

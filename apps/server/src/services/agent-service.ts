@@ -739,7 +739,7 @@ export class AgentService {
       profile.systemPrompt,
     );
     const userTimezone = await this.getUserTimezone();
-    const userContext = await this.loadUserContextForUser(undefined);
+    const userContext = await this.loadUserContextForUser(orgId, undefined);
     const harness = this.createHarnessForProfile(profile);
 
     const session = harness.createChatSession({
@@ -1840,20 +1840,22 @@ export class AgentService {
   }
 
   async getUserContext(
+    orgId: string,
     userId: string,
     includeContent = false,
   ): Promise<UserContextStatusResponse> {
-    const raw = await this.db.getUserContext(userId);
+    const raw = await this.db.getUserContext(orgId, userId);
     return buildUserContextStatus(raw, includeContent);
   }
 
-  async initUserContext(userId: string): Promise<InitUserContextResponse> {
-    const existing = normalizeUserContextContent(await this.db.getUserContext(userId));
+  async initUserContext(orgId: string, userId: string): Promise<InitUserContextResponse> {
+    const existing = normalizeUserContextContent(await this.db.getUserContext(orgId, userId));
     if (existing !== undefined) {
       return { created: false };
     }
 
     await this.db.setUserContext(
+      orgId,
       userId,
       USER_CONTEXT_TEMPLATE,
       new Date().toISOString(),
@@ -1862,10 +1864,12 @@ export class AgentService {
   }
 
   async writeUserContext(
+    orgId: string,
     userId: string,
     request: UpdateUserContextRequest,
   ): Promise<void> {
     await this.db.setUserContext(
+      orgId,
       userId,
       request.content,
       new Date().toISOString(),
@@ -1873,13 +1877,14 @@ export class AgentService {
   }
 
   private async loadUserContextForUser(
+    orgId: string,
     userId?: string | null,
   ): Promise<string | undefined> {
     if (!userId) {
       return undefined;
     }
 
-    return normalizeUserContextContent(await this.db.getUserContext(userId));
+    return normalizeUserContextContent(await this.db.getUserContext(orgId, userId));
   }
 
   private createHarness(options: {
@@ -2052,7 +2057,7 @@ export class AgentService {
       : systemPrompt;
     const initialHistory = await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = await this.loadUserContextForUser(userId);
+    const userContext = await this.loadUserContextForUser(orgId, userId);
     const compaction = this.resolveCompactionConfig(profile);
     const harness = this.createHarnessForProfile(profile);
     const saveAttachment = createAttachmentSaver(this.db, {

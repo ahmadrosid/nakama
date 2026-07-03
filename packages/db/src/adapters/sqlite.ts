@@ -684,12 +684,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
   const getUserContextStmt = db.prepare(`
-    SELECT user_context FROM users WHERE id = ?
+    SELECT COALESCE(om.user_context, u.user_context) AS user_context
+    FROM org_members om
+    INNER JOIN users u ON u.id = om.user_id
+    WHERE om.org_id = ? AND om.user_id = ?
   `);
   const setUserContextStmt = db.prepare(`
-    UPDATE users
-    SET user_context = ?, updated_at = ?
-    WHERE id = ?
+    UPDATE org_members
+    SET user_context = ?
+    WHERE org_id = ? AND user_id = ?
   `);
   const countUsersStmt = db.prepare("SELECT COUNT(*) as count FROM users");
 
@@ -780,19 +783,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
   const getOrgMemberStmt = db.prepare(`
-    SELECT org_id, user_id, role, created_at
+    SELECT org_id, user_id, role, user_context, created_at
     FROM org_members
     WHERE org_id = ? AND user_id = ?
     LIMIT 1
   `);
   const upsertOrgMemberStmt = db.prepare(`
-    INSERT INTO org_members (org_id, user_id, role, created_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO org_members (org_id, user_id, role, user_context, created_at)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(org_id, user_id) DO UPDATE SET
       role = excluded.role
   `);
   const listOrgMembersStmt = db.prepare(`
-    SELECT org_id, user_id, role, created_at
+    SELECT org_id, user_id, role, user_context, created_at
     FROM org_members
     WHERE org_id = ?
     ORDER BY created_at ASC
@@ -848,13 +851,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updateUserPasswordStmt.run(passwordHash, updatedAt, id);
     },
 
-    async getUserContext(userId) {
-      const row = getUserContextStmt.get(userId) as { user_context?: string | null } | null;
+    async getUserContext(orgId, userId) {
+      const row = getUserContextStmt.get(orgId, userId) as { user_context?: string | null } | null;
       return row?.user_context ?? null;
     },
 
-    async setUserContext(userId, content, updatedAt) {
-      setUserContextStmt.run(content, updatedAt, userId);
+    async setUserContext(orgId, userId, content, _updatedAt) {
+      setUserContextStmt.run(content, orgId, userId);
     },
 
     async countUsers() {
@@ -919,7 +922,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async upsertOrgMember(record) {
-      upsertOrgMemberStmt.run(record.orgId, record.userId, record.role, record.createdAt);
+      upsertOrgMemberStmt.run(
+        record.orgId,
+        record.userId,
+        record.role,
+        record.userContext ?? null,
+        record.createdAt,
+      );
     },
 
     async getOrgMember(orgId, userId) {
@@ -928,6 +937,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             org_id: string;
             user_id: string;
             role: string;
+            user_context?: string | null;
             created_at: string;
           }
         | null;
@@ -940,6 +950,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         orgId: row.org_id,
         userId: row.user_id,
         role: row.role as StoredOrgMemberRecord["role"],
+        userContext: row.user_context ?? null,
         createdAt: row.created_at,
       };
     },
@@ -950,6 +961,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           org_id: string;
           user_id: string;
           role: string;
+          user_context?: string | null;
           created_at: string;
         };
 
@@ -957,6 +969,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           orgId: member.org_id,
           userId: member.user_id,
           role: member.role as StoredOrgMemberRecord["role"],
+          userContext: member.user_context ?? null,
           createdAt: member.created_at,
         };
       });

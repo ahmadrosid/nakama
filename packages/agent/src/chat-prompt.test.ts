@@ -36,7 +36,7 @@ test("buildChatSystemPrompt inserts USER.md section after identity", () => {
   });
 
   const identityIndex = prompt.indexOf("You are a helpful assistant.");
-  const userIndex = prompt.indexOf("# About the User (USER.md)");
+  const userIndex = prompt.indexOf("# Personalisation (USER.md)");
   const runtimeIndex = prompt.indexOf("Chat naturally");
 
   expect(identityIndex).toBeGreaterThanOrEqual(0);
@@ -51,7 +51,7 @@ test("buildChatSystemPrompt omits USER.md section when empty", () => {
     userContext: "   ",
   });
 
-  expect(prompt).not.toContain("# About the User (USER.md)");
+  expect(prompt).not.toContain("# Personalisation (USER.md)");
 });
 
 test("buildChatSystemPrompt includes todo_write guidance when tool is available", () => {

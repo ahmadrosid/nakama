@@ -274,9 +274,10 @@ describe("organization schema migration", () => {
       expect(fkCheck).toEqual([]);
 
       const member = db
-        .prepare("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?")
-        .get("org_acme", "user_admin") as { role: string };
+        .prepare("SELECT role, user_context FROM org_members WHERE org_id = ? AND user_id = ?")
+        .get("org_acme", "user_admin") as { role: string; user_context: string | null };
       expect(member.role).toBe("admin");
+      expect(member.user_context).toBeNull();
     } finally {
       db.close();
     }

@@ -280,6 +280,7 @@ function migrateOrgTables(db: Database): void {
       org_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       role TEXT NOT NULL,
+      user_context TEXT,
       created_at TEXT NOT NULL,
       PRIMARY KEY (org_id, user_id),
       FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
@@ -302,6 +303,15 @@ function migrateOrgTables(db: Database): void {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(org_members)")
+    .all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("user_context")) {
+    db.exec(`ALTER TABLE org_members ADD COLUMN user_context TEXT;`);
+  }
 }
 
 const TENANT_ORG_ID_TABLES = [

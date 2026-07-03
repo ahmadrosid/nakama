@@ -27,6 +27,23 @@ describe("user context routes", () => {
     });
 
     const session = await setupFreshInstallSession(app, databaseAdapter);
+    const org1Id = session.orgId!;
+    const user = await databaseAdapter.getUserByEmail("admin@example.com");
+    expect(user).not.toBeNull();
+    const now = new Date().toISOString();
+    await databaseAdapter.upsertOrganization({
+      id: "org_second",
+      name: "Second Org",
+      slug: "second-org",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      orgId: "org_second",
+      userId: user!.id,
+      role: "member",
+      createdAt: now,
+    });
 
     const initResponse = await app.fetch(
       new Request("http://localhost:4310/v1/user/context/init", {
@@ -42,7 +59,7 @@ describe("user context routes", () => {
 
     const getResponse = await app.fetch(
       new Request("http://localhost:4310/v1/user/context?content=true", {
-        headers: { Cookie: session.cookieHeader },
+        headers: session.headers(),
       }),
     );
     expect(getResponse.status).toBe(200);
@@ -62,8 +79,21 @@ describe("user context routes", () => {
     );
     expect(writeResponse.status).toBe(204);
 
-    const user = await databaseAdapter.getUserByEmail("admin@example.com");
-    expect(user).not.toBeNull();
-    expect(await databaseAdapter.getUserContext(user!.id)).toBe("# About Me\n\nAlice from Acme");
+    expect(await databaseAdapter.getUserContext(org1Id, user!.id)).toBe("# About Me\n\nAlice from Acme");
+
+    const writeSecondOrgResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/user/context", {
+        method: "PUT",
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "Content-Type": "application/json",
+        }, "org_second"),
+        body: JSON.stringify({ content: "# About Me\n\nAlice from Second Org" }),
+      }),
+    );
+    expect(writeSecondOrgResponse.status).toBe(204);
+
+    expect(await databaseAdapter.getUserContext(org1Id, user!.id)).toBe("# About Me\n\nAlice from Acme");
+    expect(await databaseAdapter.getUserContext("org_second", user!.id)).toBe("# About Me\n\nAlice from Second Org");
   });
 });

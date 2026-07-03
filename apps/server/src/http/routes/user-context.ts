@@ -3,6 +3,7 @@ import type { InitUserContextResponse, UpdateUserContextRequest, UserContextStat
 import { json, readJson, getRequestAuth } from "../shared";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
+import { requireActiveOrgIdFromContext } from "../org-guards";
 
 export function registerUserContextRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent } = options;
@@ -52,23 +53,26 @@ export function registerUserContextRoutes(app: HonoApp, options: ServerOptions):
 
   app.get("/v1/user/context", async (c) => {
     const auth = getRequestAuth(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     const includeContent = c.req.query("content") === "true";
     return json<UserContextStatusResponse>(
-      await agent.getUserContext(auth.user.id, includeContent),
+      await agent.getUserContext(orgId, auth.user.id, includeContent),
     );
   });
 
   app.put("/v1/user/context", async (c) => {
     const auth = getRequestAuth(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<UpdateUserContextRequest>(c.req.raw);
-    await agent.writeUserContext(auth.user.id, body);
+    await agent.writeUserContext(orgId, auth.user.id, body);
     return new Response(null, { status: 204 });
   });
 
   app.post("/v1/user/context/init", async (c) => {
     const auth = getRequestAuth(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     return json<InitUserContextResponse>(
-      await agent.initUserContext(auth.user.id),
+      await agent.initUserContext(orgId, auth.user.id),
       201,
     );
   });

@@ -51,7 +51,6 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const attachments = new Map<string, StoredAttachmentRecord>();
   const usersById = new Map<string, StoredUserRecord>();
   const usersByEmail = new Map<string, StoredUserRecord>();
-  const userContextByUserId = new Map<string, string>();
   const browserSessionsByHash = new Map<string, StoredBrowserSessionRecord>();
   const organizations = new Map<string, StoredOrganizationRecord>();
   const organizationsBySlug = new Map<string, StoredOrganizationRecord>();
@@ -103,12 +102,17 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       usersByEmail.set(updated.email, updated);
     },
 
-    async getUserContext(userId) {
-      return userContextByUserId.get(userId) ?? null;
+    async getUserContext(orgId, userId) {
+      return orgMembers.get(`${orgId}:${userId}`)?.userContext ?? null;
     },
 
-    async setUserContext(userId, content, updatedAt) {
-      userContextByUserId.set(userId, content);
+    async setUserContext(orgId, userId, content, updatedAt) {
+      const memberKey = `${orgId}:${userId}`;
+      const member = orgMembers.get(memberKey);
+      if (member) {
+        orgMembers.set(memberKey, { ...member, userContext: content });
+      }
+
       const user = usersById.get(userId);
       if (!user) {
         return;
