@@ -158,6 +158,31 @@ describe("profile service createProfile", () => {
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");
   });
 
+  test("assigns default bundled skills when they exist", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-default-skills-"));
+    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertSkill({
+      id: "skill_manage_skills",
+      name: "manage-skills",
+      description: "Create, update, inspect, or manage reusable profile skills.",
+      sourcePath: path.join(tempConfigDir, "agent", "skills", "manage-skills"),
+      hasTool: false,
+      disableModelInvocation: false,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const service = new ProfileService(db);
+    const created = await service.createProfile(ORG_ID, { name: "Skill Bot" });
+    const skills = await db.listSkillsForProfile(created.profile.id);
+
+    expect(skills.map((skill) => skill.name)).toContain("manage-skills");
+  });
+
   test("skips missing basic built-in tools without failing", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-missing-tools-"));
     process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;

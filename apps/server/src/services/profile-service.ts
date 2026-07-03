@@ -39,7 +39,7 @@ import {
 import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
 import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
-import { ensureBuiltinToolDefinitions } from "@tinyclaw/db";
+import { ensureBuiltinToolDefinitions, ensureProfileDefaultBundledSkills } from "@tinyclaw/db";
 import { loadJavascriptTool, validateJavascriptToolModule } from "./javascript-tool-loader";
 import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
@@ -129,6 +129,7 @@ export class ProfileService {
     await initSoulDirectory(soulDir);
     await writeGeneratedSoulFiles(soulDir, request.soulFiles);
     await this.assignDefaultTools(profile.id);
+    await ensureProfileDefaultBundledSkills(this.db, profile.id);
 
     return this.getProfile(orgId, profile.id);
   }

@@ -152,7 +152,7 @@ Each tool in `packages/core/src/tools/` uses one Zod `*InputSchema` for both run
 
 | Tool | Module |
 |------|--------|
-| `write_file`, `delete_file`, `read_file`, `create_skill` | `builtin.ts` |
+| `write_file`, `delete_file`, `read_file` | `builtin.ts` |
 | `search_files` | `search-files.ts` |
 | `knowledge_base_search` | `knowledge-base-search.ts` |
 | `update_profile_memory` | `profile-memory.ts` |
@@ -160,7 +160,7 @@ Each tool in `packages/core/src/tools/` uses one Zod `*InputSchema` for both run
 | `web_fetch` | `web-fetch.ts` |
 | `email` | `email.ts` |
 
-`ripgrep.ts` backs the search tools but is not model-facing. `create_skill`, `web_search`, and server tools (`bash`, Super Bot meta-tools, JS/MCP) define schemas in core where applicable but execute in `apps/server` (or on the LLM provider for `web_search`).
+`ripgrep.ts` backs the search tools but is not model-facing. `web_search` and server tools (`bash`, Super Bot meta-tools, JS/MCP) define schemas in core where applicable but execute in `apps/server` (or on the LLM provider for `web_search`).
 
 ## Request lifecycle
 
