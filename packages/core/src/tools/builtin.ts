@@ -36,21 +36,29 @@ export const deleteFileInputSchema = z
   })
   .strict();
 
+export const editFileInputSchema = z
+  .object({
+    path: requiredTrimmedString("path"),
+    edits: z
+      .array(
+        z
+          .object({
+            oldText: requiredTrimmedString("oldText"),
+            newText: z.string({ error: "newText is required." }),
+          })
+          .strict(),
+      )
+      .min(1, "edits must contain at least one replacement."),
+    cwd: trimmedOptionalString,
+  })
+  .strict();
+
 export const readFileInputSchema = z
   .object({
     path: requiredTrimmedString("path"),
     cwd: trimmedOptionalString,
     offset: readFileOffsetSchema,
     limit: readFileLimitSchema,
-  })
-  .strict();
-
-export const createSkillInputSchema = z
-  .object({
-    name: requiredTrimmedString("name"),
-    description: requiredTrimmedString("description"),
-    body: trimmedOptionalString,
-    disableModelInvocation: z.boolean().optional(),
   })
   .strict();
 
@@ -65,8 +73,8 @@ export const saveArtifactInputSchema = z
 
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
 export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
+export type EditFileInput = z.infer<typeof editFileInputSchema>;
 export type ReadFileInput = z.infer<typeof readFileInputSchema>;
-export type CreateSkillInput = z.infer<typeof createSkillInputSchema>;
 export type SaveArtifactInput = z.infer<typeof saveArtifactInputSchema>;
 
 export interface WriteFileOutput {
@@ -77,6 +85,13 @@ export interface WriteFileOutput {
 export interface DeleteFileOutput {
   path: string;
   deleted: true;
+}
+
+export interface EditFileOutput {
+  path: string;
+  replacements: number;
+  bytesWritten: number;
+  fuzzyMatches: number;
 }
 
 export interface ReadFileOutput {
@@ -185,6 +200,315 @@ export async function runDeleteFile(
   return { path: guarded.resolved, deleted: true };
 }
 
+export const editFileTool: ToolDefinition<EditFileInput, EditFileOutput> = {
+  name: "edit_file",
+  description:
+    "Edit an existing text file with one or more exact replacements. Each oldText must be present once, non-overlapping, and is matched against the original file.",
+  parameters: jsonSchemaFromZod(editFileInputSchema),
+  run(input, context) {
+    return runEditFile(input, context);
+  },
+};
+
+export async function runEditFile(
+  input: unknown,
+  context: ToolContext,
+  options: FileToolRunOptions = {},
+): Promise<EditFileOutput> {
+  const parsed = parseToolInput(editFileInputSchema, input);
+
+  const guardOptions = buildFileGuardOptions(context, options);
+  const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
+  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, undefined, guardOptions);
+  const filePath = guarded.resolved;
+
+  if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
+    throw new PathGuardError(
+      `Editing ${path.basename(filePath)} is not allowed`,
+      "SPECIAL_FILE",
+    );
+  }
+
+  let fileStat;
+  try {
+    fileStat = await stat(filePath);
+  } catch {
+    throw new Error(`File not found: ${filePath}`);
+  }
+
+  if (!fileStat.isFile()) {
+    throw new Error(`Path is not a file: ${filePath}`);
+  }
+
+  if (fileStat.size > maxBytes) {
+    throw new PathGuardError(
+      `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
+      "TOO_LARGE",
+    );
+  }
+
+  const rawBuffer = await readFile(filePath);
+  const hasBom =
+    rawBuffer.length >= 3 && rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
+  const content = rawBuffer.toString("utf8", hasBom ? 3 : 0);
+  const lineEnding = detectLineEnding(content);
+  const plans = parsed.edits
+    .map((edit, index) => planEdit(content, edit, index, lineEnding))
+    .sort((a, b) => a.start - b.start);
+  assertNoOverlappingEdits(plans);
+
+  const nextContent = applyEditPlans(content, plans);
+  const outputContent = hasBom ? `\uFEFF${nextContent}` : nextContent;
+  const bytesWritten = Buffer.byteLength(outputContent, "utf8");
+
+  await guardFilePath(parsed.path, parsed.cwd ?? null, bytesWritten, guardOptions);
+  await writeFile(filePath, outputContent, "utf8");
+
+  return {
+    path: filePath,
+    replacements: plans.length,
+    bytesWritten,
+    fuzzyMatches: plans.filter((plan) => plan.fuzzy).length,
+  };
+}
+
+interface PlannedEdit {
+  index: number;
+  start: number;
+  end: number;
+  newText: string;
+  fuzzy: boolean;
+}
+
+function planEdit(
+  content: string,
+  edit: EditFileInput["edits"][number],
+  index: number,
+  lineEnding: string,
+): PlannedEdit {
+  if (edit.oldText === edit.newText) {
+    throw new Error(`Edit ${index + 1} makes no change: oldText and newText are identical.`);
+  }
+
+  const exactMatches = findAllOccurrences(content, edit.oldText);
+
+  if (exactMatches.length > 1) {
+    throw new Error(
+      `Edit ${index + 1} is ambiguous: oldText matched ${exactMatches.length} times.`,
+    );
+  }
+
+  if (exactMatches.length === 1) {
+    const start = exactMatches[0]!;
+    return {
+      index,
+      start,
+      end: start + edit.oldText.length,
+      newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
+      fuzzy: false,
+    };
+  }
+
+  const fuzzyMatches = findNormalizedMatches(content, edit.oldText);
+
+  if (fuzzyMatches.length === 0) {
+    throw new Error(`Edit ${index + 1} oldText not found in file.`);
+  }
+
+  if (fuzzyMatches.length > 1) {
+    throw new Error(`Edit ${index + 1} is ambiguous after normalized matching.`);
+  }
+
+  const match = fuzzyMatches[0]!;
+
+  return {
+    index,
+    start: match.start,
+    end: match.end,
+    newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
+    fuzzy: true,
+  };
+}
+
+function detectLineEnding(content: string): string {
+  const crlf = content.match(/\r\n/g)?.length ?? 0;
+  const lf = content.match(/(?<!\r)\n/g)?.length ?? 0;
+  const cr = content.match(/\r(?!\n)/g)?.length ?? 0;
+
+  if (crlf >= lf && crlf >= cr && crlf > 0) {
+    return "\r\n";
+  }
+
+  if (cr > lf && cr > 0) {
+    return "\r";
+  }
+
+  return "\n";
+}
+
+function normalizeReplacementLineEndings(value: string, lineEnding: string): string {
+  return value.replace(/\r\n|\r|\n/g, lineEnding);
+}
+
+function findAllOccurrences(content: string, search: string): number[] {
+  const matches: number[] = [];
+  let index = 0;
+
+  while (true) {
+    index = content.indexOf(search, index);
+    if (index === -1) {
+      return matches;
+    }
+    matches.push(index);
+    index += search.length;
+  }
+}
+
+interface NormalizedMatch {
+  start: number;
+  end: number;
+}
+
+interface NormalizedChar {
+  char: string;
+  start: number;
+  end: number;
+}
+
+function findNormalizedMatches(content: string, search: string): NormalizedMatch[] {
+  const normalizedContent = normalizeForEditMatch(content);
+  const normalizedSearch = normalizeForEditMatch(search);
+  const needle = normalizedSearch.text;
+
+  if (!needle) {
+    return [];
+  }
+
+  const matches: NormalizedMatch[] = [];
+  let index = 0;
+
+  while (true) {
+    index = normalizedContent.text.indexOf(needle, index);
+    if (index === -1) {
+      return matches;
+    }
+
+    const firstChar = normalizedContent.chars[index];
+    const lastChar = normalizedContent.chars[index + needle.length - 1];
+
+    if (firstChar && lastChar) {
+      matches.push({ start: firstChar.start, end: lastChar.end });
+    }
+
+    index += needle.length;
+  }
+}
+
+function normalizeForEditMatch(value: string): { text: string; chars: NormalizedChar[] } {
+  const chars: NormalizedChar[] = [];
+
+  for (let index = 0; index < value.length; ) {
+    const start = index;
+    const codePoint = value.codePointAt(index);
+
+    if (codePoint === undefined) {
+      break;
+    }
+
+    const rawChar = String.fromCodePoint(codePoint);
+    index += rawChar.length;
+    const normalizedChar = normalizeEditChar(rawChar);
+
+    if (normalizedChar === null) {
+      continue;
+    }
+
+    chars.push({ char: normalizedChar, start, end: index });
+  }
+
+  const filteredChars = removeTrailingWhitespaceTokens(chars);
+
+  return {
+    text: filteredChars.map((char) => char.char).join(""),
+    chars: filteredChars,
+  };
+}
+
+function normalizeEditChar(char: string): string | null {
+  if (char === "\r") {
+    return null;
+  }
+
+  if (char === "\u00A0") {
+    return " ";
+  }
+
+  if (char === "\u2018" || char === "\u2019") {
+    return "'";
+  }
+
+  if (char === "\u201C" || char === "\u201D") {
+    return "\"";
+  }
+
+  if (char === "\u2013" || char === "\u2014") {
+    return "-";
+  }
+
+  return char;
+}
+
+function removeTrailingWhitespaceTokens(chars: NormalizedChar[]): NormalizedChar[] {
+  const keep = new Array<boolean>(chars.length).fill(true);
+  let runStart: number | null = null;
+
+  for (let index = 0; index <= chars.length; index += 1) {
+    const char = chars[index]?.char;
+
+    if (char === " " || char === "\t") {
+      runStart ??= index;
+      continue;
+    }
+
+    if ((char === "\n" || char === undefined) && runStart !== null) {
+      for (let runIndex = runStart; runIndex < index; runIndex += 1) {
+        keep[runIndex] = false;
+      }
+    }
+
+    runStart = null;
+  }
+
+  return chars.filter((_char, index) => keep[index]);
+}
+
+function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
+  for (let index = 1; index < plans.length; index += 1) {
+    const previous = plans[index - 1]!;
+    const current = plans[index]!;
+
+    if (current.start < previous.end) {
+      throw new Error(
+        `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`,
+      );
+    }
+  }
+}
+
+function applyEditPlans(content: string, plans: PlannedEdit[]): string {
+  let nextContent = "";
+  let cursor = 0;
+
+  for (const plan of plans) {
+    nextContent += content.slice(cursor, plan.start);
+    nextContent += plan.newText;
+    cursor = plan.end;
+  }
+
+  nextContent += content.slice(cursor);
+  return nextContent;
+}
+
 export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
   name: "read_file",
   description:
@@ -257,16 +581,6 @@ export async function runReadFile(
   };
 }
 
-export const createSkillTool: ToolDefinition<CreateSkillInput> = {
-  name: "create_skill",
-  description:
-    "Save a step-by-step procedure or repeatable workflow as a skill for the active profile and assign it immediately. Use for actions the agent executes — multi-step instructions, workflows, and processes. Not for facts or observations (use update_profile_memory for those).",
-  parameters: jsonSchemaFromZod(createSkillInputSchema),
-  async run() {
-    throw new Error("create_skill must be resolved by the TinyClaw server.");
-  },
-};
-
 export const saveArtifactTool: ToolDefinition<SaveArtifactInput, SaveArtifactOutput> = {
   name: "save_artifact",
   description:
@@ -297,9 +611,9 @@ export async function runSaveArtifact(
 export const builtinTools: ToolDefinition[] = [
   writeFileTool,
   deleteFileTool,
+  editFileTool,
   readFileTool,
   saveArtifactTool,
-  createSkillTool,
   searchFilesTool,
   knowledgeBaseSearchTool,
   webSearchTool,

@@ -47,7 +47,10 @@ import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const BASIC_PROFILE_TOOL_IDS = [
-  BUILTIN_TOOL_IDS.create_skill,
+  BUILTIN_TOOL_IDS.write_file,
+  BUILTIN_TOOL_IDS.edit_file,
+  BUILTIN_TOOL_IDS.read_file,
+  BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
   BUILTIN_TOOL_IDS.update_profile_memory,
 ] as const;

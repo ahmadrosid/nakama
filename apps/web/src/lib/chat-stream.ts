@@ -139,6 +139,10 @@ export function formatToolActionLabel(
     return `Deleted ${basename(input.path)}`;
   }
 
+  if (tool === "edit_file" && typeof input?.path === "string") {
+    return `Edited ${basename(input.path)}`;
+  }
+
   if (tool === "read_file" && typeof input?.path === "string") {
     return `Read ${basename(input.path)}`;
   }

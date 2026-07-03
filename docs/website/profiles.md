@@ -28,7 +28,7 @@ If a session or channel config omits a profile id — or names one that does not
 
 ### New custom profiles
 
-Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `create_skill`, `knowledge_base_search`, and `update_profile_memory` when those builtins are available. Assign more tools, MCP servers, and skills from the dashboard.
+Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `update_profile_memory` when those builtins are available. Assign more tools, MCP servers, and skills from the dashboard.
 
 Super Bot can also create profiles from chat. For profile-creation requests, it uses a Super Bot-only bundled skill that guides soul-file generation, keeps `MEMORY.md` empty, and uses the current tool inventory to recommend a small relevant starter set.
 

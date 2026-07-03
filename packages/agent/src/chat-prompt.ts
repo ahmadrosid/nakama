@@ -71,19 +71,13 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "update_profile_memory")) {
       sections.push(
-        "Use update_profile_memory to record facts, preferences, and personal context — things you know about the user. Do not use it for step-by-step procedures; use create_skill for those.",
+        "Use update_profile_memory to record facts, preferences, and personal context — things you know about the user. Do not use it for step-by-step procedures; use profile skills for those.",
       );
     }
 
     if (tools.some((tool) => tool.name === "archive_profile_memory")) {
       sections.push(
         "Use archive_profile_memory when the user wants to forget, remove, or clean up old memory without deleting it. Archived facts live under memory-archive/ and are not loaded automatically; use search_files or read_file to retrieve them when relevant.",
-      );
-    }
-
-    if (tools.some((tool) => tool.name === "create_skill")) {
-      sections.push(
-        "Use create_skill to save step-by-step workflows and repeatable procedures — actions you execute for the user. Do not use it for facts or observations; use update_profile_memory for those.",
       );
     }
   }

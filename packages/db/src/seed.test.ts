@@ -67,7 +67,7 @@ describe("seed built-in tools", () => {
     await ensureBuiltinToolDefinitions(db);
     await ensureBuiltinToolDefinitions(db);
 
-    expect(await db.getTool(BUILTIN_TOOL_IDS.create_skill)).not.toBeNull();
+    expect(await db.getTool(BUILTIN_TOOL_IDS.edit_file)).not.toBeNull();
     expect(await db.getTool(BUILTIN_TOOL_IDS.archive_profile_memory)).not.toBeNull();
   });
 });

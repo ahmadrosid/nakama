@@ -55,6 +55,7 @@ export function stopSpawnedServer(child: Bun.Subprocess | null): void {
 const REQUIRED_BUILTIN_TOOLS = [
   "write_file",
   "delete_file",
+  "edit_file",
   "read_file",
   "search_files",
   "web_search",

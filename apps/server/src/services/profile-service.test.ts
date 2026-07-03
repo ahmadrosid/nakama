@@ -149,7 +149,10 @@ describe("profile service createProfile", () => {
     const created = await service.createProfile(ORG_ID, { name: "Skill Bot" });
     const tools = await db.listToolsForProfile(created.profile.id);
 
-    expect(tools.map((tool) => tool.name)).toContain("create_skill");
+    expect(tools.map((tool) => tool.name)).toContain("read_file");
+    expect(tools.map((tool) => tool.name)).toContain("write_file");
+    expect(tools.map((tool) => tool.name)).toContain("edit_file");
+    expect(tools.map((tool) => tool.name)).toContain("search_files");
     expect(tools.map((tool) => tool.name)).toContain("knowledge_base_search");
     expect(tools.map((tool) => tool.name)).toContain("update_profile_memory");
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");

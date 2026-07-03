@@ -104,10 +104,6 @@ describe("seedOrgSuperBotProfile", () => {
     const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
-      if (toolId === BUILTIN_TOOL_IDS.create_skill) {
-        continue;
-      }
-
       expect(toolIds).toContain(toolId);
     }
 

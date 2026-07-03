@@ -84,7 +84,7 @@ test("buildChatSystemPrompt includes update_profile_memory guidance when tool is
 
   expect(prompt).toContain("update_profile_memory");
   expect(prompt).toContain("facts, preferences, and personal context");
-  expect(prompt).toContain("create_skill");
+  expect(prompt).toContain("profile skills");
 });
 
 test("buildChatSystemPrompt includes archive_profile_memory guidance when tool is available", () => {
@@ -98,17 +98,6 @@ test("buildChatSystemPrompt includes archive_profile_memory guidance when tool i
   expect(prompt).toContain("search_files");
 });
 
-test("buildChatSystemPrompt includes create_skill guidance when tool is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [{ name: "create_skill", description: "Skill", parameters: { type: "object", properties: {} } }],
-    { enableToolLoop: true },
-  );
-
-  expect(prompt).toContain("create_skill");
-  expect(prompt).toContain("step-by-step workflows and repeatable procedures");
-  expect(prompt).toContain("update_profile_memory");
-});
-
 test("buildChatSystemPrompt omits memory and skill guidance when tools are not present", () => {
   const prompt = buildChatSystemPrompt(
     [{ name: "write_file", description: "Write", parameters: { type: "object", properties: {} } }],
@@ -116,7 +105,7 @@ test("buildChatSystemPrompt omits memory and skill guidance when tools are not p
   );
 
   expect(prompt).not.toContain("update_profile_memory");
-  expect(prompt).not.toContain("create_skill");
+  expect(prompt).not.toContain("profile skills");
 });
 
 test("buildChatSystemPrompt omits tool guidance when enableToolLoop is false", () => {
@@ -126,7 +115,7 @@ test("buildChatSystemPrompt omits tool guidance when enableToolLoop is false", (
   );
 
   expect(prompt).not.toContain("update_profile_memory");
-  expect(prompt).not.toContain("create_skill");
+  expect(prompt).not.toContain("profile skills");
 });
 
 test("buildChatSystemPrompt adds private chat guidance for telegram and whatsapp", () => {

@@ -29,20 +29,20 @@ TinyClaw includes these builtins:
 
 | Tool | `default` / `super_bot` | All profiles | Notes |
 |------|-------------------------|--------------|-------|
-| `write_file` | Yes | No | |
+| `write_file` | Yes | Yes | Assigned to new custom profiles by default |
 | `delete_file` | Yes | No | |
-| `read_file` | Yes | No | |
+| `edit_file` | Yes | Yes | Assigned to new custom profiles by default |
+| `read_file` | Yes | Yes | Assigned to new custom profiles by default |
 | `save_artifact` | Yes | No | Persistent output under `artifacts/` |
-| `search_files` | Yes | No | |
+| `search_files` | Yes | Yes | Assigned to new custom profiles by default |
 | `knowledge_base_search` | Yes | Yes | Assigned to new custom profiles by default |
 | `web_search` | Yes | No | |
 | `web_fetch` | Yes | No | |
 | `update_profile_memory` | Yes | Yes | Assigned to new custom profiles by default |
 | `archive_profile_memory` | Yes | No | |
 | `email` | Yes | No | Omitted at runtime when mailbox is unconfigured |
-| `create_skill` | Yes | Yes | Assigned to new custom profiles by default |
 
-**New custom profiles** receive `create_skill`, `knowledge_base_search`, and `update_profile_memory` until a platform admin assigns additional tools. System profiles (`default`, `super_bot`) get the full seeded set.
+**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `update_profile_memory` until a platform admin assigns additional tools. System profiles (`default`, `super_bot`) get the full seeded set.
 
 ## Choosing tools for a profile
 
@@ -86,6 +86,24 @@ Delete a file from the profile workspace or custom tools directory.
 
 **Availability:** When assigned to the profile.
 
+### `edit_file`
+
+Edit an existing text file in the profile workspace using exact replacements.
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `path` | string | Yes | Relative to profile workspace unless absolute |
+| `edits` | array | Yes | One or more `{ oldText, newText }` replacements |
+| `cwd` | string | No | Base directory within workspace |
+
+Each `oldText` must be present once and edits must not overlap. TinyClaw applies all edits against the original file, then writes the result atomically after validation.
+
+**Returns:** `{ path, replacements, bytesWritten, fuzzyMatches }`
+
+**Scope:** Profile workspace and custom tools directory only.
+
+**Availability:** When assigned to the profile.
+
 ### `read_file`
 
 Read text from a file in the profile workspace.
@@ -123,19 +141,6 @@ Save a persistent output file for the active profile. Use this when the agent wa
 ```
 
 Use `text` mode for markdown, logs, code snippets, and plain text. Use `base64` mode for binary files such as images and PDFs.
-
-**Availability:** When assigned to the profile.
-
-### `create_skill`
-
-Save a repeatable procedure as a skill for the active profile and assign it immediately.
-
-| Parameter | Type | Required | Notes |
-|-----------|------|----------|-------|
-| `name` | string | Yes | Unique skill name for the profile |
-| `description` | string | Yes | When the skill should be used |
-| `body` | string | No | Step-by-step instructions |
-| `disableModelInvocation` | boolean | No | When true, skill only activates on explicit invocation |
 
 **Availability:** When assigned to the profile.
 

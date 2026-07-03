@@ -167,7 +167,6 @@ import {
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createTodoTools } from "../tools/todo-tools";
-import { createCreateSkillTool } from "../tools/create-skill";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
@@ -1984,10 +1983,7 @@ export class AgentService {
     options: { includeAutomationTools?: boolean; includeTodoTools?: boolean } = {},
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
-    const builtinOverrides = this.skillsService
-      ? [createCreateSkillTool(this.skillsService)]
-      : [];
-    const tools = await resolveProfileStoredTools(storedTools, builtinOverrides);
+    const tools = await resolveProfileStoredTools(storedTools);
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
 

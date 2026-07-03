@@ -7,9 +7,7 @@ import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
-const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS).filter(
-  (toolId) => toolId !== BUILTIN_TOOL_IDS.create_skill,
-);
+const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,

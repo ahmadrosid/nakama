@@ -44,7 +44,7 @@ export const updateProfileMemoryTool: ToolDefinition<
 > = {
   name: "update_profile_memory",
   description:
-    "Record a fact, preference, decision, or observation in the active profile's MEMORY.md for cross-session continuity. Creates MEMORY.md if it doesn't exist. Use for things you know about the user — not step-by-step procedures (use create_skill for those).",
+    "Record a fact, preference, decision, or observation in the active profile's MEMORY.md for cross-session continuity. Creates MEMORY.md if it doesn't exist. Use for things you know about the user — not step-by-step procedures (use profile skills for those).",
   parameters: jsonSchemaFromZod(updateProfileMemoryInputSchema),
   run(input, context) {
     return runUpdateProfileMemory(input, context);

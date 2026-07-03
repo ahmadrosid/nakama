@@ -132,9 +132,9 @@ The dashboard also supports a shared skill library through the skills API and sy
 
 ### From the agent itself
 
-If a profile has the builtin `create_skill` tool, the bot can create a new profile-scoped skill during chat and assign it immediately.
+Profiles receive a bundled `manage-skills` skill that teaches the bot how to create and update profile-scoped skills with `write_file`, `read_file`, `search_files`, and `edit_file`.
 
-New custom profiles receive `create_skill`, `knowledge_base_search`, and `update_profile_memory` by default when those builtins are available.
+New custom profiles receive the file tools, `knowledge_base_search`, and `update_profile_memory` by default when those builtins are available.
 
 ## Sync behavior
 

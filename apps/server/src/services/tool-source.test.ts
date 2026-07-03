@@ -66,6 +66,22 @@ describe("readToolSource", () => {
     expect(source.content).toContain("writeFileTool");
   });
 
+  test("reads built-in edit_file source", async () => {
+    const source = await readToolSource({
+      id: BUILTIN_TOOL_IDS.edit_file,
+      name: "edit_file",
+      description: "Edit file",
+      handlerType: "builtin",
+      handlerConfig: { name: "edit_file" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    expect(source.path).toBe("packages/core/src/tools/builtin.ts");
+    expect(source.language).toBe("typescript");
+    expect(source.content).toContain("editFileTool");
+  });
+
   test("reads built-in read_file source", async () => {
     const source = await readToolSource({
       id: BUILTIN_TOOL_IDS.read_file,

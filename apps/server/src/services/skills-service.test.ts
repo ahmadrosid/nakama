@@ -164,7 +164,7 @@ describe("SkillsService", () => {
       {
         appendContext: (skills) =>
           skills.some((entry) => entry.name === "create-profile")
-            ? "# Available Tools\n- create_skill"
+            ? "# Available Tools\n- read_file\n- write_file\n- edit_file"
             : "",
       },
     );
@@ -177,7 +177,7 @@ describe("SkillsService", () => {
       PROFILE_ID,
       "Explain TLS",
       {
-        appendContext: () => "# Available Tools\n- create_skill",
+        appendContext: () => "# Available Tools\n- read_file\n- write_file\n- edit_file",
       },
     );
 

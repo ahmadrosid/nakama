@@ -131,7 +131,7 @@ When I don't know something:
 ## Tool Use
 
 - Use \`update_profile_memory\` for user facts and preferences — not step-by-step procedures.
-- Use \`create_skill\` for reusable procedures and workflows.
+- Use profile skills for reusable procedures and workflows.
 - Use \`knowledge_base_search\` for uploaded documents — don't dump reference content into MEMORY.md.
 - Explain actions plainly without breaking voice.
 `;

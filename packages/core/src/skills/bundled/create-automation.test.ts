@@ -75,6 +75,41 @@ describe("bundled create-profile skill", () => {
   });
 });
 
+describe("bundled manage-skills skill", () => {
+  test("parses bundled markdown", async () => {
+    const content = await readBundledSkillMarkdown("manage-skills");
+    const parsed = parseSkillMarkdown(content, "manage-skills/SKILL.md");
+
+    expect(parsed.frontmatter.name).toBe("manage-skills");
+    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
+    expect(parsed.body).toContain("write_file");
+    expect(parsed.body).toContain("edit_file");
+    expect(parsed.body).toContain("skills/{skill-name}/SKILL.md");
+  });
+
+  test("description matches skill management messages", async () => {
+    const content = await readBundledSkillMarkdown("manage-skills");
+    const parsed = parseSkillMarkdown(content, "manage-skills/SKILL.md");
+    const discovered = {
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      disableModelInvocation: false,
+      includeBodyOnMatch: true,
+      directory: "/tmp/manage-skills",
+      skillFilePath: "/tmp/manage-skills/SKILL.md",
+      body: parsed.body,
+      hasTool: false,
+      toolPath: null,
+    };
+
+    expect(
+      matchSkillsForMessage([discovered], "Create a reusable skill for bug triage").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["manage-skills"]);
+  });
+});
+
 describe("ensureBundledSkillFiles", () => {
   let configDir: string;
 
@@ -92,6 +127,7 @@ describe("ensureBundledSkillFiles", () => {
     const created = await ensureBundledSkillFiles();
 
     expect(created).toContain("create-automation");
+    expect(created).toContain("manage-skills");
     expect(created).toContain("create-profile");
 
     const content = await readFile(
@@ -100,6 +136,13 @@ describe("ensureBundledSkillFiles", () => {
     );
 
     expect(content).toContain("name: create-automation");
+
+    const manageSkillsContent = await readFile(
+      join(configDir, "agent", "skills", "manage-skills", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(manageSkillsContent).toContain("name: manage-skills");
 
     const createProfileContent = await readFile(
       join(configDir, "agent", "skills", "create-profile", "SKILL.md"),

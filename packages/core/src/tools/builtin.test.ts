@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   PathGuardError,
   runDeleteFile,
+  runEditFile,
   runReadFile,
   runSaveArtifact,
   runWriteFile,
@@ -97,6 +98,177 @@ describe("file builtin tools", () => {
     await expect(readFile(targetPath, "utf8")).rejects.toThrow();
   });
 
+  test("edit_file replaces a unique text match", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "hello old world", "utf8");
+
+    const result = await runEditFile(
+      { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.path).toBe(await realpath(targetPath));
+    expect(result.replacements).toBe(1);
+    expect(result.fuzzyMatches).toBe(0);
+    expect(await readFile(targetPath, "utf8")).toBe("hello new world");
+  });
+
+  test("edit_file resolves relative paths from profile workspace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    await writeFile(path.join(tempDir, "note.txt"), "relative old", "utf8");
+
+    const result = await runEditFile(
+      { path: "note.txt", edits: [{ oldText: "old", newText: "new" }] },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.path).toBe(path.join(await realpath(tempDir), "note.txt"));
+    expect(await readFile(result.path, "utf8")).toBe("relative new");
+  });
+
+  test("edit_file applies multiple edits against the original file", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "one two three", "utf8");
+
+    const result = await runEditFile(
+      {
+        path: targetPath,
+        edits: [
+          { oldText: "one", newText: "two" },
+          { oldText: "three", newText: "one" },
+        ],
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.replacements).toBe(2);
+    expect(await readFile(targetPath, "utf8")).toBe("two two one");
+  });
+
+  test("edit_file rejects ambiguous matches", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "old and old", "utf8");
+
+    await expect(
+      runEditFile(
+        { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow("ambiguous");
+    expect(await readFile(targetPath, "utf8")).toBe("old and old");
+  });
+
+  test("edit_file rejects overlapping edits", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "abcdef", "utf8");
+
+    await expect(
+      runEditFile(
+        {
+          path: targetPath,
+          edits: [
+            { oldText: "abc", newText: "ABC" },
+            { oldText: "bcd", newText: "BCD" },
+          ],
+        },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow("overlaps");
+    expect(await readFile(targetPath, "utf8")).toBe("abcdef");
+  });
+
+  test("edit_file fuzzy matches line endings and smart punctuation", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "before\r\nsay “hello”—now\r\nafter\r\n", "utf8");
+
+    const result = await runEditFile(
+      {
+        path: targetPath,
+        edits: [{ oldText: "say \"hello\"-now", newText: "say goodbye" }],
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.fuzzyMatches).toBe(1);
+    expect(await readFile(targetPath, "utf8")).toBe("before\r\nsay goodbye\r\nafter\r\n");
+  });
+
+  test("edit_file preserves CRLF style in replacement text", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "before\r\nold block\r\nafter\r\n", "utf8");
+
+    await runEditFile(
+      {
+        path: targetPath,
+        edits: [{ oldText: "old block", newText: "new\nblock" }],
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(await readFile(targetPath, "utf8")).toBe("before\r\nnew\r\nblock\r\nafter\r\n");
+  });
+
+  test("edit_file fuzzy matching ignores trailing whitespace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "alpha  \nbeta\n", "utf8");
+
+    const result = await runEditFile(
+      {
+        path: targetPath,
+        edits: [{ oldText: "alpha\nbeta", newText: "ALPHA\nbeta" }],
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(result.fuzzyMatches).toBe(1);
+    expect(await readFile(targetPath, "utf8")).toBe("ALPHA\nbeta\n");
+  });
+
+  test("edit_file preserves a UTF-8 BOM", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "\uFEFFhello old", "utf8");
+
+    await runEditFile(
+      { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    const result = await readFile(targetPath);
+    expect(result.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+    expect(result.toString("utf8")).toBe("\uFEFFhello new");
+  });
+
+  test("edit_file rejects missing oldText", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    const targetPath = path.join(tempDir, "note.txt");
+    await writeFile(targetPath, "hello", "utf8");
+
+    await expect(
+      runEditFile(
+        { path: targetPath, edits: [{ oldText: "missing", newText: "new" }] },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow("oldText not found");
+  });
+
   test("read_file reads an existing file", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-"));
     const targetPath = path.join(tempDir, "sample.txt");
@@ -176,6 +348,9 @@ describe("file builtin tools", () => {
     await expect(runReadFile({ path: "a.txt" }, {})).rejects.toThrow(
       "orgId and profileId are required.",
     );
+    await expect(
+      runEditFile({ path: "a.txt", edits: [{ oldText: "x", newText: "y" }] }, {}),
+    ).rejects.toThrow("orgId and profileId are required.");
   });
 
   test("save_artifact writes text files under artifacts", async () => {
@@ -299,6 +474,36 @@ describe("file builtin tools", () => {
     await expect(
       runDeleteFile(
         { path: "/etc/should-not-delete" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(PathGuardError);
+  });
+
+  test("edit_file rejects path outside allowed dirs", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+
+    await expect(
+      runEditFile(
+        {
+          path: "/etc/tinyclaw-should-fail",
+          edits: [{ oldText: "x", newText: "y" }],
+        },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(PathGuardError);
+  });
+
+  test("edit_file rejects oversized replacement result", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    setDefaultFileGuardOptions({ maxFileBytes: 100 });
+    const targetPath = path.join(tempDir, "small.txt");
+    await writeFile(targetPath, "small", "utf8");
+
+    await expect(
+      runEditFile(
+        { path: targetPath, edits: [{ oldText: "small", newText: "A".repeat(200) }] },
         PROFILE_CONTEXT,
         { workspaceRoot: tempDir },
       ),
