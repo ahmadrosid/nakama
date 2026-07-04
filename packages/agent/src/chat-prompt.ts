@@ -55,7 +55,8 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "todo_write")) {
       sections.push(
-        "For complex requests with 3+ distinct steps, call todo_write first to break the work into a task plan.",
+        "Use todo_write only when the work genuinely needs multiple todos, such as complex requests with 3+ distinct steps.",
+        "Do not call todo_write for a single-step request or when the plan would contain only one todo.",
         "Keep exactly one todo in_progress at a time, mark todos completed immediately after finishing them, and use merge: true for incremental updates.",
         "Use merge: false only when replacing the entire task plan.",
         "When an active task plan is present in your context, continue unfinished tasks on the next turn before taking on new work unless the user changes direction.",

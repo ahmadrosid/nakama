@@ -13,6 +13,7 @@ export interface SkillTokenRange {
 }
 
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
+const HIDDEN_SLASH_SKILL_NAMES = new Set<string>(["create-automation", "manage-skills"]);
 
 export function findActiveSkillSlashRange(
   value: string,
@@ -47,13 +48,14 @@ export function filterSkillsForSlashQuery(
   skills: SkillSummary[],
   query: string,
 ): SkillSummary[] {
+  const visibleSkills = skills.filter((skill) => !HIDDEN_SLASH_SKILL_NAMES.has(skill.name));
   const normalized = query.trim().toLowerCase();
 
   if (!normalized) {
-    return skills;
+    return visibleSkills;
   }
 
-  return skills.filter((skill) => {
+  return visibleSkills.filter((skill) => {
     const name = skill.name.toLowerCase();
     const description = skill.description.toLowerCase();
     return name.includes(normalized) || description.includes(normalized);

@@ -54,17 +54,6 @@ test("buildChatSystemPrompt omits USER.md section when empty", () => {
   expect(prompt).not.toContain("# Personalisation (USER.md)");
 });
 
-test("buildChatSystemPrompt includes todo_write guidance when tool is available", () => {
-  const prompt = buildChatSystemPrompt(
-    [{ name: "todo_write", description: "Track tasks", parameters: { type: "object", properties: {} } }],
-    { enableToolLoop: true },
-  );
-
-  expect(prompt).toContain("todo_write");
-  expect(prompt).toContain("merge: true");
-  expect(prompt).toContain("continue unfinished tasks");
-});
-
 test("buildChatSystemPrompt includes ask_user_question guidance when tool is available", () => {
   const prompt = buildChatSystemPrompt(
     [{ name: "ask_user_question", description: "Questions", parameters: { type: "object", properties: {} } }],

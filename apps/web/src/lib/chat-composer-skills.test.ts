@@ -20,6 +20,18 @@ const deploySkill = skill({
   disableModelInvocation: true,
 });
 
+const createAutomationSkill = skill({
+  id: "skill_create_automation",
+  name: "create-automation",
+  description: "Create and manage automations.",
+});
+
+const manageSkillsSkill = skill({
+  id: "skill_manage_skills",
+  name: "manage-skills",
+  description: "Create and manage skills.",
+});
+
 function skill(overrides: Partial<SkillSummary>): SkillSummary {
   return {
     id: overrides.id ?? "skill_test",
@@ -59,10 +71,12 @@ describe("findActiveSkillSlashRange", () => {
 
 describe("filterSkillsForSlashQuery", () => {
   test("returns all skills for an empty query", () => {
-    expect(filterSkillsForSlashQuery([weatherSkill, deploySkill], "").map((s) => s.name)).toEqual([
-      "weather",
-      "deploy",
-    ]);
+    expect(
+      filterSkillsForSlashQuery(
+        [weatherSkill, createAutomationSkill, manageSkillsSkill, deploySkill],
+        "",
+      ).map((s) => s.name),
+    ).toEqual(["weather", "deploy"]);
   });
 
   test("filters by skill name or description", () => {
@@ -72,6 +86,18 @@ describe("filterSkillsForSlashQuery", () => {
     expect(filterSkillsForSlashQuery([weatherSkill, deploySkill], "production")).toEqual([
       deploySkill,
     ]);
+  });
+
+  test("hides bundled management skills even when they match the query", () => {
+    expect(
+      filterSkillsForSlashQuery([createAutomationSkill, manageSkillsSkill, weatherSkill], "create"),
+    ).toEqual([]);
+    expect(
+      filterSkillsForSlashQuery(
+        [createAutomationSkill, manageSkillsSkill, weatherSkill],
+        "manage",
+      ),
+    ).toEqual([]);
   });
 });
 
