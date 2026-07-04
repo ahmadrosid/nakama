@@ -34,7 +34,7 @@ const BACKGROUND_CODES: Record<Theme, Record<NamedBackgroundColor, string>> = {
     surface: "48;5;236",
   },
   light: {
-    surface: "48;5;251",
+    surface: "48;5;254",
   },
 };
 
@@ -49,6 +49,20 @@ export function getTheme(): Theme {
 }
 
 export async function detectTheme(): Promise<Theme | null> {
+  // macOS system appearance — most reliable for Apple terminals
+  if (process.platform === "darwin") {
+    try {
+      const { execSync } = require("node:child_process");
+      execSync("defaults read -g AppleInterfaceStyle 2>/dev/null", {
+        encoding: "utf8",
+        timeout: 500,
+      });
+      return "dark";
+    } catch {
+      return "light";
+    }
+  }
+
   // Many terminals set this: "0;15" = dark bg light fg, "15;0" = light bg dark fg
   const colorFgBg = process.env.COLORFGBG;
   if (colorFgBg) {
