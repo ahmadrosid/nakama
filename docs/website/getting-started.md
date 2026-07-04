@@ -100,6 +100,9 @@ TinyClaw can expose the same agent runtime through:
 
 Enable Telegram or WhatsApp from the web app settings when you are ready.
 
+TinyClaw can also expose webhook-based notification destinations from the same **Integrations** area.
+The first destination type is Telegram, so external apps can send simple notifications into a Telegram group or topic through TinyClaw.
+
 Telegram replies support normal Markdown for emphasis, code, headings, short lists, and simple links.
 If you want Telegram voice notes to work, also open **Settings** and choose an OpenAI **Audio transcription model**.
 WhatsApp supports direct-chat setup through the linked-device flow with QR or pairing code.

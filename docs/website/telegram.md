@@ -14,6 +14,7 @@ With Telegram enabled, users can:
 
 - chat with a TinyClaw profile in a private chat
 - use the bot in Telegram groups
+- receive outbound webhook notifications in a group or topic
 - switch org and profile with commands
 - send text, photos, voice notes, and supported documents
 - receive Markdown-style rich replies when Telegram accepts the formatting
@@ -164,6 +165,61 @@ In Telegram supergroup topics, each topic can use its own TinyClaw profile.
 - new topics use the default Telegram profile until you switch them
 - `/profile` in the main group chat changes the group-level profile
 - `/org` stays group-level, so switch org first if a topic needs a profile from another org
+
+## Outbound notifications to Telegram
+
+TinyClaw can also send simple text notifications into Telegram.
+
+This is separate from the normal chat bridge. Instead of waiting for a Telegram user to message the bot first, another app can call a TinyClaw webhook and TinyClaw will post the message into a configured Telegram chat.
+
+This is useful for things like:
+
+- new payment notifications
+- failed job alerts
+- deploy finished messages
+- support or sales event notifications
+
+### How it works
+
+1. Open **Integrations**
+2. In **Notification destinations**, create a new destination
+3. Choose a name
+4. Enter the Telegram `chat_id`
+5. Optionally enter a Telegram `topic_id` for supergroup topics
+6. Save and copy the generated webhook URL and API key
+
+Each destination belongs to one org and points to one Telegram target.
+If you set a `topic_id`, TinyClaw sends the message directly into that topic thread.
+
+### Webhook payload
+
+TinyClaw keeps the webhook contract intentionally small.
+
+Send a `POST` request with JSON like this:
+
+```json
+{
+  "title": "Payment received",
+  "body": "Order #INV-1042 paid by Acme Co.",
+  "level": "success"
+}
+```
+
+`body` is required.
+`title` is optional.
+`level` is optional and can be `info`, `success`, `warning`, or `error`.
+
+TinyClaw formats that into a short Telegram text message and sends it to the configured chat or topic.
+
+### Design note
+
+In v1, TinyClaw does not accept arbitrary templating or custom Telegram payloads from external apps.
+
+That is intentional:
+
+- the webhook stays stable and easy to validate
+- external apps only need to send simple notification text
+- the destination model can later support Slack or Discord with the same webhook shape
 
 ## Step 6: Configure Telegram privacy mode for groups
 
