@@ -186,9 +186,44 @@ export async function resolveCodingAgentHarness(
   preferredKind?: StoredCodingAgentHarnessKind | null,
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
-  const statuses = await listCodingAgentHarnessStatuses(db);
+  const enabled = settings.harnesses.filter((harness) => harness.enabled);
 
-  const enabled = statuses.filter((harness) => harness.enabled);
+  const candidates: StoredCodingAgentHarnessRecord[] = [];
+
+  if (preferredKind) {
+    const preferred = enabled.find((harness) => harness.kind === preferredKind);
+
+    if (preferred) {
+      candidates.push(preferred);
+    }
+  } else if (settings.selectedHarnessId) {
+    const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
+
+    if (selected) {
+      candidates.push(selected);
+    }
+  }
+
+  for (const harness of enabled) {
+    if (!candidates.includes(harness)) {
+      candidates.push(harness);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const runtime = await getHarnessRuntimeStatus(candidate.command);
+
+    if (runtime.installed) {
+      return {
+        ...candidate,
+        ...runtime,
+        authenticated: null,
+        ready: true,
+        nextStep: null,
+        statusMessage: null,
+      };
+    }
+  }
 
   if (preferredKind) {
     const preferred = enabled.find((harness) => harness.kind === preferredKind);
@@ -197,25 +232,7 @@ export async function resolveCodingAgentHarness(
       throw new Error(`Configured coding agent '${preferredKind}' is unavailable.`);
     }
 
-    if (!preferred.installed) {
-      throw new Error(`${preferred.name} is selected but not installed.`);
-    }
-
-    return preferred;
-  }
-
-  if (settings.selectedHarnessId) {
-    const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
-
-    if (selected?.installed) {
-      return selected;
-    }
-  }
-
-  const firstInstalled = enabled.find((harness) => harness.installed);
-
-  if (firstInstalled) {
-    return firstInstalled;
+    throw new Error(`${preferred.name} is selected but not installed.`);
   }
 
   throw new Error(

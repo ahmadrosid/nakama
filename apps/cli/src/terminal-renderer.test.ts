@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { TerminalLayout } from "./terminal-layout";
 import type { PendingMessage } from "./message-queue";
 import {
@@ -99,6 +99,12 @@ describe("TerminalRenderer", () => {
   let endMessageSpy: ReturnType<typeof spyOn<TerminalLayout, "endMessage">> | null = null;
   let beginStreamSpy: ReturnType<typeof spyOn<TerminalLayout, "beginStream">> | null = null;
   let endStreamSpy: ReturnType<typeof spyOn<TerminalLayout, "endStream">> | null = null;
+  let originalColumns: number | undefined;
+
+  beforeEach(() => {
+    originalColumns = process.stdout.columns;
+    process.stdout.columns = 80;
+  });
 
   afterEach(() => {
     setReservedRowsSpy?.mockRestore();
@@ -121,6 +127,8 @@ describe("TerminalRenderer", () => {
     endMessageSpy = null;
     beginStreamSpy = null;
     endStreamSpy = null;
+    process.stdout.columns = originalColumns;
+    originalColumns = undefined;
   });
 
   test("renders composer and pending state through the layout", () => {
