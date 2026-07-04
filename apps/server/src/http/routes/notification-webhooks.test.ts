@@ -84,7 +84,8 @@ describe("notification webhook routes", () => {
       expect(response.status).toBe(204);
       expect(telegramCalls[0]).toEqual({
         chat_id: 1001,
-        text: "[SUCCESS] New payment received\nCustomer: Ahmad",
+        text: "✅ <b>New payment received</b>\n\nCustomer: Ahmad",
+        parse_mode: "HTML",
         message_thread_id: 22,
       });
     } finally {

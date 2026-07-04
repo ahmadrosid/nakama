@@ -66,4 +66,30 @@ describe("createTelegramOutboundAdapter", () => {
       });
     });
   });
+
+  test("renders markdown as Telegram HTML when parse mode is requested", async () => {
+    await useTempHome(async () => {
+      const calls: Array<Record<string, unknown>> = [];
+      const adapter = createTelegramOutboundAdapter({
+        fetchImpl: async (_input, init) => {
+          calls.push(JSON.parse(String(init?.body)));
+          return new Response("ok", { status: 200 });
+        },
+      });
+
+      await expect(
+        adapter.send({
+          text: "✅ **New payment**\n\nCustomer: [Ahmad](https://example.com)",
+          chatIds: [1001],
+          parseMode: "HTML",
+        }),
+      ).resolves.toEqual({ ok: true });
+
+      expect(calls[0]).toEqual({
+        chat_id: 1001,
+        text: '✅ <b>New payment</b>\n\nCustomer: <a href="https://example.com">Ahmad</a>',
+        parse_mode: "HTML",
+      });
+    });
+  });
 });

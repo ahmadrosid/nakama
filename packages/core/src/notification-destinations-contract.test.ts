@@ -42,6 +42,20 @@ describe("normalizeCreateNotificationDestinationRequest", () => {
     });
   });
 
+  test("accepts a negative telegram chat id for supergroups", () => {
+    expect(
+      normalizeCreateNotificationDestinationRequest({
+        name: "Notifications",
+        channel: "telegram",
+        telegram: { chatId: -1003734526664, topicId: 147 },
+      }),
+    ).toEqual({
+      name: "Notifications",
+      channel: "telegram",
+      telegram: { chatId: -1003734526664, topicId: 147 },
+    });
+  });
+
   test("rejects invalid telegram config", () => {
     expect(
       () =>
@@ -50,7 +64,7 @@ describe("normalizeCreateNotificationDestinationRequest", () => {
           channel: "telegram",
           telegram: { chatId: 0 },
         }),
-    ).toThrow("telegram.chatId must be a positive integer.");
+    ).toThrow("telegram.chatId must be a non-zero integer.");
   });
 });
 

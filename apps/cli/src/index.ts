@@ -4,6 +4,7 @@ import { runChat } from "./chat";
 import { parseCliProfileArgs } from "./profile";
 import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
 import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
+import { setTheme, type Theme, detectTheme } from "./styled-text";
 import {
   formatRotateTokenError,
   isRotateTokenCommand,
@@ -20,6 +21,33 @@ if (isRotateTokenCommand()) {
   }
 }
 
+function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === "--theme") {
+      const value = argv[index + 1]?.trim();
+      if (value === "light" || value === "dark") return value;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--theme=light") return "light";
+    if (arg === "--theme=dark") return "dark";
+  }
+
+  return null;
+}
+
+async function resolveTheme(): Promise<Theme> {
+  const explicit = parseThemeArg();
+  if (explicit) return explicit;
+  if (process.env.TINYCLAW_THEME === "light") return "light";
+  if (process.env.TINYCLAW_THEME === "dark") return "dark";
+  const detected = await detectTheme();
+  return detected ?? "dark";
+}
+
 let spawnedChild: Bun.Subprocess | null = null;
 const abortController = new AbortController();
 
@@ -27,6 +55,9 @@ registerCleanupHandlers(() => {
   abortController.abort();
   stopSpawnedServer(spawnedChild);
 });
+
+const cliTheme = await resolveTheme();
+setTheme(cliTheme);
 
 try {
   const { serverUrl, spawnedChild: child } = await ensureServerRunning();

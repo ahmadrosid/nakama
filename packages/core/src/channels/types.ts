@@ -18,6 +18,7 @@ export interface TelegramOutboundAdapter {
     text: string;
     chatIds?: number[];
     topicId?: number;
+    parseMode?: "HTML";
   }): Promise<ChannelSendResult>;
 }
 

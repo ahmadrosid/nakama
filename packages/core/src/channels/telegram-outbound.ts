@@ -1,5 +1,6 @@
 import { loadTelegramConfigFile } from "../telegram-config";
 import { splitTelegramChunks } from "./message-format";
+import { renderTelegramRichText } from "./telegram-rich-text";
 import type { ChannelSendResult, TelegramOutboundAdapter } from "./types";
 
 export interface TelegramOutboundOptions {
@@ -38,6 +39,7 @@ export function createTelegramOutboundAdapter(
 
         for (const chatId of chatIds) {
           for (const chunk of chunks) {
+            const text = input.parseMode === "HTML" ? renderTelegramRichText(chunk) : chunk;
             const response = await fetchImpl(
               `https://api.telegram.org/bot${token}/sendMessage`,
               {
@@ -45,7 +47,8 @@ export function createTelegramOutboundAdapter(
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   chat_id: chatId,
-                  text: chunk,
+                  text,
+                  ...(input.parseMode ? { parse_mode: input.parseMode } : {}),
                   ...(input.topicId ? { message_thread_id: input.topicId } : {}),
                 }),
               },

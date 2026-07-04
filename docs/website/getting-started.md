@@ -103,6 +103,8 @@ Enable Telegram or WhatsApp from the web app settings when you are ready.
 TinyClaw can also expose webhook-based notification destinations from the same **Integrations** area.
 The first destination type is Telegram, so external apps can send simple notifications into a Telegram group or topic through TinyClaw.
 
+To create a Telegram notification destination, just copy the Telegram topic share link, such as `https://t.me/c/3734526664/147`, and paste it into TinyClaw. TinyClaw will extract the Chat ID and Topic ID for you automatically.
+
 Telegram replies support normal Markdown for emphasis, code, headings, short lists, and simple links.
 If you want Telegram voice notes to work, also open **Settings** and choose an OpenAI **Audio transcription model**.
 WhatsApp supports direct-chat setup through the linked-device flow with QR or pairing code.

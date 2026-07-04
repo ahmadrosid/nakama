@@ -6,6 +6,10 @@ import type {
   UpdateNotificationDestinationRequest,
 } from "./contract";
 
+function isNonZeroInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value !== 0;
+}
+
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
@@ -21,8 +25,8 @@ function normalizeTelegramConfig(
   const record = value as Record<string, unknown>;
   const chatId = record.chatId;
 
-  if (!isPositiveInteger(chatId)) {
-    throw new Error(`${fieldName}.chatId must be a positive integer.`);
+  if (!isNonZeroInteger(chatId)) {
+    throw new Error(`${fieldName}.chatId must be a non-zero integer.`);
   }
 
   const topicId = record.topicId;

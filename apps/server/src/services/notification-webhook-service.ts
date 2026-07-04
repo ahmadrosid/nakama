@@ -8,14 +8,29 @@ import {
 import type { DatabaseAdapter } from "@tinyclaw/db";
 import type { AuthService } from "./auth-service";
 
+function levelPrefix(level: NotificationWebhookRequest["level"]): string {
+  switch (level) {
+    case "success":
+      return "✅";
+    case "warning":
+      return "⚠️";
+    case "error":
+      return "❌";
+    case "info":
+      return "ℹ️";
+    default:
+      return "🔔";
+  }
+}
+
 function formatNotificationMessage(payload: NotificationWebhookRequest): string {
-  const prefix = payload.level ? `[${payload.level.toUpperCase()}] ` : "";
+  const prefix = levelPrefix(payload.level);
 
   if (payload.title) {
-    return `${prefix}${payload.title}\n${payload.body}`;
+    return `${prefix} **${payload.title}**\n\n${payload.body}`;
   }
 
-  return `${prefix}${payload.body}`;
+  return `${prefix} ${payload.body}`;
 }
 
 export class NotificationWebhookService {
@@ -39,6 +54,7 @@ export class NotificationWebhookService {
     const result = await this.telegram.send({
       text: formatNotificationMessage(normalized),
       chatIds: [destination.config.chatId],
+      parseMode: "HTML",
       ...(destination.config.topicId ? { topicId: destination.config.topicId } : {}),
     });
 

@@ -8,7 +8,12 @@ describe("NotificationWebhookService", () => {
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
     const apiKey = "secret_key";
-    const calls: Array<{ text: string; chatIds?: number[]; topicId?: number }> = [];
+    const calls: Array<{
+      text: string;
+      chatIds?: number[];
+      topicId?: number;
+      parseMode?: "HTML";
+    }> = [];
 
     await databaseAdapter.upsertNotificationDestination({
       id: "dest_1",
@@ -38,9 +43,10 @@ describe("NotificationWebhookService", () => {
 
     expect(calls).toEqual([
       {
-        text: "[SUCCESS] New payment received\nCustomer: Ahmad",
+        text: "✅ **New payment received**\n\nCustomer: Ahmad",
         chatIds: [1001],
         topicId: 22,
+        parseMode: "HTML",
       },
     ]);
   });

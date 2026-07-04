@@ -184,12 +184,11 @@ This is useful for things like:
 1. Open **Integrations**
 2. In **Notification destinations**, create a new destination
 3. Choose a name
-4. Enter the Telegram `chat_id`
-5. Optionally enter a Telegram `topic_id` for supergroup topics
+4. Paste the Telegram topic link, such as `https://t.me/c/3734526664/147`
 6. Save and copy the generated webhook URL and API key
 
 Each destination belongs to one org and points to one Telegram target.
-If you set a `topic_id`, TinyClaw sends the message directly into that topic thread.
+TinyClaw extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
 
 ### Webhook payload
 
@@ -304,6 +303,34 @@ TinyClaw also supports:
 TELEGRAM_ALLOWED_USER_IDS
 TINYCLAW_TELEGRAM_PROFILE_ID
 ```
+
+## Notification destinations for groups and topics
+
+From **Integrations → Notifications**, TinyClaw can create Telegram webhook destinations for a group or a forum topic.
+
+If you already have a topic share link such as:
+
+```text
+https://t.me/c/3734526664/147
+```
+
+you can derive the form values directly:
+
+- `Telegram chat ID`: prefix the number after `/c/` with `-100` → `-1003734526664`
+- `Telegram topic ID`: use the last path segment → `147`
+
+This matches what Telegram Bot API returns in:
+
+- `message.chat.id`
+- `message.message_thread_id`
+
+If you prefer the API method, send a fresh message in the target topic and call:
+
+```text
+https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
+```
+
+Then copy `message.chat.id` and `message.message_thread_id` from the matching update.
 
 ## Troubleshooting
 
