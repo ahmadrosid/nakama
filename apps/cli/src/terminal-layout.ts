@@ -217,6 +217,9 @@ export class TerminalLayout {
   }
 
   endStream(): void {
+    // When a streamed assistant reply becomes a sealed transcript message, we
+    // keep one extra wrapped blank row above it so the final reply breathes a
+    // bit more than the in-progress stream state.
     if (this.streamBuffer && this.messages.messageCount > 0) {
       this.streamBuffer = `\n${this.streamBuffer}`;
     }

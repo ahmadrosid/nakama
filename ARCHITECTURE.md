@@ -235,6 +235,55 @@ Key files:
 - [`apps/server/src/services/notification-webhook-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/notification-webhook-service.ts)
 - [`apps/server/src/services/attachment-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/attachment-service.ts)
 
+## CLI terminal rendering
+
+The CLI uses a small terminal UI pipeline instead of printing lines directly.
+
+### Main files
+
+- [`apps/cli/src/terminal-renderer.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-renderer.ts): semantic layer for composer state, transcript events, streaming state, and status lines
+- [`apps/cli/src/terminal-layout.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-layout.ts): viewport math, pinned input area, stream buffer, frame diffing, and terminal writes
+- [`apps/cli/src/virtual-message-list.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/virtual-message-list.ts): transcript storage plus lazy wrapping and message spacing rules
+- [`apps/cli/src/terminal-frame.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-frame.ts): frame diff and cursor placement
+
+### Terms
+
+- `composer`: the live prompt UI at the bottom, including the gray padded box, current input, pending queue, and suggestions
+- `reserved rows`: terminal rows permanently held for the composer so output does not overwrite it
+- `transcript`: sealed message history already committed into `VirtualMessageList`
+- `open message`: a message started with `beginMessage()` but not yet sealed with `endMessage()`
+- `stream buffer`: temporary assistant text while streaming is still in progress
+- `status line`: ephemeral line such as thinking/loading state, rendered between transcript content and the composer
+- `viewport`: the visible terminal region managed by the diff renderer
+- `pinned input`: the behavior where the composer stays attached to the bottom of the viewport while history scrolls above it
+
+### Flow
+
+1. `PersistentPrompt` updates composer state.
+2. `TerminalRenderer` converts that state into display lines with `buildComposerLines()`.
+3. `TerminalLayout` reserves rows for those lines and renders the current frame.
+4. Submitted messages and tool/output events are appended as transcript messages through `beginMessage()`, `writelnScroll()`, and `endMessage()`.
+5. Assistant streaming writes into `streamBuffer` first, then `endStream()` flushes it into the transcript as a sealed assistant message.
+
+### Spacing rules
+
+- Submitted user messages intentionally render as a padded "bubble" with one blank surface row above and below the text.
+- Composer input also keeps blank surface rows above and below the current input line for the same visual treatment.
+- Conversational blocks (`user`, `assistant`, `tool`) get a leading blank separator before the block when they are not the first message.
+- Output-only lines stay compact and do not automatically get conversational separators.
+- When an assistant stream becomes a sealed transcript message, `TerminalLayout.endStream()` inserts one extra wrapped blank row above that sealed assistant reply. This is separate from the normal conversational separator.
+
+### Where confusion usually comes from
+
+The CLI has multiple independent sources of "space":
+
+- user bubble padding in `VirtualMessageList`
+- composer padding in `buildComposerLines()`
+- inter-message separators in `shouldInsertLeadingGap()`
+- post-stream assistant spacing in `TerminalLayout.endStream()`
+
+When adjusting terminal spacing, treat these as separate layers. A visual gap in the CLI is often caused by one of these rules, not all of them.
+
 ## Persistence model
 
 The main SQLite schema lives in [`packages/db/sql/schema.sql`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/db/sql/schema.sql).

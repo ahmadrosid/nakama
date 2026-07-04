@@ -465,7 +465,7 @@ describe("TerminalLayout frame pipeline", () => {
       "> hello             ",
       "                    ",
       "",
-      "",
+      "  ",
       " Morning! What's on ",
       "  your mind today? ",
       "",
