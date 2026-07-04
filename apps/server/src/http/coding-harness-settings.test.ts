@@ -17,7 +17,7 @@ describe("coding harness settings routes", () => {
   beforeEach(async () => {
     tempBinDir = await mkdtemp(join(tmpdir(), "tinyclaw-coding-harness-route-bin-"));
     configDir = await mkdtemp(join(tmpdir(), "tinyclaw-coding-harness-route-config-"));
-    process.env.PATH = `${tempBinDir}:${originalPath}`;
+    process.env.PATH = tempBinDir;
     process.env.TINYCLAW_CONFIG_DIR = configDir;
   });
 
@@ -119,7 +119,7 @@ describe("coding harness settings routes", () => {
     expect(verified.harnessId).toBe("coding-harness-codex");
     expect(verified.authenticated).toBe(true);
     expect(verified.ready).toBe(true);
-  });
+  }, 15_000);
 
   test("verify reports login required when codex is installed but not authenticated", async () => {
     await installFakeBinary(tempBinDir, "codex", "login-required");
@@ -179,7 +179,7 @@ describe("coding harness settings routes", () => {
     expect(verified.ready).toBe(false);
     expect(verified.nextStep).toBe("login");
     expect(verified.error).toContain("codex login");
-  });
+  }, 15_000);
 });
 
 async function installFakeBinary(

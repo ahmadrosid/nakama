@@ -718,18 +718,21 @@ export class AgentService {
   async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
     const settings = await loadCodingAgentWorkspaceSettings(this.db);
     const statuses = await listCodingAgentHarnessStatuses(this.db);
-    const candidateHarness =
+    const activeHarness =
       statuses.find(
-        (harness) => harness.id === settings.selectedHarnessId && harness.enabled && harness.installed,
-      ) ?? statuses.find((harness) => harness.enabled && harness.installed) ?? null;
-    const readiness = candidateHarness
-      ? await verifyCodingAgentHarness(this.db, candidateHarness.id)
-      : null;
+        (harness) =>
+          harness.id === settings.selectedHarnessId &&
+          harness.enabled &&
+          harness.installed &&
+          harness.ready,
+      ) ??
+      statuses.find((harness) => harness.enabled && harness.installed && harness.ready) ??
+      null;
 
     return {
-      configured: readiness?.ready ?? false,
+      configured: activeHarness !== null,
       selectedHarnessId: settings.selectedHarnessId,
-      activeHarnessId: readiness?.ready ? candidateHarness?.id ?? null : null,
+      activeHarnessId: activeHarness?.id ?? null,
       harnesses: statuses.map((harness) => ({
         id: harness.id,
         kind: harness.kind,
@@ -738,6 +741,10 @@ export class AgentService {
         enabled: harness.enabled,
         installed: harness.installed,
         version: harness.version,
+        authenticated: harness.authenticated,
+        ready: harness.ready,
+        nextStep: harness.nextStep,
+        statusMessage: harness.statusMessage,
         selected: harness.id === settings.selectedHarnessId,
         installHint: getCodingHarnessInstallHint(harness.kind),
         installCommand: getCodingHarnessInstallCommand(harness.kind),

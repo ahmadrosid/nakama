@@ -34,7 +34,10 @@ import {
   loadConfig,
   writeRuntimeServerUrl,
 } from "@tinyclaw/core";
-import { serverHasTaskChat } from "@tinyclaw/core/ensure-server";
+import {
+  serverHasCodingHarnessVerify,
+  serverHasTaskChat,
+} from "@tinyclaw/core/ensure-server";
 import { ensureBundledSkillFiles } from "@tinyclaw/core";
 import { createDatabase, ensureBundledSkillsAssigned, seedDatabase, type Database } from "@tinyclaw/db";
 
@@ -285,9 +288,11 @@ async function findRunningTinyClawServerUrl(
       apiVersion?: number;
     };
     const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
+    const hasCodingHarnessVerify = await serverHasCodingHarnessVerify(serverUrl, controller.signal);
     return payload.ok === true &&
       payload.apiVersion === TINYCLAW_API_VERSION &&
-      hasTaskChat
+      hasTaskChat &&
+      hasCodingHarnessVerify
       ? serverUrl
       : null;
   } catch {

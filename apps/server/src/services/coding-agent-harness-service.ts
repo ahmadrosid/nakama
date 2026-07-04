@@ -11,6 +11,10 @@ import { WORKSPACE_SETTINGS_ID } from "@tinyclaw/db";
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   installed: boolean;
   version: string | null;
+  authenticated: boolean | null;
+  ready: boolean;
+  nextStep: "install" | "login" | "retry" | null;
+  statusMessage: string | null;
 }
 
 const INSTALL_COMMANDS: Record<StoredCodingAgentHarnessKind, string> = {
@@ -67,10 +71,38 @@ export async function listCodingAgentHarnessStatuses(
 ): Promise<CodingAgentHarnessStatus[]> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   return Promise.all(
-    settings.harnesses.map(async (harness) => ({
-      ...harness,
-      ...(await getHarnessRuntimeStatus(harness.command)),
-    })),
+    settings.harnesses.map(async (harness) => {
+      const runtime = await getHarnessRuntimeStatus(harness.command);
+
+      if (!runtime.installed) {
+        return {
+          ...harness,
+          ...runtime,
+          authenticated: null,
+          ready: false,
+          nextStep: "install" as const,
+          statusMessage: `${harness.name} is not installed on this machine yet.`,
+        };
+      }
+
+      const probe = await probeHarnessReadiness({
+        ...harness,
+        ...runtime,
+        authenticated: null,
+        ready: false,
+        nextStep: null,
+        statusMessage: null,
+      });
+
+      return {
+        ...harness,
+        ...runtime,
+        authenticated: probe.authenticated,
+        ready: probe.ready,
+        nextStep: probe.nextStep,
+        statusMessage: probe.statusMessage,
+      };
+    }),
   );
 }
 
@@ -203,34 +235,23 @@ export async function verifyCodingAgentHarness(
     };
   }
 
-  if (!harness.installed) {
-    return {
-      ok: false,
-      harnessId: harness.id,
-      name: harness.name,
-      version: harness.version,
-      installed: false,
-      authenticated: null,
-      ready: false,
-      nextStep: "install",
-      statusMessage: `${harness.name} is not installed on this machine yet.`,
-      error: `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
-    };
-  }
-
-  const probe = await probeHarnessReadiness(harness);
-
   return {
-    ok: probe.ready,
+    ok: harness.ready,
     harnessId: harness.id,
     name: harness.name,
     version: harness.version,
-    installed: true,
-    authenticated: probe.authenticated,
-    ready: probe.ready,
-    nextStep: probe.nextStep,
-    statusMessage: probe.statusMessage,
-    error: probe.error,
+    installed: harness.installed,
+    authenticated: harness.authenticated,
+    ready: harness.ready,
+    nextStep: harness.nextStep,
+    statusMessage: harness.statusMessage,
+    error: harness.installed
+      ? harness.ready
+        ? null
+        : harness.nextStep === "login"
+          ? authenticationHelpForHarness(harness.kind)
+          : harness.statusMessage ?? `TinyClaw could not verify ${harness.name} yet.`
+      : `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
   };
 }
 
@@ -318,7 +339,6 @@ async function probeHarnessReadiness(
   ready: boolean;
   nextStep: "login" | "retry" | null;
   statusMessage: string | null;
-  error: string | null;
 }> {
   const tempDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-probe-"));
 
@@ -332,7 +352,6 @@ async function probeHarnessReadiness(
         ready: false,
         nextStep: "retry",
         statusMessage: "Readiness check timed out.",
-        error: "The readiness check timed out before the coding agent responded.",
       };
     }
 
@@ -342,7 +361,6 @@ async function probeHarnessReadiness(
         ready: true,
         nextStep: null,
         statusMessage: `${harness.name} is installed and ready.`,
-        error: null,
       };
     }
 
@@ -352,7 +370,6 @@ async function probeHarnessReadiness(
         ready: false,
         nextStep: "login",
         statusMessage: `${harness.name} is installed but still needs login.`,
-        error: authenticationHelpForHarness(harness.kind),
       };
     }
 
@@ -361,7 +378,6 @@ async function probeHarnessReadiness(
       ready: false,
       nextStep: "retry",
       statusMessage: `${harness.name} is installed but the readiness check failed.`,
-      error: combinedOutput || `TinyClaw could not verify ${harness.name} yet.`,
     };
   } finally {
     await rm(tempDir, { recursive: true, force: true });

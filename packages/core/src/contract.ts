@@ -835,6 +835,10 @@ export interface CodingHarnessStatus {
   installHint: string;
   installCommand: string;
   version: string | null;
+  authenticated: boolean | null;
+  ready: boolean;
+  nextStep: "install" | "login" | "retry" | null;
+  statusMessage: string | null;
 }
 
 export interface CodingHarnessSettingsResponse {

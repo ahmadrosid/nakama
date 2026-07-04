@@ -48,16 +48,6 @@ export function CodingHarnessSettingsPanel({
 
   const selectedHarness =
     settings?.harnesses.find((harness) => harness.id === selectedHarnessId) ?? null;
-  const verification =
-    verifyMutation.data?.harnessId === selectedHarnessId ? verifyMutation.data : null;
-
-  useEffect(() => {
-    if (!enabled || !selectedHarness || !selectedHarness.installed) {
-      return;
-    }
-
-    verifyMutation.mutate({ harnessId: selectedHarness.id });
-  }, [enabled, selectedHarnessId]);
 
   const summary = useMemo(() => {
     if (!selectedHarness) {
@@ -76,7 +66,7 @@ export function CodingHarnessSettingsPanel({
       };
     }
 
-    if (verifyMutation.isPending && verification === null) {
+    if (verifyMutation.isPending) {
       return {
         tone: "neutral",
         label: "Checking readiness",
@@ -84,19 +74,19 @@ export function CodingHarnessSettingsPanel({
       };
     }
 
-    if (verification?.ready) {
+    if (selectedHarness.ready) {
       return {
         tone: "ok",
         label: `${selectedHarness.name} is ready`,
-        body: verification.statusMessage ?? "TinyClaw can use this coding agent now.",
+        body: selectedHarness.statusMessage ?? "TinyClaw can use this coding agent now.",
       };
     }
 
-    if (verification?.nextStep === "login") {
+    if (selectedHarness.nextStep === "login") {
       return {
         tone: "warn",
         label: `Login required for ${selectedHarness.name}`,
-        body: verification.error ?? `${selectedHarness.name} still needs authentication.`,
+        body: selectedHarness.statusMessage ?? `${selectedHarness.name} still needs authentication.`,
       };
     }
 
@@ -105,7 +95,7 @@ export function CodingHarnessSettingsPanel({
       label: "Run readiness check",
       body: "TinyClaw still needs to confirm this coding agent can actually run.",
     };
-  }, [selectedHarness, verification, verifyMutation.isPending]);
+  }, [selectedHarness, verifyMutation.isPending]);
 
   function handleRefresh() {
     setHint(null);
@@ -251,7 +241,6 @@ export function CodingHarnessSettingsPanel({
         <div className="space-y-2">
           {settings.harnesses.map((harness) => {
             const selected = selectedHarnessId === harness.id;
-            const readiness = verification?.harnessId === harness.id ? verification : null;
 
             return (
               <button
@@ -291,32 +280,32 @@ export function CodingHarnessSettingsPanel({
                         tone={
                           !harness.installed
                             ? "muted"
-                            : readiness?.authenticated === true
+                            : harness.authenticated === true
                               ? "ok"
-                              : readiness?.authenticated === false
+                              : harness.authenticated === false
                                 ? "warn"
                                 : "muted"
                         }
                         label={
                           !harness.installed
                             ? "Waiting for install"
-                            : readiness?.authenticated === true
+                            : harness.authenticated === true
                               ? "Logged in"
-                              : readiness?.authenticated === false
+                              : harness.authenticated === false
                                 ? "Needs login"
                                 : "Login not checked"
                         }
                       />
                       <StatusChip
                         icon={<CheckCircle2Icon className="size-3.5" />}
-                        tone={readiness?.ready ? "ok" : "muted"}
-                        label={readiness?.ready ? "Ready" : "Not ready yet"}
+                        tone={harness.ready ? "ok" : "muted"}
+                        label={harness.ready ? "Ready" : "Not ready yet"}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {!harness.installed
                         ? harness.installHint
-                        : readiness?.statusMessage ?? "Run the readiness check to confirm login."}
+                        : harness.statusMessage ?? "Run the readiness check to confirm login."}
                     </p>
                   </div>
                 </div>
