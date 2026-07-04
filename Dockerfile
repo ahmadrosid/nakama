@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # TinyClaw — one container: API, web dashboard, automation + task workers
 # Build: docker build -t tinyclaw .
 # Run:   docker run -d -p 4310:4310 -v tinyclaw-config:/root/.tinyclaw tinyclaw
