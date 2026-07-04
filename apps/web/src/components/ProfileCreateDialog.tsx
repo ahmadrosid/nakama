@@ -1,4 +1,5 @@
 import type { ToolSummary } from "@tinyclaw/core/contract";
+import { DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useCodingHarnessSettings } from "@/hooks/use-coding-harness-settings";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
@@ -59,6 +61,7 @@ export function ProfileCreateDialog({
   const createMutation = useCreateProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
+  const { data: codingHarnessSettings } = useCodingHarnessSettings(open);
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -79,6 +82,7 @@ export function ProfileCreateDialog({
     ? "Auto-generated from the name. Use letters, numbers, `_`, or `-`."
     : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
   const availableTools = tools.filter((tool) => !toolIds.includes(tool.id));
+  const selectableTools = availableTools.filter((tool) => !isToolBlocked(tool, codingHarnessSettings?.configured));
   const selectedTools = tools.filter((tool) => toolIds.includes(tool.id));
 
   useEffect(() => {
@@ -329,7 +333,7 @@ export function ProfileCreateDialog({
                       <div className="flex flex-col gap-2">
                         <Select
                           value=""
-                          disabled={busy || availableTools.length === 0}
+                          disabled={busy || selectableTools.length === 0}
                           onValueChange={(value) => handleToolSelect(value != null ? String(value) : "")}
                         >
                           <SelectTrigger
@@ -338,12 +342,12 @@ export function ProfileCreateDialog({
                           >
                             <SelectValue
                               placeholder={
-                                availableTools.length === 0 ? "All tools added" : "Add a tool…"
+                                selectableTools.length === 0 ? "All tools added" : "Add a tool…"
                               }
                             />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableTools.map((tool) => (
+                            {selectableTools.map((tool) => (
                               <SelectItem key={tool.id} value={tool.id}>
                                 {tool.name}
                               </SelectItem>
@@ -353,6 +357,13 @@ export function ProfileCreateDialog({
                         <p className="text-xs text-muted-foreground">
                           Selecting a tool adds it right away. Remove any you do not want below.
                         </p>
+                        {availableTools.some(
+                          (tool) => isToolBlocked(tool, codingHarnessSettings?.configured),
+                        ) ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-300">
+                            The coding delegation tool stays hidden until a coding harness is configured.
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="rounded-md border border-border bg-muted/20 p-2">
@@ -399,6 +410,10 @@ export function ProfileCreateDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function isToolBlocked(tool: ToolSummary, codingConfigured: boolean | undefined): boolean {
+  return tool.id === DELEGATE_CODING_TASK_TOOL_ID && codingConfigured === false;
 }
 
 function Field({

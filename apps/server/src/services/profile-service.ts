@@ -36,10 +36,14 @@ import {
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
   writeSoulFile,
 } from "@tinyclaw/core";
-import { isProtectedToolId } from "@tinyclaw/core/tools/protected";
-import { BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
+import {
+  BUILTIN_TOOL_IDS,
+  DELEGATE_CODING_TASK_TOOL_ID,
+  isProtectedToolId,
+} from "@tinyclaw/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
 import { ensureBuiltinToolDefinitions, ensureProfileDefaultBundledSkills } from "@tinyclaw/db";
+import { resolveCodingAgentHarness } from "./coding-agent-harness-service";
 import { loadJavascriptTool, validateJavascriptToolModule } from "./javascript-tool-loader";
 import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
@@ -257,6 +261,16 @@ export class ProfileService {
 
     if (!tool) {
       throw new Error("Tool not found.");
+    }
+
+    if (request.toolId === DELEGATE_CODING_TASK_TOOL_ID) {
+      await resolveCodingAgentHarness(this.db).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new TinyClawApiError(
+          `Configure a ready coding agent harness before assigning this tool. ${message}`,
+          400,
+        );
+      });
     }
 
     await this.db.assignToolToProfile(profileId, request.toolId);

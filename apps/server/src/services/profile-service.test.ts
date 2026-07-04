@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter, ensureBuiltinToolDefinitions } from "@tinyclaw/db";
+import {
+  createInMemoryDatabaseAdapter,
+  ensureBuiltinToolDefinitions,
+  ensureServerToolDefinitions,
+} from "@tinyclaw/db";
+import { DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
@@ -301,6 +306,40 @@ describe("profile service createProfile", () => {
     await expect(
       service.createProfile(ORG_ID, { id: "../escape", name: "Bad Bot" }),
     ).rejects.toThrow(/profile id must/i);
+  });
+});
+
+describe("profile service assignTool", () => {
+  let tempConfigDir = "";
+  const originalPath = process.env.PATH ?? "";
+
+  afterEach(async () => {
+    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.PATH = originalPath;
+
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { recursive: true, force: true });
+      tempConfigDir = "";
+    }
+  });
+
+  test("blocks delegate coding task until a coding harness is ready", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-assign-tool-"));
+    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    process.env.PATH = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    await ensureServerToolDefinitions(db);
+
+    const service = new ProfileService(db);
+    const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
+
+    await expect(
+      service.assignTool(ORG_ID, created.profile.id, {
+        toolId: DELEGATE_CODING_TASK_TOOL_ID,
+      }),
+    ).rejects.toThrow(/configure a ready coding agent harness/i);
   });
 });
 

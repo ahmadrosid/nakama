@@ -822,6 +822,34 @@ export interface SendEmailTestResponse {
   messageId: string;
 }
 
+export type CodingHarnessKind = "codex" | "claude_code" | "opencode";
+
+export interface CodingHarnessStatus {
+  id: string;
+  kind: CodingHarnessKind;
+  name: string;
+  command: string;
+  enabled: boolean;
+  installed: boolean;
+  selected: boolean;
+  installHint: string;
+}
+
+export interface CodingHarnessSettingsResponse {
+  configured: boolean;
+  selectedHarnessId: string | null;
+  harnesses: CodingHarnessStatus[];
+}
+
+export interface UpdateCodingHarnessSettingsRequest {
+  selectedHarnessId?: string | null;
+  harnesses?: Array<{
+    id: string;
+    command?: string;
+    enabled?: boolean;
+  }>;
+}
+
 export interface WhatsAppSettingsResponse {
   configured: boolean;
   phoneNumberMasked: string | null;

@@ -50,10 +50,12 @@ import type {
   SoulStackResponse,
   SyncSkillsResponse,
   SoulStatusResponse,
+  CodingHarnessSettingsResponse,
   TelegramSettingsResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
+  UpdateCodingHarnessSettingsRequest,
   ToolDefinition,
   UpdateProfileRequest,
   UpdateSoulFileRequest,
@@ -168,6 +170,11 @@ import { createSuperBotTools } from "../tools/super-bot-tools";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createTodoTools } from "../tools/todo-tools";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
+import {
+  listCodingAgentHarnessStatuses,
+  loadCodingAgentWorkspaceSettings,
+  saveCodingAgentWorkspaceSettings,
+} from "./coding-agent-harness-service";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -702,6 +709,35 @@ export class AgentService {
       to,
       messageId: result.messageId,
     };
+  }
+
+  async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
+    const settings = await loadCodingAgentWorkspaceSettings(this.db);
+    const statuses = await listCodingAgentHarnessStatuses(this.db);
+
+    return {
+      configured: statuses.some(
+        (harness) => harness.id === settings.selectedHarnessId && harness.enabled && harness.installed,
+      ),
+      selectedHarnessId: settings.selectedHarnessId,
+      harnesses: statuses.map((harness) => ({
+        id: harness.id,
+        kind: harness.kind,
+        name: harness.name,
+        command: harness.command,
+        enabled: harness.enabled,
+        installed: harness.installed,
+        selected: harness.id === settings.selectedHarnessId,
+        installHint: getCodingHarnessInstallHint(harness.kind),
+      })),
+    };
+  }
+
+  async setCodingHarnessSettings(
+    input: UpdateCodingHarnessSettingsRequest,
+  ): Promise<CodingHarnessSettingsResponse> {
+    await saveCodingAgentWorkspaceSettings(this.db, input);
+    return this.getCodingHarnessSettings();
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
@@ -2330,4 +2366,16 @@ function parseAgentChannel(value: string): AgentChannel | null {
   }
 
   return null;
+}
+
+function getCodingHarnessInstallHint(kind: "codex" | "claude_code" | "opencode"): string {
+  if (kind === "codex") {
+    return "Install the Codex CLI on this machine, then refresh this dialog.";
+  }
+
+  if (kind === "claude_code") {
+    return "Install Claude Code on this machine, then refresh this dialog.";
+  }
+
+  return "Install OpenCode on this machine, then refresh this dialog.";
 }

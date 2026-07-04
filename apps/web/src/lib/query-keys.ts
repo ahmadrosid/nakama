@@ -56,6 +56,9 @@ export const queryKeys = {
   email: {
     settings: ["email", "settings"] as const,
   },
+  codingHarnesses: {
+    settings: ["codingHarnesses", "settings"] as const,
+  },
   whatsapp: {
     settings: ["whatsapp", "settings"] as const,
   },

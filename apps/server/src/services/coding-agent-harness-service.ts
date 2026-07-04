@@ -3,6 +3,7 @@ import type {
   StoredCodingAgentHarnessKind,
   StoredCodingAgentHarnessRecord,
 } from "@tinyclaw/db";
+import { WORKSPACE_SETTINGS_ID } from "@tinyclaw/db";
 
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   installed: boolean;
@@ -61,6 +62,57 @@ export async function listCodingAgentHarnessStatuses(
       installed: await isCommandAvailable(harness.command),
     })),
   );
+}
+
+export async function saveCodingAgentWorkspaceSettings(
+  db: DatabaseAdapter,
+  input: {
+    selectedHarnessId?: string | null;
+    harnesses?: Array<{
+      id: string;
+      command?: string;
+      enabled?: boolean;
+    }>;
+  },
+): Promise<CodingAgentWorkspaceSettings> {
+  const stored = await db.getWorkspaceSettings();
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const byId = new Map(settings.harnesses.map((harness) => [harness.id, harness]));
+
+  const nextHarnesses = settings.harnesses.map((harness) => {
+    const override = input.harnesses?.find((entry) => entry.id === harness.id);
+
+    if (!override) {
+      return harness;
+    }
+
+    return {
+      ...harness,
+      command: override.command?.trim() ? override.command.trim() : harness.command,
+      enabled: override.enabled ?? harness.enabled,
+    };
+  });
+
+  const selectedHarnessId =
+    input.selectedHarnessId === undefined
+      ? settings.selectedHarnessId
+      : input.selectedHarnessId && byId.has(input.selectedHarnessId)
+        ? input.selectedHarnessId
+        : null;
+
+  await db.upsertWorkspaceSettings({
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    visionModel: stored?.visionModel ?? null,
+    transcriptionModel: stored?.transcriptionModel ?? null,
+    codingAgentHarnesses: nextHarnesses,
+    selectedCodingAgentHarness: selectedHarnessId,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return {
+    harnesses: nextHarnesses,
+    selectedHarnessId,
+  };
 }
 
 export async function resolveCodingAgentHarness(

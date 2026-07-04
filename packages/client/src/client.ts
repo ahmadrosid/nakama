@@ -69,6 +69,7 @@ import type {
   StoredAutomation,
   SystemStatusResponse,
   TelegramSettingsResponse,
+  CodingHarnessSettingsResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
@@ -85,6 +86,7 @@ import type {
   TranscriptionSettingsResponse,
   UpdateTelegramSettingsRequest,
   UpdateEmailSettingsRequest,
+  UpdateCodingHarnessSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
   VisionSettings,
@@ -1086,6 +1088,19 @@ export class TinyClawClient {
   ): Promise<SendEmailTestResponse> {
     return this.request<SendEmailTestResponse>("/v1/settings/email/test", {
       method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
+    return this.request<CodingHarnessSettingsResponse>("/v1/settings/coding-harnesses");
+  }
+
+  async setCodingHarnessSettings(
+    request: UpdateCodingHarnessSettingsRequest,
+  ): Promise<CodingHarnessSettingsResponse> {
+    return this.request<CodingHarnessSettingsResponse>("/v1/settings/coding-harnesses", {
+      method: "PUT",
       body: JSON.stringify(request),
     });
   }

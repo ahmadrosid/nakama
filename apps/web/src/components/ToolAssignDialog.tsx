@@ -1,6 +1,8 @@
 import type { ToolSummary } from "@tinyclaw/core/contract";
+import { DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
+import { useCodingHarnessSettings } from "@/hooks/use-coding-harness-settings";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -30,9 +32,16 @@ export function ToolAssignDialog({
   onAssign,
 }: ToolAssignDialogProps) {
   const [open, setOpen] = useState(false);
+  const { data: codingHarnessSettings } = useCodingHarnessSettings(open);
 
   if (tools.length === 0) {
     return null;
+  }
+
+  function isToolDisabled(tool: ToolSummary): boolean {
+    return (
+      tool.id === DELEGATE_CODING_TASK_TOOL_ID && codingHarnessSettings?.configured === false
+    );
   }
 
   return (
@@ -73,8 +82,11 @@ export function ToolAssignDialog({
                   <CommandItem
                     key={tool.id}
                     value={`${tool.name} ${tool.description}`}
-                    disabled={disabled}
+                    disabled={disabled || isToolDisabled(tool)}
                     onSelect={() => {
+                      if (isToolDisabled(tool)) {
+                        return;
+                      }
                       void onAssign(tool.id);
                       setOpen(false);
                     }}
@@ -83,6 +95,11 @@ export function ToolAssignDialog({
                       <p>{tool.name}</p>
                       {tool.description ? (
                         <p className="truncate text-xs text-muted-foreground">{tool.description}</p>
+                      ) : null}
+                      {isToolDisabled(tool) ? (
+                        <p className="truncate text-xs text-amber-600 dark:text-amber-300">
+                          Configure a coding harness first.
+                        </p>
                       ) : null}
                     </div>
                   </CommandItem>

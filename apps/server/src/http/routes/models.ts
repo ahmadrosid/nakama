@@ -11,6 +11,7 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   type TelegramSettingsResponse,
+  type CodingHarnessSettingsResponse,
   type EmailSettingsResponse,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
@@ -20,6 +21,7 @@ import {
   type UpdateProviderResponse,
   type UpdateTelegramSettingsRequest,
   type UpdateEmailSettingsRequest,
+  type UpdateCodingHarnessSettingsRequest,
   type UpdateThinkingRequest,
   type UpdateTimezoneRequest,
   type UpdateVisionRequest,
@@ -68,9 +70,17 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     .openapi("TranscribeAudioResponse");
   const telegramSettingsSchema = z.object({}).passthrough().openapi("TelegramSettingsResponse");
   const emailSettingsSchema = z.object({}).passthrough().openapi("EmailSettingsResponse");
+  const codingHarnessSettingsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CodingHarnessSettingsResponse");
   const sendEmailTestRequestSchema = z.object({ to: z.string().optional() }).openapi("SendEmailTestRequest");
   const sendEmailTestResponseSchema = z.object({ ok: z.literal(true), to: z.string(), messageId: z.string() }).openapi("SendEmailTestResponse");
   const updateEmailRequestSchema = z.object({}).passthrough().openapi("UpdateEmailSettingsRequest");
+  const updateCodingHarnessRequestSchema = z
+    .object({})
+    .passthrough()
+    .openapi("UpdateCodingHarnessSettingsRequest");
   const whatsappSettingsSchema = z.object({}).passthrough().openapi("WhatsAppSettingsResponse");
   const discoverModelsRequestSchema = z
     .object({
@@ -323,6 +333,23 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   }));
   app.openAPIRegistry.registerPath(createRoute({
     method: "get",
+    path: "/v1/settings/coding-harnesses",
+    tags: ["Models"],
+    summary: "Get coding harness settings",
+    operationId: "getCodingHarnessSettings",
+    responses: { 200: { description: "Coding harness settings", content: { "application/json": { schema: codingHarnessSettingsSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "put",
+    path: "/v1/settings/coding-harnesses",
+    tags: ["Models"],
+    summary: "Update coding harness settings",
+    operationId: "setCodingHarnessSettings",
+    request: { body: { required: true, content: { "application/json": { schema: updateCodingHarnessRequestSchema } } } },
+    responses: { 200: { description: "Coding harness settings", content: { "application/json": { schema: codingHarnessSettingsSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "get",
     path: "/v1/settings/whatsapp",
     tags: ["Models"],
     summary: "Get WhatsApp settings",
@@ -505,6 +532,26 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
       return json<SendEmailTestResponse>(
         await agent.sendEmailTest(body.to?.trim() || auth.user.email),
       );
+    } catch (error) {
+      if (error instanceof TinyClawApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.get("/v1/settings/coding-harnesses", async (c) => {
+    requireOrgAdminFromContext(c);
+    return json<CodingHarnessSettingsResponse>(await agent.getCodingHarnessSettings());
+  });
+
+  app.put("/v1/settings/coding-harnesses", async (c) => {
+    requireOrgAdminFromContext(c);
+    const body = await readJson<UpdateCodingHarnessSettingsRequest>(c.req.raw);
+
+    try {
+      return json<CodingHarnessSettingsResponse>(await agent.setCodingHarnessSettings(body));
     } catch (error) {
       if (error instanceof TinyClawApiError) {
         return errorResponse(error.message, error.status);
