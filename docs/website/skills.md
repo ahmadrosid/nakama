@@ -112,6 +112,25 @@ On each user turn, TinyClaw can also attach matched skill context for the curren
 
 That means skills are not a separate bot. They are extra behavior layers attached to a profile.
 
+## Invoking skills in chat
+
+In the web chat composer, type `/` to open a picker for skills assigned to the active profile.
+
+You can:
+
+- Type to filter the skill list
+- Use Arrow Up and Arrow Down to move through options
+- Press Enter to insert the selected skill
+- Press Escape to close the picker
+
+Selecting a skill inserts an explicit invocation like:
+
+```text
+/skill weather
+```
+
+The composer highlights the selected skill, but the message still sends as plain text so it works with the normal skill matcher.
+
 TinyClaw also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts.
 
 For more detail, see [Agent prompts](/agent-prompt).
