@@ -70,6 +70,8 @@ import type {
   SystemStatusResponse,
   TelegramSettingsResponse,
   CodingHarnessSettingsResponse,
+  CodingHarnessInstallRequest,
+  CodingHarnessStatus,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
@@ -139,6 +141,7 @@ import { readApiErrorMessage, TinyClawApiError } from "@tinyclaw/core/api-error"
 import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
 import { resolveServerUrl } from "@tinyclaw/core/runtime";
 import {
+  readCodingHarnessInstallStream,
   normalizeStreamHandlers,
   readStreamEvents,
   resolveSendMessageBody,
@@ -1114,6 +1117,36 @@ export class TinyClawClient {
       method: "POST",
       body: JSON.stringify(request),
     });
+  }
+
+  async installCodingHarness(
+    request: CodingHarnessInstallRequest,
+    handlers: {
+      onProgress?: (message: string) => void;
+      onDone?: (status: CodingHarnessStatus) => void;
+    } = {},
+    options?: { signal?: AbortSignal },
+  ): Promise<CodingHarnessStatus> {
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/settings/coding-harnesses/install`, {
+      method: "POST",
+      headers: this.buildHeaders("POST", {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      }),
+      body: JSON.stringify(request),
+      signal: options?.signal,
+      credentials: this.credentials,
+    });
+
+    if (!response.ok) {
+      throw await createApiError(response, "/v1/settings/coding-harnesses/install");
+    }
+
+    if (!response.body) {
+      throw new Error("Server returned an empty stream.");
+    }
+
+    return readCodingHarnessInstallStream(response.body, handlers, options?.signal);
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

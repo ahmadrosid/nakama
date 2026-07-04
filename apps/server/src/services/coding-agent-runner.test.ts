@@ -13,7 +13,7 @@ describe("runCodingAgentTask", () => {
   beforeEach(async () => {
     tempBinDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-bin-"));
     workspaceRoot = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-workspace-"));
-    process.env.PATH = `${tempBinDir}:${originalPath}`;
+    process.env.PATH = tempBinDir;
   });
 
   afterEach(async () => {
@@ -68,7 +68,6 @@ describe("runCodingAgentTask", () => {
 
   test("fails when no supported harness is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
-    process.env.PATH = tempBinDir;
 
     await expect(
       runCodingAgentTask(

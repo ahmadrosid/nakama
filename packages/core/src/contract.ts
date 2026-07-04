@@ -865,6 +865,26 @@ export interface VerifyCodingHarnessResponse {
   error: string | null;
 }
 
+export interface CodingHarnessInstallRequest {
+  harnessId: string;
+}
+
+export type CodingHarnessInstallEvent =
+  | {
+      type: "progress";
+      harnessId: string;
+      name: string;
+      message: string;
+    }
+  | {
+      type: "done";
+      status: CodingHarnessStatus;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
+
 export interface UpdateCodingHarnessSettingsRequest {
   selectedHarnessId?: string | null;
   harnesses?: Array<{

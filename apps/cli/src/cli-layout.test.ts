@@ -129,11 +129,31 @@ describe("VirtualMessageList", () => {
 
 describe("TerminalLayout frame pipeline", () => {
   let writeSpy: ReturnType<typeof spyOn<typeof process.stdout, "write">> | null = null;
+  let originalColumns: number | undefined;
+  let originalRows: number | undefined;
   let writes: string[] = [];
 
   afterEach(() => {
     writeSpy?.mockRestore();
     writeSpy = null;
+    if (originalColumns === undefined) {
+      delete (process.stdout as Record<string, unknown>).columns;
+    } else {
+      Object.defineProperty(process.stdout, "columns", {
+        configurable: true,
+        value: originalColumns,
+      });
+    }
+    if (originalRows === undefined) {
+      delete (process.stdout as Record<string, unknown>).rows;
+    } else {
+      Object.defineProperty(process.stdout, "rows", {
+        configurable: true,
+        value: originalRows,
+      });
+    }
+    originalColumns = undefined;
+    originalRows = undefined;
     writes = [];
   });
 
@@ -146,6 +166,12 @@ describe("TerminalLayout frame pipeline", () => {
   }
 
   function setTerminalSize(columns: number, rows: number): void {
+    if (originalColumns === undefined) {
+      originalColumns = process.stdout.columns;
+    }
+    if (originalRows === undefined) {
+      originalRows = process.stdout.rows;
+    }
     Object.defineProperty(process.stdout, "columns", {
       configurable: true,
       value: columns,

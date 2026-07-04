@@ -12,6 +12,7 @@ import {
   type ModelsResponse,
   type TelegramSettingsResponse,
   type CodingHarnessSettingsResponse,
+  type CodingHarnessInstallRequest,
   type EmailSettingsResponse,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
@@ -41,6 +42,8 @@ import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json, readJson } from "../shared";
 import { requireOrgAdminFromContext } from "../org-guards";
+import { installCodingAgentHarness } from "../../services/coding-agent-harness-service";
+import { streamCodingHarnessInstall } from "../coding-harness-install-stream";
 
 export function registerModelRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, workerManager } = options;
@@ -76,6 +79,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     .object({})
     .passthrough()
     .openapi("CodingHarnessSettingsResponse");
+  const codingHarnessInstallRequestSchema = z
+    .object({ harnessId: z.string() })
+    .openapi("CodingHarnessInstallRequest");
+  const codingHarnessInstallEventSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CodingHarnessInstallEvent");
   const sendEmailTestRequestSchema = z.object({ to: z.string().optional() }).openapi("SendEmailTestRequest");
   const sendEmailTestResponseSchema = z.object({ ok: z.literal(true), to: z.string(), messageId: z.string() }).openapi("SendEmailTestResponse");
   const updateEmailRequestSchema = z.object({}).passthrough().openapi("UpdateEmailSettingsRequest");
@@ -368,6 +378,15 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     responses: { 200: { description: "Coding harness verification", content: { "application/json": { schema: verifyCodingHarnessResponseSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
   }));
   app.openAPIRegistry.registerPath(createRoute({
+    method: "post",
+    path: "/v1/settings/coding-harnesses/install",
+    tags: ["Models"],
+    summary: "Install a coding harness",
+    operationId: "installCodingHarness",
+    request: { body: { required: true, content: { "application/json": { schema: codingHarnessInstallRequestSchema } } } },
+    responses: { 200: { description: "Coding harness install stream", content: { "application/json": { schema: codingHarnessInstallEventSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
     method: "get",
     path: "/v1/settings/whatsapp",
     tags: ["Models"],
@@ -595,6 +614,29 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);
     }
+  });
+
+  app.post("/v1/settings/coding-harnesses/install", async (c) => {
+    requireOrgAdminFromContext(c);
+    const body = await readJson<CodingHarnessInstallRequest>(c.req.raw);
+
+    return streamCodingHarnessInstall(async (send) => {
+      const status = await installCodingAgentHarness(agent.database, body.harnessId, (message) => {
+        send({
+          type: "progress",
+          harnessId: body.harnessId,
+          name: "",
+          message,
+        });
+      });
+
+      send({
+        type: "done",
+        status,
+      });
+    }, {
+      timeoutMessage: "Install timed out while waiting for the coding harness installer.",
+    });
   });
 
   app.get("/v1/settings/telegram", async () => {

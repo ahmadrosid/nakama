@@ -17,15 +17,39 @@ export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord
   statusMessage: string | null;
 }
 
-const INSTALL_COMMANDS: Record<StoredCodingAgentHarnessKind, string> = {
-  codex: "npm install -g @openai/codex",
-  claude_code: "npm install -g @anthropic-ai/claude-code",
-  opencode: "npm install -g opencode-ai",
+interface CodingAgentInstallPlan {
+  command: string;
+  args: string[];
+  displayCommand: string;
+}
+
+const INSTALL_PLANS: Record<StoredCodingAgentHarnessKind, CodingAgentInstallPlan> = {
+  codex: {
+    command: "npm",
+    args: ["install", "-g", "@openai/codex"],
+    displayCommand: "npm install -g @openai/codex",
+  },
+  claude_code: {
+    command: "npm",
+    args: ["install", "-g", "@anthropic-ai/claude-code"],
+    displayCommand: "npm install -g @anthropic-ai/claude-code",
+  },
+  opencode: {
+    command: "npm",
+    args: ["install", "-g", "opencode-ai"],
+    displayCommand: "npm install -g opencode-ai",
+  },
 };
 
 export interface CodingAgentWorkspaceSettings {
   harnesses: StoredCodingAgentHarnessRecord[];
   selectedHarnessId: string | null;
+}
+
+export interface CodingAgentHarnessInstallProgress {
+  harnessId: string;
+  name: string;
+  message: string;
 }
 
 const DEFAULT_HARNESSES: StoredCodingAgentHarnessRecord[] = [
@@ -317,7 +341,7 @@ function extractVersion(stdout: string, stderr: string): string | null {
 }
 
 export function getCodingHarnessInstallCommand(kind: StoredCodingAgentHarnessKind): string {
-  return INSTALL_COMMANDS[kind];
+  return INSTALL_PLANS[kind].displayCommand;
 }
 
 export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind): string {
@@ -330,6 +354,56 @@ export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind):
   }
 
   return "Install OpenCode on this machine, then check again.";
+}
+
+export async function installCodingAgentHarness(
+  db: DatabaseAdapter,
+  harnessId: string,
+  onProgress?: (progress: CodingAgentHarnessInstallProgress) => void,
+): Promise<CodingAgentHarnessStatus> {
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const harness = settings.harnesses.find((entry) => entry.id === harnessId);
+
+  if (!harness) {
+    throw new Error("Unknown coding harness.");
+  }
+
+  const installPlan = INSTALL_PLANS[harness.kind];
+  const emitProgress = (message: string) => {
+    onProgress?.({
+      harnessId: harness.id,
+      name: harness.name,
+      message,
+    });
+  };
+
+  emitProgress(`Starting ${harness.name} install.`);
+  emitProgress(installPlan.displayCommand);
+
+  const result = await runInstallCommand(installPlan, emitProgress);
+  const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+
+  if (result.timedOut) {
+    throw new Error(`Install timed out while running ${harness.name}.`);
+  }
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      combinedOutput
+        ? `${harness.name} install failed: ${summarizeInstallOutput(combinedOutput)}`
+        : `${harness.name} install failed.`,
+    );
+  }
+
+  emitProgress(`${harness.name} install finished. Refreshing readiness.`);
+
+  const updated = (await listCodingAgentHarnessStatuses(db)).find((entry) => entry.id === harness.id);
+
+  if (!updated) {
+    throw new Error(`Installed ${harness.name}, but TinyClaw could not refresh its status.`);
+  }
+
+  return updated;
 }
 
 async function probeHarnessReadiness(
@@ -502,4 +576,114 @@ function authenticationHelpForHarness(kind: StoredCodingAgentHarnessKind): strin
   }
 
   return "OpenCode is installed, but it still needs authentication. Finish OpenCode login on this machine, then check again.";
+}
+
+async function runInstallCommand(
+  plan: CodingAgentInstallPlan,
+  onProgress?: (message: string) => void,
+): Promise<{
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}> {
+  const { spawn } = await import("node:child_process");
+  const timeoutMs = 120_000;
+
+  return new Promise((resolve) => {
+    const child = spawn(plan.command, plan.args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    const emitLine = (prefix: "stdout" | "stderr", line: string) => {
+      onProgress?.(`${prefix}: ${line}`);
+    };
+
+    const flushBuffer = (buffer: string, prefix: "stdout" | "stderr") => {
+      let nextBuffer = buffer;
+
+      while (true) {
+        const newlineIndex = nextBuffer.search(/\r?\n/);
+
+        if (newlineIndex < 0) {
+          break;
+        }
+
+        const newlineLength = nextBuffer[newlineIndex] === "\r" ? 2 : 1;
+        const line = nextBuffer.slice(0, newlineIndex).trim();
+        nextBuffer = nextBuffer.slice(newlineIndex + newlineLength);
+
+        if (line) {
+          emitLine(prefix, line);
+        }
+      }
+
+      return nextBuffer;
+    };
+
+    child.stdout?.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      stdoutBuffer += text;
+      stdoutBuffer = flushBuffer(stdoutBuffer, "stdout");
+    });
+    child.stderr?.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      stderrBuffer += text;
+      stderrBuffer = flushBuffer(stderrBuffer, "stderr");
+    });
+
+    child.once("error", (error) => {
+      clearTimeout(timeoutId);
+
+      if (stdoutBuffer.trim()) {
+        emitLine("stdout", stdoutBuffer.trim());
+      }
+      if (stderrBuffer.trim()) {
+        emitLine("stderr", stderrBuffer.trim());
+      }
+
+      resolve({
+        exitCode: null,
+        stdout,
+        stderr: `${stderr}\n${String(error)}`.trim(),
+        timedOut,
+      });
+    });
+
+    child.once("close", (exitCode) => {
+      clearTimeout(timeoutId);
+
+      if (stdoutBuffer.trim()) {
+        emitLine("stdout", stdoutBuffer.trim());
+      }
+      if (stderrBuffer.trim()) {
+        emitLine("stderr", stderrBuffer.trim());
+      }
+
+      resolve({
+        exitCode,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        timedOut,
+      });
+    });
+  });
+}
+
+function summarizeInstallOutput(output: string): string {
+  const firstLine = output.split(/\r?\n/, 1)[0]?.trim() || output.trim();
+  return firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine;
 }

@@ -1,4 +1,9 @@
-import type { SendMessageInput, StreamEvent } from "@tinyclaw/core/contract";
+import type {
+  CodingHarnessInstallEvent,
+  CodingHarnessStatus,
+  SendMessageInput,
+  StreamEvent,
+} from "@tinyclaw/core/contract";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = 120_000;
@@ -9,11 +14,128 @@ export async function readStreamEvents(
   signal?: AbortSignal,
   idleMs = DEFAULT_STREAM_IDLE_MS,
 ): Promise<string> {
+  let reply = "";
+  let sawDataEvent = false;
+
+  const doneReply = await consumeSseEvents<StreamEvent, string>(
+    body,
+    (payload) => {
+      if (payload.type === "chunk") {
+        handlers.onChunk(payload.delta);
+        reply += payload.delta;
+      }
+
+      if (payload.type === "thinking") {
+        handlers.onThinking?.(payload.delta);
+      }
+
+      if (payload.type === "tool_start") {
+        handlers.onToolStart?.({
+          toolCallId: payload.toolCallId,
+          tool: payload.tool,
+          input: payload.input,
+        });
+      }
+
+      if (payload.type === "tool_end") {
+        handlers.onToolEnd?.({
+          toolCallId: payload.toolCallId,
+          tool: payload.tool,
+          result: payload.result,
+        });
+      }
+
+      if (payload.type === "todos_updated") {
+        handlers.onTodosUpdated?.(payload.todos);
+      }
+
+      if (payload.type === "questionnaire_updated") {
+        handlers.onQuestionnaireUpdated?.(payload.questionnaire);
+      }
+
+      if (payload.type === "done") {
+        return payload.reply;
+      }
+
+      if (payload.type === "error") {
+        throw new Error(payload.error);
+      }
+    },
+    signal,
+    idleMs,
+    () => {
+      sawDataEvent = true;
+    },
+  );
+
+  if (doneReply) {
+    return doneReply;
+  }
+
+  if (!reply) {
+    throw new Error(
+      sawDataEvent
+        ? "Stream ended before the model returned a reply."
+        : "Stream ended without a response. Only server keepalive events were received — the LLM call likely failed or hung before producing output.",
+    );
+  }
+
+  return reply;
+}
+
+export interface CodingHarnessInstallStreamHandlers {
+  onProgress?: (message: string) => void;
+  onDone?: (status: CodingHarnessStatus) => void;
+}
+
+export async function readCodingHarnessInstallStream(
+  body: ReadableStream<Uint8Array>,
+  handlers: CodingHarnessInstallStreamHandlers = {},
+  signal?: AbortSignal,
+): Promise<CodingHarnessStatus> {
+  let status: CodingHarnessStatus | null = null;
+
+  const doneStatus = await consumeSseEvents<CodingHarnessInstallEvent, CodingHarnessStatus>(
+    body,
+    (payload) => {
+      if (payload.type === "progress") {
+        handlers.onProgress?.(payload.message);
+      }
+
+      if (payload.type === "done") {
+        status = payload.status;
+        handlers.onDone?.(payload.status);
+        return payload.status;
+      }
+
+      if (payload.type === "error") {
+        throw new Error(payload.error);
+      }
+    },
+    signal,
+  );
+
+  if (doneStatus) {
+    return doneStatus;
+  }
+
+  if (status) {
+    return status;
+  }
+
+  throw new Error("Install stream ended without a completion event.");
+}
+
+async function consumeSseEvents<TEvent extends { type: string }, TResult>(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: TEvent) => TResult | undefined | Promise<TResult | undefined>,
+  signal?: AbortSignal,
+  idleMs = DEFAULT_STREAM_IDLE_MS,
+  onDataEvent?: () => void,
+): Promise<TResult | undefined> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let reply = "";
-  let sawDataEvent = false;
   let lastDataAt = Date.now();
 
   const abortReader = () => {
@@ -53,71 +175,27 @@ export async function readStreamEvents(
             continue;
           }
 
-          sawDataEvent = true;
+          onDataEvent?.();
           lastDataAt = Date.now();
 
-          const payload = JSON.parse(line.slice(6)) as StreamEvent;
+          const payload = JSON.parse(line.slice(6)) as TEvent;
+          const result = await onEvent(payload);
 
-          if (payload.type === "chunk") {
-            handlers.onChunk(payload.delta);
-            reply += payload.delta;
-          }
-
-          if (payload.type === "thinking") {
-            handlers.onThinking?.(payload.delta);
-          }
-
-          if (payload.type === "tool_start") {
-            handlers.onToolStart?.({
-              toolCallId: payload.toolCallId,
-              tool: payload.tool,
-              input: payload.input,
-            });
-          }
-
-          if (payload.type === "tool_end") {
-            handlers.onToolEnd?.({
-              toolCallId: payload.toolCallId,
-              tool: payload.tool,
-              result: payload.result,
-            });
-          }
-
-          if (payload.type === "todos_updated") {
-            handlers.onTodosUpdated?.(payload.todos);
-          }
-
-          if (payload.type === "questionnaire_updated") {
-            handlers.onQuestionnaireUpdated?.(payload.questionnaire);
-          }
-
-          if (payload.type === "done") {
-            return payload.reply;
-          }
-
-          if (payload.type === "error") {
-            throw new Error(payload.error);
+          if (result !== undefined) {
+            return result;
           }
         }
       }
     }
 
     if (signal?.aborted) {
-      return reply;
+      return undefined;
     }
 
-    if (!reply) {
-      throw new Error(
-        sawDataEvent
-          ? "Stream ended before the model returned a reply."
-          : "Stream ended without a response. Only server keepalive events were received — the LLM call likely failed or hung before producing output.",
-      );
-    }
-
-    return reply;
+    return undefined;
   } catch (error) {
     if (signal?.aborted) {
-      return reply;
+      return undefined;
     }
 
     throw error;
