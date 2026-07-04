@@ -433,6 +433,46 @@ describe("TerminalLayout frame pipeline", () => {
     ]);
   });
 
+  test("adds extra blank space above a sealed assistant reply", () => {
+    captureStdout();
+    setTerminalSize(20, 12);
+    const layout = new TerminalLayout(null);
+
+    Object.assign(layout as Record<string, unknown>, {
+      enabled: true,
+      anchored: true,
+      anchorRow: 8,
+      viewportTopRow: 8,
+    });
+
+    layout.setReservedRows(1, [plainLine("> ")]);
+    layout.beginMessage("user");
+    layout.writelnScroll("> hello");
+    layout.endMessage();
+    layout.beginMessage("assistant");
+    layout.writeScroll("Morning! What's on your mind today?");
+    layout.endStream();
+    layout.endMessage();
+
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
+    const renderedLines =
+      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+
+    expect(renderedLines).toEqual([
+      "                    ",
+      "> hello             ",
+      "                    ",
+      "",
+      "",
+      " Morning! What's on ",
+      "  your mind today? ",
+      "",
+      "> ",
+    ]);
+  });
+
   test("keeps streamed text wrapping stable after sealing the message", () => {
     captureStdout();
     setTerminalSize(20, 12);

@@ -231,7 +231,6 @@ export class TerminalRenderer implements ComposerRenderer, StatusRenderer {
     };
     this.layout.endStream();
     this.layout.endMessage();
-    this.layout.writelnScroll("");
   }
 
   appendStreamChunk(text: string): void {

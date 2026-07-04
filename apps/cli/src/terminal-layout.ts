@@ -217,6 +217,9 @@ export class TerminalLayout {
   }
 
   endStream(): void {
+    if (this.streamBuffer && this.messages.messageCount > 0) {
+      this.streamBuffer = `\n${this.streamBuffer}`;
+    }
     this.flushStreamBuffer();
     this.statusLine = null;
     if (this.followOutput) {

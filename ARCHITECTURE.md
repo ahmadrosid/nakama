@@ -1,188 +1,259 @@
 # TinyClaw Architecture
 
-TinyClaw is a multi-tenant AI assistant platform: one agent runtime, multiple thin clients. Each **organization** is a flat tenant boundary — profiles, sessions, tools, and related data are scoped to an org. Users chat with configurable bots, draft automations, and (eventually) run them. Everything funnels through a single HTTP server; clients do not embed agent logic.
+TinyClaw is a multi-tenant AI agent platform with one shared server runtime and several thin clients. Each **organization** is the tenant boundary. Profiles, sessions, tools, MCP servers, skills, automations, tasks, attachments, and usage data are all scoped to an org unless explicitly platform-level.
 
 ## System overview
 
 ```mermaid
 flowchart TB
-  subgraph clients ["Thin clients"]
+  subgraph clients ["Clients"]
     web["apps/web"]
     cli["apps/cli"]
-    telegram["apps/platform/telegram"]
+    tg["apps/platform/telegram"]
+    wa["apps/platform/whatsapp"]
   end
 
   subgraph sdk ["@tinyclaw/client"]
-    httpSdk["HTTP SDK"]
+    client["HTTP + SSE client"]
   end
 
-  subgraph server ["apps/server — agent runtime"]
-    app["http/app.ts — Hono HTTP / SSE"]
-    auth["auth-middleware.ts"]
-    orgCtx["org-middleware.ts"]
-    agentSvc["AgentService"]
-    resolver["tool-resolver"]
-    handlers["Tool handlers<br/>builtin · bash · javascript · mcp"]
-    providers["providers/<br/>OpenAI · Anthropic"]
-    memory[("In-memory chat<br/>AgentChatSession")]
+  subgraph server ["apps/server"]
+    http["Hono HTTP app"]
+    auth["Auth + CSRF middleware"]
+    org["Org context middleware"]
+    agent["AgentService"]
+    routes["Routes"]
+    workers["WorkerManagerService"]
+    notif["Notification services"]
   end
 
-  subgraph packages ["packages"]
-    core["@tinyclaw/core<br/>config · contracts · builtin tools"]
-    agent["@tinyclaw/agent<br/>harness · tool loop · automations"]
-    dbPkg["@tinyclaw/db<br/>SQLite"]
+  subgraph runtime ["Runtime services"]
+    harness["@tinyclaw/agent"]
+    tools["Tool resolver + handlers"]
+    providers["Provider adapters"]
+    mcp["MCP registry + bridge"]
+    persist["Session persistence"]
   end
 
-  subgraph external ["External"]
-    llm["OpenAI / Anthropic"]
-    sqlite[("SQLite<br/>orgs · profiles · tools · sessions")]
+  subgraph data ["State"]
+    db["@tinyclaw/db (SQLite)"]
+    soul["~/.tinyclaw/orgs/.../profiles/..."]
     config["~/.tinyclaw/config.ini"]
+    files["Attachments / knowledge files"]
   end
 
-  web --> httpSdk
-  cli --> httpSdk
-  telegram --> httpSdk
-  httpSdk -->|"HTTP / SSE<br/>X-Org-Id"| app
-  app --> auth
-  app --> orgCtx
-  app --> agentSvc
-  agentSvc --> agent
-  agentSvc --> resolver
-  resolver --> handlers
-  agentSvc --> providers
-  agentSvc --> memory
-  agent --> core
-  handlers --> core
-  dbPkg --> core
-  httpSdk --> core
-  providers --> llm
-  dbPkg --> sqlite
-  core --> config
+  subgraph workers2 ["Platform workers"]
+    automation["automation worker"]
+    telegram["telegram worker"]
+    whatsapp["whatsapp worker"]
+  end
+
+  clients --> client
+  client -->|"HTTP / SSE + X-Org-Id"| http
+  http --> auth
+  http --> org
+  http --> routes
+  routes --> agent
+  routes --> workers
+  routes --> notif
+  agent --> harness
+  agent --> tools
+  agent --> providers
+  agent --> mcp
+  agent --> persist
+  harness --> db
+  persist --> db
+  tools --> soul
+  agent --> soul
+  db --> files
+  server --> config
+  workers --> automation
+  workers --> telegram
+  workers --> whatsapp
 ```
 
-**Dependency rule:** `packages/*` never import from `apps/*`. Shared code flows packages → apps only.
+**Dependency rule:** `packages/*` can be imported by `apps/*`, but not the other way around.
 
-## Codemap
+## Repo map
 
 ```text
 tinyclaw/
 ├── apps/
-│   ├── web/                 # Dashboard (primary UI); org switcher, setup wizard
-│   ├── cli/                 # Terminal client; auto-starts server
-│   ├── platform/
-│   │   └── telegram/        # Telegram bot bridge; auto-starts server
-│   │   └── whatsapp/        # WhatsApp bot bridge; auto-starts server
-│   └── server/              # HTTP API, agent runtime, LLM providers
+│   ├── server/              # HTTP API, auth, org middleware, agent orchestration
+│   ├── web/                 # Dashboard
+│   ├── cli/                 # Terminal client
+│   └── platform/
+│       ├── automation/      # Scheduler / automation worker
+│       ├── telegram/        # Telegram bridge
+│       └── whatsapp/        # WhatsApp bridge
 ├── packages/
-│   ├── core/                # Config, API types, provider interfaces, builtin tools, skills
-│   ├── agent/               # Chat harness, tool loop, automation engine
-│   ├── db/                  # SQLite via bun:sqlite
-│   └── client/              # HTTP SDK for apps
+│   ├── agent/               # Prompt assembly, tool loop, chat session runtime
+│   ├── core/                # Contracts, soul system, config, builtin tool defs
+│   ├── db/                  # SQLite schema, adapters, migrations
+│   └── client/              # Shared HTTP/SSE client
+└── docs/website/            # Documentation site
 ```
 
-**Where is the thing that does X?**
+## Main boundaries
 
-| Question | Look in |
-|----------|---------|
-| HTTP routing | `apps/server/src/http/app.ts` and `apps/server/src/http/routes/*` |
-| HTTP auth / CSRF | `apps/server/src/http/auth-middleware.ts`, `shared.ts`, `public-routes.ts` |
-| Org context resolution (`X-Org-Id`, session `active_org_id`) | `apps/server/src/http/org-middleware.ts` |
-| Org lifecycle, invites, members, roles | `apps/server/src/services/org-service.ts`, `routes/platform-orgs.ts`, `routes/org-members.ts` |
-| Role guards (platform admin, org admin, viewer) | `apps/server/src/http/org-guards.ts` |
-| Session lifecycle, model switching | `AgentService` |
-| Profile CRUD, soul files, avatar, knowledge base | `apps/server/src/http/routes/profiles.ts`, `AgentService` |
-| Resolving DB-backed tools a session may call | `tool-resolver.ts` |
-| Builtin tool schemas and handlers | `packages/core/src/tools/*`, `schema.ts` |
-| Skill discovery, matching, prompt composition, tool loading | `packages/core/src/skills/*`, `apps/server/src/services/skills-service.ts` |
-| MCP server registry, connections, profile assignment | `mcp-service.ts`, `mcp-client-manager.ts` |
-| Runtime MCP tool expansion for assigned servers | `mcp-tool-bridge.ts` in `AgentService.resolveProfileTools` |
-| Super Bot meta-tools, bash | `super-bot-tools.ts`, `bash.ts` |
-| LLM vendor calls | `providers/` in `apps/server` |
-| Chat, streaming, tool loop | `AgentHarness`, `AgentChatSession` in `@tinyclaw/agent` |
-| SQLite schema (`packages/db/sql/schema.sql`) | `@tinyclaw/db` |
-| CLI server discovery / spawn | `ensure-server.ts` in `apps/cli` |
-| Shared request/response types | `@tinyclaw/core` (`contract.ts`) |
-| OpenAPI generation | `apps/server/src/http/openapi.ts` plus route-owned registration in `apps/server/src/http/routes/*` |
+**Clients are thin.** `apps/web`, `apps/cli`, Telegram, and WhatsApp talk to `apps/server` through HTTP/SSE. They do not run the agent loop themselves.
 
-Use symbol search for exact paths — names are stable; line numbers are not.
+**Server owns orchestration.** `apps/server/src/services/agent-service.ts` is the main composition layer. It wires profiles, providers, tools, MCP servers, soul files, attachments, questionnaire/todo state, and persistence around `@tinyclaw/agent`.
 
-## Architectural invariants
+**Agent package is runtime logic.** `packages/agent` builds prompts, runs the tool loop, manages compaction, and exposes `AgentChatSession`.
 
-**One agent runtime.** Chat and automation drafting run only in `apps/server`. No client talks to OpenAI or Anthropic directly.
+**Core package is shared contract/config logic.** `packages/core` holds request/response types, soul composition, built-in tool definitions, channel helpers, attachment helpers, and config readers.
 
-**Hub and spoke.** New channels are thin apps on `@tinyclaw/client`. There is no second agent implementation per channel.
+**DB package owns persistence.** `packages/db` defines schema and adapters for orgs, users, memberships, profiles, sessions, messages, automations, tasks, notifications, MCP servers, skills, attachments, and usage stats.
 
-**Packages do not depend on apps.** `packages/*` must not import from `apps/*`. Shared code flows packages → apps, never the reverse.
+## HTTP architecture
 
-**Hono owns the HTTP surface.** The server entrypoint builds a single `OpenAPIHono` app in `apps/server/src/http/app.ts`. Runtime, tests, auth, and OpenAPI all go through that same app.
+The server entrypoint is [`apps/server/src/http/app.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/app.ts). Request flow is:
 
-**Providers are server-only.** OpenAI and Anthropic adapters live under `apps/server/src/providers/`, not in `@tinyclaw/core` or `@tinyclaw/agent`.
+1. Static web assets are served first when `webDistDir` is present.
+2. Auth middleware validates bearer auth or browser session auth and applies CSRF checks where needed.
+3. Internal automation and notification webhook routes are registered before org middleware.
+4. Org middleware resolves `X-Org-Id` or browser `active_org_id`, verifies membership, and attaches `orgRole`.
+5. Route modules under `apps/server/src/http/routes/*` call services.
+6. `/openapi.json` is generated from the same Hono route registration used at runtime.
 
-**Organizations gate tenancy.** Each deployment hosts many orgs. Authenticated requests (except `/v1/auth/*` and `/v1/platform/*`) must carry org context via the `X-Org-Id` header or the browser session's `active_org_id`. Middleware verifies org membership and attaches `orgRole` before route handlers run.
+Current route groups include:
 
-**Profiles gate behavior.** A session binds to a profile (`default` when omitted). The profile supplies the system prompt and tool allowlist before any message is handled. Profile, tool, MCP, and skill admin routes require **platform admin**; org admins manage members only.
+- `auth`
+- `sessions`
+- `profiles`
+- `tools`
+- `skills`
+- `mcp`
+- `automations`
+- `tasks`
+- `notification-destinations`
+- `notification-webhooks`
+- `workers`
+- `platform-orgs`
+- `org-members`
+- `data-portability`
+- `system`
+- `models`
+- `user-context`
 
-**Org roles.** Three org roles: `admin`, `member`, `viewer`. Viewers may read chat history but cannot invoke agents or mutate state (`requireNotViewer`). Platform admins manage org lifecycle but do not access org data unless they are also org members.
+## Multi-tenancy and auth
 
-**Chat history is in-memory.** `AgentChatSession` holds `ChatMessage[]` in the server process. SQLite stores orgs, profiles, tools, session metadata — not message bodies. Tenant-owned tables carry an `org_id` column for per-org isolation.
+Organizations are the tenant boundary. Every authenticated non-platform request must resolve an active org.
 
-**Tools are allowlisted per profile.** The model may only invoke tools assigned to the active profile. Super Bot gets extra runtime tools (meta-tools, `bash`) injected server-side for `super_bot`.
+- Header-based org selection: `X-Org-Id`
+- Browser session fallback: `active_org_id`
+- Org roles: `admin`, `member`, `viewer`
+- Platform admin routes stay under `/v1/platform/*`
 
-**Tool calls use native LLM function calling.** Allowed tools are sent to OpenAI or Anthropic as structured definitions with JSON Schema parameters. The model returns tool calls; the server executes handlers and feeds results back as tool messages. Streaming clients receive `tool_start` / `tool_end` SSE events during execution.
+Important files:
 
-## Boundaries
+- [`apps/server/src/http/org-middleware.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/org-middleware.ts)
+- [`apps/server/src/http/org-guards.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/org-guards.ts)
+- [`apps/server/src/services/org-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/org-service.ts)
 
-See the [system overview](#system-overview) diagram for the full topology. At a high level:
+## Agent runtime
 
-**Client ↔ server.** `@tinyclaw/client` knows session IDs and API shapes from `@tinyclaw/core`. It has no visibility into providers, profiles beyond the API, or the tool loop.
+The runtime is assembled in [`apps/server/src/services/agent-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/agent-service.ts).
 
-**HTTP ↔ auth.** Hono middleware enforces bearer auth and browser cookie-session auth. Mutating browser requests must also pass CSRF checks, except for explicitly public routes such as login/setup.
+Per session, the server resolves:
 
-**HTTP ↔ org context.** After auth, org middleware resolves the active org, verifies membership, and attaches role. Clients send `X-Org-Id` (see `@tinyclaw/client`); the web dashboard persists the choice in the browser session via `/v1/auth/active-org`.
+- profile + soul files
+- provider/model selection
+- built-in tools
+- assigned custom JS tools
+- assigned MCP tools
+- Super Bot runtime-only tools
+- questionnaire/todo state
+- attachment save/load helpers
 
-**Server ↔ agent package.** `AgentService` owns the session map and delegates to `AgentHarness`. The harness depends on `Provider` from `@tinyclaw/core`, not on HTTP or SQLite.
+Prompt construction happens in three layers:
 
-**Server ↔ database.** Organizations, memberships, invites, and tenant-owned rows (profiles, tools, sessions, automations, etc.) persist in SQLite with `org_id` scoping. Live chat state does not cross this boundary.
+1. [`packages/core/src/soul/compose.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/core/src/soul/compose.ts) for soul content
+2. [`packages/agent/src/chat-prompt.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/agent/src/chat-prompt.ts) for chat structure and tool instructions
+3. [`packages/agent/src/chat.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/agent/src/chat.ts) for final per-turn generation
 
-**Agent ↔ tools.** The harness asks the model; the server resolves and runs handlers. See [Built-in tools](#built-in-tools).
+## Sessions and persistence
 
-## Built-in tools
+This was one of the main places the old doc drifted.
 
-Each tool in `packages/core/src/tools/` uses one Zod `*InputSchema` for both runtime validation and LLM JSON Schema (`jsonSchemaFromZod` → `parameters`, `parseToolInput` → `run()`). Shared field helpers (`requiredTrimmedString`, `maxResultsSchema`, etc.) live in `schema.ts`.
+- `AgentChatSession` still manages live conversation state in memory while a session is active.
+- Session history is also persisted to SQLite in `session_messages`.
+- `apps/server/src/services/session-persistence.ts` wraps sessions so sends, streaming replies, and compaction update durable history.
+- Session metadata also stores questionnaire and todo state on the `sessions` table.
 
-| Tool | Module |
-|------|--------|
-| `write_file`, `delete_file`, `read_file` | `builtin.ts` |
-| `search_files` | `search-files.ts` |
-| `knowledge_base_search` | `knowledge-base-search.ts` |
-| `update_profile_memory` | `profile-memory.ts` |
-| `web_search` | `web-search.ts` |
-| `web_fetch` | `web-fetch.ts` |
-| `email` | `email.ts` |
+Relevant tables:
 
-`ripgrep.ts` backs the search tools but is not model-facing. `web_search` and server tools (`bash`, Super Bot meta-tools, JS/MCP) define schemas in core where applicable but execute in `apps/server` (or on the LLM provider for `web_search`).
+- `sessions`
+- `session_messages`
+- `attachments`
 
-## Request lifecycle
+## Tools and MCP
 
-1. `apps/server/src/http/app.ts` checks static web assets first.
-2. Hono auth middleware validates bearer auth or browser session auth, then enforces CSRF for mutating browser requests.
-3. Org middleware resolves org context (`X-Org-Id` or session `active_org_id`), verifies membership, and attaches `orgRole`. Skipped for public routes, `/v1/auth/*`, and `/v1/platform/*`.
-4. A route handler in `apps/server/src/http/routes/*` parses the request and calls the right service. Role guards (`org-guards.ts`) enforce platform-admin, org-admin, or non-viewer checks where needed.
-5. Service code calls `AgentService`, `OrgService`, persistence, workers, MCP, automations, or tasks as needed.
-6. `/openapi.json` is served from the same Hono route registration, so docs and runtime stay aligned.
+Built-in tool definitions live in `packages/core/src/tools/*`.
 
-## Cross-cutting concerns
+Execution paths are split:
 
-**Configuration** — API key and model live in `~/.tinyclaw/config.ini`, or via `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (OpenAI preferred when both are set). Provider is inferred automatically. Loaded through `@tinyclaw/core`. The server writes `~/.tinyclaw/runtime/server-url.txt` so clients can find it.
+- built-in shared tools: `packages/core/src/tools/*`
+- server-side runtime tools: `apps/server/src/tools/*`
+- custom JavaScript tools: loaded by `apps/server/src/services/javascript-tool-loader.ts`
+- MCP-backed tools: expanded through `apps/server/src/services/mcp-tool-bridge.ts`
 
-Deployment mailbox settings for the built-in `email` tool live in the `[email]` section of the same `config.ini` file (`imap_host`, `smtp_host`, shared `username`/`password`, TLS flags, and `from`). Org admins manage them from the web System page under the Tools tab. This mailbox is deployment-global, like Telegram/WhatsApp bridge credentials — not per-org database state.
+Tool access is profile-scoped. The model only receives tools assigned to the active profile, plus extra runtime tools for Super Bot when allowed.
 
-**IDs** — Entities use prefixed IDs via `createId()` (e.g. `org_…`, `session_…`, `profile_…`).
+## Workers, automations, and tasks
 
-**Multi-tenancy** — Flat org-as-tenant model. First-time setup (`POST /v1/auth/setup`) creates the initial org and admin user. Platform admins provision additional orgs via `/v1/platform/orgs`. Org admins invite members through `/v1/orgs/{orgId}/members` and `/v1/orgs/{orgId}/invites`. Users with multiple org memberships switch via the web org switcher or `POST /v1/auth/active-org`. Shared channel bots (Telegram/WhatsApp) will route via `channel_org_mappings`; schema is in place.
+TinyClaw now has a clearer worker/runtime split than the older doc suggested.
 
-**API versioning** — `TINYCLAW_API_VERSION` is returned by `/health`. The server uses it for singleton detection (don't start a duplicate). Clients should reject incompatible versions.
+- `apps/platform/automation` runs scheduled automation work
+- `apps/platform/telegram` handles Telegram delivery/inbound flow
+- `apps/platform/whatsapp` handles WhatsApp delivery/inbound flow
+- `apps/server/src/services/worker-manager-service.ts` manages them through PM2
 
-**OpenAPI** — The HTTP surface is generated from Hono route registration in `apps/server/src/http/routes/*` via `apps/server/src/http/openapi.ts` and served at `/openapi.json`. Treat route code as source of truth.
+Automations and tasks are separate persisted concepts:
 
-**Offline-friendly startup** — The server starts without an API key. Chat and automation drafting degrade to heuristic fallbacks when no provider is configured.
+- `automations` + `automation_runs`
+- `tasks` + `task_runs`
+
+Core services:
+
+- [`apps/server/src/services/automation-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/automation-service.ts)
+- [`apps/server/src/services/automation-runner.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/automation-runner.ts)
+- [`apps/server/src/services/task-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/task-service.ts)
+- [`apps/server/src/services/task-runner.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/task-runner.ts)
+
+## Notifications and attachments
+
+Two newer areas that deserve explicit mention:
+
+- Notification destinations and incoming webhooks are first-class server features.
+- Attachments are stored as records in SQLite and files on disk, then rehydrated into model/provider message format when needed.
+
+Key files:
+
+- [`apps/server/src/services/notification-destination-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/notification-destination-service.ts)
+- [`apps/server/src/services/notification-webhook-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/notification-webhook-service.ts)
+- [`apps/server/src/services/attachment-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/attachment-service.ts)
+
+## Persistence model
+
+The main SQLite schema lives in [`packages/db/sql/schema.sql`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/db/sql/schema.sql).
+
+High-value tables today:
+
+- tenant + auth: `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`
+- agent config: `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `mcp_servers`, `profile_mcp_servers`
+- runtime state: `sessions`, `session_messages`, `attachments`
+- execution: `automations`, `automation_runs`, `tasks`, `task_runs`
+- notifications: `notification_destinations`
+- analytics/config: `llm_usage_stats`, `llm_usage_model_stats`, `workspace_settings`
+
+## Current invariants
+
+- `packages/*` must not import from `apps/*`
+- Org membership is checked before org-scoped routes run
+- Profiles control agent behavior and tool availability
+- Message history is durable, not purely process-memory anymore
+- OpenAPI is generated from the same Hono app used at runtime
+- Channel apps are transport bridges, not separate agent implementations
+- PM2 worker management is optional at runtime but is the intended orchestration path for platform workers

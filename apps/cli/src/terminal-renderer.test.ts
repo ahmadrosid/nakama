@@ -178,6 +178,7 @@ describe("TerminalRenderer", () => {
     expect(writeScrollSpy).toHaveBeenCalledWith("Hello");
     expect(writelnScrollSpy).toHaveBeenNthCalledWith(1, "intro");
     expect(writelnScrollSpy).toHaveBeenNthCalledWith(2, "> submitted");
+    expect(writelnScrollSpy).toHaveBeenCalledTimes(2);
     expect(writelnBelowStatusSpy).toHaveBeenCalledWith("> queued");
     expect(endStreamSpy).toHaveBeenCalledTimes(1);
     expect(state.stream).toEqual({ active: false, text: "" });
