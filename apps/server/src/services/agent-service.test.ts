@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  WORKSPACE_SETTINGS_ID,
 } from "@tinyclaw/db";
 import type { StoredProfileRecord } from "@tinyclaw/db";
 import { AgentService } from "./agent-service";
@@ -267,5 +268,56 @@ describe("AgentService transcription settings", () => {
     expect(await service.getTranscriptionSettings()).toEqual({
       transcription: { model: "p-openai-1::whisper-1" },
     });
+  });
+});
+
+describe("AgentService coding delegation context", () => {
+  test("includes the selected harness name in the coding delegation context", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: WORKSPACE_SETTINGS_ID,
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-opencode",
+          kind: "opencode",
+          name: "OpenCode",
+          command: "opencode",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: "coding-harness-opencode",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const service = new AgentService(null, null, db);
+    const context = await (service as unknown as {
+      formatCodingDelegationContext(): Promise<string>;
+    }).formatCodingDelegationContext();
+
+    expect(context).toContain("The selected coding agent harness is OpenCode");
+    expect(context).toContain("delegate_coding_task");
+  });
+
+  test("falls back gracefully when no harness is selected", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: WORKSPACE_SETTINGS_ID,
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [],
+      selectedCodingAgentHarness: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const service = new AgentService(null, null, db);
+    const context = await (service as unknown as {
+      formatCodingDelegationContext(): Promise<string>;
+    }).formatCodingDelegationContext();
+
+    expect(context).toContain("No coding agent harness is selected");
+    expect(context).toContain("delegate_coding_task");
   });
 });

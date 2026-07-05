@@ -2162,14 +2162,21 @@ export class AgentService {
             context.userMessage,
             {
               appendContext: async (matched) => {
-                if (
-                  !profile.isSuper ||
-                  !matched.some((skill) => skill.name === "create-profile")
-                ) {
+                if (!profile.isSuper) {
                   return "";
                 }
 
-                return this.formatProfileAuthoringToolContext();
+                const parts: string[] = [];
+
+                if (matched.some((skill) => skill.name === "create-profile")) {
+                  parts.push(await this.formatProfileAuthoringToolContext());
+                }
+
+                if (matched.some((skill) => skill.name === "coding-delegation")) {
+                  parts.push(await this.formatCodingDelegationContext());
+                }
+
+                return parts.filter(Boolean).join("\n\n");
               },
             },
           );
@@ -2252,6 +2259,25 @@ export class AgentService {
       "# Available Tools for Profile Creation",
       "Use this current tool inventory to choose a small, relevant starter tool set. Do not assign every tool by default.",
       ...lines,
+    ].join("\n");
+  }
+
+  private async formatCodingDelegationContext(): Promise<string> {
+    const settings = await loadCodingAgentWorkspaceSettings(this.db);
+    const selected = settings.harnesses.find(
+      (harness) => harness.id === settings.selectedHarnessId,
+    );
+
+    if (selected) {
+      return [
+        "# Coding Agent Harness",
+        `The selected coding agent harness is ${selected.name}. When you call delegate_coding_task without specifying a backend, it will use ${selected.name}. Only specify a different backend if the user explicitly asks for it.`,
+      ].join("\n");
+    }
+
+    return [
+      "# Coding Agent Harness",
+      "No coding agent harness is selected in workspace settings. delegate_coding_task will fall back to the first installed harness when no backend is specified.",
     ].join("\n");
   }
 
