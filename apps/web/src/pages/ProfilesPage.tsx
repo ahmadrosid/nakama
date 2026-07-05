@@ -962,7 +962,7 @@ export function ProfilesPage() {
                       controls="profile-detail-panel-profile"
                       onSelect={() => setDetailTab("profile")}
                     >
-                      Profile
+                      Config
                     </ProfileDetailTabButton>
                     <ProfileDetailTabButton
                       id="profile-detail-tab-prompt"
