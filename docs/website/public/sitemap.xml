@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ahmadrosid.github.io/nakama</loc>
+    <loc>https://ahmadrosid.github.io/nakama/</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamagetting-started</loc>
+    <loc>https://ahmadrosid.github.io/nakama/getting-started</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamaoverview</loc>
+    <loc>https://ahmadrosid.github.io/nakama/overview</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamamulti-tenancy</loc>
+    <loc>https://ahmadrosid.github.io/nakama/multi-tenancy</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamaprofiles</loc>
+    <loc>https://ahmadrosid.github.io/nakama/profiles</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamaagent-prompt</loc>
+    <loc>https://ahmadrosid.github.io/nakama/agent-prompt</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamabuiltin-tools</loc>
+    <loc>https://ahmadrosid.github.io/nakama/builtin-tools</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamamcp</loc>
+    <loc>https://ahmadrosid.github.io/nakama/mcp</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamatelegram</loc>
+    <loc>https://ahmadrosid.github.io/nakama/telegram</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamawhatsapp</loc>
+    <loc>https://ahmadrosid.github.io/nakama/whatsapp</loc>
   </url>
   <url>
-    <loc>https://ahmadrosid.github.io/nakamaskills</loc>
+    <loc>https://ahmadrosid.github.io/nakama/skills</loc>
   </url>
 </urlset>

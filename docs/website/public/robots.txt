@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ahmadrosid.github.io/nakamasitemap.xml
-LLMS: https://ahmadrosid.github.io/nakamallms.txt
+Sitemap: https://ahmadrosid.github.io/nakama/sitemap.xml
+LLMS: https://ahmadrosid.github.io/nakama/llms.txt

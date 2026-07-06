@@ -4,9 +4,9 @@ Nakama can run locally with Bun or in Docker.
 
 ## Why Nakama exists?
 
-Nakama makes setting up an AI agent as easy as running a WordPress site — self-hosted and managed without a team of engineers.
+Nakama is an open-source platform for building teams of AI agents.
 
-Where OpenClaw and Hermes serve personal assistants, Nakama is built for **team assistants** — agents that work alongside a whole team, not a single person.
+Where a single personal assistant tries to do everything, Nakama lets you assemble a nakama — agents with distinct roles that work together. A researcher, a writer, an operator: each profile is an agent with its own soul, tools, and memory.
 
 Multi-tenant by default: each organization is an isolated boundary with its own profiles, members, tools, and memory. One deployment can serve many clients — agencies and service companies get a separate org, agents, and data per client.
 

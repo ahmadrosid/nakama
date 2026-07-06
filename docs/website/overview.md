@@ -1,6 +1,8 @@
 # Overview
 
-Nakama is a self-hosted AI agent platform for teams.
+Nakama is an open-source platform for building teams of AI agents.
+
+Every agent has a role. Together, they're your nakama.
 
 The easiest way to think about it:
 
@@ -29,9 +31,9 @@ It keeps one team's data separate from another team's data, including:
 
 ### 2. Profile
 
-A profile is the bot users talk to.
+A profile is an agent on your team — the bot users talk to.
 
-It defines:
+Each profile has a role. It defines:
 
 - The bot's identity
 - The bot's instructions
@@ -79,13 +81,13 @@ Most deployments follow this pattern:
 
 Nakama is a good fit when you want:
 
-- Your own hosted agent system
-- Multiple bots with different behavior
-- Team or tenant separation
-- Control over tools and model access
+- A team of AI agents, not a single general-purpose assistant
+- Each agent with a distinct role, tools, and behavior
+- Your own open-source, self-hosted agent platform
+- Team or tenant separation across organizations
 - Web and messaging channels on top of one backend
 
-It is less about writing prompts manually and more about operating a small agent platform for yourself or your team.
+It is less about writing one prompt and more about assembling and operating your nakama.
 
 ## Next steps
 

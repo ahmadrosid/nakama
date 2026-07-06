@@ -1,10 +1,10 @@
 # Profiles
 
-A **profile** is the bot definition Nakama runs for a session.
+A **profile** is an agent definition Nakama runs for a session.
 
-It answers one practical question: **which bot should respond, and how should it behave?**
+It answers one practical question: **which agent should respond, and what is its role?**
 
-Profiles belong to an **organization**. Switching orgs in the dashboard shows only that org's bots.
+Profiles belong to an **organization**. Switching orgs in the dashboard shows only that org's agents.
 
 ## Default profile per organization
 

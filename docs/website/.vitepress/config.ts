@@ -3,14 +3,15 @@ import path from 'node:path'
 import { defineConfig } from 'vitepress'
 
 const SITE_NAME = 'Nakama'
-const SITE_DESCRIPTION = 'Deploy your own AI agent platform as easily as spinning up WordPress.'
+const SITE_TAGLINE = "Every agent has a role. Together, they're your nakama."
+const SITE_DESCRIPTION = 'An open-source platform for building teams of AI agents.'
 const SITE_URL = 'https://ahmadrosid.github.io/nakama'
 const AUTHOR_NAME = 'Ahmad Rosid'
 const AUTHOR_ROLE = 'Creator and maintainer of Nakama'
 const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
 
 const pageDescriptions: Record<string, string> = {
-  'index.md': 'Self-hosted AI agents for teams with profiles, tools, channels, and multi-tenant workspaces.',
+  'index.md': 'An open-source platform for building teams of AI agents with profiles, tools, channels, and multi-tenant workspaces.',
   'getting-started.md': 'Install Nakama with Bun or Docker, run the server, and complete first-time setup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, and channels.',
   'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
@@ -83,9 +84,9 @@ function buildLlmsTxt(pages: string[]) {
   const lines = [
     `# ${SITE_NAME}`,
     '',
-    `> ${SITE_DESCRIPTION}`,
+    `> ${SITE_DESCRIPTION} ${SITE_TAGLINE}`,
     '',
-    `${SITE_NAME} is a self-hosted, multi-tenant AI agent platform for teams. It supports organizations, profiles, soul files, builtin tools, skills, MCP servers, and channels like web, CLI, Telegram, and WhatsApp.`,
+    `${SITE_NAME} is an open-source, self-hosted platform for building teams of AI agents. Each profile is an agent with its own role, soul, tools, and memory. Organizations, skills, MCP servers, and channels like web, CLI, Telegram, and WhatsApp let you run your nakama from one deployment.`,
     '',
     `Maintainer: ${AUTHOR_NAME} (${AUTHOR_ROLE})`,
     `Website: ${SITE_URL}/`,

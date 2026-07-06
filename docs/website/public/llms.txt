@@ -1,11 +1,11 @@
 # Nakama
 
-> Deploy your own AI agent platform as easily as spinning up WordPress.
+> An open-source platform for building teams of AI agents. Every agent has a role. Together, they're your nakama.
 
-Nakama is a self-hosted, multi-tenant AI agent platform for teams. It supports organizations, profiles, soul files, builtin tools, skills, MCP servers, and channels like web, CLI, Telegram, and WhatsApp.
+Nakama is an open-source, self-hosted platform for building teams of AI agents. Each profile is an agent with its own role, soul, tools, and memory. Organizations, skills, MCP servers, and channels like web, CLI, Telegram, and WhatsApp let you run your nakama from one deployment.
 
 Maintainer: Ahmad Rosid (Creator and maintainer of Nakama)
-Website: https://ahmadrosid.github.io/nakama
+Website: https://ahmadrosid.github.io/nakama/
 Repository: https://github.com/ahmadrosid/nakama
 
 ## AI-friendly access
@@ -15,14 +15,14 @@ Repository: https://github.com/ahmadrosid/nakama
 
 ## Docs
 
-- [Home](https://ahmadrosid.github.io/nakamaindex.md): Self-hosted AI agents for teams with profiles, tools, channels, and multi-tenant workspaces.
-- [Getting Started](https://ahmadrosid.github.io/nakamagetting-started.md): Install Nakama with Bun or Docker, run the server, and complete first-time setup.
-- [Overview](https://ahmadrosid.github.io/nakamaoverview.md): Understand the Nakama mental model: organizations, profiles, tools, and channels.
-- [Multi Tenancy](https://ahmadrosid.github.io/nakamamulti-tenancy.md): Learn how organizations, roles, and tenant isolation work in Nakama.
-- [Profiles](https://ahmadrosid.github.io/nakamaprofiles.md): See how Nakama profiles define bot behavior, soul files, tools, and model selection.
-- [Agent Prompt](https://ahmadrosid.github.io/nakamaagent-prompt.md): Understand how Nakama builds the final system prompt from soul files, tools, and runtime context.
-- [Builtin Tools](https://ahmadrosid.github.io/nakamabuiltin-tools.md): Review the builtin tools that Nakama profiles can use, including persistent artifact saving and file access boundaries.
-- [Skills](https://ahmadrosid.github.io/nakamaskills.md): Learn how reusable skills extend Nakama profiles with focused workflows.
-- [MCP Servers](https://ahmadrosid.github.io/nakamamcp.md): Connect external MCP servers to Nakama profiles and expose new tools safely.
-- [Telegram](https://ahmadrosid.github.io/nakamatelegram.md): Set up Nakama as a Telegram bot with pairing, commands, and group behavior.
-- [WhatsApp](https://ahmadrosid.github.io/nakamawhatsapp.md): Set up Nakama on WhatsApp with linking, commands, and troubleshooting.
+- [Home](https://ahmadrosid.github.io/nakama/index.md): An open-source platform for building teams of AI agents with profiles, tools, channels, and multi-tenant workspaces.
+- [Getting Started](https://ahmadrosid.github.io/nakama/getting-started.md): Install Nakama with Bun or Docker, run the server, and complete first-time setup.
+- [Overview](https://ahmadrosid.github.io/nakama/overview.md): Understand the Nakama mental model: organizations, profiles, tools, and channels.
+- [Multi Tenancy](https://ahmadrosid.github.io/nakama/multi-tenancy.md): Learn how organizations, roles, and tenant isolation work in Nakama.
+- [Profiles](https://ahmadrosid.github.io/nakama/profiles.md): See how Nakama profiles define bot behavior, soul files, tools, and model selection.
+- [Agent Prompt](https://ahmadrosid.github.io/nakama/agent-prompt.md): Understand how Nakama builds the final system prompt from soul files, tools, and runtime context.
+- [Builtin Tools](https://ahmadrosid.github.io/nakama/builtin-tools.md): Review the builtin tools that Nakama profiles can use, including persistent artifact saving and file access boundaries.
+- [Skills](https://ahmadrosid.github.io/nakama/skills.md): Learn how reusable skills extend Nakama profiles with focused workflows.
+- [MCP Servers](https://ahmadrosid.github.io/nakama/mcp.md): Connect external MCP servers to Nakama profiles and expose new tools safely.
+- [Telegram](https://ahmadrosid.github.io/nakama/telegram.md): Set up Nakama as a Telegram bot with pairing, commands, and group behavior.
+- [WhatsApp](https://ahmadrosid.github.io/nakama/whatsapp.md): Set up Nakama on WhatsApp with linking, commands, and troubleshooting.
