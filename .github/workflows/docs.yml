@@ -13,24 +13,24 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment_retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Ensure GitHub Pages is enabled
+      - name: Configure GitHub Pages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/pages" --silent 2>/dev/null || \
-            gh api "repos/${GITHUB_REPOSITORY}/pages" -X POST -f build_type=workflow
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow || \
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -47,10 +47,20 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: docs/website/.vitepress/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Retry Pages deploy
+        if: steps.deployment.outcome == 'failure'
+        id: deployment_retry
+        uses: actions/deploy-pages@v5
+
+      - name: Verify Pages deploy
+        if: steps.deployment.outcome == 'failure' && steps.deployment_retry.outcome == 'failure'
+        run: exit 1
