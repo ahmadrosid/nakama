@@ -64,7 +64,7 @@ describe("findActiveSkillSlashRange", () => {
   });
 
   test("ignores slash after a word and slash ranges with whitespace", () => {
-    expect(findActiveSkillSlashRange("https://tinyclaw.test", 8)).toBeNull();
+    expect(findActiveSkillSlashRange("https://nakama.test", 8)).toBeNull();
     expect(findActiveSkillSlashRange("/skill weather", 14)).toBeNull();
   });
 });
