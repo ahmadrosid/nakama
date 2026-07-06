@@ -10,6 +10,10 @@ export async function ensureLocalClientAccess(db: DatabaseAdapter): Promise<void
   let user = await db.getUserByEmail(LOCAL_CLIENT_EMAIL);
 
   if (!user) {
+    user = await db.getUserById(LOCAL_CLIENT_USER_ID);
+  }
+
+  if (!user) {
     await db.createUser({
       id: LOCAL_CLIENT_USER_ID,
       email: LOCAL_CLIENT_EMAIL,

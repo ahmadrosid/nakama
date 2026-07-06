@@ -5,6 +5,7 @@ import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrgani
 import { SetupStepAccount } from "@/components/setup-wizard/SetupStepAccount";
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
+import { useAppContext } from "@/context/app-context";
 import { pathForPage } from "@/lib/navigation";
 
 export interface SetupOrganizationDraft {
@@ -34,14 +35,17 @@ export interface SetupWizardProps {
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<SetupStepId>(1);
+  const { health } = useAppContext();
+  const userAlreadyConfigured = health?.userConfigured === true;
+  const firstStep: SetupStepId = userAlreadyConfigured ? 3 : 1;
+  const [currentStep, setCurrentStep] = useState<SetupStepId>(firstStep);
   const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(null);
 
   useEffect(() => {
-    if (currentStep === 2 && !accountDraft) {
+    if (!userAlreadyConfigured && currentStep === 2 && !accountDraft) {
       setCurrentStep(1);
     }
-  }, [currentStep, accountDraft]);
+  }, [currentStep, accountDraft, userAlreadyConfigured]);
 
   const goNext = useCallback(() => {
     setCurrentStep((prev) => {
@@ -63,12 +67,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const goBack = useCallback(() => {
     setCurrentStep((prev) => {
-      if (prev <= 1) {
-        return 1;
+      if (prev <= firstStep) {
+        return firstStep;
       }
       return (prev - 1) as SetupStepId;
     });
-  }, []);
+  }, [firstStep]);
 
   const handleComplete = useCallback(() => {
     if (onComplete) {

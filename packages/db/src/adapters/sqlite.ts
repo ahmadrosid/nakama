@@ -7,7 +7,6 @@ import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import type {
   DatabaseAdapter,
   StoredBrowserSessionRecord,
-  LlmUsageStatsDelta,
   StoredAutomationRecord,
   StoredAutomationRunRecord,
   StoredLlmUsageModelStatsRecord,

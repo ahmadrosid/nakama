@@ -1,9 +1,21 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth-context";
 import { useAppContext } from "@/context/app-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SETUP_PATH } from "@/lib/navigation";
+
+function resolvePostAuthPath(
+  health: { providerConfigured?: boolean } | null,
+  from?: string,
+): string {
+  if (health?.providerConfigured !== true) {
+    return SETUP_PATH;
+  }
+
+  return from ?? "/chat";
+}
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -13,14 +25,16 @@ export function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const { health } = useAppContext();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
 
   if (isAuthenticated) {
-    navigate("/chat", { replace: true });
+    navigate(resolvePostAuthPath(health, from), { replace: true });
     return null;
   }
 
   if (health?.userConfigured === false) {
-    return <Navigate to="/setup" replace />;
+    return <Navigate to={SETUP_PATH} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +44,7 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      navigate("/chat", { replace: true });
+      navigate(resolvePostAuthPath(health, from), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

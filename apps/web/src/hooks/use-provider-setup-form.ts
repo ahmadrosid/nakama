@@ -4,6 +4,7 @@ import { normalizeModelListRows, type ModelListRow } from "@/components/ModelLis
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 import { useAppContext } from "@/context/app-context";
+import { useAuth } from "@/context/auth-context";
 import { useModelsQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
@@ -29,7 +30,10 @@ interface UseProviderSetupFormOptions {
 
 export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) {
   const { createProvider } = useAppContext();
-  const { data: catalogResponse, error: catalogQueryError } = useModelsQuery();
+  const { isAuthenticated } = useAuth();
+  const { data: catalogResponse, error: catalogQueryError } = useModelsQuery({
+    enabled: isAuthenticated,
+  });
   const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? [];
 
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");

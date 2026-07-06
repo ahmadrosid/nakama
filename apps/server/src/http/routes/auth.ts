@@ -292,17 +292,17 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.openapi(meRoute, async (c) => {
     if (!authService || !databaseAdapter || !orgService) {
-      return errorResponse("Authentication not configured", 500);
+      return c.json({ error: "Authentication not configured" }, 500);
     }
 
     const auth = await authenticateRequest(c.req.raw, authService, databaseAdapter);
     if (!auth) {
-      return errorResponse("Authentication required", 401);
+      return c.json({ error: "Authentication required" }, 401);
     }
 
     const user = await databaseAdapter.getUserById(auth.user.id);
     if (!user) {
-      return errorResponse("Authentication required", 401);
+      return c.json({ error: "Authentication required" }, 401);
     }
 
     const authBody = await orgService.buildAuthUserResponse(
@@ -310,17 +310,17 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       auth.session?.id,
       auth.session?.activeOrgId,
     );
-    return json<AuthUserResponse>(authBody, 200);
+    return c.json(authBody, 200);
   });
 
   app.openapi(logoutRoute, async (c) => {
     if (!authService || !databaseAdapter) {
-      return errorResponse("Authentication not configured", 500);
+      return c.json({ error: "Authentication not configured" }, 500);
     }
 
     const auth = await authenticateRequest(c.req.raw, authService, databaseAdapter);
     if (!auth) {
-      return errorResponse("Authentication required", 401);
+      return c.json({ error: "Authentication required" }, 401);
     }
 
     assertBrowserCsrf(c.req.raw, auth, authService);
@@ -333,9 +333,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       );
     }
 
-    const headers = new Headers();
-    clearBrowserSessionCookies(headers);
-    return json({ ok: true }, 200, headers);
+    const response = c.json({ ok: true }, 200);
+    clearBrowserSessionCookies(response.headers);
+    return response;
   });
 
   app.openAPIRegistry.registerPath(changePasswordRoute);
