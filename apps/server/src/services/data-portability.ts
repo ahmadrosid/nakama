@@ -277,22 +277,22 @@ function readZip(buffer: Buffer): ZipEntry[] {
 function readManifest(entries: ZipEntry[]): DataExportManifest {
   const manifestEntry = entries.find((entry) => entry.name === NAKAMA_EXPORT_MANIFEST);
   if (!manifestEntry) {
-    throw new Error("Archive is missing Tinyclaw export manifest.");
+    throw new Error("Archive is missing Nakama export manifest.");
   }
 
   let manifest: DataExportManifest;
   try {
     manifest = JSON.parse(manifestEntry.data.toString("utf8")) as DataExportManifest;
   } catch {
-    throw new Error("Tinyclaw export manifest is not valid JSON.");
+    throw new Error("Nakama export manifest is not valid JSON.");
   }
 
   if (manifest.kind !== "nakama-export") {
-    throw new Error("Archive is not a Tinyclaw export.");
+    throw new Error("Archive is not a Nakama export.");
   }
 
   if (manifest.version !== NAKAMA_EXPORT_FORMAT_VERSION) {
-    throw new Error(`Unsupported Tinyclaw export version: ${manifest.version}`);
+    throw new Error(`Unsupported Nakama export version: ${manifest.version}`);
   }
 
   return manifest;
