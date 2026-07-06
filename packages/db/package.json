@@ -1,12 +1,12 @@
 {
-  "name": "@tinyclaw/db",
+  "name": "@nakama/db",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tinyclaw/core": "workspace:*",
+    "@nakama/core": "workspace:*",
     "bcryptjs": "^3.0.3"
   },
   "scripts": {

@@ -13,8 +13,8 @@ import type {
   ProviderName,
   StreamChatHandlers,
   ToolCall,
-} from "@tinyclaw/core";
-import { toAnthropicUserContent, WEB_SEARCH_TOOL_NAME } from "@tinyclaw/core";
+} from "@nakama/core";
+import { toAnthropicUserContent, WEB_SEARCH_TOOL_NAME } from "@nakama/core";
 import {
   buildTokenUsage,
   normalizeThinkingEffort,

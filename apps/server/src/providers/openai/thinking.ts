@@ -1,4 +1,4 @@
-import { findCustomModel, type CustomModelEntry } from "@tinyclaw/core";
+import { findCustomModel, type CustomModelEntry } from "@nakama/core";
 import { getModelById } from "../models";
 
 /** OpenAI ids known not to accept the `reasoning` request parameter. */

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BUILTIN_TOOL_IDS, DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
-import { PREINSTALLED_MCP_SERVER_IDS } from "@tinyclaw/core/mcp/preinstalled";
+import { BUILTIN_TOOL_IDS, DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
+import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import {
   ensureBuiltinToolDefinitions,

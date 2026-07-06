@@ -55,7 +55,7 @@ export function resolveServerUrl(
   env: Record<string, string | undefined> = process.env,
 ): string {
   return normalizeServerUrl(
-    env.TINYCLAW_SERVER_URL?.trim() ||
+    env.nakama_SERVER_URL?.trim() ||
       readRuntimeServerUrl() ||
       DEFAULT_SERVER_URL,
   );

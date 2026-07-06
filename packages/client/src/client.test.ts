@@ -3,13 +3,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { getUserConfigDir, saveUserConfig } from "@tinyclaw/core";
+import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { createClient } from "./index";
 
 test("chat stream request includes cookie CSRF protection", async () => {
   const originalDocument = (globalThis as typeof globalThis & { document?: { cookie: string } }).document;
   (globalThis as typeof globalThis & { document?: { cookie: string } }).document = {
-    cookie: "tinyclaw_csrf=csrf-token-123; other=value",
+    cookie: "nakama_csrf=csrf-token-123; other=value",
   };
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
@@ -84,7 +84,7 @@ test("data export downloads zip bytes with filename metadata", async () => {
       fetchCalls.push({ input, init });
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: {
-          "Content-Disposition": 'attachment; filename="tinyclaw-export-test.zip"',
+          "Content-Disposition": 'attachment; filename="nakama-export-test.zip"',
           "Content-Type": "application/zip",
         },
       });
@@ -97,7 +97,7 @@ test("data export downloads zip bytes with filename metadata", async () => {
   const headers = new Headers(fetchCalls[0]!.init?.headers);
   expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
   expect(headers.get("Content-Type")).toBeNull();
-  expect(result.filename).toBe("tinyclaw-export-test.zip");
+  expect(result.filename).toBe("nakama-export-test.zip");
   expect(Array.from(new Uint8Array(result.data))).toEqual([1, 2, 3]);
 });
 
@@ -110,7 +110,7 @@ test("data import helpers upload base64 archive data", async () => {
       fetchCalls.push({ input, init });
       if (input.toString().endsWith("/preview")) {
         return Response.json({
-          manifest: { kind: "tinyclaw-export" },
+          manifest: { kind: "nakama-export" },
           archiveFileCount: 1,
           archiveTotalBytes: 3,
           topLevelPaths: ["config.ini"],
@@ -119,8 +119,8 @@ test("data import helpers upload base64 archive data", async () => {
       }
 
       return Response.json({
-        manifest: { kind: "tinyclaw-export" },
-        restoredRoot: "/tmp/tinyclaw",
+        manifest: { kind: "nakama-export" },
+        restoredRoot: "/tmp/nakama",
         restoredFileCount: 1,
       });
     },
@@ -144,8 +144,8 @@ test("data import helpers upload base64 archive data", async () => {
 });
 
 test("non-browser clients reload the local auth token once after a 401", async () => {
-  const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-client-auth-reload-"));
-  process.env.TINYCLAW_CONFIG_DIR = configDir;
+  const configDir = await mkdtemp(join(tmpdir(), "nakama-client-auth-reload-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
 
   try {
     await writeFile(
@@ -184,7 +184,7 @@ test("non-browser clients reload the local auth token once after a 401", async (
     await expect(client.health()).resolves.toEqual({ ok: true });
     expect(attempts).toBe(2);
   } finally {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
     await rm(configDir, { recursive: true, force: true });
   }
 });

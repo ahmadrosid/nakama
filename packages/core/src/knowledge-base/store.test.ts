@@ -17,10 +17,10 @@ const ORG_ID = "org_test";
 
 describe("knowledge base store", () => {
   let tempConfigDir = "";
-  const previousConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = previousConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -29,8 +29,8 @@ describe("knowledge base store", () => {
   });
 
   async function setupProfile(profileId: string): Promise<void> {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-kb-store-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-kb-store-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     await import("node:fs/promises").then(({ mkdir }) =>
       mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "profiles", profileId), {
         recursive: true,

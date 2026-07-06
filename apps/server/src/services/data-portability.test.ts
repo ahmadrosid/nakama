@@ -3,16 +3,16 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  createTinyClawDataExport,
-  previewTinyClawDataImport,
-  restoreTinyClawDataImport,
-  TINYCLAW_EXPORT_MANIFEST,
+  createNakamaDataExport,
+  previewNakamaDataImport,
+  restoreNakamaDataImport,
+  NAKAMA_EXPORT_MANIFEST,
 } from "./data-portability";
 
 let rootDir = "";
 
 beforeEach(async () => {
-  rootDir = await mkdtemp(join(tmpdir(), "tinyclaw-data-portability-test-"));
+  rootDir = await mkdtemp(join(tmpdir(), "nakama-data-portability-test-"));
 });
 
 afterEach(async () => {
@@ -22,36 +22,36 @@ afterEach(async () => {
   }
 });
 
-describe("Tinyclaw data portability", () => {
+describe("Nakama data portability", () => {
   test("exports config root content with a manifest", async () => {
     await writeFile(join(rootDir, "config.ini"), "provider=openai");
-    await writeFile(join(rootDir, "tinyclaw.db"), "sqlite");
+    await writeFile(join(rootDir, "nakama.db"), "sqlite");
     await writeFile(join(rootDir, "tools.js"), "module.exports = {}");
 
-    const result = await createTinyClawDataExport({
+    const result = await createNakamaDataExport({
       rootDir,
       now: new Date("2026-07-01T10:00:00.000Z"),
     });
-    const preview = await previewTinyClawDataImport(result.data, { rootDir });
+    const preview = await previewNakamaDataImport(result.data, { rootDir });
 
-    expect(result.filename).toBe("tinyclaw-export-2026-07-01T10-00-00-000Z.zip");
-    expect(result.manifest.kind).toBe("tinyclaw-export");
-    expect(result.manifest.topLevelPaths).toEqual(["config.ini", "tinyclaw.db", "tools.js"]);
+    expect(result.filename).toBe("nakama-export-2026-07-01T10-00-00-000Z.zip");
+    expect(result.manifest.kind).toBe("nakama-export");
+    expect(result.manifest.topLevelPaths).toEqual(["config.ini", "nakama.db", "tools.js"]);
     expect(preview.manifest.createdAt).toBe("2026-07-01T10:00:00.000Z");
     expect(preview.archiveFileCount).toBe(3);
-    expect(preview.topLevelPaths).toEqual(["config.ini", "tinyclaw.db", "tools.js"]);
+    expect(preview.topLevelPaths).toEqual(["config.ini", "nakama.db", "tools.js"]);
   });
 
   test("reports external database paths without copying them", async () => {
-    const outsideDb = join(await mkdtemp(join(tmpdir(), "tinyclaw-external-db-")), "tinyclaw.db");
+    const outsideDb = join(await mkdtemp(join(tmpdir(), "nakama-external-db-")), "nakama.db");
     await writeFile(join(rootDir, "config.ini"), "ok");
 
     try {
-      const result = await createTinyClawDataExport({ rootDir, databasePath: outsideDb });
+      const result = await createNakamaDataExport({ rootDir, databasePath: outsideDb });
       expect(result.manifest.skipped).toEqual([
         {
           path: outsideDb,
-          reason: "Database path is outside the Tinyclaw root.",
+          reason: "Database path is outside the Nakama root.",
         },
       ]);
     } finally {
@@ -61,16 +61,16 @@ describe("Tinyclaw data portability", () => {
 
   test("preview does not mutate existing data and restore replaces it after confirmation", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
-    const exportResult = await createTinyClawDataExport({ rootDir });
+    const exportResult = await createNakamaDataExport({ rootDir });
 
     await writeFile(join(rootDir, "config.ini"), "changed");
     await writeFile(join(rootDir, "extra.txt"), "remove me");
 
-    const preview = await previewTinyClawDataImport(exportResult.data, { rootDir });
+    const preview = await previewNakamaDataImport(exportResult.data, { rootDir });
     expect(preview.willReplaceRoot).toBe(true);
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
 
-    const restore = await restoreTinyClawDataImport(exportResult.data, {
+    const restore = await restoreNakamaDataImport(exportResult.data, {
       rootDir,
       confirm: true,
     });
@@ -78,25 +78,25 @@ describe("Tinyclaw data portability", () => {
     expect(restore.restoredFileCount).toBe(1);
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("original");
     await expect(readFile(join(rootDir, "extra.txt"), "utf8")).rejects.toThrow();
-    await expect(readFile(join(rootDir, TINYCLAW_EXPORT_MANIFEST), "utf8")).rejects.toThrow();
+    await expect(readFile(join(rootDir, NAKAMA_EXPORT_MANIFEST), "utf8")).rejects.toThrow();
   });
 
   test("restore requires explicit confirmation", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
-    const exportResult = await createTinyClawDataExport({ rootDir });
+    const exportResult = await createNakamaDataExport({ rootDir });
 
     await expect(
-      restoreTinyClawDataImport(exportResult.data, { rootDir, confirm: false }),
+      restoreNakamaDataImport(exportResult.data, { rootDir, confirm: false }),
     ).rejects.toThrow("Restore confirmation is required.");
   });
 
   test("rejects malformed archives and unsafe entry paths", async () => {
-    await expect(previewTinyClawDataImport(Buffer.from("not a zip"), { rootDir })).rejects.toThrow(
+    await expect(previewNakamaDataImport(Buffer.from("not a zip"), { rootDir })).rejects.toThrow(
       "Invalid ZIP archive.",
     );
 
     const unsafe = buildUnsafeZip();
-    await expect(previewTinyClawDataImport(unsafe, { rootDir })).rejects.toThrow(
+    await expect(previewNakamaDataImport(unsafe, { rootDir })).rejects.toThrow(
       "Archive entry escapes restore root",
     );
   });

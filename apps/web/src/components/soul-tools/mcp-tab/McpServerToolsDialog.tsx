@@ -1,4 +1,4 @@
-import type { McpServerSummary } from "@tinyclaw/core/contract";
+import type { McpServerSummary } from "@nakama/core/contract";
 import { BlocksIcon } from "lucide-react";
 import { McpToolList } from "@/components/soul-tools/McpToolList";
 import { Button } from "@/components/ui/button";

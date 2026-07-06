@@ -4,8 +4,8 @@ import type {
   GenerateChatInput,
   ProviderClient,
   ToolDefinition,
-} from "@tinyclaw/core";
-import { webSearchTool } from "@tinyclaw/core";
+} from "@nakama/core";
+import { webSearchTool } from "@nakama/core";
 import { createAgentHarness } from "./index";
 
 function createCapturingProvider(

@@ -3,7 +3,7 @@ import {
   replaceImagePartsWithDescriptions,
   resolveMessagesForNonVisionProvider,
   type ProviderClient,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { createAgentHarness } from "./index";
 
 const tinyPngBase64 =

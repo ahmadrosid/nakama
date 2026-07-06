@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_URL, TINYCLAW_API_VERSION } from "@tinyclaw/core";
+import { DEFAULT_SERVER_URL, NAKAMA_API_VERSION } from "@nakama/core";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { HonoApp } from "./types";
 import type { ServerOptions } from "./context";
@@ -38,9 +38,9 @@ export function buildHttpOpenApiSpec(app?: HonoApp, serverUrl?: string) {
   return openApiApp.getOpenAPI31Document({
     openapi: "3.1.0",
     info: {
-      title: "TinyClaw API",
-      version: String(TINYCLAW_API_VERSION),
-      description: "HTTP API for the TinyClaw personal AI assistant.",
+      title: "Nakama API",
+      version: String(NAKAMA_API_VERSION),
+      description: "HTTP API for the Nakama personal AI assistant.",
     },
     servers: [
       {

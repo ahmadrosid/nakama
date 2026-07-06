@@ -1,8 +1,8 @@
-import type { OrgRole } from "@tinyclaw/core";
+import type { OrgRole } from "@nakama/core";
 import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
-  TinyClawApiError,
+  NakamaApiError,
   type AgentChannel,
   type AgentQuestionnaire,
   type AgentTodo,
@@ -10,20 +10,20 @@ import {
   type SendMessageInput,
   type StreamEvent,
   verifyLocalAuthToken,
-} from "@tinyclaw/core";
-import type { AgentChatSession } from "@tinyclaw/agent";
+} from "@nakama/core";
+import type { AgentChatSession } from "@nakama/agent";
 import type { Context } from "hono";
 import type { AuthService } from "../services/auth-service";
 import type {
   DatabaseAdapter,
   StoredBrowserSessionRecord,
   StoredUserRecord,
-} from "@tinyclaw/db";
-import { ensureLocalClientAccess } from "@tinyclaw/db";
+} from "@nakama/db";
+import { ensureLocalClientAccess } from "@nakama/db";
 import type { AppEnv } from "./types";
 
-const SESSION_COOKIE_NAME = "tinyclaw_session";
-const CSRF_COOKIE_NAME = "tinyclaw_csrf";
+const SESSION_COOKIE_NAME = "nakama_session";
+const CSRF_COOKIE_NAME = "nakama_csrf";
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -113,7 +113,7 @@ function toAuthUser(user: StoredUserRecord): RequestAuthContext["user"] {
 export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
   const auth = c.get("auth");
   if (!auth) {
-    throw new TinyClawApiError("Authentication required", 401);
+    throw new NakamaApiError("Authentication required", 401);
   }
 
   return auth;
@@ -190,11 +190,11 @@ export function assertBrowserCsrf(
   const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
 
   if (!csrfToken || !csrfHeader || csrfToken !== csrfHeader.trim()) {
-    throw new TinyClawApiError("CSRF validation failed.", 403);
+    throw new NakamaApiError("CSRF validation failed.", 403);
   }
 
   if (auth.session?.csrfTokenHash !== authService.hashToken(csrfToken)) {
-    throw new TinyClawApiError("CSRF validation failed.", 403);
+    throw new NakamaApiError("CSRF validation failed.", 403);
   }
 }
 
@@ -293,7 +293,7 @@ export async function readJson<T>(request: Request): Promise<T> {
     return (await request.json()) as T;
   } catch (err) {
     if (err instanceof SyntaxError) {
-      throw new TinyClawApiError("Invalid JSON in request body.", 400);
+      throw new NakamaApiError("Invalid JSON in request body.", 400);
     }
     throw err;
   }
@@ -318,7 +318,7 @@ export function parseChannel(value: string | undefined): AgentChannel {
     return value;
   }
 
-  throw new TinyClawApiError("Invalid channel. Expected cli, web, or telegram.", 400);
+  throw new NakamaApiError("Invalid channel. Expected cli, web, or telegram.", 400);
 }
 
 const STREAM_TIMEOUT_MS = 120_000;

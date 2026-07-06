@@ -1,5 +1,5 @@
-import type { ProfileSummary } from "@tinyclaw/core/contract";
-import { getProfileAvatarUrl } from "@tinyclaw/client";
+import type { ProfileSummary } from "@nakama/core/contract";
+import { getProfileAvatarUrl } from "@nakama/client";
 import { cn } from "@/lib/utils";
 
 type ProfileAvatarProfile = Pick<ProfileSummary, "id" | "name" | "hasAvatar" | "updatedAt">;

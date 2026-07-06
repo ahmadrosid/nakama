@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
+import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 

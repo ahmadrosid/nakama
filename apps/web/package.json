@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/web",
+  "name": "@nakama/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,8 +20,8 @@
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
     "@tanstack/react-query": "^5.100.14",
-    "@tinyclaw/client": "workspace:*",
-    "@tinyclaw/core": "workspace:*",
+    "@nakama/client": "workspace:*",
+    "@nakama/core": "workspace:*",
     "ai": "^6.0.191",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -12,7 +12,7 @@ import {
 import { getMemoryArchiveFilePath } from "./memory-paths";
 
 const PROFILE = { orgId: "org_test", profileId: "profile_test" };
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("memory archive", () => {
   let tempDir = "";
@@ -23,18 +23,18 @@ describe("memory archive", () => {
       tempDir = "";
     }
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
   });
 
   async function setupProfileMemory(content: string): Promise<string> {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-memory-archive-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-memory-archive-"));
     const soulDir = path.join(tempDir, "orgs", PROFILE.orgId, "profiles", PROFILE.profileId);
     await mkdir(soulDir, { recursive: true });
     await writeFile(path.join(soulDir, "MEMORY.md"), content, "utf8");
-    process.env.TINYCLAW_CONFIG_DIR = tempDir;
+    process.env.NAKAMA_CONFIG_DIR = tempDir;
     return soulDir;
   }
 

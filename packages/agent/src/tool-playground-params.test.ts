@@ -48,11 +48,11 @@ describe("tool playground params", () => {
       { toolName: "echo", description: "Echo", prompt: "test" },
       {
         provider: {
-          generateText: async () => '{"query":"tinyclaw"}',
+          generateText: async () => '{"query":"nakama"}',
         } as never,
       },
     );
 
-    expect(result).toEqual({ query: "tinyclaw" });
+    expect(result).toEqual({ query: "nakama" });
   });
 });

@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/server",
+  "name": "@nakama/server",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,9 +15,9 @@
     "@hono/zod-openapi": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openrouter/sdk": "^0.12.79",
-    "@tinyclaw/agent": "workspace:*",
-    "@tinyclaw/core": "workspace:*",
-    "@tinyclaw/db": "workspace:*",
+    "@nakama/agent": "workspace:*",
+    "@nakama/core": "workspace:*",
+    "@nakama/db": "workspace:*",
     "bcryptjs": "^3.0.3",
     "croner": "^10.0.1",
     "fflate": "^0.8.3",

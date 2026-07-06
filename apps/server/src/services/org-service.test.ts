@@ -1,15 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { TinyClawApiError } from "@tinyclaw/core";
-import { getProfileSoulDir } from "@tinyclaw/core";
-import { LOCAL_CLIENT_EMAIL } from "@tinyclaw/core/local-auth";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { NakamaApiError } from "@nakama/core";
+import { getProfileSoulDir } from "@nakama/core";
+import { LOCAL_CLIENT_EMAIL } from "@nakama/core/local-auth";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
 import { OrgService } from "./org-service";
 import { setupTestConfigDir } from "../test-config-dir";
 
-setupTestConfigDir("tinyclaw-org-service-test-");
+setupTestConfigDir("nakama-org-service-test-");
 
 function createOrgService() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -299,7 +299,7 @@ describe("OrgService", () => {
 
     await expect(
       orgService.createOrganization({ name: "   ", slug: "acme" }),
-    ).rejects.toBeInstanceOf(TinyClawApiError);
+    ).rejects.toBeInstanceOf(NakamaApiError);
   });
 
   test("lists, updates, and removes members", async () => {

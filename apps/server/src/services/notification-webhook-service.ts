@@ -1,11 +1,11 @@
-import { TinyClawApiError } from "@tinyclaw/core";
+import { NakamaApiError } from "@nakama/core";
 import {
   createTelegramOutboundAdapter,
   normalizeNotificationWebhookRequest,
   type NotificationWebhookRequest,
   type TelegramOutboundAdapter,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
 function levelPrefix(level: NotificationWebhookRequest["level"]): string {
@@ -47,7 +47,7 @@ export class NotificationWebhookService {
   async deliver(destinationId: string, apiKey: string | null, payload: unknown): Promise<void> {
     const destination = await this.databaseAdapter.getNotificationDestination(destinationId);
     if (!destination || !apiKey || this.authService.hashToken(apiKey) !== destination.secretHash) {
-      throw new TinyClawApiError("Invalid notification credentials.", 401);
+      throw new NakamaApiError("Invalid notification credentials.", 401);
     }
 
     const normalized = normalizeNotificationWebhookRequest(payload);
@@ -59,7 +59,7 @@ export class NotificationWebhookService {
     });
 
     if (!result.ok) {
-      throw new TinyClawApiError(result.error ?? "Notification delivery failed.", 502);
+      throw new NakamaApiError(result.error ?? "Notification delivery failed.", 502);
     }
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TinyClawApiError } from "@tinyclaw/core/api-error";
+import { NakamaApiError } from "@nakama/core/api-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,8 +21,8 @@ import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
 function formatUserContextError(error: unknown): string {
-  if (error instanceof TinyClawApiError && error.status === 404) {
-    return "This feature needs a newer TinyClaw server. Restart the server and try again.";
+  if (error instanceof NakamaApiError && error.status === 404) {
+    return "This feature needs a newer Nakama server. Restart the server and try again.";
   }
 
   return formatError(error);

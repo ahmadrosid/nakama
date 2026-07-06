@@ -1,5 +1,5 @@
-import type { NotificationWebhookRequest } from "@tinyclaw/core";
-import { TinyClawApiError } from "@tinyclaw/core";
+import type { NotificationWebhookRequest } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import { NotificationWebhookService } from "../../services/notification-webhook-service";
 import type { ServerOptions } from "../context";
 import { errorResponse, readJson } from "../shared";
@@ -21,7 +21,7 @@ export function registerNotificationWebhookRoutes(
       await service.deliver(c.req.param("destinationId"), apiKey, body);
       return new Response(null, { status: 204 });
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       return errorResponse(error instanceof Error ? error.message : String(error), 400);

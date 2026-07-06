@@ -1,9 +1,9 @@
-import type { ToolDetail } from "@tinyclaw/core/contract";
+import type { ToolDetail } from "@nakama/core/contract";
 import {
   BUILTIN_TOOL_IDS,
   DELEGATE_CODING_TASK_TOOL_ID,
   isProtectedToolId,
-} from "@tinyclaw/core/tools/protected";
+} from "@nakama/core/tools/protected";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";

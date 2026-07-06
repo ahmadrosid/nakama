@@ -4,20 +4,20 @@ import {
   normalizeBaseUrl,
   validateCustomModels,
   validateDisplayName,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import type {
   CreateProviderRequest,
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import {
   createProviderInstanceId,
   findProviderInstance,
   normalizeProviderInstanceLabel,
   type ProviderInstance,
   validateProviderInstanceLabel,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   getDefaultModel,
   getModelById,

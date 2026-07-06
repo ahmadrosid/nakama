@@ -4,8 +4,8 @@ import {
   isEmailConfigComplete,
   loadEmailConfig,
   type EmailOutboundAdapter,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter, CachedMcpTool, StoredMcpServerRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter, CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
 import type { McpClientManager } from "./mcp-client-manager";
 
 interface McpEmailTarget {

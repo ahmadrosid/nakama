@@ -262,14 +262,14 @@ describe("convertHtmlToMarkdown", () => {
       <!--[-->
       <nav><!--]--><a href="#content">Skip to content</a><!--[--></nav>
       <!---->
-      <!--[--><main id="content"><h1>TinyClaw</h1><p>Self-hosted AI agents</p></main><!--]-->
+      <!--[--><main id="content"><h1>Nakama</h1><p>Self-hosted AI agents</p></main><!--]-->
     `);
 
     expect(md).not.toContain("<!--[-->");
     expect(md).not.toContain("<!--]-->");
     expect(md).not.toContain("<!---->");
     expect(md).toContain("[Skip to content](#content)");
-    expect(md).toContain("# TinyClaw");
+    expect(md).toContain("# Nakama");
     expect(md).toContain("Self-hosted AI agents");
   });
 });

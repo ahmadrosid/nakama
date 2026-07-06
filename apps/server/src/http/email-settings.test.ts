@@ -6,7 +6,7 @@ import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { AgentService } from "../services/agent-service";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupFreshInstallSession } from "./test-session-helpers";
 
 describe("email settings routes", () => {
@@ -18,12 +18,12 @@ describe("email settings routes", () => {
       configDir = "";
     }
 
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("org admin can read and update email settings without exposing password", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-email-route-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-email-route-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();

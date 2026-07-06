@@ -1,7 +1,7 @@
 import * as readline from "node:readline/promises";
-import type { ProfileSummary } from "@tinyclaw/core";
-import { pickProfileForOrg } from "@tinyclaw/core";
-import type { TinyClawClient } from "@tinyclaw/client";
+import type { ProfileSummary } from "@nakama/core";
+import { pickProfileForOrg } from "@nakama/core";
+import type { NakamaClient } from "@nakama/client";
 import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
 
 export interface CliProfileOptions {
@@ -132,7 +132,7 @@ function findProfile(
 }
 
 export async function resolveStartupProfile(
-  client: TinyClawClient,
+  client: NakamaClient,
   options: CliProfileOptions,
 ): Promise<{ profileId: string; profile: ProfileSummary }> {
   const { profiles } = await client.listProfiles();

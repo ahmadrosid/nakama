@@ -1,23 +1,23 @@
 import type { Context } from "hono";
-import { TinyClawApiError } from "@tinyclaw/core";
+import { NakamaApiError } from "@nakama/core";
 import type { AppEnv } from "./types";
 import { getRequestAuth, type RequestAuthContext } from "./shared";
 
 export function requireOrgAdmin(auth: RequestAuthContext): void {
   if (auth.orgRole !== "admin") {
-    throw new TinyClawApiError("Forbidden", 403);
+    throw new NakamaApiError("Forbidden", 403);
   }
 }
 
 export function requireNotViewer(auth: RequestAuthContext): void {
   if (auth.orgRole === "viewer") {
-    throw new TinyClawApiError("Forbidden", 403);
+    throw new NakamaApiError("Forbidden", 403);
   }
 }
 
 export function requirePlatformAdmin(auth: RequestAuthContext): void {
   if (!auth.isPlatformAdmin) {
-    throw new TinyClawApiError("Forbidden", 403);
+    throw new NakamaApiError("Forbidden", 403);
   }
 }
 
@@ -32,7 +32,7 @@ export function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
     return;
   }
 
-  throw new TinyClawApiError("Forbidden", 403);
+  throw new NakamaApiError("Forbidden", 403);
 }
 
 export function requireOrgAdminOrPlatformAdminFromContext(
@@ -59,7 +59,7 @@ export function requireActiveOrgIdFromContext(c: Context<AppEnv>): string {
   const orgId = getRequestAuth(c).activeOrgId?.trim();
 
   if (!orgId) {
-    throw new TinyClawApiError("Organization context required", 400);
+    throw new NakamaApiError("Organization context required", 400);
   }
 
   return orgId;

@@ -1,4 +1,4 @@
-import type { ArtifactFile } from "@tinyclaw/core/contract";
+import type { ArtifactFile } from "@nakama/core/contract";
 import { FileDownIcon, FileTextIcon, ImageIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";

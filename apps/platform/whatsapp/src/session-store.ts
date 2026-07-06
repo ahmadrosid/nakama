@@ -1,5 +1,5 @@
-import { readTextOrNull, writePrivateTextFile } from "@tinyclaw/core/fs";
-import { getWhatsAppConfigDir } from "@tinyclaw/core/whatsapp-config";
+import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
+import { getWhatsAppConfigDir } from "@nakama/core/whatsapp-config";
 import { join } from "node:path";
 import { homedir } from "node:os";
 

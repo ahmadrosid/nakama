@@ -1,10 +1,10 @@
-import type { HealthResponse, LlmUsageStatus, SystemStatusResponse, WorkerProcessInfo } from "@tinyclaw/core";
+import type { HealthResponse, LlmUsageStatus, SystemStatusResponse, WorkerProcessInfo } from "@nakama/core";
 import {
   getAutomationWorkerHeartbeatStatus,
   getTelegramWorkerStatus,
   getWhatsAppWorkerStatus,
-  TINYCLAW_API_VERSION,
-} from "@tinyclaw/core";
+  NAKAMA_API_VERSION,
+} from "@nakama/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { McpService } from "./mcp-service";
@@ -122,7 +122,7 @@ export class SystemStatusService {
   private getServerStatus(): HealthResponse {
     return {
       ok: true,
-      apiVersion: TINYCLAW_API_VERSION,
+      apiVersion: NAKAMA_API_VERSION,
       providerConfigured: this.agent.providerConfigured,
     };
   }

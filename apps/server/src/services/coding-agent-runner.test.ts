@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { WORKSPACE_SETTINGS_ID, createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { WORKSPACE_SETTINGS_ID, createInMemoryDatabaseAdapter } from "@nakama/db";
 import { runCodingAgentTask } from "./coding-agent-runner";
 
 describe("runCodingAgentTask", () => {
@@ -11,8 +11,8 @@ describe("runCodingAgentTask", () => {
   let workspaceRoot = "";
 
   beforeEach(async () => {
-    tempBinDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-bin-"));
-    workspaceRoot = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-workspace-"));
+    tempBinDir = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-bin-"));
+    workspaceRoot = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-workspace-"));
     process.env.PATH = tempBinDir;
   });
 

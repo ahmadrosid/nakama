@@ -1,5 +1,5 @@
-import type { DocumentAttachment } from "@tinyclaw/core/contract";
-import { normalizeDocumentMediaType, parseDocumentDataUrl } from "@tinyclaw/core/message-content";
+import type { DocumentAttachment } from "@nakama/core/contract";
+import { normalizeDocumentMediaType, parseDocumentDataUrl } from "@nakama/core/message-content";
 
 export const KNOWLEDGE_BASE_ACCEPT =
   ".pdf,.txt,.md,.csv,application/pdf,text/plain,text/csv,text/markdown";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
 import { AgentService } from "../../services/agent-service";

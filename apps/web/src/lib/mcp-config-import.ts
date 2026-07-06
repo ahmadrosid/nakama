@@ -1,4 +1,4 @@
-import type { McpHttpConfig, McpStdioConfig, McpTransport } from "@tinyclaw/core/contract";
+import type { McpHttpConfig, McpStdioConfig, McpTransport } from "@nakama/core/contract";
 
 export type ParsedMcpServerImport = {
   name: string;

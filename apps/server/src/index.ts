@@ -25,7 +25,7 @@ import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./tools/automation-tools";
-import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
+import { NAKAMA_API_VERSION } from "@nakama/core";
 import {
   DEFAULT_SERVER_HOST,
   DEFAULT_SERVER_PORT,
@@ -33,25 +33,25 @@ import {
   getUserConfigDir,
   loadConfig,
   writeRuntimeServerUrl,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   serverHasCodingHarnessVerify,
   serverHasTaskChat,
-} from "@tinyclaw/core/ensure-server";
-import { ensureBundledSkillFiles } from "@tinyclaw/core";
-import { createDatabase, ensureBundledSkillsAssigned, seedDatabase, type Database } from "@tinyclaw/db";
+} from "@nakama/core/ensure-server";
+import { ensureBundledSkillFiles } from "@nakama/core";
+import { createDatabase, ensureBundledSkillsAssigned, seedDatabase, type Database } from "@nakama/db";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-const host = process.env.TINYCLAW_HOST ?? DEFAULT_SERVER_HOST;
-const requestedPort = parsePort(process.env.TINYCLAW_PORT);
-const canFallbackToNextPort = process.env.TINYCLAW_PORT == null;
+const host = process.env.NAKAMA_HOST ?? DEFAULT_SERVER_HOST;
+const requestedPort = parsePort(process.env.NAKAMA_PORT);
+const canFallbackToNextPort = process.env.NAKAMA_PORT == null;
 
-const existingServerUrl = await findRunningTinyClawServerUrl(host, requestedPort);
+const existingServerUrl = await findRunningNakamaServerUrl(host, requestedPort);
 
 if (existingServerUrl) {
   const runtimeServerUrl = writeRuntimeServerUrl(existingServerUrl);
-  console.log(`TinyClaw server already running on ${runtimeServerUrl}`);
+  console.log(`Nakama server already running on ${runtimeServerUrl}`);
   console.log(
     "Stop it before restarting to pick up code changes (for example: kill $(lsof -ti :4310)).",
   );
@@ -169,8 +169,8 @@ if (server.port !== requestedPort) {
   console.log(`Port ${requestedPort} is busy. Using ${server.port} instead.`);
 }
 
-console.log(`TinyClaw server listening on ${serverUrl}`);
-console.log(`TinyClaw database ready at ${config.databaseUrl}`);
+console.log(`Nakama server listening on ${serverUrl}`);
+console.log(`Nakama database ready at ${config.databaseUrl}`);
 
 try {
   await workerManager.recoverDesiredWorkers();
@@ -179,7 +179,7 @@ try {
 }
 
 if (webDistDir) {
-  console.log(`TinyClaw web dashboard ready at ${serverUrl}`);
+  console.log(`Nakama web dashboard ready at ${serverUrl}`);
 }
 
 if (!provider) {
@@ -194,7 +194,7 @@ function parsePort(value: string | undefined): number {
   const port = Number(value);
 
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new Error(`Invalid TINYCLAW_PORT: ${value}`);
+    throw new Error(`Invalid NAKAMA_PORT: ${value}`);
   }
 
   return port;
@@ -229,7 +229,7 @@ function startServer(options: {
     }
   }
 
-  throw lastError ?? new Error("Failed to find an open port for the TinyClaw server.");
+  throw lastError ?? new Error("Failed to find an open port for the Nakama server.");
 }
 
 function isAddressInUseError(error: unknown): error is { code: string } {
@@ -266,7 +266,7 @@ function registerRuntimeCleanup(
   }
 }
 
-async function findRunningTinyClawServerUrl(
+async function findRunningNakamaServerUrl(
   host: string,
   port: number,
 ): Promise<string | null> {
@@ -290,7 +290,7 @@ async function findRunningTinyClawServerUrl(
     const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
     const hasCodingHarnessVerify = await serverHasCodingHarnessVerify(serverUrl, controller.signal);
     return payload.ok === true &&
-      payload.apiVersion === TINYCLAW_API_VERSION &&
+      payload.apiVersion === NAKAMA_API_VERSION &&
       hasTaskChat &&
       hasCodingHarnessVerify
       ? serverUrl

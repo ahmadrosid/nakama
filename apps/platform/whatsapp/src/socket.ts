@@ -9,7 +9,7 @@ import {
 } from "@whiskeysockets/baileys";
 import {
   getWhatsAppConfigDir,
-} from "@tinyclaw/core/whatsapp-config";
+} from "@nakama/core/whatsapp-config";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
@@ -53,7 +53,7 @@ export async function createWhatsAppSocket(
         auth: state,
         logger: baileysLogger,
         printQRInTerminal: false,
-        browser: ["TinyClaw", "Chrome", "4.0.0"] as [string, string, string],
+        browser: ["Nakama", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
         retryRequestDelayMs: 2_000,
         // Keep history sync disabled, but allow Baileys init queries so the

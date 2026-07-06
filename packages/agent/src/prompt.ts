@@ -1,4 +1,4 @@
-import type { AgentChannel, ToolDefinition } from "@tinyclaw/core";
+import type { AgentChannel, ToolDefinition } from "@nakama/core";
 
 export function buildAutomationSystemPrompt(tools: ToolDefinition[]): string {
   const toolCatalog =
@@ -9,7 +9,7 @@ export function buildAutomationSystemPrompt(tools: ToolDefinition[]): string {
       : "- No tools are available.";
 
   return [
-    "You are TinyClaw, an automation planner.",
+    "You are Nakama, an automation planner.",
     "Convert the user's request into a JSON automation definition.",
     "Use only tools from the catalog below.",
     "Prefer schedule triggers when the user mentions recurring timing.",

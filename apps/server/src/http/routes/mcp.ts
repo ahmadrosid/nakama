@@ -7,7 +7,7 @@ import type {
   TestMcpServerResponse,
   UpdateMcpServerRequest,
   CreateMcpServerRequest,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { json, readJson } from "../shared";
 import { requirePlatformAdminFromContext, requireActiveOrgIdFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";

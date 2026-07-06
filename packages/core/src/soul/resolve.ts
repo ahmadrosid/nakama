@@ -3,7 +3,7 @@ import { getUserConfigDir } from "../user-config";
 import { getSoulStatus, loadSoulStack } from "./load";
 import type { LoadedSoulStack, SoulStatus } from "./types";
 
-/** Per-profile soul stack: ~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/ */
+/** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
 export function getProfileSoulDir(orgId: string, profileId: string): string {
   return join(getUserConfigDir(), "orgs", orgId, "profiles", profileId);
 }

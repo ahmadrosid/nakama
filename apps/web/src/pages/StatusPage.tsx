@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { LlmUsageStatus, SystemStatusResponse } from "@tinyclaw/core/contract";
+import type { LlmUsageStatus, SystemStatusResponse } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { useAuth } from "@/context/auth-context";
@@ -761,7 +761,7 @@ export function deriveSummary(status: SystemStatusResponse): {
     return {
       tone: "bad",
       title: "Server offline",
-      description: "Restart TinyClaw and check your connection.",
+      description: "Restart Nakama and check your connection.",
     };
   }
 

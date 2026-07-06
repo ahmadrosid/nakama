@@ -1,5 +1,5 @@
-import type { ToolSummary } from "@tinyclaw/core/contract";
-import { DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
+import type { ToolSummary } from "@nakama/core/contract";
+import { DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";

@@ -5,7 +5,7 @@ import type {
   GenerateChatInput,
   ProviderClient,
   ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { createAgentHarness } from "./index";
 
 function createMockProvider(

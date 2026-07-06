@@ -1,4 +1,4 @@
-export const SIDEBAR_COLLAPSED_KEY = "tinyclaw-sidebar-collapsed";
+export const SIDEBAR_COLLAPSED_KEY = "nakama-sidebar-collapsed";
 
 export function getInitialSidebarCollapsed(): boolean {
   try {

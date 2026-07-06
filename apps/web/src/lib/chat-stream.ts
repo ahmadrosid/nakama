@@ -5,8 +5,8 @@ import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
-} from "@tinyclaw/core/contract";
-import type { StreamHandlers } from "@tinyclaw/client";
+} from "@nakama/core/contract";
+import type { StreamHandlers } from "@nakama/client";
 import type { ChatListItem } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 

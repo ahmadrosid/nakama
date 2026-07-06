@@ -3,8 +3,8 @@ import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
   WORKSPACE_SETTINGS_ID,
-} from "@tinyclaw/db";
-import type { StoredProfileRecord } from "@tinyclaw/db";
+} from "@nakama/db";
+import type { StoredProfileRecord } from "@nakama/db";
 import { AgentService } from "./agent-service";
 
 const ORG_ID = "org_test";

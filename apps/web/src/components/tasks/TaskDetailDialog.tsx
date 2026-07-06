@@ -1,4 +1,4 @@
-import type { ProfileSummary, StoredTask } from "@tinyclaw/core/contract";
+import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
 import { PlayIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -22,7 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { useDraftTaskPromptMutation } from "@/hooks/use-tasks";
-import { normalizeTaskPrompt } from "@tinyclaw/core/normalize-task-prompt";
+import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
 import { formatError } from "@/lib/client";
 
 interface TaskDetailDialogProps {

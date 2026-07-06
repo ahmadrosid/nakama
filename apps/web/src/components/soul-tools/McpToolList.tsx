@@ -1,4 +1,4 @@
-import type { CachedMcpToolSummary } from "@tinyclaw/core/contract";
+import type { CachedMcpToolSummary } from "@nakama/core/contract";
 import { ChevronRightIcon, SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";

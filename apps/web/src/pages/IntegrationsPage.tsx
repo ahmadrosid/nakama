@@ -140,7 +140,7 @@ export function IntegrationsPage() {
             <div className="space-y-4">
               <SectionIntro
                 title="Coding agents"
-                description="Choose which CLI agent TinyClaw can use for delegated code work on this server."
+                description="Choose which CLI agent Nakama can use for delegated code work on this server."
               />
               <CodingHarnessSettingsPanel embedded />
             </div>

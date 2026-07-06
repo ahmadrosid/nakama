@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID } from "@tinyclaw/core/local-auth";
+import { LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { ensureLocalClientAccess } from "./local-client";
 

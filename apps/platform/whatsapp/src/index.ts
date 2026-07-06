@@ -1,14 +1,14 @@
-import { createClient } from "@tinyclaw/client";
-import { ChannelOrgStore, getChannelOrgSelectionPath } from "@tinyclaw/core/channel-org";
-import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
-import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
+import { createClient } from "@nakama/client";
+import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
+import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import {
   clearWhatsAppWorkerHeartbeat,
   writeWhatsAppWorkerHeartbeat,
   writeWhatsAppQrCode,
   clearWhatsAppQrCode,
-} from "@tinyclaw/core/whatsapp-worker";
-import { syncWhatsAppOwnerPairing } from "@tinyclaw/core/whatsapp-config";
+} from "@nakama/core/whatsapp-worker";
+import { syncWhatsAppOwnerPairing } from "@nakama/core/whatsapp-config";
 import { createWhatsAppSocket } from "./socket";
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
@@ -45,7 +45,7 @@ try {
 
   const client = createClient({
     baseUrl: serverUrl,
-    authToken: await loadLocalAuthToken("whatsapp@tinyclaw.internal"),
+    authToken: await loadLocalAuthToken("whatsapp@nakama.internal"),
   });
   const health = await client.health();
 
@@ -116,7 +116,7 @@ try {
   const paired = authConfig?.pairedJid ? "yes" : "no";
   const pendingCode = authConfig?.pairingCode ? "yes" : "no";
   console.log(
-    `TinyClaw WhatsApp bridge · ${serverUrl} · profile ${config.profileId} · paired ${paired} · pairing code ${pendingCode}`,
+    `Nakama WhatsApp bridge · ${serverUrl} · profile ${config.profileId} · paired ${paired} · pairing code ${pendingCode}`,
   );
 
   await socket.start();

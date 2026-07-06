@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, unlink, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { WorkerManagerService } from "./worker-manager-service";
-import { readWorkerDesiredState, setWorkerDesiredRunning } from "@tinyclaw/core";
+import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
 
 function createMockPm2() {
   const mockPm2 = {
@@ -25,8 +25,8 @@ const projectRoot = "/tmp/test-project";
 let configDir: string | null = null;
 
 beforeEach(async () => {
-  configDir = await mkdtemp(join(tmpdir(), "tinyclaw-worker-manager-"));
-  process.env.TINYCLAW_CONFIG_DIR = configDir;
+  configDir = await mkdtemp(join(tmpdir(), "nakama-worker-manager-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
 });
 
 afterEach(async () => {
@@ -35,7 +35,7 @@ afterEach(async () => {
     configDir = null;
   }
 
-  delete process.env.TINYCLAW_CONFIG_DIR;
+  delete process.env.NAKAMA_CONFIG_DIR;
 });
 
 describe("WorkerManagerService", () => {
@@ -120,7 +120,7 @@ describe("WorkerManagerService", () => {
     });
 
     test("starts worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "tinyclaw-worker-dist-"));
+      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
       const distFilePath = join(tmpProjectRoot, "apps/platform/whatsapp/dist/index.js");
       await mkdir(join(tmpProjectRoot, "apps/platform/whatsapp/dist"), { recursive: true });
       await writeFile(distFilePath, "console.log('ok')");
@@ -137,7 +137,7 @@ describe("WorkerManagerService", () => {
     });
 
     test("starts telegram worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "tinyclaw-worker-dist-"));
+      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
       const distFilePath = join(tmpProjectRoot, "apps/platform/telegram/dist/index.js");
       await mkdir(join(tmpProjectRoot, "apps/platform/telegram/dist"), { recursive: true });
       await writeFile(distFilePath, "console.log('ok')");
@@ -154,7 +154,7 @@ describe("WorkerManagerService", () => {
     });
 
     test("starts automation worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "tinyclaw-worker-dist-"));
+      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
       const distFilePath = join(tmpProjectRoot, "apps/platform/automation/dist/index.js");
       await mkdir(join(tmpProjectRoot, "apps/platform/automation/dist"), { recursive: true });
       await writeFile(distFilePath, "console.log('ok')");
@@ -331,7 +331,7 @@ describe("WorkerManagerService", () => {
 
   describe("getWorkerLogs", () => {
     test("returns last N lines of stdout and stderr", async () => {
-      const tmpDir = await mkdtemp(join(tmpdir(), "tinyclaw-logs-"));
+      const tmpDir = await mkdtemp(join(tmpdir(), "nakama-logs-"));
       const outPath = join(tmpDir, "out.log");
       const errPath = join(tmpDir, "err.log");
       await writeFile(outPath, "line1\nline2\nline3\nline4\nline5\n");

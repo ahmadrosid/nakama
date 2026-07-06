@@ -1,6 +1,6 @@
 import type { Context } from "grammy";
-import type { ImageAttachment } from "@tinyclaw/core/contract";
-import { MAX_IMAGE_BYTES } from "@tinyclaw/core/message-content";
+import type { ImageAttachment } from "@nakama/core/contract";
+import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { downloadTelegramFile, OversizedTelegramFileError } from "./attachments";
 
 export interface TelegramImageInput {

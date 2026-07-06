@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AutomationSchedule, AutomationSchedulerStatus } from "@tinyclaw/core";
-import type { TinyClawClient } from "@tinyclaw/client";
+import type { AutomationSchedule, AutomationSchedulerStatus } from "@nakama/core";
+import type { NakamaClient } from "@nakama/client";
 import { AutomationWorkerScheduler } from "./scheduler";
 
 function createMockClient(
@@ -9,13 +9,13 @@ function createMockClient(
     runAutomationInternal: (id: string) => Promise<void>;
     getTimezone: () => Promise<string>;
   }> = {},
-): TinyClawClient {
+): NakamaClient {
   return {
     listAutomationSchedules: async () => [],
     runAutomationInternal: async () => {},
     getTimezone: async () => "UTC",
     ...overrides,
-  } as unknown as TinyClawClient;
+  } as unknown as NakamaClient;
 }
 
 describe("AutomationWorkerScheduler", () => {

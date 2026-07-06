@@ -6,7 +6,7 @@ import {
   LocalAuthTokenManagedExternallyError,
   loadLocalAuthToken,
   verifyLocalAuthToken,
-} from "@tinyclaw/core/local-auth";
+} from "@nakama/core/local-auth";
 import {
   formatRotateTokenError,
   isRotateTokenCommand,
@@ -21,8 +21,8 @@ describe("rotate-token command", () => {
   });
 
   test("runRotateToken rotates the on-disk token", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-cli-rotate-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-rotate-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const original = await loadLocalAuthToken();
@@ -43,11 +43,11 @@ describe("rotate-token command", () => {
       expect(rotated).not.toBe(original);
       await expect(verifyLocalAuthToken(original!)).resolves.toBeNull();
       await expect(verifyLocalAuthToken(rotated!)).resolves.toEqual({
-        email: "local-client@tinyclaw.internal",
+        email: "local-client@nakama.internal",
       });
       expect(logs.some((line) => line.includes(rotated!))).toBe(true);
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
@@ -55,6 +55,6 @@ describe("rotate-token command", () => {
   test("formatRotateTokenError surfaces env-managed token errors", () => {
     expect(
       formatRotateTokenError(new LocalAuthTokenManagedExternallyError()),
-    ).toContain("TINYCLAW_LOCAL_AUTH_TOKEN");
+    ).toContain("NAKAMA_LOCAL_AUTH_TOKEN");
   });
 });

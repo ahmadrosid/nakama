@@ -5,7 +5,7 @@ import {
   guardFilePath,
   type ToolContext,
   type ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_CHARS = 32_000;

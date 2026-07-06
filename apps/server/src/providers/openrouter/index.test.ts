@@ -57,8 +57,8 @@ describe("createOpenRouterProvider", () => {
       expect(request.url).toContain("/chat/completions");
       const headers = request.headers;
       expect(headers.get("Authorization")).toBe("Bearer sk-or-v1-test");
-      expect(headers.get("HTTP-Referer")).toBe("https://github.com/ahmadrosid/tinyclaw");
-      expect(headers.get("X-OpenRouter-Title")).toBe("TinyClaw");
+      expect(headers.get("HTTP-Referer")).toBe("https://github.com/ahmadrosid/nakama");
+      expect(headers.get("X-OpenRouter-Title")).toBe("Nakama");
 
       return new Response(chatCompletionResponse("Hello from OpenRouter"), {
         status: 200,

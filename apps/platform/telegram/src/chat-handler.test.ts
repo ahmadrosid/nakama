@@ -41,7 +41,7 @@ describe("createChatHandler group chats", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -80,7 +80,7 @@ describe("createChatHandler group chats", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -127,7 +127,7 @@ describe("createChatHandler group chats", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -184,7 +184,7 @@ describe("createChatHandler group chats", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -242,7 +242,7 @@ describe("createChatHandler group chats", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -294,7 +294,7 @@ describe("createChatHandler group chats", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -347,7 +347,7 @@ describe("createChatHandler group chats", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -391,7 +391,7 @@ describe("createChatHandler group chats", () => {
         },
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -438,7 +438,7 @@ describe("createChatHandler group chats", () => {
         autoComplete: false,
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -513,7 +513,7 @@ describe("createChatHandler group chats", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -555,7 +555,7 @@ describe("createChatHandler group chats", () => {
       await authStore.reload();
       const { client } = createMockClient({ orgs: createMultiTestOrgs() });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -594,7 +594,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -627,7 +627,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -664,7 +664,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -702,7 +702,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -721,7 +721,7 @@ describe("createChatHandler security", () => {
       await handleMessage(pairAttempt.ctx);
 
       expect(pairAttempt.replies).toEqual([
-        "Linked successfully. You can chat with TinyClaw now.",
+        "Linked successfully. You can chat with Nakama now.",
       ]);
       expect(authStore.isAuthorized(1001)).toBe(true);
       expect(authStore.getConfig()?.handshakeCode).toBeNull();
@@ -754,7 +754,7 @@ describe("createChatHandler security", () => {
         profiles: [{ id: "default", model: null }],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -795,7 +795,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -830,7 +830,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -866,7 +866,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -902,7 +902,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls, getStreamControl } = createMockClient({ streaming: true });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -949,7 +949,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1003,7 +1003,7 @@ describe("createChatHandler security", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1059,7 +1059,7 @@ describe("createChatHandler security", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1106,7 +1106,7 @@ describe("createChatHandler security", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1171,7 +1171,7 @@ describe("createChatHandler security", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1234,7 +1234,7 @@ describe("createChatHandler security", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1278,7 +1278,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1314,7 +1314,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1328,7 +1328,7 @@ describe("createChatHandler security", () => {
 
       const { ctx, replies } = createMessageContext({
         userId: 4242,
-        text: "/start@TinyClawBot",
+        text: "/start@NakamaBot",
       });
 
       await handleMessage(ctx);
@@ -1349,7 +1349,7 @@ describe("createChatHandler security", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1386,7 +1386,7 @@ describe("bridge API integration", () => {
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1421,7 +1421,7 @@ describe("bridge API integration", () => {
       await authStore.reload();
       const { client } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1452,7 +1452,7 @@ describe("bridge API integration", () => {
       await authStore.reload();
       const { client, calls } = createMockClient({ orgs: createMultiTestOrgs() });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1484,7 +1484,7 @@ describe("bridge API integration", () => {
       await authStore.reload();
       const { client, calls, orgIds } = createMockClient({ orgs: createMultiTestOrgs() });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1526,7 +1526,7 @@ describe("bridge API integration", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1563,7 +1563,7 @@ describe("bridge API integration", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1600,7 +1600,7 @@ describe("bridge API integration", () => {
         ],
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1648,7 +1648,7 @@ describe("bridge API integration", () => {
         },
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1699,7 +1699,7 @@ describe("bridge API integration", () => {
         },
       });
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1776,7 +1776,7 @@ describe("createChatHandler document attachments", () => {
       await authStore.reload();
       const { client, calls, getLastStreamInput } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1824,7 +1824,7 @@ describe("createChatHandler document attachments", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1867,7 +1867,7 @@ describe("createChatHandler document attachments", () => {
       );
       const { client, calls, getLastStreamInput } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
@@ -1910,7 +1910,7 @@ describe("createChatHandler document attachments", () => {
       await authStore.reload();
       const { client, calls } = createMockClient();
       const sessionStore = new SessionStore(
-        path.join(homeDir, ".tinyclaw", "telegram", "chat-sessions.json"),
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();

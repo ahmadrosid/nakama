@@ -1,4 +1,4 @@
-import type { ListTimezonesResponse, TimezoneCatalogEntry } from "@tinyclaw/core/contract";
+import type { ListTimezonesResponse, TimezoneCatalogEntry } from "@nakama/core/contract";
 
 export function getBrowserTimezone(): string {
   try {

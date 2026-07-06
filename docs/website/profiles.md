@@ -1,6 +1,6 @@
 # Profiles
 
-A **profile** is the bot definition TinyClaw runs for a session.
+A **profile** is the bot definition Nakama runs for a session.
 
 It answers one practical question: **which bot should respond, and how should it behave?**
 
@@ -8,9 +8,9 @@ Profiles belong to an **organization**. Switching orgs in the dashboard shows on
 
 ## Default profile per organization
 
-TinyClaw does **not** share one global `default` bot across every org.
+Nakama does **not** share one global `default` bot across every org.
 
-When an organization is created — including the first org at install — TinyClaw automatically:
+When an organization is created — including the first org at install — Nakama automatically:
 
 1. Creates one **default profile** for that org (`isDefault: true`)
 2. Assigns the standard builtin tool set (web search, file tools, email, and the rest)
@@ -24,7 +24,7 @@ That profile is named **Default Bot** and gets a unique id (not a fixed string l
 | Super bot | Not auto-created; platform admin may add a profile with `isSuper: true` if needed |
 | Additional orgs | Each gets its own default profile and isolated on-disk data |
 
-If a session or channel config omits a profile id — or names one that does not exist in the active org — TinyClaw falls back to that org's default profile.
+If a session or channel config omits a profile id — or names one that does not exist in the active org — Nakama falls back to that org's default profile.
 
 ### New custom profiles
 
@@ -54,7 +54,7 @@ One profile should map to one clear purpose. Create another profile when you nee
 
 ## How profiles affect replies
 
-When a chat runs with a profile, TinyClaw builds the agent context in this order:
+When a chat runs with a profile, Nakama builds the agent context in this order:
 
 1. Start with the profile's `systemPrompt`
 2. If soul files exist, compose them into the main system prompt
@@ -81,7 +81,7 @@ Profiles support two layers of instruction:
 Soul files, avatars, knowledge-base documents, artifacts, and profile-scoped skills all live under an org-scoped path:
 
 ```text
-~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/
+~/.nakama/orgs/{orgId}/profiles/{profileId}/
 ```
 
 Supported soul files:
@@ -96,18 +96,18 @@ Supported soul files:
 Profile-scoped skills are stored at:
 
 ```text
-~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/skills/
+~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/
 ```
 
 Artifacts saved by the agent are stored at:
 
 ```text
-~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/artifacts/
+~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
 If you want richer personality and clearer long-term behavior, use soul files. If you only need a quick setup, the stored `systemPrompt` may be enough.
 
-Platform-admin data exports include these org/profile workspaces as part of the full TinyClaw data-root ZIP.
+Platform-admin data exports include these org/profile workspaces as part of the full Nakama data-root ZIP.
 Restoring an export replaces the local data root after preview and confirmation; it is not a per-profile merge.
 
 ### Default Bot soul stack
@@ -129,19 +129,19 @@ Each profile can optionally select its own model.
 Profiles keep their own context on disk under the org-scoped profile directory:
 
 - **Knowledge base** documents for searchable reference material
-- **Inherited knowledge sources** for shared product references, such as the TinyClaw documentation
+- **Inherited knowledge sources** for shared product references, such as the Nakama documentation
 - **`MEMORY.md`** for facts and continuity saved by the agent
 - **Artifacts** for persistent reports, generated files, images, PDFs, and other saved outputs
 
 This data is isolated per org and per profile. Two orgs never read or write the same directory, even if profile ids happen to match.
 
-Each profile also sees the default TinyClaw documentation source in the Knowledge tab:
+Each profile also sees the default Nakama documentation source in the Knowledge tab:
 
 ```text
-https://ahmadrosid.github.io/tinyclaw/
+https://ahmadrosid.github.io/nakama/
 ```
 
-When a user asks about TinyClaw setup, profiles, tools, orgs, integrations, API, or troubleshooting, the agent can use that inherited source with `web_fetch` or `web_search` before answering detailed product questions.
+When a user asks about Nakama setup, profiles, tools, orgs, integrations, API, or troubleshooting, the agent can use that inherited source with `web_fetch` or `web_search` before answering detailed product questions.
 
 ## Multi-tenant behavior
 

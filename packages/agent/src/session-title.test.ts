@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, ProviderClient } from "@tinyclaw/core";
+import type { ChatMessage, ProviderClient } from "@nakama/core";
 import {
   buildSessionTitlePrompt,
   generateSessionTitleFromMessages,

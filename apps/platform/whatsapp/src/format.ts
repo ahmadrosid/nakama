@@ -1,5 +1,5 @@
-import { formatClientError } from "@tinyclaw/core/api-error";
-import type { AgentTodo } from "@tinyclaw/core/contract";
+import { formatClientError } from "@nakama/core/api-error";
+import type { AgentTodo } from "@nakama/core/contract";
 
 const WHATSAPP_MAX_MESSAGE_LENGTH = 65536;
 const WHATSAPP_CHAT_BUBBLE_MAX_CHARS = 400;
@@ -147,7 +147,7 @@ function formatWhatsAppTodoLine(todo: AgentTodo): string {
   }
 }
 
-export const HELP_TEXT = `TinyClaw WhatsApp commands:
+export const HELP_TEXT = `Nakama WhatsApp commands:
 
 /help \u2014 show this message
 /stop \u2014 stop the agent's current reply (works during tool runs)

@@ -1,6 +1,6 @@
-import { builtinTools } from "@tinyclaw/core";
-import { preinstalledMcpServers } from "@tinyclaw/core/mcp/preinstalled";
-import { BUILTIN_TOOL_IDS, DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
+import { builtinTools } from "@nakama/core";
+import { preinstalledMcpServers } from "@nakama/core/mcp/preinstalled";
+import { BUILTIN_TOOL_IDS, DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
 import { ensureLocalClientAccess } from "./local-client";
 import { ensureOrgSuperBotProfiles } from "./org-profiles";
 import type { DatabaseAdapter } from "./types";

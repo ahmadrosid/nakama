@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { PathGuardError } from "@tinyclaw/core";
+import { PathGuardError } from "@nakama/core";
 import { runBash } from "./bash";
 
 describe("bash tool", () => {
@@ -16,7 +16,7 @@ describe("bash tool", () => {
   });
 
   test("runs commands in the profile workspace by default", async () => {
-    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-bash-"));
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
 
     const result = await runBash(
       { command: "pwd" },
@@ -30,7 +30,7 @@ describe("bash tool", () => {
   });
 
   test("supports cwd within the profile workspace", async () => {
-    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-bash-"));
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const nestedDir = path.join(workspaceRoot, "nested");
     await mkdir(nestedDir, { recursive: true });
 
@@ -45,7 +45,7 @@ describe("bash tool", () => {
   });
 
   test("rejects cwd outside the profile workspace", async () => {
-    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-bash-"));
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
 
     await expect(
       runBash(

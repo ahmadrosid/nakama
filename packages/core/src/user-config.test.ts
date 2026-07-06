@@ -21,12 +21,12 @@ describe("ensureUserConfigDir", () => {
       configDir = "";
     }
 
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("creates the config directory when missing", async () => {
-    configDir = join(tmpdir(), `tinyclaw-config-${Date.now()}`);
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = join(tmpdir(), `nakama-config-${Date.now()}`);
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     expect(await pathExists(configDir)).toBe(false);
     await expect(ensureUserConfigDir()).resolves.toBe(configDir);
@@ -43,12 +43,12 @@ describe("user config multi-provider", () => {
       configDir = "";
     }
 
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("round-trips multiple provider instances", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const openaiId = createProviderInstanceId();
     const compatibleId = createProviderInstanceId();
@@ -98,8 +98,8 @@ describe("user config multi-provider", () => {
   });
 
   test("repairs literal undefined label on load", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const id = createProviderInstanceId();
 

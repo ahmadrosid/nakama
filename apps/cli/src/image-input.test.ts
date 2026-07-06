@@ -15,7 +15,7 @@ describe("parseImageLine", () => {
   });
 
   test("parses image path with message", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "tinyclaw-cli-"));
+    const dir = await mkdtemp(join(tmpdir(), "nakama-cli-"));
     const path = join(dir, "test.png");
     await writeFile(path, tinyPng);
 

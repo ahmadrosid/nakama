@@ -4,7 +4,7 @@ import {
   formatClientError,
   formatServerError,
   readApiErrorMessage,
-  TinyClawApiError,
+  NakamaApiError,
 } from "./api-error";
 
 describe("readApiErrorMessage", () => {
@@ -21,7 +21,7 @@ describe("readApiErrorMessage", () => {
     const response = new Response("", { status: 500 });
 
     await expect(readApiErrorMessage(response)).resolves.toBe(
-      "The server encountered an error. Try again or restart the TinyClaw server.",
+      "The server encountered an error. Try again or restart the Nakama server.",
     );
   });
 
@@ -32,21 +32,21 @@ describe("readApiErrorMessage", () => {
     });
 
     await expect(readApiErrorMessage(response)).resolves.toBe(
-      "The TinyClaw server is unavailable. Make sure it is running.",
+      "The Nakama server is unavailable. Make sure it is running.",
     );
   });
 });
 
 describe("formatClientError", () => {
   test("returns API error messages directly", () => {
-    expect(formatClientError(new TinyClawApiError("Invalid timezone.", 400))).toBe(
+    expect(formatClientError(new NakamaApiError("Invalid timezone.", 400))).toBe(
       "Invalid timezone.",
     );
   });
 
   test("maps network failures to a helpful message", () => {
     expect(formatClientError(new TypeError("Failed to fetch"))).toBe(
-      "Could not reach the TinyClaw server. Make sure it is running.",
+      "Could not reach the Nakama server. Make sure it is running.",
     );
   });
 
@@ -58,7 +58,7 @@ describe("formatClientError", () => {
         ),
       ),
     ).toBe(
-      "The connection closed before the agent finished. Restart the TinyClaw server, then try again. Long automations can take a minute or more.",
+      "The connection closed before the agent finished. Restart the Nakama server, then try again. Long automations can take a minute or more.",
     );
   });
 });
@@ -79,7 +79,7 @@ describe("fallbackApiErrorMessage", () => {
   test("uses friendly defaults by status", () => {
     expect(fallbackApiErrorMessage(404)).toBe("The requested resource was not found.");
     expect(fallbackApiErrorMessage(500)).toBe(
-      "The server encountered an error. Try again or restart the TinyClaw server.",
+      "The server encountered an error. Try again or restart the Nakama server.",
     );
   });
 });

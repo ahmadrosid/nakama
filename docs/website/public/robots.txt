@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ahmadrosid.github.io/tinyclaw/sitemap.xml
-LLMS: https://ahmadrosid.github.io/tinyclaw/llms.txt
+Sitemap: https://ahmadrosid.github.io/nakamasitemap.xml
+LLMS: https://ahmadrosid.github.io/nakamallms.txt

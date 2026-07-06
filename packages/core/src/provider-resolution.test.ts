@@ -22,10 +22,10 @@ describe("parseProviderName", () => {
 });
 
 describe("resolveProvider", () => {
-  test("prefers TINYCLAW_PROVIDER over env keys", () => {
+  test("prefers NAKAMA_PROVIDER over env keys", () => {
     const provider = resolveProvider({
       env: {
-        TINYCLAW_PROVIDER: "gemini",
+        NAKAMA_PROVIDER: "gemini",
         OPENAI_API_KEY: "sk-test",
         GEMINI_API_KEY: "test-key",
       },

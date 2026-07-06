@@ -35,8 +35,8 @@ import {
   type UpdateWhatsAppSettingsRequest,
   type VisionSettingsResponse,
   type WhatsAppSettingsResponse,
-} from "@tinyclaw/core";
-import { TinyClawApiError } from "@tinyclaw/core";
+} from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
@@ -499,7 +499,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<VisionSettingsResponse>(await agent.setVisionSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
@@ -518,7 +518,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<TranscriptionSettingsResponse>(await agent.setTranscriptionSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
@@ -533,7 +533,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<TranscribeAudioResponse>(await agent.transcribeAudio(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
@@ -554,7 +554,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<EmailSettingsResponse>(await agent.setEmailSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -571,7 +571,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
         await agent.sendEmailTest(body.to?.trim() || auth.user.email),
       );
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -591,7 +591,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<CodingHarnessSettingsResponse>(await agent.setCodingHarnessSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -608,7 +608,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<VerifyCodingHarnessResponse>(await agent.verifyCodingHarness(body.harnessId));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -649,7 +649,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<TelegramSettingsResponse>(await agent.setTelegramSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -676,7 +676,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     try {
       return json<WhatsAppSettingsResponse>(await agent.setWhatsAppSettings(body));
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       const message = error instanceof Error ? error.message : String(error);

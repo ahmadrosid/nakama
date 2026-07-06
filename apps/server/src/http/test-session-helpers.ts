@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
-import type { OrgRole } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { OrgRole } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "../services/auth-service";
 import { buildSetupAuthBody, createPlatformAdminUser, withOrgId } from "./test-org-helpers";
 
@@ -22,8 +22,8 @@ export function cookieValue(setCookies: string[], name: string): string {
 
 export function cookieHeaderFromSetCookies(setCookies: string[]): string {
   return [
-    `tinyclaw_session=${cookieValue(setCookies, "tinyclaw_session")}`,
-    `tinyclaw_csrf=${cookieValue(setCookies, "tinyclaw_csrf")}`,
+    `nakama_session=${cookieValue(setCookies, "nakama_session")}`,
+    `nakama_csrf=${cookieValue(setCookies, "nakama_csrf")}`,
   ].join("; ");
 }
 
@@ -39,7 +39,7 @@ export type TestBrowserSession = {
 export function browserSessionFromResponse(response: Response, orgId?: string): TestBrowserSession {
   const setCookies = extractSetCookies(response);
   const cookieHeader = cookieHeaderFromSetCookies(setCookies);
-  const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
+  const csrfToken = cookieValue(setCookies, "nakama_csrf");
 
   return {
     response,

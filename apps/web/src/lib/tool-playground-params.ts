@@ -1,4 +1,4 @@
-import type { JsonSchema } from "@tinyclaw/core/contract";
+import type { JsonSchema } from "@nakama/core/contract";
 
 function exampleValueForSchema(field: JsonSchema): unknown {
   if (field.enum?.length) {

@@ -1,5 +1,5 @@
-import type { LlmUsageModelStats, LlmUsageStats } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { LlmUsageModelStats, LlmUsageStats } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import {
   estimateUsageCostUsd,
   type PricingContext,

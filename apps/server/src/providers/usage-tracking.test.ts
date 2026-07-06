@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderClient } from "@tinyclaw/core";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import type { ProviderClient } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "../services/llm-usage-tracker";
 import { wrapProviderWithUsageTracking } from "./usage-tracking";
 

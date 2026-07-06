@@ -4,7 +4,7 @@ import {
   type CreateProfileRequest,
   type ToolContext,
   type ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { validateJavascriptToolModule } from "../services/javascript-tool-loader";
 import {
   SuperBotSessionState,
@@ -160,7 +160,7 @@ export function createSuperBotTools(
     {
       name: "create_tool",
       description:
-        'Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.tinyclaw/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.',
+        'Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.',
       parameters: {
         type: "object",
         properties: {
@@ -173,7 +173,7 @@ export function createSuperBotTools(
           handlerConfig: {
             type: "object",
             description:
-              'For javascript tools: { "modulePath": "my-tool.js" } relative to ~/.tinyclaw/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.',
+              'For javascript tools: { "modulePath": "my-tool.js" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.',
             additionalProperties: true,
           },
         },
@@ -202,7 +202,7 @@ export function createSuperBotTools(
 
         if (!modulePath?.endsWith(".js")) {
           throw new Error(
-            'JavaScript tools require handlerConfig.modulePath ending in ".js". Write the module with write_file to ~/.tinyclaw/tools/ first.',
+            'JavaScript tools require handlerConfig.modulePath ending in ".js". Write the module with write_file to ~/.nakama/tools/ first.',
           );
         }
 

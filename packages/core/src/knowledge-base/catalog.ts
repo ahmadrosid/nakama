@@ -25,7 +25,7 @@ export async function composeKnowledgeBaseCatalog(
 
   if (sources.length > 0) {
     lines.push(
-      "Use web_fetch for listed URL sources, or web_search when you need to find a specific page under a source. For TinyClaw product questions, consult the TinyClaw documentation before answering detailed setup, profile, tool, org, integration, API, or troubleshooting questions.",
+      "Use web_fetch for listed URL sources, or web_search when you need to find a specific page under a source. For Nakama product questions, consult the Nakama documentation before answering detailed setup, profile, tool, org, integration, API, or troubleshooting questions.",
     );
   }
 

@@ -6,7 +6,7 @@ import {
   type AutomationStep,
   type AutomationTrigger,
   type ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 interface GeneratedAutomationPayload {
   name?: unknown;

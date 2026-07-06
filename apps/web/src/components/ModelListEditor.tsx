@@ -1,4 +1,4 @@
-import type { CustomModelEntry } from "@tinyclaw/core/contract";
+import type { CustomModelEntry } from "@nakama/core/contract";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";

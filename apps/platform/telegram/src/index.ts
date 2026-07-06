@@ -1,13 +1,13 @@
-import { createClient } from "@tinyclaw/client";
-import { ChannelOrgStore, getChannelOrgSelectionPath } from "@tinyclaw/core/channel-org";
-import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
-import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
+import { createClient } from "@nakama/client";
+import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
+import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import {
   clearTelegramWorkerHeartbeat,
   isHeartbeatAlive,
   readTelegramWorkerHeartbeat,
   writeTelegramWorkerHeartbeat,
-} from "@tinyclaw/core/telegram-worker";
+} from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
@@ -35,7 +35,7 @@ try {
     isHeartbeatAlive(existingHeartbeat)
   ) {
     console.error(
-      `Another TinyClaw Telegram bridge is already running (pid ${existingHeartbeat.pid}). ` +
+      `Another Nakama Telegram bridge is already running (pid ${existingHeartbeat.pid}). ` +
         "Stop the existing bridge worker or disable it in the dashboard before starting a new one.",
     );
     process.exit(1);
@@ -47,7 +47,7 @@ try {
 
   const client = createClient({
     baseUrl: serverUrl,
-    authToken: await loadLocalAuthToken("telegram@tinyclaw.internal"),
+    authToken: await loadLocalAuthToken("telegram@nakama.internal"),
   });
   const health = await client.health();
 
@@ -62,7 +62,7 @@ try {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `TinyClaw API authentication failed: ${message}\n` +
+      `Nakama API authentication failed: ${message}\n` +
         "Restart the server so it can provision the local client user:\n" +
         "  bun run dev:server",
     );
@@ -85,7 +85,7 @@ try {
     orgStore,
   });
 
-  console.log("TinyClaw Telegram bridge running (long polling).");
+  console.log("Nakama Telegram bridge running (long polling).");
   console.log(`Server: ${serverUrl}`);
   console.log(`Profile: ${config.profileId}`);
   const authConfig = authStore.getConfig();

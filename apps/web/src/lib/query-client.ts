@@ -1,5 +1,5 @@
 import { QueryClient, type QueryCacheNotifyEvent } from "@tanstack/react-query";
-import { TinyClawApiError } from "@tinyclaw/core/api-error";
+import { NakamaApiError } from "@nakama/core/api-error";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,7 +12,7 @@ export const queryClient = new QueryClient({
 
 export function onGlobalQueryError(event: QueryCacheNotifyEvent) {
   const error = event.query?.state?.error;
-  if (error instanceof TinyClawApiError && error.status === 401) {
+  if (error instanceof NakamaApiError && error.status === 401) {
     window.location.href = "/login";
   }
 }

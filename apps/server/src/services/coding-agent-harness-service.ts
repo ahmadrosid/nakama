@@ -5,8 +5,8 @@ import type {
   DatabaseAdapter,
   StoredCodingAgentHarnessKind,
   StoredCodingAgentHarnessRecord,
-} from "@tinyclaw/db";
-import { WORKSPACE_SETTINGS_ID } from "@tinyclaw/db";
+} from "@nakama/db";
+import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
 
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   installed: boolean;
@@ -291,7 +291,7 @@ export async function verifyCodingAgentHarness(
         ? null
         : harness.nextStep === "login"
           ? authenticationHelpForHarness(harness.kind)
-          : harness.statusMessage ?? `TinyClaw could not verify ${harness.name} yet.`
+          : harness.statusMessage ?? `Nakama could not verify ${harness.name} yet.`
       : `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
   };
 }
@@ -417,7 +417,7 @@ export async function installCodingAgentHarness(
   const updated = (await listCodingAgentHarnessStatuses(db)).find((entry) => entry.id === harness.id);
 
   if (!updated) {
-    throw new Error(`Installed ${harness.name}, but TinyClaw could not refresh its status.`);
+    throw new Error(`Installed ${harness.name}, but Nakama could not refresh its status.`);
   }
 
   return updated;
@@ -431,7 +431,7 @@ async function probeHarnessReadiness(
   nextStep: "login" | "retry" | null;
   statusMessage: string | null;
 }> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-coding-agent-probe-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-probe-"));
 
   try {
     const result = await runProbeCommand(harness, tempDir);

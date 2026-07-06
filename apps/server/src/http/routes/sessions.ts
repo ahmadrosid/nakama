@@ -10,7 +10,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   SessionMessagesResponse,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   errorResponse,
   json,

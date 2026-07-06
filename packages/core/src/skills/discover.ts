@@ -57,7 +57,7 @@ export async function discoverSkills(
         });
       } catch (error) {
         console.warn(
-          `[tinyclaw:skills] Skipping ${skillFilePath}:`,
+          `[nakama:skills] Skipping ${skillFilePath}:`,
           error instanceof Error ? error.message : error,
         );
       }

@@ -3,11 +3,11 @@ import type {
   CompactionResponse,
   LlmToolDefinition,
   ProviderClient,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   estimateUserContentTokens,
   stripImagesForCompaction,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 const COMPACTION_BUFFER = 20_000;
 const PRUNE_MINIMUM = 20_000;

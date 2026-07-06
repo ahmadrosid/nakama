@@ -12,7 +12,7 @@ import { ensureDir, pathExists, writePrivateBytesFile, writePrivateTextFile } fr
 import { getProfileArtifactsDir } from "./soul/resolve";
 import { guardFilePath } from "./tools/paths";
 
-const ARTIFACT_META_SUFFIX = ".tinyclaw-meta.json";
+const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 
 const artifactMetaSchema = z.object({
   mimeType: z.string().trim().min(1),

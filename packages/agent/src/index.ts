@@ -1,4 +1,4 @@
-import type { AutomationDefinition, ToolDefinition } from "@tinyclaw/core";
+import type { AutomationDefinition, ToolDefinition } from "@nakama/core";
 import {
   createAgentChatSession,
   type AgentChatSession,

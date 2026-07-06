@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, SessionMessageMeta } from "@tinyclaw/core/contract";
+import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
 import { chatMessagesToListItems } from "./chat-history";
 
 const tinyPngBase64 =

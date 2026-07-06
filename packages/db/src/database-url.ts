@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { getUserConfigDir } from "@tinyclaw/core";
+import { getUserConfigDir } from "@nakama/core";
 
 export interface ResolveDatabasePathOptions {
-  /** Anchor relative file: paths (defaults to ~/.tinyclaw). */
+  /** Anchor relative file: paths (defaults to ~/.nakama). */
   baseDir?: string;
 }
 

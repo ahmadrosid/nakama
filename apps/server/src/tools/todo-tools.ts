@@ -1,4 +1,4 @@
-import type { AgentTodoStatus, ToolDefinition } from "@tinyclaw/core";
+import type { AgentTodoStatus, ToolDefinition } from "@nakama/core";
 import type { AgentTodoState } from "../services/agent-todo-state";
 
 export function createTodoTools(todoState: AgentTodoState): ToolDefinition[] {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TinyClawApiError } from "./api-error";
+import { NakamaApiError } from "./api-error";
 import {
   countUserImages,
   estimateUserContentTokens,
@@ -86,14 +86,14 @@ describe("validateImageAttachments", () => {
   test("rejects unsupported media type", () => {
     expect(() =>
       validateImageAttachments([{ mediaType: "image/bmp", data: tinyPngBase64 }]),
-    ).toThrow(TinyClawApiError);
+    ).toThrow(NakamaApiError);
   });
 
   test("rejects oversized image", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
       validateImageAttachments([{ mediaType: "image/png", data: huge }]),
-    ).toThrow(TinyClawApiError);
+    ).toThrow(NakamaApiError);
   });
 });
 
@@ -103,7 +103,7 @@ describe("validateDocumentAttachments", () => {
       validateDocumentAttachments([
         { filename: "bad.bin", mediaType: "application/octet-stream", data: "YWJj" },
       ]),
-    ).toThrow(TinyClawApiError);
+    ).toThrow(NakamaApiError);
   });
 
   test("rejects oversized document", () => {
@@ -112,13 +112,13 @@ describe("validateDocumentAttachments", () => {
       validateDocumentAttachments([
         { filename: "big.pdf", mediaType: "application/pdf", data: huge },
       ]),
-    ).toThrow(TinyClawApiError);
+    ).toThrow(NakamaApiError);
   });
 });
 
 describe("validateCombinedAttachmentCount", () => {
   test("rejects more than five attachments total", () => {
-    expect(() => validateCombinedAttachmentCount(3, 3)).toThrow(TinyClawApiError);
+    expect(() => validateCombinedAttachmentCount(3, 3)).toThrow(NakamaApiError);
   });
 });
 

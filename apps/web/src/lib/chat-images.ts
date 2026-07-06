@@ -1,9 +1,9 @@
-import type { DocumentAttachment, ImageAttachment, MessageContentPart } from "@tinyclaw/core/contract";
+import type { DocumentAttachment, ImageAttachment, MessageContentPart } from "@nakama/core/contract";
 import {
   isImageDescriptionText,
   parseImageDescriptionText,
-} from "@tinyclaw/core/image-content";
-import { normalizeDocumentMediaType, parseDataUrl, parseDocumentDataUrl } from "@tinyclaw/core/message-content";
+} from "@nakama/core/image-content";
+import { normalizeDocumentMediaType, parseDataUrl, parseDocumentDataUrl } from "@nakama/core/message-content";
 import type { FileUIPart } from "ai";
 import {
   documentDisplayFromContentPart,

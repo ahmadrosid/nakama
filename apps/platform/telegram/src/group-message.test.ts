@@ -98,13 +98,13 @@ describe("group-message helpers", () => {
     const ctx = {
       chat: { id: -100123, type: "supergroup" as const },
       message: {
-        text: "TinyClaw hello",
+        text: "Nakama hello",
         entities: [
           {
             type: "text_mention" as const,
             offset: 0,
             length: 8,
-            user: { id: botInfo.id, is_bot: true, first_name: "TinyClaw" },
+            user: { id: botInfo.id, is_bot: true, first_name: "Nakama" },
           },
         ],
       },

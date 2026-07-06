@@ -1,4 +1,4 @@
-import type { CustomModelEntry, ProviderModelOption } from "@tinyclaw/core/contract";
+import type { CustomModelEntry, ProviderModelOption } from "@nakama/core/contract";
 import type { ReactNode } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 

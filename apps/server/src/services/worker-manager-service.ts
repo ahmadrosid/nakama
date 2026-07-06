@@ -1,10 +1,10 @@
-import type { WorkerLogsResponse, WorkerProcessInfo } from "@tinyclaw/core";
+import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
 import {
   readWorkerDesiredState,
   readRuntimeServerUrl,
   setWorkerDesiredRunning,
   type PlatformWorkerName,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -270,15 +270,15 @@ export class WorkerManagerService {
     };
 
     const serverUrl =
-      process.env.TINYCLAW_SERVER_URL?.trim() || readRuntimeServerUrl() || "";
+      process.env.nakama_SERVER_URL?.trim() || readRuntimeServerUrl() || "";
 
     if (serverUrl) {
-      env.TINYCLAW_SERVER_URL = serverUrl;
+      env.nakama_SERVER_URL = serverUrl;
     }
 
-    const configDir = process.env.TINYCLAW_CONFIG_DIR?.trim();
+    const configDir = process.env.NAKAMA_CONFIG_DIR?.trim();
     if (configDir) {
-      env.TINYCLAW_CONFIG_DIR = configDir;
+      env.NAKAMA_CONFIG_DIR = configDir;
     }
 
     return env;

@@ -1,28 +1,28 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@tinyclaw/core/tools/protected";
-import type { StoredToolRecord } from "@tinyclaw/db";
+import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
+import type { StoredToolRecord } from "@nakama/db";
 import { readToolSource } from "./tool-source";
 
 describe("readToolSource", () => {
   let configDir: string;
   let toolsDir: string;
-  const previousConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
   beforeEach(async () => {
     configDir = path.join(import.meta.dir, ".test-config");
     toolsDir = path.join(configDir, "tools");
     await rm(configDir, { recursive: true, force: true });
     await mkdir(toolsDir, { recursive: true });
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
   afterEach(async () => {
     if (previousConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = previousConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
 
     await rm(configDir, { recursive: true, force: true });

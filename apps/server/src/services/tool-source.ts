@@ -2,13 +2,13 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ToolSourceResponse } from "@tinyclaw/core";
-import { pathExists, TinyClawApiError } from "@tinyclaw/core";
-import type { StoredToolRecord } from "@tinyclaw/db";
+import type { ToolSourceResponse } from "@nakama/core";
+import { pathExists, NakamaApiError } from "@nakama/core";
+import type { StoredToolRecord } from "@nakama/db";
 import { resolveJavascriptModulePath } from "./javascript-tool-loader";
 
 const require = createRequire(import.meta.url);
-const corePackageRoot = path.dirname(require.resolve("@tinyclaw/core/package.json"));
+const corePackageRoot = path.dirname(require.resolve("@nakama/core/package.json"));
 const serverSrcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: string }> = {
@@ -72,20 +72,20 @@ export async function readToolSource(record: StoredToolRecord): Promise<ToolSour
     const source = BUILTIN_SOURCE_BY_NAME[record.name];
 
     if (!source) {
-      throw new TinyClawApiError(`No source mapping for built-in tool "${record.name}".`, 404);
+      throw new NakamaApiError(`No source mapping for built-in tool "${record.name}".`, 404);
     }
 
     return readFixedToolSource(source, "typescript");
   }
 
-  throw new TinyClawApiError(`Unsupported tool handler type: ${record.handlerType}.`, 404);
+  throw new NakamaApiError(`Unsupported tool handler type: ${record.handlerType}.`, 404);
 }
 
 async function readJavascriptToolSource(record: StoredToolRecord): Promise<ToolSourceResponse> {
   const modulePath = readJavascriptModulePath(record.handlerConfig);
 
   if (!modulePath) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       `Tool "${record.name}" is missing handlerConfig.modulePath.`,
       404,
     );
@@ -96,14 +96,14 @@ async function readJavascriptToolSource(record: StoredToolRecord): Promise<ToolS
   try {
     resolvedPath = resolveJavascriptModulePath(modulePath);
   } catch (error) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       error instanceof Error ? error.message : String(error),
       404,
     );
   }
 
   if (!(await pathExists(resolvedPath))) {
-    throw new TinyClawApiError(`Tool module not found: ${modulePath}`, 404);
+    throw new NakamaApiError(`Tool module not found: ${modulePath}`, 404);
   }
 
   const content = await readFile(resolvedPath, "utf8");
@@ -120,7 +120,7 @@ async function readFixedToolSource(
   language: ToolSourceResponse["language"],
 ): Promise<ToolSourceResponse> {
   if (!(await pathExists(source.filePath))) {
-    throw new TinyClawApiError(`Tool source file not found: ${source.displayPath}`, 404);
+    throw new NakamaApiError(`Tool source file not found: ${source.displayPath}`, 404);
   }
 
   const content = await readFile(source.filePath, "utf8");

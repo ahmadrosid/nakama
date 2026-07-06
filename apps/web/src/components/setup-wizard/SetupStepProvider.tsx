@@ -1,5 +1,5 @@
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
-import type { CreateProviderResponse } from "@tinyclaw/core/contract";
+import type { CreateProviderResponse } from "@nakama/core/contract";
 
 interface SetupStepProviderProps {
   onNext: (result: CreateProviderResponse) => void;

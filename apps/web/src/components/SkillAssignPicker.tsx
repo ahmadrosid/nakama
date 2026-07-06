@@ -1,4 +1,4 @@
-import type { SkillSummary } from "@tinyclaw/core/contract";
+import type { SkillSummary } from "@nakama/core/contract";
 import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";

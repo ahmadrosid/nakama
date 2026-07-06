@@ -1,15 +1,15 @@
 # WhatsApp
 
-Use WhatsApp when you want the same TinyClaw agent available from your phone in a direct chat.
+Use WhatsApp when you want the same Nakama agent available from your phone in a direct chat.
 
-The WhatsApp bridge talks to the same TinyClaw server as the web app and CLI. It is a chat channel, not a separate agent system.
+The WhatsApp bridge talks to the same Nakama server as the web app and CLI. It is a chat channel, not a separate agent system.
 
 ## Good use cases
 
 WhatsApp works well for:
 
 - quick questions while away from your desk
-- using one TinyClaw profile from phone and web
+- using one Nakama profile from phone and web
 - simple direct-chat workflows for one linked number
 - lightweight status checks and short back-and-forth conversations
 
@@ -17,7 +17,7 @@ WhatsApp works well for:
 
 With WhatsApp enabled, users can:
 
-- chat with a TinyClaw profile in a private WhatsApp chat
+- chat with a Nakama profile in a private WhatsApp chat
 - switch org with commands
 - start a new conversation or clear history
 - stop an in-progress reply
@@ -25,7 +25,7 @@ With WhatsApp enabled, users can:
 
 ## Reply formatting
 
-Agents can still write normal Markdown-style replies, but TinyClaw simplifies them for WhatsApp.
+Agents can still write normal Markdown-style replies, but Nakama simplifies them for WhatsApp.
 
 In practice:
 
@@ -38,9 +38,9 @@ This keeps replies readable in WhatsApp without depending on web-style Markdown 
 
 ## Setup
 
-### 1. Enable WhatsApp in TinyClaw
+### 1. Enable WhatsApp in Nakama
 
-1. Open **Integrations → WhatsApp** in the TinyClaw web app
+1. Open **Integrations → WhatsApp** in the Nakama web app
 2. Choose which profile should reply
 3. Click **Enable WhatsApp**
 
@@ -52,7 +52,7 @@ From the repo root:
 bun run dev:whatsapp
 ```
 
-If the TinyClaw server is not already running, start it too:
+If the Nakama server is not already running, start it too:
 
 ```bash
 bun run dev:server
@@ -60,7 +60,7 @@ bun run dev:server
 
 ### 3. Link your WhatsApp account
 
-TinyClaw supports two ways to link:
+Nakama supports two ways to link:
 
 #### Option A: pairing code
 
@@ -78,7 +78,7 @@ TinyClaw supports two ways to link:
 4. Go to **Settings → Linked Devices**
 5. Tap **Link a Device** and scan the QR code
 
-After linking succeeds, TinyClaw shows the linked account and the bridge can receive messages.
+After linking succeeds, Nakama shows the linked account and the bridge can receive messages.
 
 ## Chat behavior
 
@@ -86,7 +86,7 @@ WhatsApp currently works as a **private chat** channel.
 
 - direct chats are supported
 - group chats are not handled by the current bridge
-- each linked WhatsApp chat keeps its own TinyClaw session
+- each linked WhatsApp chat keeps its own Nakama session
 
 If you change the reply profile, new messages use that profile. Starting a new conversation with `/new` gives you a fresh session.
 
@@ -110,7 +110,7 @@ Useful WhatsApp commands:
 
 Check:
 
-1. the TinyClaw server is running
+1. the Nakama server is running
 2. the WhatsApp bridge is running with `bun run dev:whatsapp`
 3. the WhatsApp account is linked
 4. the linked number shown in **Integrations → WhatsApp** is the one you are messaging from

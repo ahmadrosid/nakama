@@ -3,7 +3,7 @@ import type {
   ChatMessage,
   ThinkingEffort,
   ToolCall,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;

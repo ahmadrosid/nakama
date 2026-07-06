@@ -1,4 +1,4 @@
-import { createId, nanoid, TinyClawApiError } from "@tinyclaw/core";
+import { createId, nanoid, NakamaApiError } from "@nakama/core";
 import {
   normalizeCreateNotificationDestinationRequest,
   normalizeUpdateNotificationDestinationRequest,
@@ -8,8 +8,8 @@ import {
   type NotificationDestinationWithSecret,
   type RegenerateNotificationDestinationKeyResponse,
   type UpdateNotificationDestinationRequest,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter, StoredNotificationDestinationRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter, StoredNotificationDestinationRecord } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
 export function notificationDestinationWebhookPath(destinationId: string): string {
@@ -126,7 +126,7 @@ export class NotificationDestinationService {
     const record = await this.databaseAdapter.getNotificationDestination(destinationId);
 
     if (!record || record.orgId !== orgId) {
-      throw new TinyClawApiError("Notification destination not found", 404);
+      throw new NakamaApiError("Notification destination not found", 404);
     }
 
     return record;

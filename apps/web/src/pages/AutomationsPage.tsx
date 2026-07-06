@@ -5,7 +5,7 @@ import type {
   AutomationRunStatus,
   AutomationTrigger,
   StoredAutomation,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import {
   BotIcon,
   CheckCircle2Icon,

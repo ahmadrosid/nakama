@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@tinyclaw/core/contract";
+import type { TaskStatus } from "@nakama/core/contract";
 import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle2Icon,

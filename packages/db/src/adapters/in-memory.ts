@@ -1,4 +1,4 @@
-import { getUserMessageText, type MessageContentPart } from "@tinyclaw/core";
+import { getUserMessageText, type MessageContentPart } from "@nakama/core";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import type {
   DatabaseAdapter,

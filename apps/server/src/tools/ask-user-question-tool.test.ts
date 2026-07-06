@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
 import { createAskUserQuestionTools } from "./ask-user-question-tool";
 

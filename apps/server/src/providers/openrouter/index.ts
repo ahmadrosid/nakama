@@ -22,7 +22,7 @@ import type {
   ProviderClient,
   StreamChatHandlers,
   ToolCall,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
@@ -32,8 +32,8 @@ import {
 } from "../shared";
 import { openRouterModelSupportsThinking } from "./thinking";
 
-const OPENROUTER_REFERER = "https://github.com/ahmadrosid/tinyclaw";
-const OPENROUTER_APP_TITLE = "TinyClaw";
+const OPENROUTER_REFERER = "https://github.com/ahmadrosid/nakama";
+const OPENROUTER_APP_TITLE = "Nakama";
 const PROVIDER_LABEL = "OpenRouter";
 
 export interface OpenRouterProviderOptions {

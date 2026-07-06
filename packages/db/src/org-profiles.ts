@@ -2,12 +2,12 @@ import {
   nanoid,
   DEFAULT_BUNDLED_SKILL_NAMES,
   SUPER_BOT_BUNDLED_SKILL_NAMES,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   DELEGATE_CODING_TASK_TOOL_ID,
-} from "@tinyclaw/core/tools/protected";
+} from "@nakama/core/tools/protected";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 

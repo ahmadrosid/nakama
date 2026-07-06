@@ -2,29 +2,29 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { defineConfig } from 'vitepress'
 
-const SITE_NAME = 'TinyClaw'
+const SITE_NAME = 'Nakama'
 const SITE_DESCRIPTION = 'Deploy your own AI agent platform as easily as spinning up WordPress.'
-const SITE_URL = 'https://ahmadrosid.github.io/tinyclaw'
+const SITE_URL = 'https://ahmadrosid.github.io/nakama'
 const AUTHOR_NAME = 'Ahmad Rosid'
-const AUTHOR_ROLE = 'Creator and maintainer of TinyClaw'
-const OG_IMAGE_URL = `${SITE_URL}/tinyclaw-demo.png`
+const AUTHOR_ROLE = 'Creator and maintainer of Nakama'
+const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
 
 const pageDescriptions: Record<string, string> = {
   'index.md': 'Self-hosted AI agents for teams with profiles, tools, channels, and multi-tenant workspaces.',
-  'getting-started.md': 'Install TinyClaw with Bun or Docker, run the server, and complete first-time setup.',
-  'overview.md': 'Understand the TinyClaw mental model: organizations, profiles, tools, and channels.',
-  'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in TinyClaw.',
-  'profiles.md': 'See how TinyClaw profiles define bot behavior, soul files, tools, and model selection.',
-  'agent-prompt.md': 'Understand how TinyClaw builds the final system prompt from soul files, tools, and runtime context.',
-  'builtin-tools.md': 'Review the builtin tools that TinyClaw profiles can use and how access is controlled.',
-  'skills.md': 'Learn how reusable skills extend TinyClaw profiles with focused workflows.',
-  'mcp.md': 'Connect external MCP servers to TinyClaw profiles and expose new tools safely.',
-  'telegram.md': 'Set up TinyClaw as a Telegram bot with pairing, commands, and group behavior.',
-  'whatsapp.md': 'Set up TinyClaw on WhatsApp with linking, commands, and troubleshooting.',
+  'getting-started.md': 'Install Nakama with Bun or Docker, run the server, and complete first-time setup.',
+  'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, and channels.',
+  'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
+  'profiles.md': 'See how Nakama profiles define bot behavior, soul files, tools, and model selection.',
+  'agent-prompt.md': 'Understand how Nakama builds the final system prompt from soul files, tools, and runtime context.',
+  'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use and how access is controlled.',
+  'skills.md': 'Learn how reusable skills extend Nakama profiles with focused workflows.',
+  'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
+  'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
+  'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
 }
 
 const pageTitles: Record<string, string> = {
-  'index.md': 'TinyClaw',
+  'index.md': 'Nakama',
   'getting-started.md': 'Getting Started',
   'overview.md': 'Overview',
   'multi-tenancy.md': 'Multi-tenancy',
@@ -89,7 +89,7 @@ function buildLlmsTxt(pages: string[]) {
     '',
     `Maintainer: ${AUTHOR_NAME} (${AUTHOR_ROLE})`,
     `Website: ${SITE_URL}/`,
-    `Repository: https://github.com/ahmadrosid/tinyclaw`,
+    `Repository: https://github.com/ahmadrosid/nakama`,
     '',
     '## AI-friendly access',
     '',
@@ -110,12 +110,12 @@ function buildLlmsTxt(pages: string[]) {
 export default defineConfig({
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
-  base: '/tinyclaw/',
+  base: '/nakama/',
   sitemap: {
     hostname: SITE_URL,
   },
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: '/tinyclaw/favicon.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/nakama/favicon.png' }],
     ['meta', { name: 'author', content: `${AUTHOR_NAME}, ${AUTHOR_ROLE}` }],
   ],
   transformHead({ pageData }) {
@@ -161,7 +161,7 @@ export default defineConfig({
   themeConfig: {
     logo: {
       src: '/favicon.png',
-      alt: 'TinyClaw logo',
+      alt: 'Nakama logo',
     },
     nav: [
       { text: 'Docs', link: '/getting-started' },
@@ -194,11 +194,11 @@ export default defineConfig({
       },
     ],
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/ahmadrosid/tinyclaw' },
+      { icon: 'github', link: 'https://github.com/ahmadrosid/nakama' },
     ],
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © TinyClaw contributors',
+      copyright: 'Copyright © Nakama contributors',
     },
   },
 })

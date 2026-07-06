@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "./http/app";
 import { AuthService } from "./services/auth-service";
 import { seedOrgForUser, TEST_ORG_ID, withOrgId, buildSetupAuthBody } from "./http/test-org-helpers";
@@ -15,19 +15,19 @@ import {
 import { OrgService } from "./services/org-service";
 
 const TEST_DIST_DIR = join(import.meta.dir, "__test_dist__");
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 let testConfigDir = "";
 
 beforeAll(() => {
-  testConfigDir = mkdtempSync(join(tmpdir(), "tinyclaw-app-test-"));
-  process.env.TINYCLAW_CONFIG_DIR = testConfigDir;
+  testConfigDir = mkdtempSync(join(tmpdir(), "nakama-app-test-"));
+  process.env.NAKAMA_CONFIG_DIR = testConfigDir;
 });
 
 afterAll(() => {
   if (originalConfigDir === undefined) {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   } else {
-    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
   }
 
   if (testConfigDir) {
@@ -167,8 +167,8 @@ describe("browser session auth", () => {
     const setupBody = (await setupResponse.json()) as { activeOrgId: string; email: string };
     expect(setupBody.activeOrgId).toStartWith("org_");
     const setCookies = extractSetCookies(setupResponse);
-    expect(setCookies.some((cookie) => cookie.startsWith("tinyclaw_session="))).toBe(true);
-    expect(setCookies.some((cookie) => cookie.startsWith("tinyclaw_csrf="))).toBe(true);
+    expect(setCookies.some((cookie) => cookie.startsWith("nakama_session="))).toBe(true);
+    expect(setCookies.some((cookie) => cookie.startsWith("nakama_csrf="))).toBe(true);
 
     const cookieHeader = cookieHeaderFromSetCookies(setCookies);
     const meResponse = await app.fetch(
@@ -210,7 +210,7 @@ describe("browser session auth", () => {
     expect(loginResponse.status).toBe(200);
     const setCookies = extractSetCookies(loginResponse);
     const cookieHeader = cookieHeaderFromSetCookies(setCookies);
-    const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
+    const csrfToken = cookieValue(setCookies, "nakama_csrf");
 
     const logoutResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/logout", {
@@ -244,7 +244,7 @@ describe("browser session auth", () => {
     const setupBody = (await setupResponse.json()) as { activeOrgId: string };
     const setCookies = extractSetCookies(setupResponse);
     const cookieHeader = cookieHeaderFromSetCookies(setCookies);
-    const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
+    const csrfToken = cookieValue(setCookies, "nakama_csrf");
 
     const denied = await app.fetch(
       new Request("http://localhost:4310/v1/workers/whatsapp/start", {
@@ -280,7 +280,7 @@ describe("browser session auth", () => {
     );
     const setCookies = extractSetCookies(setupResponse);
     const cookieHeader = cookieHeaderFromSetCookies(setCookies);
-    const csrfToken = cookieValue(setCookies, "tinyclaw_csrf");
+    const csrfToken = cookieValue(setCookies, "nakama_csrf");
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/orgs", {
@@ -341,7 +341,7 @@ describe("browser session auth", () => {
         method: "POST",
         headers: {
           Cookie: cookieHeaderFromSetCookies(setCookies),
-          "X-CSRF-Token": cookieValue(setCookies, "tinyclaw_csrf"),
+          "X-CSRF-Token": cookieValue(setCookies, "nakama_csrf"),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ name: "Blocked Org", slug: "blocked-org" }),

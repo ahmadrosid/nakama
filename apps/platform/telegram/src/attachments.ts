@@ -1,10 +1,10 @@
 import type { Context } from "grammy";
-import type { SendMessageInput } from "@tinyclaw/core/contract";
+import type { SendMessageInput } from "@nakama/core/contract";
 import {
   MAX_DOCUMENT_BYTES,
   normalizeDocumentMediaType,
   validateDocumentAttachments,
-} from "@tinyclaw/core/message-content";
+} from "@nakama/core/message-content";
 
 const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
   "application/pdf",

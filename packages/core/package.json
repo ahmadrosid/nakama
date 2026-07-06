@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/core",
+  "name": "@nakama/core",
   "private": true,
   "type": "module",
   "exports": {

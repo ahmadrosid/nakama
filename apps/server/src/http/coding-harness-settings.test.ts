@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "./app";
 import { setupFreshInstallSession } from "./test-session-helpers";
 import { AuthService } from "../services/auth-service";
@@ -15,15 +15,15 @@ describe("coding harness settings routes", () => {
   let configDir = "";
 
   beforeEach(async () => {
-    tempBinDir = await mkdtemp(join(tmpdir(), "tinyclaw-coding-harness-route-bin-"));
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-coding-harness-route-config-"));
+    tempBinDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-route-bin-"));
+    configDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-route-config-"));
     process.env.PATH = tempBinDir;
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
   afterEach(async () => {
     process.env.PATH = originalPath;
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
 
     if (tempBinDir) {
       await rm(tempBinDir, { recursive: true, force: true });

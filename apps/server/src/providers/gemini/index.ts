@@ -6,7 +6,7 @@ import type {
   GenerateTextInput,
   ProviderClient,
   StreamChatHandlers,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { buildGeminiChatConfig, buildGeminiGenerateConfig } from "./config";
 import {
   extractTextAndThinkingFromParts,

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
 import { AutomationService } from "../../services/automation-service";
 import { AutomationRunner } from "../../services/automation-runner";
-import { loadLocalAuthToken } from "@tinyclaw/core";
+import { loadLocalAuthToken } from "@nakama/core";
 import { seedLocalClientUser } from "../test-org-helpers";
 
 const PROFILE_ID = "profile_default";

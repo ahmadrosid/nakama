@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage } from "@tinyclaw/core";
+import type { ChatMessage } from "@nakama/core";
 import { toAnthropicMessages } from "./anthropic";
 import { toGeminiContents } from "./gemini";
 import { toOpenAIMessages, toResponsesInput } from "./openai";

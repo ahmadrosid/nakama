@@ -1,4 +1,4 @@
-import { findCustomModel, type CustomModelEntry } from "@tinyclaw/core";
+import { findCustomModel, type CustomModelEntry } from "@nakama/core";
 
 /** OpenRouter slugs known not to accept the `reasoning` request parameter. */
 const THINKING_DENY_PREFIXES = [

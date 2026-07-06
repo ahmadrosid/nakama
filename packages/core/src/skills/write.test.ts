@@ -11,16 +11,16 @@ describe("createSkillFile", () => {
   let configDir: string;
 
   afterEach(async () => {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
       await rm(configDir, { recursive: true, force: true });
     }
   });
 
-  test("writes a profile skill to ~/.tinyclaw/orgs/{orgId}/profiles/{id}/skills/", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-skill-write-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+  test("writes a profile skill to ~/.nakama/orgs/{orgId}/profiles/{id}/skills/", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-skill-write-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const directory = await createSkillFile({
       name: "weather",
@@ -50,8 +50,8 @@ describe("createSkillFile", () => {
   });
 
   test("deleteSkillDirectory removes a managed profile skill directory", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-skill-write-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-skill-write-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const directory = await createSkillFile({
       name: "notes",

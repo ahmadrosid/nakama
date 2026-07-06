@@ -2,7 +2,7 @@ import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
   ProfileSummary,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import {
   CameraIcon,
   PlusIcon,

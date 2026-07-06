@@ -7,7 +7,7 @@ import type {
   CreateToolRequest,
   ProfileResponse,
   ToolDetail,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import type { ProfileService } from "../services/profile-service";
 import {
   SuperBotSessionState,
@@ -15,7 +15,7 @@ import {
 } from "../services/super-bot-session-state";
 import { createSuperBotTools } from "./super-bot-tools";
 
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const ORG_ID = "org_test";
 const SESSION_ID = "session_test";
 
@@ -24,9 +24,9 @@ describe("super bot create_tool", () => {
 
   afterEach(async () => {
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
 
     if (tempConfigDir) {
@@ -36,8 +36,8 @@ describe("super bot create_tool", () => {
   });
 
   test("always registers agent-authored tools as javascript", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-super-tool-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
@@ -121,8 +121,8 @@ describe("super bot create_tool", () => {
   });
 
   test("rejects missing javascript modules before storing the tool", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-super-tool-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 

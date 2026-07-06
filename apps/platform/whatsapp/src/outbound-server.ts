@@ -1,4 +1,4 @@
-import { loadWhatsAppConfigFile, resolveWhatsAppOutboundPort } from "@tinyclaw/core";
+import { loadWhatsAppConfigFile, resolveWhatsAppOutboundPort } from "@nakama/core";
 
 export interface WhatsAppOutboundSendHandle {
   sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;

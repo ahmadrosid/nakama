@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderClient } from "@tinyclaw/core";
+import type { ProviderClient } from "@nakama/core";
 import { wrapProviderForNonVision } from "./non-vision-wrap";
 
 describe("wrapProviderForNonVision", () => {

@@ -1,9 +1,9 @@
-import { createClient } from "@tinyclaw/client";
-import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
+import { createClient } from "@nakama/client";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { runChat } from "./chat";
 import { parseCliProfileArgs } from "./profile";
 import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
-import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
+import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 import { setTheme, type Theme, detectTheme } from "./styled-text";
 import {
   formatRotateTokenError,
@@ -42,8 +42,8 @@ function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
 async function resolveTheme(): Promise<Theme> {
   const explicit = parseThemeArg();
   if (explicit) return explicit;
-  if (process.env.TINYCLAW_THEME === "light") return "light";
-  if (process.env.TINYCLAW_THEME === "dark") return "dark";
+  if (process.env.NAKAMA_THEME === "light") return "light";
+  if (process.env.NAKAMA_THEME === "dark") return "dark";
   const detected = await detectTheme();
   return detected ?? "dark";
 }
@@ -65,7 +65,7 @@ try {
 
   const client = createClient({
     baseUrl: serverUrl,
-    authToken: await loadLocalAuthToken("cli@tinyclaw.internal"),
+    authToken: await loadLocalAuthToken("cli@nakama.internal"),
   });
   let health = await client.health();
 

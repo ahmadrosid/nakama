@@ -25,7 +25,7 @@ Give each profile the minimum tool set it needs.
 
 ## Default assignments
 
-TinyClaw includes these builtins:
+Nakama includes these builtins:
 
 | Tool | `default` / `super_bot` | All profiles | Notes |
 |------|-------------------------|--------------|-------|
@@ -67,7 +67,7 @@ Write text to a file in the profile workspace.
 
 **Returns:** `{ path, bytesWritten }`
 
-**Scope:** `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/` and `~/.tinyclaw/tools/` (custom JS modules)
+**Scope:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` and `~/.nakama/tools/` (custom JS modules)
 
 **Availability:** When assigned to the profile.
 
@@ -96,7 +96,7 @@ Edit an existing text file in the profile workspace using exact replacements.
 | `edits` | array | Yes | One or more `{ oldText, newText }` replacements |
 | `cwd` | string | No | Base directory within workspace |
 
-Each `oldText` must be present once and edits must not overlap. TinyClaw applies all edits against the original file, then writes the result atomically after validation.
+Each `oldText` must be present once and edits must not overlap. Nakama applies all edits against the original file, then writes the result atomically after validation.
 
 **Returns:** `{ path, replacements, bytesWritten, fuzzyMatches }`
 
@@ -137,7 +137,7 @@ Save a persistent output file for the active profile. Use this when the agent wa
 **Behavior:** Creates parent directories as needed and stores files under:
 
 ```text
-~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/artifacts/
+~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
 Use `text` mode for markdown, logs, code snippets, and plain text. Use `base64` mode for binary files such as images and PDFs.
@@ -158,13 +158,13 @@ Search text in files under the profile workspace.
 
 **Returns:** `{ query, root, matches, matchCount, truncated }`
 
-**Scope:** `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/` only. Requires `rg` (ripgrep) on PATH.
+**Scope:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` only. Requires `rg` (ripgrep) on PATH.
 
 **Availability:** When assigned to the profile.
 
 ### `knowledge_base_search`
 
-Search uploaded knowledge base documents for relevant facts. The Knowledge tab can also show inherited URL sources, such as the TinyClaw documentation; use `web_fetch` or `web_search` for those URL sources.
+Search uploaded knowledge base documents for relevant facts. The Knowledge tab can also show inherited URL sources, such as the Nakama documentation; use `web_fetch` or `web_search` for those URL sources.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -175,7 +175,7 @@ Search uploaded knowledge base documents for relevant facts. The Knowledge tab c
 
 **Returns:** `{ query, root, matches, matchCount, truncated }` — empty matches when no ready document matches the filter.
 
-**Scope:** Extracted text files stored under `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
+**Scope:** Extracted text files stored under `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
 
 **Availability:** When assigned **and** at least one uploaded document has `status: "ready"`. Inherited URL sources do not require `knowledge_base_search`; they require `web_fetch` or `web_search`.
 
@@ -216,7 +216,7 @@ Record a fact, preference, or decision in the profile's `MEMORY.md`.
 
 **Returns:** `{ path, bytesTotal }`
 
-**Behavior:** Appends under a dated `## YYYY-MM-DD` section in `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/MEMORY.md`.
+**Behavior:** Appends under a dated `## YYYY-MM-DD` section in `~/.nakama/orgs/{orgId}/profiles/{profileId}/MEMORY.md`.
 
 **Limits:** 4096 bytes total file size.
 
@@ -233,7 +233,7 @@ Move facts out of active `MEMORY.md` into `memory-archive/` without deleting the
 
 **Returns:** `{ archived, activeBytes, archivePath }`
 
-**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
+**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.nakama/orgs/{orgId}/profiles/{profileId}/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
 
 **Availability:** When assigned to the profile.
 
@@ -255,13 +255,13 @@ List, read, search, and send email through the deployment mailbox configured in 
 
 **Returns:** Structured JSON with `messages`, `message`, or `sent` — or `{ error: "..." }` on failure. Send body max 256 KB.
 
-**Availability:** When assigned **and** the `[email]` section in `~/.tinyclaw/config.ini` is complete. Omitted at runtime when incomplete (`omitUnavailableBuiltinTools`).
+**Availability:** When assigned **and** the `[email]` section in `~/.nakama/config.ini` is complete. Omitted at runtime when incomplete (`omitUnavailableBuiltinTools`).
 
 ## Configuration prerequisites
 
 ### Email
 
-The `email` tool uses a deployment-global mailbox. Required keys in `~/.tinyclaw/config.ini` under `[email]`:
+The `email` tool uses a deployment-global mailbox. Required keys in `~/.nakama/config.ini` under `[email]`:
 
 - `imap_host`, `smtp_host`
 - `username`, `password`
@@ -276,11 +276,11 @@ Requires an OpenAI or Anthropic provider with a configured API key.
 
 ### Knowledge base
 
-Upload documents via the profile dashboard or API. Search only indexes extracted text from documents with `status: "ready"`. Upload path: `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
+Upload documents via the profile dashboard or API. Search only indexes extracted text from documents with `status: "ready"`. Upload path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/knowledge-base/`.
 
 ### Data portability
 
-Platform admins can export and import the whole local TinyClaw data root from **Agent → System → Data** in the dashboard.
+Platform admins can export and import the whole local Nakama data root from **Agent → System → Data** in the dashboard.
 Use **Export ZIP** to download a backup.
 Exports are `.zip` backups and should be handled as sensitive files because they can include local auth, provider configuration, custom tools, skills, profile workspaces, and a local SQLite database.
 
@@ -291,10 +291,10 @@ Confirmed restore replaces the current local data root; selective merge, schedul
 
 File tools (`read_file`, `write_file`, `delete_file`) are scoped to:
 
-- **Profile workspace:** `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, etc.)
-- **Custom tools directory:** `~/.tinyclaw/tools/` (follows `TINYCLAW_CONFIG_DIR` if set)
+- **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, etc.)
+- **Custom tools directory:** `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set)
 
-`save_artifact` is more specific: it only writes under `~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/artifacts/`.
+`save_artifact` is more specific: it only writes under `~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/`.
 
 Path guards enforce:
 

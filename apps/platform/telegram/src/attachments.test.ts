@@ -1,6 +1,6 @@
 import { describe, expect, test, spyOn, afterEach } from "bun:test";
 import type { Context } from "grammy";
-import { MAX_DOCUMENT_BYTES } from "@tinyclaw/core/message-content";
+import { MAX_DOCUMENT_BYTES } from "@nakama/core/message-content";
 import {
   buildTelegramDocumentInput,
   OVERSIZED_FILE_REPLY,

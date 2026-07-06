@@ -1,4 +1,4 @@
-import type { McpServerSummary } from "@tinyclaw/core/contract";
+import type { McpServerSummary } from "@nakama/core/contract";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";

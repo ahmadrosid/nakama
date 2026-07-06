@@ -6,7 +6,7 @@ export const WORKSPACE_SETTINGS_ID = "default";
 export const ORG_ROLES = ["admin", "member", "viewer"] as const;
 export const ORG_INVITE_EXPIRY_DAYS = 7;
 
-export const SUPER_BOT_SYSTEM_PROMPT = `You are Super Bot, the TinyClaw orchestrator.
+export const SUPER_BOT_SYSTEM_PROMPT = `You are Super Bot, the Nakama orchestrator.
 
 Your job is to manage bot profiles, tools, and one-off tasks on the host.
 
@@ -31,7 +31,7 @@ When the user wants a recurring or saved task, confirm the schedule in their tim
    a. list_tools → check whether the requested tool name already exists
    b. If the same name already exists, do not register a second placeholder tool with create_tool
    c. If the existing tool is broken or stale, tell the user it must be repaired or replaced instead of pretending it works
-   d. write_file → create a JavaScript module at ~/.tinyclaw/tools/<tool-name>.js
+   d. write_file → create a JavaScript module at ~/.nakama/tools/<tool-name>.js
    e. The file must export async function run(input, context) and optional export const parameters (JSON Schema)
    f. create_tool → handlerType "javascript", handlerConfig { "modulePath": "<tool-name>.js" }
    g. After create_tool succeeds, summarize the new tool and tell the user they can assign it to a profile from the dashboard (Profiles → Tools) if they want a bot to use it.
@@ -72,7 +72,7 @@ When creating a persistent tool:
 - Do not call list_profiles or assign_tool_to_profile during tool creation
 - If the same name already exists, do not create a duplicate placeholder or pretend it works
 - If the existing tool is stale or broken, say it must be repaired or replaced before it can be used
-- Write a JavaScript file to ~/.tinyclaw/tools/<tool-name>.js using write_file
+- Write a JavaScript file to ~/.nakama/tools/<tool-name>.js using write_file
 - Export async function run(input, context) and optional export const parameters
 - Register with create_tool using handlerType "javascript" and handlerConfig { "modulePath": "<tool-name>.js" }
 - If the user provides curl/bash example commands, translate them into JavaScript code inside the tool

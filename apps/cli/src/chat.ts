@@ -9,9 +9,9 @@ import {
   type SendMessageInput,
   type SoulStatusResponse,
   type UserContextStatusResponse,
-} from "@tinyclaw/core";
-import type { RemoteChatSession, StreamHandlers } from "@tinyclaw/client";
-import type { TinyClawClient } from "@tinyclaw/client";
+} from "@nakama/core";
+import type { RemoteChatSession, StreamHandlers } from "@nakama/client";
+import type { NakamaClient } from "@nakama/client";
 import { mergeSendInput, parseImageLine } from "./image-input";
 import { formatSlashCommands, effectiveModelState, isActiveModelOption, resolveModelSwitchTarget, resolveSuggestions } from "./commands";
 import { saveCliProfileId } from "./cli-config";
@@ -32,7 +32,7 @@ import { styledLine } from "./styled-text";
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
 
 interface RunChatOptions {
-  client: TinyClawClient;
+  client: NakamaClient;
   channel: AgentChannel;
   offline?: boolean;
   profileId?: CliProfileOptions["profileId"];
@@ -964,7 +964,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
 }
 
 async function printCurrentModel(
-  client: TinyClawClient,
+  client: NakamaClient,
   write: (text: string) => void = (text) => console.log(text),
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null,
@@ -1013,7 +1013,7 @@ export function formatStatusLines(
 }
 
 async function printStatus(
-  client: TinyClawClient,
+  client: NakamaClient,
   write: (text: string) => void,
   profile: ProfileSummary | null,
   cachedModels: ModelsResponse | null,
@@ -1029,7 +1029,7 @@ async function printStatus(
 }
 
 async function printModels(
-  client: TinyClawClient,
+  client: NakamaClient,
   write: (text: string) => void = (text) => console.log(text),
   profile: ProfileSummary | null = null,
   cachedModels: ModelsResponse | null = null,

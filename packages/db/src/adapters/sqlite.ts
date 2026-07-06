@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import type { AgentQuestionnaire, ChatMessage } from "@tinyclaw/core";
-import { getUserMessageText } from "@tinyclaw/core";
+import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
+import { getUserMessageText } from "@nakama/core";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
 import { migrateDatabase } from "../migrate";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";

@@ -8,8 +8,8 @@ module.exports = {
       autorestart: true,
       env: {
         NODE_ENV: "production",
-        TINYCLAW_HOST: "0.0.0.0",
-        TINYCLAW_PORT: "4310",
+        NAKAMA_HOST: "0.0.0.0",
+        NAKAMA_PORT: "4310",
       },
     },
   ],

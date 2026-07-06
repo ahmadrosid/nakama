@@ -13,7 +13,7 @@ import {
 } from "./builtin";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("file builtin tools", () => {
   let tempDir = "";
@@ -29,15 +29,15 @@ describe("file builtin tools", () => {
       configDir = "";
     }
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
     setDefaultFileGuardOptions({});
   });
 
   test("write_file creates nested files", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const targetPath = path.join(tempDir, "nested", "hello.txt");
 
     const result = await runWriteFile(
@@ -52,7 +52,7 @@ describe("file builtin tools", () => {
   });
 
   test("write_file resolves relative paths from profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const result = await runWriteFile(
       { path: "notes.txt", content: "relative" },
       PROFILE_CONTEXT,
@@ -64,9 +64,9 @@ describe("file builtin tools", () => {
   });
 
   test("write_file allows custom tool modules outside profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-write-"));
-    configDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
     const toolsDir = path.join(configDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
@@ -82,7 +82,7 @@ describe("file builtin tools", () => {
   });
 
   test("delete_file removes a file", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-delete-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-delete-"));
     const targetPath = path.join(tempDir, "remove-me.txt");
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, "temp", "utf8");
@@ -99,7 +99,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file replaces a unique text match", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "hello old world", "utf8");
 
@@ -116,7 +116,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file resolves relative paths from profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     await writeFile(path.join(tempDir, "note.txt"), "relative old", "utf8");
 
     const result = await runEditFile(
@@ -130,7 +130,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file applies multiple edits against the original file", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "one two three", "utf8");
 
@@ -151,7 +151,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file rejects ambiguous matches", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "old and old", "utf8");
 
@@ -166,7 +166,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file rejects overlapping edits", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "abcdef", "utf8");
 
@@ -187,7 +187,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file fuzzy matches line endings and smart punctuation", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "before\r\nsay “hello”—now\r\nafter\r\n", "utf8");
 
@@ -205,7 +205,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file preserves CRLF style in replacement text", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "before\r\nold block\r\nafter\r\n", "utf8");
 
@@ -222,7 +222,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file fuzzy matching ignores trailing whitespace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "alpha  \nbeta\n", "utf8");
 
@@ -240,7 +240,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file preserves a UTF-8 BOM", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "\uFEFFhello old", "utf8");
 
@@ -256,7 +256,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file rejects missing oldText", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-edit-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
     await writeFile(targetPath, "hello", "utf8");
 
@@ -270,7 +270,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file reads an existing file", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "sample.txt");
     await writeFile(targetPath, "hello world", "utf8");
 
@@ -290,7 +290,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file resolves relative paths from profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     await writeFile(path.join(tempDir, "notes.txt"), "relative", "utf8");
 
     const result = await runReadFile(
@@ -304,9 +304,9 @@ describe("file builtin tools", () => {
   });
 
   test("read_file allows custom tool modules outside profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-"));
-    configDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
     const toolsDir = path.join(configDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
@@ -324,7 +324,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file supports offset and limit", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "lines.txt");
     await writeFile(targetPath, "one\ntwo\nthree\nfour", "utf8");
 
@@ -354,8 +354,8 @@ describe("file builtin tools", () => {
   });
 
   test("save_artifact writes text files under artifacts", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const result = await runSaveArtifact(
       {
@@ -374,8 +374,8 @@ describe("file builtin tools", () => {
   });
 
   test("save_artifact decodes base64 content", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const result = await runSaveArtifact(
       {
@@ -395,8 +395,8 @@ describe("file builtin tools", () => {
   // -----------------------------------------------------------------------
 
   test("rejects path traversal via ../ escape", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
-    const escapePath = path.join(tempDir, "../../../etc/tinyclaw-exploit-test");
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
+    const escapePath = path.join(tempDir, "../../../etc/nakama-exploit-test");
 
     await expect(
       runWriteFile(
@@ -408,11 +408,11 @@ describe("file builtin tools", () => {
   });
 
   test("rejects absolute path outside allowed dirs", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runWriteFile(
-        { path: "/etc/tinyclaw-should-fail", content: "NOPE" },
+        { path: "/etc/nakama-should-fail", content: "NOPE" },
         PROFILE_CONTEXT,
         { workspaceRoot: tempDir },
       ),
@@ -420,11 +420,11 @@ describe("file builtin tools", () => {
   });
 
   test("rejects home directory expansion outside allowed dirs", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runWriteFile(
-        { path: "~/.ssh/tinyclaw-test", content: "SSH_KEY" },
+        { path: "~/.ssh/nakama-test", content: "SSH_KEY" },
         PROFILE_CONTEXT,
         { workspaceRoot: tempDir },
       ),
@@ -432,7 +432,7 @@ describe("file builtin tools", () => {
   });
 
   test("cwd injection falls back to profile workspace", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     const result = await runWriteFile(
       { path: "safe.txt", content: "OK", cwd: "/etc" },
@@ -444,7 +444,7 @@ describe("file builtin tools", () => {
   });
 
   test("rejects null byte in path", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runWriteFile(
@@ -456,7 +456,7 @@ describe("file builtin tools", () => {
   });
 
   test("rejects content exceeding max file size", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
     setDefaultFileGuardOptions({ maxFileBytes: 100 });
 
     await expect(
@@ -469,7 +469,7 @@ describe("file builtin tools", () => {
   });
 
   test("delete_file rejects path outside allowed dirs", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runDeleteFile(
@@ -481,12 +481,12 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file rejects path outside allowed dirs", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runEditFile(
         {
-          path: "/etc/tinyclaw-should-fail",
+          path: "/etc/nakama-should-fail",
           edits: [{ oldText: "x", newText: "y" }],
         },
         PROFILE_CONTEXT,
@@ -496,7 +496,7 @@ describe("file builtin tools", () => {
   });
 
   test("edit_file rejects oversized replacement result", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
     setDefaultFileGuardOptions({ maxFileBytes: 100 });
     const targetPath = path.join(tempDir, "small.txt");
     await writeFile(targetPath, "small", "utf8");
@@ -511,7 +511,7 @@ describe("file builtin tools", () => {
   });
 
   test("allows nested subdirectory writes", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     const nestedPath = path.join(tempDir, "deep", "nested", "file.txt");
     const result = await runWriteFile(
@@ -525,7 +525,7 @@ describe("file builtin tools", () => {
   });
 
   test("rejects special filesystem paths", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
       runWriteFile(
@@ -537,8 +537,8 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects path traversal via ../ escape", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
-    const escapePath = path.join(tempDir, "../../../etc/tinyclaw-exploit-test");
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
+    const escapePath = path.join(tempDir, "../../../etc/nakama-exploit-test");
 
     await expect(
       runReadFile({ path: escapePath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
@@ -546,17 +546,17 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects path outside allowed dirs", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
-      runReadFile({ path: "/etc/tinyclaw-should-fail" }, PROFILE_CONTEXT, {
+      runReadFile({ path: "/etc/nakama-should-fail" }, PROFILE_CONTEXT, {
         workspaceRoot: tempDir,
       }),
     ).rejects.toThrow(PathGuardError);
   });
 
   test("read_file rejects null byte in path", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
       runReadFile(
@@ -568,7 +568,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects missing file", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
       runReadFile({ path: path.join(tempDir, "missing.txt") }, PROFILE_CONTEXT, {
@@ -578,7 +578,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects directory path", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
       runReadFile({ path: tempDir }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
@@ -586,7 +586,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects config.ini", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
     const targetPath = path.join(tempDir, "config.ini");
     await writeFile(targetPath, "secret=value", "utf8");
 
@@ -596,7 +596,7 @@ describe("file builtin tools", () => {
   });
 
   test("read_file rejects oversized file", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-read-sec-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
     setDefaultFileGuardOptions({ maxFileBytes: 100 });
     const targetPath = path.join(tempDir, "big.txt");
     await writeFile(targetPath, "A".repeat(200), "utf8");

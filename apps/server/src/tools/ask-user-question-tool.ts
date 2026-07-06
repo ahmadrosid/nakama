@@ -1,4 +1,4 @@
-import { nanoid, type AgentQuestionnaire, type ToolDefinition } from "@tinyclaw/core";
+import { nanoid, type AgentQuestionnaire, type ToolDefinition } from "@nakama/core";
 import type { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
 
 export function createAskUserQuestionTools(

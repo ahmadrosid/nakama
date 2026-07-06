@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { UserConfig } from "@tinyclaw/core";
+import type { UserConfig } from "@nakama/core";
 import {
   resolveTranscriptionProviderSelection,
   TRANSCRIPTION_MODEL_REQUIRED_MESSAGE,

@@ -1,7 +1,7 @@
-import type { AgentChatSession } from "@tinyclaw/agent";
-import type { ChatMessage } from "@tinyclaw/core";
-import { createId } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { AgentChatSession } from "@nakama/agent";
+import type { ChatMessage } from "@nakama/core";
+import { createId } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 
 export function wrapPersistedSession(
   sessionId: string,

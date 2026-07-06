@@ -100,7 +100,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       : currentStep === 2
         ? "Create your organization"
         : currentStep === 3
-          ? "Welcome to TinyClaw"
+          ? "Welcome to Nakama"
           : "Tell us about yourself";
 
   const subtitle =

@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@tinyclaw/core";
+import type { ToolDefinition } from "@nakama/core";
 import type { AgentRequest } from "./chat";
 
 export function buildChatSystemPrompt(
@@ -15,7 +15,7 @@ export function buildChatSystemPrompt(
 ): string {
   const sections = [
     options.basePrompt?.trim() ||
-    "You are TinyClaw, a helpful personal AI assistant.",
+    "You are Nakama, a helpful personal AI assistant.",
   ];
 
   if (options.userContext?.trim()) {

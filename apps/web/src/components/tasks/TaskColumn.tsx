@@ -1,4 +1,4 @@
-import type { ProfileSummary, StoredTask, TaskStatus } from "@tinyclaw/core/contract";
+import type { ProfileSummary, StoredTask, TaskStatus } from "@nakama/core/contract";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { TASK_COLUMN_META_BY_ID } from "@/lib/task-board";

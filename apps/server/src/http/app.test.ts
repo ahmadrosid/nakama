@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
-import { loadLocalAuthToken, verifyLocalAuthToken } from "@tinyclaw/core";
+import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
@@ -25,7 +25,7 @@ import {
 } from "./test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 
-setupTestConfigDir("tinyclaw-http-app-test-");
+setupTestConfigDir("nakama-http-app-test-");
 
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -178,8 +178,8 @@ function createServerOptions() {
 
 describe("createHonoApp", () => {
   test("accepts opaque bearer auth for internal clients", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bearer-auth-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const options = createServerOptions();
@@ -210,14 +210,14 @@ describe("createHonoApp", () => {
       expect(whatsappResponse.status).toBe(200);
       await expect(whatsappResponse.json()).resolves.toEqual({ enabled: false });
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
 
   test("auto-provisions local client user on first bearer auth", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bearer-auth-autoprovision-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-autoprovision-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const options = createServerOptions();
@@ -243,14 +243,14 @@ describe("createHonoApp", () => {
       expect(response.status).toBe(200);
       expect(await options.databaseAdapter.getUserByEmail(LOCAL_CLIENT_EMAIL)).not.toBeNull();
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
 
   test("resolves org context for bearer auth without X-Org-Id", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bearer-auth-org-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-bearer-auth-org-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const options = createServerOptions();
@@ -267,7 +267,7 @@ describe("createHonoApp", () => {
 
       expect(profilesResponse.status).toBe(200);
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
@@ -288,8 +288,8 @@ describe("createHonoApp", () => {
   });
 
   test("rotates the local auth token from a browser session", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-rotate-auth-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-rotate-auth-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const options = createServerOptions();
@@ -310,7 +310,7 @@ describe("createHonoApp", () => {
           headers: withOrgId(
             {
               Cookie: cookieHeaderFromSetCookies(setupCookies),
-              "X-CSRF-Token": cookieValue(setupCookies, "tinyclaw_csrf"),
+              "X-CSRF-Token": cookieValue(setupCookies, "nakama_csrf"),
             },
             orgId,
           ),
@@ -324,14 +324,14 @@ describe("createHonoApp", () => {
       const oldToken = await loadLocalAuthToken();
       expect(oldToken).toBe(rotatePayload.token);
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
 
   test("rejects local auth token rotation from bearer auth", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-rotate-auth-bearer-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-rotate-auth-bearer-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const token = await loadLocalAuthToken();
@@ -350,7 +350,7 @@ describe("createHonoApp", () => {
         error: "Sign in through the dashboard to rotate the local auth token.",
       });
     } finally {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { recursive: true, force: true });
     }
   });
@@ -882,7 +882,7 @@ describe("createHonoApp", () => {
           headers: withOrgId(
             {
               Cookie: cookieHeaderFromSetCookies(platformCookies),
-              "X-CSRF-Token": cookieValue(platformCookies, "tinyclaw_csrf"),
+              "X-CSRF-Token": cookieValue(platformCookies, "nakama_csrf"),
             },
             "",
           ),
@@ -930,7 +930,7 @@ describe("createHonoApp", () => {
           headers: {
             ...orgHeaders,
             "Content-Type": "application/json",
-            "X-CSRF-Token": cookieValue(orgAdminCookies, "tinyclaw_csrf"),
+            "X-CSRF-Token": cookieValue(orgAdminCookies, "nakama_csrf"),
           },
           body: JSON.stringify({ name: "Blocked", systemPrompt: "nope" }),
         }),

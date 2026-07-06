@@ -1,4 +1,4 @@
-import type { CreateProviderResponse, ProviderModelOption } from "@tinyclaw/core/contract";
+import type { CreateProviderResponse, ProviderModelOption } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { normalizeModelListRows, type ModelListRow } from "@/components/ModelListEditor";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";

@@ -5,7 +5,7 @@ import {
   type ModelListRow,
 } from "@/components/ModelListEditor";
 import { OpenCodeGoModelsBrowseList } from "@/components/OpenCodeGoModelsBrowseList";
-import type { ProviderModelOption } from "@tinyclaw/core/contract";
+import type { ProviderModelOption } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";

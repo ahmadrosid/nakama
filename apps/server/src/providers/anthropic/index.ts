@@ -6,7 +6,7 @@ import type {
   ProviderClient,
   ProviderName,
   StreamChatHandlers,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { continueAnthropicUntilDone } from "./web-search";
 import { buildTokenUsage } from "../shared";
 

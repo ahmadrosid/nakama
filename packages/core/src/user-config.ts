@@ -151,13 +151,13 @@ export function validateTimezone(
 }
 
 export function getUserConfigDir(): string {
-  const override = process.env.TINYCLAW_CONFIG_DIR?.trim();
+  const override = process.env.NAKAMA_CONFIG_DIR?.trim();
 
   if (override) {
     return override;
   }
 
-  return join(homedir(), ".tinyclaw");
+  return join(homedir(), ".nakama");
 }
 
 export function getUserConfigPath(): string {
@@ -511,7 +511,7 @@ function buildConfigIniLines(
   patch: Record<string, string | undefined> = {},
 ): string[] {
   const mergedGlobal = { ...global, ...patch };
-  const lines = ["# TinyClaw user config"];
+  const lines = ["# Nakama user config"];
 
   if (mergedGlobal.default_provider_id !== undefined) {
     lines.push(`default_provider_id=${mergedGlobal.default_provider_id.trim()}`);

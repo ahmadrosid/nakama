@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/telegram",
+  "name": "@nakama/telegram",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@tinyclaw/client": "workspace:*",
-    "@tinyclaw/core": "workspace:*",
+    "@nakama/client": "workspace:*",
+    "@nakama/core": "workspace:*",
     "grammy": "^1.35.0"
   }
 }

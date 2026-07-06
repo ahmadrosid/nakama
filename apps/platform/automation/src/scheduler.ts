@@ -1,10 +1,10 @@
-import type { AutomationSchedule } from "@tinyclaw/core/contract";
+import type { AutomationSchedule } from "@nakama/core/contract";
 import {
   AutomationScheduler,
   type AutomationSchedulerDelegate,
   type AutomationSchedulerStatus,
-} from "@tinyclaw/core/automation-scheduler";
-import type { TinyClawClient } from "@tinyclaw/client";
+} from "@nakama/core/automation-scheduler";
+import type { NakamaClient } from "@nakama/client";
 
 export interface AutomationWorkerSchedulerDelegate extends AutomationSchedulerDelegate {}
 
@@ -13,7 +13,7 @@ export class AutomationWorkerScheduler {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
-    private readonly client: TinyClawClient,
+    private readonly client: NakamaClient,
     private readonly onStatusChange?: (status: AutomationSchedulerStatus) => void,
   ) {
     this.scheduler = new AutomationScheduler({

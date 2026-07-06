@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ThinkingEffort, ThinkingSettings, UpdateThinkingRequest } from "@tinyclaw/core/contract";
+import type { ThinkingEffort, ThinkingSettings, UpdateThinkingRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 

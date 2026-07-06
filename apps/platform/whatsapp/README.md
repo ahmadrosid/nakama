@@ -17,6 +17,6 @@ Setup flow:
 
 Notes:
 
-- Auth state is stored in `~/.tinyclaw/whatsapp/auth/`
-- Chat session mappings are stored in `~/.tinyclaw/whatsapp/chat-sessions.json`
+- Auth state is stored in `~/.nakama/whatsapp/auth/`
+- Chat session mappings are stored in `~/.nakama/whatsapp/chat-sessions.json`
 - Restart the bridge after changing the saved phone number

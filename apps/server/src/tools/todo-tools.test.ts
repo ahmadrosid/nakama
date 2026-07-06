@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentTodoState } from "../services/agent-todo-state";
 import { createTodoTools } from "./todo-tools";
 

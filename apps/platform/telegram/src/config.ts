@@ -3,7 +3,7 @@ import {
   getTelegramConfigPath,
   loadTelegramConfigFile,
   resolveTelegramConfigFromSources,
-} from "@tinyclaw/core/telegram-config";
+} from "@nakama/core/telegram-config";
 
 export interface TelegramBridgeConfig {
   botToken: string;

@@ -5,7 +5,7 @@ import type {
   MessageContentPart,
   ProviderName,
 } from "./contract";
-import { TinyClawApiError } from "./api-error";
+import { NakamaApiError } from "./api-error";
 import {
   resolveUserContentForProvider,
   toAnthropicDocumentBlock,
@@ -92,7 +92,7 @@ export function normalizeUserContent(
   }
 
   if (parts.length === 0) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       "Message must include text or at least one attachment.",
       400,
     );
@@ -108,7 +108,7 @@ export function validateCombinedAttachmentCount(
   const total = imageCount + documentCount;
 
   if (total > MAX_ATTACHMENTS_PER_MESSAGE) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       `At most ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message.`,
       400,
     );
@@ -117,7 +117,7 @@ export function validateCombinedAttachmentCount(
 
 export function validateImageAttachments(images: ImageAttachment[]): void {
   if (images.length > MAX_ATTACHMENTS_PER_MESSAGE) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       `At most ${MAX_ATTACHMENTS_PER_MESSAGE} images per message.`,
       400,
     );
@@ -125,7 +125,7 @@ export function validateImageAttachments(images: ImageAttachment[]): void {
 
   for (const image of images) {
     if (!ALLOWED_IMAGE_MEDIA_TYPES.has(image.mediaType)) {
-      throw new TinyClawApiError(
+      throw new NakamaApiError(
         `Unsupported image type: ${image.mediaType}. Allowed: jpeg, png, gif, webp.`,
         400,
       );
@@ -137,7 +137,7 @@ export function validateImageAttachments(images: ImageAttachment[]): void {
 
 export function validateDocumentAttachments(documents: DocumentAttachment[]): void {
   if (documents.length > MAX_ATTACHMENTS_PER_MESSAGE) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       `At most ${MAX_ATTACHMENTS_PER_MESSAGE} documents per message.`,
       400,
     );
@@ -147,13 +147,13 @@ export function validateDocumentAttachments(documents: DocumentAttachment[]): vo
     const filename = document.filename.trim();
 
     if (!filename) {
-      throw new TinyClawApiError("Document filename must not be empty.", 400);
+      throw new NakamaApiError("Document filename must not be empty.", 400);
     }
 
     const mediaType = normalizeDocumentMediaType(document.mediaType, filename);
 
     if (!ALLOWED_DOCUMENT_MEDIA_TYPES.has(mediaType)) {
-      throw new TinyClawApiError(
+      throw new NakamaApiError(
         `Unsupported document type: ${document.mediaType}. Allowed: pdf, docx, csv, txt.`,
         400,
       );
@@ -178,14 +178,14 @@ function validateAttachmentBytes(data: string, maxBytes: number, label: string):
   const raw = data.trim();
 
   if (!raw) {
-    throw new TinyClawApiError(`${label} data must not be empty.`, 400);
+    throw new NakamaApiError(`${label} data must not be empty.`, 400);
   }
 
   const base64 = raw.includes(",") ? (raw.split(",")[1] ?? "") : raw;
   const byteLength = estimateBase64DecodedLength(base64);
 
   if (byteLength > maxBytes) {
-    throw new TinyClawApiError(
+    throw new NakamaApiError(
       `Each ${label} must be at most ${maxBytes / (1024 * 1024)} MB.`,
       400,
     );

@@ -5,7 +5,7 @@ import type {
   McpServerSummary,
   McpStdioConfig,
   McpTransport,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import { BracesIcon } from "lucide-react";
 import { useEffect, useState, type ClipboardEvent, type FormEvent } from "react";
 import {

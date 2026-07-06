@@ -3,7 +3,7 @@ import type {
   GenerateTextInput,
   ProviderClient,
   StreamChatHandlers,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { createAnthropicProvider } from "../anthropic";
 import { createOpenAIProvider } from "../openai";
 

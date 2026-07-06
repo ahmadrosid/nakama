@@ -3,7 +3,7 @@ import type {
   ListTimezonesResponse,
   TimezoneCatalogEntry,
   TimezoneCatalogGroup,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { getTimezoneCityAliases } from "./timezone-city-aliases";
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });

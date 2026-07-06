@@ -1,5 +1,5 @@
-import { createClient } from "@tinyclaw/client";
-import { formatClientError } from "@tinyclaw/core/api-error";
+import { createClient } from "@nakama/client";
+import { formatClientError } from "@nakama/core/api-error";
 
 export const client = createClient({ baseUrl: "" });
 

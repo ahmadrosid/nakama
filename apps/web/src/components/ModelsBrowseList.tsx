@@ -49,7 +49,7 @@ export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowse
     let result = sortedRows;
     if (costFilter === "free") result = result.filter((row) => row.isFree);
     if (hideDeprecated) result = result.filter((row) => !row.deprecated);
-    if (provider) result = result.filter((row) => row.tinyclawProvider === provider);
+    if (provider) result = result.filter((row) => row.nakamaProvider === provider);
     const query = deferredSearch.trim().toLowerCase();
     if (query) {
       result = result.filter(
@@ -211,7 +211,7 @@ function ModelRowButton({
   return (
     <button
       type="button"
-      onClick={() => onSelect(row.tinyclawProvider, row.modelId, row)}
+      onClick={() => onSelect(row.nakamaProvider, row.modelId, row)}
       disabled={!row.supported}
       title={row.unsupportedReason}
       style={style}
@@ -248,7 +248,7 @@ function ModelRowButton({
           )}
           {row.experimental && (
             <span
-              title="Untested with tinyclaw — feature support (tools, JSON mode, streaming) may vary."
+              title="Untested with nakama — feature support (tools, JSON mode, streaming) may vary."
               className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-amber-400 ring-1 ring-amber-500/30"
             >
               experimental

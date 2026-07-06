@@ -1,4 +1,4 @@
-import { MAX_IMAGE_BYTES } from "@tinyclaw/core/message-content";
+import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 
 const MAX_DIMENSION = 2048;
 const QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4] as const;

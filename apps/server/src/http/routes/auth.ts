@@ -10,7 +10,7 @@ import {
   type RotateLocalAuthTokenResponse,
   type SetActiveOrgRequest,
   type SetupAuthRequest,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";

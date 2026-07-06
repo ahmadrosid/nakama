@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@tinyclaw/core/contract";
+import type { SessionSummary } from "@nakama/core/contract";
 import { RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";

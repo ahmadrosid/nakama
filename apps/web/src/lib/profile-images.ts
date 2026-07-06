@@ -1,5 +1,5 @@
-import type { ImageAttachment } from "@tinyclaw/core/contract";
-import { parseDataUrl } from "@tinyclaw/core/message-content";
+import type { ImageAttachment } from "@nakama/core/contract";
+import { parseDataUrl } from "@nakama/core/message-content";
 
 export function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
   return new Promise((resolve) => {

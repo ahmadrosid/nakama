@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import type { ImageAttachment, SendMessageInput } from "@tinyclaw/core";
-import { MAX_IMAGE_BYTES } from "@tinyclaw/core";
+import type { ImageAttachment, SendMessageInput } from "@nakama/core";
+import { MAX_IMAGE_BYTES } from "@nakama/core";
 
 const IMAGE_PATH_PATTERN = /^@(\S+)(?:\s+([\s\S]*))?$/;
 

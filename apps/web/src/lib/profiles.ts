@@ -1,4 +1,4 @@
-import type { ProfileSummary } from "@tinyclaw/core/contract";
+import type { ProfileSummary } from "@nakama/core/contract";
 
 /** @deprecated Use {@link findSuperBotProfile} — super bots are org-scoped. */
 export const SUPER_BOT_PROFILE_ID = "super_bot";

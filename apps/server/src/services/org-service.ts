@@ -1,4 +1,4 @@
-import { TinyClawApiError, generateTemporaryPassword } from "@tinyclaw/core";
+import { NakamaApiError, generateTemporaryPassword } from "@nakama/core";
 import type {
   AddOrgMemberResponse,
   CreateOrganizationRequest,
@@ -15,21 +15,21 @@ import type {
   ListUserOrgsResponse,
   UpdateOrgMemberRequest,
   UserOrgSummary,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import {
   ensureLocalClientAccess,
   ORG_INVITE_EXPIRY_DAYS,
   ORG_ROLES,
   seedOrgDefaultProfile,
   seedOrgSuperBotProfile,
-} from "@tinyclaw/db";
+} from "@nakama/db";
 import type {
   DatabaseAdapter,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
   StoredUserRecord,
-} from "@tinyclaw/db";
-import { getProfileSoulDir, initSoulDirectory } from "@tinyclaw/core";
+} from "@nakama/db";
+import { getProfileSoulDir, initSoulDirectory } from "@nakama/core";
 import type { AuthService } from "./auth-service";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -53,12 +53,12 @@ export class OrgService {
   ): Promise<OrganizationSummary> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
     if (!org) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     const name = request.name.trim();
     if (!name) {
-      throw new TinyClawApiError("Organization name is required.", 400);
+      throw new NakamaApiError("Organization name is required.", 400);
     }
 
     const now = new Date().toISOString();
@@ -158,7 +158,7 @@ export class OrgService {
     );
 
     if (!membership) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     if (input.sessionId) {
@@ -202,7 +202,7 @@ export class OrgService {
   }): Promise<AddOrgMemberResponse> {
     const org = await this.databaseAdapter.getOrganizationById(input.orgId);
     if (!org) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     const name = input.name.trim();
@@ -210,19 +210,19 @@ export class OrgService {
     const phone = input.phone.trim();
 
     if (!name) {
-      throw new TinyClawApiError("Member name is required.", 400);
+      throw new NakamaApiError("Member name is required.", 400);
     }
 
     if (!EMAIL_PATTERN.test(email)) {
-      throw new TinyClawApiError("A valid email address is required.", 400);
+      throw new NakamaApiError("A valid email address is required.", 400);
     }
 
     if (!phone || !PHONE_PATTERN.test(phone)) {
-      throw new TinyClawApiError("A valid phone number is required.", 400);
+      throw new NakamaApiError("A valid phone number is required.", 400);
     }
 
     if (!ORG_ROLES.includes(input.role)) {
-      throw new TinyClawApiError("Invalid org role.", 400);
+      throw new NakamaApiError("Invalid org role.", 400);
     }
 
     const now = new Date().toISOString();
@@ -231,7 +231,7 @@ export class OrgService {
     if (existingUser) {
       const member = await this.databaseAdapter.getOrgMember(input.orgId, existingUser.id);
       if (member) {
-        throw new TinyClawApiError("User is already a member of this organization.", 409);
+        throw new NakamaApiError("User is already a member of this organization.", 409);
       }
 
       await this.databaseAdapter.upsertOrgMember({
@@ -291,11 +291,11 @@ export class OrgService {
     const phone = normalizeOptionalPhone(input.admin.phone);
 
     if (!name) {
-      throw new TinyClawApiError("Admin name is required.", 400);
+      throw new NakamaApiError("Admin name is required.", 400);
     }
 
     if (!EMAIL_PATTERN.test(email)) {
-      throw new TinyClawApiError("A valid email address is required.", 400);
+      throw new NakamaApiError("A valid email address is required.", 400);
     }
 
     const now = new Date().toISOString();
@@ -324,7 +324,7 @@ export class OrgService {
   async listMembers(orgId: string): Promise<ListOrgMembersResponse> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
     if (!org) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     const records = await this.databaseAdapter.listOrgMembers(orgId);
@@ -347,7 +347,7 @@ export class OrgService {
 
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
     if (!deleted) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
   }
 
@@ -358,13 +358,13 @@ export class OrgService {
   ): Promise<OrgMemberResponse> {
     const nextRole = input.role;
     if (nextRole !== undefined && !ORG_ROLES.includes(nextRole)) {
-      throw new TinyClawApiError("Invalid org role.", 400);
+      throw new NakamaApiError("Invalid org role.", 400);
     }
 
     const member = await this.assertCanChangeAdminMembership(orgId, userId, nextRole);
     const user = await this.databaseAdapter.getUserById(userId);
     if (!user) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     const now = new Date().toISOString();
@@ -406,29 +406,29 @@ export class OrgService {
   }): Promise<OrgInviteCreatedResponse> {
     const org = await this.databaseAdapter.getOrganizationById(input.orgId);
     if (!org) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     const email = normalizeEmail(input.email);
     if (!EMAIL_PATTERN.test(email)) {
-      throw new TinyClawApiError("A valid email address is required.", 400);
+      throw new NakamaApiError("A valid email address is required.", 400);
     }
 
     if (!ORG_ROLES.includes(input.role)) {
-      throw new TinyClawApiError("Invalid org role.", 400);
+      throw new NakamaApiError("Invalid org role.", 400);
     }
 
     const existingUser = await this.databaseAdapter.getUserByEmail(email);
     if (existingUser) {
       const member = await this.databaseAdapter.getOrgMember(input.orgId, existingUser.id);
       if (member) {
-        throw new TinyClawApiError("User is already a member of this organization.", 409);
+        throw new NakamaApiError("User is already a member of this organization.", 409);
       }
     }
 
     const pendingInvite = await this.databaseAdapter.getPendingOrgInvite(input.orgId, email);
     if (pendingInvite) {
-      throw new TinyClawApiError("An invite is already pending for this email.", 409);
+      throw new NakamaApiError("An invite is already pending for this email.", 409);
     }
 
     const now = new Date();
@@ -463,21 +463,21 @@ export class OrgService {
   }> {
     const token = request.token?.trim();
     if (!token) {
-      throw new TinyClawApiError("Invite token is required.", 400);
+      throw new NakamaApiError("Invite token is required.", 400);
     }
 
     const invite = await this.databaseAdapter.getOrgInviteByTokenHash(
       this.authService.hashToken(token),
     );
     if (!invite) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     assertInviteUsable(invite);
 
     const password = request.password?.trim();
     if (!password) {
-      throw new TinyClawApiError("Password is required to accept an invite.", 400);
+      throw new NakamaApiError("Password is required to accept an invite.", 400);
     }
 
     assertNewPassword(password);
@@ -497,13 +497,13 @@ export class OrgService {
     } else {
       const valid = await this.authService.verifyPassword(password, user.passwordHash);
       if (!valid) {
-        throw new TinyClawApiError("Invalid credentials", 401);
+        throw new NakamaApiError("Invalid credentials", 401);
       }
     }
 
     const existingMember = await this.databaseAdapter.getOrgMember(invite.orgId, user.id);
     if (existingMember) {
-      throw new TinyClawApiError("User is already a member of this organization.", 409);
+      throw new NakamaApiError("User is already a member of this organization.", 409);
     }
 
     await this.databaseAdapter.upsertOrgMember({
@@ -528,7 +528,7 @@ export class OrgService {
   }): Promise<void> {
     const user = await this.databaseAdapter.getUserById(input.userId);
     if (!user) {
-      throw new TinyClawApiError("Authentication required", 401);
+      throw new NakamaApiError("Authentication required", 401);
     }
 
     const currentPassword = input.currentPassword.trim();
@@ -537,7 +537,7 @@ export class OrgService {
 
     const valid = await this.authService.verifyPassword(currentPassword, user.passwordHash);
     if (!valid) {
-      throw new TinyClawApiError("Current password is incorrect.", 401);
+      throw new NakamaApiError("Current password is incorrect.", 401);
     }
 
     const now = new Date().toISOString();
@@ -555,7 +555,7 @@ export class OrgService {
   ): Promise<{ orgId: string; userId: string; role: OrgRole; createdAt: string }> {
     const member = await this.databaseAdapter.getOrgMember(orgId, userId);
     if (!member) {
-      throw new TinyClawApiError("Not found", 404);
+      throw new NakamaApiError("Not found", 404);
     }
 
     if (member.role !== "admin") {
@@ -569,11 +569,11 @@ export class OrgService {
     }
 
     if (nextRole !== undefined && nextRole !== "admin") {
-      throw new TinyClawApiError("Cannot change role of the last org admin.", 409);
+      throw new NakamaApiError("Cannot change role of the last org admin.", 409);
     }
 
     if (nextRole === undefined) {
-      throw new TinyClawApiError("Cannot remove the last org admin.", 409);
+      throw new NakamaApiError("Cannot remove the last org admin.", 409);
     }
 
     return member;
@@ -586,11 +586,11 @@ export class OrgService {
     const slug = request.slug.trim().toLowerCase();
 
     if (!name) {
-      throw new TinyClawApiError("Organization name is required.", 400);
+      throw new NakamaApiError("Organization name is required.", 400);
     }
 
     if (!slug || !SLUG_PATTERN.test(slug)) {
-      throw new TinyClawApiError(
+      throw new NakamaApiError(
         "Organization slug must use lowercase letters, numbers, and hyphens.",
         400,
       );
@@ -598,13 +598,13 @@ export class OrgService {
 
     if (request.admin) {
       if (!request.admin.name.trim() || !request.admin.email.trim()) {
-        throw new TinyClawApiError("Admin name and email are required.", 400);
+        throw new NakamaApiError("Admin name and email are required.", 400);
       }
     }
 
     const existing = await this.databaseAdapter.getOrganizationBySlug(slug);
     if (existing) {
-      throw new TinyClawApiError("Organization slug already exists.", 409);
+      throw new NakamaApiError("Organization slug already exists.", 409);
     }
 
     const now = new Date().toISOString();
@@ -642,7 +642,7 @@ function normalizeOptionalPhone(phone: string): string | null {
   }
 
   if (!PHONE_PATTERN.test(trimmed)) {
-    throw new TinyClawApiError("Enter a valid phone number.", 400);
+    throw new NakamaApiError("Enter a valid phone number.", 400);
   }
 
   return trimmed;
@@ -659,21 +659,21 @@ function generateInviteToken(): string {
 
 function assertInviteUsable(invite: StoredOrgInviteRecord): void {
   if (invite.acceptedAt) {
-    throw new TinyClawApiError("Invite has already been accepted.", 400);
+    throw new NakamaApiError("Invite has already been accepted.", 400);
   }
 
   if (invite.revokedAt) {
-    throw new TinyClawApiError("Invite is no longer valid.", 400);
+    throw new NakamaApiError("Invite is no longer valid.", 400);
   }
 
   if (new Date(invite.expiresAt).getTime() <= Date.now()) {
-    throw new TinyClawApiError("Invite has expired.", 400);
+    throw new NakamaApiError("Invite has expired.", 400);
   }
 }
 
 function assertNewPassword(password: string): void {
   if (password.length < 8) {
-    throw new TinyClawApiError("Password must be at least 8 characters.", 400);
+    throw new NakamaApiError("Password must be at least 8 characters.", 400);
   }
 }
 

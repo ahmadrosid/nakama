@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { ToolDefinition } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import { runCodingAgentTask, type DelegateCodingTaskInput, type DelegateCodingTaskResult } from "../services/coding-agent-runner";
 
 export function createDelegateCodingTaskTool(

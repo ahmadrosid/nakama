@@ -1,4 +1,4 @@
-import type { CreateSkillRequest } from "@tinyclaw/core/contract";
+import type { CreateSkillRequest } from "@nakama/core/contract";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,7 +82,7 @@ export function SkillCreateDialog({
             <DialogDescription>
               Create a workflow skill for this profile. It is saved under{" "}
               <code className="rounded bg-muted px-1 py-0.5">
-                ~/.tinyclaw/profiles/&lt;profile&gt;/skills/
+                ~/.nakama/profiles/&lt;profile&gt;/skills/
               </code>
               .
             </DialogDescription>

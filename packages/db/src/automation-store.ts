@@ -1,4 +1,4 @@
-import type { AutomationDefinition, StoredAutomation } from "@tinyclaw/core";
+import type { AutomationDefinition, StoredAutomation } from "@nakama/core";
 import type { DatabaseAdapter, StoredAutomationRecord } from "./types";
 
 export interface AutomationStore {

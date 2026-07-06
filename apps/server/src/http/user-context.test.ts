@@ -3,11 +3,11 @@ import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { AgentService } from "../services/agent-service";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupFreshInstallSession } from "./test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 
-setupTestConfigDir("tinyclaw-user-context-test-");
+setupTestConfigDir("nakama-user-context-test-");
 
 describe("user context routes", () => {
   test("stores USER.md per authenticated member", async () => {

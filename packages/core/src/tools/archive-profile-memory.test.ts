@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { runArchiveProfileMemory } from "./archive-profile-memory";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("archive_profile_memory tool", () => {
   let tempDir = "";
@@ -16,18 +16,18 @@ describe("archive_profile_memory tool", () => {
       tempDir = "";
     }
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
   });
 
   async function setupProfileMemory(content: string): Promise<void> {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-archive-tool-"));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-archive-tool-"));
     const soulDir = path.join(tempDir, "orgs", "org_test", "profiles", "profile_test");
     await mkdir(soulDir, { recursive: true });
     await writeFile(path.join(soulDir, "MEMORY.md"), content, "utf8");
-    process.env.TINYCLAW_CONFIG_DIR = tempDir;
+    process.env.NAKAMA_CONFIG_DIR = tempDir;
   }
 
   test("archives matching bullets and returns active byte count", async () => {

@@ -6,7 +6,7 @@ import type {
   CreateAutomationRequest,
   StoredAutomation,
   UpdateAutomationRequest,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   computeAutomationNextRunAt,
   createId,
@@ -18,8 +18,8 @@ import {
   summarizeAutomationUnreadCounts,
   validateAutomationDelivery,
   validateAutomationInput,
-} from "@tinyclaw/core";
-import { DatabaseAutomationStore, type DatabaseAdapter } from "@tinyclaw/db";
+} from "@nakama/core";
+import { DatabaseAutomationStore, type DatabaseAdapter } from "@nakama/db";
 
 export interface AutomationServiceOptions {
   getUserTimezone: () => Promise<string>;

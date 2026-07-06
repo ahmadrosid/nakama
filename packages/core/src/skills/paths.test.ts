@@ -10,13 +10,13 @@ describe("skill paths", () => {
   let configDir: string | undefined;
 
   afterEach(() => {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
     configDir = undefined;
   });
 
-  test("resolveSkillDiscoveryDirs defaults to ~/.tinyclaw/agent/skills", async () => {
-    configDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-paths-test-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+  test("resolveSkillDiscoveryDirs defaults to ~/.nakama/agent/skills", async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await expect(resolveSkillDiscoveryDirs()).resolves.toEqual([
       path.join(configDir, "agent", "skills"),
@@ -24,8 +24,8 @@ describe("skill paths", () => {
   });
 
   test("resolveSkillDiscoveryDirs includes profile skills dir", async () => {
-    configDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-paths-test-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await expect(
       resolveSkillDiscoveryDirs({ orgId: ORG_ID, profileId: "profile_default" }),
@@ -36,8 +36,8 @@ describe("skill paths", () => {
   });
 
   test("resolveSkillDiscoveryDirs scans all profile skill dirs when no profileId", async () => {
-    configDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-paths-test-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
     await mkdir(path.join(configDir, "orgs", ORG_ID, "profiles", "profile_a", "skills"), {
       recursive: true,
     });

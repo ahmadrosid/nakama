@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: TinyClaw
+  name: Nakama
   text: Self-hosted AI agents
   tagline: Run your own multi-tenant AI agent workspace with profiles, tools, and channels.
   actions:
@@ -11,11 +11,11 @@ hero:
       link: /getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/ahmadrosid/tinyclaw
+      link: https://github.com/ahmadrosid/nakama
 
 features:
   - title: One server, many bots
-    details: Run multiple agent profiles from one TinyClaw deployment.
+    details: Run multiple agent profiles from one Nakama deployment.
   - title: Multi-tenant by design
     details: Separate organizations, members, profiles, sessions, and tools cleanly.
   - title: Flexible agent behavior
@@ -28,4 +28,4 @@ features:
     details: Run locally for testing or host it on your own infrastructure.
 ---
 
-TinyClaw is for people who want to run their own AI agent system instead of using a hosted SaaS. You set up the server once, create organizations and profiles, assign tools, and let users chat with the right bot for their use case.
+Nakama is for people who want to run their own AI agent system instead of using a hosted SaaS. You set up the server once, create organizations and profiles, assign tools, and let users chat with the right bot for their use case.

@@ -1,4 +1,4 @@
-import type { ImageAttachment } from "@tinyclaw/core";
+import type { ImageAttachment } from "@nakama/core";
 import type { PromptSuggestion } from "./commands";
 import { isClipboardImagePasteSupported, readClipboardImage } from "./clipboard-image";
 import { normalizePastedText } from "./prompt-display";

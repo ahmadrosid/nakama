@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 
 describe("LlmUsageTracker", () => {

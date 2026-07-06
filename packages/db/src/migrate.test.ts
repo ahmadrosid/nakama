@@ -449,7 +449,7 @@ describe("organization schema migration", () => {
 describe("migration SQL hardening", () => {
   test("rejects unexpected tenant table names before SQLite can run injected ATTACH statements", () => {
     const db = new Database(":memory:");
-    const attachPath = "/tmp/tinyclaw-migrate-attach-test.sqlite";
+    const attachPath = "/tmp/nakama-migrate-attach-test.sqlite";
 
     rmSync(attachPath, { force: true });
 

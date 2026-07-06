@@ -32,6 +32,6 @@ describe("chat history route helpers", () => {
   });
 
   test("uses a profile-scoped session storage key", () => {
-    expect(sessionStorageKey("default")).toBe("tinyclaw:session:default");
+    expect(sessionStorageKey("default")).toBe("nakama:session:default");
   });
 });

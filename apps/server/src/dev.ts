@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_SERVER_PORT, clearRuntimeServerUrl } from "@tinyclaw/core";
+import { DEFAULT_SERVER_PORT, clearRuntimeServerUrl } from "@nakama/core";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const serverEntry = join(projectRoot, "apps/server/src/index.ts");

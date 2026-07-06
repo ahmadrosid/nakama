@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getUserConfigDir } from "@tinyclaw/core";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
-import { previewTinyClawDataImport } from "../../services/data-portability";
+import { getUserConfigDir } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { previewNakamaDataImport } from "../../services/data-portability";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { browserSessionFromResponse, loginPlatformAdminSession } from "../test-session-helpers";
 
-setupTestConfigDir("tinyclaw-data-portability-routes-test-");
+setupTestConfigDir("nakama-data-portability-routes-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -35,7 +35,7 @@ function createApp() {
 }
 
 describe("data portability routes", () => {
-  test("platform admin can download a Tinyclaw export ZIP", async () => {
+  test("platform admin can download a Nakama export ZIP", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const session = await loginPlatformAdminSession(app, authService, databaseAdapter);
     await writeFile(join(getUserConfigDir(), "config.ini"), "provider=openai");
@@ -48,10 +48,10 @@ describe("data portability routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
-    expect(response.headers.get("content-disposition")).toContain("tinyclaw-export-");
+    expect(response.headers.get("content-disposition")).toContain("nakama-export-");
 
-    const preview = await previewTinyClawDataImport(Buffer.from(await response.arrayBuffer()));
-    expect(preview.manifest.kind).toBe("tinyclaw-export");
+    const preview = await previewNakamaDataImport(Buffer.from(await response.arrayBuffer()));
+    expect(preview.manifest.kind).toBe("nakama-export");
     expect(preview.topLevelPaths).toContain("config.ini");
   });
 

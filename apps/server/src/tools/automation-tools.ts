@@ -1,4 +1,4 @@
-import { emptyObjectSchema, normalizeAutomationDelivery, type ToolContext, type ToolDefinition } from "@tinyclaw/core";
+import { emptyObjectSchema, normalizeAutomationDelivery, type ToolContext, type ToolDefinition } from "@nakama/core";
 import type { AutomationRunner } from "../services/automation-runner";
 import type { AutomationService } from "../services/automation-service";
 

@@ -2,15 +2,15 @@ import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
-import type { TinyClawClient } from "@tinyclaw/client";
-import type { ProfileSummary, UserOrgSummary } from "@tinyclaw/core/contract";
+import type { NakamaClient } from "@nakama/client";
+import type { ProfileSummary, UserOrgSummary } from "@nakama/core/contract";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
   parseListUserOrgsResponse,
-} from "@tinyclaw/core/bridge-api";
-import { ChannelOrgStore } from "@tinyclaw/core/channel-org";
-import type { StreamHandlers } from "@tinyclaw/client";
+} from "@nakama/core/bridge-api";
+import { ChannelOrgStore } from "@nakama/core/channel-org";
+import type { StreamHandlers } from "@nakama/client";
 
 export interface MockStreamControl {
   complete(reply?: string): void;
@@ -216,7 +216,7 @@ export function createMockClient(
       models: [],
       displayName: null,
     }),
-  } as unknown as TinyClawClient;
+  } as unknown as NakamaClient;
 
   assertBridgeClientMethods(client);
 
@@ -253,11 +253,11 @@ export async function writeWhatsAppConfigIni(
     pairedJid?: string | null;
   },
 ): Promise<void> {
-  const dir = path.join(homeDir, ".tinyclaw", "whatsapp");
+  const dir = path.join(homeDir, ".nakama", "whatsapp");
   await mkdir(dir, { recursive: true });
 
   const lines = [
-    "# TinyClaw WhatsApp bridge",
+    "# Nakama WhatsApp bridge",
     `phone_number=${config.phoneNumber}`,
     `profile_id=${config.profileId ?? "default"}`,
   ];
@@ -276,14 +276,14 @@ export async function writeWhatsAppConfigIni(
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return new ChannelOrgStore(
-    path.join(homeDir, ".tinyclaw", "whatsapp", "org-selection.json"),
+    path.join(homeDir, ".nakama", "whatsapp", "org-selection.json"),
   );
 }
 
 export async function withTempHome<T>(
   run: (homeDir: string) => Promise<T>,
 ): Promise<T> {
-  const homeDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-whatsapp-home-"));
+  const homeDir = await mkdtemp(path.join(os.tmpdir(), "nakama-whatsapp-home-"));
   const homedirSpy = spyOn(os, "homedir").mockReturnValue(homeDir);
 
   try {

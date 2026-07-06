@@ -281,7 +281,7 @@ async function fetchWithRedirects(
       signal,
       headers: {
         accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-        "user-agent": "tinyclaw-web_fetch/1.0 (+https://github.com/ahmadrosid/tinyclaw)",
+        "user-agent": "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
       },
     });
 

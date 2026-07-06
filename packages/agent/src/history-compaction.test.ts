@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatCompletionResult, ChatMessage, ProviderClient } from "@tinyclaw/core";
+import type { ChatCompletionResult, ChatMessage, ProviderClient } from "@nakama/core";
 import {
   buildCompactionPrompt,
   compactHistory,

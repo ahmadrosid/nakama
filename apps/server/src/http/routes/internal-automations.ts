@@ -1,4 +1,4 @@
-import { isWorkerSchedulable, type AutomationSchedule } from "@tinyclaw/core";
+import { isWorkerSchedulable, type AutomationSchedule } from "@nakama/core";
 import { errorResponse, json } from "../shared";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";

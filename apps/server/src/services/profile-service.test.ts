@@ -6,11 +6,11 @@ import {
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
   ensureServerToolDefinitions,
-} from "@tinyclaw/db";
-import { DELEGATE_CODING_TASK_TOOL_ID } from "@tinyclaw/core/tools/protected";
+} from "@nakama/db";
+import { DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
 import { ProfileService } from "./profile-service";
 
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -22,9 +22,9 @@ describe("profile service createTool", () => {
 
   afterEach(async () => {
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
 
     if (tempConfigDir) {
@@ -34,8 +34,8 @@ describe("profile service createTool", () => {
   });
 
   test("defaults to an executable javascript tool", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-tool-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const toolsDir = path.join(tempConfigDir, "tools");
     await mkdir(toolsDir, { recursive: true });
 
@@ -76,7 +76,7 @@ describe("profile service avatar", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -85,8 +85,8 @@ describe("profile service avatar", () => {
   });
 
   test("uploads, serves, and deletes profile avatars", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-avatar-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-avatar-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "Avatar Bot" });
@@ -120,7 +120,7 @@ describe("profile service createProfile", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -129,8 +129,8 @@ describe("profile service createProfile", () => {
   });
 
   test("scaffolds soul templates for new profiles", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-soul-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-soul-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "Soul Bot" });
@@ -144,8 +144,8 @@ describe("profile service createProfile", () => {
   });
 
   test("assigns basic tools when the built-in tools exist", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-default-tools-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-default-tools-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
@@ -164,8 +164,8 @@ describe("profile service createProfile", () => {
   });
 
   test("assigns default bundled skills when they exist", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-default-skills-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-default-skills-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
@@ -189,8 +189,8 @@ describe("profile service createProfile", () => {
   });
 
   test("skips missing basic built-in tools without failing", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-missing-tools-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-missing-tools-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
 
@@ -202,8 +202,8 @@ describe("profile service createProfile", () => {
   });
 
   test("writes generated soul files and keeps memory empty", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-generated-soul-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-generated-soul-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, {
@@ -229,8 +229,8 @@ describe("profile service createProfile", () => {
   });
 
   test("rejects unsupported generated soul file keys", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-bad-soul-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-bad-soul-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
@@ -245,8 +245,8 @@ describe("profile service createProfile", () => {
   });
 
   test("stores profile model selection", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-model-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-model-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
@@ -265,8 +265,8 @@ describe("profile service createProfile", () => {
   });
 
   test("uses a slug from the profile name when id is omitted", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-slug-id-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-slug-id-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "Research Assistant" });
@@ -275,8 +275,8 @@ describe("profile service createProfile", () => {
   });
 
   test("uses a custom profile id when provided", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-custom-id-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-custom-id-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, {
@@ -288,8 +288,8 @@ describe("profile service createProfile", () => {
   });
 
   test("rejects duplicate custom profile ids", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-duplicate-id-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-duplicate-id-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
@@ -314,7 +314,7 @@ describe("profile service assignTool", () => {
   const originalPath = process.env.PATH ?? "";
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     process.env.PATH = originalPath;
 
     if (tempConfigDir) {
@@ -324,8 +324,8 @@ describe("profile service assignTool", () => {
   });
 
   test("blocks delegate coding task until a coding harness is ready", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-assign-tool-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-assign-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     process.env.PATH = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
@@ -347,7 +347,7 @@ describe("profile service knowledge base", () => {
   let tempConfigDir = "";
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -356,8 +356,8 @@ describe("profile service knowledge base", () => {
   });
 
   test("uploads, lists, and deletes knowledge base documents", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-profile-kb-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-kb-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
@@ -375,7 +375,7 @@ describe("profile service knowledge base", () => {
     const listed = await service.listKnowledgeBase(ORG_ID, profileId);
     expect(listed.documents).toHaveLength(1);
     expect(listed.documents[0]?.filename).toBe("notes.txt");
-    expect(listed.sources[0]?.url).toBe("https://ahmadrosid.github.io/tinyclaw/");
+    expect(listed.sources[0]?.url).toBe("https://ahmadrosid.github.io/nakama");
 
     const deleted = await service.deleteKnowledgeBaseDocument(
       ORG_ID,

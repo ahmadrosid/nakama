@@ -4,7 +4,7 @@ import type {
   LlmToolDefinition,
   ProviderChatOptions,
   ThinkingEffort,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { normalizeThinkingEffort } from "../shared";
 
 export function buildGeminiGenerateConfig(options: {

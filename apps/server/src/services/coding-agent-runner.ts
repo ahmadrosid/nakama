@@ -7,8 +7,8 @@ import {
   guardFilePath,
   readBundledSkillBody,
   type ToolContext,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter, StoredCodingAgentHarnessKind } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter, StoredCodingAgentHarnessKind } from "@nakama/db";
 import { resolveCodingAgentHarness, type CodingAgentHarnessStatus } from "./coding-agent-harness-service";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60_000;
@@ -129,7 +129,7 @@ async function runCodex(
   cwd: string,
   timeoutMs: number,
 ): Promise<DelegateCodingTaskResult> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "tinyclaw-codex-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "nakama-codex-"));
   const outputFile = path.join(tempDir, "last-message.txt");
 
   try {

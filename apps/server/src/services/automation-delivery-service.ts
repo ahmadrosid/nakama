@@ -1,7 +1,7 @@
 import type {
   AutomationRunRecord,
   StoredAutomation,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   createEmailOutboundAdapter,
   createTelegramOutboundAdapter,
@@ -9,12 +9,12 @@ import {
   formatAutomationDeliveryMessage,
   truncateForChannel,
   shouldDeliverForRun,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import type {
   EmailOutboundAdapter,
   TelegramOutboundAdapter,
   WhatsAppOutboundAdapter,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import type { AutomationService } from "./automation-service";
 
 export interface AutomationDeliveryServiceOptions {

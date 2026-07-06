@@ -6,12 +6,12 @@ import type {
   LlmToolDefinition,
   StreamChatHandlers,
   ToolCall,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   isMessageContentPartArray,
   toOpenAIResponsesUserContent,
   WEB_SEARCH_TOOL_NAME,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   buildTokenUsage,
   normalizeThinkingEffort,

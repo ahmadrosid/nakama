@@ -8,7 +8,7 @@ import type {
   AddOrgMemberRequest,
   InviteOrgMemberRequest,
   UpdateOrgMemberRequest,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 

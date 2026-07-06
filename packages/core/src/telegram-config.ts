@@ -146,7 +146,7 @@ export async function loadTelegramSettingsPublic(): Promise<TelegramSettingsPubl
 
 async function writeTelegramConfigFile(config: TelegramConfigFile): Promise<void> {
   const lines = [
-    "# TinyClaw Telegram bridge",
+    "# Nakama Telegram bridge",
     `bot_token=${config.botToken}`,
     `profile_id=${config.profileId}`,
     ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
@@ -270,7 +270,7 @@ export async function verifyAndPairTelegramUser(
     return {
       ok: false,
       message:
-        "No pairing code is active. Open TinyClaw Integrations → Telegram and generate a new code.",
+        "No pairing code is active. Open Nakama Integrations → Telegram and generate a new code.",
     };
   }
 
@@ -291,7 +291,7 @@ export async function verifyAndPairTelegramUser(
 
   return {
     ok: true,
-    message: "Linked successfully. You can chat with TinyClaw now.",
+    message: "Linked successfully. You can chat with Nakama now.",
   };
 }
 
@@ -312,7 +312,7 @@ export function resolveTelegramConfigFromSources(options: {
   return {
     botToken,
     profileId:
-      env.TINYCLAW_TELEGRAM_PROFILE_ID?.trim() ||
+      env.nakama_TELEGRAM_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_TELEGRAM_PROFILE_ID,
     handshakeCode: file?.handshakeCode ?? null,

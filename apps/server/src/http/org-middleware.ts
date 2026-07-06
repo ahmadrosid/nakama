@@ -1,4 +1,4 @@
-import type { OrgRole } from "@tinyclaw/core";
+import type { OrgRole } from "@nakama/core";
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import type { AppEnv } from "./types";

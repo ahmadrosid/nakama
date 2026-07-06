@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { NotificationDestinationWithSecret } from "@tinyclaw/core/contract";
+import type { NotificationDestinationWithSecret } from "@nakama/core/contract";
 import { CheckIcon, CopyIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,7 +40,7 @@ function LatestSecret({
     `  -H 'X-API-Key: ${apiKey}' \\`,
     `  -d '{`,
     `    "title": "New notification",`,
-    `    "body": "Hello from TinyClaw",`,
+    `    "body": "Hello from Nakama",`,
     `    "level": "info"`,
     `  }'`,
   ].join("\n");
@@ -246,7 +246,7 @@ export function NotificationDestinationsCard() {
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Notification Destinations</p>
           <p className="text-xs text-muted-foreground">
-            Create a Telegram destination, then use the webhook URL and API key from TinyClaw
+            Create a Telegram destination, then use the webhook URL and API key from Nakama
             to send simple notifications.
           </p>
         </div>
@@ -267,7 +267,7 @@ export function NotificationDestinationsCard() {
         </div>
 
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-          Open the Telegram topic, copy its link, and paste it here. TinyClaw will extract the
+          Open the Telegram topic, copy its link, and paste it here. Nakama will extract the
           Chat ID and Topic ID for you automatically.
         </div>
 

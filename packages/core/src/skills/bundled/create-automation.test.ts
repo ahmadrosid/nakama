@@ -114,13 +114,13 @@ describe("ensureBundledSkillFiles", () => {
   let configDir: string;
 
   beforeEach(async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-bundled-skills-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-bundled-skills-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
     await mkdir(join(configDir, "agent", "skills"), { recursive: true });
   });
 
   afterEach(() => {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("writes bundled skills when missing", async () => {

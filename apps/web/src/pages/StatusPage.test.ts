@@ -1,4 +1,4 @@
-import type { SystemStatusResponse } from "@tinyclaw/core/contract";
+import type { SystemStatusResponse } from "@nakama/core/contract";
 import { describe, expect, test } from "bun:test";
 import { buildServiceColumns, deriveSummary } from "./StatusPage";
 

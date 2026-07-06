@@ -1,4 +1,4 @@
-import { findCustomModel, type ProviderInstance, type ProviderName } from "@tinyclaw/core";
+import { findCustomModel, type ProviderInstance, type ProviderName } from "@nakama/core";
 import { getModelById } from "./models";
 
 export interface ModelPricing {

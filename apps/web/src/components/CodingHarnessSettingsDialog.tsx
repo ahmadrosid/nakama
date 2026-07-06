@@ -64,7 +64,7 @@ export function CodingHarnessSettingsPanel({
       return {
         tone: "warn",
         label: "Pick an agent",
-        body: "Choose which coding agent TinyClaw should use on this machine.",
+        body: "Choose which coding agent Nakama should use on this machine.",
       };
     }
 
@@ -88,7 +88,7 @@ export function CodingHarnessSettingsPanel({
       return {
         tone: "ok",
         label: `${selectedHarness.name} is ready`,
-        body: selectedHarness.statusMessage ?? "TinyClaw can use this coding agent now.",
+        body: selectedHarness.statusMessage ?? "Nakama can use this coding agent now.",
       };
     }
 
@@ -103,7 +103,7 @@ export function CodingHarnessSettingsPanel({
     return {
       tone: "warn",
       label: "Run readiness check",
-      body: "TinyClaw still needs to confirm this coding agent can actually run.",
+      body: "Nakama still needs to confirm this coding agent can actually run.",
     };
   }, [selectedHarness, verifyMutation.isPending]);
 
@@ -128,7 +128,7 @@ export function CodingHarnessSettingsPanel({
           const selected = saved.harnesses.find((harness) => harness.id === selectedHarnessId);
           setHint(
             selected
-              ? `${selected.name} selected. TinyClaw will use it for coding delegation after the readiness check passes.`
+              ? `${selected.name} selected. Nakama will use it for coding delegation after the readiness check passes.`
               : "Coding agent selection saved.",
           );
         },
@@ -252,7 +252,7 @@ export function CodingHarnessSettingsPanel({
               </span>
             </div>
             <p className="text-sm text-muted-foreground">
-              TinyClaw can hand off coding tasks to a CLI agent on this server.
+              Nakama can hand off coding tasks to a CLI agent on this server.
             </p>
           </div>
           {!embedded ? (
@@ -404,7 +404,7 @@ export function CodingHarnessSettingsPanel({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            TinyClaw should only enable code delegation after the selected agent is ready.
+            Nakama should only enable code delegation after the selected agent is ready.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" onClick={handleRefresh}>
@@ -471,7 +471,7 @@ export function CodingHarnessSettingsDialog({
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle>Coding agents</DialogTitle>
           <DialogDescription className="text-xs">
-            Pick an agent, make sure it is installed and logged in, then TinyClaw can enable code delegation.
+            Pick an agent, make sure it is installed and logged in, then Nakama can enable code delegation.
           </DialogDescription>
         </DialogHeader>
         <div className="p-4">

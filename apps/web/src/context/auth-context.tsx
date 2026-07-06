@@ -9,7 +9,7 @@ import {
 } from "react";
 import { client } from "@/lib/client";
 import { queryClient } from "@/lib/query-client";
-import type { AuthUserResponse, SetupAuthRequest, UserOrgSummary } from "@tinyclaw/core/contract";
+import type { AuthUserResponse, SetupAuthRequest, UserOrgSummary } from "@nakama/core/contract";
 
 interface AuthContextValue {
   user: AuthUserResponse | null;

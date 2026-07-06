@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { UpdateWhatsAppSettingsRequest } from "@tinyclaw/core/contract";
+import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import { CheckIcon, CopyIcon, RefreshCwIcon, ScanQrCodeIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useQueryClient } from "@tanstack/react-query";

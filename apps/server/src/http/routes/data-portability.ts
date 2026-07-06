@@ -4,11 +4,11 @@ import {
   type PreviewDataImportRequest,
   type RestoreDataImportRequest,
   type RestoreDataImportResponse,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
-  createTinyClawDataExport,
-  previewTinyClawDataImport,
-  restoreTinyClawDataImport,
+  createNakamaDataExport,
+  previewNakamaDataImport,
+  restoreNakamaDataImport,
 } from "../../services/data-portability";
 import { errorResponse, json, readJson } from "../shared";
 import { requirePlatformAdminFromContext } from "../org-guards";
@@ -36,11 +36,11 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
       method: "get",
       path: "/v1/platform/data/export",
       tags: ["Platform"],
-      summary: "Export Tinyclaw data",
+      summary: "Export Nakama data",
       operationId: "exportPlatformData",
       responses: {
         200: {
-          description: "Tinyclaw data export ZIP",
+          description: "Nakama data export ZIP",
           content: {
             "application/zip": {
               schema: z.string().openapi({ type: "string", format: "binary" }),
@@ -58,7 +58,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
       method: "post",
       path: "/v1/platform/data/import/preview",
       tags: ["Platform"],
-      summary: "Preview Tinyclaw data import",
+      summary: "Preview Nakama data import",
       operationId: "previewPlatformDataImport",
       request: {
         body: {
@@ -83,7 +83,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
       method: "post",
       path: "/v1/platform/data/import/restore",
       tags: ["Platform"],
-      summary: "Restore Tinyclaw data import",
+      summary: "Restore Nakama data import",
       operationId: "restorePlatformDataImport",
       request: {
         body: {
@@ -105,7 +105,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
 
   app.get("/v1/platform/data/export", async (c) => {
     requirePlatformAdminFromContext(c);
-    const result = await createTinyClawDataExport();
+    const result = await createNakamaDataExport();
     return new Response(result.data, {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
@@ -119,7 +119,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
 
     try {
-      const preview = await previewTinyClawDataImport(readArchiveRequestData(body.data));
+      const preview = await previewNakamaDataImport(readArchiveRequestData(body.data));
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
@@ -131,7 +131,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
     const body = await readJson<RestoreDataImportRequest>(c.req.raw);
 
     try {
-      const restore = await restoreTinyClawDataImport(readArchiveRequestData(body.data), {
+      const restore = await restoreNakamaDataImport(readArchiveRequestData(body.data), {
         confirm: body.confirm,
       });
       return json<RestoreDataImportResponse>(restore);

@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/cli",
+  "name": "@nakama/cli",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@crosscopy/clipboard": "^0.3.6",
-    "@tinyclaw/client": "workspace:*",
-    "@tinyclaw/core": "workspace:*"
+    "@nakama/client": "workspace:*",
+    "@nakama/core": "workspace:*"
   }
 }

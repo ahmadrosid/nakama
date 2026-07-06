@@ -1,6 +1,6 @@
-# TinyClaw — one container: API, web dashboard, automation + task workers
-# Build: docker build -t tinyclaw .
-# Run:   docker run -d -p 4310:4310 -v tinyclaw-config:/root/.tinyclaw tinyclaw
+# Nakama — one container: API, web dashboard, automation + task workers
+# Build: docker build -t nakama .
+# Run:   docker run -d -p 4310:4310 -v nakama-config:/root/.nakama nakama
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
 FROM --platform=linux/amd64 oven/bun:1.3-slim AS web-builder
@@ -11,7 +11,7 @@ COPY apps apps
 COPY packages packages
 
 RUN bun install --frozen-lockfile --ignore-scripts \
-  && bun run --filter @tinyclaw/web build
+  && bun run --filter @nakama/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM --platform=linux/amd64 oven/bun:1.3-slim AS runtime
@@ -29,20 +29,20 @@ COPY apps/cli/package.json apps/cli/
 COPY --from=web-builder /app/apps/web/dist apps/web/dist
 
 RUN bun install --frozen-lockfile --production --ignore-scripts \
-      --filter '@tinyclaw/server' \
-      --filter '@tinyclaw/automation' \
-      --filter '@tinyclaw/telegram' \
-      --filter '@tinyclaw/whatsapp' \
+      --filter '@nakama/server' \
+      --filter '@nakama/automation' \
+      --filter '@nakama/telegram' \
+      --filter '@nakama/whatsapp' \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)"
 
 ENV NODE_ENV=production \
-    TINYCLAW_HOST=0.0.0.0 \
-    TINYCLAW_PORT=4310 \
-    DATABASE_URL=file:data/sqlite/tinyclaw.sqlite
+    NAKAMA_HOST=0.0.0.0 \
+    NAKAMA_PORT=4310 \
+    DATABASE_URL=file:data/sqlite/nakama.sqlite
 
 EXPOSE 4310
 
-VOLUME ["/root/.tinyclaw"]
+VOLUME ["/root/.nakama"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://127.0.0.1:4310/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"

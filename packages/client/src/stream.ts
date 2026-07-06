@@ -3,7 +3,7 @@ import type {
   CodingHarnessStatus,
   SendMessageInput,
   StreamEvent,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = 120_000;

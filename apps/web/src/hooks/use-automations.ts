@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { UpdateAutomationRequest } from "@tinyclaw/core/contract";
+import type { UpdateAutomationRequest } from "@nakama/core/contract";
 import { useAuth } from "@/context/auth-context";
 import { automationsQueryOptions } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";

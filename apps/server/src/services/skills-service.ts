@@ -8,7 +8,7 @@ import type {
   SkillSummary,
   SyncSkillsResponse,
   ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   composeMatchedSkillsPrompt,
   composeSkillsCatalog,
@@ -22,8 +22,8 @@ import {
   loadSkillTools,
   matchSkillsForMessage,
   type DiscoveredSkill,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter, StoredSkillRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter, StoredSkillRecord } from "@nakama/db";
 
 export class SkillsService {
   private discoveredCache: DiscoveredSkill[] | null = null;

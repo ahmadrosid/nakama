@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { nanoid } from "@tinyclaw/core";
-import { PREINSTALLED_MCP_SERVER_IDS } from "@tinyclaw/core/mcp/preinstalled";
-import { createInMemoryDatabaseAdapter, ensurePreinstalledMcpServers } from "@tinyclaw/db";
+import { nanoid } from "@nakama/core";
+import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
+import { createInMemoryDatabaseAdapter, ensurePreinstalledMcpServers } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 

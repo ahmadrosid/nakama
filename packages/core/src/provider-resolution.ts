@@ -59,7 +59,7 @@ export interface ResolveProviderOptions {
 export function resolveProvider(options: ResolveProviderOptions = {}): UserProviderName | null {
   const env = options.env ?? process.env;
 
-  const explicitEnvProvider = parseProviderName(readEnvValue(env, "TINYCLAW_PROVIDER"));
+  const explicitEnvProvider = parseProviderName(readEnvValue(env, "NAKAMA_PROVIDER"));
 
   if (explicitEnvProvider) {
     return explicitEnvProvider;

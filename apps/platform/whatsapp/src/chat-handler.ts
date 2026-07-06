@@ -1,5 +1,5 @@
-import type { TinyClawClient, RemoteChatSession } from "@tinyclaw/client";
-import type { SendMessageInput } from "@tinyclaw/core/contract";
+import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import type { SendMessageInput } from "@nakama/core/contract";
 import type { WASocket } from "@whiskeysockets/baileys";
 import {
   findOrgBySelectionInput,
@@ -7,9 +7,9 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
   type ChannelOrgStore,
-} from "@tinyclaw/core/channel-org";
-import { pickProfileForOrg } from "@tinyclaw/core/profiles";
-import { normalizePairingCode } from "@tinyclaw/core/whatsapp-config";
+} from "@nakama/core/channel-org";
+import { pickProfileForOrg } from "@nakama/core/profiles";
+import { normalizePairingCode } from "@nakama/core/whatsapp-config";
 import {
   clearActiveStream,
   isAbortError,
@@ -26,17 +26,17 @@ import type { SessionStore } from "./session-store";
 const chatLocks = new Map<string, Promise<void>>();
 
 const PAIRING_PROMPT =
-  "Welcome to TinyClaw.\n\n" +
+  "Welcome to Nakama.\n\n" +
   "Paste your pairing code from Integrations \u2192 WhatsApp in the web dashboard. " +
   "You only need to do this once for this number.";
 
 const NO_CODE_PROMPT =
   "This number is not linked yet.\n\n" +
-  "Open TinyClaw Integrations \u2192 WhatsApp, generate a pairing code, " +
+  "Open Nakama Integrations \u2192 WhatsApp, generate a pairing code, " +
   "then send that code here. Or scan the QR code in Integrations.";
 
 export interface ChatHandlerDeps {
-  client: TinyClawClient;
+  client: NakamaClient;
   config: WhatsAppBridgeConfig;
   authStore: WhatsAppAuthStore;
   sessionStore: SessionStore;

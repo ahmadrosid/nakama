@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { withOrgId } from "./test-org-helpers";
 import { browserSessionFromResponse, loginPlatformAdminSession } from "./test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 
-setupTestConfigDir("tinyclaw-platform-orgs-test-");
+setupTestConfigDir("nakama-platform-orgs-test-");
 
 function createPlatformApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();

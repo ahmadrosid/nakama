@@ -10,9 +10,9 @@ import {
 
 describe("cli-config", () => {
   test("saves and loads profile_id", async () => {
-    const configDir = await mkdtemp(join(tmpdir(), "tinyclaw-cli-"));
-    const previous = process.env.TINYCLAW_CONFIG_DIR;
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-"));
+    const previous = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       await saveCliProfileId("super_bot");
@@ -22,9 +22,9 @@ describe("cli-config", () => {
       expect(raw).toContain("profile_id=super_bot");
     } finally {
       if (previous === undefined) {
-        delete process.env.TINYCLAW_CONFIG_DIR;
+        delete process.env.NAKAMA_CONFIG_DIR;
       } else {
-        process.env.TINYCLAW_CONFIG_DIR = previous;
+        process.env.NAKAMA_CONFIG_DIR = previous;
       }
     }
   });

@@ -13,11 +13,11 @@
     "types": ["bun"],
     "baseUrl": ".",
     "paths": {
-      "@tinyclaw/agent": ["packages/agent/src/index.ts"],
-      "@tinyclaw/client": ["packages/client/src/index.ts"],
-      "@tinyclaw/core": ["packages/core/src/index.ts"],
-      "@tinyclaw/core/*": ["packages/core/src/*"],
-      "@tinyclaw/db": ["packages/db/src/index.ts"]
+      "@nakama/agent": ["packages/agent/src/index.ts"],
+      "@nakama/client": ["packages/client/src/index.ts"],
+      "@nakama/core": ["packages/core/src/index.ts"],
+      "@nakama/core/*": ["packages/core/src/*"],
+      "@nakama/db": ["packages/db/src/index.ts"]
     }
   }
 }

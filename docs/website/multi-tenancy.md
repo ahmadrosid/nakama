@@ -1,6 +1,6 @@
 # How Multi-tenancy Works
 
-TinyClaw is built for running more than one team or customer on the same deployment.
+Nakama is built for running more than one team or customer on the same deployment.
 
 The main rule is simple:
 
@@ -18,7 +18,7 @@ That organization keeps its own:
 
 ## Why this matters
 
-Multi-tenancy lets you run one TinyClaw server without mixing teams together.
+Multi-tenancy lets you run one Nakama server without mixing teams together.
 
 For example:
 
@@ -46,10 +46,10 @@ When deciding permissions, think of it like this:
 
 ## First-time setup
 
-When you install TinyClaw for the first time:
+When you install Nakama for the first time:
 
 1. You create the first admin user
-2. TinyClaw creates the first organization
+2. Nakama creates the first organization
 3. That admin can invite more people
 4. More organizations can be created later if needed
 

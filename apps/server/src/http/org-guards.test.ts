@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TinyClawApiError } from "@tinyclaw/core";
+import { NakamaApiError } from "@nakama/core";
 import { requireNotViewer, requireOrgAdmin, requirePlatformAdmin } from "./org-guards";
 import type { RequestAuthContext } from "./shared";
 
@@ -19,8 +19,8 @@ describe("org guards", () => {
   });
 
   test("requireOrgAdmin rejects members and viewers", () => {
-    expect(() => requireOrgAdmin(auth("member"))).toThrow(TinyClawApiError);
-    expect(() => requireOrgAdmin(auth("viewer"))).toThrow(TinyClawApiError);
+    expect(() => requireOrgAdmin(auth("member"))).toThrow(NakamaApiError);
+    expect(() => requireOrgAdmin(auth("viewer"))).toThrow(NakamaApiError);
     try {
       requireOrgAdmin(auth("member"));
     } catch (error) {

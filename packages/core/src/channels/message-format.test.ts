@@ -14,7 +14,7 @@ describe("formatAutomationDeliveryMessage", () => {
       body: "Summary text",
     });
 
-    expect(formatted.subject).toBe("[TinyClaw] AI news — completed");
+    expect(formatted.subject).toBe("[Nakama] AI news — completed");
     expect(formatted.text).toContain("Summary text");
   });
 });

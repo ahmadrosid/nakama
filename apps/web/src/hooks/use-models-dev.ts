@@ -15,7 +15,7 @@ export interface ModelsDevRow {
   reasoning: boolean;
   vision: boolean;
   isZen: boolean;
-  tinyclawProvider: SelectedProvider;
+  nakamaProvider: SelectedProvider;
   supported: boolean;
   unsupportedReason?: string;
   experimental: boolean;
@@ -55,7 +55,7 @@ const UNSUPPORTED_NPM: Record<string, string> = {
   "venice-ai-sdk-provider": "Requires Venice-specific auth",
 };
 
-function resolveTinyclawProvider(
+function resolvenakamaProvider(
   providerId: string,
   npm: string | undefined,
 ): SelectedProvider {
@@ -78,7 +78,7 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
     const apiUrl = (provider.api as string | undefined) ?? "";
     const npm = provider.npm as string | undefined;
     const models = (provider.models as Record<string, unknown> | undefined) ?? {};
-    const tinyclawProvider = resolveTinyclawProvider(providerId, npm);
+    const nakamaProvider = resolvenakamaProvider(providerId, npm);
     const unsupportedReason = npm ? UNSUPPORTED_NPM[npm] : undefined;
     const supported = !unsupportedReason;
     const experimental = supported && !OFFICIAL_PROVIDER_IDS.has(providerId);
@@ -112,7 +112,7 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
         reasoning: !!(model.reasoning as boolean | undefined),
         vision: (modalities.input ?? []).includes("image"),
         isZen: providerId === "opencode",
-        tinyclawProvider,
+        nakamaProvider,
         supported,
         ...(unsupportedReason ? { unsupportedReason } : {}),
         experimental,

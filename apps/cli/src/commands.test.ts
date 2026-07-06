@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelsResponse, ProfileSummary } from "@tinyclaw/core";
+import type { ModelsResponse, ProfileSummary } from "@nakama/core";
 import {
   effectiveModelState,
   formatSlashCommands,

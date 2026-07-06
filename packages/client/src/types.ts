@@ -5,9 +5,9 @@ import type {
   ChatMessage,
   CompactionResponse,
   SendMessageInput,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 
-export interface TinyClawClientOptions {
+export interface NakamaClientOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
   authToken?: string;

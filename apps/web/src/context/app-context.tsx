@@ -3,7 +3,7 @@ import type {
   ConfigureProviderResponse,
   CreateProviderRequest,
   CreateProviderResponse,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import {
   createContext,
   useCallback,

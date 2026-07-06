@@ -19,7 +19,7 @@ import type {
   ToolSummary,
   UpdateProfileRequest,
   UploadKnowledgeBaseResponse,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   createId,
   deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
@@ -32,17 +32,17 @@ import {
   readProfileAvatar,
   resolveSoulStackForProfile,
   saveProfileAvatar,
-  TinyClawApiError,
+  NakamaApiError,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
   writeSoulFile,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   BUILTIN_TOOL_IDS,
   DELEGATE_CODING_TASK_TOOL_ID,
   isProtectedToolId,
-} from "@tinyclaw/core/tools/protected";
-import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@tinyclaw/db";
-import { ensureBuiltinToolDefinitions, ensureProfileDefaultBundledSkills } from "@tinyclaw/db";
+} from "@nakama/core/tools/protected";
+import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@nakama/db";
+import { ensureBuiltinToolDefinitions, ensureProfileDefaultBundledSkills } from "@nakama/db";
 import { resolveCodingAgentHarness } from "./coding-agent-harness-service";
 import { loadJavascriptTool, validateJavascriptToolModule } from "./javascript-tool-loader";
 import { toMcpServerSummaries } from "./mcp-service";
@@ -266,7 +266,7 @@ export class ProfileService {
     if (request.toolId === DELEGATE_CODING_TASK_TOOL_ID) {
       await resolveCodingAgentHarness(this.db).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        throw new TinyClawApiError(
+        throw new NakamaApiError(
           `Configure a ready coding agent harness before assigning this tool. ${message}`,
           400,
         );
@@ -389,7 +389,7 @@ export class ProfileService {
     const avatar = await readProfileAvatar(orgId, profileId);
 
     if (!avatar) {
-      throw new TinyClawApiError("Profile avatar not found.", 404);
+      throw new NakamaApiError("Profile avatar not found.", 404);
     }
 
     return avatar;
@@ -401,7 +401,7 @@ export class ProfileService {
     const profile = await this.db.getProfile(profileId);
 
     if (!profile?.orgId) {
-      throw new TinyClawApiError("Profile not found.", 404);
+      throw new NakamaApiError("Profile not found.", 404);
     }
 
     return this.getProfileAvatar(profile.orgId, profileId);
@@ -412,7 +412,7 @@ export class ProfileService {
     const removed = await deleteProfileAvatar(orgId, profileId);
 
     if (!removed) {
-      throw new TinyClawApiError("Profile avatar not found.", 404);
+      throw new NakamaApiError("Profile avatar not found.", 404);
     }
 
     const now = new Date().toISOString();
@@ -441,7 +441,7 @@ export class ProfileService {
       return { document: uploaded, profileId };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to upload knowledge base document.";
-      throw new TinyClawApiError(message, 400);
+      throw new NakamaApiError(message, 400);
     }
   }
 
@@ -454,7 +454,7 @@ export class ProfileService {
     const deleted = await removeKnowledgeBaseDocument(orgId, profileId, documentId);
 
     if (!deleted) {
-      throw new TinyClawApiError("Knowledge base document not found.", 404);
+      throw new NakamaApiError("Knowledge base document not found.", 404);
     }
 
     return { deleted: true, profileId, documentId };
@@ -467,7 +467,7 @@ export class ProfileService {
     const trimmed = requestedId?.trim() || slugifyProfileName(name);
 
     if (!PROFILE_ID_PATTERN.test(trimmed)) {
-      throw new TinyClawApiError(
+      throw new NakamaApiError(
         "Profile id must start with a letter or number and use only letters, numbers, underscores, and hyphens (max 64 characters).",
         400,
       );
@@ -476,7 +476,7 @@ export class ProfileService {
     const existing = await this.db.getProfile(trimmed);
 
     if (existing) {
-      throw new TinyClawApiError("Profile id already exists.", 409);
+      throw new NakamaApiError("Profile id already exists.", 409);
     }
 
     return trimmed;
@@ -486,7 +486,7 @@ export class ProfileService {
     const profile = await this.db.getProfileForOrg(profileId, orgId);
 
     if (!profile) {
-      throw new TinyClawApiError("Profile not found.", 404);
+      throw new NakamaApiError("Profile not found.", 404);
     }
 
     return profile;
@@ -506,7 +506,7 @@ export class ProfileService {
     const tool = await this.db.getTool(toolId);
 
     if (!tool) {
-      throw new TinyClawApiError("Tool not found.", 404);
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
     return tool;

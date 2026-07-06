@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ProfileSummary } from "@tinyclaw/core";
+import type { ProfileSummary } from "@nakama/core";
 import {
   parseCliProfileArgs,
   resolveProfileInput,

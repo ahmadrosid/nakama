@@ -1,11 +1,11 @@
 import * as readline from "node:readline/promises";
-import type { TinyClawClient } from "@tinyclaw/client";
+import type { NakamaClient } from "@nakama/client";
 import {
   getUserConfigPath,
   promptForProviderConfig,
   type ProviderModelOption,
   type UserProviderName,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 function readPassword(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -65,13 +65,13 @@ function readPassword(prompt: string): Promise<string> {
 }
 
 export async function ensureUserConfiguredViaCli(
-  client: TinyClawClient,
+  client: NakamaClient,
 ): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return false;
   }
 
-  console.log("TinyClaw admin setup\n");
+  console.log("Nakama admin setup\n");
   console.log("No admin user found. Let's create one.\n");
 
   const rl = readline.createInterface({
@@ -112,7 +112,7 @@ export async function ensureUserConfiguredViaCli(
 }
 
 export async function ensureProviderConfiguredViaCli(
-  client: TinyClawClient,
+  client: NakamaClient,
 ): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return false;
@@ -121,7 +121,7 @@ export async function ensureProviderConfiguredViaCli(
   const catalog = await client.getModels();
   const modelHelpers = createModelHelpers(catalog.models);
 
-  console.log("TinyClaw setup\n");
+  console.log("Nakama setup\n");
   console.log("No API key found. Let's configure one.\n");
 
   const rl = readline.createInterface({

@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus } from "@tinyclaw/core";
+import { TASK_STATUSES, type TaskStatus } from "@nakama/core";
 
 export function isValidTaskStatus(value: string): value is TaskStatus {
   return (TASK_STATUSES as readonly string[]).includes(value);

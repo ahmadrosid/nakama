@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { StoredMcpServerRecord } from "@tinyclaw/db";
+import type { StoredMcpServerRecord } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 import {
   buildMcpToolDefinitions,

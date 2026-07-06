@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { loginPlatformAdminSession, loginUserSession } from "../test-session-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
 
-setupTestConfigDir("tinyclaw-tools-route-test-");
+setupTestConfigDir("nakama-tools-route-test-");
 
 function createApp(agentOverrides: Record<string, unknown> = {}) {
   const databaseAdapter = createInMemoryDatabaseAdapter();

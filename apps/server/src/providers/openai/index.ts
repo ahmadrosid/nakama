@@ -10,8 +10,8 @@ import type {
   ProviderName,
   StreamChatHandlers,
   ToolCall,
-} from "@tinyclaw/core";
-import { messagesIncludeUserDocuments, messagesIncludeUserImages, toOpenAIChatUserContent } from "@tinyclaw/core";
+} from "@nakama/core";
+import { messagesIncludeUserDocuments, messagesIncludeUserImages, toOpenAIChatUserContent } from "@nakama/core";
 import { generateOpenAIResponsesChat } from "./responses";
 import {
   buildChatCompletionResult,

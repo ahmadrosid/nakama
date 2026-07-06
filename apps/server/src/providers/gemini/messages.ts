@@ -4,8 +4,8 @@ import {
   type Content,
   type Part,
 } from "@google/genai";
-import type { ChatMessage } from "@tinyclaw/core";
-import { resolveUserContentForProvider } from "@tinyclaw/core";
+import type { ChatMessage } from "@nakama/core";
+import { resolveUserContentForProvider } from "@nakama/core";
 import { readRecord } from "../shared";
 
 export async function toGeminiContents(messages: ChatMessage[]): Promise<Content[]> {
@@ -48,7 +48,7 @@ export async function toGeminiContents(messages: ChatMessage[]): Promise<Content
 }
 
 async function toGeminiUserParts(
-  content: string | import("@tinyclaw/core").MessageContentPart[],
+  content: string | import("@nakama/core").MessageContentPart[],
 ): Promise<Part[]> {
   const resolved = await resolveUserContentForProvider(content, "gemini");
 
@@ -128,7 +128,7 @@ export function parseGeminiFunctionCalls(
   functionCalls:
     | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
     | undefined,
-): import("@tinyclaw/core").ToolCall[] {
+): import("@nakama/core").ToolCall[] {
   if (!functionCalls?.length) {
     return [];
   }

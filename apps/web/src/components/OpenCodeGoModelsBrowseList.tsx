@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import type { ProviderModelOption } from "@tinyclaw/core/contract";
+import type { ProviderModelOption } from "@nakama/core/contract";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 

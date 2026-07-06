@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { HealthResponse, ModelsResponse, ProfileSummary } from "@tinyclaw/core";
+import type { HealthResponse, ModelsResponse, ProfileSummary } from "@nakama/core";
 import {
   formatErrorLines,
   formatStatusLines,

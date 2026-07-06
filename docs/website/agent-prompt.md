@@ -1,6 +1,6 @@
 # How Agent Prompts Work
 
-When a user starts chatting with a profile, TinyClaw builds one system prompt from several sources.
+When a user starts chatting with a profile, Nakama builds one system prompt from several sources.
 
 The short version:
 
@@ -19,9 +19,9 @@ Profile soul/system prompt
 
 ## Main profile prompt
 
-TinyClaw first resolves the profile's main prompt.
+Nakama first resolves the profile's main prompt.
 
-If the profile has soul files, TinyClaw uses them:
+If the profile has soul files, Nakama uses them:
 
 | File | Injected as |
 |------|-------------|
@@ -30,13 +30,13 @@ If the profile has soul files, TinyClaw uses them:
 | `INSTRUCTIONS.md` | Operating instructions |
 | `MEMORY.md` | Continuity |
 
-If there are no soul files, TinyClaw uses the profile's stored `systemPrompt`.
+If there are no soul files, Nakama uses the profile's stored `systemPrompt`.
 
 If both exist and they are different, the stored `systemPrompt` is appended as extra profile instructions.
 
 ## Extra profile context
 
-After the main profile prompt, TinyClaw may append:
+After the main profile prompt, Nakama may append:
 
 - Assigned skills catalog
 - Knowledge base catalog
@@ -52,11 +52,11 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - Memory and skill rules when those tools are available
 - Telegram or WhatsApp behavior when the message comes from those channels
 
-When soul is active, TinyClaw tells the agent to use tools while staying in character.
+When soul is active, Nakama tells the agent to use tools while staying in character.
 
 ## Per-turn context
 
-On each user message, TinyClaw can add fresh context for that turn:
+On each user message, Nakama can add fresh context for that turn:
 
 - Active todo/task state
 - Skills matched to the current user message
@@ -65,7 +65,7 @@ This context is not permanent. It is attached only when relevant for the current
 
 ## Current date
 
-Right before sending the request to the LLM, TinyClaw appends the current date:
+Right before sending the request to the LLM, Nakama appends the current date:
 
 ```text
 Today is <current date>.

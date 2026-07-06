@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateTaskRequest, UpdateTaskRequest } from "@tinyclaw/core/contract";
+import type { CreateTaskRequest, UpdateTaskRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { TASK_COLUMN_META } from "@/lib/task-board";
 import { loadTaskMessages } from "@/lib/task-messages";

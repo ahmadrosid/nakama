@@ -1,4 +1,4 @@
-import type { ModelsResponse, ProfileSummary, ProviderModelOption } from "@tinyclaw/core";
+import type { ModelsResponse, ProfileSummary, ProviderModelOption } from "@nakama/core";
 
 export function parseModelCommandArg(raw: string): {
   providerId: string | null;

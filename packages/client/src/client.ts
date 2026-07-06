@@ -136,10 +136,10 @@ import type {
   TaskRunRecord,
   WorkerLogsResponse,
   RotateLocalAuthTokenResponse,
-} from "@tinyclaw/core/contract";
-import { readApiErrorMessage, TinyClawApiError } from "@tinyclaw/core/api-error";
-import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
-import { resolveServerUrl } from "@tinyclaw/core/runtime";
+} from "@nakama/core/contract";
+import { readApiErrorMessage, NakamaApiError } from "@nakama/core/api-error";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import { resolveServerUrl } from "@nakama/core/runtime";
 import {
   readCodingHarnessInstallStream,
   normalizeStreamHandlers,
@@ -152,17 +152,17 @@ import type {
   SendStreamOptions,
   StreamHandler,
   StreamHandlers,
-  TinyClawClientOptions,
+  NakamaClientOptions,
 } from "./types";
 
-export class TinyClawClient {
+export class NakamaClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
   private authToken: string | null;
   private orgId: string | null;
 
-  constructor(options: TinyClawClientOptions = {}) {
+  constructor(options: NakamaClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
     const fetchFn = options.fetch ?? fetch;
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
@@ -198,7 +198,7 @@ export class TinyClawClient {
   }> {
     const response = await this.fetchRaw("/v1/platform/data/export");
     return {
-      filename: readContentDispositionFilename(response.headers) ?? "tinyclaw-export.zip",
+      filename: readContentDispositionFilename(response.headers) ?? "nakama-export.zip",
       data: await response.arrayBuffer(),
     };
   }
@@ -1408,7 +1408,7 @@ export class TinyClawClient {
     }
 
     if (isMutatingMethod(method)) {
-      const csrfToken = readCookie("tinyclaw_csrf");
+      const csrfToken = readCookie("nakama_csrf");
       if (csrfToken) {
         merged["X-CSRF-Token"] = csrfToken;
       }
@@ -1417,9 +1417,9 @@ export class TinyClawClient {
     return merged;
   }
 }
-async function createApiError(response: Response, path: string): Promise<TinyClawApiError> {
+async function createApiError(response: Response, path: string): Promise<NakamaApiError> {
   const message = await readApiErrorMessage(response);
-  return new TinyClawApiError(message, response.status, path);
+  return new NakamaApiError(message, response.status, path);
 }
 
 function isMutatingMethod(method: string): boolean {

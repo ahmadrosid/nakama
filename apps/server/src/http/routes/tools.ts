@@ -10,7 +10,7 @@ import type {
   SuggestToolParamsResponse,
   ToolResponse,
   ToolSourceResponse,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { json, readJson } from "../shared";
 import {
   requireOrgAdminOrPlatformAdminFromContext,

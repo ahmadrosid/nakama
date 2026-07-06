@@ -1,9 +1,9 @@
-import type { TelegramConfigFile } from "@tinyclaw/core/telegram-config";
+import type { TelegramConfigFile } from "@nakama/core/telegram-config";
 import {
   isTelegramUserAuthorized,
   loadTelegramConfigFile,
   verifyAndPairTelegramUser,
-} from "@tinyclaw/core/telegram-config";
+} from "@nakama/core/telegram-config";
 
 export class TelegramAuthStore {
   private config: TelegramConfigFile | null = null;

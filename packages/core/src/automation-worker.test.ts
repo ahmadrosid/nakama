@@ -16,8 +16,8 @@ import {
 let configDir: string | null = null;
 
 async function useTempConfigDir(): Promise<string> {
-  configDir = await mkdtemp(join(tmpdir(), "tinyclaw-automation-worker-"));
-  process.env.TINYCLAW_CONFIG_DIR = configDir;
+  configDir = await mkdtemp(join(tmpdir(), "nakama-automation-worker-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
   return configDir;
 }
 
@@ -26,7 +26,7 @@ async function cleanupTempConfigDir(): Promise<void> {
     await rm(configDir, { recursive: true, force: true });
     configDir = null;
   }
-  delete process.env.TINYCLAW_CONFIG_DIR;
+  delete process.env.NAKAMA_CONFIG_DIR;
 }
 
 describe("automation-worker heartbeat", () => {

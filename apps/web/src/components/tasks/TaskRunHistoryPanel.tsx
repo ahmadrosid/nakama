@@ -1,4 +1,4 @@
-import type { ProfileSummary, StoredTask } from "@tinyclaw/core/contract";
+import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
 import { XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -198,7 +198,7 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
       {chatUnavailable ? (
         <div className="shrink-0 space-y-2 border-t border-border/50 px-4 py-4 sm:px-5">
           <p className="text-sm text-muted-foreground">
-            Run history is shown above. Restart the TinyClaw server to enable follow-up chat.
+            Run history is shown above. Restart the Nakama server to enable follow-up chat.
           </p>
         </div>
       ) : (

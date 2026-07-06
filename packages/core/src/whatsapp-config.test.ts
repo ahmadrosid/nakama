@@ -112,7 +112,7 @@ describe("saveWhatsAppConfig", () => {
   });
 
   async function useTempWhatsAppHome(run: () => Promise<void>): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-home-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-home-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await run();
   }
@@ -157,9 +157,9 @@ describe("saveWhatsAppConfig", () => {
         pairing_code: first!.pairingCode!,
         paired_jid: "1234567890@s.whatsapp.net",
       };
-      const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+      const dir = path.join(tempHome, ".nakama", "whatsapp");
       const lines = [
-        "# TinyClaw WhatsApp bridge",
+        "# Nakama WhatsApp bridge",
         ...Object.entries(configWithJid).map(([k, v]) => `${k}=${v}`),
         "",
       ];
@@ -198,7 +198,7 @@ describe("resetWhatsAppSessionForReconnect", () => {
   });
 
   async function useTempWhatsAppHome(run: () => Promise<void>): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-reset-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-reset-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await run();
   }
@@ -206,7 +206,7 @@ describe("resetWhatsAppSessionForReconnect", () => {
   test("clears auth dir, pairing fields, and QR while preserving phone and profile", async () => {
     await useTempWhatsAppHome(async () => {
       await saveWhatsAppConfig({ phoneNumber: "+1234567890", profileId: "profile_custom" });
-      const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+      const dir = path.join(tempHome, ".nakama", "whatsapp");
       const authDir = path.join(dir, "auth");
       await mkdir(authDir, { recursive: true });
       await writeFile(path.join(authDir, "creds.json"), "{}", "utf8");
@@ -221,7 +221,7 @@ describe("resetWhatsAppSessionForReconnect", () => {
       };
       await writeFile(
         path.join(dir, "config.ini"),
-        ["# TinyClaw WhatsApp bridge", ...Object.entries(configWithJid).map(([k, v]) => `${k}=${v}`), ""].join("\n"),
+        ["# Nakama WhatsApp bridge", ...Object.entries(configWithJid).map(([k, v]) => `${k}=${v}`), ""].join("\n"),
         "utf8",
       );
 
@@ -330,7 +330,7 @@ describe("syncWhatsAppOwnerPairing", () => {
   });
 
   test("auto-pairs owner when WhatsApp JID includes a device suffix", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-sync-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
     await saveWhatsAppConfig({ profileId: "default" });
@@ -348,7 +348,7 @@ describe("syncWhatsAppOwnerPairing", () => {
   });
 
   test("overwrites a stale phone number after QR link", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-sync-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
     await saveWhatsAppConfig({ phoneNumber: "+6281227900622" });
@@ -364,16 +364,16 @@ describe("syncWhatsAppOwnerPairing", () => {
   });
 
   test("clears stale pairing code when owner pairing sync completes", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-sync-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
     await saveWhatsAppConfig({ phoneNumber: "+6281379292556" });
 
-    const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+    const dir = path.join(tempHome, ".nakama", "whatsapp");
     await writeFile(
       path.join(dir, "config.ini"),
       [
-        "# TinyClaw WhatsApp bridge",
+        "# Nakama WhatsApp bridge",
         "phone_number=+6281379292556",
         "profile_id=default",
         "pairing_code=ABCD1234",
@@ -395,15 +395,15 @@ describe("syncWhatsAppOwnerPairing", () => {
   });
 
   test("preserves an existing paired LID during owner sync", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-wa-sync-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-wa-sync-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
-    const dir = path.join(tempHome, ".tinyclaw", "whatsapp");
+    const dir = path.join(tempHome, ".nakama", "whatsapp");
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "config.ini"),
       [
-        "# TinyClaw WhatsApp bridge",
+        "# Nakama WhatsApp bridge",
         "phone_number=6281379292556",
         "profile_id=default",
         "paired_jid=6281379292556@s.whatsapp.net",

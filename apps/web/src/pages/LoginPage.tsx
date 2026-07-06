@@ -42,8 +42,8 @@ export function LoginPage() {
     <div className="flex h-svh items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center text-center">
-          <img src="/tinyclaw.png" alt="TinyClaw" className="mb-4 size-14 rounded-xl" />
-          <h1 className="text-xl font-semibold tracking-tight">Sign in to TinyClaw</h1>
+          <img src="/nakama.png" alt="Nakama" className="mb-4 size-14 rounded-xl" />
+          <h1 className="text-xl font-semibold tracking-tight">Sign in to Nakama</h1>
           <p className="text-sm text-muted-foreground">Enter your credentials to access your account.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

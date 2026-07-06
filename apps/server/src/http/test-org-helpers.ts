@@ -1,9 +1,9 @@
-import type { OrgRole, SetupAuthRequest } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { OrgRole, SetupAuthRequest } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "../../services/auth-service";
 
 export const TEST_ORG_ID = "org_test";
-export const LOCAL_CLIENT_EMAIL = "local-client@tinyclaw.internal";
+export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
 
 export function buildSetupAuthBody(
   email = "admin@example.com",

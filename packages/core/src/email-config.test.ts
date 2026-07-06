@@ -29,7 +29,7 @@ describe("email config", () => {
       configDir = "";
     }
 
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("formats from header with optional display name", () => {
@@ -51,8 +51,8 @@ describe("email config", () => {
   });
 
   test("round-trips email settings without exposing password publicly", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-email-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-email-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const saved = await saveEmailConfig({
       imapHost: "imap.example.com",
@@ -82,8 +82,8 @@ describe("email config", () => {
   });
 
   test("keeps existing password when update omits it", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-email-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-email-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await saveEmailConfig({
       imapHost: "imap.example.com",
@@ -103,8 +103,8 @@ describe("email config", () => {
   });
 
   test("keeps existing password when update sends redacted placeholder", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-email-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-email-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await saveEmailConfig({
       imapHost: "imap.example.com",
@@ -142,8 +142,8 @@ describe("email config", () => {
   });
 
   test("saveUserConfig preserves email section", async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-email-config-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-email-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await saveEmailConfig({
       imapHost: "imap.example.com",

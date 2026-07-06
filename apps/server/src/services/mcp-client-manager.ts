@@ -7,9 +7,9 @@ import type {
   McpHttpConfig,
   McpStdioConfig,
   McpTransport,
-} from "@tinyclaw/core";
-import { getProfileSoulDir } from "@tinyclaw/core";
-import type { CachedMcpTool, StoredMcpServerRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import { getProfileSoulDir } from "@nakama/core";
+import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
 
 interface ConnectedMcpClient {
   client: Client;
@@ -53,7 +53,7 @@ export class McpClientManager {
 
     const transport = createTransport(server.transport, server.config, options);
     const client = new Client({
-      name: "tinyclaw",
+      name: "nakama",
       version: "1.0.0",
     });
 
@@ -134,7 +134,7 @@ export class McpClientManager {
   ): Promise<CachedMcpTool[]> {
     const mcpTransport = createTransport(transport, config);
     const client = new Client({
-      name: "tinyclaw",
+      name: "nakama",
       version: "1.0.0",
     });
 

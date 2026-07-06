@@ -1,6 +1,6 @@
-import type { AgentQuestionnaire, AgentTodo, OrgRole, ThinkingEffort } from "@tinyclaw/core";
+import type { AgentQuestionnaire, AgentTodo, OrgRole, ThinkingEffort } from "@nakama/core";
 
-export type { OrgRole } from "@tinyclaw/core";
+export type { OrgRole } from "@nakama/core";
 export type ChannelType = "telegram" | "whatsapp";
 
 export type AutomationRunStatus = "running" | "completed" | "failed";

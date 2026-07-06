@@ -4,9 +4,9 @@ import type {
   TaskRunRecord,
   TaskStatus,
   UpdateTaskRequest,
-} from "@tinyclaw/core";
-import { createId } from "@tinyclaw/core";
-import type { DatabaseAdapter, StoredTaskRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import { createId } from "@nakama/core";
+import type { DatabaseAdapter, StoredTaskRecord } from "@nakama/db";
 import { isValidTaskStatus, validateTaskInput } from "./task-validate";
 import type { TaskRunner } from "./task-runner";
 

@@ -1,15 +1,15 @@
-import { formatAgentQuestionnaireAnswersMessage } from "@tinyclaw/core/agent-questionnaire";
+import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import type {
   AgentChannel,
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
   ProfileSummary,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { RemoteChatSession } from "@tinyclaw/client";
+import type { RemoteChatSession } from "@nakama/client";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";

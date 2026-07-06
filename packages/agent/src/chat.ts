@@ -10,7 +10,7 @@ import type {
   ToolCall,
   ToolContext,
   ToolDefinition,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 export interface AgentRequest {
   prompt: string;
@@ -31,7 +31,7 @@ import {
   normalizeUserContent,
   partitionTools,
   toLlmToolDefinitions,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { buildChatSystemPrompt } from "./chat-prompt";
 import {
   compactHistory,

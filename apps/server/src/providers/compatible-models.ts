@@ -2,8 +2,8 @@ import {
   findCustomModel,
   normalizeBaseUrl,
   type CustomModelEntry,
-} from "@tinyclaw/core";
-import type { ProviderInstance, ProviderName } from "@tinyclaw/core";
+} from "@nakama/core";
+import type { ProviderInstance, ProviderName } from "@nakama/core";
 import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS, getDefaultModel } from "./models";

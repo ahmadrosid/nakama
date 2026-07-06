@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { OrgMemberSummary, OrgRole } from "@tinyclaw/core/contract";
+import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { CopyIcon, PencilIcon, PlusIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

@@ -10,12 +10,12 @@ import { runKnowledgeBaseSearch } from "./knowledge-base-search";
 
 describe("knowledge_base_search tool", () => {
   let tempConfigDir = "";
-  const previousConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   const orgId = "org_test";
   const profileId = "profile_kb_search";
 
   afterEach(async () => {
-    process.env.TINYCLAW_CONFIG_DIR = previousConfigDir;
+    process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -24,8 +24,8 @@ describe("knowledge_base_search tool", () => {
   });
 
   async function setupExtractedFile(filename: string, body: string): Promise<void> {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-kb-search-"));
-    process.env.TINYCLAW_CONFIG_DIR = tempConfigDir;
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-kb-search-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const profileDir = path.join(tempConfigDir, "orgs", orgId, "profiles", profileId);
     await mkdir(path.join(profileDir, "knowledge-base"), { recursive: true });

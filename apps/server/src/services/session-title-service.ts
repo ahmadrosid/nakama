@@ -1,6 +1,6 @@
-import { generateSessionTitleFromMessages } from "@tinyclaw/agent";
-import type { ChatMessage, UserConfig } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import { generateSessionTitleFromMessages } from "@nakama/agent";
+import type { ChatMessage, UserConfig } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { resolveProfileProviderSelection } from "./provider-instance-helpers";
 

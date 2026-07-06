@@ -2,7 +2,7 @@ export type Theme = "light" | "dark" | "system";
 
 export type ResolvedTheme = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "tinyclaw-theme";
+export const THEME_STORAGE_KEY = "nakama-theme";
 
 export function isTheme(value: string | null | undefined): value is Theme {
   return value === "light" || value === "dark" || value === "system";

@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TINYCLAW_API_VERSION } from "./contract";
+import { NAKAMA_API_VERSION } from "./contract";
 import { resolveServerUrl } from "./runtime";
 
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -28,7 +28,7 @@ export async function ensureServerRunning(): Promise<EnsureServerResult> {
     env: process.env,
   });
 
-  console.warn("Starting TinyClaw server...");
+  console.warn("Starting Nakama server...");
 
   const readyUrl = await waitForServer(STARTUP_TIMEOUT_MS);
 
@@ -122,7 +122,7 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
       apiVersion?: number;
     };
 
-    if (payload.ok !== true || payload.apiVersion !== TINYCLAW_API_VERSION) {
+    if (payload.ok !== true || payload.apiVersion !== NAKAMA_API_VERSION) {
       return false;
     }
 

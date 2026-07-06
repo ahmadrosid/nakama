@@ -1,7 +1,7 @@
-import type { DatabaseAdapter, StoredToolRecord } from "@tinyclaw/db";
-import { builtinTools, type ToolDefinition } from "@tinyclaw/core";
-import { isEmailConfigComplete, loadEmailConfig } from "@tinyclaw/core/email-config";
-import { emailTool } from "@tinyclaw/core/tools/email";
+import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
+import { builtinTools, type ToolDefinition } from "@nakama/core";
+import { isEmailConfigComplete, loadEmailConfig } from "@nakama/core/email-config";
+import { emailTool } from "@nakama/core/tools/email";
 import { bashTool } from "../tools/bash";
 import { createDelegateCodingTaskTool } from "../tools/delegate-coding-task";
 import { loadJavascriptTool } from "./javascript-tool-loader";

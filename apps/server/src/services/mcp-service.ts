@@ -11,10 +11,10 @@ import type {
   ProfileRef,
   TestMcpServerResponse,
   UpdateMcpServerRequest,
-} from "@tinyclaw/core";
-import { createId, TinyClawApiError } from "@tinyclaw/core";
-import { isPreinstalledMcpServerId } from "@tinyclaw/core/mcp/preinstalled";
-import type { CachedMcpTool, DatabaseAdapter, StoredMcpServerRecord, StoredProfileRecord } from "@tinyclaw/db";
+} from "@nakama/core";
+import { createId, NakamaApiError } from "@nakama/core";
+import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
+import type { CachedMcpTool, DatabaseAdapter, StoredMcpServerRecord, StoredProfileRecord } from "@nakama/db";
 import {
   McpClientManager,
   toCachedMcpToolSummaries,
@@ -157,7 +157,7 @@ export class McpService {
 
     if (profiles.length > 0) {
       const profileRefs = toProfileRefs(profiles);
-      throw new TinyClawApiError(
+      throw new NakamaApiError(
         formatMcpServerInUseMessage(profileRefs),
         409,
         undefined,

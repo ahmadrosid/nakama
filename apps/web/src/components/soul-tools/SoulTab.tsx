@@ -1,4 +1,4 @@
-import type { SoulStackFiles } from "@tinyclaw/core/contract";
+import type { SoulStackFiles } from "@nakama/core/contract";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -395,7 +395,7 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
               <div className="mb-4">
                 <h2 className="type-section-title">Profiles</h2>
                 <p className="type-body mt-1 text-xs">
-                  Each profile has its own soul stack under ~/.tinyclaw/profiles/.
+                  Each profile has its own soul stack under ~/.nakama/profiles/.
                 </p>
               </div>
 

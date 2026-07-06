@@ -1,4 +1,4 @@
-import type { StoredTask, TaskStatus } from "@tinyclaw/core/contract";
+import type { StoredTask, TaskStatus } from "@nakama/core/contract";
 import { AlertTriangleIcon, KanbanIcon, PlusIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";

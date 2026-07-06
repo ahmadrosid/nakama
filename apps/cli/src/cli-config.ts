@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getUserConfigDir, readTextOrNull, writePrivateTextFile } from "@tinyclaw/core";
+import { getUserConfigDir, readTextOrNull, writePrivateTextFile } from "@nakama/core";
 
 export function getCliConfigPath(): string {
   return join(getUserConfigDir(), "cli.ini");
@@ -24,7 +24,7 @@ export async function saveCliProfileId(profileId: string): Promise<void> {
     return;
   }
 
-  const lines = ["# TinyClaw CLI", `profile_id=${trimmed}`, ""];
+  const lines = ["# Nakama CLI", `profile_id=${trimmed}`, ""];
 
   await writePrivateTextFile(getCliConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),

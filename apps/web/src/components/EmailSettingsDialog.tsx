@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import type { UpdateEmailSettingsRequest } from "@tinyclaw/core/contract";
+import type { UpdateEmailSettingsRequest } from "@nakama/core/contract";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

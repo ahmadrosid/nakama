@@ -1,4 +1,4 @@
-import type { JsonSchema, ProviderClient } from "@tinyclaw/core";
+import type { JsonSchema, ProviderClient } from "@nakama/core";
 
 export interface SuggestToolParamsInput {
   toolName: string;
@@ -8,7 +8,7 @@ export interface SuggestToolParamsInput {
 }
 
 const SUGGEST_PARAMS_SYSTEM = [
-  "You generate JSON parameter objects for testing TinyClaw custom tools.",
+  "You generate JSON parameter objects for testing Nakama custom tools.",
   "Return only a valid JSON object matching the tool schema.",
   "Do not use markdown fences, labels, or surrounding prose.",
 ].join("\n");

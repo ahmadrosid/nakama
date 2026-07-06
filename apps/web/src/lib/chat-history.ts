@@ -3,9 +3,9 @@ import type {
   AgentQuestionAnswer,
   ChatMessage,
   SessionMessageMeta,
-} from "@tinyclaw/core/contract";
-import { parseAgentQuestionnaireAnswersMessage } from "@tinyclaw/core/agent-questionnaire";
-import { extractThinkingFromAssistantMessage } from "@tinyclaw/core/thinking-content";
+} from "@nakama/core/contract";
+import { parseAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import { extractThinkingFromAssistantMessage } from "@nakama/core/thinking-content";
 import { userContentToDisplayDocuments, userContentToDisplayImageAttachments, userContentToDisplayImages, stripImageDescriptionsFromDisplayText } from "@/lib/chat-images";
 
 export interface RequestedChatSession {
@@ -50,7 +50,7 @@ export function readRequestedDraftKeyFromNewChatSearch(search: string): string |
   return draftKey || null;
 }
 
-export const CHAT_DRAFT_STORAGE_PREFIX = "tinyclaw:chat-draft:";
+export const CHAT_DRAFT_STORAGE_PREFIX = "nakama:chat-draft:";
 
 export function consumeStoredChatDraft(key: string): string | null {
   if (typeof sessionStorage === "undefined") {
@@ -117,7 +117,7 @@ export interface ChatListItem {
 }
 
 export function sessionStorageKey(profileId: string): string {
-  return `tinyclaw:session:${profileId}`;
+  return `nakama:session:${profileId}`;
 }
 
 export const HISTORY_SESSION_CHANNELS = ["web", "telegram", "whatsapp"] as const satisfies readonly AgentChannel[];

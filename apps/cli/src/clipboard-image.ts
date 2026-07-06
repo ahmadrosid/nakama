@@ -1,6 +1,6 @@
 import { getImageBinary, hasImage } from "@crosscopy/clipboard";
-import type { ImageAttachment } from "@tinyclaw/core";
-import { validateImageAttachments } from "@tinyclaw/core";
+import type { ImageAttachment } from "@nakama/core";
+import { validateImageAttachments } from "@nakama/core";
 
 export function isClipboardImagePasteSupported(): boolean {
   return true;

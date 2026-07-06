@@ -35,7 +35,7 @@ import {
   type NavItem,
 } from "@/lib/navigation";
 
-const GITHUB_REPO_URL = "https://github.com/ahmadrosid/tinyclaw";
+const GITHUB_REPO_URL = "https://github.com/ahmadrosid/nakama";
 
 export function Layout() {
   const location = useLocation();
@@ -86,12 +86,12 @@ export function Layout() {
             )}
           >
             <img
-              src="/tinyclaw.png"
-              alt="TinyClaw"
+              src="/nakama.png"
+              alt="Nakama"
               className="size-8 shrink-0 rounded-lg object-contain"
             />
             {!collapsed ? (
-              <p className="type-brand min-w-0 flex-1 truncate">TinyClaw</p>
+              <p className="type-brand min-w-0 flex-1 truncate">Nakama</p>
             ) : null}
             {!collapsed ? <GitHubRepoButton /> : null}
             <SidebarCollapseButton collapsed={collapsed} onToggle={toggle} />

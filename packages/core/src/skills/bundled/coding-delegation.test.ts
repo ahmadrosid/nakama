@@ -59,13 +59,13 @@ describe("ensureBundledSkillFiles for coding delegation", () => {
   let configDir: string;
 
   beforeEach(async () => {
-    configDir = await mkdtemp(join(tmpdir(), "tinyclaw-coding-delegation-skills-"));
-    process.env.TINYCLAW_CONFIG_DIR = configDir;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-coding-delegation-skills-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
     await mkdir(join(configDir, "agent", "skills"), { recursive: true });
   });
 
   afterEach(() => {
-    delete process.env.TINYCLAW_CONFIG_DIR;
+    delete process.env.NAKAMA_CONFIG_DIR;
   });
 
   test("writes coding delegation bundled skills when missing", async () => {

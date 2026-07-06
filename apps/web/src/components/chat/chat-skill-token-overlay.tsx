@@ -1,4 +1,4 @@
-import type { SkillSummary } from "@tinyclaw/core/contract";
+import type { SkillSummary } from "@nakama/core/contract";
 import { getSkillTokenRanges, type SkillTokenRange } from "@/lib/chat-composer-skills";
 import { cn } from "@/lib/utils";
 

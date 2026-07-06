@@ -1,5 +1,5 @@
-import type { McpServerSummary } from "@tinyclaw/core/contract";
-import { isPreinstalledMcpServerId } from "@tinyclaw/core/mcp/preinstalled";
+import type { McpServerSummary } from "@nakama/core/contract";
+import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import {
   EllipsisVerticalIcon,
   EyeIcon,

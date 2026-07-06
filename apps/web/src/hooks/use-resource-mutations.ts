@@ -7,8 +7,8 @@ import type {
   SoulStackFiles,
   UpdateProfileRequest,
   UserContextStatusResponse,
-} from "@tinyclaw/core/contract";
-import { TinyClawApiError } from "@tinyclaw/core/api-error";
+} from "@nakama/core/contract";
+import { NakamaApiError } from "@nakama/core/api-error";
 import { client } from "@/lib/client";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
 import { queryKeys } from "@/lib/query-keys";
@@ -23,7 +23,7 @@ async function fetchUserContext(
   try {
     return await client.getUserContext({ includeContent });
   } catch (error) {
-    if (error instanceof TinyClawApiError && error.status === 404) {
+    if (error instanceof NakamaApiError && error.status === 404) {
       return EMPTY_USER_CONTEXT;
     }
 

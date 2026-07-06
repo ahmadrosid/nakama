@@ -16,8 +16,8 @@ import type {
   UpdateSoulFileRequest,
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
-} from "@tinyclaw/core";
-import { filterProfilesForChatAccess } from "@tinyclaw/core/profiles";
+} from "@nakama/core";
+import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import { json, readJson, getRequestAuth } from "../shared";
 import { requirePlatformAdminFromContext, requireActiveOrgIdFromContext } from "../org-guards";
 import type { HonoApp } from "../types";

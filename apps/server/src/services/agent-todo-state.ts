@@ -3,8 +3,8 @@ import {
   hasActiveAgentTodos,
   type AgentTodo,
   type AgentTodoStatus,
-} from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+} from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 
 const MAX_TODOS = 20;
 

@@ -1,4 +1,4 @@
-import type { ProviderModelOption } from "@tinyclaw/core/contract";
+import type { ProviderModelOption } from "@nakama/core/contract";
 
 export interface OpenRouterApiPricing {
   prompt?: string;

@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
-import type { UserOrgSummary } from "@tinyclaw/core/contract";
+import type { UserOrgSummary } from "@nakama/core/contract";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 

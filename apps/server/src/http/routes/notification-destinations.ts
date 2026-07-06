@@ -5,8 +5,8 @@ import type {
   NotificationDestinationWithSecret,
   RegenerateNotificationDestinationKeyResponse,
   UpdateNotificationDestinationRequest,
-} from "@tinyclaw/core";
-import { TinyClawApiError } from "@tinyclaw/core";
+} from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import { NotificationDestinationService } from "../../services/notification-destination-service";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
@@ -36,7 +36,7 @@ export function registerNotificationDestinationRoutes(
         await service.create(auth.activeOrgId!, body),
       );
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       return errorResponse(error instanceof Error ? error.message : String(error), 400);
@@ -52,7 +52,7 @@ export function registerNotificationDestinationRoutes(
         await service.update(auth.activeOrgId!, c.req.param("destinationId"), body),
       );
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       return errorResponse(error instanceof Error ? error.message : String(error), 400);
@@ -67,7 +67,7 @@ export function registerNotificationDestinationRoutes(
         await service.regenerateKey(auth.activeOrgId!, c.req.param("destinationId")),
       );
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       return errorResponse(error instanceof Error ? error.message : String(error), 400);
@@ -81,7 +81,7 @@ export function registerNotificationDestinationRoutes(
       await service.delete(auth.activeOrgId!, c.req.param("destinationId"));
       return new Response(null, { status: 204 });
     } catch (error) {
-      if (error instanceof TinyClawApiError) {
+      if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
       return errorResponse(error instanceof Error ? error.message : String(error), 400);

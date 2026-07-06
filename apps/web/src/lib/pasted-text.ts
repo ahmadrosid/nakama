@@ -1,4 +1,4 @@
-import type { MessageContentPart } from "@tinyclaw/core/contract";
+import type { MessageContentPart } from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
 
 export const LONG_PASTE_WORD_THRESHOLD = 300;

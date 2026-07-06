@@ -1,5 +1,5 @@
-import type { ChatMessage, TaskMessagesResponse } from "@tinyclaw/core/contract";
-import { TinyClawApiError } from "@tinyclaw/core/api-error";
+import type { ChatMessage, TaskMessagesResponse } from "@nakama/core/contract";
+import { NakamaApiError } from "@nakama/core/api-error";
 import { client } from "@/lib/client";
 
 export async function loadTaskMessages(taskId: string): Promise<TaskMessagesResponse> {
@@ -17,7 +17,7 @@ export async function loadTaskMessages(taskId: string): Promise<TaskMessagesResp
       messages: fallback.messages.length > 0 ? fallback.messages : result.messages,
     };
   } catch (error) {
-    if (error instanceof TinyClawApiError && error.status === 404) {
+    if (error instanceof NakamaApiError && error.status === 404) {
       return buildTaskMessagesFromRuns(taskId);
     }
 

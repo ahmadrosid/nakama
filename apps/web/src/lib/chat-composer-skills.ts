@@ -1,4 +1,4 @@
-import type { SkillSummary } from "@tinyclaw/core/contract";
+import type { SkillSummary } from "@nakama/core/contract";
 
 export interface SkillSlashRange {
   start: number;

@@ -1,7 +1,7 @@
 import {
   resolveMessagesForNonVisionProvider,
   type ProviderClient,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
 export function wrapProviderForNonVision(provider: ProviderClient): ProviderClient {
   return {

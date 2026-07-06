@@ -55,7 +55,7 @@ describe("composeSoulSystemPrompt", () => {
 
 describe("default seed compose integration", () => {
   test("initSoulDirectory + loadSoulStack + compose omits Profile Instructions", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-compose-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-compose-"));
 
     try {
       await initSoulDirectory(directory);
@@ -70,7 +70,7 @@ describe("default seed compose integration", () => {
   });
 
   test("initSoulDirectory does not overwrite existing SOUL.md", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-init-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-init-"));
 
     try {
       await initSoulDirectory(directory);
@@ -86,7 +86,7 @@ describe("default seed compose integration", () => {
   });
 
   test("loads default stack sections in compose output", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-stack-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-stack-"));
 
     try {
       await initSoulDirectory(directory);

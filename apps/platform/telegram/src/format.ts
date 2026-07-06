@@ -1,5 +1,5 @@
-import { formatClientError } from "@tinyclaw/core/api-error";
-import type { AgentTodo } from "@tinyclaw/core/contract";
+import { formatClientError } from "@nakama/core/api-error";
+import type { AgentTodo } from "@nakama/core/contract";
 
 const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
 
@@ -220,7 +220,7 @@ function formatTelegramTodoLine(todo: AgentTodo): string {
   }
 }
 
-export const HELP_TEXT = `TinyClaw Telegram commands:
+export const HELP_TEXT = `Nakama Telegram commands:
 
 /start — welcome and show this message
 /help — show this message

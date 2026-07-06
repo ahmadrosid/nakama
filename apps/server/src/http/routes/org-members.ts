@@ -7,7 +7,7 @@ import type {
   OrgInviteCreatedResponse,
   OrgMemberResponse,
   UpdateOrgMemberRequest,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json, readJson } from "../shared";

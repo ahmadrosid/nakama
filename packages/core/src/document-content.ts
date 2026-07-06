@@ -1,5 +1,5 @@
 import type { DocumentAttachment, MessageContentPart, ProviderName } from "./contract";
-import { TinyClawApiError } from "./api-error";
+import { NakamaApiError } from "./api-error";
 import { extractPdfText } from "./pdf-text";
 
 export type DocumentTextParser = (
@@ -97,7 +97,7 @@ export async function resolveDocumentPartForProvider(
     };
   }
 
-  throw new TinyClawApiError(
+  throw new NakamaApiError(
     `Provider "${provider}" does not support ${part.mediaType} documents natively. Register a text parser with registerDocumentTextParser().`,
     400,
   );

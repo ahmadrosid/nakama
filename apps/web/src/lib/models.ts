@@ -2,9 +2,9 @@ import type {
   ConfigureProviderRequest,
   CreateProviderRequest,
   ProviderModelOption,
-} from "@tinyclaw/core/contract";
-import { formatConfiguredProviderLabel } from "@tinyclaw/core/provider-label";
-import type { UserProviderName } from "@tinyclaw/core/provider-resolution";
+} from "@nakama/core/contract";
+import { formatConfiguredProviderLabel } from "@nakama/core/provider-label";
+import type { UserProviderName } from "@nakama/core/provider-resolution";
 
 export type SelectedProvider = UserProviderName;
 

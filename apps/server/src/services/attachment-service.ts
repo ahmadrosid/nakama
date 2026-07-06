@@ -1,10 +1,10 @@
-import type { AgentChannel, LoadAttachmentBytes, SaveInlineAttachment } from "@tinyclaw/core";
-import { createId } from "@tinyclaw/core";
+import type { AgentChannel, LoadAttachmentBytes, SaveInlineAttachment } from "@nakama/core";
+import { createId } from "@nakama/core";
 import {
   readAttachmentBytes,
   saveAttachmentBytes,
-} from "@tinyclaw/core/attachments/store";
-import type { DatabaseAdapter, StoredAttachmentRecord } from "@tinyclaw/db";
+} from "@nakama/core/attachments/store";
+import type { DatabaseAdapter, StoredAttachmentRecord } from "@nakama/db";
 
 export interface AttachmentServiceContext {
   orgId: string;

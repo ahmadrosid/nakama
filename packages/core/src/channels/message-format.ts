@@ -27,7 +27,7 @@ export function formatAutomationDeliveryMessage(options: {
   body: string;
 }): { subject: string; text: string } {
   const label = options.status === "failed" ? "failed" : "completed";
-  const subject = `[TinyClaw] ${options.automationName} — ${label}`;
+  const subject = `[Nakama] ${options.automationName} — ${label}`;
   const text = [
     subject,
     options.completedAt,

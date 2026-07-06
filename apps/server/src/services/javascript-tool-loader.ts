@@ -1,8 +1,8 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { JsonSchema, ToolContext, ToolDefinition } from "@tinyclaw/core";
-import { getCustomToolsDir, pathExists, permissiveObjectSchema } from "@tinyclaw/core";
-import type { StoredToolRecord } from "@tinyclaw/db";
+import type { JsonSchema, ToolContext, ToolDefinition } from "@nakama/core";
+import { getCustomToolsDir, pathExists, permissiveObjectSchema } from "@nakama/core";
+import type { StoredToolRecord } from "@nakama/db";
 
 const moduleCache = new Map<string, JavascriptToolModule>();
 

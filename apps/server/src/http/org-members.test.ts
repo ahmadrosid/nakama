@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { LOCAL_CLIENT_EMAIL } from "@tinyclaw/core/local-auth";
+import { LOCAL_CLIENT_EMAIL } from "@nakama/core/local-auth";
 import { createHonoApp } from "./app";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { loginPlatformAdminSession, loginUserSession } from "./test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 
-setupTestConfigDir("tinyclaw-org-members-test-");
+setupTestConfigDir("nakama-org-members-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();

@@ -9,8 +9,8 @@ import type {
   ProviderClient,
   StreamChatHandlers,
   ToolCall,
-} from "@tinyclaw/core";
-import { normalizeBaseUrl } from "@tinyclaw/core";
+} from "@nakama/core";
+import { normalizeBaseUrl } from "@nakama/core";
 import OpenAI from "openai";
 import {
   buildChatCompletionResult,

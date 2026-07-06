@@ -1,5 +1,5 @@
 {
-  "name": "@tinyclaw/whatsapp",
+  "name": "@nakama/whatsapp",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@tinyclaw/client": "workspace:*",
-    "@tinyclaw/core": "workspace:*",
+    "@nakama/client": "workspace:*",
+    "@nakama/core": "workspace:*",
     "@whiskeysockets/baileys": "^6.7.16"
   }
 }

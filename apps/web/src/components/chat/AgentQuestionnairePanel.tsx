@@ -1,5 +1,5 @@
-import { hasActiveAgentQuestionnaire } from "@tinyclaw/core/agent-questionnaire";
-import type { AgentQuestionAnswer, AgentQuestionnaire } from "@tinyclaw/core/contract";
+import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
+import type { AgentQuestionAnswer, AgentQuestionnaire } from "@nakama/core/contract";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";

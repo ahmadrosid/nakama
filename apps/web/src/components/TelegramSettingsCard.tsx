@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { UpdateTelegramSettingsRequest } from "@tinyclaw/core/contract";
+import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
 import { CopyIcon, EyeIcon, EyeOffIcon, RefreshCwIcon } from "lucide-react";
 import {
   TelegramAllowedUsersDialog,
@@ -113,7 +113,7 @@ export function TelegramSettingsCard({
   const headerSubtitle = !configured
     ? "Step 1: paste a bot token from @BotFather"
     : hasLinkedUsers && running
-      ? "Your Telegram is connected to TinyClaw"
+      ? "Your Telegram is connected to Nakama"
       : hasLinkedUsers
         ? "Linked. Start the bridge to receive messages"
         : pairingCode

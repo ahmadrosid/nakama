@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type { InitUserContextResponse, UpdateUserContextRequest, UserContextStatusResponse } from "@tinyclaw/core";
+import type { InitUserContextResponse, UpdateUserContextRequest, UserContextStatusResponse } from "@nakama/core";
 import { json, readJson, getRequestAuth } from "../shared";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";

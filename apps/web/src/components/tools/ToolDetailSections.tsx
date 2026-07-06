@@ -1,4 +1,4 @@
-import type { ToolDetail } from "@tinyclaw/core/contract";
+import type { ToolDetail } from "@nakama/core/contract";
 import { ToolSourceCodeBlock } from "@/components/tools/ToolSourceCodeBlock";
 import { Spinner } from "@/components/ui/spinner";
 import { useToolSourceQuery } from "@/hooks/use-app-queries";

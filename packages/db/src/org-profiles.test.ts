@@ -3,7 +3,7 @@ import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   DELEGATE_CODING_TASK_TOOL_ID,
-} from "@tinyclaw/core/tools/protected";
+} from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import { ensureBuiltinToolDefinitions } from "./seed";

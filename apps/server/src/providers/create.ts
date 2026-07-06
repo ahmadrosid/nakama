@@ -9,7 +9,7 @@ import {
   type ProviderInstance,
   type ProviderName,
   type UserConfig,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { resolveModel } from "./models";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";

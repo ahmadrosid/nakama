@@ -3,7 +3,7 @@ import {
   loadUserConfig,
   type ProviderClient,
   type UserConfig,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { createProviderFromSources } from "./providers";
 
 export interface ProviderBootstrap {

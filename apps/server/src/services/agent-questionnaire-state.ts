@@ -1,5 +1,5 @@
-import type { AgentQuestionnaire } from "@tinyclaw/core";
-import type { DatabaseAdapter } from "@tinyclaw/db";
+import type { AgentQuestionnaire } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 
 const MAX_QUESTIONS = 5;
 const MAX_CHOICES = 5;

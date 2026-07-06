@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationService } from "./automation-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationDeliveryService } from "./automation-delivery-service";
@@ -563,7 +563,7 @@ describe("AutomationRunner", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({
       to: "hey@ahmadrosid.com",
-      subject: "[TinyClaw] Digest — completed",
+      subject: "[Nakama] Digest — completed",
       body: expect.stringContaining("News summary"),
     });
 

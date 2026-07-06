@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { TINYCLAW_API_VERSION } from "@tinyclaw/core";
+import { NAKAMA_API_VERSION } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
 
@@ -8,7 +8,7 @@ const DOCS_HTML = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TinyClaw API</title>
+    <title>Nakama API</title>
   </head>
   <body>
     <div id="app"></div>
@@ -82,7 +82,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
     const userCount = (await databaseAdapter?.countUsers()) ?? 0;
     return c.json({
       ok: true,
-      apiVersion: TINYCLAW_API_VERSION,
+      apiVersion: NAKAMA_API_VERSION,
       providerConfigured: agent.providerConfigured,
       userConfigured: userCount > 0,
     }, 200);

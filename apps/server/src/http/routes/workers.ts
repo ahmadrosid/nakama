@@ -6,7 +6,7 @@ import {
   requireNotViewerFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import type { WorkerLogsResponse } from "@tinyclaw/core";
+import type { WorkerLogsResponse } from "@nakama/core";
 
 export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void {
   const { workerManager } = options;

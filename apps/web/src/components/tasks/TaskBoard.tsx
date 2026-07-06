@@ -1,4 +1,4 @@
-import type { ProfileSummary, StoredTask, TaskStatus } from "@tinyclaw/core/contract";
+import type { ProfileSummary, StoredTask, TaskStatus } from "@nakama/core/contract";
 import {
   DndContext,
   DragOverlay,

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { ProviderModelOption } from "@tinyclaw/core/contract";
+import type { ProviderModelOption } from "@nakama/core/contract";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import {
   OpenRouterModelsBrowseList,

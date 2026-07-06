@@ -3,7 +3,7 @@ import { createAuthMiddleware } from "./auth-middleware";
 import { createOrgContextMiddleware } from "./org-middleware";
 import type { ServerOptions } from "./context";
 import type { HonoApp } from "./types";
-import { TinyClawApiError, formatServerError } from "@tinyclaw/core";
+import { NakamaApiError, formatServerError } from "@nakama/core";
 import { errorResponse } from "./shared";
 import { registerSystemRoutes } from "./routes/system";
 import { registerAuthRoutes } from "./routes/auth";
@@ -30,7 +30,7 @@ export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
 
   app.onError((err) => {
-    if (err instanceof TinyClawApiError) {
+    if (err instanceof NakamaApiError) {
       return errorResponse(
         err.message,
         err.status,

@@ -2,15 +2,15 @@ import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
-import type { TinyClawClient } from "@tinyclaw/client";
-import type { AgentTodo, UserOrgSummary } from "@tinyclaw/core/contract";
+import type { NakamaClient } from "@nakama/client";
+import type { AgentTodo, UserOrgSummary } from "@nakama/core/contract";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
   parseListUserOrgsResponse,
-} from "@tinyclaw/core/bridge-api";
-import { ChannelOrgStore } from "@tinyclaw/core/channel-org";
-import type { StreamHandlers } from "@tinyclaw/client";
+} from "@nakama/core/bridge-api";
+import { ChannelOrgStore } from "@nakama/core/channel-org";
+import type { StreamHandlers } from "@nakama/client";
 import type { Context } from "grammy";
 import type { TelegramBotInfo } from "./group-message";
 
@@ -354,7 +354,7 @@ export function createMockClient(
       calls.transcribeAudio += 1;
       return { text: "Transcribed voice message" };
     },
-  } as unknown as TinyClawClient;
+  } as unknown as NakamaClient;
 
   assertBridgeClientMethods(client);
 
@@ -379,11 +379,11 @@ export async function writeTelegramConfigIni(
     allowedUserIds?: number[];
   },
 ): Promise<void> {
-  const dir = path.join(homeDir, ".tinyclaw", "telegram");
+  const dir = path.join(homeDir, ".nakama", "telegram");
   await mkdir(dir, { recursive: true });
 
   const lines = [
-    "# TinyClaw Telegram bridge",
+    "# Nakama Telegram bridge",
     `bot_token=${config.botToken}`,
     `profile_id=${config.profileId ?? "default"}`,
   ];
@@ -406,14 +406,14 @@ export async function writeTelegramConfigIni(
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return new ChannelOrgStore(
-    path.join(homeDir, ".tinyclaw", "telegram", "org-selection.json"),
+    path.join(homeDir, ".nakama", "telegram", "org-selection.json"),
   );
 }
 
 export async function withTempHome<T>(
   run: (homeDir: string) => Promise<T>,
 ): Promise<T> {
-  const homeDir = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-telegram-home-"));
+  const homeDir = await mkdtemp(path.join(os.tmpdir(), "nakama-telegram-home-"));
   const homedirSpy = spyOn(os, "homedir").mockReturnValue(homeDir);
 
   try {

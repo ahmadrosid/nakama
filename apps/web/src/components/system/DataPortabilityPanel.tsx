@@ -1,4 +1,4 @@
-import type { DataImportPreviewResponse } from "@tinyclaw/core/contract";
+import type { DataImportPreviewResponse } from "@nakama/core/contract";
 import {
   AlertTriangleIcon,
   DatabaseBackupIcon,
@@ -95,7 +95,7 @@ export function DataPortabilityPanel() {
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-foreground">Export local data</h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Download a ZIP backup of the configured Tinyclaw data root.
+                Download a ZIP backup of the configured Nakama data root.
               </p>
             </div>
           </div>

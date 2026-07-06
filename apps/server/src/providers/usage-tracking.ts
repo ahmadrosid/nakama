@@ -5,8 +5,8 @@ import type {
   GenerateTextResult,
   ProviderClient,
   StreamChatHandlers,
-} from "@tinyclaw/core";
-import { estimateUserContentTokens } from "@tinyclaw/core";
+} from "@nakama/core";
+import { estimateUserContentTokens } from "@nakama/core";
 import type { LlmUsageTracker } from "../services/llm-usage-tracker";
 
 function estimateTokens(text: string): number {

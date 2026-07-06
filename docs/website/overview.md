@@ -1,21 +1,21 @@
 # Overview
 
-TinyClaw is a self-hosted AI agent platform for teams.
+Nakama is a self-hosted AI agent platform for teams.
 
 The easiest way to think about it:
 
-- One TinyClaw server can host many organizations
+- One Nakama server can host many organizations
 - Each organization can have many members
 - Each organization can have many profiles
 - Each profile is a bot with its own behavior, memory, and tool access
 
 ## Core mental model
 
-If you are using TinyClaw, most of the product can be understood through these four ideas.
+If you are using Nakama, most of the product can be understood through these four ideas.
 
 ### 1. Organization
 
-An organization is the main boundary in TinyClaw.
+An organization is the main boundary in Nakama.
 
 It keeps one team's data separate from another team's data, including:
 
@@ -57,7 +57,7 @@ This is how you keep one bot safe and narrow while another bot can be more capab
 
 ### 4. Channels
 
-The same TinyClaw profile can be used from different places:
+The same Nakama profile can be used from different places:
 
 - Web dashboard
 - CLI
@@ -75,9 +75,9 @@ Most deployments follow this pattern:
 5. Upload knowledge base documents if needed
 6. Let users chat with the right profile
 
-## Who TinyClaw is for
+## Who Nakama is for
 
-TinyClaw is a good fit when you want:
+Nakama is a good fit when you want:
 
 - Your own hosted agent system
 - Multiple bots with different behavior

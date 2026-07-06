@@ -9,7 +9,7 @@ import type {
   TaskMessagesResponse,
   TaskResponse,
   UpdateTaskRequest,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { errorResponse, json, readJson } from "../shared";
 import { requireActiveOrgIdFromContext } from "../org-guards";
 import type { HonoApp } from "../types";

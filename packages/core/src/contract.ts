@@ -68,11 +68,11 @@ export interface AutomationUnreadSummary {
 
 export type AgentChannel = "web" | "cli" | "telegram" | "whatsapp" | "automation" | "task";
 
-export const TINYCLAW_API_VERSION = 1;
+export const NAKAMA_API_VERSION = 1;
 
 export interface HealthResponse {
   ok: true;
-  apiVersion: typeof TINYCLAW_API_VERSION;
+  apiVersion: typeof NAKAMA_API_VERSION;
   providerConfigured: boolean;
   userConfigured: boolean;
 }
@@ -179,9 +179,9 @@ export interface DataExportSkippedItem {
 }
 
 export interface DataExportManifest {
-  kind: "tinyclaw-export";
+  kind: "nakama-export";
   version: number;
-  apiVersion: typeof TINYCLAW_API_VERSION;
+  apiVersion: typeof NAKAMA_API_VERSION;
   createdAt: string;
   sourceRootName: string;
   topLevelPaths: string[];
@@ -1498,7 +1498,7 @@ export interface ToolContext {
   orgId?: string;
   profileId?: string;
   sessionId?: string;
-  /** Profile workspace root (~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/). */
+  /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;
 }
 

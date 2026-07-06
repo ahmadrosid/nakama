@@ -13,7 +13,7 @@ describe("formatDataPortabilityBytes", () => {
 });
 
 describe("canRestoreDataImport", () => {
-  const file = new File(["zip"], "tinyclaw.zip", { type: "application/zip" });
+  const file = new File(["zip"], "nakama.zip", { type: "application/zip" });
 
   test("requires a selected file, successful preview, and idle restore state", () => {
     expect(

@@ -1,4 +1,4 @@
-import { formatServerError, type CodingHarnessInstallEvent } from "@tinyclaw/core";
+import { formatServerError, type CodingHarnessInstallEvent } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 

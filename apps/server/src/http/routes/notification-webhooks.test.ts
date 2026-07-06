@@ -2,8 +2,8 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { saveTelegramConfig } from "@tinyclaw/core";
-import { createInMemoryDatabaseAdapter } from "@tinyclaw/db";
+import { saveTelegramConfig } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
@@ -23,7 +23,7 @@ describe("notification webhook routes", () => {
   });
 
   async function createApp() {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-notify-webhook-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-notify-webhook-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await saveTelegramConfig({ botToken: "1234567890:TEST" });
 

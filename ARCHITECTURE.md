@@ -1,6 +1,6 @@
-# TinyClaw Architecture
+# Nakama Architecture
 
-TinyClaw is a multi-tenant AI agent platform with one shared server runtime and several thin clients. Each **organization** is the tenant boundary. Profiles, sessions, tools, MCP servers, skills, automations, tasks, attachments, and usage data are all scoped to an org unless explicitly platform-level.
+Nakama is a multi-tenant AI agent platform with one shared server runtime and several thin clients. Each **organization** is the tenant boundary. Profiles, sessions, tools, MCP servers, skills, automations, tasks, attachments, and usage data are all scoped to an org unless explicitly platform-level.
 
 ## System overview
 
@@ -13,7 +13,7 @@ flowchart TB
     wa["apps/platform/whatsapp"]
   end
 
-  subgraph sdk ["@tinyclaw/client"]
+  subgraph sdk ["@nakama/client"]
     client["HTTP + SSE client"]
   end
 
@@ -28,7 +28,7 @@ flowchart TB
   end
 
   subgraph runtime ["Runtime services"]
-    harness["@tinyclaw/agent"]
+    harness["@nakama/agent"]
     tools["Tool resolver + handlers"]
     providers["Provider adapters"]
     mcp["MCP registry + bridge"]
@@ -36,9 +36,9 @@ flowchart TB
   end
 
   subgraph data ["State"]
-    db["@tinyclaw/db (SQLite)"]
-    soul["~/.tinyclaw/orgs/.../profiles/..."]
-    config["~/.tinyclaw/config.ini"]
+    db["@nakama/db (SQLite)"]
+    soul["~/.nakama/orgs/.../profiles/..."]
+    config["~/.nakama/config.ini"]
     files["Attachments / knowledge files"]
   end
 
@@ -77,7 +77,7 @@ flowchart TB
 ## Repo map
 
 ```text
-tinyclaw/
+nakama/
 ├── apps/
 │   ├── server/              # HTTP API, auth, org middleware, agent orchestration
 │   ├── web/                 # Dashboard
@@ -98,7 +98,7 @@ tinyclaw/
 
 **Clients are thin.** `apps/web`, `apps/cli`, Telegram, and WhatsApp talk to `apps/server` through HTTP/SSE. They do not run the agent loop themselves.
 
-**Server owns orchestration.** `apps/server/src/services/agent-service.ts` is the main composition layer. It wires profiles, providers, tools, MCP servers, soul files, attachments, questionnaire/todo state, and persistence around `@tinyclaw/agent`.
+**Server owns orchestration.** `apps/server/src/services/agent-service.ts` is the main composition layer. It wires profiles, providers, tools, MCP servers, soul files, attachments, questionnaire/todo state, and persistence around `@nakama/agent`.
 
 **Agent package is runtime logic.** `packages/agent` builds prompts, runs the tool loop, manages compaction, and exposes `AgentChatSession`.
 
@@ -108,7 +108,7 @@ tinyclaw/
 
 ## HTTP architecture
 
-The server entrypoint is [`apps/server/src/http/app.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/app.ts). Request flow is:
+The server entrypoint is [`apps/server/src/http/app.ts`](./nakama/apps/server/src/http/app.ts). Request flow is:
 
 1. Static web assets are served first when `webDistDir` is present.
 2. Auth middleware validates bearer auth or browser session auth and applies CSRF checks where needed.
@@ -148,13 +148,13 @@ Organizations are the tenant boundary. Every authenticated non-platform request 
 
 Important files:
 
-- [`apps/server/src/http/org-middleware.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/org-middleware.ts)
-- [`apps/server/src/http/org-guards.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/http/org-guards.ts)
-- [`apps/server/src/services/org-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/org-service.ts)
+- [`apps/server/src/http/org-middleware.ts`](./nakama/apps/server/src/http/org-middleware.ts)
+- [`apps/server/src/http/org-guards.ts`](./nakama/apps/server/src/http/org-guards.ts)
+- [`apps/server/src/services/org-service.ts`](./nakama/apps/server/src/services/org-service.ts)
 
 ## Agent runtime
 
-The runtime is assembled in [`apps/server/src/services/agent-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/agent-service.ts).
+The runtime is assembled in [`apps/server/src/services/agent-service.ts`](./nakama/apps/server/src/services/agent-service.ts).
 
 Per session, the server resolves:
 
@@ -169,9 +169,9 @@ Per session, the server resolves:
 
 Prompt construction happens in three layers:
 
-1. [`packages/core/src/soul/compose.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/core/src/soul/compose.ts) for soul content
-2. [`packages/agent/src/chat-prompt.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/agent/src/chat-prompt.ts) for chat structure and tool instructions
-3. [`packages/agent/src/chat.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/agent/src/chat.ts) for final per-turn generation
+1. [`packages/core/src/soul/compose.ts`](./nakama/packages/core/src/soul/compose.ts) for soul content
+2. [`packages/agent/src/chat-prompt.ts`](./nakama/packages/agent/src/chat-prompt.ts) for chat structure and tool instructions
+3. [`packages/agent/src/chat.ts`](./nakama/packages/agent/src/chat.ts) for final per-turn generation
 
 ## Sessions and persistence
 
@@ -203,7 +203,7 @@ Tool access is profile-scoped. The model only receives tools assigned to the act
 
 ## Workers, automations, and tasks
 
-TinyClaw now has a clearer worker/runtime split than the older doc suggested.
+Nakama now has a clearer worker/runtime split than the older doc suggested.
 
 - `apps/platform/automation` runs scheduled automation work
 - `apps/platform/telegram` handles Telegram delivery/inbound flow
@@ -217,10 +217,10 @@ Automations and tasks are separate persisted concepts:
 
 Core services:
 
-- [`apps/server/src/services/automation-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/automation-service.ts)
-- [`apps/server/src/services/automation-runner.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/automation-runner.ts)
-- [`apps/server/src/services/task-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/task-service.ts)
-- [`apps/server/src/services/task-runner.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/task-runner.ts)
+- [`apps/server/src/services/automation-service.ts`](./nakama/apps/server/src/services/automation-service.ts)
+- [`apps/server/src/services/automation-runner.ts`](./nakama/apps/server/src/services/automation-runner.ts)
+- [`apps/server/src/services/task-service.ts`](./nakama/apps/server/src/services/task-service.ts)
+- [`apps/server/src/services/task-runner.ts`](./nakama/apps/server/src/services/task-runner.ts)
 
 ## Notifications and attachments
 
@@ -231,9 +231,9 @@ Two newer areas that deserve explicit mention:
 
 Key files:
 
-- [`apps/server/src/services/notification-destination-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/notification-destination-service.ts)
-- [`apps/server/src/services/notification-webhook-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/notification-webhook-service.ts)
-- [`apps/server/src/services/attachment-service.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/server/src/services/attachment-service.ts)
+- [`apps/server/src/services/notification-destination-service.ts`](./nakama/apps/server/src/services/notification-destination-service.ts)
+- [`apps/server/src/services/notification-webhook-service.ts`](./nakama/apps/server/src/services/notification-webhook-service.ts)
+- [`apps/server/src/services/attachment-service.ts`](./nakama/apps/server/src/services/attachment-service.ts)
 
 ## CLI terminal rendering
 
@@ -241,10 +241,10 @@ The CLI uses a small terminal UI pipeline instead of printing lines directly.
 
 ### Main files
 
-- [`apps/cli/src/terminal-renderer.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-renderer.ts): semantic layer for composer state, transcript events, streaming state, and status lines
-- [`apps/cli/src/terminal-layout.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-layout.ts): viewport math, pinned input area, stream buffer, frame diffing, and terminal writes
-- [`apps/cli/src/virtual-message-list.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/virtual-message-list.ts): transcript storage plus lazy wrapping and message spacing rules
-- [`apps/cli/src/terminal-frame.ts`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/apps/cli/src/terminal-frame.ts): frame diff and cursor placement
+- [`apps/cli/src/terminal-renderer.ts`](./nakama/apps/cli/src/terminal-renderer.ts): semantic layer for composer state, transcript events, streaming state, and status lines
+- [`apps/cli/src/terminal-layout.ts`](./nakama/apps/cli/src/terminal-layout.ts): viewport math, pinned input area, stream buffer, frame diffing, and terminal writes
+- [`apps/cli/src/virtual-message-list.ts`](./nakama/apps/cli/src/virtual-message-list.ts): transcript storage plus lazy wrapping and message spacing rules
+- [`apps/cli/src/terminal-frame.ts`](./nakama/apps/cli/src/terminal-frame.ts): frame diff and cursor placement
 
 ### Terms
 
@@ -286,7 +286,7 @@ When adjusting terminal spacing, treat these as separate layers. A visual gap in
 
 ## Persistence model
 
-The main SQLite schema lives in [`packages/db/sql/schema.sql`](/Users/ahmadrosid/github.com/ahmadrosid/tinyclaw/packages/db/sql/schema.sql).
+The main SQLite schema lives in [`packages/db/sql/schema.sql`](./nakama/packages/db/sql/schema.sql).
 
 High-value tables today:
 

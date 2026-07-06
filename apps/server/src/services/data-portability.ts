@@ -23,15 +23,15 @@ import {
 import { unzipSync, zipSync } from "fflate";
 import {
   getUserConfigDir,
-  TINYCLAW_API_VERSION,
+  NAKAMA_API_VERSION,
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
   type RestoreDataImportResponse,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 
-export const TINYCLAW_EXPORT_MANIFEST = "tinyclaw-export.json";
-export const TINYCLAW_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
+export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
 
 export interface CreateDataExportOptions {
   rootDir?: string;
@@ -66,10 +66,10 @@ interface InventoryItem {
   size: number;
 }
 
-const RESTORE_PREFIX = ".tinyclaw-restore-";
-const BACKUP_PREFIX = ".tinyclaw-backup-";
+const RESTORE_PREFIX = ".nakama-restore-";
+const BACKUP_PREFIX = ".nakama-backup-";
 
-export async function createTinyClawDataExport(
+export async function createNakamaDataExport(
   options: CreateDataExportOptions = {},
 ): Promise<CreateDataExportResult> {
   const rootDir = resolve(options.rootDir ?? getUserConfigDir());
@@ -84,16 +84,16 @@ export async function createTinyClawDataExport(
     const databasePath = resolve(options.databasePath);
     const relativeDatabasePath = relative(rootDir, databasePath);
     if (relativeDatabasePath.startsWith("..") || isAbsolute(relativeDatabasePath)) {
-      skipped.push({ path: databasePath, reason: "Database path is outside the Tinyclaw root." });
+      skipped.push({ path: databasePath, reason: "Database path is outside the Nakama root." });
     }
   }
 
   const manifest: DataExportManifest = {
-    kind: "tinyclaw-export",
-    version: TINYCLAW_EXPORT_FORMAT_VERSION,
-    apiVersion: TINYCLAW_API_VERSION,
+    kind: "nakama-export",
+    version: NAKAMA_EXPORT_FORMAT_VERSION,
+    apiVersion: NAKAMA_API_VERSION,
     createdAt,
-    sourceRootName: basename(rootDir) || ".tinyclaw",
+    sourceRootName: basename(rootDir) || ".nakama",
     topLevelPaths,
     fileCount: files.length,
     totalBytes,
@@ -101,7 +101,7 @@ export async function createTinyClawDataExport(
   };
 
   const entries: Record<string, Uint8Array> = {
-    [TINYCLAW_EXPORT_MANIFEST]: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+    [NAKAMA_EXPORT_MANIFEST]: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
   };
 
   for (const file of files) {
@@ -110,20 +110,20 @@ export async function createTinyClawDataExport(
   }
 
   return {
-    filename: `tinyclaw-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
+    filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
     data: Buffer.from(zipSync(entries)),
     manifest,
   };
 }
 
-export async function previewTinyClawDataImport(
+export async function previewNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
   options: PreviewDataImportOptions = {},
 ): Promise<DataImportPreviewResponse> {
   const rootDir = resolve(options.rootDir ?? getUserConfigDir());
   const entries = readZip(toBuffer(archive));
   const manifest = readManifest(entries);
-  const restorableEntries = entries.filter((entry) => entry.name !== TINYCLAW_EXPORT_MANIFEST);
+  const restorableEntries = entries.filter((entry) => entry.name !== NAKAMA_EXPORT_MANIFEST);
 
   return {
     manifest,
@@ -136,7 +136,7 @@ export async function previewTinyClawDataImport(
   };
 }
 
-export async function restoreTinyClawDataImport(
+export async function restoreNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
   options: RestoreDataImportOptions,
 ): Promise<RestoreDataImportResponse> {
@@ -159,7 +159,7 @@ export async function restoreTinyClawDataImport(
     let restoredFileCount = 0;
 
     for (const entry of entries) {
-      if (entry.name === TINYCLAW_EXPORT_MANIFEST) {
+      if (entry.name === NAKAMA_EXPORT_MANIFEST) {
         continue;
       }
 
@@ -275,7 +275,7 @@ function readZip(buffer: Buffer): ZipEntry[] {
 }
 
 function readManifest(entries: ZipEntry[]): DataExportManifest {
-  const manifestEntry = entries.find((entry) => entry.name === TINYCLAW_EXPORT_MANIFEST);
+  const manifestEntry = entries.find((entry) => entry.name === NAKAMA_EXPORT_MANIFEST);
   if (!manifestEntry) {
     throw new Error("Archive is missing Tinyclaw export manifest.");
   }
@@ -287,11 +287,11 @@ function readManifest(entries: ZipEntry[]): DataExportManifest {
     throw new Error("Tinyclaw export manifest is not valid JSON.");
   }
 
-  if (manifest.kind !== "tinyclaw-export") {
+  if (manifest.kind !== "nakama-export") {
     throw new Error("Archive is not a Tinyclaw export.");
   }
 
-  if (manifest.version !== TINYCLAW_EXPORT_FORMAT_VERSION) {
+  if (manifest.version !== NAKAMA_EXPORT_FORMAT_VERSION) {
     throw new Error(`Unsupported Tinyclaw export version: ${manifest.version}`);
   }
 
@@ -324,7 +324,7 @@ function toZipPath(path: string): string {
 function shouldSkipRelativePath(path: string): boolean {
   const first = path.split("/")[0];
   return (
-    first === TINYCLAW_EXPORT_MANIFEST ||
+    first === NAKAMA_EXPORT_MANIFEST ||
     first.startsWith(RESTORE_PREFIX) ||
     first.startsWith(BACKUP_PREFIX)
   );

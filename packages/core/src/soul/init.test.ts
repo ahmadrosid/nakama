@@ -20,7 +20,7 @@ describe("isLegacySoulPlaceholder", () => {
 
 describe("initSoulDirectory seeding", () => {
   test("fills an empty SOUL.md on init", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-empty-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-empty-"));
 
     try {
       await writeFile(join(directory, "SOUL.md"), "\n", "utf8");
@@ -34,7 +34,7 @@ describe("initSoulDirectory seeding", () => {
   });
 
   test("upgrades legacy placeholder SOUL.md", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-legacy-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-legacy-"));
 
     try {
       await writeFile(join(directory, "SOUL.md"), "# Your Name\n\n[Belief 1]\n", "utf8");
@@ -49,7 +49,7 @@ describe("initSoulDirectory seeding", () => {
   });
 
   test("does not overwrite customized SOUL.md", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-custom-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-custom-"));
 
     try {
       await writeFile(join(directory, "SOUL.md"), "# My Custom Bot\n\nCustom identity.\n", "utf8");
@@ -64,7 +64,7 @@ describe("initSoulDirectory seeding", () => {
   });
 
   test("creates full stack for first install", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "tinyclaw-soul-first-install-"));
+    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-first-install-"));
 
     try {
       const result = await initSoulDirectory(directory);

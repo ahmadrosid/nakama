@@ -1,4 +1,4 @@
-import { hasActiveAgentTodos } from "@tinyclaw/core/agent-todo";
+import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
@@ -6,7 +6,7 @@ import type {
   ProviderModelOption,
   ProfileSummary,
   SkillSummary,
-} from "@tinyclaw/core/contract";
+} from "@nakama/core/contract";
 import type { ChatStatus } from "ai";
 import type { FileUIPart } from "ai";
 import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
@@ -40,7 +40,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MAX_IMAGE_BYTES } from "@tinyclaw/core/message-content";
+import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import {
   ALL_ATTACHMENT_ACCEPT,
   DOCUMENT_ACCEPT,

@@ -1,4 +1,4 @@
-import type { ImageAttachment, SendMessageInput } from "@tinyclaw/core";
+import type { ImageAttachment, SendMessageInput } from "@nakama/core";
 import { splitInputDisplayLines } from "./prompt-display";
 
 export interface PendingMessage {

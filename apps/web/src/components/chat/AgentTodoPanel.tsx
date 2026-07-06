@@ -1,5 +1,5 @@
-import { hasActiveAgentTodos } from "@tinyclaw/core/agent-todo";
-import type { AgentTodo } from "@tinyclaw/core/contract";
+import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
+import type { AgentTodo } from "@nakama/core/contract";
 import {
   CheckCircle2Icon,
   ChevronRightIcon,

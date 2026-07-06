@@ -1,10 +1,10 @@
-import { createClient } from "@tinyclaw/client";
-import { ensureServerRunning, stopSpawnedServer } from "@tinyclaw/core/ensure-server";
-import { loadLocalAuthToken } from "@tinyclaw/core/local-auth";
+import { createClient } from "@nakama/client";
+import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
-} from "@tinyclaw/core/automation-worker";
+} from "@nakama/core/automation-worker";
 import { loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
 
@@ -52,7 +52,7 @@ try {
 
   await writeAutomationWorkerHeartbeat(true, 0);
 
-  console.log("TinyClaw automation worker running.");
+  console.log("Nakama automation worker running.");
   console.log(`Server: ${serverUrl}`);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

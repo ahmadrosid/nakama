@@ -6,7 +6,7 @@ import {
   type AgentChatSession,
   type AgentHarness,
   type CompactionConfig,
-} from "@tinyclaw/agent";
+} from "@nakama/agent";
 import type {
   AgentChannel,
   AgentQuestionnaire,
@@ -82,7 +82,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   UserConfig,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import {
   DEFAULT_THINKING_EFFORT,
   DEFAULT_THINKING_ENABLED,
@@ -132,18 +132,18 @@ import {
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
-  TinyClawApiError,
+  NakamaApiError,
   writeSoulFile,
   type OrgRole,
-} from "@tinyclaw/core";
-import { canAccessSuperBotProfile } from "@tinyclaw/core/profiles";
+} from "@nakama/core";
+import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   SUPER_BOT_TOOL_AUTHORING_RULES,
   WORKSPACE_SETTINGS_ID,
   type DatabaseAdapter,
   type StoredProfileRecord,
   type StoredTaskRunRecord,
-} from "@tinyclaw/db";
+} from "@nakama/db";
 import {
   createProviderForInstance,
   createProviderFromActiveConfig,
@@ -396,7 +396,7 @@ export class AgentService {
       });
 
       if (!resolved) {
-        throw new TinyClawApiError(
+        throw new NakamaApiError(
           "Selected image parsing model is unavailable. Choose a vision-capable model.",
           400,
         );
@@ -447,7 +447,7 @@ export class AgentService {
       });
 
       if (!resolved) {
-        throw new TinyClawApiError(
+        throw new NakamaApiError(
           "Selected audio transcription model is unavailable. Choose an OpenAI Whisper model.",
           400,
         );
@@ -482,7 +482,7 @@ export class AgentService {
     const mediaType = input.mediaType?.trim();
 
     if (!data || !mediaType) {
-      throw new TinyClawApiError("Audio data and media type are required.", 400);
+      throw new NakamaApiError("Audio data and media type are required.", 400);
     }
 
     let bytes: Buffer;
@@ -490,17 +490,17 @@ export class AgentService {
     try {
       bytes = Buffer.from(data, "base64");
     } catch {
-      throw new TinyClawApiError("Audio data must be valid base64.", 400);
+      throw new NakamaApiError("Audio data must be valid base64.", 400);
     }
 
     if (bytes.length === 0) {
-      throw new TinyClawApiError("Audio data is empty.", 400);
+      throw new NakamaApiError("Audio data is empty.", 400);
     }
 
     const selection = resolveTranscriptionProviderSelection(this.userConfig);
 
     if (!selection) {
-      throw new TinyClawApiError(TRANSCRIPTION_MODEL_REQUIRED_MESSAGE, 400);
+      throw new NakamaApiError(TRANSCRIPTION_MODEL_REQUIRED_MESSAGE, 400);
     }
 
     const text = await transcribeAudioWithOpenAI(
@@ -704,8 +704,8 @@ export class AgentService {
     const sender = createSmtpSender(emailConfigToMailboxConfig(config!));
     const result = await sender.send({
       to,
-      subject: "TinyClaw test email",
-      text: "This is a test email from your TinyClaw deployment.",
+      subject: "Nakama test email",
+      text: "This is a test email from your Nakama deployment.",
     });
 
     return {
@@ -983,7 +983,7 @@ export class AgentService {
           isPlatformAdmin: access?.isPlatformAdmin,
         }))
     ) {
-      throw new TinyClawApiError("Super Bot is only available to org admins.", 403);
+      throw new NakamaApiError("Super Bot is only available to org admins.", 403);
     }
 
     const sessionId = nanoid();
@@ -2209,7 +2209,7 @@ export class AgentService {
         const visionSelection = resolveVisionProviderSelection(this.userConfig);
 
         if (!visionSelection) {
-          throw new TinyClawApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
+          throw new NakamaApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
         }
 
         let visionProvider = createVisionFallbackProvider(visionSelection);

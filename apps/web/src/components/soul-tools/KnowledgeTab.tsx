@@ -1,4 +1,4 @@
-import type { KnowledgeBaseDocument } from "@tinyclaw/core/contract";
+import type { KnowledgeBaseDocument } from "@nakama/core/contract";
 import {
   ExternalLinkIcon,
   FileTextIcon,

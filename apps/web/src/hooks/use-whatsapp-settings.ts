@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { UpdateWhatsAppSettingsRequest } from "@tinyclaw/core/contract";
+import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 

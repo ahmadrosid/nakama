@@ -9,7 +9,7 @@ import type {
   MarkAutomationRunsReadResponse,
   RunAutomationResponse,
   UpdateAutomationRequest,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { errorResponse, getRequestAuth, json, parseChannel, readJson } from "../shared";
 import { requireActiveOrgIdFromContext } from "../org-guards";
 import type { HonoApp } from "../types";

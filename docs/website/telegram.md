@@ -1,18 +1,18 @@
 # Telegram
 
-TinyClaw can run as a Telegram bot so you can chat with the same agent from your phone, desktop Telegram, or a shared group.
+Nakama can run as a Telegram bot so you can chat with the same agent from your phone, desktop Telegram, or a shared group.
 
 The mental model is simple:
 
-- Telegram is a **channel** for TinyClaw
-- The bridge talks to the same TinyClaw server as the web app
-- Pairing links a real Telegram user to your TinyClaw access
+- Telegram is a **channel** for Nakama
+- The bridge talks to the same Nakama server as the web app
+- Pairing links a real Telegram user to your Nakama access
 
 ## What Telegram supports
 
 With Telegram enabled, users can:
 
-- chat with a TinyClaw profile in a private chat
+- chat with a Nakama profile in a private chat
 - use the bot in Telegram groups
 - receive outbound webhook notifications in a group or topic
 - switch org and profile with commands
@@ -31,15 +31,15 @@ Every Telegram setup starts with a bot token from `@BotFather`.
 
 Keep the token secret. Anyone with the token can control your Telegram bot.
 
-## Step 2: Save Telegram settings in TinyClaw
+## Step 2: Save Telegram settings in Nakama
 
-Open **Integrations → Telegram** in the TinyClaw web app, then:
+Open **Integrations → Telegram** in the Nakama web app, then:
 
 1. Paste the bot token
-2. Choose the default TinyClaw profile for Telegram replies
+2. Choose the default Nakama profile for Telegram replies
 3. Save
 
-When you save for the first time, TinyClaw can generate a pairing code for linking your Telegram account.
+When you save for the first time, Nakama can generate a pairing code for linking your Telegram account.
 
 ## Step 3: Enable audio transcription for voice chat
 
@@ -47,7 +47,7 @@ Telegram voice notes and audio files are turned into text before they are sent t
 
 To enable that:
 
-1. Open **Settings** in the TinyClaw web app
+1. Open **Settings** in the Nakama web app
 2. Add an **OpenAI** provider in **LLM providers** if you have not added one yet
 3. In **Audio transcription model**, choose an OpenAI model such as Whisper
 4. Wait for the `Saved` confirmation
@@ -57,7 +57,7 @@ Without this setting, text chat still works, but Telegram audio messages will no
 
 ## Step 4: Pair your Telegram account
 
-Pairing is required so random Telegram users cannot talk to your internal TinyClaw bot.
+Pairing is required so random Telegram users cannot talk to your internal Nakama bot.
 
 1. Copy the pairing code from **Integrations → Telegram**
 2. Start a private chat with your bot
@@ -67,11 +67,11 @@ After a successful match, that Telegram user is linked and the pairing code is c
 
 ### Why pairing exists
 
-The bot token only connects TinyClaw to Telegram.
+The bot token only connects Nakama to Telegram.
 
-Pairing connects **your Telegram user account** to TinyClaw permissions.
+Pairing connects **your Telegram user account** to Nakama permissions.
 
-That means TinyClaw can:
+That means Nakama can:
 
 - identify which Telegram user is talking
 - allow private chat safely
@@ -85,15 +85,15 @@ For local development, start it from the repo root:
 bun run dev:telegram
 ```
 
-The bridge uses long polling and forwards Telegram messages to your TinyClaw server.
+The bridge uses long polling and forwards Telegram messages to your Nakama server.
 
-If the TinyClaw server is not already running, the bridge will try to start it.
+If the Nakama server is not already running, the bridge will try to start it.
 
-For production, start the Telegram bridge worker from the **Integrations** page in the TinyClaw web app instead of using the dev command.
+For production, start the Telegram bridge worker from the **Integrations** page in the Nakama web app instead of using the dev command.
 
 ## Optional: Direct allowlist instead of pairing
 
-TinyClaw also supports allowlisting Telegram user IDs directly.
+Nakama also supports allowlisting Telegram user IDs directly.
 
 This is useful when you want to pre-authorize specific users without the one-time pairing flow.
 
@@ -112,7 +112,7 @@ To paste raw Telegram update JSON instead:
 5. Click **Add user**
 
 Use the Telegram user's `from.id`, not their `@username`.
-When you paste raw JSON, TinyClaw reads `message.from.id` and shows the username when it is present.
+When you paste raw JSON, Nakama reads `message.from.id` and shows the username when it is present.
 
 For example, in this Telegram update payload:
 
@@ -139,15 +139,15 @@ Private chat is the simplest mode.
 
 Once paired or allowlisted:
 
-- normal messages go to the TinyClaw agent
+- normal messages go to the Nakama agent
 - the bot keeps a Telegram chat session
 - Telegram commands work immediately
 
-If an unlinked user opens the bot, TinyClaw asks for the pairing code instead of sending the message to the agent.
+If an unlinked user opens the bot, Nakama asks for the pairing code instead of sending the message to the agent.
 
 ## Group chat behavior
 
-TinyClaw supports Telegram groups, but it is intentionally conservative about when it replies.
+Nakama supports Telegram groups, but it is intentionally conservative about when it replies.
 
 In a group, the bot responds only when the message is:
 
@@ -159,7 +159,7 @@ This keeps group chats usable without making the bot noisy.
 
 ### Group topics and profiles
 
-In Telegram supergroup topics, each topic can use its own TinyClaw profile.
+In Telegram supergroup topics, each topic can use its own Nakama profile.
 
 - `/profile` inside a topic changes only that topic
 - new topics use the default Telegram profile until you switch them
@@ -168,9 +168,9 @@ In Telegram supergroup topics, each topic can use its own TinyClaw profile.
 
 ## Outbound notifications to Telegram
 
-TinyClaw can also send simple text notifications into Telegram.
+Nakama can also send simple text notifications into Telegram.
 
-This is separate from the normal chat bridge. Instead of waiting for a Telegram user to message the bot first, another app can call a TinyClaw webhook and TinyClaw will post the message into a configured Telegram chat.
+This is separate from the normal chat bridge. Instead of waiting for a Telegram user to message the bot first, another app can call a Nakama webhook and Nakama will post the message into a configured Telegram chat.
 
 This is useful for things like:
 
@@ -188,11 +188,11 @@ This is useful for things like:
 6. Save and copy the generated webhook URL and API key
 
 Each destination belongs to one org and points to one Telegram target.
-TinyClaw extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
+Nakama extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
 
 ### Webhook payload
 
-TinyClaw keeps the webhook contract intentionally small.
+Nakama keeps the webhook contract intentionally small.
 
 Send a `POST` request with JSON like this:
 
@@ -208,11 +208,11 @@ Send a `POST` request with JSON like this:
 `title` is optional.
 `level` is optional and can be `info`, `success`, `warning`, or `error`.
 
-TinyClaw formats that into a short Telegram text message and sends it to the configured chat or topic.
+Nakama formats that into a short Telegram text message and sends it to the configured chat or topic.
 
 ### Design note
 
-In v1, TinyClaw does not accept arbitrary templating or custom Telegram payloads from external apps.
+In v1, Nakama does not accept arbitrary templating or custom Telegram payloads from external apps.
 
 That is intentional:
 
@@ -252,7 +252,7 @@ These commands are available in Telegram:
 
 ## Supported message types
 
-Telegram can send more than plain text into TinyClaw.
+Telegram can send more than plain text into Nakama.
 
 Supported inputs include:
 
@@ -261,11 +261,11 @@ Supported inputs include:
 - voice notes and audio messages
 - supported documents such as `pdf`, `docx`, `txt`, and `csv`
 
-Small supported documents are downloaded and forwarded into the TinyClaw chat flow. Voice notes and audio messages are first transcribed with the configured OpenAI audio transcription model. Unsupported media gets a friendly rejection message instead of silently failing.
+Small supported documents are downloaded and forwarded into the Nakama chat flow. Voice notes and audio messages are first transcribed with the configured OpenAI audio transcription model. Unsupported media gets a friendly rejection message instead of silently failing.
 
 ## Rich Markdown replies
 
-Agents can reply in normal Markdown-style text. TinyClaw converts a safe subset into Telegram rich formatting.
+Agents can reply in normal Markdown-style text. Nakama converts a safe subset into Telegram rich formatting.
 
 Supported formatting includes:
 
@@ -277,11 +277,11 @@ Supported formatting includes:
 - headings
 - simple links
 
-If Telegram rejects the rich rendering, TinyClaw falls back to plain text.
+If Telegram rejects the rich rendering, Nakama falls back to plain text.
 
 ## Configuration notes
 
-TinyClaw stores Telegram bridge settings under its local config directory.
+Nakama stores Telegram bridge settings under its local config directory.
 
 Important values include:
 
@@ -297,16 +297,16 @@ Environment-based setup is also supported. The main env var is:
 TELEGRAM_BOT_TOKEN
 ```
 
-TinyClaw also supports:
+Nakama also supports:
 
 ```text
 TELEGRAM_ALLOWED_USER_IDS
-TINYCLAW_TELEGRAM_PROFILE_ID
+NAKAMA_TELEGRAM_PROFILE_ID
 ```
 
 ## Notification destinations for groups and topics
 
-From **Integrations → Notifications**, TinyClaw can create Telegram webhook destinations for a group or a forum topic.
+From **Integrations → Notifications**, Nakama can create Telegram webhook destinations for a group or a forum topic.
 
 If you already have a topic share link such as:
 
@@ -340,7 +340,7 @@ Check these first:
 
 1. The bot token is saved correctly
 2. `bun run dev:telegram` is running
-3. The TinyClaw server is running
+3. The Nakama server is running
 4. The Telegram user is paired or allowlisted
 
 ### Private chat works but group chat does not

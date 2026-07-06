@@ -183,7 +183,7 @@ export async function loadWhatsAppSettingsPublic(): Promise<WhatsAppSettingsPubl
 
 async function writeWhatsAppConfigFile(config: WhatsAppConfigFile): Promise<void> {
   const lines = [
-    "# TinyClaw WhatsApp bridge",
+    "# Nakama WhatsApp bridge",
     `profile_id=${config.profileId}`,
     ...(config.phoneNumber.trim() ? [`phone_number=${config.phoneNumber}`] : []),
     ...(config.pairingCode ? [`pairing_code=${config.pairingCode}`] : []),
@@ -321,7 +321,7 @@ export async function verifyAndPairWhatsAppUser(
     return {
       ok: false,
       message:
-        "No pairing code is active. Open TinyClaw Integrations \u2192 WhatsApp and generate a new code.",
+        "No pairing code is active. Open Nakama Integrations \u2192 WhatsApp and generate a new code.",
     };
   }
 
@@ -349,7 +349,7 @@ export async function verifyAndPairWhatsAppUser(
 
   return {
     ok: true,
-    message: "Linked successfully. You can chat with TinyClaw now.",
+    message: "Linked successfully. You can chat with Nakama now.",
   };
 }
 
@@ -402,7 +402,7 @@ export function resolveWhatsAppConfigFromSources(options: {
   return {
     phoneNumber: env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
-      env.TINYCLAW_WHATSAPP_PROFILE_ID?.trim() ||
+      env.nakama_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_WHATSAPP_PROFILE_ID,
     pairingCode: file?.pairingCode ?? null,

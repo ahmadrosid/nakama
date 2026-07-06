@@ -2,9 +2,9 @@ import {
   findCustomModel,
   validateCustomModels,
   type CustomModelEntry,
-} from "@tinyclaw/core";
-import type { ProviderName } from "@tinyclaw/core";
-import type { ProviderModelOption as ContractProviderModelOption } from "@tinyclaw/core/contract";
+} from "@nakama/core";
+import type { ProviderName } from "@nakama/core";
+import type { ProviderModelOption as ContractProviderModelOption } from "@nakama/core/contract";
 import {
   resolveCompatibleDefaultModel,
   resolveOpenRouterDefaultModel,

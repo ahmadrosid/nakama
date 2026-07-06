@@ -1,4 +1,4 @@
-import { readTextOrNull, writePrivateTextFile } from "@tinyclaw/core/fs";
+import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -56,7 +56,7 @@ export class SessionStore {
 }
 
 function getTelegramConfigDir(): string {
-  return join(homedir(), ".tinyclaw", "telegram");
+  return join(homedir(), ".nakama", "telegram");
 }
 
 function getChatSessionsPath(): string {

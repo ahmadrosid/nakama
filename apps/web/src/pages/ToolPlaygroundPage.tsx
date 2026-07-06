@@ -1,4 +1,4 @@
-import type { ToolDetail } from "@tinyclaw/core/contract";
+import type { ToolDetail } from "@nakama/core/contract";
 import { ChevronLeftIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";

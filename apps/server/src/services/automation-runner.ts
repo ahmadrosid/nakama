@@ -1,4 +1,4 @@
-import { isWorkerSchedulable, type StoredAutomation } from "@tinyclaw/core";
+import { isWorkerSchedulable, type StoredAutomation } from "@nakama/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationDeliveryService } from "./automation-delivery-service";
 import type { AutomationService } from "./automation-service";

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { runUpdateProfileMemory, MEMORY_MAX_BYTES } from "./profile-memory";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
-const originalConfigDir = process.env.TINYCLAW_CONFIG_DIR;
+const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("update_profile_memory tool", () => {
   let tempDir = "";
@@ -16,14 +16,14 @@ describe("update_profile_memory tool", () => {
       tempDir = "";
     }
     if (originalConfigDir === undefined) {
-      delete process.env.TINYCLAW_CONFIG_DIR;
+      delete process.env.NAKAMA_CONFIG_DIR;
     } else {
-      process.env.TINYCLAW_CONFIG_DIR = originalConfigDir;
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
   });
 
   function setupTempDir(): string {
-    tempDir = path.join(os.tmpdir(), "tinyclaw-memory-test-");
+    tempDir = path.join(os.tmpdir(), "nakama-memory-test-");
     return tempDir;
   }
 
@@ -32,7 +32,7 @@ describe("update_profile_memory tool", () => {
     await mkdir(path.join(dir, "orgs", "org_test", "profiles", "profile_test"), {
       recursive: true,
     });
-    process.env.TINYCLAW_CONFIG_DIR = dir;
+    process.env.NAKAMA_CONFIG_DIR = dir;
     return dir;
   }
 

@@ -1,12 +1,12 @@
-import type { TinyClawClient, RemoteChatSession } from "@tinyclaw/client";
-import type { SendMessageInput } from "@tinyclaw/core/contract";
+import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import type { SendMessageInput } from "@nakama/core/contract";
 import {
   findOrgBySelectionInput,
   formatOrgSelectionPrompt,
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
   type ChannelOrgStore,
-} from "@tinyclaw/core/channel-org";
+} from "@nakama/core/channel-org";
 import {
   filterProfilesForChatAccess,
   formatProfileSelectionPrompt,
@@ -16,7 +16,7 @@ import {
   resolveProfileInput,
   resolveProfileInScopes,
   type ProfileScope,
-} from "@tinyclaw/core/profiles";
+} from "@nakama/core/profiles";
 import type { Context } from "grammy";
 import {
   clearActiveStream,
@@ -36,7 +36,7 @@ import {
   formatTelegramAudioError,
   hasTelegramAudio,
 } from "./audio";
-import { normalizeHandshakeInput } from "@tinyclaw/core/telegram-config";
+import { normalizeHandshakeInput } from "@nakama/core/telegram-config";
 import type { TelegramBridgeConfig } from "./config";
 import type { TelegramAuthStore } from "./auth-store";
 import { formatError, HELP_TEXT, splitTelegramMessage } from "./format";
@@ -65,17 +65,17 @@ const LINK_IN_PRIVATE_REPLY =
   "Link your account in a private chat with this bot first.";
 
 const PAIRING_PROMPT =
-  "Welcome to TinyClaw.\n\n" +
+  "Welcome to Nakama.\n\n" +
   "Paste your pairing code from Integrations → Telegram in the web dashboard. " +
   "You only need to do this once for this chat.";
 
 const NO_CODE_PROMPT =
   "This bot is not linked yet.\n\n" +
-  "Open TinyClaw Integrations → Telegram, save your bot token, and copy the pairing code. " +
+  "Open Nakama Integrations → Telegram, save your bot token, and copy the pairing code. " +
   "Then send that code here.";
 
 export interface ChatHandlerDeps {
-  client: TinyClawClient;
+  client: NakamaClient;
   config: TelegramBridgeConfig;
   authStore: TelegramAuthStore;
   sessionStore: SessionStore;

@@ -6,7 +6,7 @@ import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
   type WorkerProcessInfo,
-} from "@tinyclaw/core";
+} from "@nakama/core";
 import { SystemStatusService } from "./system-status-service";
 
 let configDir: string | null = null;
@@ -19,12 +19,12 @@ afterEach(async () => {
     configDir = null;
   }
 
-  delete process.env.TINYCLAW_CONFIG_DIR;
+  delete process.env.NAKAMA_CONFIG_DIR;
 });
 
 async function withConfigDir(): Promise<void> {
-  configDir = await mkdtemp(join(tmpdir(), "tinyclaw-system-status-"));
-  process.env.TINYCLAW_CONFIG_DIR = configDir;
+  configDir = await mkdtemp(join(tmpdir(), "nakama-system-status-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
 }
 
 function createService(automationProcess: WorkerProcessInfo | null) {

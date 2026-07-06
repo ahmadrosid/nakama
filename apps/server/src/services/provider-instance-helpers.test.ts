@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderInstance } from "@tinyclaw/core";
+import type { ProviderInstance } from "@nakama/core";
 import {
   applyProviderInstanceUpdate,
   modelExistsOnInstance,

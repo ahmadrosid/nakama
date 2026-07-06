@@ -1,4 +1,4 @@
-import type { CreateProviderResponse } from "@tinyclaw/core/contract";
+import type { CreateProviderResponse } from "@nakama/core/contract";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useState } from "react";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";

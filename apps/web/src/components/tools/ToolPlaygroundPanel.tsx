@@ -1,4 +1,4 @@
-import type { ToolDetail } from "@tinyclaw/core/contract";
+import type { ToolDetail } from "@nakama/core/contract";
 import { PlayIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -172,7 +172,7 @@ export function ToolPlaygroundRunForm({
         <p className="type-body mt-1 text-xs">
           Execute this tool outside chat with real side effects. Relative paths resolve against the
           assigned profile workspace under{" "}
-          <code className="type-code">~/.tinyclaw/orgs/…/profiles/…/</code>.
+          <code className="type-code">~/.nakama/orgs/…/profiles/…/</code>.
         </p>
       </div>
 

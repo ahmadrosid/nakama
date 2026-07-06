@@ -1,4 +1,4 @@
-import type { ProfileSummary, StoredTask } from "@tinyclaw/core/contract";
+import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Loader2Icon, PencilIcon, PlayIcon } from "lucide-react";

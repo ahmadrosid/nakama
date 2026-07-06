@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatCompletionResult, GenerateChatInput, ProviderClient } from "@tinyclaw/core";
+import type { ChatCompletionResult, GenerateChatInput, ProviderClient } from "@nakama/core";
 import { createAgentHarness } from "./index";
 
 function createCapturingProvider(

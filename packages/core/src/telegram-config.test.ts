@@ -80,7 +80,7 @@ describe("verifyAndPairTelegramUser", () => {
     config: Parameters<typeof writeTelegramConfig>[1],
     run: () => Promise<void>,
   ): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-tg-home-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-tg-home-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await writeTelegramConfig(tempHome, config);
     await run();
@@ -97,7 +97,7 @@ describe("verifyAndPairTelegramUser", () => {
 
         expect(result).toEqual({
           ok: true,
-          message: "Linked successfully. You can chat with TinyClaw now.",
+          message: "Linked successfully. You can chat with Nakama now.",
         });
 
         const config = await loadTelegramConfigFile();
@@ -129,7 +129,7 @@ describe("verifyAndPairTelegramUser", () => {
   });
 
   test("rejects pairing when telegram is not configured", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-tg-home-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-tg-home-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
     const result = await verifyAndPairTelegramUser("AABBCCDD", 9001);
@@ -173,7 +173,7 @@ describe("saveTelegramConfig", () => {
   });
 
   async function useTempTelegramHome(run: () => Promise<void>): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "tinyclaw-core-tg-home-"));
+    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-tg-home-"));
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await run();
   }
@@ -267,11 +267,11 @@ async function writeTelegramConfig(
     allowedUserIds?: number[];
   },
 ): Promise<void> {
-  const dir = path.join(homeDir, ".tinyclaw", "telegram");
+  const dir = path.join(homeDir, ".nakama", "telegram");
   await mkdir(dir, { recursive: true });
 
   const lines = [
-    "# TinyClaw Telegram bridge",
+    "# Nakama Telegram bridge",
     `bot_token=${config.botToken}`,
     `profile_id=${config.profileId ?? "default"}`,
   ];

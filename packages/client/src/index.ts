@@ -1,20 +1,20 @@
-export { TinyClawClient } from "./client";
+export { NakamaClient } from "./client";
 export type {
   RemoteChatSession,
   SendMessageArg,
   SendStreamOptions,
   StreamHandler,
   StreamHandlers,
-  TinyClawClientOptions,
+  NakamaClientOptions,
 } from "./types";
-export { formatClientError as formatError, TinyClawApiError } from "@tinyclaw/core/api-error";
+export { formatClientError as formatError, NakamaApiError } from "@nakama/core/api-error";
 
-import type { ProfileSummary } from "@tinyclaw/core/contract";
-import { TinyClawClient } from "./client";
-import type { TinyClawClientOptions } from "./types";
+import type { ProfileSummary } from "@nakama/core/contract";
+import { NakamaClient } from "./client";
+import type { NakamaClientOptions } from "./types";
 
-export function createClient(options?: TinyClawClientOptions): TinyClawClient {
-  return new TinyClawClient(options);
+export function createClient(options?: NakamaClientOptions): NakamaClient {
+  return new NakamaClient(options);
 }
 
 export function getProfileAvatarUrl(

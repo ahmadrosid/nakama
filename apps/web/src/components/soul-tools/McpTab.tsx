@@ -1,4 +1,4 @@
-import type { McpServerSummary } from "@tinyclaw/core/contract";
+import type { McpServerSummary } from "@nakama/core/contract";
 import { useState } from "react";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { McpPageState, McpServersSection } from "@/components/soul-tools/mcp-tab/McpServersSection";

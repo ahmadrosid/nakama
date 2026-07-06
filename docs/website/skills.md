@@ -42,7 +42,7 @@ A profile can have many skills, and the same global skill can be assigned to mor
 Global skills live in the shared skill library:
 
 ```text
-~/.tinyclaw/agent/skills/
+~/.nakama/agent/skills/
 ```
 
 These are useful when the same workflow should be reusable across multiple profiles.
@@ -52,7 +52,7 @@ These are useful when the same workflow should be reusable across multiple profi
 Profile-scoped skills live inside one org/profile workspace:
 
 ```text
-~/.tinyclaw/orgs/{orgId}/profiles/{profileId}/skills/
+~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/
 ```
 
 These are useful when the workflow only makes sense for one specific bot.
@@ -106,9 +106,9 @@ This is useful when the workflow needs both:
 
 ## How skills are used at runtime
 
-When a profile starts a chat, TinyClaw appends the assigned skills catalog to the agent prompt.
+When a profile starts a chat, Nakama appends the assigned skills catalog to the agent prompt.
 
-On each user turn, TinyClaw can also attach matched skill context for the current message.
+On each user turn, Nakama can also attach matched skill context for the current message.
 
 That means skills are not a separate bot. They are extra behavior layers attached to a profile.
 
@@ -131,7 +131,7 @@ Selecting a skill inserts an explicit invocation like:
 
 The composer highlights the selected skill, but the message still sends as plain text so it works with the normal skill matcher.
 
-TinyClaw also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts.
+Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts.
 
 For more detail, see [Agent prompts](/agent-prompt).
 
@@ -157,14 +157,14 @@ New custom profiles receive the file tools, `knowledge_base_search`, and `update
 
 ## Sync behavior
 
-TinyClaw discovers skills from disk and syncs them into the database.
+Nakama discovers skills from disk and syncs them into the database.
 
 This is why there is a skills sync step:
 
 - Files on disk are the source material
 - The database stores discovered metadata for the dashboard and API
 
-If you add or change skill folders manually, run skill sync so TinyClaw refreshes what it knows.
+If you add or change skill folders manually, run skill sync so Nakama refreshes what it knows.
 
 ## Permissions
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ListTimezonesResponse } from "@tinyclaw/core/contract";
+import type { ListTimezonesResponse } from "@nakama/core/contract";
 import { searchTimezoneEntries } from "./timezones";
 
 const sampleCatalog: ListTimezonesResponse = {

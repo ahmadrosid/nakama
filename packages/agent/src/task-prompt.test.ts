@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ProviderClient } from "@tinyclaw/core";
-import { normalizeTaskPrompt } from "@tinyclaw/core";
+import type { ProviderClient } from "@nakama/core";
+import { normalizeTaskPrompt } from "@nakama/core";
 import {
   buildTaskPromptUserPrompt,
   draftTaskPromptFromFields,
