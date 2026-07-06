@@ -207,7 +207,7 @@ function startServer(options: {
   host: string;
   preferredPort: number;
   canFallbackToNextPort: boolean;
-  fetch: (request: Request) => Promise<Response>;
+  fetch: (request: Request) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65535)

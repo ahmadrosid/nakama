@@ -45,7 +45,7 @@ try {
 
   const client = createClient({
     baseUrl: serverUrl,
-    authToken: await loadLocalAuthToken("whatsapp@nakama.internal"),
+    authToken: (await loadLocalAuthToken("whatsapp@nakama.internal")) ?? undefined,
   });
   const health = await client.health();
 

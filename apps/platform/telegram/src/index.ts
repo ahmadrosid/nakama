@@ -47,7 +47,7 @@ try {
 
   const client = createClient({
     baseUrl: serverUrl,
-    authToken: await loadLocalAuthToken("telegram@nakama.internal"),
+    authToken: (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined,
   });
   const health = await client.health();
 
