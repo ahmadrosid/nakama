@@ -263,7 +263,6 @@ interface OrgInviteRow {
 }
 
 export async function createSqliteDatabase(databaseUrl: string): Promise<SqliteDatabase> {
-  console.log("Debug databaseUrl", databaseUrl);
   const databasePath = resolveDatabasePath(databaseUrl);
   ensureDatabaseDirectory(databasePath);
 
