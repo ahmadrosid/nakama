@@ -2,10 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "bun:sqlite";
-import { LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
-
-const LEGACY_LOCAL_CLIENT_EMAIL = "local-client@tinyclaw.internal";
-
 export function migrateDatabase(db: Database): void {
   const schemaPath = resolveSchemaPath();
   const sql = readFileSync(schemaPath, "utf8");
@@ -28,7 +24,6 @@ export function migrateDatabase(db: Database): void {
   migrateAttachmentsTable(db);
   migrateAutomationRunsTable(db);
   migrateAutomationRunReadStateTable(db);
-  migrateTinyClawRenames(db);
 }
 
 export function resolveSchemaPath(options: {
@@ -738,14 +733,4 @@ function migrateAttachmentsTable(db: Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
   `);
-}
-
-function migrateTinyClawRenames(db: Database): void {
-  db.prepare(
-    `
-    UPDATE users
-    SET email = ?
-    WHERE id = ? AND email = ?
-  `,
-  ).run(LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID, LEGACY_LOCAL_CLIENT_EMAIL);
 }

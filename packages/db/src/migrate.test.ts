@@ -446,33 +446,6 @@ describe("organization schema migration", () => {
   });
 });
 
-describe("tinyclaw rename migration", () => {
-  test("updates legacy local client email on migrate", () => {
-    const db = new Database(":memory:");
-
-    try {
-      migrateDatabase(db);
-      const now = "2026-06-21T00:00:00.000Z";
-      db.prepare(
-        `
-        INSERT INTO users (
-          id, email, password_hash, is_platform_admin, created_at, updated_at
-        ) VALUES (?, ?, ?, 0, ?, ?)
-      `,
-      ).run("user_local_client", "local-client@tinyclaw.internal", "hash", now, now);
-
-      migrateDatabase(db);
-
-      const row = db
-        .prepare("SELECT email FROM users WHERE id = ?")
-        .get("user_local_client") as { email: string };
-      expect(row.email).toBe("local-client@nakama.internal");
-    } finally {
-      db.close();
-    }
-  });
-});
-
 describe("migration SQL hardening", () => {
   test("rejects unexpected tenant table names before SQLite can run injected ATTACH statements", () => {
     const db = new Database(":memory:");

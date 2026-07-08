@@ -20,7 +20,6 @@ docs/plans/*
 docs/brainstorms/*
 .worktrees/
 scripts/*
-!scripts/migrate-tinyclaw-to-nakama.ts
 outputs/
 pitch-deck.pdf
 pitch-deck.md

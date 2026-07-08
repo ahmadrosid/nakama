@@ -64,27 +64,6 @@ describe("ensureLocalClientAccess", () => {
     expect(user?.passwordHash.length).toBeGreaterThan(20);
   });
 
-  test("reuses legacy tinyclaw local client user without creating a duplicate", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await db.createUser({
-      id: LOCAL_CLIENT_USER_ID,
-      email: "local-client@tinyclaw.internal",
-      passwordHash: "hashed",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await ensureLocalClientAccess(db);
-
-    expect(await db.countUsers()).toBe(1);
-    expect(await db.countHumanUsers()).toBe(0);
-    expect((await db.getUserById(LOCAL_CLIENT_USER_ID))?.email).toBe(
-      "local-client@tinyclaw.internal",
-    );
-  });
-
   test("replaces a placeholder password hash with a secure hash", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();

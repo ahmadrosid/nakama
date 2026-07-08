@@ -17,8 +17,7 @@
     "build:docs": "bun run --cwd docs/website build",
     "preview:docs": "bun run --cwd docs/website preview",
     "build": "bun run --workspaces --if-present build",
-    "test": "bun run --workspaces --if-present test",
-    "migrate:tinyclaw": "bun run scripts/migrate-tinyclaw-to-nakama.ts"
+    "test": "bun run --workspaces --if-present test"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
