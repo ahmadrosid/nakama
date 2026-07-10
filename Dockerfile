@@ -18,7 +18,6 @@ FROM --platform=linux/amd64 oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
 COPY package.json bun.lock ./
-COPY scripts scripts
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram
