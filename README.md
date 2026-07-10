@@ -49,8 +49,8 @@ docker run -d -p 4310:4310 -v nakama-config:/root/.nakama ghcr.io/ahmadrosid/nak
 **Build from source:**
 
 ```bash
-# Build the image
-docker build --platform=linux/amd64 -t nakama .
+# Build the image (uses ./.docker/config.json to avoid macOS keychain prompts)
+./scripts/docker-build.sh
 
 # Run the container
 docker run -d -p 4310:4310 -v nakama-config:/root/.nakama nakama

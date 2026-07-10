@@ -1,6 +1,6 @@
 # Nakama — one container: API, web dashboard, automation + task workers
-# Build: docker build -t nakama .
-# Run:   docker run -d -p 4310:4310 -v nakama-config:/root/.nakama nakama
+# Build: ./scripts/docker-build.sh
+# Run:   docker run -d -p 4310:4310 -v nakama-data:/nakama/data nakama
 
 # --- Build web dashboard (devDependencies stay in this stage only) ---
 FROM --platform=linux/amd64 oven/bun:1.3-slim AS web-builder
@@ -33,16 +33,23 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@nakama/automation' \
       --filter '@nakama/telegram' \
       --filter '@nakama/whatsapp' \
-  && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)"
+  && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
+  && groupadd --system --gid 1000 nakama \
+  && useradd --system --uid 1000 --gid nakama --home-dir /nakama/data --create-home nakama \
+  && mkdir -p /nakama/data \
+  && chown -R nakama:nakama /app /nakama
 
 ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
     NAKAMA_PORT=4310 \
-    DATABASE_URL=file:data/sqlite/nakama.sqlite
+    NAKAMA_CONFIG_DIR=/nakama/data \
+    DATABASE_URL=file:/nakama/data/sqlite/nakama.sqlite
 
 EXPOSE 4310
 
-VOLUME ["/root/.nakama"]
+VOLUME ["/nakama/data"]
+
+USER 1000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://127.0.0.1:4310/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
