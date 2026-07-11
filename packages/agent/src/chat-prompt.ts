@@ -1,6 +1,55 @@
 import type { ToolDefinition } from "@nakama/core";
 import type { AgentRequest } from "./chat";
 
+type MessagingChannel = "telegram" | "whatsapp" | "discord";
+
+type MessagingChannelPromptConfig = {
+  label: string;
+  supportsGroupAudience: boolean;
+  format: readonly string[];
+};
+
+const MESSAGING_CHANNEL_PROMPT = {
+  telegram: {
+    label: "Telegram",
+    supportsGroupAudience: true,
+    format: [
+      "Write in normal Markdown when formatting helps; Telegram delivery will render a safe rich subset.",
+      "Use simple Markdown: **bold**, *italic*, __underline__, inline code, fenced code blocks, headings, links, and short lists.",
+      "Avoid raw HTML, Markdown tables, deeply nested lists, and very long code blocks because Telegram is best for compact chat messages.",
+    ],
+  },
+  whatsapp: {
+    label: "WhatsApp",
+    supportsGroupAudience: false,
+    format: [
+      "WhatsApp only supports simple *bold* and _italic_ formatting.",
+      "Do not use markdown headings, bullet lists, numbered lists, tables, or ``` code fences.",
+    ],
+  },
+  discord: {
+    label: "Discord",
+    supportsGroupAudience: true,
+    format: [
+      "Discord supports a Markdown subset: **bold**, *italic*, __underline__, ~~strikethrough~~, inline code, fenced code blocks, and headings.",
+      "Avoid tables and very long code blocks; keep messages compact for chat.",
+    ],
+  },
+} as const satisfies Record<MessagingChannel, MessagingChannelPromptConfig>;
+
+const SHARED_MESSAGING_STYLE = [
+  "Write like texting a friend: short paragraphs and a conversational tone.",
+  "Prefer one to three brief paragraphs unless the user asks for detail.",
+  "If you must share code or commands, put them on their own line as plain text without backticks.",
+  "Do not mention tools, JSON, or internal steps in the user-visible reply.",
+] as const;
+
+function isMessagingChannel(
+  channel: AgentRequest["channel"] | undefined,
+): channel is MessagingChannel {
+  return channel !== undefined && channel in MESSAGING_CHANNEL_PROMPT;
+}
+
 export function buildChatSystemPrompt(
   tools: ToolDefinition[],
   options: {
@@ -83,7 +132,7 @@ export function buildChatSystemPrompt(
     }
   }
 
-  if (options.channel === "telegram" || options.channel === "whatsapp") {
+  if (isMessagingChannel(options.channel)) {
     appendMessagingChannelPrompt(sections, options.channel, options.chatKind ?? "private");
   }
 
@@ -92,37 +141,14 @@ export function buildChatSystemPrompt(
 
 function appendMessagingChannelPrompt(
   sections: string[],
-  channel: "telegram" | "whatsapp",
+  channel: MessagingChannel,
   chatKind: "private" | "group",
 ): void {
-  const platform = channel === "telegram" ? "Telegram" : "WhatsApp";
+  const config = MESSAGING_CHANNEL_PROMPT[channel];
+  const audienceLine =
+    chatKind === "group" && config.supportsGroupAudience
+      ? `You are replying in a ${config.label} channel. Everyone in the channel can see your messages.`
+      : `You are replying in a private ${config.label} chat.`;
 
-  if (chatKind === "group" && channel === "telegram") {
-    sections.push(
-      "",
-      "You are replying in a Telegram group chat. Everyone in the group can see your messages.",
-    );
-  } else {
-    sections.push("", `You are replying in a private ${platform} chat.`);
-  }
-
-  if (channel === "telegram") {
-    sections.push(
-      "Write in normal Markdown when formatting helps; Telegram delivery will render a safe rich subset.",
-      "Use simple Markdown: **bold**, *italic*, __underline__, inline code, fenced code blocks, headings, links, and short lists.",
-      "Avoid raw HTML, Markdown tables, deeply nested lists, and very long code blocks because Telegram is best for compact chat messages.",
-    );
-  } else {
-    sections.push(
-      "WhatsApp only supports simple *bold* and _italic_ formatting.",
-      "Do not use markdown headings, bullet lists, numbered lists, tables, or ``` code fences.",
-    );
-  }
-
-  sections.push(
-    "Write like texting a friend: short paragraphs and a conversational tone.",
-    "Prefer one to three brief paragraphs unless the user asks for detail.",
-    "If you must share code or commands, put them on their own line as plain text without backticks.",
-    "Do not mention tools, JSON, or internal steps in the user-visible reply.",
-  );
+  sections.push("", audienceLine, ...config.format, ...SHARED_MESSAGING_STYLE);
 }

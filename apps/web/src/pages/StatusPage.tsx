@@ -5,6 +5,7 @@ import {
   CheckCircle2Icon,
   ClockIcon,
   CoinsIcon,
+  HashIcon,
   MessageCircleIcon,
   ServerIcon,
   SmartphoneIcon,
@@ -82,7 +83,7 @@ function StatusDashboard({
 }) {
   const summary = useMemo(() => deriveSummary(status), [status]);
   const services = useMemo(() => buildServiceColumns(status), [status]);
-  const { automationWorker, telegramWorker, whatsappWorker } = status;
+  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } = status;
 
   return (
     <section className={cn(sectionClass, "min-w-0 overflow-hidden")}>
@@ -97,7 +98,7 @@ function StatusDashboard({
         />
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-border lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+      <div className="grid grid-cols-1 divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0 xl:grid-cols-4">
         {services.map((service) => {
           if (service.title === "Automation") {
             return (
@@ -147,6 +148,21 @@ function StatusDashboard({
                     ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
                     : undefined
                 }
+              />
+            );
+          }
+
+          if (service.title === "Discord") {
+            return (
+              <WorkerServiceColumn
+                key={service.title}
+                icon={service.icon}
+                title={service.title}
+                status={service.status}
+                tone={service.tone}
+                worker={discordWorker}
+                workerName="discord"
+                canManage={canManageWorkers}
               />
             );
           }
@@ -677,7 +693,7 @@ function StatusSkeleton() {
 }
 
 export function buildServiceColumns(status: SystemStatusResponse) {
-  const { automationWorker, telegramWorker, whatsappWorker } = status;
+  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } = status;
 
   return [
     {
@@ -694,6 +710,11 @@ export function buildServiceColumns(status: SystemStatusResponse) {
       icon: SmartphoneIcon,
       title: "WhatsApp",
       ...whatsappServiceStatus(whatsappWorker),
+    },
+    {
+      icon: HashIcon,
+      title: "Discord",
+      ...discordServiceStatus(discordWorker),
     },
   ];
 }
@@ -752,6 +773,24 @@ function whatsappServiceStatus(
   return { status: "Healthy", tone: "ok" };
 }
 
+function discordServiceStatus(
+  discordWorker: SystemStatusResponse["discordWorker"],
+): { status: string; tone: ServiceStatusTone } {
+  if (!discordWorker.configured) {
+    return { status: "Not set up", tone: "muted" };
+  }
+
+  if (!discordWorker.running) {
+    return { status: "Offline", tone: "bad" };
+  }
+
+  if (!discordWorker.paired) {
+    return { status: "Awaiting pairing", tone: "warn" };
+  }
+
+  return { status: "Healthy", tone: "ok" };
+}
+
 export function deriveSummary(status: SystemStatusResponse): {
   tone: StatusTone;
   title: string;
@@ -786,6 +825,14 @@ export function deriveSummary(status: SystemStatusResponse): {
       tone: "warn",
       title: "WhatsApp offline",
       description: "Start the WhatsApp worker to receive messages.",
+    };
+  }
+
+  if (status.discordWorker.configured && !status.discordWorker.running) {
+    return {
+      tone: "warn",
+      title: "Discord bridge offline",
+      description: "Start the Discord worker (bun run dev:discord) to receive messages.",
     };
   }
 

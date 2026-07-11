@@ -29,6 +29,8 @@
     "./telegram-config": "./src/telegram-config.ts",
     "./email-config": "./src/email-config.ts",
     "./telegram-worker": "./src/telegram-worker.ts",
+    "./discord-config": "./src/discord-config.ts",
+    "./discord-worker": "./src/discord-worker.ts",
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",
     "./tools/protected": "./src/tools/protected.ts",

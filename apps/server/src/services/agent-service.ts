@@ -52,6 +52,7 @@ import type {
   SoulStatusResponse,
   CodingHarnessSettingsResponse,
   TelegramSettingsResponse,
+  DiscordSettingsResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
@@ -61,6 +62,7 @@ import type {
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UpdateTelegramSettingsRequest,
+  UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateUserContextRequest,
@@ -108,6 +110,7 @@ import {
   isWritableSoulFileKey,
   loadSoulStack,
   loadTelegramSettingsPublic,
+  loadDiscordSettingsPublic,
   loadEmailSettingsPublic,
   loadEmailConfig,
   isEmailConfigComplete,
@@ -122,10 +125,12 @@ import {
   rehydrateAttachmentRefsInContent,
   rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   regenerateTelegramHandshake,
+  regenerateDiscordHandshake,
   regenerateWhatsAppPairingCode,
   replaceImagePartsWithDescriptions,
   resolveSoulStackForProfile,
   saveTelegramConfig,
+  saveDiscordConfig,
   saveWhatsAppConfig,
   createSmtpSender,
   loadUserThinkingSettings,
@@ -678,6 +683,38 @@ export class AgentService {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return regenerateTelegramHandshake();
+  }
+
+  async getDiscordSettings(): Promise<DiscordSettingsResponse> {
+    return loadDiscordSettingsPublic();
+  }
+
+  async setDiscordSettings(
+    input: UpdateDiscordSettingsRequest,
+  ): Promise<DiscordSettingsResponse> {
+    const existing = await loadDiscordSettingsPublic();
+    const botToken =
+      input.botToken !== undefined && input.botToken.trim()
+        ? input.botToken.trim()
+        : undefined;
+
+    if (!botToken && !existing.configured) {
+      throw new Error("Bot token is required.");
+    }
+
+    return saveDiscordConfig({
+      ...(botToken ? { botToken } : {}),
+      ...(input.allowedUserIds !== undefined
+        ? { allowedUserIds: input.allowedUserIds }
+        : existing.allowedUserIds.length > 0
+          ? { allowedUserIds: existing.allowedUserIds.join(",") }
+          : {}),
+      ...(input.profileId !== undefined ? { profileId: input.profileId } : {}),
+    });
+  }
+
+  async regenerateDiscordHandshake(): Promise<DiscordSettingsResponse> {
+    return regenerateDiscordHandshake();
   }
 
   async getEmailSettings(): Promise<EmailSettingsResponse> {
@@ -2410,7 +2447,7 @@ export class AgentService {
 }
 
 function parseAgentChannel(value: string): AgentChannel | null {
-  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp" || value === "automation") {
+  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp" || value === "discord" || value === "automation") {
     return value;
   }
 

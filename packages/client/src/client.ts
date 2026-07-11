@@ -69,6 +69,7 @@ import type {
   StoredAutomation,
   SystemStatusResponse,
   TelegramSettingsResponse,
+  DiscordSettingsResponse,
   CodingHarnessSettingsResponse,
   CodingHarnessInstallRequest,
   CodingHarnessStatus,
@@ -89,6 +90,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UpdateTelegramSettingsRequest,
+  UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateCodingHarnessSettingsRequest,
   UpdateWhatsAppSettingsRequest,
@@ -1025,6 +1027,25 @@ export class NakamaClient {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return this.request<TelegramSettingsResponse>("/v1/settings/telegram/handshake", {
+      method: "POST",
+    });
+  }
+
+  async getDiscordSettings(): Promise<DiscordSettingsResponse> {
+    return this.request<DiscordSettingsResponse>("/v1/settings/discord");
+  }
+
+  async setDiscordSettings(
+    request: UpdateDiscordSettingsRequest,
+  ): Promise<DiscordSettingsResponse> {
+    return this.request<DiscordSettingsResponse>("/v1/settings/discord", {
+      method: "PUT",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async regenerateDiscordHandshake(): Promise<DiscordSettingsResponse> {
+    return this.request<DiscordSettingsResponse>("/v1/settings/discord/handshake", {
       method: "POST",
     });
   }

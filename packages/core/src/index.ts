@@ -35,6 +35,8 @@ export * from "./email-config";
 export { createSmtpSender } from "./mail/smtp-sender";
 export { createImapReader } from "./mail/imap-reader";
 export * from "./telegram-worker";
+export * from "./discord-config";
+export * from "./discord-worker";
 export * from "./whatsapp-config";
 export * from "./whatsapp-worker";
 export * from "./worker-desired-state";

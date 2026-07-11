@@ -62,6 +62,9 @@ export const queryKeys = {
   whatsapp: {
     settings: ["whatsapp", "settings"] as const,
   },
+  discord: {
+    settings: ["discord", "settings"] as const,
+  },
   userContext: ["userContext"] as const,
   modelsDev: ["modelsDev"] as const,
   openRouterModels: ["openRouterModels"] as const,

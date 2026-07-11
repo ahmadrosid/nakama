@@ -11,6 +11,7 @@
     "dev:cli": "bun run apps/cli/src/index.ts",
     "dev:telegram": "bun run --filter @nakama/telegram dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",
+    "dev:discord": "bun run --filter @nakama/discord dev",
     "dev:automation": "bun run --filter @nakama/automation dev",
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:docs": "bun run --cwd docs/website dev",

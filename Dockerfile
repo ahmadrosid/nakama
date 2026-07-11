@@ -22,6 +22,7 @@ COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation
 COPY apps/platform/telegram apps/platform/telegram
 COPY apps/platform/whatsapp apps/platform/whatsapp
+COPY apps/platform/discord apps/platform/discord
 COPY packages packages
 # Workspace stubs keep the lockfile valid without pulling web/cli sources.
 COPY apps/web/package.json apps/web/
@@ -33,6 +34,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
       --filter '@nakama/automation' \
       --filter '@nakama/telegram' \
       --filter '@nakama/whatsapp' \
+      --filter '@nakama/discord' \
   && test -n "$(find node_modules/.bun -path '*/node_modules/pm2/bin/pm2-runtime' -type f -print -quit)" \
   && mkdir -p /nakama/data \
   && if getent group 1000 >/dev/null; then \

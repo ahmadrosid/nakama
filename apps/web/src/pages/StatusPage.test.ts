@@ -26,6 +26,7 @@ const healthyStatus: SystemStatusResponse = {
   },
   taskWorker: { ok: true, activeRuns: 0, providerConfigured: true },
   telegramWorker: { ok: true, configured: true, running: true, paired: true },
+  discordWorker: { ok: true, configured: true, running: true, paired: true, connected: true },
   whatsappWorker: {
     ok: true,
     configured: true,
@@ -79,8 +80,18 @@ describe("StatusPage helpers", () => {
 
   test("maps bridge health to service columns", () => {
     const columns = buildServiceColumns(healthyStatus);
-    expect(columns.map((column) => column.title)).toEqual(["Automation", "Telegram", "WhatsApp"]);
-    expect(columns.map((column) => column.status)).toEqual(["Healthy", "Healthy", "Healthy"]);
+    expect(columns.map((column) => column.title)).toEqual([
+      "Automation",
+      "Telegram",
+      "WhatsApp",
+      "Discord",
+    ]);
+    expect(columns.map((column) => column.status)).toEqual([
+      "Healthy",
+      "Healthy",
+      "Healthy",
+      "Healthy",
+    ]);
   });
 
   test("marks automation as PM2 unavailable when no managed process is present", () => {

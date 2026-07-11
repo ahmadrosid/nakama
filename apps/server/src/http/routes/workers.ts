@@ -70,7 +70,7 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
   app.post("/v1/workers/:name/:action{start|stop|restart}", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
     const action = c.req.param("action");
-    if (name === "telegram" || name === "whatsapp") {
+    if (name === "telegram" || name === "whatsapp" || name === "discord") {
       requirePlatformAdminFromContext(c);
     } else {
       requireNotViewerFromContext(c);

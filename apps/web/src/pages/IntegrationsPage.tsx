@@ -2,12 +2,14 @@ import type { LucideIcon } from "lucide-react";
 import {
   BellRingIcon,
   BotIcon,
+  HashIcon,
   KeyRoundIcon,
   MessageCircleMoreIcon,
   SendIcon,
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { CodingHarnessSettingsPanel } from "@/components/CodingHarnessSettingsDialog";
+import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
@@ -28,6 +30,12 @@ const INTEGRATION_SECTIONS = [
     label: "WhatsApp",
     description: "Bridge and device link",
     icon: MessageCircleMoreIcon,
+  },
+  {
+    id: "discord",
+    label: "Discord",
+    description: "Bot and pairing",
+    icon: HashIcon,
   },
   {
     id: "notifications",
@@ -56,6 +64,7 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "token" ||
     value === "notifications" ||
     value === "whatsapp" ||
+    value === "discord" ||
     value === "coding-agents"
   ) {
     return value;
@@ -101,8 +110,8 @@ export function IntegrationsPage() {
       <header className="space-y-1">
         <h1 className="type-page-title">Integrations</h1>
         <p className="type-body max-w-2xl">
-          Manage bridge access, coding delegation, Telegram setup, notification webhooks, and
-          WhatsApp linking from one place.
+          Manage bridge access, coding delegation, Telegram and Discord setup, notification
+          webhooks, and WhatsApp linking from one place.
         </p>
       </header>
 
@@ -153,6 +162,16 @@ export function IntegrationsPage() {
                 description="Connect your Telegram bot, choose the target profile, and finish pairing."
               />
               <TelegramSettingsCard />
+            </div>
+          ) : null}
+
+          {section === "discord" ? (
+            <div className="space-y-4">
+              <SectionIntro
+                title="Discord"
+                description="Connect your Discord bot, choose the target profile, and finish DM pairing."
+              />
+              <DiscordSettingsCard />
             </div>
           ) : null}
 

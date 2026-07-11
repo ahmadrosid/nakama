@@ -66,6 +66,11 @@ describe("WorkerManagerService", () => {
       expect(service.isValidWorker("automation")).toBe(true);
     });
 
+    test("returns true for discord", () => {
+      const service = new WorkerManagerService(projectRoot, createMockPm2());
+      expect(service.isValidWorker("discord")).toBe(true);
+    });
+
     test("returns false for unknown worker", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
       expect(service.isValidWorker("foobar")).toBe(false);
@@ -87,7 +92,7 @@ describe("WorkerManagerService", () => {
       expect(opts.args).toContain("apps/platform/telegram/src/index.ts");
       expect(opts.interpreter).toBeUndefined();
       expect(opts.name).toBe("telegram");
-      expect(await readWorkerDesiredState()).toEqual({ telegram: true, whatsapp: false, automation: true });
+      expect(await readWorkerDesiredState()).toEqual({ telegram: true, whatsapp: false, discord: false, automation: true });
     });
 
     test("starts whatsapp worker", async () => {
@@ -116,7 +121,7 @@ describe("WorkerManagerService", () => {
       expect(opts.script).toBe("bun");
       expect(opts.args).toContain("apps/platform/automation/src/index.ts");
       expect(opts.interpreter).toBeUndefined();
-      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, automation: true });
+      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, discord: false, automation: true });
     });
 
     test("starts worker from dist when dist build exists", async () => {
@@ -194,7 +199,7 @@ describe("WorkerManagerService", () => {
       await service.stopWorker("telegram");
 
       expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
-      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, automation: true });
+      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, discord: false, automation: true });
     });
 
     test("throws for unknown worker", async () => {

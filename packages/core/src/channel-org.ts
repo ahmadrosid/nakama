@@ -3,7 +3,7 @@ import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
 import { readTextOrNull, writePrivateTextFile } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
-export type ChannelOrgSelectionChannel = "telegram" | "whatsapp";
+export type ChannelOrgSelectionChannel = "telegram" | "whatsapp" | "discord";
 
 export interface ChannelOrgRecord {
   orgId: string;

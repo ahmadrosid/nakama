@@ -12,12 +12,14 @@ import { join } from "node:path";
 const WORKER_SCRIPTS: Record<string, string> = {
   telegram: "apps/platform/telegram/src/index.ts",
   whatsapp: "apps/platform/whatsapp/src/index.ts",
+  discord: "apps/platform/discord/src/index.ts",
   automation: "apps/platform/automation/src/index.ts",
 };
 
 const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
   telegram: "apps/platform/telegram/dist/index.js",
   whatsapp: "apps/platform/whatsapp/dist/index.js",
+  discord: "apps/platform/discord/dist/index.js",
   automation: "apps/platform/automation/dist/index.js",
 };
 

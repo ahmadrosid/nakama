@@ -40,6 +40,7 @@ describe("parseWorkerDesiredState", () => {
     expect(parseWorkerDesiredState('{"telegram": true}')).toEqual({
       telegram: true,
       whatsapp: false,
+      discord: false,
       automation: true,
     });
   });
@@ -48,6 +49,7 @@ describe("parseWorkerDesiredState", () => {
     expect(parseWorkerDesiredState("not-json")).toEqual({
       telegram: false,
       whatsapp: false,
+      discord: false,
       automation: true,
     });
   });
@@ -56,6 +58,7 @@ describe("parseWorkerDesiredState", () => {
     expect(parseWorkerDesiredState('{"telegram":false,"whatsapp":false}')).toEqual({
       telegram: false,
       whatsapp: false,
+      discord: false,
       automation: true,
     });
   });
@@ -64,6 +67,7 @@ describe("parseWorkerDesiredState", () => {
     expect(parseWorkerDesiredState('{"telegram":false,"whatsapp":false,"automation":false}')).toEqual({
       telegram: false,
       whatsapp: false,
+      discord: false,
       automation: false,
     });
   });
@@ -75,6 +79,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: false,
         whatsapp: false,
+        discord: false,
         automation: true,
       });
     });
@@ -86,6 +91,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: true,
         whatsapp: false,
+        discord: false,
         automation: true,
       });
 
@@ -93,6 +99,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: true,
         whatsapp: true,
+        discord: false,
         automation: true,
       });
 
@@ -100,6 +107,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: true,
         whatsapp: true,
+        discord: false,
         automation: false,
       });
 
@@ -107,6 +115,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: false,
         whatsapp: true,
+        discord: false,
         automation: false,
       });
     });
@@ -124,6 +133,7 @@ describe("worker desired state persistence", () => {
       expect(await readWorkerDesiredState()).toEqual({
         telegram: true,
         whatsapp: false,
+        discord: false,
         automation: true,
       });
     });

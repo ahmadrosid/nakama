@@ -26,7 +26,7 @@ import type { HonoApp } from "../types";
 export function registerSessionRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent } = options;
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
-  const agentChannelSchema = z.enum(["web", "cli", "telegram", "whatsapp", "automation", "task"]).openapi("AgentChannel");
+  const agentChannelSchema = z.enum(["web", "cli", "telegram", "whatsapp", "discord", "automation", "task"]).openapi("AgentChannel");
   const createSessionRequestSchema = z.object({
     channel: agentChannelSchema,
     profileId: z.string().optional(),
