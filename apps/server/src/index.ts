@@ -167,8 +167,11 @@ if (webDistDir) {
   console.log(`Nakama web dashboard ready at ${serverUrl}`);
 }
 
-if (!provider) {
-  console.log("Provider not configured. Chat will run in offline mode.");
+const humanUserCount = await database.adapter.countHumanUsers();
+if (humanUserCount > 0 && !agent.providerConfigured) {
+  console.warn(
+    `Provider not configured — complete the setup wizard at ${serverUrl}/setup to enable chat and automations.`,
+  );
 }
 
 function parsePort(value: string | undefined): number {

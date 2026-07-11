@@ -1554,7 +1554,7 @@ export class AgentService {
   private refreshHarness(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
     const active = getActiveProviderInstance(this.userConfig);
-    this._providerConfigured = isProviderConfigured(this.userConfig);
+    this._providerConfigured = isProviderConfigured(this.userConfig) && provider !== null;
     this.harness = this.createHarness({
       provider,
       providerInstance: active,
