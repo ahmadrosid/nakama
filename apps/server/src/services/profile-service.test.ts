@@ -159,7 +159,7 @@ describe("profile service createProfile", () => {
     expect(tools.map((tool) => tool.name)).toContain("edit_file");
     expect(tools.map((tool) => tool.name)).toContain("search_files");
     expect(tools.map((tool) => tool.name)).toContain("knowledge_base_search");
-    expect(tools.map((tool) => tool.name)).toContain("update_profile_memory");
+    expect(tools.map((tool) => tool.name)).not.toContain("update_profile_memory");
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");
   });
 

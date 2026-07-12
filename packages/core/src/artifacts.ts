@@ -5,10 +5,8 @@ import type {
   ArtifactFile,
   DeleteArtifactResponse,
   ListArtifactsResponse,
-  SaveArtifactMode,
-  SaveArtifactOutput,
 } from "./contract";
-import { ensureDir, pathExists, writePrivateBytesFile, writePrivateTextFile } from "./fs";
+import { pathExists } from "./fs";
 import { getProfileArtifactsDir } from "./soul/resolve";
 import { guardFilePath } from "./tools/paths";
 
@@ -28,66 +26,6 @@ function getArtifactMetaPath(filePath: string): string {
 
 function isArtifactMetaFile(filename: string): boolean {
   return filename.endsWith(ARTIFACT_META_SUFFIX);
-}
-
-function normalizeBase64(raw: string): string {
-  return raw.replace(/\s+/g, "");
-}
-
-function decodeBase64(content: string): Buffer {
-  const normalized = normalizeBase64(content);
-
-  if (!normalized || normalized.length % 4 === 1 || /[^A-Za-z0-9+/=]/.test(normalized)) {
-    throw new Error("content must be valid base64.");
-  }
-
-  const bytes = Buffer.from(normalized, "base64");
-
-  if (bytes.length === 0 && normalized !== "") {
-    throw new Error("content must be valid base64.");
-  }
-
-  return bytes;
-}
-
-export async function saveArtifactFile(input: {
-  orgId: string;
-  profileId: string;
-  filename: string;
-  content: string;
-  mimeType: string;
-  mode: SaveArtifactMode;
-}): Promise<SaveArtifactOutput> {
-  const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
-  await ensureDir(artifactsDir);
-  const resolvedArtifactsDir = await realpath(artifactsDir);
-
-  const guarded = await guardFilePath(input.filename, null, undefined, {
-    allowedDirs: [resolvedArtifactsDir],
-    cwd: resolvedArtifactsDir,
-  });
-  const filePath = guarded.resolved;
-  const savedAt = new Date().toISOString();
-  const bytes =
-    input.mode === "base64" ? decodeBase64(input.content) : Buffer.from(input.content, "utf8");
-
-  await writePrivateBytesFile(filePath, bytes);
-
-  const metadata: ArtifactMeta = {
-    mimeType: input.mimeType,
-    savedAt,
-    sizeBytes: bytes.byteLength,
-  };
-
-  await writePrivateTextFile(getArtifactMetaPath(filePath), JSON.stringify(metadata, null, 2));
-
-  return {
-    filename: path.relative(resolvedArtifactsDir, filePath),
-    path: filePath,
-    mimeType: input.mimeType,
-    mode: input.mode,
-    bytesWritten: bytes.byteLength,
-  };
 }
 
 export async function listArtifacts(

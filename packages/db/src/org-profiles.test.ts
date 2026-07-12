@@ -71,12 +71,18 @@ describe("seedOrgDefaultProfile", () => {
   test("assigns default bundled skills but not super bot skills", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
+    await upsertSkill(db, "update-profile-memory");
+    await upsertSkill(db, "archive-profile-memory");
+    await upsertSkill(db, "save-artifact");
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
     const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
 
     expect(skillNames).toContain("create-automation");
+    expect(skillNames).toContain("update-profile-memory");
+    expect(skillNames).toContain("archive-profile-memory");
+    expect(skillNames).toContain("save-artifact");
     expect(skillNames).not.toContain("create-profile");
   });
 });
@@ -138,17 +144,20 @@ describe("seedOrgSuperBotProfile", () => {
     expect(await db.listProfilesForOrg("org_a")).toHaveLength(1);
   });
 
-  test("backfills newly added builtins on existing super bot", async () => {
+  test("backfills newly added bundled skills on existing super bot", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await ensureBuiltinToolDefinitions(db);
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
-    await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.archive_profile_memory);
+    await upsertSkill(db, "update-profile-memory");
+    await upsertSkill(db, "archive-profile-memory");
+    await upsertSkill(db, "save-artifact");
 
     await seedOrgSuperBotProfile(db, "org_a");
 
-    const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
-    expect(toolIds).toContain(BUILTIN_TOOL_IDS.archive_profile_memory);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    expect(skillNames).toContain("update-profile-memory");
+    expect(skillNames).toContain("archive-profile-memory");
+    expect(skillNames).toContain("save-artifact");
   });
 
   test("backfills super bot bundled skills on existing super bot", async () => {

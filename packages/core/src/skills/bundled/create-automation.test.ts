@@ -110,6 +110,121 @@ describe("bundled manage-skills skill", () => {
   });
 });
 
+describe("bundled archive-profile-memory skill", () => {
+  test("parses bundled markdown", async () => {
+    const content = await readBundledSkillMarkdown("archive-profile-memory");
+    const parsed = parseSkillMarkdown(content, "archive-profile-memory/SKILL.md");
+
+    expect(parsed.frontmatter.name).toBe("archive-profile-memory");
+    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
+    expect(parsed.body).toContain("read_file");
+    expect(parsed.body).toContain("edit_file");
+    expect(parsed.body).toContain("write_file");
+    expect(parsed.body).toContain("memory-archive/");
+  });
+
+  test("description matches archive and cleanup messages", async () => {
+    const content = await readBundledSkillMarkdown("archive-profile-memory");
+    const parsed = parseSkillMarkdown(content, "archive-profile-memory/SKILL.md");
+    const discovered = {
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      disableModelInvocation: false,
+      includeBodyOnMatch: true,
+      directory: "/tmp/archive-profile-memory",
+      skillFilePath: "/tmp/archive-profile-memory/SKILL.md",
+      body: parsed.body,
+      hasTool: false,
+      toolPath: null,
+    };
+
+    expect(
+      matchSkillsForMessage([discovered], "Please forget that preference").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["archive-profile-memory"]);
+
+    expect(
+      matchSkillsForMessage([discovered], "Clean up old memory from last month").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["archive-profile-memory"]);
+  });
+});
+
+describe("bundled update-profile-memory skill", () => {
+  test("parses bundled markdown", async () => {
+    const content = await readBundledSkillMarkdown("update-profile-memory");
+    const parsed = parseSkillMarkdown(content, "update-profile-memory/SKILL.md");
+
+    expect(parsed.frontmatter.name).toBe("update-profile-memory");
+    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
+    expect(parsed.body).toContain("read_file");
+    expect(parsed.body).toContain("edit_file");
+    expect(parsed.body).toContain("write_file");
+    expect(parsed.body).toContain("MEMORY.md");
+    expect(parsed.body).toContain("4096");
+  });
+
+  test("description matches remember and preference messages", async () => {
+    const content = await readBundledSkillMarkdown("update-profile-memory");
+    const parsed = parseSkillMarkdown(content, "update-profile-memory/SKILL.md");
+    const discovered = {
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      disableModelInvocation: false,
+      includeBodyOnMatch: true,
+      directory: "/tmp/update-profile-memory",
+      skillFilePath: "/tmp/update-profile-memory/SKILL.md",
+      body: parsed.body,
+      hasTool: false,
+      toolPath: null,
+    };
+
+    expect(
+      matchSkillsForMessage([discovered], "Remember that I prefer dark mode").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["update-profile-memory"]);
+  });
+});
+
+describe("bundled save-artifact skill", () => {
+  test("parses bundled markdown", async () => {
+    const content = await readBundledSkillMarkdown("save-artifact");
+    const parsed = parseSkillMarkdown(content, "save-artifact/SKILL.md");
+
+    expect(parsed.frontmatter.name).toBe("save-artifact");
+    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
+    expect(parsed.body).toContain("write_file");
+    expect(parsed.body).toContain("artifacts/");
+    expect(parsed.body).toContain(".nakama-meta.json");
+    expect(parsed.body).toContain("mimeType");
+  });
+
+  test("description matches save and report messages", async () => {
+    const content = await readBundledSkillMarkdown("save-artifact");
+    const parsed = parseSkillMarkdown(content, "save-artifact/SKILL.md");
+    const discovered = {
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      disableModelInvocation: false,
+      includeBodyOnMatch: true,
+      directory: "/tmp/save-artifact",
+      skillFilePath: "/tmp/save-artifact/SKILL.md",
+      body: parsed.body,
+      hasTool: false,
+      toolPath: null,
+    };
+
+    expect(
+      matchSkillsForMessage([discovered], "Save this report for later").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["save-artifact"]);
+  });
+});
+
 describe("ensureBundledSkillFiles", () => {
   let configDir: string;
 
@@ -128,6 +243,9 @@ describe("ensureBundledSkillFiles", () => {
 
     expect(created).toContain("create-automation");
     expect(created).toContain("manage-skills");
+    expect(created).toContain("update-profile-memory");
+    expect(created).toContain("archive-profile-memory");
+    expect(created).toContain("save-artifact");
     expect(created).toContain("create-profile");
     expect(created).toContain("coding-delegation");
     expect(created).toContain("coding-backend-codex");
@@ -147,6 +265,27 @@ describe("ensureBundledSkillFiles", () => {
     );
 
     expect(manageSkillsContent).toContain("name: manage-skills");
+
+    const archiveProfileMemoryContent = await readFile(
+      join(configDir, "agent", "skills", "archive-profile-memory", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(archiveProfileMemoryContent).toContain("name: archive-profile-memory");
+
+    const updateProfileMemoryContent = await readFile(
+      join(configDir, "agent", "skills", "update-profile-memory", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(updateProfileMemoryContent).toContain("name: update-profile-memory");
+
+    const saveArtifactContent = await readFile(
+      join(configDir, "agent", "skills", "save-artifact", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(saveArtifactContent).toContain("name: save-artifact");
 
     const createProfileContent = await readFile(
       join(configDir, "agent", "skills", "create-profile", "SKILL.md"),
