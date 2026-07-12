@@ -25,9 +25,11 @@ describe("needsTrailingStreamNewline", () => {
 describe("formatStatusLines", () => {
   const health: HealthResponse = {
     ok: true,
-    apiVersion: "v1",
+    apiVersion: 1,
     providerConfigured: true,
     userConfigured: true,
+    composioConfigured: false,
+    composioAvailable: false,
   };
   const models: ModelsResponse = {
     currentProviderId: "provider-a",

@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  isValidBaseUrl,
   normalizeBaseUrl,
   parseCustomModelsJson,
   serializeCustomModels,
@@ -349,6 +351,62 @@ export async function saveUserTimezone(timezone: string): Promise<void> {
   });
 }
 
+function readWebPublicUrl(values: Record<string, string>): string | undefined {
+  const trimmed = values.web_public_url?.trim();
+  return trimmed && isValidBaseUrl(trimmed) ? normalizeBaseUrl(new URL(trimmed).origin) : undefined;
+}
+
+export function readUserWebPublicUrlSync(): string | null {
+  try {
+    const raw = readFileSync(getUserConfigPath(), "utf8");
+    return readWebPublicUrl(parseIniWithSections(raw).global) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadUserWebPublicUrl(): Promise<string | null> {
+  const raw = await readTextOrNull(getUserConfigPath());
+
+  if (raw === null) {
+    return null;
+  }
+
+  return readWebPublicUrl(parseIniWithSections(raw).global) ?? null;
+}
+
+export async function saveUserWebPublicUrl(webPublicUrl: string): Promise<string> {
+  const trimmed = webPublicUrl.trim();
+
+  if (!trimmed || !isValidBaseUrl(trimmed)) {
+    throw new Error("webPublicUrl must be a valid http or https URL.");
+  }
+
+  const normalized = normalizeBaseUrl(new URL(trimmed).origin);
+  const existing = await loadUserConfig();
+
+  if (existing) {
+    const raw = await readTextOrNull(getUserConfigPath());
+    const parsed = raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+    await writeParsedConfigIni(parsed.global, parsed.sections, {
+      web_public_url: normalized,
+    });
+    return normalized;
+  }
+
+  const raw = await readTextOrNull(getUserConfigPath());
+  const parsed = raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+    web_public_url: normalized,
+  });
+
+  await writePrivateTextFile(getUserConfigPath(), lines.join("\n"), {
+    ensureDir: getUserConfigDir(),
+  });
+
+  return normalized;
+}
+
 export async function saveUserConfig(config: UserConfig): Promise<void> {
   const raw = await readTextOrNull(getUserConfigPath());
   const existingParsed =
@@ -528,6 +586,10 @@ function buildConfigIniLines(
 
   if (mergedGlobal.timezone?.trim()) {
     lines.push(`timezone=${mergedGlobal.timezone.trim()}`);
+  }
+
+  if (mergedGlobal.web_public_url?.trim()) {
+    lines.push(`web_public_url=${mergedGlobal.web_public_url.trim()}`);
   }
 
   const thinkingEnabled =

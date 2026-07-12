@@ -167,6 +167,14 @@ export interface StoredWorkspaceSettingsRecord {
 
 export type StoredCodingAgentHarnessKind = "codex" | "claude_code" | "opencode";
 
+export interface StoredCodingAgentHarnessProbeCache {
+  checkedAt: string;
+  authenticated: boolean | null;
+  ready: boolean;
+  nextStep: "install" | "login" | "retry" | null;
+  statusMessage: string | null;
+}
+
 export interface StoredCodingAgentHarnessRecord {
   id: string;
   kind: StoredCodingAgentHarnessKind;
@@ -174,6 +182,7 @@ export interface StoredCodingAgentHarnessRecord {
   command: string;
   args: string[];
   enabled: boolean;
+  probeCache?: StoredCodingAgentHarnessProbeCache | null;
 }
 
 export interface StoredNotificationDestinationRecord {
@@ -188,6 +197,54 @@ export interface StoredNotificationDestinationRecord {
   orgId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type StoredOrgComposioToolkitStatus = "disabled" | "enabled";
+
+/** @deprecated Use StoredOrgComposioToolkitStatus for org catalog rows. */
+export type StoredComposioToolkitStatus =
+  | StoredOrgComposioToolkitStatus
+  | "oauth_in_progress"
+  | "connected"
+  | "error";
+
+export interface StoredComposioToolkitRecord {
+  id: string;
+  orgId: string;
+  toolkitSlug: string;
+  displayName: string;
+  status: StoredOrgComposioToolkitStatus;
+  cachedTools: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StoredComposioUserConnectionStatus = "oauth_in_progress" | "connected" | "error";
+
+export interface StoredComposioUserConnectionRecord {
+  id: string;
+  orgId: string;
+  userId: string;
+  toolkitId: string;
+  status: StoredComposioUserConnectionStatus;
+  connectedAccountId: string | null;
+  sessionIdEnc: string | null;
+  oauthStateHash: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredProfileComposioToolkitRecord {
+  profileId: string;
+  toolkitId: string;
+  allowedActions: string[] | null;
 }
 
 export interface LlmUsageStatsDelta {
@@ -448,6 +505,37 @@ export interface DatabaseAdapter {
   getNotificationDestination(id: string): Promise<StoredNotificationDestinationRecord | null>;
   upsertNotificationDestination(record: StoredNotificationDestinationRecord): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
+
+  listComposioToolkitsForOrg(orgId: string): Promise<StoredComposioToolkitRecord[]>;
+  getComposioToolkit(id: string): Promise<StoredComposioToolkitRecord | null>;
+  getComposioToolkitBySlug(
+    orgId: string,
+    toolkitSlug: string,
+  ): Promise<StoredComposioToolkitRecord | null>;
+  upsertComposioToolkit(record: StoredComposioToolkitRecord): Promise<void>;
+  deleteComposioToolkit(id: string): Promise<boolean>;
+
+  listComposioUserConnectionsForUser(
+    orgId: string,
+    userId: string,
+  ): Promise<StoredComposioUserConnectionRecord[]>;
+  getComposioUserConnection(
+    userId: string,
+    toolkitId: string,
+  ): Promise<StoredComposioUserConnectionRecord | null>;
+  getComposioUserConnectionById(
+    id: string,
+  ): Promise<StoredComposioUserConnectionRecord | null>;
+  upsertComposioUserConnection(record: StoredComposioUserConnectionRecord): Promise<void>;
+  deleteComposioUserConnection(id: string): Promise<boolean>;
+
+  listProfileComposioToolkits(
+    profileId: string,
+  ): Promise<StoredProfileComposioToolkitRecord[]>;
+  replaceProfileComposioToolkits(
+    profileId: string,
+    assignments: StoredProfileComposioToolkitRecord[],
+  ): Promise<void>;
 
   listMcpServers(): Promise<StoredMcpServerRecord[]>;
   getMcpServer(id: string): Promise<StoredMcpServerRecord | null>;

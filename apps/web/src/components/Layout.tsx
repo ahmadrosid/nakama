@@ -28,6 +28,7 @@ import {
   NAV_GROUPS,
   NAV_ITEM_ICONS,
   canAccessSystemPage,
+  canAccessIntegrationsPage,
   PAGE_PATHS,
   PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
@@ -57,7 +58,7 @@ export function Layout() {
           }
 
           if (item.id === "integrations") {
-            return activeOrg?.role === "admin";
+            return canAccessIntegrationsPage(activeOrg?.role);
           }
 
           return (

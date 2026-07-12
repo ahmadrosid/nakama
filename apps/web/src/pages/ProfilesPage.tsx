@@ -17,6 +17,7 @@ import { ArtifactsTab } from "@/components/soul-tools/ArtifactsTab";
 import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
+import { ComposioToolkitAssignPicker } from "@/components/ComposioToolkitAssignPicker";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
@@ -43,6 +44,11 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { ExpandableTextarea } from "@/components/ui/expandable-textarea";
+import {
+  useComposioToolkits,
+  useProfileComposioToolkits,
+  useUpdateProfileComposioToolkitsMutation,
+} from "@/hooks/use-composio";
 import {
   useMcpServersQuery,
   useModelsQuery,
@@ -124,7 +130,8 @@ function profileHasPendingEdits(snapshot: ProfileEditSnapshot): boolean {
 type RemoveAssignmentTarget =
   | { kind: "tool"; id: string; name: string }
   | { kind: "mcp"; id: string; name: string }
-  | { kind: "skill"; id: string; name: string };
+  | { kind: "skill"; id: string; name: string }
+  | { kind: "composio"; id: string; name: string };
 
 export function ProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -136,10 +143,12 @@ export function ProfilesPage() {
   } = useProfilesQuery();
   const { data: allTools = [] } = useToolsQuery();
   const { data: allMcpServers = [] } = useMcpServersQuery();
-  const { data: allSkills = [] } = useSkillsQuery();
-  const { data: modelsResponse } = useModelsQuery();
+  const { data: composioToolkitsData } = useComposioToolkits();
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
+  const { data: profileComposioData } = useProfileComposioToolkits(selectedId);
+  const { data: allSkills = [] } = useSkillsQuery();
+  const { data: modelsResponse } = useModelsQuery();
   const {
     data: detail = null,
     isLoading: detailLoading,
@@ -158,6 +167,7 @@ export function ProfilesPage() {
   const assignSkillMutation = useAssignSkillMutation();
   const unassignSkillMutation = useUnassignSkillMutation();
   const deleteSkillMutation = useDeleteSkillMutation();
+  const updateComposioMutation = useUpdateProfileComposioToolkitsMutation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -234,7 +244,8 @@ export function ProfilesPage() {
     createSkillMutation.isPending ||
     assignSkillMutation.isPending ||
     unassignSkillMutation.isPending ||
-    deleteSkillMutation.isPending;
+    deleteSkillMutation.isPending ||
+    updateComposioMutation.isPending;
 
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
@@ -545,6 +556,42 @@ export function ProfilesPage() {
     (server) => !detail?.mcpServers.some((assigned) => assigned.id === server.id),
   );
 
+  const assignedComposioToolkits = useMemo(() => {
+    if (!profileComposioData || !composioToolkitsData) {
+      return [];
+    }
+
+    const toolkitById = new Map(
+      composioToolkitsData.orgToolkits.map((toolkit) => [toolkit.id, toolkit]),
+    );
+
+    const userByToolkitId = new Map(
+      composioToolkitsData.userConnections.map((connection) => [connection.toolkitId, connection]),
+    );
+
+    return profileComposioData.assignments
+      .map((assignment) => {
+        const toolkit = toolkitById.get(assignment.toolkitId);
+        const userConnection = userByToolkitId.get(assignment.toolkitId);
+        return toolkit ? { assignment, toolkit, userConnection } : null;
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  }, [composioToolkitsData, profileComposioData]);
+
+  const availableComposioToolkits = useMemo(() => {
+    if (!composioToolkitsData) {
+      return [];
+    }
+
+    const assignedIds = new Set(
+      profileComposioData?.assignments.map((assignment) => assignment.toolkitId) ?? [],
+    );
+
+    return composioToolkitsData.orgToolkits.filter(
+      (toolkit) => toolkit.status !== "disabled" && !assignedIds.has(toolkit.id),
+    );
+  }, [composioToolkitsData, profileComposioData]);
+
   const assignedSkillIds = useMemo(
     () => new Set(detail?.skills.map((skill) => skill.id) ?? []),
     [detail?.skills],
@@ -727,6 +774,29 @@ export function ProfilesPage() {
     }
   }
 
+  async function handleAssignComposioToolkit(toolkitId: string) {
+    if (!selectedId || !profileComposioData) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await updateComposioMutation.mutateAsync({
+        profileId: selectedId,
+        assignments: [
+          ...profileComposioData.assignments.map((assignment) => ({
+            toolkitId: assignment.toolkitId,
+            allowedActions: assignment.allowedActions,
+          })),
+          { toolkitId },
+        ],
+      });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleRemoveAssignmentConfirm() {
     if (!selectedId || !removeConfirm) {
       return;
@@ -739,6 +809,20 @@ export function ProfilesPage() {
         await unassignMutation.mutateAsync({ profileId: selectedId, toolId: removeConfirm.id });
       } else if (removeConfirm.kind === "mcp") {
         await unassignMcpMutation.mutateAsync({ profileId: selectedId, serverId: removeConfirm.id });
+      } else if (removeConfirm.kind === "composio") {
+        if (!profileComposioData) {
+          return;
+        }
+
+        await updateComposioMutation.mutateAsync({
+          profileId: selectedId,
+          assignments: profileComposioData.assignments
+            .filter((assignment) => assignment.toolkitId !== removeConfirm.id)
+            .map((assignment) => ({
+              toolkitId: assignment.toolkitId,
+              allowedActions: assignment.allowedActions,
+            })),
+        });
       } else {
         await unassignSkillMutation.mutateAsync({ profileId: selectedId, skillId: removeConfirm.id });
       }
@@ -1218,6 +1302,74 @@ export function ProfilesPage() {
                       )}
                     </div>
 
+                    {composioToolkitsData?.configured ? (
+                      <div className="pt-5">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h3 className="type-section-title">Composio toolkits</h3>
+                            {assignedComposioToolkits.length > 0 ? (
+                              <p className="type-body mt-1 text-xs">
+                                {assignedComposioToolkits.length} assigned
+                              </p>
+                            ) : null}
+                          </div>
+                          <ComposioToolkitAssignPicker
+                            toolkits={availableComposioToolkits}
+                            disabled={busy}
+                            buttonLabel="Assign toolkit"
+                            onAssign={handleAssignComposioToolkit}
+                          />
+                        </div>
+
+                        {composioToolkitsData.orgToolkits.length === 0 ? (
+                          <p className="type-body text-xs text-muted-foreground">
+                            Ask an org admin to enable apps on Integrations first.
+                          </p>
+                        ) : assignedComposioToolkits.length === 0 ? null : (
+                          <ul className="divide-y divide-border rounded-md border border-border">
+                            {assignedComposioToolkits.map(({ toolkit, userConnection }) => (
+                              <li
+                                key={toolkit.id}
+                                className="flex items-center justify-between gap-2 px-3 py-2 first:rounded-t-md last:rounded-b-md"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium leading-tight text-foreground">
+                                    {toolkit.displayName}
+                                  </p>
+                                  <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                                    Org: {toolkit.status}
+                                    {userConnection?.status === "connected"
+                                      ? " · You: connected"
+                                      : " · You: not connected — connect on Integrations"}
+                                    {toolkit.cachedTools.length > 0
+                                      ? ` · ${toolkit.cachedTools.length} tool${toolkit.cachedTools.length === 1 ? "" : "s"}`
+                                      : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                                  disabled={busy}
+                                  aria-label={`Remove ${toolkit.displayName}`}
+                                  onClick={() =>
+                                    setRemoveConfirm({
+                                      kind: "composio",
+                                      id: toolkit.id,
+                                      name: toolkit.displayName,
+                                    })
+                                  }
+                                >
+                                  <Trash2Icon className="size-4" aria-hidden />
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : null}
+
                     <div className="pt-5">
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -1421,14 +1573,18 @@ export function ProfilesPage() {
                 ? "Delete MCP server?"
                 : removeConfirm?.kind === "skill"
                   ? "Delete skill?"
-                  : "Delete tool?"}
+                  : removeConfirm?.kind === "composio"
+                    ? "Remove Composio toolkit?"
+                    : "Delete tool?"}
             </DialogTitle>
             <DialogDescription>
               {removeConfirm?.kind === "mcp"
                 ? `Delete "${removeConfirm.name}" from this profile? The server stays registered in Soul.`
                 : removeConfirm?.kind === "skill"
                   ? `Delete "${removeConfirm.name}" from this profile? The skill stays available to assign again.`
-                  : `Delete "${removeConfirm?.name}" from this profile?`}
+                  : removeConfirm?.kind === "composio"
+                    ? `Remove "${removeConfirm.name}" from this profile? The org connection stays on Integrations.`
+                    : `Delete "${removeConfirm?.name}" from this profile?`}
             </DialogDescription>
           </DialogHeader>
 

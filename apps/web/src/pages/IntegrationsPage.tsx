@@ -5,10 +5,13 @@ import {
   BotIcon,
   KeyRoundIcon,
   MessageCircleMoreIcon,
+  PlugIcon,
   SendIcon,
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { CodingHarnessSettingsPanel } from "@/components/CodingHarnessSettingsDialog";
+import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
+import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
@@ -37,6 +40,12 @@ const INTEGRATION_SECTIONS = [
     icon: BellRingIcon,
   },
   {
+    id: "composio",
+    label: "Composio",
+    description: "SaaS app connections",
+    icon: PlugIcon,
+  },
+  {
     id: "coding-agents",
     label: "Coding agents",
     description: "Coding agent CLI",
@@ -57,6 +66,7 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "token" ||
     value === "notifications" ||
     value === "whatsapp" ||
+    value === "composio" ||
     value === "coding-agents"
   ) {
     return value;
@@ -68,7 +78,6 @@ function resolveSection(value: string | null): IntegrationSectionId {
 export function IntegrationsPage() {
   const { activeOrg, isLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const section = resolveSection(searchParams.get("section"));
 
   if (isLoading) {
     return (
@@ -78,15 +87,21 @@ export function IntegrationsPage() {
     );
   }
 
-  if (activeOrg?.role !== "admin") {
+  if (activeOrg?.role === "viewer") {
     return <Navigate to="/chat" replace />;
   }
+
+  const isOrgAdmin = activeOrg?.role === "admin";
+  const section = resolveSection(isOrgAdmin ? searchParams.get("section") : "composio");
+  const visibleSections = isOrgAdmin
+    ? INTEGRATION_SECTIONS
+    : INTEGRATION_SECTIONS.filter((item) => item.id === "composio");
 
   function setSection(nextSection: IntegrationSectionId) {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
-        if (nextSection === "token") {
+        if (nextSection === "telegram") {
           next.delete("section");
         } else {
           next.set("section", nextSection);
@@ -102,8 +117,9 @@ export function IntegrationsPage() {
       <header className="space-y-1">
         <h1 className="type-page-title">Integrations</h1>
         <p className="type-body max-w-2xl">
-          Manage bridge access, coding agents, Telegram setup, notification webhooks, and WhatsApp
-          linking from one place.
+          {isOrgAdmin
+            ? "Manage bridge access, coding agents, Composio SaaS connections, Telegram setup, notification webhooks, and WhatsApp linking from one place."
+            : "View org-enabled SaaS toolkits and connection status. Connect accounts from chat."}
         </p>
       </header>
 
@@ -113,7 +129,7 @@ export function IntegrationsPage() {
             aria-label="Integration settings"
             className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
           >
-            {INTEGRATION_SECTIONS.map((item) => (
+            {visibleSections.map((item) => (
               <SidebarButton
                 key={item.id}
                 label={item.label}
@@ -137,6 +153,13 @@ export function IntegrationsPage() {
           ) : null}
 
           {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
+
+          {section === "composio" ? (
+            <div className="space-y-4">
+              {isOrgAdmin ? <ComposioSettingsCard /> : null}
+              <ComposioConnectionsCard />
+            </div>
+          ) : null}
 
           {section === "telegram" ? (
             <IntegrationSection

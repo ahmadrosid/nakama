@@ -79,7 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [orgs, user]);
 
   const setup = useCallback(async (request: SetupAuthRequest) => {
-    await client.setupUser(request);
+    const webPublicUrl =
+      request.webPublicUrl ??
+      (typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : undefined);
+
+    await client.setupUser({
+      ...request,
+      ...(webPublicUrl ? { webPublicUrl } : {}),
+    });
     await refreshSession();
   }, [refreshSession]);
 

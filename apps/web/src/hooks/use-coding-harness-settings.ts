@@ -41,10 +41,37 @@ export function useVerifyCodingHarness() {
 
   return useMutation({
     mutationFn: (request: VerifyCodingHarnessRequest) => client.verifyCodingHarness(request),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.codingHarnesses.settings,
-      });
+    onSuccess: (result) => {
+      queryClient.setQueryData(
+        queryKeys.codingHarnesses.settings,
+        (current) => {
+          if (!current || !result.harnessId) {
+            return current;
+          }
+
+          const harnesses = current.harnesses.map((harness) =>
+            harness.id === result.harnessId
+              ? {
+                  ...harness,
+                  version: result.version ?? harness.version,
+                  authenticated: result.authenticated,
+                  ready: result.ready,
+                  nextStep: result.nextStep,
+                  statusMessage: result.statusMessage,
+                }
+              : harness,
+          );
+
+          const activeHarnessId = result.ready ? result.harnessId : current.activeHarnessId;
+
+          return {
+            ...current,
+            configured: result.ready,
+            activeHarnessId,
+            harnesses,
+          };
+        },
+      );
     },
   });
 }

@@ -24,6 +24,8 @@ export function migrateDatabase(db: Database): void {
   migrateAttachmentsTable(db);
   migrateAutomationRunsTable(db);
   migrateAutomationRunReadStateTable(db);
+  migrateComposioTables(db);
+  migrateComposioUserConnections(db);
 }
 
 export function resolveSchemaPath(options: {
@@ -732,5 +734,173 @@ function migrateAttachmentsTable(db: Database): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
+  `);
+}
+
+function migrateComposioUserConnections(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS composio_user_connections (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      toolkit_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      connected_account_id TEXT,
+      session_id_enc TEXT,
+      oauth_state_hash TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      FOREIGN KEY (toolkit_id) REFERENCES composio_toolkits (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS composio_user_connections_user_toolkit_unique
+      ON composio_user_connections (user_id, toolkit_id);
+
+    CREATE INDEX IF NOT EXISTS composio_user_connections_org_user
+      ON composio_user_connections (org_id, user_id);
+  `);
+
+  const legacyToolkits = db
+    .prepare(
+      `
+      SELECT
+        id,
+        org_id,
+        status,
+        connected_account_id,
+        session_id_enc,
+        oauth_state_hash,
+        last_error,
+        created_at,
+        updated_at
+      FROM composio_toolkits
+      WHERE status IN ('connected', 'oauth_in_progress', 'error')
+         OR connected_account_id IS NOT NULL
+         OR oauth_state_hash IS NOT NULL
+         OR session_id_enc IS NOT NULL
+    `,
+    )
+    .all() as Array<{
+    id: string;
+    org_id: string;
+    status: string;
+    connected_account_id: string | null;
+    session_id_enc: string | null;
+    oauth_state_hash: string | null;
+    last_error: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  const findAdminStmt = db.prepare(`
+    SELECT user_id
+    FROM org_members
+    WHERE org_id = ? AND role = 'admin'
+    ORDER BY created_at ASC
+    LIMIT 1
+  `);
+  const existingConnectionStmt = db.prepare(`
+    SELECT id FROM composio_user_connections WHERE toolkit_id = ? LIMIT 1
+  `);
+  const insertConnectionStmt = db.prepare(`
+    INSERT INTO composio_user_connections (
+      id,
+      org_id,
+      user_id,
+      toolkit_id,
+      status,
+      connected_account_id,
+      session_id_enc,
+      oauth_state_hash,
+      last_error,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const normalizeToolkitStmt = db.prepare(`
+    UPDATE composio_toolkits
+    SET
+      status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'enabled' END,
+      connected_account_id = NULL,
+      session_id_enc = NULL,
+      oauth_state_hash = NULL,
+      updated_at = ?
+    WHERE id = ?
+  `);
+
+  const now = new Date().toISOString();
+
+  for (const toolkit of legacyToolkits) {
+    if (existingConnectionStmt.get(toolkit.id)) {
+      normalizeToolkitStmt.run(now, toolkit.id);
+      continue;
+    }
+
+    const adminRow = findAdminStmt.get(toolkit.org_id) as { user_id: string } | null;
+    if (!adminRow?.user_id) {
+      normalizeToolkitStmt.run(now, toolkit.id);
+      continue;
+    }
+
+    const connectionStatus =
+      toolkit.status === "oauth_in_progress"
+        ? "oauth_in_progress"
+        : toolkit.status === "error"
+          ? "error"
+          : "connected";
+
+    insertConnectionStmt.run(
+      `cuc_${toolkit.id}`,
+      toolkit.org_id,
+      adminRow.user_id,
+      toolkit.id,
+      connectionStatus,
+      toolkit.connected_account_id,
+      toolkit.session_id_enc,
+      toolkit.oauth_state_hash,
+      toolkit.last_error,
+      toolkit.created_at,
+      toolkit.updated_at,
+    );
+
+    normalizeToolkitStmt.run(now, toolkit.id);
+  }
+}
+
+function migrateComposioTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS composio_toolkits (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      toolkit_slug TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      connected_account_id TEXT,
+      session_id_enc TEXT,
+      oauth_state_hash TEXT,
+      cached_tools TEXT NOT NULL DEFAULT '[]',
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS composio_toolkits_org_slug_unique
+      ON composio_toolkits (org_id, toolkit_slug);
+
+    CREATE INDEX IF NOT EXISTS composio_toolkits_org_id
+      ON composio_toolkits (org_id);
+
+    CREATE TABLE IF NOT EXISTS profile_composio_toolkits (
+      profile_id TEXT NOT NULL,
+      toolkit_id TEXT NOT NULL,
+      allowed_actions TEXT,
+      PRIMARY KEY (profile_id, toolkit_id),
+      FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+      FOREIGN KEY (toolkit_id) REFERENCES composio_toolkits (id) ON DELETE CASCADE
+    );
   `);
 }

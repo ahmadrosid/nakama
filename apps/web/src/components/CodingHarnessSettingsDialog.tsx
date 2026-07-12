@@ -224,14 +224,7 @@ export function CodingHarnessSettingsPanel({
   }
 
   if (isLoading) {
-    return (
-      <Card className="shadow-none">
-        <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-          <Spinner />
-          Loading coding agent setup…
-        </CardContent>
-      </Card>
-    );
+    return <CodingHarnessSettingsSkeleton embedded={embedded} />;
   }
 
   if (error) {
@@ -470,6 +463,56 @@ export function CodingHarnessSettingsPanel({
             >
               {saveMutation.isPending ? <Spinner className="size-4" /> : "Save selected agent"}
             </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolean }) {
+  return (
+    <Card className={cn("shadow-none", embedded ? "border-border" : "border-0 shadow-none")}>
+      <CardContent
+        className="space-y-5 p-6"
+        aria-busy="true"
+        aria-label="Loading coding agents"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="skeleton-shimmer h-5 w-28 rounded" />
+            <div className="skeleton-shimmer h-4 w-full max-w-sm rounded" />
+          </div>
+          <div className="skeleton-shimmer h-7 w-32 rounded-full" />
+        </div>
+
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="rounded-lg border border-border px-4 py-3.5">
+              <div className="flex items-start gap-3">
+                <div className="skeleton-shimmer mt-0.5 size-4 shrink-0 rounded" />
+                <div className="min-w-0 flex-1 space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="skeleton-shimmer h-4 w-24 rounded" />
+                    <div className="skeleton-shimmer h-5 w-28 rounded-full" />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <div className="skeleton-shimmer h-5 w-[5.5rem] rounded-full" />
+                    <div className="skeleton-shimmer h-5 w-[7.25rem] rounded-full" />
+                    <div className="skeleton-shimmer h-5 w-[6.25rem] rounded-full" />
+                  </div>
+                </div>
+                <div className="skeleton-shimmer size-7 shrink-0 rounded-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="skeleton-shimmer h-3 w-full max-w-xs rounded" />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="skeleton-shimmer h-9 w-24 rounded-md" />
+            <div className="skeleton-shimmer h-9 w-36 rounded-md" />
           </div>
         </div>
       </CardContent>

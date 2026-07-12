@@ -21,6 +21,7 @@ import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
+import { ComposioService } from "./services/composio-service";
 import { SkillsService } from "./services/skills-service";
 import { AuthService } from "./services/auth-service";
 import { OrgService } from "./services/org-service";
@@ -76,10 +77,12 @@ await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
 const mcpClientManager = new McpClientManager();
 const mcpService = new McpService(database.adapter, mcpClientManager);
+const composioService = new ComposioService(database.adapter, authService);
 const skillsService = new SkillsService(database.adapter);
 
 agent.setMcpClientManager(mcpClientManager);
 agent.setMcpService(mcpService);
+agent.setComposioService(composioService);
 agent.setSkillsService(skillsService);
 
 const automationService = new AutomationService(database.adapter, {
@@ -115,6 +118,8 @@ const systemStatus = new SystemStatusService(
   taskRunner,
   workerManager,
   mcpService,
+  composioService,
+  database.adapter,
 );
 
 const webDistDir = resolveWebDistDir(projectRoot);
@@ -125,6 +130,7 @@ const app = createHonoApp({
   systemStatus,
   workerManager,
   mcpService,
+  composioService,
   authService,
   orgService,
   databaseAdapter: database.adapter,

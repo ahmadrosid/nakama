@@ -7,10 +7,12 @@ import type {
   ProfileSummary,
 } from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
+import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { RemoteChatSession } from "@nakama/client";
 import { ChatComposer } from "@/components/chat/chat-composer";
+import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";
 import { useProfileQuery } from "@/hooks/use-app-queries";
@@ -59,6 +61,13 @@ interface SendMessageOptions {
   questionnaireAnswers?: AgentQuestionAnswer[];
 }
 
+interface QueuedSend {
+  id: string;
+  text: string;
+  files: FileUIPart[];
+  options: SendMessageOptions;
+}
+
 export function ChatPage() {
   const params = useParams();
   const location = useLocation();
@@ -80,7 +89,10 @@ export function ChatPage() {
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composerDraft, setComposerDraft] = useState("");
+  const [queuedMessages, setQueuedMessages] = useState<QueuedComposerMessage[]>([]);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const messageQueueRef = useRef<QueuedSend[]>([]);
+  const isSendingRef = useRef(false);
   const skipNextProfileSessionRef = useRef(false);
   const loadedRouteRef = useRef<string | null>(null);
   const profileSwitchInFlightRef = useRef(false);
@@ -222,6 +234,9 @@ export function ChatPage() {
       localStorage.removeItem(sessionStorageKey(nextProfileId));
       skipNextProfileSessionRef.current = true;
       loadedRouteRef.current = null;
+      messageQueueRef.current = [];
+      isSendingRef.current = false;
+      setQueuedMessages([]);
       setSession(null);
       setSessionChannel("web");
       setMessages([]);
@@ -388,22 +403,20 @@ export function ChatPage() {
     streamAbortRef.current?.abort();
   }, []);
 
-  const sendMessage = useCallback(
-    async (text: string, files: FileUIPart[] = [], options: SendMessageOptions = {}) => {
-      if (readOnlySession) {
-        return;
-      }
+  const executeSend = useCallback(
+    async (
+      text: string,
+      files: FileUIPart[] = [],
+      options: SendMessageOptions = {},
+      queueItem?: QueuedSend,
+    ) => {
+      isSendingRef.current = true;
+      setBusy(true);
+      setError(null);
 
       const images = filePartsToImageAttachments(files);
       const documents = filePartsToDocumentAttachments(files);
       const displayDocuments = filePartsToDisplayDocuments(files);
-
-      if ((!text.trim() && images.length === 0 && documents.length === 0) || !profileId || busy) {
-        return;
-      }
-
-      setBusy(true);
-      setError(null);
 
       if (options.initialMessages) {
         setMessages(options.initialMessages);
@@ -411,7 +424,30 @@ export function ChatPage() {
         setAgentQuestionnaire(null);
       }
 
+      setAgentQuestionnaire(null);
+
+      const displayImages = images.map((image) => ({
+        mediaType: image.mediaType,
+        url: `data:${image.mediaType};base64,${image.data}`,
+      }));
+      const useImageAttachments = activeModelSupportsVision === false;
+      const outgoingOptions = {
+        thinkingEnabled: showThinking,
+        imageAttachments:
+          useImageAttachments && displayImages.length > 0 ? displayImages : undefined,
+        questionnaireAnswers: options.questionnaireAnswers,
+      };
+
+      appendOutgoingMessages(
+        setMessages,
+        text,
+        useImageAttachments ? [] : displayImages,
+        displayDocuments.length > 0 ? displayDocuments : undefined,
+        outgoingOptions,
+      );
+
       let activeSession = options.sessionOverride ?? session;
+      let shouldDrainQueue = true;
 
       if (!activeSession) {
         try {
@@ -422,31 +458,22 @@ export function ChatPage() {
           syncChatUrl(profileId, activeSession.id);
         } catch (err) {
           setError(formatError(err));
-          setBusy(false);
+          shouldDrainQueue = false;
+          setMessages((current) => current.slice(0, -2));
+          if (queueItem) {
+            messageQueueRef.current.unshift(queueItem);
+            setQueuedMessages((current) => [
+              {
+                id: queueItem.id,
+                text: queueItem.text,
+                attachmentCount: queueItem.files.length,
+              },
+              ...current,
+            ]);
+          }
           return;
         }
       }
-
-      setAgentQuestionnaire(null);
-
-      const displayImages = images.map((image) => ({
-        mediaType: image.mediaType,
-        url: `data:${image.mediaType};base64,${image.data}`,
-      }));
-      const useImageAttachments = activeModelSupportsVision === false;
-
-      appendOutgoingMessages(
-        setMessages,
-        text,
-        useImageAttachments ? [] : displayImages,
-        displayDocuments.length > 0 ? displayDocuments : undefined,
-        {
-          thinkingEnabled: showThinking,
-          imageAttachments:
-            useImageAttachments && displayImages.length > 0 ? displayImages : undefined,
-          questionnaireAnswers: options.questionnaireAnswers,
-        },
-      );
 
       const abortController = new AbortController();
       streamAbortRef.current = abortController;
@@ -506,9 +533,54 @@ export function ChatPage() {
         streamAbortRef.current = null;
         setCanStop(false);
         setBusy(false);
+
+        const next = shouldDrainQueue ? messageQueueRef.current.shift() : null;
+        if (next) {
+          setQueuedMessages((current) => current.filter((item) => item.id !== next.id));
+          void executeSend(next.text, next.files, next.options, next);
+        } else {
+          isSendingRef.current = false;
+        }
       }
     },
-    [session, busy, profileId, syncChatUrl, showThinking, activeModelSupportsVision, readOnlySession],
+    [session, profileId, syncChatUrl, showThinking, activeModelSupportsVision],
+  );
+
+  const sendMessage = useCallback(
+    async (text: string, files: FileUIPart[] = [], options: SendMessageOptions = {}) => {
+      if (readOnlySession) {
+        return;
+      }
+
+      const images = filePartsToImageAttachments(files);
+      const documents = filePartsToDocumentAttachments(files);
+
+      if ((!text.trim() && images.length === 0 && documents.length === 0) || !profileId) {
+        return;
+      }
+
+      if (isSendingRef.current) {
+        const queuedItem: QueuedSend = {
+          id: nanoid(),
+          text,
+          files,
+          options,
+        };
+        messageQueueRef.current.push(queuedItem);
+        setQueuedMessages((current) => [
+          ...current,
+          {
+            id: queuedItem.id,
+            text: queuedItem.text,
+            attachmentCount: queuedItem.files.length,
+          },
+        ]);
+        return;
+      }
+
+      await executeSend(text, files, options);
+    },
+    [executeSend, profileId, readOnlySession],
   );
 
   const handleTryAgainMessage = useCallback(
@@ -621,6 +693,7 @@ export function ChatPage() {
         renderModelLabel={renderModelLabel}
         todos={agentTodos}
         questionnaire={agentQuestionnaire}
+        queuedMessages={queuedMessages}
         onSubmitQuestionnaire={(answers) => {
           setComposerDraft("");
           void sendMessage(formatAgentQuestionnaireAnswersMessage(answers), [], {

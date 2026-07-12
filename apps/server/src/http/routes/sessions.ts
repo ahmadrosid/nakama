@@ -20,7 +20,7 @@ import {
   getRequestAuth,
 } from "../shared";
 import { requireActiveOrgIdFromContext } from "../org-guards";
-import type { ServerOptions } from "../context";
+import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { HonoApp } from "../types";
 
 export function registerSessionRoutes(app: HonoApp, options: ServerOptions): void {
@@ -92,6 +92,7 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     images: z.array(z.object({}).passthrough()).optional(),
     documents: z.array(z.object({}).passthrough()).optional(),
     stream: z.boolean().optional(),
+    clientOrigin: z.string().optional(),
   }).openapi("SendMessageRequest");
   const sendMessageResponseSchema = z.object({ reply: z.string() }).openapi("SendMessageResponse");
   const sessionIdParamSchema = z.object({
@@ -294,10 +295,12 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     }
 
     const body = await readJson<SendMessageRequest>(c.req.raw);
+    const clientOrigin = resolveRequestClientOrigin(c.req.raw, body.clientOrigin);
     const input = {
       message: body.message ?? "",
       images: body.images,
       documents: body.documents,
+      ...(clientOrigin ? { clientOrigin } : {}),
     };
     const wantsStream =
       body.stream === true ||

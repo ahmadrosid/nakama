@@ -84,7 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         id: "integrations",
         label: "Integrations",
-        description: "Telegram and WhatsApp connections",
+        description: "Bridges, Composio, and coding agents",
       },
       {
         id: "soul",
@@ -124,6 +124,10 @@ export function canAccessSystemPage(
   orgRole: string | undefined,
 ): boolean {
   return isPlatformAdmin || orgRole === "admin";
+}
+
+export function canAccessIntegrationsPage(orgRole: string | undefined): boolean {
+  return orgRole === "admin" || orgRole === "member";
 }
 
 export function canUseToolPlayground(

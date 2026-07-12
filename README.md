@@ -65,7 +65,9 @@ The dashboard will be available at http://localhost:4310.
 
 ### Integrations
 
-Nakama integrates with **Telegram** and **WhatsApp**. Enable them in the web app under **Integrations**.
+Nakama integrates with **Telegram**, **WhatsApp**, and **Composio** (SaaS app connections). Enable them in the web app under **Integrations**.
+
+For Composio, save your API key under **Integrations → Composio** (stored in `~/.nakama/composio/config.ini`). Org admins connect OAuth apps on Integrations; assign toolkits per profile on **Profiles**.
 
 On first run, the server prompts for a provider and API key if none is configured. Settings are saved to `~/.nakama/config.ini`.
 

@@ -142,11 +142,47 @@
       color: var(--foreground);
     }
   }
+
+  .skeleton-shimmer {
+    @apply relative overflow-hidden bg-muted;
+  }
+
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    translate: -100% 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklch, var(--foreground) 10%, transparent) 50%,
+      transparent 100%
+    );
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    to {
+      translate: 100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-shimmer::after {
+      animation: none;
+    }
+  }
 }
 
 @layer components {
   .panel {
     @apply rounded-md border border-border bg-card;
+  }
+
+  /* Chat composer must stay fully opaque — InputGroup defaults use dark:bg-input/30 and has-disabled:opacity-50. */
+  .chat-composer-input {
+    background-color: var(--card) !important;
+    opacity: 1 !important;
   }
 
   .btn {

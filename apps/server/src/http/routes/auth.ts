@@ -11,6 +11,10 @@ import {
   type SetActiveOrgRequest,
   type SetupAuthRequest,
 } from "@nakama/core";
+import {
+  persistWebPublicUrl,
+  resolveRequestClientOrigin,
+} from "../../services/composio-callback-url";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
@@ -65,6 +69,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
                   phone: z.string().optional(),
                   password: z.string(),
                 }),
+                webPublicUrl: z.string().optional(),
               })
               .openapi("SetupAuthRequest"),
           },
@@ -237,6 +242,15 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     if (password.length < 8) {
       return errorResponse("Password must be at least 8 characters.", 400);
+    }
+
+    const webPublicUrl = resolveRequestClientOrigin(c.req.raw, body.webPublicUrl);
+    if (webPublicUrl) {
+      try {
+        await persistWebPublicUrl(webPublicUrl);
+      } catch (error) {
+        return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      }
     }
 
     const { user, organization } = await orgService.bootstrapInitialSetup({

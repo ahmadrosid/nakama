@@ -3,6 +3,8 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   buildCodingHarnessInstallPlan,
   isCodingAgentCommand,
+  listCodingAgentHarnessStatuses,
+  refreshCodingAgentHarnessProbe,
   resolveCodingAgentHarness,
 } from "./coding-agent-harness-service";
 
@@ -67,5 +69,59 @@ describe("coding-agent harness resolution", () => {
 
     expect(harness.kind).toBe("codex");
     expect(harness.ready).toBe(true);
+  });
+
+  test("listCodingAgentHarnessStatuses skips readiness probes by default", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: "workspace-settings",
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-codex",
+          kind: "codex",
+          name: "Codex",
+          command: "__missing_codex__",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const statuses = await listCodingAgentHarnessStatuses(db);
+
+    expect(statuses).toHaveLength(3);
+    expect(statuses.find((harness) => harness.kind === "codex")?.installed).toBe(false);
+    expect(statuses.find((harness) => harness.kind === "codex")?.ready).toBe(false);
+  });
+
+  test("refreshCodingAgentHarnessProbe persists cached readiness", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: "workspace-settings",
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-codex",
+          kind: "codex",
+          name: "Codex",
+          command: "echo",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: "coding-harness-codex",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const probed = await refreshCodingAgentHarnessProbe(db, "coding-harness-codex");
+    expect(probed.ready).toBe(true);
+
+    const cached = await listCodingAgentHarnessStatuses(db);
+    expect(cached.find((harness) => harness.id === "coding-harness-codex")?.ready).toBe(true);
   });
 });

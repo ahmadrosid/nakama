@@ -13,6 +13,8 @@ export interface NakamaClientOptions {
   authToken?: string;
   credentials?: RequestCredentials;
   orgId?: string | null;
+  /** Browser-style origin for OAuth callbacks when this client has no window (e.g. Telegram bridge). */
+  clientOrigin?: string;
 }
 
 export type StreamHandler = (delta: string) => void;

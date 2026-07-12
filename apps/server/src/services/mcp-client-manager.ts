@@ -151,6 +151,79 @@ export class McpClientManager {
     }
   }
 
+  async connectHttpEndpoint(
+    connectionKey: string,
+    url: string,
+    headers?: Record<string, string>,
+  ): Promise<CachedMcpTool[]> {
+    await this.disconnectKey(connectionKey);
+
+    const transport = new StreamableHTTPClientTransport(new URL(url), {
+      requestInit: {
+        headers,
+      },
+    });
+    const client = new Client({
+      name: "nakama",
+      version: "1.0.0",
+    });
+
+    await client.connect(transport);
+    const result = await client.listTools();
+    const tools = normalizeListedTools(result.tools);
+    this.connections.set(connectionKey, { client, transport });
+    return tools;
+  }
+
+  isHttpEndpointConnected(connectionKey: string): boolean {
+    return this.connections.has(connectionKey);
+  }
+
+  async callHttpEndpointTool(
+    connectionKey: string,
+    toolName: string,
+    input: unknown,
+  ): Promise<unknown> {
+    const client = this.requireClientByKey(connectionKey);
+    const result = await client.callTool({
+      name: toolName,
+      arguments: asToolArguments(input),
+    });
+
+    if ("toolResult" in result) {
+      return result.toolResult;
+    }
+
+    if (result.isError) {
+      return {
+        error: formatToolContent(result.content),
+      };
+    }
+
+    if (result.structuredContent !== undefined) {
+      return result.structuredContent;
+    }
+
+    return {
+      content: result.content,
+      text: formatToolContent(result.content),
+    };
+  }
+
+  async disconnectHttpEndpoint(connectionKey: string): Promise<void> {
+    await this.disconnectKey(connectionKey);
+  }
+
+  private requireClientByKey(connectionKey: string): Client {
+    const connection = this.connections.get(connectionKey);
+
+    if (!connection) {
+      throw new Error(`HTTP MCP endpoint "${connectionKey}" is not connected.`);
+    }
+
+    return connection.client;
+  }
+
   private requireClient(
     serverId: string,
     transport: McpTransport,

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
+    "@composio/core": "^0.13.1",
     "@countrystatecity/timezones": "^1.0.5",
     "@google/genai": "^2.7.0",
     "@hono/zod-openapi": "^1.4.0",

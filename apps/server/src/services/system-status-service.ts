@@ -3,10 +3,13 @@ import {
   getAutomationWorkerHeartbeatStatus,
   getTelegramWorkerStatus,
   getWhatsAppWorkerStatus,
+  isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
 } from "@nakama/core";
+import type { DatabaseAdapter } from "@nakama/db";
 import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
+import type { ComposioService } from "./composio-service";
 import type { McpService } from "./mcp-service";
 import type { TaskRunner } from "./task-runner";
 import type { WorkerManagerService } from "./worker-manager-service";
@@ -18,6 +21,8 @@ export class SystemStatusService {
     private readonly taskRunner: TaskRunner,
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
+    private readonly composioService: ComposioService | null = null,
+    private readonly databaseAdapter: DatabaseAdapter | null = null,
   ) {}
 
   async getStatus(): Promise<SystemStatusResponse> {
@@ -38,7 +43,7 @@ export class SystemStatusService {
     ]);
 
     return {
-      server: this.getServerStatus(),
+      server: await this.getServerStatus(),
       automationWorker: {
         ok: automationManagedOnline && automationRunning,
         running: automationRunning,
@@ -119,11 +124,19 @@ export class SystemStatusService {
     };
   }
 
-  private getServerStatus(): HealthResponse {
+  private async getServerStatus(): Promise<HealthResponse> {
+    const composioConfigured = await isComposioConfiguredAsync();
+    const humanUserCount = (await this.databaseAdapter?.countHumanUsers()) ?? 0;
+
     return {
       ok: true,
       apiVersion: NAKAMA_API_VERSION,
       providerConfigured: this.agent.providerConfigured,
+      userConfigured: humanUserCount > 0,
+      composioConfigured,
+      composioAvailable: composioConfigured
+        ? await (this.composioService?.isReachable() ?? false)
+        : false,
     };
   }
 }

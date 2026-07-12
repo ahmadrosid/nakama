@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { normalizeBaseUrl } from "./compatible-provider-config";
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE } from "./fs";
-import { getUserConfigDir } from "./user-config";
+import { getUserConfigDir, readUserWebPublicUrlSync } from "./user-config";
 
 export const DEFAULT_SERVER_HOST = "127.0.0.1";
 export const DEFAULT_SERVER_PORT = 4310;
@@ -52,4 +52,16 @@ export function resolveServerUrl(
   return normalizeBaseUrl(
     env.nakama_SERVER_URL?.trim() || readRuntimeServerUrl() || DEFAULT_SERVER_URL,
   );
+}
+
+/** Public web app origin for OAuth callbacks from non-browser clients (Telegram, WhatsApp, CLI). */
+export function resolveWebPublicUrl(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const configured = env.NAKAMA_WEB_PUBLIC_URL?.trim() || env.NAKAMA_PUBLIC_URL?.trim();
+  if (configured) {
+    return normalizeBaseUrl(configured);
+  }
+
+  return readUserWebPublicUrlSync() ?? undefined;
 }

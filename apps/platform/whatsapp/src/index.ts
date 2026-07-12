@@ -2,6 +2,7 @@ import { createClient } from "@nakama/client";
 import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
 import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import {
   clearWhatsAppWorkerHeartbeat,
   writeWhatsAppWorkerHeartbeat,
@@ -46,6 +47,7 @@ try {
   const client = createClient({
     baseUrl: serverUrl,
     authToken: (await loadLocalAuthToken("whatsapp@nakama.internal")) ?? undefined,
+    clientOrigin: resolveWebPublicUrl(),
   });
   const health = await client.health();
 

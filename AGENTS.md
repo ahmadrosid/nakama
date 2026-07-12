@@ -82,6 +82,7 @@ Loaded by `loadSoulStack()` (`load.ts`); injected by `composeSoulSystemPrompt()`
 - `search_files` / `ripgrep` — file/content search
 - `bash` (Super Bot) — run shell commands in the profile workspace
 - `coding-delegation` skill — invoke Codex / Claude Code / OpenCode for repo coding work via `bash` and harness CLI templates
+- Composio — hybrid org toolkit catalog + per-user OAuth via Integrations (see `docs/website/composio.md`)
 
 ## Tool execution & workspace
 

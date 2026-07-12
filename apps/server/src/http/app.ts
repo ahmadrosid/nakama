@@ -24,6 +24,7 @@ import { registerCodingAgentRoutes } from "./routes/coding-agents";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
 import { registerNotificationWebhookRoutes } from "./routes/notification-webhooks";
+import { registerComposioOAuthRoutes, registerComposioRoutes } from "./routes/composio";
 import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { tryServeStaticWeb } from "../static-web";
 import { serializeHttpOpenApiSpec } from "./openapi";
@@ -61,6 +62,7 @@ export function createHonoApp(options: ServerOptions) {
   app.use("*", createAuthMiddleware(options));
   registerInternalAutomationRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
+  registerComposioOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
   registerSystemRoutes(app, options);
   registerAuthRoutes(app, options);
@@ -74,6 +76,7 @@ export function createHonoApp(options: ServerOptions) {
   registerToolRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
+  registerComposioRoutes(app, options);
   registerTaskRoutes(app, options);
   registerPlatformOrgRoutes(app, options);
   registerDataPortabilityRoutes(app, options);
