@@ -167,6 +167,14 @@ export interface StoredWorkspaceSettingsRecord {
 
 export type StoredCodingAgentHarnessKind = "codex" | "claude_code" | "opencode";
 
+export interface StoredCodingAgentHarnessProbeCache {
+  checkedAt: string;
+  authenticated: boolean | null;
+  ready: boolean;
+  nextStep: "install" | "login" | "retry" | null;
+  statusMessage: string | null;
+}
+
 export interface StoredCodingAgentHarnessRecord {
   id: string;
   kind: StoredCodingAgentHarnessKind;
@@ -174,6 +182,7 @@ export interface StoredCodingAgentHarnessRecord {
   command: string;
   args: string[];
   enabled: boolean;
+  probeCache?: StoredCodingAgentHarnessProbeCache | null;
 }
 
 export interface StoredNotificationDestinationRecord {

@@ -4,6 +4,7 @@ import path from "node:path";
 import type {
   DatabaseAdapter,
   StoredCodingAgentHarnessKind,
+  StoredCodingAgentHarnessProbeCache,
   StoredCodingAgentHarnessRecord,
 } from "@nakama/db";
 import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
@@ -68,6 +69,15 @@ export interface CodingAgentWorkspaceSettings {
   selectedHarnessId: string | null;
 }
 
+const PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export interface ListCodingAgentHarnessStatusesOptions {
+  /** When true, run live readiness probes for installed harnesses. Default false (use cache). */
+  probe?: boolean;
+  /** When set with probe, only probe this harness id. */
+  harnessId?: string | null;
+}
+
 export interface CodingAgentHarnessInstallProgress {
   harnessId: string;
   name: string;
@@ -114,8 +124,12 @@ export async function loadCodingAgentWorkspaceSettings(
 
 export async function listCodingAgentHarnessStatuses(
   db: DatabaseAdapter,
+  options: ListCodingAgentHarnessStatusesOptions = {},
 ): Promise<CodingAgentHarnessStatus[]> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
+  const probe = options.probe ?? false;
+  const probeHarnessId = options.harnessId ?? null;
+
   return Promise.all(
     settings.harnesses.map(async (harness) => {
       const runtime = await getHarnessRuntimeStatus(harness.command);
@@ -131,7 +145,14 @@ export async function listCodingAgentHarnessStatuses(
         };
       }
 
-      const probe = await probeHarnessReadiness({
+      const shouldProbe =
+        probe && (probeHarnessId === null || probeHarnessId === harness.id);
+
+      if (!shouldProbe) {
+        return buildHarnessStatusFromCache(harness, runtime);
+      }
+
+      const probed = await probeHarnessReadiness({
         ...harness,
         ...runtime,
         authenticated: null,
@@ -143,13 +164,70 @@ export async function listCodingAgentHarnessStatuses(
       return {
         ...harness,
         ...runtime,
-        authenticated: probe.authenticated,
-        ready: probe.ready,
-        nextStep: probe.nextStep,
-        statusMessage: probe.statusMessage,
+        authenticated: probed.authenticated,
+        ready: probed.ready,
+        nextStep: probed.nextStep,
+        statusMessage: probed.statusMessage,
       };
     }),
   );
+}
+
+export async function refreshCodingAgentHarnessProbe(
+  db: DatabaseAdapter,
+  harnessId: string,
+): Promise<CodingAgentHarnessStatus> {
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const harness = settings.harnesses.find((entry) => entry.id === harnessId);
+
+  if (!harness) {
+    throw new Error("Unknown coding harness.");
+  }
+
+  const runtime = await getHarnessRuntimeStatus(harness.command);
+
+  if (!runtime.installed) {
+    await clearHarnessProbeCache(db, harnessId);
+
+    return {
+      ...harness,
+      ...runtime,
+      authenticated: null,
+      ready: false,
+      nextStep: "install",
+      statusMessage: `${harness.name} is not installed on this machine yet.`,
+    };
+  }
+
+  const probe = await probeHarnessReadiness({
+    ...harness,
+    ...runtime,
+    authenticated: null,
+    ready: false,
+    nextStep: null,
+    statusMessage: null,
+  });
+
+  const checkedAt = new Date().toISOString();
+  const probeCache: StoredCodingAgentHarnessProbeCache = {
+    checkedAt,
+    authenticated: probe.authenticated,
+    ready: probe.ready,
+    nextStep: probe.nextStep,
+    statusMessage: probe.statusMessage,
+  };
+
+  await saveHarnessProbeCache(db, harnessId, probeCache);
+
+  return {
+    ...harness,
+    ...runtime,
+    authenticated: probe.authenticated,
+    ready: probe.ready,
+    nextStep: probe.nextStep,
+    statusMessage: probe.statusMessage,
+    probeCache,
+  };
 }
 
 export async function saveCodingAgentWorkspaceSettings(
@@ -251,6 +329,20 @@ export async function resolveCodingAgentHarness(
     return new Error(message);
   };
 
+  const ensureReady = async (harness: CodingAgentHarnessStatus): Promise<CodingAgentHarnessStatus> => {
+    if (harness.ready && isProbeCacheFresh(harness.probeCache)) {
+      return harness;
+    }
+
+    const refreshed = await refreshCodingAgentHarnessProbe(db, harness.id);
+
+    if (refreshed.ready) {
+      return refreshed;
+    }
+
+    throw notReadyError(refreshed);
+  };
+
   if (preferredKind) {
     const preferred = enabled.find((harness) => harness.kind === preferredKind);
 
@@ -258,29 +350,25 @@ export async function resolveCodingAgentHarness(
       throw new Error(`Configured coding agent '${preferredKind}' is unavailable.`);
     }
 
-    if (preferred.ready) {
-      return preferred;
-    }
-
-    throw notReadyError(preferred);
+    return ensureReady(preferred);
   }
 
   if (!settings.selectedHarnessId) {
     if (readyHarnesses.length === 1) {
-      return readyHarnesses[0]!;
+      return ensureReady(readyHarnesses[0]!);
     }
   } else {
     const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
 
-    if (selected?.ready) {
-      return selected;
+    if (selected) {
+      return ensureReady(selected);
     }
   }
 
   const fallbackReady = readyHarnesses[0];
 
   if (fallbackReady) {
-    return fallbackReady;
+    return ensureReady(fallbackReady);
   }
 
   const selected = settings.selectedHarnessId
@@ -289,7 +377,7 @@ export async function resolveCodingAgentHarness(
   const installed = selected?.installed ? selected : enabled.find((harness) => harness.installed);
 
   if (installed) {
-    throw notReadyError(installed);
+    return ensureReady(installed);
   }
 
   throw new Error(
@@ -312,16 +400,36 @@ export async function verifyCodingAgentHarness(
   statusMessage: string | null;
   error: string | null;
 }> {
-  const statuses = await listCodingAgentHarnessStatuses(db);
-  const harness =
-    statuses.find((entry) => entry.id === harnessId) ??
-    statuses.find((entry) => entry.installed) ??
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const targetHarnessId =
+    harnessId ??
+    settings.selectedHarnessId ??
+    settings.harnesses.find((entry) => entry.enabled)?.id ??
     null;
 
-  if (!harness) {
+  if (!targetHarnessId) {
     return {
       ok: false,
       harnessId: harnessId ?? null,
+      name: null,
+      version: null,
+      installed: false,
+      authenticated: null,
+      ready: false,
+      nextStep: "install",
+      statusMessage: "Install a supported coding agent first.",
+      error: "No supported coding agent is installed yet.",
+    };
+  }
+
+  let harness: CodingAgentHarnessStatus;
+
+  try {
+    harness = await refreshCodingAgentHarnessProbe(db, targetHarnessId);
+  } catch {
+    return {
+      ok: false,
+      harnessId: targetHarnessId,
       name: null,
       version: null,
       installed: false,
@@ -373,6 +481,87 @@ function mergeHarnesses(
           args: stored.args.length > 0 ? stored.args : defaultHarness.args,
         }
       : { ...defaultHarness, args: [...defaultHarness.args] };
+  });
+}
+
+function isProbeCacheFresh(
+  cache: StoredCodingAgentHarnessProbeCache | null | undefined,
+): boolean {
+  if (!cache?.checkedAt) {
+    return false;
+  }
+
+  const checkedAt = Date.parse(cache.checkedAt);
+
+  if (Number.isNaN(checkedAt)) {
+    return false;
+  }
+
+  return Date.now() - checkedAt < PROBE_CACHE_TTL_MS;
+}
+
+function buildHarnessStatusFromCache(
+  harness: StoredCodingAgentHarnessRecord,
+  runtime: Pick<CodingAgentHarnessStatus, "installed" | "version">,
+): CodingAgentHarnessStatus {
+  const cache = harness.probeCache;
+
+  if (cache) {
+    return {
+      ...harness,
+      ...runtime,
+      authenticated: cache.authenticated,
+      ready: cache.ready,
+      nextStep: cache.nextStep,
+      statusMessage: cache.statusMessage,
+    };
+  }
+
+  return {
+    ...harness,
+    ...runtime,
+    authenticated: null,
+    ready: false,
+    nextStep: null,
+    statusMessage: null,
+  };
+}
+
+async function saveHarnessProbeCache(
+  db: DatabaseAdapter,
+  harnessId: string,
+  probeCache: StoredCodingAgentHarnessProbeCache,
+): Promise<void> {
+  const stored = await db.getWorkspaceSettings();
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const nextHarnesses = settings.harnesses.map((harness) =>
+    harness.id === harnessId ? { ...harness, probeCache } : harness,
+  );
+
+  await db.upsertWorkspaceSettings({
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    visionModel: stored?.visionModel ?? null,
+    transcriptionModel: stored?.transcriptionModel ?? null,
+    codingAgentHarnesses: nextHarnesses,
+    selectedCodingAgentHarness: settings.selectedHarnessId,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function clearHarnessProbeCache(db: DatabaseAdapter, harnessId: string): Promise<void> {
+  const stored = await db.getWorkspaceSettings();
+  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const nextHarnesses = settings.harnesses.map((harness) =>
+    harness.id === harnessId ? { ...harness, probeCache: null } : harness,
+  );
+
+  await db.upsertWorkspaceSettings({
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    visionModel: stored?.visionModel ?? null,
+    transcriptionModel: stored?.transcriptionModel ?? null,
+    codingAgentHarnesses: nextHarnesses,
+    selectedCodingAgentHarness: settings.selectedHarnessId,
+    updatedAt: new Date().toISOString(),
   });
 }
 
@@ -504,11 +693,7 @@ export async function installCodingAgentHarness(
 
   emitProgress(`${harness.name} install finished. Refreshing readiness.`);
 
-  const updated = (await listCodingAgentHarnessStatuses(db)).find((entry) => entry.id === harness.id);
-
-  if (!updated) {
-    throw new Error(`Installed ${harness.name}, but Nakama could not refresh its status.`);
-  }
+  const updated = await refreshCodingAgentHarnessProbe(db, harness.id);
 
   return updated;
 }

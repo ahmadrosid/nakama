@@ -73,9 +73,11 @@ describe("coding harness settings routes", () => {
       activeHarnessId: string | null;
       harnesses: Array<{ kind: string; installed: boolean }>;
     };
-    expect(emptyBody.configured).toBe(true);
-    expect(emptyBody.activeHarnessId).toBe("coding-harness-codex");
-    expect(emptyBody.harnesses.some((harness) => harness.kind === "codex")).toBe(true);
+    expect(emptyBody.configured).toBe(false);
+    expect(emptyBody.activeHarnessId).toBeNull();
+    const codexHarness = emptyBody.harnesses.find((harness) => harness.kind === "codex");
+    expect(codexHarness?.installed).toBe(true);
+    expect(codexHarness?.ready).toBe(false);
 
     const putResponse = await app.fetch(
       new Request("http://localhost:4310/v1/settings/coding-harnesses", {
@@ -96,7 +98,7 @@ describe("coding harness settings routes", () => {
       selectedHarnessId: string | null;
       harnesses: Array<{ id: string; selected: boolean; installed: boolean }>;
     };
-    expect(saved.configured).toBe(true);
+    expect(saved.configured).toBe(false);
     expect(saved.selectedHarnessId).toBe("coding-harness-codex");
     expect(saved.harnesses.find((harness) => harness.id === "coding-harness-codex")?.selected).toBe(
       true,
@@ -126,6 +128,23 @@ describe("coding harness settings routes", () => {
     expect(verified.harnessId).toBe("coding-harness-codex");
     expect(verified.authenticated).toBe(true);
     expect(verified.ready).toBe(true);
+
+    const getCached = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        headers: session.headers(),
+      }),
+    );
+    expect(getCached.status).toBe(200);
+    const cachedBody = (await getCached.json()) as {
+      configured: boolean;
+      activeHarnessId: string | null;
+      harnesses: Array<{ id: string; ready: boolean }>;
+    };
+    expect(cachedBody.configured).toBe(true);
+    expect(cachedBody.activeHarnessId).toBe("coding-harness-codex");
+    expect(
+      cachedBody.harnesses.find((harness) => harness.id === "coding-harness-codex")?.ready,
+    ).toBe(true);
   }, 15_000);
 
   test("install stream uses the database adapter instead of an undefined agent property", async () => {

@@ -2175,6 +2175,49 @@ function toWorkspaceSettingsRecord(row: WorkspaceSettingsRow): StoredWorkspaceSe
   };
 }
 
+function parseCodingAgentHarnessProbeCache(
+  raw: unknown,
+): StoredWorkspaceSettingsRecord["codingAgentHarnesses"][number]["probeCache"] {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+
+  const cache = raw as Record<string, unknown>;
+  const checkedAt = typeof cache.checkedAt === "string" ? cache.checkedAt.trim() : "";
+  const nextStep = cache.nextStep;
+
+  if (!checkedAt) {
+    return null;
+  }
+
+  if (
+    nextStep !== null &&
+    nextStep !== "install" &&
+    nextStep !== "login" &&
+    nextStep !== "retry"
+  ) {
+    return null;
+  }
+
+  return {
+    checkedAt,
+    authenticated:
+      typeof cache.authenticated === "boolean"
+        ? cache.authenticated
+        : cache.authenticated === null
+          ? null
+          : null,
+    ready: cache.ready === true,
+    nextStep,
+    statusMessage:
+      typeof cache.statusMessage === "string"
+        ? cache.statusMessage
+        : cache.statusMessage === null
+          ? null
+          : null,
+  };
+}
+
 function parseCodingAgentHarnesses(
   raw: string | null | undefined,
 ): StoredWorkspaceSettingsRecord["codingAgentHarnesses"] {
@@ -2211,6 +2254,8 @@ function parseCodingAgentHarnesses(
         return [];
       }
 
+      const probeCache = parseCodingAgentHarnessProbeCache(harness.probeCache);
+
       return [
         {
           id,
@@ -2219,6 +2264,7 @@ function parseCodingAgentHarnesses(
           command,
           args,
           enabled: harness.enabled !== false,
+          ...(probeCache ? { probeCache } : {}),
         },
       ];
     });
