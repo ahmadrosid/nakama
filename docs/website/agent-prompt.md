@@ -51,6 +51,7 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - Tool-use guidance for assigned tools
 - Memory and skill rules when `read_file` and `edit_file` are available (bundled `update-profile-memory` and `archive-profile-memory` skills)
 - Artifact guidance when `write_file` is available (bundled `save-artifact` skill)
+- Coding-agent harness context when `coding-delegation` matches ([Coding agent](/coding-agent))
 - Telegram or WhatsApp behavior when the message comes from those channels
 
 When soul is active, Nakama tells the agent to use tools while staying in character.

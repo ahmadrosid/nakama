@@ -6,7 +6,6 @@ import {
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
-  DELEGATE_CODING_TASK_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
@@ -103,7 +102,6 @@ export async function seedOrgSuperBotProfile(
     await ensureProfileDefaultBundledSkills(db, existing.id);
     await ensureProfileSuperBotBundledSkills(db, existing.id);
     await ensureSuperBotBashTool(db, existing.id);
-    await ensureSuperBotDelegateCodingTaskTool(db, existing.id);
     return existing;
   }
 
@@ -127,7 +125,6 @@ export async function seedOrgSuperBotProfile(
   }
 
   await ensureSuperBotBashTool(db, profile.id);
-  await ensureSuperBotDelegateCodingTaskTool(db, profile.id);
   await ensureProfileDefaultBundledSkills(db, profile.id);
   await ensureProfileSuperBotBundledSkills(db, profile.id);
 
@@ -158,25 +155,4 @@ export async function ensureSuperBotBashTool(db: DatabaseAdapter, profileId: str
   });
 
   await db.assignToolToProfile(profileId, BASH_TOOL_ID);
-}
-
-export async function ensureSuperBotDelegateCodingTaskTool(
-  db: DatabaseAdapter,
-  profileId: string,
-): Promise<void> {
-  const now = new Date().toISOString();
-  const existing = await db.getTool(DELEGATE_CODING_TASK_TOOL_ID);
-
-  await db.upsertTool({
-    id: DELEGATE_CODING_TASK_TOOL_ID,
-    name: "delegate_coding_task",
-    description:
-      "Delegate a coding task to an installed headless coding agent like Codex, Claude Code, or OpenCode. Super Bot only.",
-    handlerType: "bash",
-    handlerConfig: {},
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  });
-
-  await db.assignToolToProfile(profileId, DELEGATE_CODING_TASK_TOOL_ID);
 }

@@ -20,6 +20,7 @@ const pageDescriptions: Record<string, string> = {
   'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory and artifact workflows use file tools plus bundled skills.',
   'skills.md': 'Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.',
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
+  'coding-agent.md': 'Hand repo coding work to Codex, Claude Code, or OpenCode from Nakama chat via bash, the coding-delegation skill, and Integrations harness setup.',
   'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
   'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
 }
@@ -34,6 +35,7 @@ const pageTitles: Record<string, string> = {
   'builtin-tools.md': 'Builtin Tools',
   'skills.md': 'Skills',
   'mcp.md': 'MCP Servers',
+  'coding-agent.md': 'Coding Agent',
   'telegram.md': 'Telegram',
   'whatsapp.md': 'WhatsApp',
 }
@@ -190,6 +192,7 @@ export default defineConfig({
         items: [
           { text: 'Builtin Tools', link: '/builtin-tools' },
           { text: 'Skills', link: '/skills' },
+          { text: 'Coding Agent', link: '/coding-agent' },
           { text: 'MCP Servers', link: '/mcp' },
         ],
       },

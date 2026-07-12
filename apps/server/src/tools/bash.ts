@@ -8,6 +8,7 @@ import {
 } from "@nakama/core";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = 30 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
 
 export interface BashInput {
@@ -42,7 +43,7 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
       },
       timeoutMs: {
         type: "number",
-        description: "Timeout in milliseconds. Defaults to 30000, max 120000.",
+        description: "Timeout in milliseconds. Defaults to 30000, max 1800000 (30 minutes).",
       },
     },
     required: ["command"],
@@ -158,7 +159,7 @@ function readTimeout(value: unknown): number {
     return DEFAULT_TIMEOUT_MS;
   }
 
-  return Math.min(value, 120_000);
+  return Math.min(value, MAX_TIMEOUT_MS);
 }
 
 function readOptionalNumber(input: unknown, key: string): unknown {

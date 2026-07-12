@@ -15,6 +15,8 @@ describe("bundled coding-delegation skill", () => {
     expect(parsed.frontmatter.name).toBe("coding-delegation");
     expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
     expect(parsed.body).toContain("Keep ordinary conversation local");
+    expect(parsed.body).toContain("bash");
+    expect(parsed.body).toContain("timeoutMs");
     expect(parsed.body).toContain("After the coding agent returns");
   });
 

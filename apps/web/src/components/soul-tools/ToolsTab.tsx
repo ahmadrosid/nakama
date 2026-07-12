@@ -1,7 +1,6 @@
 import type { ToolDetail } from "@nakama/core/contract";
 import {
   BUILTIN_TOOL_IDS,
-  DELEGATE_CODING_TASK_TOOL_ID,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
 import { PlusIcon, Trash2Icon } from "lucide-react";
@@ -272,8 +271,6 @@ function ToolListSection({
               onConfigure={
                 isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
                   ? onConfigureEmail
-                  : isOrgAdmin && tool.id === DELEGATE_CODING_TASK_TOOL_ID
-                    ? onConfigureCodingHarnesses
                   : undefined
               }
             />

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { BUILTIN_TOOL_IDS, DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
+import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import {
   ensureBuiltinToolDefinitions,
   ensurePreinstalledMcpServers,
-  ensureServerToolDefinitions,
   removeDeprecatedBuiltinTools,
+  removeDeprecatedServerTools,
   removeUnsupportedTools,
   seedDatabase,
 } from "./seed";
@@ -209,12 +209,38 @@ describe("seed built-in tools", () => {
     expect(await db.getTool("tool_create_skill")).toBeNull();
   });
 
-  test("ensureServerToolDefinitions registers delegate coding task", async () => {
+  test("removeDeprecatedServerTools deletes delegate coding task", async () => {
     const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
 
-    await ensureServerToolDefinitions(db);
+    await db.upsertTool({
+      id: "tool_delegate_coding_task",
+      name: "delegate_coding_task",
+      description: "Delegate coding",
+      handlerType: "bash",
+      handlerConfig: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      id: "profile_test",
+      name: "Test",
+      systemPrompt: "",
+      model: null,
+      isSuper: false,
+      orgId: "org_test",
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("profile_test", "tool_delegate_coding_task");
 
-    expect(await db.getTool(DELEGATE_CODING_TASK_TOOL_ID)).not.toBeNull();
+    await removeDeprecatedServerTools(db);
+
+    expect(await db.getTool("tool_delegate_coding_task")).toBeNull();
+    expect((await db.listToolsForProfile("profile_test")).map((tool) => tool.id)).not.toContain(
+      "tool_delegate_coding_task",
+    );
   });
 });
 

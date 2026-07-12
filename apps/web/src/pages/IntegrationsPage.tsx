@@ -38,7 +38,7 @@ const INTEGRATION_SECTIONS = [
   {
     id: "coding-agents",
     label: "Coding agents",
-    description: "Code delegation CLI",
+    description: "Coding agent CLI",
     icon: BotIcon,
   },
   {
@@ -101,7 +101,7 @@ export function IntegrationsPage() {
       <header className="space-y-1">
         <h1 className="type-page-title">Integrations</h1>
         <p className="type-body max-w-2xl">
-          Manage bridge access, coding delegation, Telegram setup, notification webhooks, and
+          Manage bridge access, coding agents, Telegram setup, notification webhooks, and
           WhatsApp linking from one place.
         </p>
       </header>

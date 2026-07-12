@@ -205,7 +205,8 @@ describe("SkillsService", () => {
     );
 
     expect(matched).toContain("Active Skill: coding-delegation");
-    expect(matched).toContain("When delegating:");
+    expect(matched).toContain("Delegation workflow");
+    expect(matched).toContain("bash");
 
     const unrelated = await service.formatMatchedSkillsForPrompt(
       ORG_ID,

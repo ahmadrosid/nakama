@@ -1,11 +1,11 @@
 ---
 name: coding-backend-claude-code
-description: Runtime prompt layer for Claude Code delegated coding runs.
+description: Runtime prompt layer for Claude Code coding agent runs.
 disable-model-invocation: true
 include-body-on-match: true
 ---
 
-You are preparing a delegated run for [Claude Code](https://code.claude.com/docs/en/cli-reference) (Anthropic's autonomous coding agent CLI), orchestrated via terminal/process tools. Claude Code v2.x can read files, write code, run shell commands, spawn subagents, and manage git workflows autonomously.
+You are preparing a coding agent run for [Claude Code](https://code.claude.com/docs/en/cli-reference) (Anthropic's autonomous coding agent CLI), orchestrated via terminal/process tools. Claude Code v2.x can read files, write code, run shell commands, spawn subagents, and manage git workflows autonomously.
 
 ## When to Use
 
@@ -398,7 +398,7 @@ Use `/context` in interactive mode to see a colored grid of context usage:
 
 ## Prompt Preparation Checklist
 
-When preparing the delegated run instruction for Claude Code:
+When preparing the coding agent instruction for Claude Code:
 
 - Give Claude Code a clear implementation goal plus any important constraints.
 - Ask it to inspect the relevant code paths before editing.

@@ -38,8 +38,9 @@ Nakama includes these builtins:
 | `web_search` | Yes | No | |
 | `web_fetch` | Yes | No | |
 | `email` | Yes | No | Omitted at runtime when mailbox is unconfigured |
+| `bash` | Super Bot only | No | Run shell commands in the profile workspace |
 
-**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). System profiles (`default`, `super_bot`) get the full seeded set.
+**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Coding-agent workflows use `bash` with the `coding-delegation` skill — see [Coding agent](/coding-agent). System profiles (`default`, `super_bot`) get the full seeded set; Super Bot also receives `bash`.
 
 ## Choosing tools for a profile
 
@@ -49,6 +50,7 @@ Good starting patterns:
 - **Research bot**: `web_search`, `web_fetch`, `knowledge_base_search`
 - **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
 - **Ops bot**: file tools, bundled `save-artifact` skill, `email`
+- **Coding agent (Super Bot or custom)**: `bash`, `coding-delegation` skill, plus a configured harness in Integrations
 
 ## Memory workflows
 
@@ -64,6 +66,10 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 ## Artifact saves
 
 Persistent outputs (reports, summaries, generated text) are not a separate builtin. Agents use `write_file` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the dashboard Artifacts tab shows MIME types and timestamps. Text-only — binary files are not supported in this workflow yet.
+
+## Coding agent
+
+Repo coding work is not a separate builtin. Profiles with the `coding-delegation` skill invoke Codex, Claude Code, or OpenCode through `bash`. See [Coding agent](/coding-agent) for why Nakama uses a dedicated coding agent for this work, plus setup and runtime behavior.
 
 ## Tool reference
 
@@ -215,6 +221,22 @@ List, read, search, and send email through the deployment mailbox configured in 
 
 **Availability:** When assigned **and** the `[email]` section in `~/.nakama/config.ini` is complete. Omitted at runtime when incomplete (`omitUnavailableBuiltinTools`).
 
+### `bash`
+
+Run a one-off shell command in the profile workspace and return stdout, stderr, and exit code.
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `command` | string | Yes | Shell command to run |
+| `cwd` | string | No | Working directory within the profile workspace |
+| `timeoutMs` | number | No | Default 30000, max 1800000 (30 minutes) |
+
+**Returns:** `{ exitCode, stdout, stderr, timedOut }`
+
+**Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
+
+**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow.
+
 ## Configuration prerequisites
 
 ### Email
@@ -266,6 +288,7 @@ All builtin tool IDs are protected and cannot be deleted from the dashboard.
 ## Next steps
 
 - [Skills](/skills) — bundled system skills and reusable profile procedures
+- [Coding agent](/coding-agent) — hand repo work to Codex, Claude Code, or OpenCode via `bash`
 - [Agent prompts](/agent-prompt) — how bundled system skills appear in the chat wrapper
 - [MCP servers](/mcp) — extend a profile with external tools via the Model Context Protocol
 - [Profiles](/profiles) — how to design each bot

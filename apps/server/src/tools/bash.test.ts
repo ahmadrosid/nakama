@@ -59,4 +59,17 @@ describe("bash tool", () => {
   test("requires profileId", async () => {
     await expect(runBash({ command: "pwd" }, {})).rejects.toThrow("profileId is required.");
   });
+
+  test("accepts delegation-scale timeouts up to 30 minutes", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
+    const result = await runBash(
+      { command: "echo ok", timeoutMs: 30 * 60_000 },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe("ok");
+  });
 });

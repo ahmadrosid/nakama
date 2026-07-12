@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
-  DELEGATE_CODING_TASK_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
@@ -107,7 +106,7 @@ describe("seedOrgSuperBotProfile", () => {
     expect(orgAList[0]?.id).toBe(orgASuperBot.id);
   });
 
-  test("assigns builtins, bash, and delegate coding task", async () => {
+  test("assigns builtins and bash", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
@@ -118,7 +117,6 @@ describe("seedOrgSuperBotProfile", () => {
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
-    expect(toolIds).toContain(DELEGATE_CODING_TASK_TOOL_ID);
   });
 
   test("assigns super bot bundled skills", async () => {

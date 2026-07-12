@@ -32,6 +32,8 @@ Platform admins create extra profiles inside the **active org**. Each new profil
 
 Super Bot can also create profiles from chat. For profile-creation requests, it uses a Super Bot-only bundled skill that guides soul-file generation, keeps `MEMORY.md` empty, and uses the current tool inventory to recommend a small relevant starter set.
 
+Super Bot can hand coding tasks to a dedicated coding agent via the `coding-delegation` skill and `bash`. See [Coding agent](/coding-agent).
+
 ## What a profile contains
 
 | Field | What it means |

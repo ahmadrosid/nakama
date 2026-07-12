@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -272,8 +275,32 @@ describe("AgentService transcription settings", () => {
 });
 
 describe("AgentService coding delegation context", () => {
-  test("includes the selected harness name in the coding delegation context", async () => {
+  const originalPath = process.env.PATH ?? "";
+  const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
+  let tempBinDir = "";
+
+  beforeEach(async () => {
+    tempBinDir = await mkdtemp(path.join(tmpdir(), "nakama-agent-delegation-bin-"));
+    process.env.PATH = tempBinDir;
+    process.env.NAKAMA_DISABLE_FIX_PATH = "1";
+  });
+
+  afterEach(async () => {
+    process.env.PATH = originalPath;
+    if (originalDisableFixPath === undefined) {
+      delete process.env.NAKAMA_DISABLE_FIX_PATH;
+    } else {
+      process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
+    }
+    if (tempBinDir) {
+      await rm(tempBinDir, { recursive: true, force: true });
+      tempBinDir = "";
+    }
+  });
+
+  test("includes harness command template and backend guidance for bash delegation", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await installFakeOpenCode(tempBinDir);
     await db.upsertWorkspaceSettings({
       id: WORKSPACE_SETTINGS_ID,
       visionModel: null,
@@ -294,14 +321,17 @@ describe("AgentService coding delegation context", () => {
 
     const service = new AgentService(null, null, db);
     const context = await (service as unknown as {
-      formatCodingDelegationContext(): Promise<string>;
-    }).formatCodingDelegationContext();
+      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
+    }).formatCodingDelegationContext("org_test", "profile_test");
 
-    expect(context).toContain("The selected coding agent harness is OpenCode");
-    expect(context).toContain("delegate_coding_task");
+    expect(context).toContain("Selected backend: OpenCode");
+    expect(context).toContain("bash");
+    expect(context).toContain("opencode run");
+    expect(context).toContain("preparing a coding agent run for [OpenCode]");
+    expect(context).not.toContain("delegate_coding_task");
   });
 
-  test("falls back gracefully when no harness is selected", async () => {
+  test("falls back gracefully when no harness is ready", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
       id: WORKSPACE_SETTINGS_ID,
@@ -314,10 +344,27 @@ describe("AgentService coding delegation context", () => {
 
     const service = new AgentService(null, null, db);
     const context = await (service as unknown as {
-      formatCodingDelegationContext(): Promise<string>;
-    }).formatCodingDelegationContext();
+      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
+    }).formatCodingDelegationContext("org_test", "profile_test");
 
-    expect(context).toContain("No coding agent harness is selected");
-    expect(context).toContain("delegate_coding_task");
+    expect(context).toContain("No coding agent harness is ready");
+    expect(context).toContain("bash");
+    expect(context).not.toContain("delegate_coding_task");
   });
 });
+
+async function installFakeOpenCode(binDir: string): Promise<void> {
+  const scriptPath = path.join(binDir, "opencode");
+  await writeFile(
+    scriptPath,
+    [
+      "#!/bin/sh",
+      "if [ \"$1\" = \"--version\" ]; then",
+      "  echo \"fake opencode\"",
+      "  exit 0",
+      "fi",
+      "printf '%s' \"$*\"",
+    ].join("\n"),
+  );
+  await chmod(scriptPath, 0o755);
+}

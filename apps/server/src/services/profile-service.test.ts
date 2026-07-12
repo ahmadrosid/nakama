@@ -5,9 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
-  ensureServerToolDefinitions,
 } from "@nakama/db";
-import { DELEGATE_CODING_TASK_TOOL_ID } from "@nakama/core/tools/protected";
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -309,13 +307,19 @@ describe("profile service createProfile", () => {
   });
 });
 
-describe("profile service assignTool", () => {
+describe("profile service assignSkill", () => {
   let tempConfigDir = "";
   const originalPath = process.env.PATH ?? "";
+  const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
 
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     process.env.PATH = originalPath;
+    if (originalDisableFixPath === undefined) {
+      delete process.env.NAKAMA_DISABLE_FIX_PATH;
+    } else {
+      process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
+    }
 
     if (tempConfigDir) {
       await rm(tempConfigDir, { recursive: true, force: true });
@@ -323,21 +327,33 @@ describe("profile service assignTool", () => {
     }
   });
 
-  test("blocks delegate coding task until a coding harness is ready", async () => {
-    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-assign-tool-"));
+  test("blocks coding-delegation until a coding harness is ready", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-assign-skill-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     process.env.PATH = tempConfigDir;
+    process.env.NAKAMA_DISABLE_FIX_PATH = "1";
 
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
-    await ensureServerToolDefinitions(db);
+    const now = new Date().toISOString();
+    await db.upsertSkill({
+      id: "skill_coding_delegation",
+      name: "coding-delegation",
+      description: "Delegate coding work",
+      sourcePath: "/tmp/coding-delegation",
+      hasTool: false,
+      disableModelInvocation: false,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const service = new ProfileService(db);
     const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
 
     await expect(
-      service.assignTool(ORG_ID, created.profile.id, {
-        toolId: DELEGATE_CODING_TASK_TOOL_ID,
+      service.assignSkill(ORG_ID, created.profile.id, {
+        skillId: "skill_coding_delegation",
       }),
     ).rejects.toThrow(/configure a ready coding agent harness/i);
   });

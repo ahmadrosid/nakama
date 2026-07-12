@@ -3,7 +3,6 @@ import { builtinTools, type ToolDefinition } from "@nakama/core";
 import { isEmailConfigComplete, loadEmailConfig } from "@nakama/core/email-config";
 import { emailTool } from "@nakama/core/tools/email";
 import { bashTool } from "../tools/bash";
-import { createDelegateCodingTaskTool } from "../tools/delegate-coding-task";
 import { loadJavascriptTool } from "./javascript-tool-loader";
 
 export function omitUnavailableBuiltinTools(
@@ -71,13 +70,6 @@ async function resolveStoredTool(
   return null;
 }
 
-function buildServerTools(db?: DatabaseAdapter): Map<string, ToolDefinition> {
-  const tools = new Map<string, ToolDefinition>([[bashTool.name, bashTool]]);
-
-  if (db) {
-    const delegateCodingTaskTool = createDelegateCodingTaskTool(db);
-    tools.set(delegateCodingTaskTool.name, delegateCodingTaskTool);
-  }
-
-  return tools;
+function buildServerTools(_db?: DatabaseAdapter): Map<string, ToolDefinition> {
+  return new Map<string, ToolDefinition>([[bashTool.name, bashTool]]);
 }

@@ -128,7 +128,7 @@ export function CodingHarnessSettingsPanel({
           const selected = saved.harnesses.find((harness) => harness.id === selectedHarnessId);
           setHint(
             selected
-              ? `${selected.name} selected. Nakama will use it for coding delegation after the readiness check passes.`
+              ? `${selected.name} selected. Nakama will use it for coding agent runs after the readiness check passes.`
               : "Coding agent selection saved.",
           );
         },
