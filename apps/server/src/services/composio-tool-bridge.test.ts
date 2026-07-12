@@ -4,8 +4,8 @@ import {
   buildComposioToolDefinitions,
   composioConnectionKey,
   namespacedComposioToolName,
-  resolveComposioCallbackBaseUrl,
 } from "./composio-tool-bridge";
+import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
 import type { ComposioService } from "./composio-service";
 import { McpClientManager } from "./mcp-client-manager";
 
@@ -151,13 +151,15 @@ describe("composio-tool-bridge", () => {
       "usr_1",
       "profile_1",
       composioService,
-      "http://localhost:3003",
     );
 
     expect(tools).toHaveLength(1);
     expect(tools[0]?.name).toBe("composio__connect_account");
 
-    const result = await tools[0]?.run({ toolkit_slug: "gmail" }, {});
+    const result = await tools[0]?.run(
+      { toolkit_slug: "gmail" },
+      { clientOrigin: "http://localhost:3003" },
+    );
     expect(result).toMatchObject({
       toolkitSlug: "gmail",
       displayName: "Gmail",
@@ -165,18 +167,17 @@ describe("composio-tool-bridge", () => {
     });
   });
 
-  test("resolveComposioCallbackBaseUrl prefers NAKAMA_WEB_PUBLIC_URL", () => {
-    const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
-    process.env.NAKAMA_WEB_PUBLIC_URL = "https://app.example.com/";
+  test("resolveComposioCallbackBaseUrl prefers clientOrigin from browser", () => {
+    expect(
+      resolveComposioCallbackBaseUrl({ clientOrigin: "https://app.example.com/" }),
+    ).toBe("https://app.example.com");
+  });
 
-    try {
-      expect(resolveComposioCallbackBaseUrl()).toBe("https://app.example.com");
-    } finally {
-      if (previous === undefined) {
-        delete process.env.NAKAMA_WEB_PUBLIC_URL;
-      } else {
-        process.env.NAKAMA_WEB_PUBLIC_URL = previous;
-      }
-    }
+  test("resolveComposioCallbackBaseUrl reads Origin header from request", () => {
+    const request = new Request("http://127.0.0.1:4310/v1/sessions/s1/messages", {
+      headers: { Origin: "http://localhost:3003" },
+    });
+
+    expect(resolveComposioCallbackBaseUrl({ request })).toBe("http://localhost:3003");
   });
 });

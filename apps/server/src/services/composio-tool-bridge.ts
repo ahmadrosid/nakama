@@ -1,5 +1,6 @@
-import type { ComposioToolErrorResult, ToolDefinition } from "@nakama/core";
+import type { ComposioToolErrorResult, ToolContext, ToolDefinition } from "@nakama/core";
 import { emptyObjectSchema } from "@nakama/core";
+import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
 import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
 import { sanitizeLlmToolNamePart } from "./mcp-tool-bridge";
@@ -34,18 +35,6 @@ function notConnectedError(toolkitSlug: string): ComposioToolErrorResult {
   };
 }
 
-/** Base URL the user's browser can reach for OAuth callback (web app origin, not API port). */
-export function resolveComposioCallbackBaseUrl(): string {
-  const configured =
-    process.env.NAKAMA_WEB_PUBLIC_URL?.trim() || process.env.NAKAMA_PUBLIC_URL?.trim();
-  if (configured) {
-    return configured.replace(/\/$/, "");
-  }
-
-  const webPort = process.env.NAKAMA_WEB_PORT?.trim() || "3003";
-  return `http://127.0.0.1:${webPort}`;
-}
-
 interface ComposioConnectAccountInput {
   toolkit_slug: string;
 }
@@ -55,7 +44,6 @@ export async function buildComposioConnectTools(
   userId: string,
   profileId: string,
   composioService: ComposioService,
-  callbackBaseUrl: string,
 ): Promise<ToolDefinition[]> {
   if (!userId) {
     return [];
@@ -92,7 +80,7 @@ export async function buildComposioConnectTools(
         },
         required: ["toolkit_slug"],
       },
-      async run(input) {
+      async run(input, context: ToolContext) {
         const toolkitSlug =
           typeof input === "object" &&
           input &&
@@ -108,6 +96,9 @@ export async function buildComposioConnectTools(
         }
 
         try {
+          const callbackBaseUrl = resolveComposioCallbackBaseUrl({
+            clientOrigin: context.clientOrigin,
+          });
           const { redirectUrl } = await composioService.connectToolkit(
             orgId,
             userId,

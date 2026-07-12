@@ -9,26 +9,11 @@ import type {
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import { ComposioService } from "../../services/composio-service";
+import { resolveComposioCallbackBaseUrl } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireNotViewerFromContext, requireOrgAdminFromContext } from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
-
-function resolveCallbackBaseUrl(request: Request, callbackOrigin?: string): string {
-  const explicitOrigin = callbackOrigin?.trim();
-  if (explicitOrigin) {
-    return explicitOrigin.replace(/\/$/, "");
-  }
-
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  if (forwardedHost) {
-    const forwardedProto = request.headers.get("x-forwarded-proto") ?? "http";
-    return `${forwardedProto}://${forwardedHost}`;
-  }
-
-  const url = new URL(request.url);
-  return `${url.protocol}//${url.host}`;
-}
 
 export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions): void {
   const service = options.composioService;
@@ -112,7 +97,10 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
           auth.activeOrgId!,
           auth.user.id,
           c.req.param("toolkitSlug"),
-          resolveCallbackBaseUrl(c.req.raw, body.callbackOrigin),
+          resolveComposioCallbackBaseUrl({
+            clientOrigin: body.callbackOrigin,
+            request: c.req.raw,
+          }),
         ),
       );
     } catch (error) {

@@ -6,6 +6,7 @@ import { SetupStepAccount } from "@/components/setup-wizard/SetupStepAccount";
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
 import { useAppContext } from "@/context/app-context";
+import { client } from "@/lib/client";
 import { pathForPage } from "@/lib/navigation";
 
 export interface SetupOrganizationDraft {
@@ -40,6 +41,16 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const firstStep: SetupStepId = userAlreadyConfigured ? 3 : 1;
   const [currentStep, setCurrentStep] = useState<SetupStepId>(firstStep);
   const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.location?.origin) {
+      return;
+    }
+
+    void client.updateWebPublicUrl(window.location.origin).catch(() => {
+      // Fresh install persists during POST /v1/auth/setup instead.
+    });
+  }, []);
 
   useEffect(() => {
     if (!userAlreadyConfigured && currentStep === 2 && !accountDraft) {

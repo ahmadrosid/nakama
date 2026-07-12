@@ -68,6 +68,7 @@ import type {
   RunAutomationResponse,
   StoredAutomation,
   SystemStatusResponse,
+  WebPublicUrlSettingsResponse,
   TelegramSettingsResponse,
   ComposioSettingsResponse,
   CodingHarnessSettingsResponse,
@@ -118,6 +119,7 @@ import type {
   TaskMessagesResponse,
   AuthUserResponse,
   SetupAuthRequest,
+  UpdateWebPublicUrlRequest,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateNotificationDestinationRequest,
@@ -169,6 +171,7 @@ export class NakamaClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
+  private readonly clientOrigin: string | null;
   private authToken: string | null;
   private orgId: string | null;
 
@@ -177,6 +180,7 @@ export class NakamaClient {
     const fetchFn = options.fetch ?? fetch;
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
     this.credentials = options.credentials ?? "include";
+    this.clientOrigin = options.clientOrigin?.trim().replace(/\/$/, "") || null;
     this.authToken = options.authToken ?? null;
     this.orgId = options.orgId ?? null;
   }
@@ -200,6 +204,17 @@ export class NakamaClient {
 
   async getSystemStatus(): Promise<SystemStatusResponse> {
     return this.request<SystemStatusResponse>("/v1/system/status");
+  }
+
+  async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {
+    return this.request<WebPublicUrlSettingsResponse>("/v1/system/web-public-url");
+  }
+
+  async updateWebPublicUrl(webPublicUrl: string): Promise<{ webPublicUrl: string }> {
+    return this.request<{ webPublicUrl: string }>("/v1/system/web-public-url", {
+      method: "PUT",
+      body: JSON.stringify({ webPublicUrl } satisfies UpdateWebPublicUrlRequest),
+    });
   }
 
   async exportData(): Promise<{
@@ -714,7 +729,7 @@ export class NakamaClient {
     return {
       id: sessionId,
       send: async (input: SendMessageArg) => {
-        const body = resolveSendMessageBody(input);
+        const body = resolveSendMessageBody(input, this.clientOrigin ?? undefined);
         const response = await this.request<SendMessageResponse>(
           `/v1/sessions/${sessionId}/messages`,
           {
@@ -731,7 +746,7 @@ export class NakamaClient {
         options?: SendStreamOptions,
       ) => {
         const handlers = normalizeStreamHandlers(handler);
-        const body = { ...resolveSendMessageBody(input), stream: true };
+        const body = { ...resolveSendMessageBody(input, this.clientOrigin ?? undefined), stream: true };
         const headers = this.buildHeaders("POST", {
           "Content-Type": "application/json",
           Accept: "text/event-stream",

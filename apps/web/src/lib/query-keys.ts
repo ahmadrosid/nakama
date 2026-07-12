@@ -5,6 +5,7 @@ export const queryKeys = {
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,
   systemStatus: ["systemStatus"] as const,
+  webPublicUrl: ["system", "webPublicUrl"] as const,
   profiles: {
     all: ["profiles"] as const,
     detail: (profileId: string) => ["profiles", profileId] as const,

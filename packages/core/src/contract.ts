@@ -233,6 +233,18 @@ export interface SetupAuthRequest {
     phone?: string;
     password: string;
   };
+  /** Public web app origin (e.g. window.location.origin) for OAuth callbacks. */
+  webPublicUrl?: string;
+}
+
+export interface UpdateWebPublicUrlRequest {
+  webPublicUrl: string;
+}
+
+export interface WebPublicUrlSettingsResponse {
+  webPublicUrl: string | null;
+  /** Set when NAKAMA_WEB_PUBLIC_URL / NAKAMA_PUBLIC_URL overrides the saved value. */
+  envOverride: string | null;
 }
 
 export interface AuthUserResponse {
@@ -498,6 +510,8 @@ export interface SendMessageInput {
   message: string;
   images?: ImageAttachment[];
   documents?: DocumentAttachment[];
+  /** Browser origin for OAuth callbacks (e.g. window.location.origin). */
+  clientOrigin?: string;
 }
 
 export interface SendMessageRequest {
@@ -505,6 +519,7 @@ export interface SendMessageRequest {
   images?: ImageAttachment[];
   documents?: DocumentAttachment[];
   stream?: boolean;
+  clientOrigin?: string;
 }
 
 export interface SendMessageResponse {
@@ -1530,6 +1545,8 @@ export interface ToolContext {
   orgId?: string;
   profileId?: string;
   sessionId?: string;
+  /** Browser origin for OAuth callbacks during this tool run. */
+  clientOrigin?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;
 }

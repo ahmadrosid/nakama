@@ -210,7 +210,6 @@ import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import {
   buildComposioConnectTools,
   buildComposioToolDefinitions,
-  resolveComposioCallbackBaseUrl,
 } from "./composio-tool-bridge";
 import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
@@ -2172,8 +2171,6 @@ export class AgentService {
         throw new Error("Profile organization is missing.");
       }
 
-      const callbackBaseUrl = resolveComposioCallbackBaseUrl();
-
       resolved = [
         ...resolved,
         ...(await buildComposioConnectTools(
@@ -2181,7 +2178,6 @@ export class AgentService {
           options.userId,
           profile.id,
           this.composioService,
-          callbackBaseUrl,
         )),
         ...(await buildComposioToolDefinitions(
           orgId,

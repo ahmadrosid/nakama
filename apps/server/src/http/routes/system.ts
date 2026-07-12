@@ -1,6 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
+import { persistWebPublicUrl, getWebPublicUrlSettings, resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
+import { requireOrgAdminFromContext } from "../org-guards";
+import { errorResponse, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const DOCS_HTML = `<!doctype html>
@@ -68,6 +71,62 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
     },
   });
 
+  const updateWebPublicUrlRoute = createRoute({
+    method: "put",
+    path: "/v1/system/web-public-url",
+    tags: ["Health"],
+    summary: "Persist the public web app URL for OAuth callbacks",
+    operationId: "updateWebPublicUrl",
+    request: {
+      body: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                webPublicUrl: z.string(),
+              })
+              .openapi("UpdateWebPublicUrlRequest"),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "Saved web public URL",
+        content: {
+          "application/json": {
+            schema: z.object({ webPublicUrl: z.string() }).openapi("UpdateWebPublicUrlResponse"),
+          },
+        },
+      },
+      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  });
+
+  const getWebPublicUrlRoute = createRoute({
+    method: "get",
+    path: "/v1/system/web-public-url",
+    tags: ["Health"],
+    summary: "Read the saved public web app URL for OAuth callbacks",
+    operationId: "getWebPublicUrl",
+    responses: {
+      200: {
+        description: "Web public URL settings",
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                webPublicUrl: z.string().nullable(),
+                envOverride: z.string().nullable(),
+              })
+              .openapi("WebPublicUrlSettingsResponse"),
+          },
+        },
+      },
+    },
+  });
+
   app.get("/docs", () => {
     return new Response(DOCS_HTML, {
       headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -95,5 +154,26 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
 
   app.openapi(systemStatusRoute, async (c) => {
     return c.json(await systemStatus.getStatus(), 200);
+  });
+
+  app.openapi(getWebPublicUrlRoute, async (c) => {
+    requireOrgAdminFromContext(c);
+    return c.json(await getWebPublicUrlSettings(), 200);
+  });
+
+  app.openapi(updateWebPublicUrlRoute, async (c) => {
+    requireOrgAdminFromContext(c);
+    const body = await readJson<{ webPublicUrl?: string }>(c.req.raw);
+    const webPublicUrl = resolveRequestClientOrigin(c.req.raw, body.webPublicUrl);
+
+    if (!webPublicUrl) {
+      return errorResponse("webPublicUrl is required.", 400);
+    }
+
+    try {
+      return c.json({ webPublicUrl: await persistWebPublicUrl(webPublicUrl) }, 200);
+    } catch (error) {
+      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+    }
   });
 }

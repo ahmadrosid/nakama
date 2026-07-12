@@ -214,6 +214,23 @@ export function normalizeStreamHandlers(
   return handler;
 }
 
-export function resolveSendMessageBody(input: SendMessageArg): SendMessageInput {
-  return typeof input === "string" ? { message: input } : input;
+export function resolveSendMessageBody(
+  input: SendMessageArg,
+  defaultClientOrigin?: string,
+): SendMessageInput {
+  const body = typeof input === "string" ? { message: input } : input;
+
+  if (body.clientOrigin?.trim()) {
+    return body;
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return { ...body, clientOrigin: window.location.origin };
+  }
+
+  if (defaultClientOrigin?.trim()) {
+    return { ...body, clientOrigin: defaultClientOrigin.replace(/\/$/, "") };
+  }
+
+  return body;
 }

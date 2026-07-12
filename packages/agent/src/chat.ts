@@ -289,6 +289,12 @@ async function sendMessage(
   const effectiveSystemPrompt = promptContext.trim()
     ? `${systemPrompt}\n\n${promptContext.trim()}`
     : systemPrompt;
+  const effectiveToolContext =
+    input.clientOrigin?.trim() && options.toolContext
+      ? { ...options.toolContext, clientOrigin: input.clientOrigin.trim() }
+      : input.clientOrigin?.trim()
+        ? { clientOrigin: input.clientOrigin.trim() }
+        : options.toolContext;
 
   try {
     const reply = await runConversation(
@@ -301,7 +307,7 @@ async function sendMessage(
       llmTools,
       providerOptions,
       options.handlers,
-      options.toolContext,
+      effectiveToolContext,
       options.rehydrateMessagesForProvider,
     );
 

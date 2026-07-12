@@ -41,7 +41,10 @@ If you used org-shared connections before this model, existing connected toolkit
 
 - Assigned Composio tools are namespaced as `composio__{toolkit}__{tool}`.
 - When the user's account is not connected, chat exposes `composio__connect_account` so the agent can generate an OAuth link and send it in the reply.
-- Set `NAKAMA_WEB_PUBLIC_URL` (or `NAKAMA_PUBLIC_URL`) to your web app origin in production so OAuth callbacks land correctly (defaults to `http://127.0.0.1:3003` in dev).
+- **Web chat:** callback URL comes from the browser automatically (`window.location.origin`).
+- **Setup wizard:** silently saves `window.location.origin` during first-time setup (no extra step shown).
+- **Settings:** org admins can view or change the public web URL under Settings.
+- **Telegram / WhatsApp:** bridges read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL` env override) and pass it on each message.
 - Auth failures return `COMPOSIO_NOT_CONNECTED`; the agent should call `composio__connect_account` and share the link.
 - Automations without a user context do not resolve personal Composio tools.
 
