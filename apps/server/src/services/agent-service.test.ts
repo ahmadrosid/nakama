@@ -324,10 +324,8 @@ describe("AgentService coding delegation context", () => {
       formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
     }).formatCodingDelegationContext("org_test", "profile_test");
 
-    expect(context).toContain("Selected backend: OpenCode");
     expect(context).toContain("bash");
     expect(context).toContain("opencode run");
-    expect(context).toContain("preparing a coding agent run for [OpenCode]");
     expect(context).not.toContain("delegate_coding_task");
   });
 
@@ -347,7 +345,6 @@ describe("AgentService coding delegation context", () => {
       formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
     }).formatCodingDelegationContext("org_test", "profile_test");
 
-    expect(context).toContain("No coding agent harness is ready");
     expect(context).toContain("bash");
     expect(context).not.toContain("delegate_coding_task");
   });

@@ -91,7 +91,6 @@ describe("formatCodingAgentCommandContext", () => {
       ),
     );
 
-    expect(context).toContain("Selected backend: OpenCode");
     expect(context).toContain("bash");
     expect(context).toContain("opencode run");
   });

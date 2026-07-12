@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
-import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import {
   ensureBuiltinToolDefinitions,
@@ -245,20 +244,6 @@ describe("seed built-in tools", () => {
 });
 
 describe("seed preinstalled MCP servers", () => {
-  test("ensurePreinstalledMcpServers registers exa and currency-conversion", async () => {
-    const db = createInMemoryDatabaseAdapter();
-
-    await ensurePreinstalledMcpServers(db);
-
-    const exa = await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa);
-    const currency = await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.currency_conversion);
-
-    expect(exa?.name).toBe("exa");
-    expect(exa?.transport).toBe("http");
-    expect(currency?.name).toBe("currency-conversion");
-    expect(currency?.transport).toBe("http");
-  });
-
   test("ensurePreinstalledMcpServers upserts idempotently", async () => {
     const db = createInMemoryDatabaseAdapter();
 

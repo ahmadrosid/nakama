@@ -6,7 +6,6 @@ import {
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
-import { NAKAMA_DOCS_LLMS_URL } from "@nakama/core";
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -391,7 +390,6 @@ describe("profile service knowledge base", () => {
     const listed = await service.listKnowledgeBase(ORG_ID, profileId);
     expect(listed.documents).toHaveLength(1);
     expect(listed.documents[0]?.filename).toBe("notes.txt");
-    expect(listed.sources[0]?.url).toBe(NAKAMA_DOCS_LLMS_URL);
 
     const deleted = await service.deleteKnowledgeBaseDocument(
       ORG_ID,

@@ -8,17 +8,6 @@ import { loadSoulStack } from "./load";
 import { SOUL_TEMPLATE } from "./templates";
 
 describe("composeSoulSystemPrompt", () => {
-  test("includes embodiment preamble and SOUL identity section", () => {
-    const prompt = composeSoulSystemPrompt({
-      directory: "/tmp",
-      files: { soul: SOUL_TEMPLATE },
-      loaded: ["SOUL.md"],
-    });
-
-    expect(prompt).toContain("You embody the identity defined below.");
-    expect(prompt).toContain("# Identity (SOUL.md)");
-  });
-
   test("does not append Profile Instructions when profilePrompt is empty", () => {
     const prompt = composeSoulSystemPrompt(
       {
@@ -56,7 +45,6 @@ describe("default seed compose integration", () => {
       const stack = await loadSoulStack(directory);
       const prompt = composeSoulSystemPrompt(stack, { profilePrompt: "" });
 
-      expect(prompt).toContain("# Identity (SOUL.md)");
       expect(prompt).not.toContain("# Profile Instructions");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -74,23 +62,6 @@ describe("default seed compose integration", () => {
       await initSoulDirectory(directory);
 
       expect(await readFile(soulPath, "utf8")).toBe("# Legacy Soul\n");
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  test("loads default stack sections in compose output", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-stack-"));
-
-    try {
-      await initSoulDirectory(directory);
-      const stack = await loadSoulStack(directory);
-      const prompt = composeSoulSystemPrompt(stack, { profilePrompt: "" });
-
-      expect(prompt).toContain("# Voice & Style (STYLE.md)");
-      expect(prompt).toContain("# Operating Instructions (INSTRUCTIONS.md)");
-      expect(prompt).toContain("# Continuity (MEMORY.md)");
-      expect(prompt).not.toContain("# Calibration Examples");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

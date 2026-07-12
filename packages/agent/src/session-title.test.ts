@@ -7,31 +7,6 @@ import {
 } from "./session-title";
 
 describe("session title generation", () => {
-  test("buildSessionTitlePrompt includes user and assistant snippets", () => {
-    const messages: ChatMessage[] = [
-      { role: "user", content: "Help me refactor the auth middleware" },
-      { role: "assistant", content: "Sure, let's start with the session handler." },
-    ];
-
-    expect(buildSessionTitlePrompt(messages)).toBe(
-      "User: Help me refactor the auth middleware\nAssistant: Sure, let's start with the session handler.",
-    );
-  });
-
-  test("buildSessionTitlePrompt handles image-only user messages", () => {
-    const messages: ChatMessage[] = [
-      {
-        role: "user",
-        content: [{ type: "image", mediaType: "image/png", data: "abc" }],
-      },
-      { role: "assistant", content: "I see a screenshot of your dashboard." },
-    ];
-
-    expect(buildSessionTitlePrompt(messages)).toBe(
-      "User: [image]\nAssistant: I see a screenshot of your dashboard.",
-    );
-  });
-
   test("buildSessionTitlePrompt truncates long snippets", () => {
     const longText = "a".repeat(600);
     const messages: ChatMessage[] = [

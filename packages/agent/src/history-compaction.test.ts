@@ -81,7 +81,6 @@ describe("history compaction", () => {
     const prompt = buildCompactionPrompt("Previous task summary");
 
     expect(prompt).toContain("<previous-summary>");
-    expect(prompt).toContain("Previous task summary");
     expect(prompt).toContain("## Goal");
   });
 

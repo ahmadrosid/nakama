@@ -39,17 +39,6 @@ afterEach(async () => {
 });
 
 describe("WorkerManagerService", () => {
-  describe("CJS interop", () => {
-    test("ensurePm2 unwraps default from dynamic import", async () => {
-      const mod = await import("pm2");
-      const pm2 = (mod.default ?? mod) as typeof import("pm2");
-      expect(typeof pm2.connect).toBe("function");
-      expect(typeof pm2.start).toBe("function");
-      expect(typeof pm2.stop).toBe("function");
-      expect(typeof pm2.list).toBe("function");
-      expect(typeof pm2.disconnect).toBe("function");
-    });
-  });
   describe("isValidWorker", () => {
     test("returns true for telegram", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());

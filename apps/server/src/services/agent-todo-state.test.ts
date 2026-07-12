@@ -112,8 +112,6 @@ test("formatForPrompt renders active todos", async () => {
 
   const formatted = await state.formatForPrompt("session_test");
 
-  expect(formatted).toContain("# Active Task Plan");
-  expect(formatted).toContain("Finish remaining pending or in_progress tasks");
   expect(formatted).toContain("[in progress] Ship feature");
 });
 

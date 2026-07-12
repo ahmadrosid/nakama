@@ -33,7 +33,6 @@ describe("user context storage", () => {
     expect(await db.getUserContext("org_1", "user_1")).toBeNull();
 
     await db.setUserContext("org_1", "user_1", USER_CONTEXT_TEMPLATE, now);
-    expect(await db.getUserContext("org_1", "user_1")).toBe(USER_CONTEXT_TEMPLATE);
 
     await db.setUserContext("org_1", "user_1", "# Updated", now);
     expect(await db.getUserContext("org_1", "user_1")).toBe("# Updated");

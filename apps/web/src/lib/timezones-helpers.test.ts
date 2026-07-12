@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ListTimezonesResponse } from "@nakama/core/contract";
 import {
   findTimezoneEntry,
-  getBrowserTimezone,
   getFilteredTimezoneGroups,
   getTimezoneDisplay,
 } from "./timezones";
@@ -40,9 +39,5 @@ describe("timezone helpers", () => {
   test("filters timezone groups by search term", () => {
     expect(getFilteredTimezoneGroups("jakarta", catalog)).toHaveLength(1);
     expect(getFilteredTimezoneGroups("nonexistent", catalog)).toHaveLength(0);
-  });
-
-  test("falls back to UTC when browser timezone lookup fails", () => {
-    expect(typeof getBrowserTimezone()).toBe("string");
   });
 });

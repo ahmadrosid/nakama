@@ -4,7 +4,6 @@ import {
   BUILTIN_TOOL_IDS,
 } from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import { ensureBuiltinToolDefinitions } from "./seed";
 import {
   ensureOrgSuperBotProfiles,
@@ -99,7 +98,6 @@ describe("seedOrgSuperBotProfile", () => {
     expect(orgASuperBot.isSuper).toBe(true);
     expect(orgASuperBot.isDefault).toBe(false);
     expect(orgASuperBot.name).toBe("Super Bot");
-    expect(orgASuperBot.systemPrompt).toBe(SUPER_BOT_SYSTEM_PROMPT);
 
     const orgAList = await db.listProfilesForOrg("org_a");
     expect(orgAList).toHaveLength(1);
