@@ -113,6 +113,76 @@ export function parseLinkRedirectUrl(response: unknown): string | null {
   return null;
 }
 
+export function parseConnectionRequestId(response: unknown): string | undefined {
+  if (!response || typeof response !== "object") {
+    return undefined;
+  }
+
+  const record = response as Record<string, unknown>;
+  if (typeof record.id === "string") {
+    return record.id;
+  }
+
+  if (typeof record.connectedAccountId === "string") {
+    return record.connectedAccountId;
+  }
+
+  if (typeof record.connected_account_id === "string") {
+    return record.connected_account_id;
+  }
+
+  return undefined;
+}
+
+export function unwrapComposioError(error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(String(error));
+  }
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error && cause.message.trim()) {
+    return new Error(`${error.message}: ${cause.message}`, { cause });
+  }
+
+  return error;
+}
+
+type ComposioAuthConfigClient = {
+  authConfigs: {
+    list(query?: {
+      toolkit?: string;
+      isComposioManaged?: boolean;
+    }): Promise<{ items: Array<{ id?: string }> }>;
+    create(
+      toolkitSlug: string,
+      options?: { type?: string },
+    ): Promise<{ id?: string }>;
+  };
+};
+
+export async function resolveAuthConfigId(
+  composio: ComposioAuthConfigClient,
+  toolkitSlug: string,
+): Promise<string> {
+  const slug = toolkitSlug.toLowerCase();
+  const listed = await composio.authConfigs.list({
+    toolkit: slug,
+    isComposioManaged: true,
+  });
+
+  const existingId = listed.items.find((item) => item.id)?.id;
+  if (existingId) {
+    return existingId;
+  }
+
+  const created = await composio.authConfigs.create(slug);
+  if (!created.id) {
+    throw new Error(`Failed to create Composio auth config for ${slug}.`);
+  }
+
+  return created.id;
+}
+
 export class SdkComposioApiClient implements ComposioApiClient {
   private readonly composio: Composio;
 
@@ -134,27 +204,26 @@ export class SdkComposioApiClient implements ComposioApiClient {
     toolkitSlug: string,
     callbackUrl: string,
   ): Promise<ComposioLinkResult> {
-    const response = await this.composio.connectedAccounts.link(userId, toolkitSlug, {
-      callbackUrl,
-    });
+    try {
+      const authConfigId = await resolveAuthConfigId(this.composio, toolkitSlug);
+      const response = await this.composio.connectedAccounts.link(userId, authConfigId, {
+        callbackUrl,
+        allowMultiple: true,
+      });
 
-    const redirectUrl = parseLinkRedirectUrl(response);
+      const redirectUrl = parseLinkRedirectUrl(response);
 
-    if (!redirectUrl) {
-      throw new Error("Composio did not return an OAuth redirect URL.");
+      if (!redirectUrl) {
+        throw new Error("Composio did not return an OAuth redirect URL.");
+      }
+
+      return {
+        redirectUrl,
+        connectedAccountId: parseConnectionRequestId(response),
+      };
+    } catch (error) {
+      throw unwrapComposioError(error);
     }
-
-    const record = response && typeof response === "object" ? (response as Record<string, unknown>) : {};
-
-    return {
-      redirectUrl,
-      connectedAccountId:
-        typeof record.connectedAccountId === "string"
-          ? record.connectedAccountId
-          : typeof record.connected_account_id === "string"
-            ? record.connected_account_id
-            : undefined,
-    };
   }
 
   async deleteConnectedAccount(connectedAccountId: string): Promise<void> {

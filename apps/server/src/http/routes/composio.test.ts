@@ -163,6 +163,46 @@ describe("composio routes", () => {
     });
   });
 
+  test("org admin can connect an enabled toolkit with their user id", async () => {
+    const { app, databaseAdapter } = await createApp();
+    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
+    const session = await loginUserSession(app, email, password, orgId);
+
+    const enableResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/composio/toolkits/gmail/enable", {
+        method: "POST",
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ toolkitSlug: "gmail" }),
+      }),
+    );
+
+    expect(enableResponse.status).toBe(200);
+
+    const connectResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/composio/toolkits/gmail/connect", {
+        method: "POST",
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ callbackOrigin: "http://localhost:3003" }),
+      }),
+    );
+
+    expect(connectResponse.status).toBe(200);
+    await expect(connectResponse.json()).resolves.toMatchObject({
+      redirectUrl: "https://example.com/oauth",
+    });
+
+    const connections = await databaseAdapter.listComposioUserConnectionsForUser(orgId, "user_admin");
+    expect(connections).toHaveLength(1);
+    expect(connections[0]?.userId).toBe("user_admin");
+    expect(connections[0]?.status).toBe("oauth_in_progress");
+  });
+
   test("org member can list toolkits but cannot enable them", async () => {
     const { app, databaseAdapter } = await createApp();
     const { orgId } = await seedOrgAdmin(databaseAdapter);

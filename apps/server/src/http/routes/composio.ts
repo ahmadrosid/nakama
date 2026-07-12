@@ -64,7 +64,7 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
   app.get("/v1/composio/toolkits", async (c) => {
     const auth = requireNotViewerFromContext(c);
     return json<ListComposioToolkitsResponse>(
-      await service.listToolkits(auth.activeOrgId!, auth.userId),
+      await service.listToolkits(auth.activeOrgId!, auth.user.id),
     );
   });
 
@@ -110,7 +110,7 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
       return json<ComposioConnectResponse>(
         await service.connectToolkit(
           auth.activeOrgId!,
-          auth.userId,
+          auth.user.id,
           c.req.param("toolkitSlug"),
           resolveCallbackBaseUrl(c.req.raw, body.callbackOrigin),
         ),
@@ -131,7 +131,7 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
       return json<ComposioToolkitSummary>(
         await service.disconnectToolkit(
           auth.activeOrgId!,
-          auth.userId,
+          auth.user.id,
           c.req.param("toolkitSlug"),
         ),
       );
@@ -151,7 +151,7 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
       return json<ComposioToolkitSummary>(
         await service.syncUserToolkit(
           auth.activeOrgId!,
-          auth.userId,
+          auth.user.id,
           c.req.param("toolkitSlug"),
         ),
       );
