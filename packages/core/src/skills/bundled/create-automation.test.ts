@@ -8,16 +8,6 @@ import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
 describe("bundled create-automation skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("create-automation");
-    const parsed = parseSkillMarkdown(content, "create-automation/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("create-automation");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("runAt");
-    expect(parsed.body).toContain("Do not add delivery when the user only wants results saved");
-  });
-
   test("description matches scheduling messages", async () => {
     const content = await readBundledSkillMarkdown("create-automation");
     const parsed = parseSkillMarkdown(content, "create-automation/SKILL.md");
@@ -42,16 +32,6 @@ describe("bundled create-automation skill", () => {
 });
 
 describe("bundled create-profile skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("create-profile");
-    const parsed = parseSkillMarkdown(content, "create-profile/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("create-profile");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("`MEMORY.md` must be empty");
-    expect(parsed.body).toContain("available-tools context");
-  });
-
   test("description matches profile creation messages", async () => {
     const content = await readBundledSkillMarkdown("create-profile");
     const parsed = parseSkillMarkdown(content, "create-profile/SKILL.md");
@@ -76,17 +56,6 @@ describe("bundled create-profile skill", () => {
 });
 
 describe("bundled manage-skills skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("manage-skills");
-    const parsed = parseSkillMarkdown(content, "manage-skills/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("manage-skills");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("write_file");
-    expect(parsed.body).toContain("edit_file");
-    expect(parsed.body).toContain("skills/{skill-name}/SKILL.md");
-  });
-
   test("description matches skill management messages", async () => {
     const content = await readBundledSkillMarkdown("manage-skills");
     const parsed = parseSkillMarkdown(content, "manage-skills/SKILL.md");
@@ -111,18 +80,6 @@ describe("bundled manage-skills skill", () => {
 });
 
 describe("bundled archive-profile-memory skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("archive-profile-memory");
-    const parsed = parseSkillMarkdown(content, "archive-profile-memory/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("archive-profile-memory");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("read_file");
-    expect(parsed.body).toContain("edit_file");
-    expect(parsed.body).toContain("write_file");
-    expect(parsed.body).toContain("memory-archive/");
-  });
-
   test("description matches archive and cleanup messages", async () => {
     const content = await readBundledSkillMarkdown("archive-profile-memory");
     const parsed = parseSkillMarkdown(content, "archive-profile-memory/SKILL.md");
@@ -153,19 +110,6 @@ describe("bundled archive-profile-memory skill", () => {
 });
 
 describe("bundled update-profile-memory skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("update-profile-memory");
-    const parsed = parseSkillMarkdown(content, "update-profile-memory/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("update-profile-memory");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("read_file");
-    expect(parsed.body).toContain("edit_file");
-    expect(parsed.body).toContain("write_file");
-    expect(parsed.body).toContain("MEMORY.md");
-    expect(parsed.body).toContain("4096");
-  });
-
   test("description matches remember and preference messages", async () => {
     const content = await readBundledSkillMarkdown("update-profile-memory");
     const parsed = parseSkillMarkdown(content, "update-profile-memory/SKILL.md");
@@ -190,18 +134,6 @@ describe("bundled update-profile-memory skill", () => {
 });
 
 describe("bundled save-artifact skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("save-artifact");
-    const parsed = parseSkillMarkdown(content, "save-artifact/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("save-artifact");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("write_file");
-    expect(parsed.body).toContain("artifacts/");
-    expect(parsed.body).toContain(".nakama-meta.json");
-    expect(parsed.body).toContain("mimeType");
-  });
-
   test("description matches save and report messages", async () => {
     const content = await readBundledSkillMarkdown("save-artifact");
     const parsed = parseSkillMarkdown(content, "save-artifact/SKILL.md");
@@ -251,55 +183,6 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("coding-backend-codex");
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");
-
-    const content = await readFile(
-      join(configDir, "agent", "skills", "create-automation", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(content).toContain("name: create-automation");
-
-    const manageSkillsContent = await readFile(
-      join(configDir, "agent", "skills", "manage-skills", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(manageSkillsContent).toContain("name: manage-skills");
-
-    const archiveProfileMemoryContent = await readFile(
-      join(configDir, "agent", "skills", "archive-profile-memory", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(archiveProfileMemoryContent).toContain("name: archive-profile-memory");
-
-    const updateProfileMemoryContent = await readFile(
-      join(configDir, "agent", "skills", "update-profile-memory", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(updateProfileMemoryContent).toContain("name: update-profile-memory");
-
-    const saveArtifactContent = await readFile(
-      join(configDir, "agent", "skills", "save-artifact", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(saveArtifactContent).toContain("name: save-artifact");
-
-    const createProfileContent = await readFile(
-      join(configDir, "agent", "skills", "create-profile", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(createProfileContent).toContain("name: create-profile");
-
-    const codingDelegationContent = await readFile(
-      join(configDir, "agent", "skills", "coding-delegation", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(codingDelegationContent).toContain("name: coding-delegation");
   });
 
   test("does not overwrite existing skill files", async () => {

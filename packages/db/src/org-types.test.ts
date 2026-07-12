@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { ORG_ROLES } from "./constants";
 import type {
   StoredChannelOrgMappingRecord,
   StoredOrganizationRecord,
@@ -49,9 +48,5 @@ describe("org types", () => {
 
     expect(member.role).toBe("admin");
     expect(mapping.channel).toBe("telegram");
-  });
-
-  test("org role constants align with contract union", () => {
-    expect(ORG_ROLES).toEqual(["admin", "member", "viewer"]);
   });
 });

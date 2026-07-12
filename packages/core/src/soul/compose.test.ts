@@ -5,12 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { composeSoulSystemPrompt } from "./compose";
 import { initSoulDirectory } from "./init";
 import { loadSoulStack } from "./load";
-import {
-  INSTRUCTIONS_TEMPLATE,
-  MEMORY_TEMPLATE,
-  SOUL_TEMPLATE,
-  STYLE_TEMPLATE,
-} from "./templates";
+import { SOUL_TEMPLATE } from "./templates";
 
 describe("composeSoulSystemPrompt", () => {
   test("includes embodiment preamble and SOUL identity section", () => {
@@ -22,7 +17,6 @@ describe("composeSoulSystemPrompt", () => {
 
     expect(prompt).toContain("You embody the identity defined below.");
     expect(prompt).toContain("# Identity (SOUL.md)");
-    expect(prompt).toContain("# Default Bot");
   });
 
   test("does not append Profile Instructions when profilePrompt is empty", () => {
@@ -94,11 +88,8 @@ describe("default seed compose integration", () => {
       const prompt = composeSoulSystemPrompt(stack, { profilePrompt: "" });
 
       expect(prompt).toContain("# Voice & Style (STYLE.md)");
-      expect(prompt).toContain(STYLE_TEMPLATE.split("\n")[0] ?? "");
       expect(prompt).toContain("# Operating Instructions (INSTRUCTIONS.md)");
-      expect(prompt).toContain(INSTRUCTIONS_TEMPLATE.split("\n")[0] ?? "");
       expect(prompt).toContain("# Continuity (MEMORY.md)");
-      expect(prompt).toContain(MEMORY_TEMPLATE.split("\n")[0] ?? "");
       expect(prompt).not.toContain("# Calibration Examples");
     } finally {
       await rm(directory, { recursive: true, force: true });

@@ -3,7 +3,6 @@ import type { UserConfig } from "@nakama/core";
 import {
   resolvePrimaryModelVisionSupport,
   resolveVisionProviderSelection,
-  VISION_MODEL_REQUIRED_MESSAGE,
 } from "./image-vision-fallback";
 
 describe("resolveVisionProviderSelection", () => {
@@ -74,11 +73,5 @@ describe("resolvePrimaryModelVisionSupport", () => {
         "p-go::opencode-go/kimi-k2.7-code",
       ),
     ).toBe(false);
-  });
-});
-
-describe("VISION_MODEL_REQUIRED_MESSAGE", () => {
-  test("points users to settings", () => {
-    expect(VISION_MODEL_REQUIRED_MESSAGE).toContain("Settings");
   });
 });

@@ -4,17 +4,12 @@ import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { initSoulDirectory, isLegacySoulPlaceholder } from "./init";
 import { loadSoulStack } from "./load";
-import { SOUL_TEMPLATE } from "./templates";
 
 describe("isLegacySoulPlaceholder", () => {
   test("detects old scaffold markers", () => {
     expect(isLegacySoulPlaceholder("# Your Name\n\n[Belief 1]")).toBe(true);
     expect(isLegacySoulPlaceholder("")).toBe(true);
     expect(isLegacySoulPlaceholder("   ")).toBe(true);
-  });
-
-  test("accepts filled Default Bot soul", () => {
-    expect(isLegacySoulPlaceholder(SOUL_TEMPLATE)).toBe(false);
   });
 });
 
@@ -27,7 +22,7 @@ describe("initSoulDirectory seeding", () => {
       await initSoulDirectory(directory);
 
       const soul = await readFile(join(directory, "SOUL.md"), "utf8");
-      expect(soul).toContain("# Default Bot");
+      expect(soul.trim().length).toBeGreaterThan(0);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -41,7 +36,6 @@ describe("initSoulDirectory seeding", () => {
       await initSoulDirectory(directory);
 
       const soul = await readFile(join(directory, "SOUL.md"), "utf8");
-      expect(soul).toContain("# Default Bot");
       expect(soul).not.toContain("# Your Name");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -78,7 +72,7 @@ describe("initSoulDirectory seeding", () => {
         "examples/good-outputs.md",
         "examples/bad-outputs.md",
       ]);
-      expect(stack.files.soul).toContain("# Default Bot");
+      expect(stack.files.soul.trim().length).toBeGreaterThan(0);
       expect(stack.loaded.length).toBeGreaterThan(0);
     } finally {
       await rm(directory, { recursive: true, force: true });

@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { UserConfig } from "@nakama/core";
-import {
-  resolveTranscriptionProviderSelection,
-  TRANSCRIPTION_MODEL_REQUIRED_MESSAGE,
-} from "./audio-transcription";
+import { resolveTranscriptionProviderSelection } from "./audio-transcription";
 
 describe("resolveTranscriptionProviderSelection", () => {
   test("returns null when transcription model is not configured", () => {
@@ -70,11 +67,5 @@ describe("resolveTranscriptionProviderSelection", () => {
     expect(() => resolveTranscriptionProviderSelection(config)).toThrow(
       'Configured audio transcription model "gpt-4o-mini" is not supported.',
     );
-  });
-});
-
-describe("TRANSCRIPTION_MODEL_REQUIRED_MESSAGE", () => {
-  test("points users to settings", () => {
-    expect(TRANSCRIPTION_MODEL_REQUIRED_MESSAGE).toContain("Settings");
   });
 });

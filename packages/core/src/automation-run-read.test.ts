@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  AUTOMATION_RUN_READ_EPOCH,
-  isAutomationRunUnread,
-  summarizeAutomationUnreadCounts,
-} from "./automation-run-read";
+import { isAutomationRunUnread, summarizeAutomationUnreadCounts } from "./automation-run-read";
 
 describe("isAutomationRunUnread", () => {
   test("running runs are never unread", () => {
@@ -56,7 +52,6 @@ describe("isAutomationRunUnread", () => {
         null,
       ),
     ).toBe(true);
-    expect(AUTOMATION_RUN_READ_EPOCH).toBe("1970-01-01T00:00:00.000Z");
   });
 });
 

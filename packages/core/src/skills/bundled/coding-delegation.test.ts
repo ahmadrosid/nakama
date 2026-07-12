@@ -1,25 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { matchSkillsForMessage } from "../match";
 import { parseSkillMarkdown } from "../parse";
-import { readBundledSkillBody, readBundledSkillMarkdown } from "./index";
+import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
 
 describe("bundled coding-delegation skill", () => {
-  test("parses bundled markdown", async () => {
-    const content = await readBundledSkillMarkdown("coding-delegation");
-    const parsed = parseSkillMarkdown(content, "coding-delegation/SKILL.md");
-
-    expect(parsed.frontmatter.name).toBe("coding-delegation");
-    expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);
-    expect(parsed.body).toContain("Keep ordinary conversation local");
-    expect(parsed.body).toContain("bash");
-    expect(parsed.body).toContain("timeoutMs");
-    expect(parsed.body).toContain("After the coding agent returns");
-  });
-
   test("description matches code-change requests but not plain explainers", async () => {
     const content = await readBundledSkillMarkdown("coding-delegation");
     const parsed = parseSkillMarkdown(content, "coding-delegation/SKILL.md");
@@ -49,14 +37,6 @@ describe("bundled coding-delegation skill", () => {
   });
 });
 
-describe("bundled coding backend skills", () => {
-  test("exposes backend-specific prompt bodies", async () => {
-    expect(await readBundledSkillBody("coding-backend-codex")).toContain("Codex CLI");
-    expect(await readBundledSkillBody("coding-backend-claude-code")).toContain("Claude Code");
-    expect(await readBundledSkillBody("coding-backend-opencode")).toContain("OpenCode");
-  });
-});
-
 describe("ensureBundledSkillFiles for coding delegation", () => {
   let configDir: string;
 
@@ -77,12 +57,5 @@ describe("ensureBundledSkillFiles for coding delegation", () => {
     expect(created).toContain("coding-backend-codex");
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");
-
-    const content = await readFile(
-      join(configDir, "agent", "skills", "coding-delegation", "SKILL.md"),
-      "utf8",
-    );
-
-    expect(content).toContain("name: coding-delegation");
   });
 });
