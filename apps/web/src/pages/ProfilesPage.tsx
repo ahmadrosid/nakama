@@ -144,11 +144,11 @@ export function ProfilesPage() {
   const { data: allTools = [] } = useToolsQuery();
   const { data: allMcpServers = [] } = useMcpServersQuery();
   const { data: composioToolkitsData } = useComposioToolkits();
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  const profileInitializedRef = useRef(false);
   const { data: profileComposioData } = useProfileComposioToolkits(selectedId);
   const { data: allSkills = [] } = useSkillsQuery();
   const { data: modelsResponse } = useModelsQuery();
-  const [selectedId, setSelectedIdState] = useState<string | null>(null);
-  const profileInitializedRef = useRef(false);
   const {
     data: detail = null,
     isLoading: detailLoading,
