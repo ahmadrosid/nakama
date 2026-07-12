@@ -1584,6 +1584,7 @@ export interface ComposioCatalogToolkitSummary {
   slug: string;
   name: string;
   description: string | null;
+  logoUrl: string | null;
 }
 
 export interface ListComposioToolkitsResponse {
@@ -1601,6 +1602,11 @@ export interface ListComposioToolkitsResponse {
 
 export interface EnableComposioToolkitRequest {
   toolkitSlug: string;
+}
+
+export interface ComposioConnectRequest {
+  /** Browser origin for OAuth callback (e.g. http://localhost:3003). */
+  callbackOrigin?: string;
 }
 
 export interface ComposioConnectResponse {

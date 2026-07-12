@@ -17,7 +17,7 @@ const TEST_API_KEY = "ck_test";
 function createMockClient(): ComposioApiClient {
   return {
     async listCatalogToolkits() {
-      return [{ slug: "gmail", name: "Gmail", description: "Google Mail" }];
+      return [{ slug: "gmail", name: "Gmail", description: "Google Mail", logoUrl: null }];
     },
     async linkToolkitAccount() {
       return { redirectUrl: "https://example.com/oauth" };

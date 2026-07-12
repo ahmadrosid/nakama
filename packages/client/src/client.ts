@@ -95,6 +95,7 @@ import type {
   UpdateCodingHarnessSettingsRequest,
   PrepareCodingAgentLaunchRequest,
   CodingAgentLaunchPlanResponse,
+  ComposioConnectRequest,
   ComposioConnectResponse,
   ComposioToolkitSummary,
   ListComposioToolkitsResponse,
@@ -1116,9 +1117,18 @@ export class NakamaClient {
   }
 
   async connectComposioToolkit(toolkitSlug: string): Promise<ComposioConnectResponse> {
+    const body: ComposioConnectRequest = {};
+
+    if (typeof window !== "undefined" && window.location?.origin) {
+      body.callbackOrigin = window.location.origin;
+    }
+
     return this.request<ComposioConnectResponse>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/connect`,
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
     );
   }
 

@@ -5,6 +5,7 @@ export interface ComposioCatalogToolkit {
   slug: string;
   name: string;
   description: string | null;
+  logoUrl: string | null;
 }
 
 export interface ComposioLinkResult {
@@ -39,6 +40,79 @@ export interface ComposioApiClient {
   listSessionTools(session: ComposioSessionMcpEndpoint): Promise<ComposioCachedToolSummary[]>;
 }
 
+export function extractComposioListItems<T>(
+  response: { items?: T[] } | T[] | null | undefined,
+): T[] {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (response && Array.isArray(response.items)) {
+    return response.items;
+  }
+
+  return [];
+}
+
+export function parseCatalogToolkitItem(item: {
+  slug?: unknown;
+  name?: unknown;
+  meta?: { description?: unknown; logo?: unknown };
+}): ComposioCatalogToolkit | null {
+  const slug =
+    typeof item.slug === "string"
+      ? item.slug
+      : typeof item.name === "string"
+        ? item.name.toLowerCase()
+        : null;
+
+  if (!slug) {
+    return null;
+  }
+
+  return {
+    slug: slug.toLowerCase(),
+    name: typeof item.name === "string" ? item.name : slug,
+    description: typeof item.meta?.description === "string" ? item.meta.description : null,
+    logoUrl: typeof item.meta?.logo === "string" ? item.meta.logo : null,
+  };
+}
+
+export function parseLinkRedirectUrl(response: unknown): string | null {
+  if (typeof response === "string" && response.startsWith("http")) {
+    return response;
+  }
+
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+
+  const record = response as Record<string, unknown>;
+  for (const key of [
+    "redirectUrl",
+    "redirect_url",
+    "authorizationUrl",
+    "authorization_url",
+    "url",
+  ]) {
+    if (typeof record[key] === "string" && record[key]) {
+      return record[key] as string;
+    }
+  }
+
+  for (const nestedKey of ["connectionRequest", "data", "connection"]) {
+    const nested = record[nestedKey];
+    if (nested && typeof nested === "object") {
+      const nestedUrl = parseLinkRedirectUrl(nested);
+      if (nestedUrl) {
+        return nestedUrl;
+      }
+    }
+  }
+
+  return null;
+}
+
 export class SdkComposioApiClient implements ComposioApiClient {
   private readonly composio: Composio;
 
@@ -48,28 +122,10 @@ export class SdkComposioApiClient implements ComposioApiClient {
 
   async listCatalogToolkits(): Promise<ComposioCatalogToolkit[]> {
     const response = await this.composio.toolkits.getToolkits({ limit: 200 });
-    const items = Array.isArray(response.items) ? response.items : [];
+    const items = extractComposioListItems(response);
 
     return items
-      .map((item) => {
-        const slug =
-          typeof item.slug === "string"
-            ? item.slug
-            : typeof item.name === "string"
-              ? item.name.toLowerCase()
-              : null;
-
-        if (!slug) {
-          return null;
-        }
-
-        return {
-          slug: slug.toLowerCase(),
-          name: typeof item.name === "string" ? item.name : slug,
-          description:
-            typeof item.meta?.description === "string" ? item.meta.description : null,
-        };
-      })
+      .map((item) => parseCatalogToolkitItem(item))
       .filter((item): item is ComposioCatalogToolkit => item !== null);
   }
 
@@ -82,24 +138,21 @@ export class SdkComposioApiClient implements ComposioApiClient {
       callbackUrl,
     });
 
-    const redirectUrl =
-      typeof response.redirectUrl === "string"
-        ? response.redirectUrl
-        : typeof response.redirect_url === "string"
-          ? response.redirect_url
-          : null;
+    const redirectUrl = parseLinkRedirectUrl(response);
 
     if (!redirectUrl) {
       throw new Error("Composio did not return an OAuth redirect URL.");
     }
 
+    const record = response && typeof response === "object" ? (response as Record<string, unknown>) : {};
+
     return {
       redirectUrl,
       connectedAccountId:
-        typeof response.connectedAccountId === "string"
-          ? response.connectedAccountId
-          : typeof response.connected_account_id === "string"
-            ? response.connected_account_id
+        typeof record.connectedAccountId === "string"
+          ? record.connectedAccountId
+          : typeof record.connected_account_id === "string"
+            ? record.connected_account_id
             : undefined,
     };
   }
@@ -134,7 +187,7 @@ export class SdkComposioApiClient implements ComposioApiClient {
       limit: 500,
     });
 
-    const items = Array.isArray(tools.items) ? tools.items : [];
+    const items = extractComposioListItems(tools);
 
     return items
       .map((tool) => {

@@ -194,6 +194,7 @@ export class ComposioService {
         slug: toolkit.slug,
         name: toolkit.name,
         description: toolkit.description,
+        logoUrl: toolkit.logoUrl,
       }));
 
       return {

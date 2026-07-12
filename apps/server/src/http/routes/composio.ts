@@ -1,6 +1,7 @@
 import type {
   ComposioConnectResponse,
   ComposioToolkitSummary,
+  ComposioConnectRequest,
   EnableComposioToolkitRequest,
   ListComposioToolkitsResponse,
   ListProfileComposioToolkitsResponse,
@@ -13,7 +14,18 @@ import { requireNotViewerFromContext, requireOrgAdminFromContext } from "../org-
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
-function resolveCallbackBaseUrl(request: Request): string {
+function resolveCallbackBaseUrl(request: Request, callbackOrigin?: string): string {
+  const explicitOrigin = callbackOrigin?.trim();
+  if (explicitOrigin) {
+    return explicitOrigin.replace(/\/$/, "");
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const forwardedProto = request.headers.get("x-forwarded-proto") ?? "http";
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
@@ -94,12 +106,13 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
     const auth = requireNotViewerFromContext(c);
 
     try {
+      const body = await readJson<ComposioConnectRequest>(c.req.raw).catch(() => ({}));
       return json<ComposioConnectResponse>(
         await service.connectToolkit(
           auth.activeOrgId!,
           auth.userId,
           c.req.param("toolkitSlug"),
-          resolveCallbackBaseUrl(c.req.raw),
+          resolveCallbackBaseUrl(c.req.raw, body.callbackOrigin),
         ),
       );
     } catch (error) {

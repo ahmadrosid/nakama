@@ -46,6 +46,40 @@ function ComposioStatusBadge({
   );
 }
 
+function ComposioSettingsSkeleton() {
+  return (
+    <Card className="w-full shadow-none">
+      <CardContent className="p-0" aria-busy="true" aria-label="Loading Composio settings">
+        <div className="flex items-start justify-between gap-4 p-5 pb-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton-shimmer h-5 w-24 rounded" />
+            <div className="skeleton-shimmer h-4 w-full max-w-md rounded" />
+            <div className="skeleton-shimmer h-4 w-full max-w-sm rounded" />
+          </div>
+          <div className="skeleton-shimmer h-6 w-28 shrink-0 rounded-full" />
+        </div>
+
+        <div className="border-t border-border" />
+
+        <div className="space-y-3 p-5">
+          <div className="space-y-2">
+            <div className="skeleton-shimmer h-4 w-28 rounded" />
+            <div className="skeleton-shimmer h-4 w-full rounded" />
+            <div className="skeleton-shimmer h-4 w-4/5 rounded" />
+          </div>
+          <div className="skeleton-shimmer h-9 w-full rounded-md" />
+          <div className="skeleton-shimmer h-4 w-64 rounded" />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/40 px-5 py-3">
+          <div className="skeleton-shimmer h-4 w-72 max-w-full rounded" />
+          <div className="skeleton-shimmer h-8 w-16 shrink-0 rounded-md" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ComposioSettingsCard() {
   const { data: settings, isLoading, error: loadError } = useComposioSettings();
   const saveMutation = useSaveComposioSettings();
@@ -62,15 +96,7 @@ export function ComposioSettingsCard() {
   }, [settings]);
 
   if (isLoading) {
-    return (
-      <Card className="w-full shadow-none">
-        <CardContent className="py-12">
-          <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-            <Spinner className="size-5" />
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <ComposioSettingsSkeleton />;
   }
 
   const configured = settings?.configured === true;
