@@ -96,7 +96,7 @@ export function IntegrationsPage() {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
-        if (nextSection === "token") {
+        if (nextSection === "telegram") {
           next.delete("section");
         } else {
           next.set("section", nextSection);
