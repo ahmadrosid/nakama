@@ -220,17 +220,12 @@ export function TasksPage() {
         )}
       >
         <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40">
-              <KanbanIcon className="size-5 text-foreground" aria-hidden />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <h1 className="type-page-title">Agent Swarm</h1>
-              <p className="type-body max-w-2xl">
-                Kanban board for multi-agent work. Start tasks with play, drag across columns, and
-                open done or failed cards to review run chat.
-              </p>
-            </div>
+          <div className="min-w-0 space-y-1">
+            <h1 className="type-page-title">Agent Swarm</h1>
+            <p className="type-body max-w-2xl">
+              Kanban board for multi-agent work. Start tasks with play, drag across columns, and
+              open done or failed cards to review run chat.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">

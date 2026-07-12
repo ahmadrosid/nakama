@@ -1,9 +1,7 @@
-import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BellRingIcon,
   BotIcon,
-  ExternalLinkIcon,
   HashIcon,
   KeyRoundIcon,
   MessageCircleMoreIcon,
@@ -22,7 +20,8 @@ import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
-import { DISCORD_SETUP_GUIDE_URL } from "@/lib/integration-docs";
+
+const sectionClass = "rounded-md border border-border bg-card";
 
 const INTEGRATION_SECTIONS = [
   {
@@ -124,9 +123,9 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-8 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] md:items-start">
-        <aside className="md:sticky md:top-6">
+    <section className={cn(sectionClass, "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden")}>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="shrink-0 border-b border-border p-4 md:w-56 md:border-r md:border-b-0">
           <nav
             aria-label="Integration settings"
             className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
@@ -144,12 +143,8 @@ export function IntegrationsPage() {
           </nav>
         </aside>
 
-        <section className="min-w-0">
-          {section === "token" ? (
-            <IntegrationSection>
-              <LocalAuthTokenCard />
-            </IntegrationSection>
-          ) : null}
+        <div className="min-w-0 flex-1 p-4 sm:p-5">
+          {section === "token" ? <LocalAuthTokenCard /> : null}
 
           {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
 
@@ -160,35 +155,16 @@ export function IntegrationsPage() {
             </div>
           ) : null}
 
-          {section === "telegram" ? (
-            <IntegrationSection>
-              <TelegramSettingsCard />
-            </IntegrationSection>
-          ) : null}
+          {section === "telegram" ? <TelegramSettingsCard /> : null}
 
-          {section === "discord" ? (
-            <IntegrationSection
-              docsHref={DISCORD_SETUP_GUIDE_URL}
-              docsLabel="Discord setup guide"
-            >
-              <DiscordSettingsCard />
-            </IntegrationSection>
-          ) : null}
+          {section === "discord" ? <DiscordSettingsCard /> : null}
 
-          {section === "notifications" ? (
-            <IntegrationSection>
-              <NotificationDestinationsCard />
-            </IntegrationSection>
-          ) : null}
+          {section === "notifications" ? <NotificationDestinationsCard /> : null}
 
-          {section === "whatsapp" ? (
-            <IntegrationSection>
-              <WhatsAppSettingsCard />
-            </IntegrationSection>
-          ) : null}
-        </section>
+          {section === "whatsapp" ? <WhatsAppSettingsCard /> : null}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -226,32 +202,5 @@ function SidebarButton({
         <span className="block text-xs leading-snug text-muted-foreground">{description}</span>
       </span>
     </button>
-  );
-}
-
-function IntegrationSection({
-  docsHref,
-  docsLabel = "Setup guide",
-  children,
-}: {
-  docsHref?: string;
-  docsLabel?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-4">
-      {children}
-      {docsHref ? (
-        <a
-          href={docsHref}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 px-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ExternalLinkIcon className="size-3.5 shrink-0" aria-hidden />
-          <span>{docsLabel}</span>
-        </a>
-      ) : null}
-    </div>
   );
 }

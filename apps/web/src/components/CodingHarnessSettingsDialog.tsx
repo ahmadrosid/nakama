@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  BotIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CopyIcon,
   DownloadIcon,
-  KeyRoundIcon,
-  LaptopMinimalCheckIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -306,18 +302,9 @@ export function CodingHarnessSettingsPanel({
                 <div className="flex items-start gap-3 px-4 py-3.5">
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    className="min-w-0 flex-1 text-left"
                     onClick={() => selectHarness(harness.id)}
                   >
-                    <BotIcon
-                      className={cn(
-                        "mt-0.5 size-4 shrink-0",
-                        selected ? "text-primary" : "text-muted-foreground",
-                      )}
-                      strokeWidth={1.75}
-                      aria-hidden
-                    />
-
                     <span className="min-w-0 flex-1 space-y-2">
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{harness.name}</span>
@@ -330,12 +317,10 @@ export function CodingHarnessSettingsPanel({
 
                       <span className="flex flex-wrap gap-1.5 text-xs">
                         <StatusChip
-                          icon={<LaptopMinimalCheckIcon className="size-3.5" />}
                           variant={harness.installed ? "solid-ok" : "solid-warn"}
                           label={harness.installed ? "Installed" : "Not installed"}
                         />
                         <StatusChip
-                          icon={<KeyRoundIcon className="size-3.5" />}
                           variant={
                             !harness.installed
                               ? "muted"
@@ -356,7 +341,6 @@ export function CodingHarnessSettingsPanel({
                           }
                         />
                         <StatusChip
-                          icon={<CheckIcon className="size-3.5" />}
                           variant={harness.ready ? "ok" : "muted"}
                           label={harness.ready ? "Ready" : "Not ready yet"}
                         />
@@ -366,8 +350,7 @@ export function CodingHarnessSettingsPanel({
 
                   <div className="flex shrink-0 items-center gap-2 pt-0.5">
                     {selected ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                        <CheckIcon className="size-3.5" aria-hidden />
+                      <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
                         Selected
                       </span>
                     ) : null}
@@ -388,7 +371,7 @@ export function CodingHarnessSettingsPanel({
                 </div>
 
                 {expanded ? (
-                  <div className="border-t border-border/60 px-4 py-3 pl-11">
+                  <div className="border-t border-border/60 px-4 py-3">
                     <p className="text-sm text-muted-foreground">
                       {!harness.installed
                         ? harness.installHint
@@ -490,7 +473,6 @@ function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolea
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="rounded-lg border border-border px-4 py-3.5">
               <div className="flex items-start gap-3">
-                <div className="skeleton-shimmer mt-0.5 size-4 shrink-0 rounded" />
                 <div className="min-w-0 flex-1 space-y-2.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="skeleton-shimmer h-4 w-24 rounded" />
@@ -521,25 +503,22 @@ function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolea
 }
 
 function StatusChip({
-  icon,
   variant,
   label,
 }: {
-  icon: ReactNode;
   variant: "solid-ok" | "ok" | "solid-warn" | "muted";
   label: string;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
+        "inline-flex items-center rounded-full px-2 py-0.5",
         variant === "solid-ok" && "bg-primary text-primary-foreground",
         variant === "ok" && "border border-primary/20 bg-primary/5 text-primary",
         variant === "solid-warn" && "bg-accent-500/15 text-accent-600 dark:text-accent-400",
         variant === "muted" && "bg-muted/80 text-muted-foreground",
       )}
     >
-      {icon}
       {label}
     </span>
   );
