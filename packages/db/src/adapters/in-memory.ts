@@ -25,6 +25,8 @@ import type {
   StoredToolRecord,
   StoredUserRecord,
   StoredNotificationDestinationRecord,
+  StoredComposioToolkitRecord,
+  StoredProfileComposioToolkitRecord,
   StoredWorkspaceSettingsRecord,
 } from "../types";
 
@@ -63,6 +65,8 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const llmUsageByModel = new Map<string, StoredLlmUsageModelStatsRecord>();
   let workspaceSettings: StoredWorkspaceSettingsRecord | null = null;
   const notificationDestinations = new Map<string, StoredNotificationDestinationRecord>();
+  const composioToolkits = new Map<string, StoredComposioToolkitRecord>();
+  const profileComposioToolkits = new Map<string, StoredProfileComposioToolkitRecord[]>();
 
   return {
     async getUserByEmail(email) {
@@ -747,6 +751,41 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
 
     async deleteNotificationDestination(id) {
       return notificationDestinations.delete(id);
+    },
+
+    async listComposioToolkitsForOrg(orgId) {
+      return Array.from(composioToolkits.values()).filter((record) => record.orgId === orgId);
+    },
+
+    async getComposioToolkit(id) {
+      return composioToolkits.get(id) ?? null;
+    },
+
+    async getComposioToolkitBySlug(orgId, toolkitSlug) {
+      return (
+        Array.from(composioToolkits.values()).find(
+          (record) => record.orgId === orgId && record.toolkitSlug === toolkitSlug,
+        ) ?? null
+      );
+    },
+
+    async upsertComposioToolkit(record) {
+      composioToolkits.set(record.id, record);
+    },
+
+    async deleteComposioToolkit(id) {
+      return composioToolkits.delete(id);
+    },
+
+    async listProfileComposioToolkits(profileId) {
+      return profileComposioToolkits.get(profileId) ?? [];
+    },
+
+    async replaceProfileComposioToolkits(profileId, assignments) {
+      profileComposioToolkits.set(
+        profileId,
+        assignments.map((assignment) => ({ ...assignment, profileId })),
+      );
     },
 
     async listMcpServers() {

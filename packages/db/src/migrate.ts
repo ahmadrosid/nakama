@@ -24,6 +24,7 @@ export function migrateDatabase(db: Database): void {
   migrateAttachmentsTable(db);
   migrateAutomationRunsTable(db);
   migrateAutomationRunReadStateTable(db);
+  migrateComposioTables(db);
 }
 
 export function resolveSchemaPath(options: {
@@ -732,5 +733,40 @@ function migrateAttachmentsTable(db: Database): void {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS attachments_session_id ON attachments (session_id);
+  `);
+}
+
+function migrateComposioTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS composio_toolkits (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      toolkit_slug TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      connected_account_id TEXT,
+      session_id_enc TEXT,
+      oauth_state_hash TEXT,
+      cached_tools TEXT NOT NULL DEFAULT '[]',
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS composio_toolkits_org_slug_unique
+      ON composio_toolkits (org_id, toolkit_slug);
+
+    CREATE INDEX IF NOT EXISTS composio_toolkits_org_id
+      ON composio_toolkits (org_id);
+
+    CREATE TABLE IF NOT EXISTS profile_composio_toolkits (
+      profile_id TEXT NOT NULL,
+      toolkit_id TEXT NOT NULL,
+      allowed_actions TEXT,
+      PRIMARY KEY (profile_id, toolkit_id),
+      FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+      FOREIGN KEY (toolkit_id) REFERENCES composio_toolkits (id) ON DELETE CASCADE
+    );
   `);
 }

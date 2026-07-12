@@ -93,6 +93,11 @@ import type {
   UpdateCodingHarnessSettingsRequest,
   PrepareCodingAgentLaunchRequest,
   CodingAgentLaunchPlanResponse,
+  ComposioConnectResponse,
+  ComposioToolkitSummary,
+  ListComposioToolkitsResponse,
+  ListProfileComposioToolkitsResponse,
+  UpdateProfileComposioToolkitsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
   VisionSettings,
@@ -1073,6 +1078,66 @@ export class NakamaClient {
       `/v1/notification-destinations/${encodeURIComponent(destinationId)}`,
       {
         method: "DELETE",
+      },
+    );
+  }
+
+  async listComposioToolkits(): Promise<ListComposioToolkitsResponse> {
+    return this.request<ListComposioToolkitsResponse>("/v1/composio/toolkits");
+  }
+
+  async enableComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+    return this.request<ComposioToolkitSummary>(
+      `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/enable`,
+      { method: "POST", body: JSON.stringify({ toolkitSlug }) },
+    );
+  }
+
+  async disableComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+    return this.request<ComposioToolkitSummary>(
+      `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/disable`,
+      { method: "POST" },
+    );
+  }
+
+  async connectComposioToolkit(toolkitSlug: string): Promise<ComposioConnectResponse> {
+    return this.request<ComposioConnectResponse>(
+      `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/connect`,
+      { method: "POST" },
+    );
+  }
+
+  async disconnectComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+    return this.request<ComposioToolkitSummary>(
+      `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/disconnect`,
+      { method: "POST" },
+    );
+  }
+
+  async syncComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+    return this.request<ComposioToolkitSummary>(
+      `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/sync`,
+      { method: "POST" },
+    );
+  }
+
+  async listProfileComposioToolkits(
+    profileId: string,
+  ): Promise<ListProfileComposioToolkitsResponse> {
+    return this.request<ListProfileComposioToolkitsResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
+    );
+  }
+
+  async updateProfileComposioToolkits(
+    profileId: string,
+    request: UpdateProfileComposioToolkitsRequest,
+  ): Promise<ListProfileComposioToolkitsResponse> {
+    return this.request<ListProfileComposioToolkitsResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
+      {
+        method: "PUT",
+        body: JSON.stringify(request),
       },
     );
   }

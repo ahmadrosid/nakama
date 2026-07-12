@@ -28,6 +28,8 @@ import type {
   StoredToolRecord,
   StoredUserRecord,
   StoredNotificationDestinationRecord,
+  StoredComposioToolkitRecord,
+  StoredProfileComposioToolkitRecord,
   StoredWorkspaceSettingsRecord,
 } from "../types";
 
@@ -190,6 +192,27 @@ interface NotificationDestinationRow {
   org_id: string;
   created_at: string;
   updated_at: string;
+}
+
+interface ComposioToolkitRow {
+  id: string;
+  org_id: string;
+  toolkit_slug: string;
+  display_name: string;
+  status: string;
+  connected_account_id: string | null;
+  session_id_enc: string | null;
+  oauth_state_hash: string | null;
+  cached_tools: string;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ProfileComposioToolkitRow {
+  profile_id: string;
+  toolkit_id: string;
+  allowed_actions: string | null;
 }
 
 interface SkillRow {
@@ -721,6 +744,102 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const deleteNotificationDestinationStmt = db.prepare(`
     DELETE FROM notification_destinations WHERE id = ?
+  `);
+  const listComposioToolkitsForOrgStmt = db.prepare(`
+    SELECT
+      id,
+      org_id,
+      toolkit_slug,
+      display_name,
+      status,
+      connected_account_id,
+      session_id_enc,
+      oauth_state_hash,
+      cached_tools,
+      last_error,
+      created_at,
+      updated_at
+    FROM composio_toolkits
+    WHERE org_id = ?
+    ORDER BY display_name ASC
+  `);
+  const getComposioToolkitStmt = db.prepare(`
+    SELECT
+      id,
+      org_id,
+      toolkit_slug,
+      display_name,
+      status,
+      connected_account_id,
+      session_id_enc,
+      oauth_state_hash,
+      cached_tools,
+      last_error,
+      created_at,
+      updated_at
+    FROM composio_toolkits
+    WHERE id = ?
+  `);
+  const getComposioToolkitBySlugStmt = db.prepare(`
+    SELECT
+      id,
+      org_id,
+      toolkit_slug,
+      display_name,
+      status,
+      connected_account_id,
+      session_id_enc,
+      oauth_state_hash,
+      cached_tools,
+      last_error,
+      created_at,
+      updated_at
+    FROM composio_toolkits
+    WHERE org_id = ? AND toolkit_slug = ?
+  `);
+  const upsertComposioToolkitStmt = db.prepare(`
+    INSERT INTO composio_toolkits (
+      id,
+      org_id,
+      toolkit_slug,
+      display_name,
+      status,
+      connected_account_id,
+      session_id_enc,
+      oauth_state_hash,
+      cached_tools,
+      last_error,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      org_id = excluded.org_id,
+      toolkit_slug = excluded.toolkit_slug,
+      display_name = excluded.display_name,
+      status = excluded.status,
+      connected_account_id = excluded.connected_account_id,
+      session_id_enc = excluded.session_id_enc,
+      oauth_state_hash = excluded.oauth_state_hash,
+      cached_tools = excluded.cached_tools,
+      last_error = excluded.last_error,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at
+  `);
+  const deleteComposioToolkitStmt = db.prepare(`
+    DELETE FROM composio_toolkits WHERE id = ?
+  `);
+  const listProfileComposioToolkitsStmt = db.prepare(`
+    SELECT profile_id, toolkit_id, allowed_actions
+    FROM profile_composio_toolkits
+    WHERE profile_id = ?
+  `);
+  const deleteProfileComposioToolkitsStmt = db.prepare(`
+    DELETE FROM profile_composio_toolkits WHERE profile_id = ?
+  `);
+  const insertProfileComposioToolkitStmt = db.prepare(`
+    INSERT INTO profile_composio_toolkits (profile_id, toolkit_id, allowed_actions)
+    VALUES (?, ?, ?)
   `);
 
   const getUserByEmailStmt = db.prepare("SELECT * FROM users WHERE email = ?");
@@ -1567,6 +1686,64 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async listComposioToolkitsForOrg(orgId) {
+      return listComposioToolkitsForOrgStmt
+        .all(orgId)
+        .map((row) => toComposioToolkitRecord(row as ComposioToolkitRow));
+    },
+
+    async getComposioToolkit(id) {
+      const row = getComposioToolkitStmt.get(id) as ComposioToolkitRow | null;
+      return row ? toComposioToolkitRecord(row) : null;
+    },
+
+    async getComposioToolkitBySlug(orgId, toolkitSlug) {
+      const row = getComposioToolkitBySlugStmt.get(orgId, toolkitSlug) as
+        | ComposioToolkitRow
+        | null;
+      return row ? toComposioToolkitRecord(row) : null;
+    },
+
+    async upsertComposioToolkit(record) {
+      upsertComposioToolkitStmt.run(
+        record.id,
+        record.orgId,
+        record.toolkitSlug,
+        record.displayName,
+        record.status,
+        record.connectedAccountId,
+        record.sessionIdEnc,
+        record.oauthStateHash,
+        JSON.stringify(record.cachedTools),
+        record.lastError,
+        record.createdAt,
+        record.updatedAt,
+      );
+    },
+
+    async deleteComposioToolkit(id) {
+      const result = deleteComposioToolkitStmt.run(id);
+      return result.changes > 0;
+    },
+
+    async listProfileComposioToolkits(profileId) {
+      return listProfileComposioToolkitsStmt
+        .all(profileId)
+        .map((row) => toProfileComposioToolkitRecord(row as ProfileComposioToolkitRow));
+    },
+
+    async replaceProfileComposioToolkits(profileId, assignments) {
+      deleteProfileComposioToolkitsStmt.run(profileId);
+
+      for (const assignment of assignments) {
+        insertProfileComposioToolkitStmt.run(
+          assignment.profileId,
+          assignment.toolkitId,
+          assignment.allowedActions ? JSON.stringify(assignment.allowedActions) : null,
+        );
+      }
+    },
+
     async listMcpServers() {
       return listMcpServersStmt.all().map((row) => toMcpServerRecord(row as McpServerRow));
     },
@@ -2062,6 +2239,35 @@ function toNotificationDestinationRecord(
     orgId: row.org_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toComposioToolkitRecord(row: ComposioToolkitRow): StoredComposioToolkitRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    toolkitSlug: row.toolkit_slug,
+    displayName: row.display_name,
+    status: row.status as StoredComposioToolkitRecord["status"],
+    connectedAccountId: row.connected_account_id,
+    sessionIdEnc: row.session_id_enc,
+    oauthStateHash: row.oauth_state_hash,
+    cachedTools: JSON.parse(row.cached_tools) as StoredComposioToolkitRecord["cachedTools"],
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toProfileComposioToolkitRecord(
+  row: ProfileComposioToolkitRow,
+): StoredProfileComposioToolkitRecord {
+  return {
+    profileId: row.profile_id,
+    toolkitId: row.toolkit_id,
+    allowedActions: row.allowed_actions
+      ? (JSON.parse(row.allowed_actions) as string[])
+      : null,
   };
 }
 

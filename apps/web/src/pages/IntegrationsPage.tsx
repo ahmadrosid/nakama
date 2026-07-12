@@ -5,10 +5,12 @@ import {
   BotIcon,
   KeyRoundIcon,
   MessageCircleMoreIcon,
+  PlugIcon,
   SendIcon,
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { CodingHarnessSettingsPanel } from "@/components/CodingHarnessSettingsDialog";
+import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
@@ -37,6 +39,12 @@ const INTEGRATION_SECTIONS = [
     icon: BellRingIcon,
   },
   {
+    id: "composio",
+    label: "Composio",
+    description: "SaaS app connections",
+    icon: PlugIcon,
+  },
+  {
     id: "coding-agents",
     label: "Coding agents",
     description: "Coding agent CLI",
@@ -57,6 +65,7 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "token" ||
     value === "notifications" ||
     value === "whatsapp" ||
+    value === "composio" ||
     value === "coding-agents"
   ) {
     return value;
@@ -102,8 +111,8 @@ export function IntegrationsPage() {
       <header className="space-y-1">
         <h1 className="type-page-title">Integrations</h1>
         <p className="type-body max-w-2xl">
-          Manage bridge access, coding agents, Telegram setup, notification webhooks, and WhatsApp
-          linking from one place.
+          Manage bridge access, coding agents, Composio SaaS connections, Telegram setup,
+          notification webhooks, and WhatsApp linking from one place.
         </p>
       </header>
 
@@ -137,6 +146,15 @@ export function IntegrationsPage() {
           ) : null}
 
           {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
+
+          {section === "composio" ? (
+            <IntegrationSection
+              title="Composio"
+              description="Enable toolkits, connect SaaS accounts with OAuth, and sync tools for profile assignment."
+            >
+              <ComposioConnectionsCard />
+            </IntegrationSection>
+          ) : null}
 
           {section === "telegram" ? (
             <IntegrationSection

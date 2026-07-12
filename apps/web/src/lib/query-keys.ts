@@ -53,6 +53,10 @@ export const queryKeys = {
   notificationDestinations: {
     all: ["notificationDestinations"] as const,
   },
+  composio: {
+    toolkits: ["composio", "toolkits"] as const,
+    profileToolkits: (profileId: string) => ["composio", "profiles", profileId] as const,
+  },
   email: {
     settings: ["email", "settings"] as const,
   },

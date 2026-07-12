@@ -190,6 +190,39 @@ export interface StoredNotificationDestinationRecord {
   updatedAt: string;
 }
 
+export type StoredComposioToolkitStatus =
+  | "disabled"
+  | "enabled"
+  | "oauth_in_progress"
+  | "connected"
+  | "error";
+
+export interface StoredComposioToolkitRecord {
+  id: string;
+  orgId: string;
+  toolkitSlug: string;
+  displayName: string;
+  status: StoredComposioToolkitStatus;
+  connectedAccountId: string | null;
+  sessionIdEnc: string | null;
+  oauthStateHash: string | null;
+  cachedTools: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredProfileComposioToolkitRecord {
+  profileId: string;
+  toolkitId: string;
+  allowedActions: string[] | null;
+}
+
 export interface LlmUsageStatsDelta {
   requestCount: number;
   inputTokens: number;
@@ -448,6 +481,23 @@ export interface DatabaseAdapter {
   getNotificationDestination(id: string): Promise<StoredNotificationDestinationRecord | null>;
   upsertNotificationDestination(record: StoredNotificationDestinationRecord): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
+
+  listComposioToolkitsForOrg(orgId: string): Promise<StoredComposioToolkitRecord[]>;
+  getComposioToolkit(id: string): Promise<StoredComposioToolkitRecord | null>;
+  getComposioToolkitBySlug(
+    orgId: string,
+    toolkitSlug: string,
+  ): Promise<StoredComposioToolkitRecord | null>;
+  upsertComposioToolkit(record: StoredComposioToolkitRecord): Promise<void>;
+  deleteComposioToolkit(id: string): Promise<boolean>;
+
+  listProfileComposioToolkits(
+    profileId: string,
+  ): Promise<StoredProfileComposioToolkitRecord[]>;
+  replaceProfileComposioToolkits(
+    profileId: string,
+    assignments: StoredProfileComposioToolkitRecord[],
+  ): Promise<void>;
 
   listMcpServers(): Promise<StoredMcpServerRecord[]>;
   getMcpServer(id: string): Promise<StoredMcpServerRecord | null>;

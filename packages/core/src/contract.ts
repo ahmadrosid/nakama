@@ -1526,3 +1526,75 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   parameters?: JsonSchema;
   run(input: Input, context: ToolContext): Promise<Output>;
 }
+
+export const COMPOSIO_TOOLKIT_SLUG_PATTERN = /^[a-z0-9_-]+$/;
+
+export type ComposioToolkitStatus =
+  | "disabled"
+  | "enabled"
+  | "oauth_in_progress"
+  | "connected"
+  | "error";
+
+export type ComposioToolErrorCode = "COMPOSIO_NOT_CONNECTED" | "COMPOSIO_TRANSIENT" | "COMPOSIO_POLICY";
+
+export interface ComposioCachedToolSummary {
+  slug: string;
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface ComposioToolkitSummary {
+  id: string;
+  toolkitSlug: string;
+  displayName: string;
+  status: ComposioToolkitStatus;
+  connectedAccountId: string | null;
+  cachedTools: ComposioCachedToolSummary[];
+  lastError: string | null;
+  updatedAt: string;
+}
+
+export interface ComposioCatalogToolkitSummary {
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
+export interface ListComposioToolkitsResponse {
+  composioAvailable: boolean;
+  catalog: ComposioCatalogToolkitSummary[];
+  orgToolkits: ComposioToolkitSummary[];
+}
+
+export interface EnableComposioToolkitRequest {
+  toolkitSlug: string;
+}
+
+export interface ComposioConnectResponse {
+  redirectUrl: string;
+}
+
+export interface ProfileComposioToolkitAssignment {
+  toolkitId: string;
+  toolkitSlug: string;
+  allowedActions: string[] | null;
+}
+
+export interface ListProfileComposioToolkitsResponse {
+  assignments: ProfileComposioToolkitAssignment[];
+}
+
+export interface UpdateProfileComposioToolkitsRequest {
+  assignments: Array<{
+    toolkitId: string;
+    allowedActions?: string[] | null;
+  }>;
+}
+
+export interface ComposioToolErrorResult {
+  error: string;
+  code: ComposioToolErrorCode;
+  toolkitSlug?: string;
+}

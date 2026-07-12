@@ -26,6 +26,8 @@ export * from "./profiles";
 export * from "./bridge-api";
 export * from "./channel-org";
 export * from "./compatible-provider-config";
+export * from "./composio";
+export * from "./composio-config";
 export * from "./provider-label";
 export * from "./provider-setup-prompt";
 export * from "./skills";

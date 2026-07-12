@@ -6,6 +6,7 @@ import { SystemStatusService } from "../services/system-status-service";
 import type { WorkerManagerService } from "../services/worker-manager-service";
 import type { AuthService } from "../services/auth-service";
 import type { OrgService } from "../services/org-service";
+import type { ComposioService } from "../services/composio-service";
 import type { DatabaseAdapter } from "@nakama/db";
 
 export interface ServerOptions {
@@ -15,6 +16,7 @@ export interface ServerOptions {
   systemStatus: SystemStatusService;
   workerManager: WorkerManagerService;
   mcpService: McpService;
+  composioService?: ComposioService | null;
   authService?: AuthService | null;
   orgService?: OrgService | null;
   databaseAdapter?: DatabaseAdapter | null;

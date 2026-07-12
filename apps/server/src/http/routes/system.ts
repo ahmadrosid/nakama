@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { NAKAMA_API_VERSION } from "@nakama/core";
+import { isComposioConfigured, NAKAMA_API_VERSION } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
 
@@ -30,6 +30,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
     apiVersion: z.number().int(),
     providerConfigured: z.boolean(),
     userConfigured: z.boolean(),
+    composioAvailable: z.boolean(),
   }).openapi("HealthResponse");
   const systemStatusSchema = z.object({ ok: z.boolean() }).passthrough().openapi("SystemStatusResponse");
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
@@ -85,6 +86,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
       apiVersion: NAKAMA_API_VERSION,
       providerConfigured: agent.providerConfigured,
       userConfigured: humanUserCount > 0,
+      composioAvailable: isComposioConfigured(process.env),
     }, 200);
   });
 

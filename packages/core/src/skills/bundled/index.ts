@@ -9,6 +9,7 @@ export const DEFAULT_BUNDLED_SKILL_NAMES = [
   "update-profile-memory",
   "archive-profile-memory",
   "save-artifact",
+  "composio-integrations",
 ] as const;
 export const SUPER_BOT_BUNDLED_SKILL_NAMES = ["create-profile", "coding-delegation"] as const;
 export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [

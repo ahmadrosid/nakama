@@ -203,6 +203,8 @@ import {
 } from "./session-persistence";
 import type { TaskRunner } from "./task-runner";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
+import { buildComposioToolDefinitions } from "./composio-tool-bridge";
+import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { ProfileService } from "./profile-service";
@@ -263,6 +265,7 @@ export class AgentService {
   private taskRunner: TaskRunner | null = null;
   private mcpClientManager: McpClientManager | null = null;
   private mcpService: McpService | null = null;
+  private composioService: ComposioService | null = null;
   private skillsService: SkillsService | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
@@ -323,6 +326,10 @@ export class AgentService {
 
   setMcpService(service: McpService): void {
     this.mcpService = service;
+  }
+
+  setComposioService(service: ComposioService): void {
+    this.composioService = service;
   }
 
   setSkillsService(service: SkillsService): void {
@@ -2118,6 +2125,24 @@ export class AgentService {
       ];
     }
 
+    if (this.composioService && this.mcpClientManager) {
+      const orgId = profile.orgId;
+
+      if (!orgId) {
+        throw new Error("Profile organization is missing.");
+      }
+
+      resolved = [
+        ...resolved,
+        ...(await buildComposioToolDefinitions(
+          orgId,
+          profile.id,
+          this.composioService,
+          this.mcpClientManager,
+        )),
+      ];
+    }
+
     if (includeAutomationTools && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
     }
@@ -2201,6 +2226,17 @@ export class AgentService {
 
         if (todoContext.trim()) {
           parts.push(todoContext.trim());
+        }
+
+        if (this.composioService) {
+          const composioContext = await this.composioService.formatProfileConnectionsContext(
+            orgId,
+            profileId,
+          );
+
+          if (composioContext.trim()) {
+            parts.push(composioContext.trim());
+          }
         }
 
         if (this.skillsService && context?.userMessage?.trim()) {

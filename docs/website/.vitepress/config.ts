@@ -20,6 +20,7 @@ const pageDescriptions: Record<string, string> = {
   'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory and artifact workflows use file tools plus bundled skills.',
   'skills.md': 'Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.',
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
+  'composio.md': 'Connect SaaS apps through Composio with org-scoped OAuth and profile toolkit assignment.',
   'coding-agent.md': 'Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional inference gateway routing through your Nakama provider.',
   'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
   'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
@@ -35,6 +36,7 @@ const pageTitles: Record<string, string> = {
   'builtin-tools.md': 'Builtin Tools',
   'skills.md': 'Skills',
   'mcp.md': 'MCP Servers',
+  'composio.md': 'Composio',
   'coding-agent.md': 'Coding Agent',
   'telegram.md': 'Telegram',
   'whatsapp.md': 'WhatsApp',
@@ -142,7 +144,7 @@ function buildLlmsTxt(pages: string[]) {
     },
     {
       heading: 'Operations',
-      pages: ['builtin-tools.md', 'skills.md', 'coding-agent.md', 'mcp.md'] as const,
+      pages: ['builtin-tools.md', 'skills.md', 'coding-agent.md', 'mcp.md', 'composio.md'] as const,
     },
   ] as const
 
