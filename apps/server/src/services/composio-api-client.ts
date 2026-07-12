@@ -31,11 +31,7 @@ export interface ComposioApiClient {
     userId: string,
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
-  ): Promise<ComposioSessionMcpEndpoint>;
-  reuseProfileSession(
-    sessionId: string,
-    toolkitSlugs: string[],
-    allowedToolsByToolkit: Record<string, string[] | null>,
+    connectedAccountsByToolkit?: Record<string, string>,
   ): Promise<ComposioSessionMcpEndpoint>;
   listSessionTools(session: ComposioSessionMcpEndpoint): Promise<ComposioCachedToolSummary[]>;
 }
@@ -271,19 +267,13 @@ export class SdkComposioApiClient implements ComposioApiClient {
     userId: string,
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
+    connectedAccountsByToolkit: Record<string, string> = {},
   ): Promise<ComposioSessionMcpEndpoint> {
     return this.openSession(
-      await this.composio.create(userId, this.sessionConfig(toolkitSlugs, allowedToolsByToolkit)),
-    );
-  }
-
-  async reuseProfileSession(
-    sessionId: string,
-    toolkitSlugs: string[],
-    allowedToolsByToolkit: Record<string, string[] | null>,
-  ): Promise<ComposioSessionMcpEndpoint> {
-    return this.openSession(
-      await this.composio.use(sessionId, this.sessionConfig(toolkitSlugs, allowedToolsByToolkit)),
+      await this.composio.create(
+        userId,
+        this.sessionConfig(toolkitSlugs, allowedToolsByToolkit, connectedAccountsByToolkit),
+      ),
     );
   }
 
@@ -295,6 +285,7 @@ export class SdkComposioApiClient implements ComposioApiClient {
   private sessionConfig(
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
+    connectedAccountsByToolkit: Record<string, string> = {},
   ) {
     const tools: Record<string, { enable: string[] }> = {};
 
@@ -304,10 +295,14 @@ export class SdkComposioApiClient implements ComposioApiClient {
       }
     }
 
+    const connectedAccounts =
+      Object.keys(connectedAccountsByToolkit).length > 0 ? connectedAccountsByToolkit : undefined;
+
     return {
       mcp: true as const,
       sessionPreset: "direct_tools" as const,
       toolkits: toolkitSlugs.length > 0 ? { enable: toolkitSlugs } : undefined,
+      ...(connectedAccounts ? { connectedAccounts } : {}),
       ...(Object.keys(tools).length > 0 ? { tools } : {}),
     };
   }

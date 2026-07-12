@@ -30,13 +30,6 @@ function createMockClient(): ComposioApiClient {
         headers: { Authorization: "Bearer test" },
       };
     },
-    async reuseProfileSession() {
-      return {
-        sessionId: "sess_1",
-        url: "https://mcp.composio.dev/sess_1",
-        headers: { Authorization: "Bearer test" },
-      };
-    },
     async listSessionTools() {
       return [];
     },

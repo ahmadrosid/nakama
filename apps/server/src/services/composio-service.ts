@@ -75,6 +75,10 @@ function titleCaseToolkit(slug: string): string {
 
 export class ComposioService {
   private apiClientCache: { key: string; client: ComposioApiClient } | null = null;
+  private readonly profileSessionCache = new Map<
+    string,
+    { fingerprint: string; endpoint: ComposioSessionMcpEndpoint }
+  >();
 
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
@@ -367,6 +371,7 @@ export class ComposioService {
     };
 
     await this.databaseAdapter.upsertComposioUserConnection(updatedConnection);
+    this.invalidateProfileSessionCachesForUser(payload.userId);
     await this.syncUserToolkit(payload.orgId, payload.userId, orgToolkit.toolkitSlug);
 
     return { orgId: payload.orgId, toolkitSlug: orgToolkit.toolkitSlug };
@@ -394,6 +399,7 @@ export class ComposioService {
     }
 
     await this.databaseAdapter.deleteComposioUserConnection(connection.id);
+    this.invalidateProfileSessionCachesForUser(userId);
 
     return toOrgToolkitSummary(orgToolkit);
   }
@@ -412,9 +418,15 @@ export class ComposioService {
     }
 
     try {
-      const session = await this.openUserSession(userId, [orgToolkit.toolkitSlug], {
-        [orgToolkit.toolkitSlug]: null,
-      });
+      const connectedAccountsByToolkit = connection.connectedAccountId
+        ? { [orgToolkit.toolkitSlug]: connection.connectedAccountId }
+        : {};
+      const session = await apiClient.createProfileSession(
+        composioUserId(userId),
+        [orgToolkit.toolkitSlug],
+        { [orgToolkit.toolkitSlug]: null },
+        connectedAccountsByToolkit,
+      );
       const cachedTools = await apiClient.listSessionTools(session);
       const updatedOrgToolkit: StoredComposioToolkitRecord = {
         ...orgToolkit,
@@ -431,6 +443,7 @@ export class ComposioService {
 
       await this.databaseAdapter.upsertComposioToolkit(updatedOrgToolkit);
       await this.databaseAdapter.upsertComposioUserConnection(updatedConnection);
+      this.invalidateProfileSessionCachesForUser(userId);
       return toOrgToolkitSummary(updatedOrgToolkit);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -521,6 +534,7 @@ export class ComposioService {
     const toolkitById = new Map(orgToolkits.map((toolkit) => [toolkit.id, toolkit]));
     const enabledToolkits: string[] = [];
     const allowedToolsByToolkit: Record<string, string[] | null> = {};
+    const connectedAccountsByToolkit: Record<string, string> = {};
     const userConnections = await this.databaseAdapter.listComposioUserConnectionsForUser(
       orgId,
       userId,
@@ -538,27 +552,34 @@ export class ComposioService {
 
       enabledToolkits.push(toolkit.toolkitSlug);
       allowedToolsByToolkit[toolkit.toolkitSlug] = assignment.allowedActions;
+      if (connection.connectedAccountId) {
+        connectedAccountsByToolkit[toolkit.toolkitSlug] = connection.connectedAccountId;
+      }
     }
 
     if (enabledToolkits.length === 0) {
       return null;
     }
 
-    const existingSessionId = await this.readExistingSessionId(userConnections, enabledToolkits, orgToolkits);
-
-    if (existingSessionId) {
-      return apiClient.reuseProfileSession(
-        existingSessionId,
-        enabledToolkits,
-        allowedToolsByToolkit,
-      );
+    const cacheKey = this.profileSessionCacheKey(orgId, userId, profileId);
+    const fingerprint = this.buildProfileSessionFingerprint(
+      enabledToolkits,
+      allowedToolsByToolkit,
+      connectedAccountsByToolkit,
+    );
+    const cached = this.profileSessionCache.get(cacheKey);
+    if (cached?.fingerprint === fingerprint) {
+      return cached.endpoint;
     }
 
-    return apiClient.createProfileSession(
+    const endpoint = await apiClient.createProfileSession(
       composioUserId(userId),
       enabledToolkits,
       allowedToolsByToolkit,
+      connectedAccountsByToolkit,
     );
+    this.profileSessionCache.set(cacheKey, { fingerprint, endpoint });
+    return endpoint;
   }
 
   async formatProfileConnectionsContext(
@@ -643,46 +664,30 @@ export class ComposioService {
       );
   }
 
-  private async openUserSession(
-    userId: string,
-    toolkitSlugs: string[],
-    allowedToolsByToolkit: Record<string, string[] | null>,
-  ): Promise<ComposioSessionMcpEndpoint> {
-    const apiClient = await this.requireAvailable();
-    return apiClient.createProfileSession(
-      composioUserId(userId),
-      toolkitSlugs,
-      allowedToolsByToolkit,
-    );
+  private profileSessionCacheKey(orgId: string, userId: string, profileId: string): string {
+    return `${orgId}:${userId}:${profileId}`;
   }
 
-  private async readExistingSessionId(
-    userConnections: StoredComposioUserConnectionRecord[],
+  private buildProfileSessionFingerprint(
     enabledToolkits: string[],
-    orgToolkits: StoredComposioToolkitRecord[],
-  ): Promise<string | null> {
-    const secret = await this.resolveApiKey();
-    if (!secret) {
-      return null;
-    }
+    allowedToolsByToolkit: Record<string, string[] | null>,
+    connectedAccountsByToolkit: Record<string, string>,
+  ): string {
+    return JSON.stringify({
+      toolkits: [...enabledToolkits].sort(),
+      allowedToolsByToolkit,
+      connectedAccountsByToolkit,
+    });
+  }
 
-    const slugByToolkitId = new Map(orgToolkits.map((toolkit) => [toolkit.id, toolkit.toolkitSlug]));
-    const enabled = new Set(enabledToolkits);
+  private invalidateProfileSessionCachesForUser(userId: string): void {
+    const suffix = `:${userId}:`;
 
-    for (const connection of userConnections) {
-      const slug = slugByToolkitId.get(connection.toolkitId);
-      if (!slug || !enabled.has(slug) || !connection.sessionIdEnc) {
-        continue;
-      }
-
-      try {
-        return decryptComposioSecret(connection.sessionIdEnc, secret);
-      } catch {
-        return null;
+    for (const key of this.profileSessionCache.keys()) {
+      if (key.includes(suffix)) {
+        this.profileSessionCache.delete(key);
       }
     }
-
-    return null;
   }
 
   private async encryptSessionId(sessionId: string): Promise<string> {

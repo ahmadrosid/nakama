@@ -6,6 +6,30 @@ import type { McpClientManager } from "./mcp-client-manager";
 import { sanitizeLlmToolNamePart } from "./mcp-tool-bridge";
 
 const COMPOSIO_META_TOOL_PATTERN = /^COMPOSIO_(MANAGE|WAIT|SEARCH|MULTI)/;
+const composioSessionUrls = new Map<string, string>();
+
+async function ensureComposioMcpConnection(
+  mcpClientManager: McpClientManager,
+  connectionKey: string,
+  session: { url: string; headers?: Record<string, string> },
+): Promise<void> {
+  const cachedUrl = composioSessionUrls.get(connectionKey);
+
+  if (cachedUrl !== session.url) {
+    if (cachedUrl !== undefined) {
+      await mcpClientManager.disconnectHttpEndpoint(connectionKey);
+    }
+
+    await mcpClientManager.connectHttpEndpoint(connectionKey, session.url, session.headers);
+    composioSessionUrls.set(connectionKey, session.url);
+    return;
+  }
+
+  if (!mcpClientManager.isHttpEndpointConnected(connectionKey)) {
+    await mcpClientManager.connectHttpEndpoint(connectionKey, session.url, session.headers);
+    composioSessionUrls.set(connectionKey, session.url);
+  }
+}
 
 export function composioConnectionKey(orgId: string, userId: string, profileId: string): string {
   return `composio:${orgId}:${userId}:${profileId}`;
@@ -170,9 +194,7 @@ export async function buildComposioToolDefinitions(
 
   const connectionKey = composioConnectionKey(orgId, userId, profileId);
 
-  if (!mcpClientManager.isHttpEndpointConnected(connectionKey)) {
-    await mcpClientManager.connectHttpEndpoint(connectionKey, session.url, session.headers);
-  }
+  await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
 
   const tools: ToolDefinition[] = [];
   const usedNames = new Set<string>();
@@ -208,13 +230,7 @@ export async function buildComposioToolDefinitions(
           }
 
           try {
-            if (!mcpClientManager.isHttpEndpointConnected(connectionKey)) {
-              await mcpClientManager.connectHttpEndpoint(
-                connectionKey,
-                session.url,
-                session.headers,
-              );
-            }
+            await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
 
             return await mcpClientManager.callHttpEndpointTool(
               connectionKey,

@@ -20,15 +20,9 @@ function createMockClient(): ComposioApiClient {
       return { redirectUrl: "https://example.com/oauth", connectedAccountId: "ca_1" };
     },
     async deleteConnectedAccount() {},
-    async createProfileSession(userId) {
+    async createProfileSession(userId, _toolkitSlugs, _allowedTools, connectedAccounts = {}) {
       expect(userId).toBe("nakama:user:user_admin");
-      return {
-        sessionId: "sess_1",
-        url: "https://mcp.composio.dev/sess_1",
-        headers: { Authorization: "Bearer test" },
-      };
-    },
-    async reuseProfileSession() {
+      expect(connectedAccounts).toEqual({});
       return {
         sessionId: "sess_1",
         url: "https://mcp.composio.dev/sess_1",
