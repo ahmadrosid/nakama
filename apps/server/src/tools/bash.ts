@@ -15,6 +15,8 @@ export interface BashInput {
   command: string;
   cwd?: string;
   timeoutMs?: number;
+  codingAgent?: boolean;
+  env?: Record<string, string>;
 }
 
 export interface BashOutput {
@@ -44,6 +46,16 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
       timeoutMs: {
         type: "number",
         description: "Timeout in milliseconds. Defaults to 30000, max 1800000 (30 minutes).",
+      },
+      codingAgent: {
+        type: "boolean",
+        description:
+          "When true, Nakama merges coding-agent spawn env (model gateway routing) for this command.",
+      },
+      env: {
+        type: "object",
+        description: "Optional environment variables to merge into the spawned shell process.",
+        additionalProperties: { type: "string" },
       },
     },
     required: ["command"],
@@ -86,19 +98,21 @@ export async function runBash(
       ).resolved
     : workspaceRoot;
   const timeoutMs = readTimeout(readOptionalNumber(input, "timeoutMs"));
+  const env = readStringRecord(readOptionalRecord(input, "env"));
 
-  return runShellCommand(command, cwd, timeoutMs);
+  return runShellCommand(command, cwd, timeoutMs, env);
 }
 
 function runShellCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
+  envOverrides: Record<string, string> = {},
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     const child = spawn("/bin/bash", ["-lc", command], {
       cwd,
-      env: process.env,
+      env: { ...process.env, ...envOverrides },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -177,4 +191,30 @@ function readString(input: unknown, key: string): string | null {
 
   const value = (input as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readOptionalRecord(input: unknown, key: string): Record<string, unknown> | null {
+  if (typeof input !== "object" || input === null || !(key in input)) {
+    return null;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readStringRecord(record: Record<string, unknown> | null): Record<string, string> {
+  if (!record) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(record).flatMap(([key, value]) =>
+      typeof value === "string" ? [[key, value] as const] : [],
+    ),
+  );
 }

@@ -20,7 +20,7 @@ When repo work should run on a coding agent, use the `bash` tool to run the conf
 2. Summarize the coding task in one concrete instruction block.
 3. Include only the context the coding agent needs: target behavior, affected files or areas when known, constraints, and what should be verified.
 4. Build the shell command from the template, substituting your task prompt. Escape quotes carefully or use a heredoc when the prompt is multi-line.
-5. Call `bash` with an explicit `timeoutMs` suited to the task — use 600000–1800000 ms (10–30 minutes) for substantial coding runs; keep shorter timeouts for quick checks.
+5. Call `bash` with `codingAgent: true` (or a command that starts with the harness binary) so Nakama merges spawn env when the inference gateway is enabled. Use an explicit `timeoutMs` suited to the task — use 600000–1800000 ms (10–30 minutes) for substantial coding runs; keep shorter timeouts for quick checks.
 6. Prefer precise change requests over broad open-ended prompts.
 7. If there is a preferred backend or workflow constraint from the user, pass it through.
 

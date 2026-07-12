@@ -186,6 +186,10 @@ import {
   formatCodingAgentCommandContext,
   getBackendSkillName,
 } from "./coding-agent-command";
+import {
+  getInferenceGatewayBaseUrl,
+  normalizeCodingAgentModel,
+} from "./coding-agent-spawn-env";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -332,6 +336,10 @@ export class AgentService {
 
   async getUserTimezone(): Promise<string> {
     return this.userConfig?.timezone ?? loadUserTimezone();
+  }
+
+  getUserConfig(): UserConfig | null {
+    return this.userConfig;
   }
 
   async setUserTimezone(timezone: string): Promise<string> {
@@ -2272,10 +2280,15 @@ export class AgentService {
     try {
       const harness = await resolveCodingAgentHarness(this.db);
       const workspaceRoot = getProfileSoulDir(orgId, profileId);
+      const profile = await this.db.getProfile(profileId);
       const template = buildCodingAgentCommandTemplate(
         harness,
         "<task prompt>",
         workspaceRoot,
+        {
+          model: normalizeCodingAgentModel(profile?.model),
+          gatewayBaseUrl: getInferenceGatewayBaseUrl(),
+        },
       );
       const backendSkillName = getBackendSkillName(harness.kind);
       const backendSkill = await readBundledSkillBody(backendSkillName);

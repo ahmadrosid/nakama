@@ -116,7 +116,7 @@ export function SkillAssignPicker({
 
           {codingHarnessSettings?.configured === false ? (
             <div className="border-b border-border/60 px-6 py-3 text-xs text-amber-600 dark:text-amber-300">
-              Coding agent setup required first.
+              Install and verify a coding agent in Integrations before assigning this skill.
               <Button
                 type="button"
                 variant="link"

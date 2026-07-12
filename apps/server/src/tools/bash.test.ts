@@ -72,4 +72,20 @@ describe("bash tool", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe("ok");
   });
+
+  test("merges explicit env vars into the spawned shell process", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
+    const result = await runBash(
+      {
+        command: "printf '%s' \"$ANTHROPIC_BASE_URL\"",
+        env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:4310" },
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("http://127.0.0.1:4310");
+  });
 });

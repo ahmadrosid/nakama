@@ -1,10 +1,15 @@
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
 import type { CodingAgentHarnessStatus } from "./coding-agent-harness-service";
+import {
+  buildSpawnEnvForHarness,
+  type CodingAgentSpawnEnvOptions,
+} from "./coding-agent-spawn-env";
 
 export interface CodingAgentCommandTemplate {
   backend: StoredCodingAgentHarnessKind;
   harnessName: string;
   command: string;
+  spawnEnv: Record<string, string>;
   notes: string[];
 }
 
@@ -12,14 +17,20 @@ export function buildCodingAgentCommandTemplate(
   harness: Pick<CodingAgentHarnessStatus, "kind" | "name" | "command" | "args">,
   taskPrompt: string,
   cwd: string,
+  spawnEnvOptions: CodingAgentSpawnEnvOptions = {},
 ): CodingAgentCommandTemplate {
   const escapedTask = shellEscape(taskPrompt.trim());
   const baseCommand = [harness.command, ...harness.args].join(" ");
+  const spawnEnv = buildSpawnEnvForHarness(harness.kind, spawnEnvOptions);
+  const shared = {
+    backend: harness.kind,
+    harnessName: harness.name,
+    spawnEnv,
+  };
 
   if (harness.kind === "codex") {
     return {
-      backend: harness.kind,
-      harnessName: harness.name,
+      ...shared,
       command: [
         baseCommand,
         "exec",
@@ -41,8 +52,7 @@ export function buildCodingAgentCommandTemplate(
 
   if (harness.kind === "claude_code") {
     return {
-      backend: harness.kind,
-      harnessName: harness.name,
+      ...shared,
       command: [
         baseCommand,
         "--print",
@@ -60,8 +70,7 @@ export function buildCodingAgentCommandTemplate(
   }
 
   return {
-    backend: harness.kind,
-    harnessName: harness.name,
+    ...shared,
     command: [
       baseCommand,
       "run",
@@ -85,12 +94,23 @@ export function formatCodingAgentCommandContext(
   const lines = [
     "# Coding Agent Harness",
     `Selected backend: ${template.harnessName} (${template.backend}).`,
-    "Run the coding agent via the `bash` tool using a command shaped like:",
+    "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
     "",
     "```bash",
     template.command,
     "```",
   ];
+
+  if (Object.keys(template.spawnEnv).length > 0) {
+    lines.push(
+      "",
+      "When the inference gateway is enabled, Nakama injects these env vars at spawn time:",
+      "",
+      "```json",
+      JSON.stringify(template.spawnEnv, null, 2),
+      "```",
+    );
+  }
 
   if (template.notes.length > 0) {
     lines.push("", "Notes:");

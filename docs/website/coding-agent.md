@@ -67,7 +67,33 @@ For each backend:
 3. **Verify** readiness — Nakama checks that the binary runs and is authenticated
 4. **Save** workspace settings
 
-Until at least one harness is installed and verified, coding-agent workflows are unavailable.
+Until at least one harness is installed and verified, coding-agent workflows are unavailable. When exactly one harness is ready and none is selected yet, Nakama auto-selects it at runtime.
+
+### Model routing (optional inference gateway)
+
+When `NAKAMA_INFERENCE_GATEWAY_ENABLED=1`, Nakama can route coding-agent API calls through the deployment instead of each agent's vendor account. The `bash` tool merges spawn-time env vars (for example `ANTHROPIC_BASE_URL`) when:
+
+- `codingAgent: true` is set on the bash call, or
+- the command starts with the active harness binary (auto-detection)
+
+Enable the gateway with:
+
+```bash
+export NAKAMA_INFERENCE_GATEWAY_ENABLED=1
+# optional host override (Anthropic SDK appends /v1/messages):
+# export NAKAMA_INFERENCE_GATEWAY_URL=http://127.0.0.1:4310
+```
+
+Claude Code manual equivalent:
+
+```bash
+ANTHROPIC_BASE_URL=http://127.0.0.1:4310 \
+ANTHROPIC_API_KEY="" \
+ANTHROPIC_AUTH_TOKEN=<your-local-nakama-token> \
+claude --print 'your task'
+```
+
+If `~/.claude/settings.json` forces Bedrock or another upstream, env injection may not win — adjust Claude Code settings or remove conflicting entries.
 
 ### 2. Assign tools and skills to the profile
 
@@ -110,7 +136,7 @@ On a matched turn, Nakama injects:
 The Nakama agent then:
 
 1. Builds the shell command from the template and the task prompt
-2. Calls `bash` with a long timeout when needed
+2. Calls `bash` with `codingAgent: true` (or a harness-shaped command) and a long timeout when needed
 3. Reads stdout/stderr from the coding agent
 4. Summarizes what changed, what was verified, and any follow-up risks
 

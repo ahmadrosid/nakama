@@ -1,8 +1,9 @@
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
-import { builtinTools, type ToolDefinition } from "@nakama/core";
+import { builtinTools, type ToolContext, type ToolDefinition } from "@nakama/core";
 import { isEmailConfigComplete, loadEmailConfig } from "@nakama/core/email-config";
 import { emailTool } from "@nakama/core/tools/email";
-import { bashTool } from "../tools/bash";
+import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
+import { bashTool, runBash } from "../tools/bash";
 import { loadJavascriptTool } from "./javascript-tool-loader";
 
 export function omitUnavailableBuiltinTools(
@@ -70,6 +71,18 @@ async function resolveStoredTool(
   return null;
 }
 
-function buildServerTools(_db?: DatabaseAdapter): Map<string, ToolDefinition> {
-  return new Map<string, ToolDefinition>([[bashTool.name, bashTool]]);
+function buildServerTools(db?: DatabaseAdapter): Map<string, ToolDefinition> {
+  const bash = db ? createCodingAgentAwareBashTool(db) : bashTool;
+
+  return new Map<string, ToolDefinition>([[bash.name, bash]]);
+}
+
+function createCodingAgentAwareBashTool(db: DatabaseAdapter): ToolDefinition {
+  return {
+    ...bashTool,
+    run: async (input, context: ToolContext) => {
+      const enriched = await enrichCodingAgentBashInput(db, input, context);
+      return runBash(enriched, context);
+    },
+  };
 }

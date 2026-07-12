@@ -149,6 +149,29 @@ export async function authenticateRequest(
 
   const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
   if (!sessionToken) {
+    const anthropicApiKey = request.headers.get("x-api-key")?.trim();
+
+    if (anthropicApiKey) {
+      const payload = await verifyLocalAuthToken(anthropicApiKey);
+
+      if (payload) {
+        let user = await databaseAdapter.getUserByEmail(payload.email);
+
+        if (!user && payload.email === LOCAL_CLIENT_EMAIL) {
+          await ensureLocalClientAccess(databaseAdapter);
+          user = await databaseAdapter.getUserByEmail(payload.email);
+        }
+
+        if (user) {
+          return {
+            mode: "local-token",
+            user: toAuthUser(user),
+            isPlatformAdmin: Boolean(user.isPlatformAdmin),
+          };
+        }
+      }
+    }
+
     return null;
   }
 
