@@ -182,12 +182,46 @@ export async function saveCodingAgentWorkspaceSettings(
   };
 }
 
+export function isCodingAgentCommand(
+  command: string,
+  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>,
+): boolean {
+  const trimmed = command.trim();
+
+  for (const harness of harnesses) {
+    if (!harness.enabled) {
+      continue;
+    }
+
+    const binary = harness.command.trim();
+
+    if (!binary) {
+      continue;
+    }
+
+    if (trimmed === binary || trimmed.startsWith(`${binary} `)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function resolveCodingAgentHarness(
   db: DatabaseAdapter,
   preferredKind?: StoredCodingAgentHarnessKind | null,
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const enabled = settings.harnesses.filter((harness) => harness.enabled);
+
+  if (!preferredKind && !settings.selectedHarnessId) {
+    const statuses = await listCodingAgentHarnessStatuses(db);
+    const readyHarnesses = statuses.filter((harness) => harness.enabled && harness.ready);
+
+    if (readyHarnesses.length === 1) {
+      return readyHarnesses[0]!;
+    }
+  }
 
   const candidates: StoredCodingAgentHarnessRecord[] = [];
 

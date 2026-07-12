@@ -17,6 +17,18 @@ export async function loadSavedCliProfileId(): Promise<string | null> {
   return profileId || null;
 }
 
+export async function loadSavedCliOrgId(): Promise<string | null> {
+  const raw = await readTextOrNull(getCliConfigPath());
+
+  if (raw === null) {
+    return null;
+  }
+
+  const orgId = parseIni(raw).org_id?.trim();
+
+  return orgId || null;
+}
+
 export async function saveCliProfileId(profileId: string): Promise<void> {
   const trimmed = profileId.trim();
 
@@ -24,7 +36,47 @@ export async function saveCliProfileId(profileId: string): Promise<void> {
     return;
   }
 
-  const lines = ["# Nakama CLI", `profile_id=${trimmed}`, ""];
+  const values = await readCliConfigValues();
+  values.profile_id = trimmed;
+
+  await writeCliConfig(values);
+}
+
+export async function saveCliOrgId(orgId: string): Promise<void> {
+  const trimmed = orgId.trim();
+
+  if (!trimmed) {
+    return;
+  }
+
+  const values = await readCliConfigValues();
+  values.org_id = trimmed;
+
+  await writeCliConfig(values);
+}
+
+async function readCliConfigValues(): Promise<Record<string, string>> {
+  const raw = await readTextOrNull(getCliConfigPath());
+
+  if (raw === null) {
+    return {};
+  }
+
+  return parseIni(raw);
+}
+
+async function writeCliConfig(values: Record<string, string>): Promise<void> {
+  const lines = ["# Nakama CLI"];
+
+  if (values.org_id?.trim()) {
+    lines.push(`org_id=${values.org_id.trim()}`);
+  }
+
+  if (values.profile_id?.trim()) {
+    lines.push(`profile_id=${values.profile_id.trim()}`);
+  }
+
+  lines.push("");
 
   await writePrivateTextFile(getCliConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),

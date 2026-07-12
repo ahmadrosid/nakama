@@ -176,7 +176,7 @@ They are hidden from the `/skill` slash picker (like `create-automation` and `ma
 
 ### Coding agent
 
-The `coding-delegation` bundled skill teaches when to invoke a coding agent and how to summarize CLI results. Super Bot receives it by default. Setup, harness configuration, and runtime flow are in [Coding agent](/coding-agent).
+The `coding-delegation` bundled skill teaches when to invoke a coding agent and how to summarize CLI results. Super Bot receives it by default. You can also launch a coding agent directly from the CLI (`nakama launch`). Setup, harness configuration, gateway routing, and runtime flow are in [Coding agent](/coding-agent).
 
 ## Sync behavior
 

@@ -21,6 +21,11 @@ describe("resolveProfileInput", () => {
     expect(resolveProfileInput(profiles, "2")?.id).toBe("profile_b");
   });
 
+  test("matches super bot aliases", () => {
+    expect(resolveProfileInput(profiles, "super_bot")?.id).toBe("super_bot");
+    expect(resolveProfileInput(profiles, "super-bot")?.id).toBe("super_bot");
+  });
+
   test("returns undefined for ambiguous input", () => {
     expect(resolveProfileInput(profiles, "profile")).toBeUndefined();
   });

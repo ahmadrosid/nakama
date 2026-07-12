@@ -51,6 +51,8 @@ import type {
   SyncSkillsResponse,
   SoulStatusResponse,
   CodingHarnessSettingsResponse,
+  CodingAgentLaunchPlanResponse,
+  PrepareCodingAgentLaunchRequest,
   TelegramSettingsResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
@@ -186,6 +188,12 @@ import {
   formatCodingAgentCommandContext,
   getBackendSkillName,
 } from "./coding-agent-command";
+import { prepareCodingAgentLaunch as buildCodingAgentLaunchPlan } from "./coding-agent-launcher";
+import {
+  getInferenceGatewayBaseUrl,
+  normalizeCodingAgentModel,
+} from "./coding-agent-spawn-env";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -332,6 +340,10 @@ export class AgentService {
 
   async getUserTimezone(): Promise<string> {
     return this.userConfig?.timezone ?? loadUserTimezone();
+  }
+
+  getUserConfig(): UserConfig | null {
+    return this.userConfig;
   }
 
   async setUserTimezone(timezone: string): Promise<string> {
@@ -768,6 +780,35 @@ export class AgentService {
 
   async verifyCodingHarness(harnessId?: string): Promise<VerifyCodingHarnessResponse> {
     return verifyCodingAgentHarness(this.db, harnessId);
+  }
+
+  async prepareCodingAgentLaunch(
+    orgId: string,
+    input: PrepareCodingAgentLaunchRequest,
+    options: {
+      persistSelection?: boolean;
+      orgRole?: OrgRole | null;
+      isPlatformAdmin?: boolean;
+      localCli?: boolean;
+    } = {},
+  ): Promise<CodingAgentLaunchPlanResponse> {
+    return buildCodingAgentLaunchPlan(
+      this.db,
+      {
+        orgId,
+        profileId: input.profileId,
+        backend: input.backend,
+        model: input.model,
+        cwd: input.cwd,
+        passthroughArgs: input.passthroughArgs,
+        persistSelection: options.persistSelection === true,
+      },
+      {
+        orgRole: options.orgRole,
+        isPlatformAdmin: options.isPlatformAdmin,
+        localCli: options.localCli,
+      },
+    );
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
@@ -2272,10 +2313,29 @@ export class AgentService {
     try {
       const harness = await resolveCodingAgentHarness(this.db);
       const workspaceRoot = getProfileSoulDir(orgId, profileId);
+      const profile = await this.db.getProfile(profileId);
+      const gatewayBaseUrl = getInferenceGatewayBaseUrl();
+      let authToken: string | null = null;
+
+      if (gatewayBaseUrl) {
+        try {
+          authToken = await loadLocalAuthToken();
+        } catch {
+          authToken = null;
+        }
+      }
+
       const template = buildCodingAgentCommandTemplate(
         harness,
         "<task prompt>",
         workspaceRoot,
+        {
+          model: normalizeCodingAgentModel(profile?.model),
+          gatewayBaseUrl,
+          authToken,
+          orgId,
+          profileId,
+        },
       );
       const backendSkillName = getBackendSkillName(harness.kind);
       const backendSkill = await readBundledSkillBody(backendSkillName);

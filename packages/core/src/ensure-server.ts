@@ -104,6 +104,29 @@ export async function serverHasCodingHarnessVerify(
   }
 }
 
+export async function serverHasCodingAgentPrepareLaunch(
+  serverUrl: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${serverUrl}/openapi.json`, {
+      signal,
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = (await response.json()) as {
+      paths?: Record<string, Record<string, unknown>>;
+    };
+
+    return payload.paths?.["/v1/coding-agents/prepare-launch"]?.post != null;
+  } catch {
+    return false;
+  }
+}
+
 async function isServerHealthy(serverUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 800);
@@ -131,6 +154,10 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
     }
 
     if (!(await serverHasCodingHarnessVerify(serverUrl, controller.signal))) {
+      return false;
+    }
+
+    if (!(await serverHasCodingAgentPrepareLaunch(serverUrl, controller.signal))) {
       return false;
     }
 

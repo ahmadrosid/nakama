@@ -1,5 +1,6 @@
 import type { ToolDetail } from "@nakama/core/contract";
 import {
+  BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
@@ -271,7 +272,9 @@ function ToolListSection({
               onConfigure={
                 isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
                   ? onConfigureEmail
-                  : undefined
+                  : isOrgAdmin && tool.id === BASH_TOOL_ID
+                    ? onConfigureCodingHarnesses
+                    : undefined
               }
             />
           ))}

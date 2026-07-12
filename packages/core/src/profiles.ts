@@ -64,6 +64,16 @@ export function resolveProfileInput(
   }
 
   const lower = trimmed.toLowerCase();
+  const superBotAliases = new Set(["super_bot", "super-bot", "superbot", "super bot"]);
+
+  if (superBotAliases.has(lower)) {
+    const superBots = profiles.filter((profile) => profile.isSuper);
+
+    if (superBots.length === 1) {
+      return superBots[0];
+    }
+  }
+
   const exactName = profiles.filter((profile) => profile.name.toLowerCase() === lower);
 
   if (exactName.length === 1) {

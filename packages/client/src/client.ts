@@ -91,6 +91,8 @@ import type {
   UpdateTelegramSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateCodingHarnessSettingsRequest,
+  PrepareCodingAgentLaunchRequest,
+  CodingAgentLaunchPlanResponse,
   UpdateWhatsAppSettingsRequest,
   UpdateTimezoneRequest,
   VisionSettings,
@@ -1147,6 +1149,15 @@ export class NakamaClient {
     }
 
     return readCodingHarnessInstallStream(response.body, handlers, options?.signal);
+  }
+
+  async prepareCodingAgentLaunch(
+    request: PrepareCodingAgentLaunchRequest,
+  ): Promise<CodingAgentLaunchPlanResponse> {
+    return this.request<CodingAgentLaunchPlanResponse>("/v1/coding-agents/prepare-launch", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

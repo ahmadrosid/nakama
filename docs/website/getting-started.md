@@ -94,7 +94,7 @@ Most operators only need to think about four things:
 Nakama can expose the same agent runtime through:
 
 - Web dashboard
-- CLI
+- CLI — including `bun run dev:cli -- launch` for Codex, Claude Code, or OpenCode ([Coding agent](/coding-agent))
 - Telegram
 - WhatsApp
 

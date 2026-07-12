@@ -19,6 +19,8 @@ import { registerAutomationRoutes } from "./routes/automations";
 import { registerTaskRoutes } from "./routes/tasks";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
 import { registerOrgMemberRoutes } from "./routes/org-members";
+import { registerInferenceGatewayRoutes } from "./routes/inference-gateway";
+import { registerCodingAgentRoutes } from "./routes/coding-agents";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
 import { registerNotificationWebhookRoutes } from "./routes/notification-webhooks";
@@ -76,6 +78,8 @@ export function createHonoApp(options: ServerOptions) {
   registerPlatformOrgRoutes(app, options);
   registerDataPortabilityRoutes(app, options);
   registerOrgMemberRoutes(app, options);
+  registerInferenceGatewayRoutes(app, options);
+  registerCodingAgentRoutes(app, options);
 
   app.get("/openapi.json", (c) => {
     const serverUrl = new URL(c.req.url).origin;

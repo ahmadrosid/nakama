@@ -20,7 +20,7 @@ const pageDescriptions: Record<string, string> = {
   'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory and artifact workflows use file tools plus bundled skills.',
   'skills.md': 'Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.',
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
-  'coding-agent.md': 'Hand repo coding work to Codex, Claude Code, or OpenCode from Nakama chat via bash, the coding-delegation skill, and Integrations harness setup.',
+  'coding-agent.md': 'Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional inference gateway routing through your Nakama provider.',
   'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
   'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
 }

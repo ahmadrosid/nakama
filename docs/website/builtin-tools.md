@@ -69,7 +69,7 @@ Persistent outputs (reports, summaries, generated text) are not a separate built
 
 ## Coding agent
 
-Repo coding work is not a separate builtin. Profiles with the `coding-delegation` skill invoke Codex, Claude Code, or OpenCode through `bash`. See [Coding agent](/coding-agent) for why Nakama uses a dedicated coding agent for this work, plus setup and runtime behavior.
+Repo coding work is not a separate builtin. Profiles with the `coding-delegation` skill invoke Codex, Claude Code, or OpenCode through `bash`. You can also launch a harness directly with `bun run dev:cli -- launch`. See [Coding agent](/coding-agent) for setup, the inference gateway, CLI flags, and runtime behavior.
 
 ## Tool reference
 
@@ -230,8 +230,12 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 | `command` | string | Yes | Shell command to run |
 | `cwd` | string | No | Working directory within the profile workspace |
 | `timeoutMs` | number | No | Default 30000, max 1800000 (30 minutes) |
+| `env` | object | No | Extra env vars merged at spawn time (string values) |
+| `codingAgent` | boolean | No | When true, Nakama merges coding-agent spawn env (gateway routing) for this command |
 
 **Returns:** `{ exitCode, stdout, stderr, timedOut }`
+
+**Coding-agent spawn env:** When `codingAgent: true` (or the command matches the active harness binary), Nakama merges inference-gateway env vars on the server before spawn. See [Coding agent — Model routing](/coding-agent#model-routing-inference-gateway). Optional `env` keys are merged on top.
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 

@@ -2,6 +2,7 @@ import { createClient } from "@nakama/client";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { runChat } from "./chat";
 import { parseCliProfileArgs } from "./profile";
+import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
 import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 import { setTheme, type Theme, detectTheme } from "./styled-text";
@@ -10,6 +11,7 @@ import {
   isRotateTokenCommand,
   runRotateToken,
 } from "./rotate-token";
+import { formatLaunchError, isLaunchCommand, runLaunch } from "./launch";
 
 if (isRotateTokenCommand()) {
   try {
@@ -17,6 +19,16 @@ if (isRotateTokenCommand()) {
     process.exit(0);
   } catch (error) {
     console.error(formatRotateTokenError(error));
+    process.exit(1);
+  }
+}
+
+if (isLaunchCommand()) {
+  try {
+    const exitCode = await runLaunch();
+    process.exit(exitCode);
+  } catch (error) {
+    console.error(formatLaunchError(error));
     process.exit(1);
   }
 }
@@ -67,6 +79,10 @@ try {
     baseUrl: serverUrl,
     authToken: await loadLocalAuthToken("cli@nakama.internal"),
   });
+
+  const cliOrg = parseCliOrgArgs();
+  await resolveCliOrgId(client, cliOrg);
+
   let health = await client.health();
 
   if (!health.userConfigured) {
