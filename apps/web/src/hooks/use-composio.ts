@@ -1,7 +1,31 @@
-import type { UpdateProfileComposioToolkitsRequest } from "@nakama/core/contract";
+import type { UpdateProfileComposioToolkitsRequest, UpdateComposioSettingsRequest } from "@nakama/core/contract";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+
+export const composioSettingsQueryOptions = queryOptions({
+  queryKey: queryKeys.composio.settings,
+  queryFn: () => client.getComposioSettings(),
+});
+
+export function useComposioSettings() {
+  return useQuery(composioSettingsQueryOptions);
+}
+
+export function useSaveComposioSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: UpdateComposioSettingsRequest) => client.setComposioSettings(request),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData(queryKeys.composio.settings, saved);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.composio.toolkits }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.health }),
+      ]);
+    },
+  });
+}
 
 export const composioToolkitsQueryOptions = queryOptions({
   queryKey: queryKeys.composio.toolkits,

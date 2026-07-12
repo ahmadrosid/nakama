@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { CodingHarnessSettingsPanel } from "@/components/CodingHarnessSettingsDialog";
+import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
@@ -152,6 +153,7 @@ export function IntegrationsPage() {
               title="Composio"
               description="Enable toolkits, connect SaaS accounts with OAuth, and sync tools for profile assignment."
             >
+              <ComposioSettingsCard />
               <ComposioConnectionsCard />
             </IntegrationSection>
           ) : null}

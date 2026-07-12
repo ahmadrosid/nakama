@@ -1,11 +1,10 @@
 import {
-  COMPOSIO_API_KEY_ENV,
   composioOrgUserId,
   createId,
-  isComposioConfigured,
+  loadComposioConfigFile,
   NakamaApiError,
   nanoid,
-  readEnvValue,
+  resolveComposioApiKey,
   type ComposioCatalogToolkitSummary,
   type ComposioConnectResponse,
   type ComposioToolkitSummary,
@@ -57,36 +56,56 @@ function titleCaseToolkit(slug: string): string {
 }
 
 export class ComposioService {
-  private readonly apiClient: ComposioApiClient | null;
-  private readonly env: Record<string, string | undefined>;
+  private apiClientCache: { key: string; client: ComposioApiClient } | null = null;
 
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
     private readonly authService: AuthService,
-    env: Record<string, string | undefined> = process.env,
-  ) {
-    this.env = env;
-    this.apiClient = createComposioApiClient(readEnvValue(env, COMPOSIO_API_KEY_ENV));
+  ) {}
+
+  reloadConfiguration(): void {
+    this.apiClientCache = null;
   }
 
-  isAvailable(): boolean {
-    return isComposioConfigured(this.env) && this.apiClient !== null;
+  private async resolveApiKey(): Promise<string> {
+    return resolveComposioApiKey(await loadComposioConfigFile());
+  }
+
+  private async getApiClient(): Promise<ComposioApiClient | null> {
+    const apiKey = await this.resolveApiKey();
+
+    if (!apiKey) {
+      return null;
+    }
+
+    if (this.apiClientCache?.key === apiKey) {
+      return this.apiClientCache.client;
+    }
+
+    const client = createComposioApiClient(apiKey);
+    this.apiClientCache = { key: apiKey, client };
+    return client;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return Boolean(await this.getApiClient());
   }
 
   async listToolkits(orgId: string): Promise<ListComposioToolkitsResponse> {
-    const composioAvailable = this.isAvailable();
+    const apiClient = await this.getApiClient();
+    const composioAvailable = apiClient !== null;
     const orgToolkits = (await this.databaseAdapter.listComposioToolkitsForOrg(orgId)).map(
       toToolkitSummary,
     );
 
-    if (!composioAvailable || !this.apiClient) {
+    if (!composioAvailable) {
       return { composioAvailable: false, catalog: [], orgToolkits };
     }
 
     let catalog: ComposioCatalogToolkitSummary[] = [];
 
     try {
-      const remoteCatalog = await this.apiClient.listCatalogToolkits();
+      const remoteCatalog = await apiClient.listCatalogToolkits();
       catalog = remoteCatalog.map((toolkit) => ({
         slug: toolkit.slug,
         name: toolkit.name,
@@ -108,7 +127,7 @@ export class ComposioService {
   }
 
   async enableToolkit(orgId: string, input: unknown): Promise<ComposioToolkitSummary> {
-    this.requireAvailable();
+    await this.requireAvailable();
     const request = normalizeEnableComposioToolkitRequest(input);
     const existing = await this.databaseAdapter.getComposioToolkitBySlug(orgId, request.toolkitSlug);
     const now = new Date().toISOString();
@@ -159,7 +178,7 @@ export class ComposioService {
     toolkitSlug: string,
     callbackBaseUrl: string,
   ): Promise<ComposioConnectResponse> {
-    this.requireAvailable();
+    const apiClient = await this.requireAvailable();
     const record = await this.getOwnedToolkitBySlug(orgId, toolkitSlug);
 
     if (record.status === "disabled") {
@@ -175,7 +194,7 @@ export class ComposioService {
       } satisfies ComposioOAuthStatePayload),
     ).toString("base64url");
     const callbackUrl = `${callbackBaseUrl.replace(/\/$/, "")}/v1/composio/oauth/callback?state=${encodeURIComponent(state)}`;
-    const link = await this.apiClient!.linkToolkitAccount(
+    const link = await apiClient.linkToolkitAccount(
       composioOrgUserId(orgId),
       toolkitSlug,
       callbackUrl,
@@ -196,7 +215,7 @@ export class ComposioService {
   }
 
   async completeOAuth(state: string): Promise<{ orgId: string; toolkitSlug: string }> {
-    this.requireAvailable();
+    await this.requireAvailable();
 
     let payload: ComposioOAuthStatePayload;
 
@@ -227,12 +246,12 @@ export class ComposioService {
   }
 
   async disconnectToolkit(orgId: string, toolkitSlug: string): Promise<ComposioToolkitSummary> {
-    this.requireAvailable();
+    const apiClient = await this.requireAvailable();
     const record = await this.getOwnedToolkitBySlug(orgId, toolkitSlug);
 
     if (record.connectedAccountId) {
       try {
-        await this.apiClient!.deleteConnectedAccount(record.connectedAccountId);
+        await apiClient.deleteConnectedAccount(record.connectedAccountId);
       } catch {
         // Best-effort remote revoke; local state still clears below.
       }
@@ -254,7 +273,7 @@ export class ComposioService {
   }
 
   async syncToolkit(orgId: string, toolkitSlug: string): Promise<ComposioToolkitSummary> {
-    this.requireAvailable();
+    const apiClient = await this.requireAvailable();
     const record = await this.getOwnedToolkitBySlug(orgId, toolkitSlug);
 
     if (record.status !== "connected") {
@@ -265,10 +284,10 @@ export class ComposioService {
       const session = await this.openOrgSession(orgId, [record.toolkitSlug], {
         [record.toolkitSlug]: null,
       });
-      const cachedTools = await this.apiClient!.listSessionTools(session);
+      const cachedTools = await apiClient.listSessionTools(session);
       const updated: StoredComposioToolkitRecord = {
         ...record,
-        sessionIdEnc: this.encryptSessionId(session.sessionId),
+        sessionIdEnc: await this.encryptSessionId(session.sessionId),
         cachedTools,
         lastError: null,
         updatedAt: new Date().toISOString(),
@@ -347,7 +366,9 @@ export class ComposioService {
     orgId: string,
     profileId: string,
   ): Promise<ComposioSessionMcpEndpoint | null> {
-    if (!this.isAvailable() || !this.apiClient) {
+    const apiClient = await this.getApiClient();
+
+    if (!apiClient) {
       return null;
     }
 
@@ -375,22 +396,22 @@ export class ComposioService {
       return null;
     }
 
-    const existingSessionId = this.readExistingSessionId(orgToolkits, enabledToolkits);
+    const existingSessionId = await this.readExistingSessionId(orgToolkits, enabledToolkits);
     const userId = composioOrgUserId(orgId);
 
     if (existingSessionId) {
-      return this.apiClient.reuseProfileSession(
+      return apiClient.reuseProfileSession(
         existingSessionId,
         enabledToolkits,
         allowedToolsByToolkit,
       );
     }
 
-    return this.apiClient.createProfileSession(userId, enabledToolkits, allowedToolsByToolkit);
+    return apiClient.createProfileSession(userId, enabledToolkits, allowedToolsByToolkit);
   }
 
   async formatProfileConnectionsContext(orgId: string, profileId: string): Promise<string> {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       return "";
     }
 
@@ -443,18 +464,19 @@ export class ComposioService {
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
   ): Promise<ComposioSessionMcpEndpoint> {
-    return this.apiClient!.createProfileSession(
+    const apiClient = await this.requireAvailable();
+    return apiClient.createProfileSession(
       composioOrgUserId(orgId),
       toolkitSlugs,
       allowedToolsByToolkit,
     );
   }
 
-  private readExistingSessionId(
+  private async readExistingSessionId(
     orgToolkits: StoredComposioToolkitRecord[],
     enabledToolkits: string[],
-  ): string | null {
-    const secret = readEnvValue(this.env, COMPOSIO_API_KEY_ENV);
+  ): Promise<string | null> {
+    const secret = await this.resolveApiKey();
     if (!secret) {
       return null;
     }
@@ -476,19 +498,23 @@ export class ComposioService {
     return null;
   }
 
-  private encryptSessionId(sessionId: string): string {
-    const secret = readEnvValue(this.env, COMPOSIO_API_KEY_ENV);
+  private async encryptSessionId(sessionId: string): Promise<string> {
+    const secret = await this.resolveApiKey();
     if (!secret) {
-      throw new Error("COMPOSIO_API_KEY is not configured.");
+      throw new Error("Composio API key is not configured.");
     }
 
     return encryptComposioSecret(sessionId, secret);
   }
 
-  private requireAvailable(): void {
-    if (!this.isAvailable() || !this.apiClient) {
+  private async requireAvailable(): Promise<ComposioApiClient> {
+    const apiClient = await this.getApiClient();
+
+    if (!apiClient) {
       throw new NakamaApiError("Composio is not configured on this deployment.", 503);
     }
+
+    return apiClient;
   }
 
   private async getOwnedToolkit(orgId: string, toolkitId: string): Promise<StoredComposioToolkitRecord> {

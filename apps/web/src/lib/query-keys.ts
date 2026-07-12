@@ -55,6 +55,7 @@ export const queryKeys = {
   },
   composio: {
     toolkits: ["composio", "toolkits"] as const,
+    settings: ["composio", "settings"] as const,
     profileToolkits: (profileId: string) => ["composio", "profiles", profileId] as const,
   },
   email: {

@@ -735,6 +735,15 @@ export interface UpdateTelegramSettingsRequest {
   profileId?: string;
 }
 
+export interface ComposioSettingsResponse {
+  configured: boolean;
+  apiKeyMasked: string | null;
+}
+
+export interface UpdateComposioSettingsRequest {
+  apiKey?: string;
+}
+
 export type NotificationDestinationChannel = "telegram";
 
 export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";

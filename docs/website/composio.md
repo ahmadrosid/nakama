@@ -4,12 +4,11 @@ Nakama integrates with [Composio](https://composio.dev) to give agents access to
 
 ## Setup
 
-1. Set `COMPOSIO_API_KEY` on the Nakama server.
-2. Restart the server and confirm `/health` reports `composioAvailable: true`.
-3. As an org admin, open **Integrations → Composio**.
-4. Enable a toolkit, click **Connect**, and complete OAuth in the browser.
-5. Click **Sync tools** after connecting.
-6. Assign the toolkit to a profile on the **Profiles** page.
+1. As an org admin, open **Integrations → Composio** and save your Composio API key (stored in `~/.nakama/composio/config.ini`).
+2. Confirm `/health` reports `composioAvailable: true`.
+3. Enable a toolkit, click **Connect**, and complete OAuth in the browser.
+4. Click **Sync tools** after connecting.
+5. Assign the toolkit to a profile on the **Profiles** page.
 
 ## Tenancy model
 

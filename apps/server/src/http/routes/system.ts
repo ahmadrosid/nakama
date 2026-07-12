@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { isComposioConfigured, NAKAMA_API_VERSION } from "@nakama/core";
+import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
 
@@ -86,7 +86,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
       apiVersion: NAKAMA_API_VERSION,
       providerConfigured: agent.providerConfigured,
       userConfigured: humanUserCount > 0,
-      composioAvailable: isComposioConfigured(process.env),
+      composioAvailable: await isComposioConfiguredAsync(),
     }, 200);
   });
 

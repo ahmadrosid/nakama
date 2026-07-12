@@ -54,6 +54,7 @@ import type {
   CodingAgentLaunchPlanResponse,
   PrepareCodingAgentLaunchRequest,
   TelegramSettingsResponse,
+  ComposioSettingsResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
@@ -63,6 +64,7 @@ import type {
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UpdateTelegramSettingsRequest,
+  UpdateComposioSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateWhatsAppSettingsRequest,
   UpdateUserContextRequest,
@@ -110,6 +112,7 @@ import {
   isWritableSoulFileKey,
   loadSoulStack,
   loadTelegramSettingsPublic,
+  loadComposioSettingsPublic,
   loadEmailSettingsPublic,
   loadEmailConfig,
   isEmailConfigComplete,
@@ -129,6 +132,7 @@ import {
   replaceImagePartsWithDescriptions,
   resolveSoulStackForProfile,
   saveTelegramConfig,
+  saveComposioConfig,
   saveWhatsAppConfig,
   createSmtpSender,
   loadUserThinkingSettings,
@@ -704,6 +708,31 @@ export class AgentService {
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return regenerateTelegramHandshake();
+  }
+
+  async getComposioSettings(): Promise<ComposioSettingsResponse> {
+    return loadComposioSettingsPublic();
+  }
+
+  async setComposioSettings(
+    input: UpdateComposioSettingsRequest,
+  ): Promise<ComposioSettingsResponse> {
+    const existing = await loadComposioSettingsPublic();
+    const apiKey =
+      input.apiKey !== undefined && input.apiKey.trim()
+        ? input.apiKey.trim()
+        : undefined;
+
+    if (!apiKey && !existing.configured) {
+      throw new Error("Composio API key is required.");
+    }
+
+    if (apiKey) {
+      await saveComposioConfig({ apiKey });
+      this.composioService?.reloadConfiguration();
+    }
+
+    return this.getComposioSettings();
   }
 
   async getEmailSettings(): Promise<EmailSettingsResponse> {

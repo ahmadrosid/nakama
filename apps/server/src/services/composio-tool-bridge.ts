@@ -41,7 +41,7 @@ export async function buildComposioToolDefinitions(
   composioService: ComposioService,
   mcpClientManager: McpClientManager,
 ): Promise<ToolDefinition[]> {
-  if (!composioService.isAvailable()) {
+  if (!(await composioService.isAvailable())) {
     return [];
   }
 

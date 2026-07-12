@@ -69,6 +69,7 @@ import type {
   StoredAutomation,
   SystemStatusResponse,
   TelegramSettingsResponse,
+  ComposioSettingsResponse,
   CodingHarnessSettingsResponse,
   CodingHarnessInstallRequest,
   CodingHarnessStatus,
@@ -89,6 +90,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UpdateTelegramSettingsRequest,
+  UpdateComposioSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateCodingHarnessSettingsRequest,
   PrepareCodingAgentLaunchRequest,
@@ -1033,6 +1035,19 @@ export class NakamaClient {
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
     return this.request<TelegramSettingsResponse>("/v1/settings/telegram/handshake", {
       method: "POST",
+    });
+  }
+
+  async getComposioSettings(): Promise<ComposioSettingsResponse> {
+    return this.request<ComposioSettingsResponse>("/v1/settings/composio");
+  }
+
+  async setComposioSettings(
+    request: UpdateComposioSettingsRequest,
+  ): Promise<ComposioSettingsResponse> {
+    return this.request<ComposioSettingsResponse>("/v1/settings/composio", {
+      method: "PUT",
+      body: JSON.stringify(request),
     });
   }
 

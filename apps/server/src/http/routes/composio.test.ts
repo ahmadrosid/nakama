@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { saveComposioConfig } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../app";
 import { AuthService } from "../../services/auth-service";
@@ -7,6 +11,8 @@ import { OrgService } from "../../services/org-service";
 import { ComposioService } from "../../services/composio-service";
 import type { ComposioApiClient } from "../../services/composio-api-client";
 import { loginUserSession } from "../test-session-helpers";
+
+const TEST_API_KEY = "ck_test";
 
 function createMockClient(): ComposioApiClient {
   return {
@@ -80,13 +86,20 @@ async function seedOrgAdmin(databaseAdapter: ReturnType<typeof createInMemoryDat
   return { email, password, orgId, profileId };
 }
 
-function createApp() {
+async function createApp() {
+  const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-route-"));
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+  await saveComposioConfig({ apiKey: TEST_API_KEY });
+
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
-  const composioService = new ComposioService(databaseAdapter, authService, {
-    COMPOSIO_API_KEY: "ck_test",
-  });
-  (composioService as unknown as { apiClient: ComposioApiClient }).apiClient = createMockClient();
+  const composioService = new ComposioService(databaseAdapter, authService);
+  composioService.reloadConfiguration();
+  (composioService as unknown as { apiClientCache: { key: string; client: ComposioApiClient } | null }).apiClientCache =
+    {
+      key: TEST_API_KEY,
+      client: createMockClient(),
+    };
 
   return {
     databaseAdapter,
@@ -109,7 +122,7 @@ function createApp() {
 
 describe("composio routes", () => {
   test("org admin can enable toolkit and assign it to a profile", async () => {
-    const { app, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = await createApp();
     const { email, password, orgId, profileId } = await seedOrgAdmin(databaseAdapter);
     const session = await loginUserSession(app, email, password, orgId);
 
@@ -151,7 +164,7 @@ describe("composio routes", () => {
   });
 
   test("org member cannot manage composio toolkits", async () => {
-    const { app, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = await createApp();
     const { orgId } = await seedOrgAdmin(databaseAdapter);
     const now = new Date().toISOString();
     const authService = new AuthService();

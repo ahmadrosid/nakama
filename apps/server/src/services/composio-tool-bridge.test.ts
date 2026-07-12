@@ -15,7 +15,7 @@ describe("composio-tool-bridge", () => {
 
   test("filters meta tools and disconnected assignments", async () => {
     const composioService = {
-      isAvailable: () => true,
+      isAvailable: async () => true,
       async getAssignedToolkitRecords() {
         return [
           {
