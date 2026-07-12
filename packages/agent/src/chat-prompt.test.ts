@@ -29,6 +29,59 @@ test("buildChatSystemPrompt omits automation guidance when create_automation is 
   expect(prompt).not.toContain("5-field cron syntax");
 });
 
+test("buildChatSystemPrompt includes memory skill pointers when file tools are available", () => {
+  const prompt = buildChatSystemPrompt(
+    [
+      {
+        name: "read_file",
+        description: "Read files",
+        parameters: { type: "object", properties: {} },
+      },
+      {
+        name: "edit_file",
+        description: "Edit files",
+        parameters: { type: "object", properties: {} },
+      },
+    ],
+    { enableToolLoop: true },
+  );
+
+  expect(prompt).toContain("update-profile-memory skill");
+  expect(prompt).toContain("archive-profile-memory skill");
+  expect(prompt).not.toContain("update_profile_memory");
+});
+
+test("buildChatSystemPrompt omits memory guidance when file tools are unavailable", () => {
+  const prompt = buildChatSystemPrompt(
+    [{ name: "write_file", description: "Write", parameters: { type: "object", properties: {} } }],
+    { enableToolLoop: true },
+  );
+
+  expect(prompt).not.toContain("update-profile-memory skill");
+  expect(prompt).not.toContain("archive-profile-memory skill");
+  expect(prompt).not.toContain("update_profile_memory");
+});
+
+test("buildChatSystemPrompt includes artifact skill pointer when write_file is available", () => {
+  const prompt = buildChatSystemPrompt(
+    [{ name: "write_file", description: "Write", parameters: { type: "object", properties: {} } }],
+    { enableToolLoop: true },
+  );
+
+  expect(prompt).toContain("save-artifact skill");
+  expect(prompt).not.toContain("save_artifact");
+});
+
+test("buildChatSystemPrompt omits artifact guidance when write_file is unavailable", () => {
+  const prompt = buildChatSystemPrompt(
+    [{ name: "read_file", description: "Read", parameters: { type: "object", properties: {} } }],
+    { enableToolLoop: true },
+  );
+
+  expect(prompt).not.toContain("save-artifact skill");
+  expect(prompt).not.toContain("save_artifact");
+});
+
 test("buildChatSystemPrompt inserts USER.md section after identity", () => {
   const prompt = buildChatSystemPrompt([], {
     basePrompt: "You are a helpful assistant.",

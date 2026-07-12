@@ -1298,8 +1298,6 @@ export interface UpdateSoulFileRequest {
   content: string;
 }
 
-export type SaveArtifactMode = "text" | "base64";
-
 export interface ArtifactFile {
   filename: string;
   path: string;
@@ -1507,12 +1505,4 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
   parameters?: JsonSchema;
   run(input: Input, context: ToolContext): Promise<Output>;
-}
-
-export interface SaveArtifactOutput {
-  filename: string;
-  path: string;
-  mimeType: string;
-  mode: SaveArtifactMode;
-  bytesWritten: number;
 }

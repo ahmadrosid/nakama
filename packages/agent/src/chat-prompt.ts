@@ -70,15 +70,19 @@ export function buildChatSystemPrompt(
       );
     }
 
-    if (tools.some((tool) => tool.name === "update_profile_memory")) {
+    if (
+      tools.some((tool) => tool.name === "read_file") &&
+      tools.some((tool) => tool.name === "edit_file")
+    ) {
       sections.push(
-        "Use update_profile_memory to record facts, preferences, and personal context — things you know about the user. Do not use it for step-by-step procedures; use profile skills for those.",
+        "Use the update-profile-memory skill when it is active to record facts, preferences, and personal context in MEMORY.md — things you know about the user. Do not use MEMORY.md for step-by-step procedures; use profile skills for those.",
+        "When MEMORY.md is full or the user wants to remove facts without deleting them, follow the archive-profile-memory skill when it is active. Archived facts live under memory-archive/ and are not loaded automatically; use search_files or read_file to retrieve them when relevant.",
       );
     }
 
-    if (tools.some((tool) => tool.name === "archive_profile_memory")) {
+    if (tools.some((tool) => tool.name === "write_file")) {
       sections.push(
-        "Use archive_profile_memory when the user wants to forget, remove, or clean up old memory without deleting it. Archived facts live under memory-archive/ and are not loaded automatically; use search_files or read_file to retrieve them when relevant.",
+        "Use the save-artifact skill when it is active to save persistent reports, summaries, or generated text under artifacts/ for later access in the dashboard. Do not use artifacts/ for soul files or MEMORY.md.",
       );
     }
   }

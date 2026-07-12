@@ -28,10 +28,6 @@ const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: st
     filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
     displayPath: "packages/core/src/tools/builtin.ts",
   },
-  save_artifact: {
-    filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
-    displayPath: "packages/core/src/tools/builtin.ts",
-  },
   search_files: {
     filePath: path.join(corePackageRoot, "src/tools/search-files.ts"),
     displayPath: "packages/core/src/tools/search-files.ts",
@@ -39,14 +35,6 @@ const BUILTIN_SOURCE_BY_NAME: Record<string, { filePath: string; displayPath: st
   web_search: {
     filePath: path.join(corePackageRoot, "src/tools/web-search.ts"),
     displayPath: "packages/core/src/tools/web-search.ts",
-  },
-  update_profile_memory: {
-    filePath: path.join(corePackageRoot, "src/tools/profile-memory.ts"),
-    displayPath: "packages/core/src/tools/profile-memory.ts",
-  },
-  archive_profile_memory: {
-    filePath: path.join(corePackageRoot, "src/tools/archive-profile-memory.ts"),
-    displayPath: "packages/core/src/tools/archive-profile-memory.ts",
   },
   email: {
     filePath: path.join(corePackageRoot, "src/tools/email.ts"),

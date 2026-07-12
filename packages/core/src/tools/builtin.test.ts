@@ -7,7 +7,6 @@ import {
   runDeleteFile,
   runEditFile,
   runReadFile,
-  runSaveArtifact,
   runWriteFile,
   setDefaultFileGuardOptions,
 } from "./builtin";
@@ -351,43 +350,6 @@ describe("file builtin tools", () => {
     await expect(
       runEditFile({ path: "a.txt", edits: [{ oldText: "x", newText: "y" }] }, {}),
     ).rejects.toThrow("orgId and profileId are required.");
-  });
-
-  test("save_artifact writes text files under artifacts", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    const result = await runSaveArtifact(
-      {
-        filename: "report.md",
-        content: "# Report",
-        mime_type: "text/markdown",
-        mode: "text",
-      },
-      PROFILE_CONTEXT,
-    );
-
-    expect(result.filename).toBe("report.md");
-    expect(result.mimeType).toBe("text/markdown");
-    expect(await readFile(result.path, "utf8")).toBe("# Report");
-    expect(result.path).toContain(`${path.sep}artifacts${path.sep}`);
-  });
-
-  test("save_artifact decodes base64 content", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    const result = await runSaveArtifact(
-      {
-        filename: "hello.bin",
-        content: Buffer.from("hello").toString("base64"),
-        mime_type: "application/octet-stream",
-        mode: "base64",
-      },
-      PROFILE_CONTEXT,
-    );
-
-    expect(await readFile(result.path)).toEqual(Buffer.from("hello"));
   });
 
   // -----------------------------------------------------------------------

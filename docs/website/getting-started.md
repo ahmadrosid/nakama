@@ -87,7 +87,7 @@ Most operators only need to think about four things:
 - **Organization**: the tenant boundary
 - **Members**: who can access that org
 - **Profiles**: the bots people talk to
-- **Tools**: what each profile is allowed to do
+- **Tools and skills**: what each profile is allowed to do and which workflows it can follow (including bundled skills for memory, artifacts, automations, and skill authoring)
 
 ## Integrations
 

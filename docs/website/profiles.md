@@ -28,7 +28,7 @@ If a session or channel config omits a profile id — or names one that does not
 
 ### New custom profiles
 
-Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `update_profile_memory` when those builtins are available. Assign more tools, MCP servers, and skills from the dashboard.
+Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` when those builtins are available. Default and super-bot profiles also receive bundled skills (memory, automations, skill authoring) when installed on the server. Assign more tools, MCP servers, and skills from the dashboard.
 
 Super Bot can also create profiles from chat. For profile-creation requests, it uses a Super Bot-only bundled skill that guides soul-file generation, keeps `MEMORY.md` empty, and uses the current tool inventory to recommend a small relevant starter set.
 
@@ -93,13 +93,15 @@ Supported soul files:
 | `INSTRUCTIONS.md` | Operating rules |
 | `MEMORY.md` | Continuity across sessions |
 
+Archived memory lives alongside soul files at `memory-archive/` (monthly `.md` files). It is not part of the soul stack loaded into chat.
+
 Profile-scoped skills are stored at:
 
 ```text
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/
 ```
 
-Artifacts saved by the agent are stored at:
+Artifacts saved by the agent (via the `save-artifact` skill and `write_file`) are stored at:
 
 ```text
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
@@ -130,8 +132,21 @@ Profiles keep their own context on disk under the org-scoped profile directory:
 
 - **Knowledge base** documents for searchable reference material
 - **Inherited knowledge sources** for shared product references, such as the Nakama documentation
-- **`MEMORY.md`** for facts and continuity saved by the agent
-- **Artifacts** for persistent reports, generated files, images, PDFs, and other saved outputs
+- **`MEMORY.md`** for active facts and continuity the agent should remember across sessions
+- **`memory-archive/`** for facts moved out of active memory without deleting them
+- **Artifacts** for persistent reports and generated text saved via the `save-artifact` skill
+
+Memory writes and archives use bundled skills (`update-profile-memory`, `archive-profile-memory`) with the profile's file tools — not separate memory builtins. Artifact saves use `save-artifact` with `write_file`. Default and super-bot profiles receive these skills automatically when they are installed on the server.
+
+| Store | Loaded into chat | How agents write |
+|-------|------------------|------------------|
+| `MEMORY.md` | Yes (via soul stack) | `update-profile-memory` skill + `read_file` / `edit_file` / `write_file` |
+| `memory-archive/` | No | `archive-profile-memory` skill + file tools |
+| `artifacts/` | No (dashboard + download API) | `save-artifact` skill + `write_file` |
+| Knowledge base | Via `knowledge_base_search` when assigned | Upload via dashboard; search at runtime |
+| Profile skills | Via skill matcher when relevant | `manage-skills` skill or dashboard |
+
+Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent should archive old bullets before adding new ones.
 
 This data is isolated per org and per profile. Two orgs never read or write the same directory, even if profile ids happen to match.
 

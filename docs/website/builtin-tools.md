@@ -33,16 +33,13 @@ Nakama includes these builtins:
 | `delete_file` | Yes | No | |
 | `edit_file` | Yes | Yes | Assigned to new custom profiles by default |
 | `read_file` | Yes | Yes | Assigned to new custom profiles by default |
-| `save_artifact` | Yes | No | Persistent output under `artifacts/` |
 | `search_files` | Yes | Yes | Assigned to new custom profiles by default |
 | `knowledge_base_search` | Yes | Yes | Assigned to new custom profiles by default |
 | `web_search` | Yes | No | |
 | `web_fetch` | Yes | No | |
-| `update_profile_memory` | Yes | Yes | Assigned to new custom profiles by default |
-| `archive_profile_memory` | Yes | No | |
 | `email` | Yes | No | Omitted at runtime when mailbox is unconfigured |
 
-**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `update_profile_memory` until a platform admin assigns additional tools. System profiles (`default`, `super_bot`) get the full seeded set.
+**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). System profiles (`default`, `super_bot`) get the full seeded set.
 
 ## Choosing tools for a profile
 
@@ -50,8 +47,23 @@ Good starting patterns:
 
 - **Simple chat bot**: no extra tools
 - **Research bot**: `web_search`, `web_fetch`, `knowledge_base_search`
-- **Knowledge bot**: `knowledge_base_search`, `update_profile_memory`
-- **Ops bot**: file tools, `save_artifact`, `email`
+- **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
+- **Ops bot**: file tools, bundled `save-artifact` skill, `email`
+
+## Memory workflows
+
+Profile memory is not a separate builtin. Agents use `read_file`, `write_file`, and `edit_file` with two bundled skills:
+
+| Skill | Purpose |
+|-------|---------|
+| `update-profile-memory` | Append facts and preferences to active `MEMORY.md` |
+| `archive-profile-memory` | Move bullets to `memory-archive/` without deleting them |
+
+Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profiles receive these skills when bundled skills are installed on the server. See [Bundled system skills](/skills#bundled-system-skills) for the full workflow.
+
+## Artifact saves
+
+Persistent outputs (reports, summaries, generated text) are not a separate builtin. Agents use `write_file` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the dashboard Artifacts tab shows MIME types and timestamps. Text-only — binary files are not supported in this workflow yet.
 
 ## Tool reference
 
@@ -121,29 +133,6 @@ Read text from a file in the profile workspace.
 
 **Availability:** When assigned to the profile.
 
-### `save_artifact`
-
-Save a persistent output file for the active profile. Use this when the agent wants to keep a report, summary, generated code file, image, PDF, or other work result beyond the current session.
-
-| Parameter | Type | Required | Notes |
-|-----------|------|----------|-------|
-| `filename` | string | Yes | Relative path under the profile's `artifacts/` directory |
-| `content` | string | Yes | Raw text for `text` mode, base64 payload for `base64` mode |
-| `mime_type` | string | Yes | MIME type such as `text/markdown`, `image/png`, or `application/pdf` |
-| `mode` | string | No | `text` or `base64`; default `text` |
-
-**Returns:** `{ filename, path, mimeType, mode, bytesWritten }`
-
-**Behavior:** Creates parent directories as needed and stores files under:
-
-```text
-~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
-```
-
-Use `text` mode for markdown, logs, code snippets, and plain text. Use `base64` mode for binary files such as images and PDFs.
-
-**Availability:** When assigned to the profile.
-
 ### `search_files`
 
 Search text in files under the profile workspace.
@@ -206,37 +195,6 @@ Fetch a single public HTTP(S) URL and return its content. HTML pages are convert
 
 **Availability:** When assigned to the profile.
 
-### `update_profile_memory`
-
-Record a fact, preference, or decision in the profile's `MEMORY.md`.
-
-| Parameter | Type | Required | Notes |
-|-----------|------|----------|-------|
-| `content` | string | Yes | Fact or observation to remember |
-
-**Returns:** `{ path, bytesTotal }`
-
-**Behavior:** Appends under a dated `## YYYY-MM-DD` section in `~/.nakama/orgs/{orgId}/profiles/{profileId}/MEMORY.md`.
-
-**Limits:** 4096 bytes total file size.
-
-**Availability:** When assigned to the profile.
-
-### `archive_profile_memory`
-
-Move facts out of active `MEMORY.md` into `memory-archive/` without deleting them.
-
-| Parameter | Type | Required | Notes |
-|-----------|------|----------|-------|
-| `entries` | string[] | Yes | Exact bullet texts to archive (1–20 items) |
-| `reason` | string | No | Optional note stored as an HTML comment in the archive file |
-
-**Returns:** `{ archived, activeBytes, archivePath }`
-
-**Behavior:** Removes matching bullets from `MEMORY.md` and appends them to `~/.nakama/orgs/{orgId}/profiles/{profileId}/memory-archive/YYYY-MM.md`. Archived content is not loaded into the system prompt. Use `search_files` or `read_file` to retrieve it later.
-
-**Availability:** When assigned to the profile.
-
 ### `email`
 
 List, read, search, and send email through the deployment mailbox configured in Settings.
@@ -289,12 +247,12 @@ Confirmed restore replaces the current local data root; selective merge, schedul
 
 ## Safety boundaries
 
-File tools (`read_file`, `write_file`, `delete_file`) are scoped to:
+File tools (`read_file`, `write_file`, `edit_file`, `delete_file`) are scoped to:
 
-- **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, etc.)
+- **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, `artifacts/`, etc.)
 - **Custom tools directory:** `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set)
 
-`save_artifact` is more specific: it only writes under `~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/`.
+Agents save persistent outputs under `artifacts/` via the `save-artifact` bundled skill and `write_file`, not a dedicated builtin.
 
 Path guards enforce:
 
@@ -307,6 +265,8 @@ All builtin tool IDs are protected and cannot be deleted from the dashboard.
 
 ## Next steps
 
+- [Skills](/skills) — bundled system skills and reusable profile procedures
+- [Agent prompts](/agent-prompt) — how bundled system skills appear in the chat wrapper
 - [MCP servers](/mcp) — extend a profile with external tools via the Model Context Protocol
 - [Profiles](/profiles) — how to design each bot
 - [Multi-tenancy](/multi-tenancy) — who can assign tools and manage access

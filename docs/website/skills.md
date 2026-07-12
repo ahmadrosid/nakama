@@ -151,9 +151,27 @@ The dashboard also supports a shared skill library through the skills API and sy
 
 ### From the agent itself
 
-Profiles receive a bundled `manage-skills` skill that teaches the bot how to create and update profile-scoped skills with `write_file`, `read_file`, `search_files`, and `edit_file`.
+Profiles receive bundled skills for common workflows:
 
-New custom profiles receive the file tools, `knowledge_base_search`, and `update_profile_memory` by default when those builtins are available.
+- `create-automation` — scheduling, reminders, and saved automations
+- `manage-skills` — create and update profile-scoped skills with `write_file`, `read_file`, `search_files`, and `edit_file`
+- `update-profile-memory` — record facts in active `MEMORY.md` via file tools
+- `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
+- `save-artifact` — save persistent text outputs under `artifacts/` via `write_file`
+
+New custom profiles receive the file tools and `knowledge_base_search` by default when those builtins are available. Default and super-bot profiles also receive the bundled skills above when they are installed and synced on the server.
+
+### Bundled system skills
+
+`update-profile-memory`, `archive-profile-memory`, and `save-artifact` replace older dedicated builtins. They teach the agent how to use generic file tools safely:
+
+- **Memory write path:** read or create `MEMORY.md`, append a dated `- bullet` under the user's timezone date, keep the `# Memory Log` preamble, stay under 4096 bytes
+- **Archive path:** copy exact bullets to `memory-archive/YYYY-MM.md`, then remove them from `MEMORY.md`
+- **Artifact path:** `write_file` under `artifacts/{filename}`, then write `{filename}.nakama-meta.json` with MIME metadata for the dashboard (text-only)
+
+These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and `save-artifact` when `write_file` is available.
+
+They are hidden from the `/skill` slash picker (like `create-automation` and `manage-skills`) because they are system workflows, not user-authored skills. Agents can still invoke them explicitly with `/skill update-profile-memory`, `/skill archive-profile-memory`, or `/skill save-artifact`.
 
 ## Sync behavior
 
@@ -182,8 +200,11 @@ Viewers cannot invoke agents, so they cannot trigger skills either.
 ## When to use a skill vs something else
 
 - Use a **skill** for a repeatable workflow
+- Use **`update-profile-memory`** for user facts, preferences, and durable context (not procedures)
+- Use **`archive-profile-memory`** when the user wants to forget, tidy, or free space in active memory without deleting history
 - Use the **main profile prompt** for always-on behavior and identity
 - Use a **builtin tool** for a native capability like web search or file access
+- Use **`save-artifact`** for persistent reports, summaries, and generated text under `artifacts/`
 - Use an **MCP server** for external tool integrations
 
 ## Next steps

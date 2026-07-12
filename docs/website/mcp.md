@@ -23,7 +23,7 @@ Use MCP servers when you want a profile to:
 - Run a local tool exposed through a command-based MCP server
 - Add a narrow capability that does not belong in the builtin set
 
-If a capability should be available to every profile by default, it is probably a builtin tool, not an MCP server.
+If a capability should be available to every profile by default, it is probably a builtin tool or a [bundled skill](/skills), not an MCP server. Profile memory (`MEMORY.md`) and artifact saves (`artifacts/`) use bundled skills plus file tools — not dedicated builtins.
 
 ## How MCP servers fit with profiles and tools
 
@@ -32,8 +32,9 @@ MCP servers sit alongside the [builtin tools](/builtin-tools) and follow the sam
 | Layer | Who manages it | How a profile gets it |
 |------|----------------|----------------------|
 | Builtin tools | Platform admin | Assigned per profile |
+| Bundled skills | Shipped with Nakama | Assigned per profile (memory, artifacts, automations, skill authoring) |
 | MCP servers | Platform admin | Registered once, then assigned per profile |
-| Skills | Platform admin or the bot itself | Assigned per profile |
+| Profile skills | Platform admin or the bot itself | Assigned per profile |
 
 Registering an MCP server does **not** give it to any profile. A platform admin must assign it. This keeps tool access deliberate and scoped, the same way builtin tool access is.
 
