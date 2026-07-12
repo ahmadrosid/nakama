@@ -411,22 +411,6 @@ export function ChatPage() {
         setAgentQuestionnaire(null);
       }
 
-      let activeSession = options.sessionOverride ?? session;
-
-      if (!activeSession) {
-        try {
-          activeSession = await client.createSession("web", { profileId });
-          localStorage.setItem(sessionStorageKey(profileId), activeSession.id);
-          setSessionChannel("web");
-          setSession(activeSession);
-          syncChatUrl(profileId, activeSession.id);
-        } catch (err) {
-          setError(formatError(err));
-          setBusy(false);
-          return;
-        }
-      }
-
       setAgentQuestionnaire(null);
 
       const displayImages = images.map((image) => ({
@@ -447,6 +431,23 @@ export function ChatPage() {
           questionnaireAnswers: options.questionnaireAnswers,
         },
       );
+
+      let activeSession = options.sessionOverride ?? session;
+
+      if (!activeSession) {
+        try {
+          activeSession = await client.createSession("web", { profileId });
+          localStorage.setItem(sessionStorageKey(profileId), activeSession.id);
+          setSessionChannel("web");
+          setSession(activeSession);
+          syncChatUrl(profileId, activeSession.id);
+        } catch (err) {
+          setError(formatError(err));
+          setMessages((current) => current.slice(0, -2));
+          setBusy(false);
+          return;
+        }
+      }
 
       const abortController = new AbortController();
       streamAbortRef.current = abortController;
