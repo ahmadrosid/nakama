@@ -238,4 +238,20 @@ describe("composio routes", () => {
 
     expect(enableResponse.status).toBe(403);
   });
+
+  test("oauth callback does not require a browser session", async () => {
+    const { app } = await createApp();
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/composio/oauth/callback?state=not-valid", {
+        headers: { Accept: "application/json" },
+      }),
+    );
+
+    expect(response.status).not.toBe(401);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Invalid OAuth state.",
+    });
+  });
 });

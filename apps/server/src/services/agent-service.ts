@@ -2603,7 +2603,15 @@ export class AgentService {
 }
 
 function parseAgentChannel(value: string): AgentChannel | null {
-  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp" || value === "discord" || value === "automation") {
+  if (
+    value === "cli" ||
+    value === "web" ||
+    value === "telegram" ||
+    value === "whatsapp" ||
+    value === "discord" ||
+    value === "automation" ||
+    value === "task"
+  ) {
     return value;
   }
 

@@ -2,6 +2,7 @@ import { createClient } from "@nakama/client";
 import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
 import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import {
   clearDiscordWorkerHeartbeat,
   isHeartbeatAlive,
@@ -48,6 +49,7 @@ try {
   const client = createClient({
     baseUrl: serverUrl,
     authToken: (await loadLocalAuthToken("discord@nakama.internal")) ?? undefined,
+    clientOrigin: resolveWebPublicUrl(),
   });
   const health = await client.health();
 
@@ -105,9 +107,8 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
-  process.exit(1);
-} finally {
   stopSpawnedServer(spawnedChild);
+  process.exit(1);
 }
 
 function registerCleanupHandlers(cleanup: () => void): void {

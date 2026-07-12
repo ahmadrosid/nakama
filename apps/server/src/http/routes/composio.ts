@@ -30,7 +30,37 @@ export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions
     try {
       const connectedAccountId = c.req.query("connected_account_id");
       const result = await service.completeOAuth(state, { connectedAccountId });
-      return c.redirect(`/integrations?section=composio&connected=${encodeURIComponent(result.toolkitSlug)}`);
+      const accept = c.req.header("accept") ?? "";
+      const wantsHtml = accept.includes("text/html") || !accept.includes("application/json");
+
+      if (wantsHtml) {
+        const toolkit = escapeHtml(result.toolkitSlug);
+        return c.html(
+          `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connected — Nakama</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; line-height: 1.5; color: #111; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    a { color: #0b57d0; }
+  </style>
+</head>
+<body>
+  <h1>${toolkit} connected</h1>
+  <p>You can close this tab and return to Discord, Telegram, or chat.</p>
+  <p><a href="/integrations?section=composio&amp;connected=${encodeURIComponent(result.toolkitSlug)}">Open Integrations</a></p>
+</body>
+</html>`,
+        );
+      }
+
+      return c.redirect(
+        `/integrations?section=composio&connected=${encodeURIComponent(result.toolkitSlug)}`,
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
@@ -39,6 +69,15 @@ export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions
       return errorResponse(error instanceof Error ? error.message : String(error), 400);
     }
   });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 export function registerComposioRoutes(app: HonoApp, options: ServerOptions): void {

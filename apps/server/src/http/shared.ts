@@ -337,11 +337,22 @@ export function errorResponse(
 }
 
 export function parseChannel(value: string | undefined): AgentChannel {
-  if (value === "cli" || value === "web" || value === "telegram" || value === "whatsapp") {
+  if (
+    value === "cli" ||
+    value === "web" ||
+    value === "telegram" ||
+    value === "whatsapp" ||
+    value === "discord" ||
+    value === "automation" ||
+    value === "task"
+  ) {
     return value;
   }
 
-  throw new NakamaApiError("Invalid channel. Expected cli, web, or telegram.", 400);
+  throw new NakamaApiError(
+    "Invalid channel. Expected cli, web, telegram, whatsapp, discord, automation, or task.",
+    400,
+  );
 }
 
 const STREAM_TIMEOUT_MS = 120_000;
