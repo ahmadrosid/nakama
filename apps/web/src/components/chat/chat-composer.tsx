@@ -52,10 +52,15 @@ import {
   composerIconButtonClass,
   composerShellClass,
   composerShellCompactClass,
+  composerInputGroupClass,
   composerToolbarClass,
 } from "@/lib/chat-stream";
 import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
 import { AgentQuestionnairePanel } from "@/components/chat/AgentQuestionnairePanel";
+import {
+  ChatMessageQueuePanel,
+  type QueuedComposerMessage,
+} from "@/components/chat/ChatMessageQueuePanel";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
@@ -89,6 +94,7 @@ interface ChatComposerBaseProps {
   footerClassName?: string;
   todos?: AgentTodo[];
   questionnaire?: AgentQuestionnaire | null;
+  queuedMessages?: QueuedComposerMessage[];
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
 }
 
@@ -134,12 +140,14 @@ export function ChatComposer(props: ChatComposerProps) {
     footerClassName,
     todos = [],
     questionnaire = null,
+    queuedMessages = [],
     onSubmitQuestionnaire,
   } = props;
 
   const isMinimal = props.variant === "minimal";
   const hasTodos = hasActiveAgentTodos(todos);
   const hasQuestionnaire = Boolean(questionnaire && questionnaire.questions.length > 0);
+  const hasQueuedMessages = queuedMessages.length > 0;
   const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
   const availableSkills = isMinimal ? [] : (props.availableSkills ?? []);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -172,7 +180,7 @@ export function ChatComposer(props: ChatComposerProps) {
           </span>
         </p>
       ) : null}
-      {(hasQuestionnaire || hasTodos) && !isMinimal ? (
+      {(hasQuestionnaire || hasTodos || hasQueuedMessages) && !isMinimal ? (
         <div className="relative flex w-full flex-col">
           {hasQuestionnaire ? (
             <AgentQuestionnairePanel
@@ -182,6 +190,7 @@ export function ChatComposer(props: ChatComposerProps) {
             />
           ) : null}
           <AgentTodoPanel todos={todos} stack />
+          {hasQueuedMessages ? <ChatMessageQueuePanel messages={queuedMessages} stack /> : null}
           <div className="relative z-10 -mt-2 w-full">
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
@@ -191,7 +200,7 @@ export function ChatComposer(props: ChatComposerProps) {
               prepareFiles={prepareChatUploadFiles}
               onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
               className={shellClass}
-              inputGroupClassName="overflow-visible"
+              inputGroupClassName={composerInputGroupClass}
               onSubmit={({ text, files }) => {
                 setAttachmentError(null);
                 onSubmit(text.trim(), files);
@@ -239,7 +248,7 @@ export function ChatComposer(props: ChatComposerProps) {
             : (attachmentErr) => setAttachmentError(attachmentErr.message)
         }
         className={shellClass}
-        inputGroupClassName="overflow-visible"
+        inputGroupClassName={composerInputGroupClass}
         onSubmit={({ text, files }) => {
           setAttachmentError(null);
           onSubmit(text.trim(), files);
@@ -271,19 +280,13 @@ export function ChatComposer(props: ChatComposerProps) {
           )}
         >
           {isMinimal ? (
-            <PromptInputSubmit
-              status={chatStatus}
-              disabled={disabled || (busy && !canStop)}
-              onStop={canStop ? onStop : undefined}
-              aria-label={canStop ? "Stop response" : busy ? "Sending message" : "Send message"}
-              className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              {canStop ? (
-                <StopIcon />
-              ) : (
-                <ArrowUpIcon className="size-3.5" />
-              )}
-            </PromptInputSubmit>
+            <ChatComposerSubmitButton
+              chatStatus={chatStatus}
+              busy={busy}
+              canStop={canStop}
+              disabled={disabled}
+              onStop={onStop}
+            />
           ) : (
             <ChatComposerFullFooter
               props={props}
@@ -585,23 +588,65 @@ function ChatComposerFullFooter({
 
         <span className="h-5 w-px bg-border" aria-hidden />
 
-        <PromptInputSubmit
-          status={chatStatus}
-          disabled={disabled || (busy && !canStop)}
-          onStop={canStop ? onStop : undefined}
-          aria-label={
-            canStop ? "Stop response" : busy ? "Sending message" : "Send message"
-          }
-          className="size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50"
-        >
-          {canStop ? (
-            <StopIcon />
-          ) : (
-            <ArrowUpIcon className="size-3.5" />
-          )}
-        </PromptInputSubmit>
+        <ChatComposerSubmitButton
+          chatStatus={chatStatus}
+          busy={busy}
+          canStop={canStop}
+          disabled={disabled}
+          onStop={onStop}
+        />
       </div>
     </>
+  );
+}
+
+const composerSubmitButtonClassName =
+  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
+
+function ChatComposerSubmitButton({
+  chatStatus,
+  busy,
+  canStop,
+  disabled,
+  onStop,
+}: {
+  chatStatus: ChatStatus;
+  busy: boolean;
+  canStop: boolean;
+  disabled: boolean;
+  onStop?: () => void;
+}) {
+  const controller = usePromptInputController();
+  const attachments = usePromptInputAttachments();
+  const hasContent =
+    controller.textInput.value.trim().length > 0 || attachments.files.length > 0;
+  const showStop = canStop && !hasContent;
+
+  if (showStop) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        size="icon-sm"
+        disabled={disabled}
+        aria-label="Stop response"
+        onClick={onStop}
+        className={composerSubmitButtonClassName}
+      >
+        <StopIcon />
+      </Button>
+    );
+  }
+
+  return (
+    <PromptInputSubmit
+      status={chatStatus}
+      disabled={disabled || !hasContent}
+      aria-label={busy ? "Queue message" : "Send message"}
+      className={composerSubmitButtonClassName}
+    >
+      <ArrowUpIcon className="size-3.5" />
+    </PromptInputSubmit>
   );
 }
 

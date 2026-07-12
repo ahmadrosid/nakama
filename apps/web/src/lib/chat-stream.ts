@@ -339,41 +339,56 @@ export function buildStreamHandlers(
   };
 }
 
+type OutgoingMessageOptions = {
+  thinkingEnabled?: boolean;
+  imageAttachments?: Array<{ url?: string; mediaType: string; description?: string | null }>;
+  questionnaireAnswers?: AgentQuestionAnswer[];
+};
+
+function buildOutgoingUserMessage(
+  text: string,
+  images: Array<{ mediaType: string; url: string }> = [],
+  documents: Array<{ filename: string; mediaType: string }> = [],
+  options: OutgoingMessageOptions = {},
+): ChatListItem {
+  return {
+    id: nanoid(),
+    role: "user",
+    content: text,
+    images: images.length > 0 ? images : undefined,
+    imageAttachments:
+      options.imageAttachments && options.imageAttachments.length > 0
+        ? options.imageAttachments
+        : undefined,
+    documents: documents.length > 0 ? documents : undefined,
+    questionnaireAnswers:
+      options.questionnaireAnswers && options.questionnaireAnswers.length > 0
+        ? options.questionnaireAnswers
+        : undefined,
+  };
+}
+
+function buildStreamingAssistantMessage(thinkingEnabled = false): ChatListItem {
+  return {
+    id: nanoid(),
+    role: "assistant",
+    content: "",
+    streaming: true,
+    ...(thinkingEnabled ? { thinking: "", thinkingStreaming: true } : {}),
+  };
+}
+
 export function appendOutgoingMessages(
   setMessages: Dispatch<SetStateAction<ChatListItem[]>>,
   text: string,
   images: Array<{ mediaType: string; url: string }> = [],
   documents: Array<{ filename: string; mediaType: string }> = [],
-  options: {
-    thinkingEnabled?: boolean;
-    imageAttachments?: Array<{ url?: string; mediaType: string; description?: string | null }>;
-    questionnaireAnswers?: AgentQuestionAnswer[];
-  } = {},
+  options: OutgoingMessageOptions = {},
 ): void {
   setMessages((current) => [
     ...current,
-    {
-      id: nanoid(),
-      role: "user",
-      content: text,
-      images: images.length > 0 ? images : undefined,
-      imageAttachments:
-        options.imageAttachments && options.imageAttachments.length > 0
-          ? options.imageAttachments
-          : undefined,
-      documents: documents.length > 0 ? documents : undefined,
-      questionnaireAnswers:
-        options.questionnaireAnswers && options.questionnaireAnswers.length > 0
-          ? options.questionnaireAnswers
-          : undefined,
-    },
-    {
-      id: nanoid(),
-      role: "assistant",
-      content: "",
-      streaming: true,
-      ...(options.thinkingEnabled ? { thinking: "", thinkingStreaming: true } : {}),
-    },
+    buildOutgoingUserMessage(text, images, documents, options),
+    buildStreamingAssistantMessage(options.thinkingEnabled),
   ]);
 }
 
@@ -388,14 +403,17 @@ const composerInputGroupBase =
 const composerFocusRing =
   "focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-ring/25";
 
+/** Chat composer InputGroup: always solid. Overrides InputGroup's dark:bg-input/30 and has-disabled:opacity-50. */
+export const composerInputGroupClass = "chat-composer-input overflow-visible";
+
 export const composerDockClass = cn(
-  "flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-[box-shadow,border-color]",
+  "flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs transition-[box-shadow,border-color]",
   composerFocusRing,
 );
 
 export const composerShellClass = cn(
   composerInputGroupBase,
-  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25",
+  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25",
 );
 
 export const composerShellStackedClass = cn(
@@ -405,4 +423,4 @@ export const composerShellStackedClass = cn(
 );
 
 export const composerShellCompactClass =
-  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-2.5 [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25";
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:items-stretch [&_[data-slot=input-group]]:gap-0 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:p-2.5 [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color] [&_[data-slot=input-group]:focus-within]:border-primary/30 [&_[data-slot=input-group]:focus-within]:ring-2 [&_[data-slot=input-group]:focus-within]:ring-ring/25";
