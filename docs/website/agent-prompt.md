@@ -49,7 +49,9 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - User context from `USER.md`, when available
 - The user's timezone
 - Tool-use guidance for assigned tools
-- Memory and skill rules when those tools are available
+- Memory and skill rules when `read_file` and `edit_file` are available (bundled `update-profile-memory` and `archive-profile-memory` skills)
+- Artifact guidance when `write_file` is available (bundled `save-artifact` skill)
+- Coding-agent harness context when `coding-delegation` matches ([Coding agent](/coding-agent))
 - Telegram or WhatsApp behavior when the message comes from those channels
 - Discord behavior when the message comes from a server channel (public replies)
 
@@ -71,6 +73,22 @@ Right before sending the request to the LLM, Nakama appends the current date:
 ```text
 Today is <current date>.
 ```
+
+## Bundled system skills
+
+Profiles do not use dedicated memory or artifact builtins. The chat wrapper nudges the agent toward bundled skills when the right file tools are assigned:
+
+| Skill | When nudged | Purpose |
+|-------|-------------|---------|
+| `update-profile-memory` | `read_file` + `edit_file` | Append facts and preferences to active `MEMORY.md` |
+| `archive-profile-memory` | `read_file` + `edit_file` | Move bullets from `MEMORY.md` into `memory-archive/` without deleting them |
+| `save-artifact` | `write_file` | Save persistent text outputs under `artifacts/` with metadata for the dashboard |
+
+The skills catalog is always visible. When a user message matches a skill description, Nakama can attach the full skill body for that turn (`include-body-on-match: true`).
+
+Active `MEMORY.md` is also composed into the soul stack. Archived content under `memory-archive/` is not loaded automatically — the agent uses `search_files` or `read_file` to retrieve it. Artifacts under `artifacts/` are not loaded into chat — users browse them in the dashboard Artifacts tab or download via the API.
+
+See [Skills](/skills) for the bundled skill list and [Profiles](/profiles) for where memory and artifact files live on disk.
 
 ## Where this lives in code
 

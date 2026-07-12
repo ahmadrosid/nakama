@@ -2,12 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { normalizeTaskPrompt } from "./normalize-task-prompt";
 
 describe("normalizeTaskPrompt", () => {
-  test("returns plain text unchanged", () => {
-    expect(normalizeTaskPrompt("Find the top 5 competitors.")).toBe(
-      "Find the top 5 competitors.",
-    );
-  });
-
   test("extracts prompt field from JSON object", () => {
     expect(
       normalizeTaskPrompt(

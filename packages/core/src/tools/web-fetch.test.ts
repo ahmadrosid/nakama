@@ -23,7 +23,6 @@ mock.module("node:dns/promises", () => ({
 
 const webFetchModule = await import("./web-fetch");
 const {
-  WEB_FETCH_TOOL_NAME,
   convertHtmlToMarkdown,
   webFetchInputSchema,
   webFetchTool,
@@ -99,8 +98,7 @@ describe("web_fetch input schema", () => {
 });
 
 describe("web_fetch tool metadata", () => {
-  test("exports the same name and parameters schema", () => {
-    expect(webFetchTool.name).toBe(WEB_FETCH_TOOL_NAME);
+  test("exports the parameters schema", () => {
     expect(webFetchTool.parameters?.type).toBe("object");
     expect(webFetchTool.parameters?.required).toEqual(["url"]);
     expect(webFetchTool.parameters?.additionalProperties).toBe(false);

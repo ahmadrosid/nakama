@@ -13,7 +13,11 @@ const child = Bun.spawn(["bun", "run", serverEntry], {
   stdout: "inherit",
   stderr: "inherit",
   stdin: "inherit",
-  env: process.env,
+  env: {
+    ...process.env,
+    NAKAMA_INFERENCE_GATEWAY_ENABLED:
+      process.env.NAKAMA_INFERENCE_GATEWAY_ENABLED ?? "1",
+  },
 });
 
 process.exit((await child.exited) ?? 0);

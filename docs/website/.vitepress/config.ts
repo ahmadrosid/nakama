@@ -3,23 +3,24 @@ import path from 'node:path'
 import { defineConfig } from 'vitepress'
 
 const SITE_NAME = 'Nakama'
-const SITE_TAGLINE = "Every agent has a role. Together, they're your nakama."
-const SITE_DESCRIPTION = 'An open-source platform for building teams of AI agents.'
+const SITE_TAGLINE = 'AI agents that work with your team.'
+const SITE_DESCRIPTION = 'Nakama is AI agents that work with your team — self-hosted, multi-tenant, and open source.'
 const SITE_URL = 'https://ahmadrosid.github.io/nakama'
 const AUTHOR_NAME = 'Ahmad Rosid'
 const AUTHOR_ROLE = 'Creator and maintainer of Nakama'
 const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
 
 const pageDescriptions: Record<string, string> = {
-  'index.md': 'An open-source platform for building teams of AI agents with profiles, tools, channels, and multi-tenant workspaces.',
+  'index.md': 'Nakama is AI agents that work with your team — with profiles, tools, channels, and multi-tenant workspaces.',
   'getting-started.md': 'Install Nakama with Bun or Docker, run the server, and complete first-time setup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, and channels.',
   'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
-  'profiles.md': 'See how Nakama profiles define bot behavior, soul files, tools, and model selection.',
-  'agent-prompt.md': 'Understand how Nakama builds the final system prompt from soul files, tools, and runtime context.',
-  'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use and how access is controlled.',
-  'skills.md': 'Learn how reusable skills extend Nakama profiles with focused workflows.',
+  'profiles.md': 'See how Nakama profiles define bot behavior, soul files, memory, tools, and model selection.',
+  'agent-prompt.md': 'Understand how Nakama builds the final system prompt from soul files, tools, bundled system skills, and runtime context.',
+  'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory and artifact workflows use file tools plus bundled skills.',
+  'skills.md': 'Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.',
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
+  'coding-agent.md': 'Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional inference gateway routing through your Nakama provider.',
   'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
   'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
   'discord.md': 'Set up Nakama as a Discord bot with pairing, slash commands, and server behavior.',
@@ -35,6 +36,7 @@ const pageTitles: Record<string, string> = {
   'builtin-tools.md': 'Builtin Tools',
   'skills.md': 'Skills',
   'mcp.md': 'MCP Servers',
+  'coding-agent.md': 'Coding Agent',
   'telegram.md': 'Telegram',
   'whatsapp.md': 'WhatsApp',
   'discord.md': 'Discord',
@@ -83,28 +85,115 @@ function buildJsonLd(relativePath: string, title: string, description: string) {
 }
 
 function buildLlmsTxt(pages: string[]) {
+  const topicRoutes = [
+    {
+      topics:
+        "install, run locally, Docker, first-time setup, backup, restore, dev server",
+      page: "getting-started.md",
+    },
+    {
+      topics: "connect Telegram, Telegram bot, pairing, BotFather, dev:telegram, group chat",
+      page: "telegram.md",
+    },
+    {
+      topics: "connect WhatsApp, WhatsApp linking, QR code, pairing code",
+      page: "whatsapp.md",
+    },
+    {
+      topics: "what is Nakama, mental model, organizations, profiles, tools, channels",
+      page: "overview.md",
+    },
+    {
+      topics: "organizations, tenants, roles, members, invites, org admin, multi-tenant",
+      page: "multi-tenancy.md",
+    },
+    {
+      topics: "profiles, soul files, MEMORY.md, knowledge base, artifacts, bot behavior",
+      page: "profiles.md",
+    },
+    {
+      topics: "system prompt, SOUL.md, how prompts are built, agent instructions",
+      page: "agent-prompt.md",
+    },
+    {
+      topics: "builtin tools, read_file, web_search, knowledge_base_search, email, bash",
+      page: "builtin-tools.md",
+    },
+    {
+      topics: "skills, automations, memory skills, save-artifact, manage-skills",
+      page: "skills.md",
+    },
+    {
+      topics: "MCP servers, external tools, MCP integration",
+      page: "mcp.md",
+    },
+    {
+      topics: "coding agent, Codex, Claude Code, OpenCode, dev:cli launch",
+      page: "coding-agent.md",
+    },
+  ] as const
+
+  const docSections = [
+    {
+      heading: 'Install and channels',
+      pages: ['getting-started.md', 'telegram.md', 'whatsapp.md'] as const,
+    },
+    {
+      heading: 'Concepts',
+      pages: ['index.md', 'overview.md', 'multi-tenancy.md', 'profiles.md', 'agent-prompt.md'] as const,
+    },
+    {
+      heading: 'Operations',
+      pages: ['builtin-tools.md', 'skills.md', 'coding-agent.md', 'mcp.md'] as const,
+    },
+  ] as const
+
+  const formatDocLine = (page: string) => {
+    const title = page === 'index.md' ? 'Home' : getPageTitle(page)
+    return `- [${title}](${getMarkdownUrl(page)}): ${getPageDescription(page)}`
+  }
+
   const lines = [
     `# ${SITE_NAME}`,
     '',
     `> ${SITE_DESCRIPTION} ${SITE_TAGLINE}`,
     '',
-    `${SITE_NAME} is an open-source, self-hosted platform for building teams of AI agents. Each profile is an agent with its own role, soul, tools, and memory. Organizations, skills, MCP servers, and channels like web, CLI, Telegram, WhatsApp, and Discord let you run your nakama from one deployment.`,
+    `${SITE_NAME} is AI agents that work with your team. Each profile is an agent with its own role, soul, tools, and memory. Organizations, skills, MCP servers, and channels like web, CLI, Telegram, WhatsApp, and Discord let you run your nakama from one deployment.`,
     '',
     `Maintainer: ${AUTHOR_NAME} (${AUTHOR_ROLE})`,
     `Website: ${SITE_URL}/`,
     `Repository: https://github.com/ahmadrosid/nakama`,
     '',
-    '## AI-friendly access',
+    '## For AI agents',
     '',
-    '- Markdown mirrors are available for docs pages at the same path with a `.md` suffix.',
-    '- Canonical HTML pages are available under the main docs site.',
+    'This file is the entry point for Nakama product documentation.',
+    'When a user asks about Nakama setup, behavior, integrations, or troubleshooting:',
+    `1. You are reading the index now, or fetch ${SITE_URL}/llms.txt if you do not have it yet.`,
+    '2. Pick the best page from "Topic routing" or "Docs" below.',
+    `3. web_fetch the matching .md page (for example ${SITE_URL}/telegram.md).`,
+    '4. Do not use knowledge_base_search for these URLs — that tool only searches uploaded profile documents.',
+    '5. Answer from the fetched page. Do not guess steps that are not in the docs.',
     '',
-    '## Docs',
+    'Markdown mirrors use a `.md` suffix on the same path as the HTML docs.',
     '',
-    ...pages.map((page) => {
-      const title = page === 'index.md' ? 'Home' : getPageTitle(page)
-      return `- [${title}](${getMarkdownUrl(page)}): ${getPageDescription(page)}`
-    }),
+    '## Topic routing',
+    '',
+    'Match the user question to a page:',
+    '',
+    ...topicRoutes.map(
+      ({ topics, page }) =>
+        `- ${topics} → [${getPageTitle(page)}](${getMarkdownUrl(page)})`,
+    ),
+    '',
+    ...docSections.flatMap((section) => [
+      `## Docs — ${section.heading}`,
+      '',
+      ...section.pages.filter((page) => pages.includes(page)).map(formatDocLine),
+      '',
+    ]),
+    '## All pages',
+    '',
+    ...pages.map(formatDocLine),
   ]
 
   return `${lines.join('\n')}\n`
@@ -193,6 +282,7 @@ export default defineConfig({
         items: [
           { text: 'Builtin Tools', link: '/builtin-tools' },
           { text: 'Skills', link: '/skills' },
+          { text: 'Coding Agent', link: '/coding-agent' },
           { text: 'MCP Servers', link: '/mcp' },
         ],
       },

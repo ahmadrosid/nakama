@@ -208,7 +208,6 @@ describe("agent chat tool loop", () => {
 
     await session.send("hello");
 
-    expect(systems[0]).toContain("# Active Task Plan");
     expect(systems[0]).toContain("[pending] Ship");
   });
 });

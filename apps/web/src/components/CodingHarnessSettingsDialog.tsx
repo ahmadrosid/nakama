@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  CheckCircle2Icon,
+  BotIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   CopyIcon,
   DownloadIcon,
   KeyRoundIcon,
@@ -41,6 +44,7 @@ export function CodingHarnessSettingsPanel({
   const verifyMutation = useVerifyCodingHarness();
   const installMutation = useInstallCodingHarness();
   const [selectedHarnessId, setSelectedHarnessId] = useState<string | null>(null);
+  const [expandedHarnessId, setExpandedHarnessId] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
@@ -51,7 +55,9 @@ export function CodingHarnessSettingsPanel({
       return;
     }
 
-    setSelectedHarnessId(settings.selectedHarnessId ?? settings.activeHarnessId);
+    const nextSelected = settings.selectedHarnessId ?? settings.activeHarnessId;
+    setSelectedHarnessId(nextSelected);
+    setExpandedHarnessId(nextSelected);
     setHint(null);
     setFormError(null);
   }, [settings]);
@@ -62,50 +68,53 @@ export function CodingHarnessSettingsPanel({
   const summary = useMemo(() => {
     if (!selectedHarness) {
       return {
-        tone: "warn",
+        tone: "warn" as const,
         label: "Pick an agent",
-        body: "Choose which coding agent Nakama should use on this machine.",
       };
     }
 
     if (!selectedHarness.installed) {
       return {
-        tone: "warn",
+        tone: "warn" as const,
         label: `Install ${selectedHarness.name}`,
-        body: `${selectedHarness.name} is not installed on this machine yet.`,
       };
     }
 
     if (verifyMutation.isPending) {
       return {
-        tone: "neutral",
+        tone: "neutral" as const,
         label: "Checking readiness",
-        body: `Checking whether ${selectedHarness.name} is ready to run.`,
       };
     }
 
     if (selectedHarness.ready) {
       return {
-        tone: "ok",
+        tone: "ok" as const,
         label: `${selectedHarness.name} is ready`,
-        body: selectedHarness.statusMessage ?? "Nakama can use this coding agent now.",
       };
     }
 
     if (selectedHarness.nextStep === "login") {
       return {
-        tone: "warn",
+        tone: "warn" as const,
         label: `Login required for ${selectedHarness.name}`,
-        body: selectedHarness.statusMessage ?? `${selectedHarness.name} still needs authentication.`,
       };
     }
 
     return {
-      tone: "warn",
+      tone: "warn" as const,
       label: "Run readiness check",
-      body: "Nakama still needs to confirm this coding agent can actually run.",
     };
   }, [selectedHarness, verifyMutation.isPending]);
+
+  function selectHarness(harnessId: string) {
+    setSelectedHarnessId(harnessId);
+    setExpandedHarnessId(harnessId);
+  }
+
+  function toggleExpanded(harnessId: string) {
+    setExpandedHarnessId((current) => (current === harnessId ? null : harnessId));
+  }
 
   function handleRefresh() {
     setHint(null);
@@ -128,7 +137,7 @@ export function CodingHarnessSettingsPanel({
           const selected = saved.harnesses.find((harness) => harness.id === selectedHarnessId);
           setHint(
             selected
-              ? `${selected.name} selected. Nakama will use it for coding delegation after the readiness check passes.`
+              ? `${selected.name} selected. Nakama will use it for coding agent runs after the readiness check passes.`
               : "Coding agent selection saved.",
           );
         },
@@ -190,12 +199,20 @@ export function CodingHarnessSettingsPanel({
           setInstallProgress(null);
           if (status.installed) {
             setHint(`${name} installed successfully.`);
-          } else {
-            setFormError(
-              status.statusMessage ??
-                `${name} did not finish installing. Check the command output.`,
-            );
+            return;
           }
+
+          if (status.nextStep === "login") {
+            setHint(
+              status.statusMessage ??
+                `${name} is installed. Finish login on this server, then run readiness check.`,
+            );
+            return;
+          }
+
+          setHint(
+            `${name} install finished, but Nakama could not confirm it is runnable yet. Click "Run readiness check" or install manually using the command above.`,
+          );
         },
         onError: (installError) => {
           setInstallingId(null);
@@ -209,7 +226,7 @@ export function CodingHarnessSettingsPanel({
   if (isLoading) {
     return (
       <Card className="shadow-none">
-        <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+        <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
           <Spinner />
           Loading coding agent setup…
         </CardContent>
@@ -220,7 +237,7 @@ export function CodingHarnessSettingsPanel({
   if (error) {
     return (
       <Card className="shadow-none">
-        <CardContent className="p-4 text-sm text-destructive" role="alert">
+        <CardContent className="p-6 text-sm text-destructive" role="alert">
           {formatError(error)}
         </CardContent>
       </Card>
@@ -233,43 +250,38 @@ export function CodingHarnessSettingsPanel({
 
   return (
     <Card className={cn("shadow-none", embedded ? "border-border" : "border-0 shadow-none")}>
-      <CardContent className="space-y-4 p-4">
+      <CardContent className="space-y-5 p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-foreground">Coding agents</p>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-xs",
-                  summary.tone === "ok"
-                    ? "bg-emerald-500/10 text-emerald-300"
-                    : summary.tone === "neutral"
-                      ? "bg-muted text-muted-foreground"
-                      : "bg-amber-500/10 text-amber-300",
-                )}
-              >
-                {summary.label}
-              </span>
-            </div>
+            <h2 className="type-section-title text-base">Coding agents</h2>
             <p className="text-sm text-muted-foreground">
               Nakama can hand off coding tasks to a CLI agent on this server.
             </p>
           </div>
-          {!embedded ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              render={<Link to="/integrations?section=coding-agents" />}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium",
+                summary.tone === "ok"
+                  ? "border-primary/25 bg-primary/10 text-primary"
+                  : summary.tone === "neutral"
+                    ? "border-border bg-muted text-muted-foreground"
+                    : "border-accent-500/25 bg-accent-500/10 text-accent-500",
+              )}
             >
-              Open in Integrations
-            </Button>
-          ) : null}
-        </div>
-
-        <div className="rounded-lg border border-border bg-muted/20 p-4">
-          <p className="text-sm font-medium text-foreground">{summary.label}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{summary.body}</p>
+              {summary.label}
+            </span>
+            {!embedded ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                render={<Link to="/integrations?section=coding-agents" />}
+              >
+                Open in Integrations
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {formError ? (
@@ -283,126 +295,159 @@ export function CodingHarnessSettingsPanel({
           </p>
         ) : null}
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           {settings.harnesses.map((harness) => {
             const selected = selectedHarnessId === harness.id;
+            const expanded = expandedHarnessId === harness.id;
 
             return (
-              <button
+              <div
                 key={harness.id}
-                type="button"
                 className={cn(
-                  "w-full rounded-lg border p-4 text-left transition-colors",
+                  "overflow-hidden rounded-lg border transition-colors",
                   selected
-                    ? "border-foreground/20 bg-muted/40"
-                    : "border-border bg-card hover:border-foreground/10 hover:bg-muted/20",
+                    ? "border-primary/20 bg-primary/[0.06]"
+                    : "border-border bg-background",
                 )}
-                onClick={() => setSelectedHarnessId(harness.id)}
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{harness.name}</span>
-                      {harness.version ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                          {harness.version}
-                        </span>
-                      ) : null}
-                      {selected ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                          Selected
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <StatusChip
-                        icon={<LaptopMinimalCheckIcon className="size-3.5" />}
-                        tone={harness.installed ? "ok" : "warn"}
-                        label={harness.installed ? "Installed" : "Not installed"}
-                      />
-                      <StatusChip
-                        icon={<KeyRoundIcon className="size-3.5" />}
-                        tone={
-                          !harness.installed
-                            ? "muted"
-                            : harness.authenticated === true
-                              ? "ok"
-                              : harness.authenticated === false
-                                ? "warn"
-                                : "muted"
-                        }
-                        label={
-                          !harness.installed
-                            ? "Waiting for install"
-                            : harness.authenticated === true
-                              ? "Logged in"
-                              : harness.authenticated === false
-                                ? "Needs login"
-                                : "Login not checked"
-                        }
-                      />
-                      <StatusChip
-                        icon={<CheckCircle2Icon className="size-3.5" />}
-                        tone={harness.ready ? "ok" : "muted"}
-                        label={harness.ready ? "Ready" : "Not ready yet"}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
+                <div className="flex items-start gap-3 px-4 py-3.5">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    onClick={() => selectHarness(harness.id)}
+                  >
+                    <BotIcon
+                      className={cn(
+                        "mt-0.5 size-4 shrink-0",
+                        selected ? "text-primary" : "text-muted-foreground",
+                      )}
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+
+                    <span className="min-w-0 flex-1 space-y-2">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{harness.name}</span>
+                        {harness.version ? (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {harness.version}
+                          </span>
+                        ) : null}
+                      </span>
+
+                      <span className="flex flex-wrap gap-1.5 text-xs">
+                        <StatusChip
+                          icon={<LaptopMinimalCheckIcon className="size-3.5" />}
+                          variant={harness.installed ? "solid-ok" : "solid-warn"}
+                          label={harness.installed ? "Installed" : "Not installed"}
+                        />
+                        <StatusChip
+                          icon={<KeyRoundIcon className="size-3.5" />}
+                          variant={
+                            !harness.installed
+                              ? "muted"
+                              : harness.authenticated === true
+                                ? "ok"
+                                : harness.authenticated === false
+                                  ? "solid-warn"
+                                  : "muted"
+                          }
+                          label={
+                            !harness.installed
+                              ? "Waiting for install"
+                              : harness.authenticated === true
+                                ? "Logged in"
+                                : harness.authenticated === false
+                                  ? "Needs login"
+                                  : "Login not checked"
+                          }
+                        />
+                        <StatusChip
+                          icon={<CheckIcon className="size-3.5" />}
+                          variant={harness.ready ? "ok" : "muted"}
+                          label={harness.ready ? "Ready" : "Not ready yet"}
+                        />
+                      </span>
+                    </span>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                    {selected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                        <CheckIcon className="size-3.5" aria-hidden />
+                        Selected
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      aria-expanded={expanded}
+                      aria-label={expanded ? `Collapse ${harness.name}` : `Expand ${harness.name}`}
+                      onClick={() => toggleExpanded(harness.id)}
+                    >
+                      {expanded ? (
+                        <ChevronUpIcon className="size-4" aria-hidden />
+                      ) : (
+                        <ChevronDownIcon className="size-4" aria-hidden />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {expanded ? (
+                  <div className="border-t border-border/60 px-4 py-3 pl-11">
+                    <p className="text-sm text-muted-foreground">
                       {!harness.installed
                         ? harness.installHint
                         : harness.statusMessage ?? "Run the readiness check to confirm login."}
                     </p>
-                  </div>
-                </div>
 
-                {!harness.installed ? (
-                  <div className="mt-3 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <code className="rounded-md border border-border bg-background px-2 py-1 text-xs">
-                        {harness.installCommand}
-                      </code>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void copyInstallCommand(harness.installCommand);
-                        }}
-                      >
-                        <CopyIcon className="size-3.5" />
-                        Copy install
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleInstall(harness.id, harness.name);
-                        }}
-                        disabled={installingId === harness.id}
-                      >
-                        {installingId === harness.id ? (
-                          <Spinner className="size-3.5" />
-                        ) : (
-                          <DownloadIcon className="size-3.5" />
-                        )}
-                        {installingId === harness.id ? "Installing…" : "Install"}
-                      </Button>
-                    </div>
-                    {installingId === harness.id && installProgress ? (
-                      <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        {installProgress}
-                      </p>
+                    {!harness.installed ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <code className="rounded-md border border-border bg-background px-2 py-1 text-xs">
+                            {harness.installCommand}
+                          </code>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void copyInstallCommand(harness.installCommand);
+                            }}
+                          >
+                            <CopyIcon className="size-3.5" />
+                            Copy install
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleInstall(harness.id, harness.name)}
+                            disabled={installingId === harness.id}
+                          >
+                            {installingId === harness.id ? (
+                              <Spinner className="size-3.5" />
+                            ) : (
+                              <DownloadIcon className="size-3.5" />
+                            )}
+                            {installingId === harness.id ? "Installing…" : "Install"}
+                          </Button>
+                        </div>
+                        {installingId === harness.id && installProgress ? (
+                          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                            {installProgress}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
-              </button>
+              </div>
             );
           })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">
             Nakama should only enable code delegation after the selected agent is ready.
           </p>
@@ -434,22 +479,21 @@ export function CodingHarnessSettingsPanel({
 
 function StatusChip({
   icon,
-  tone,
+  variant,
   label,
 }: {
   icon: ReactNode;
-  tone: "ok" | "warn" | "muted";
+  variant: "solid-ok" | "ok" | "solid-warn" | "muted";
   label: string;
 }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
-        tone === "ok"
-          ? "bg-emerald-500/10 text-emerald-300"
-          : tone === "warn"
-            ? "bg-amber-500/10 text-amber-300"
-            : "bg-muted text-muted-foreground",
+        variant === "solid-ok" && "bg-primary text-primary-foreground",
+        variant === "ok" && "border border-primary/20 bg-primary/5 text-primary",
+        variant === "solid-warn" && "bg-accent-500/15 text-accent-600 dark:text-accent-400",
+        variant === "muted" && "bg-muted/80 text-muted-foreground",
       )}
     >
       {icon}
@@ -471,7 +515,8 @@ export function CodingHarnessSettingsDialog({
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle>Coding agents</DialogTitle>
           <DialogDescription className="text-xs">
-            Pick an agent, make sure it is installed and logged in, then Nakama can enable code delegation.
+            Pick an agent, make sure it is installed and logged in, then Nakama can enable code
+            delegation.
           </DialogDescription>
         </DialogHeader>
         <div className="p-4">

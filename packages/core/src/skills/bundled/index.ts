@@ -3,7 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSkillMarkdown } from "../parse";
 
-export const DEFAULT_BUNDLED_SKILL_NAMES = ["create-automation", "manage-skills"] as const;
+export const DEFAULT_BUNDLED_SKILL_NAMES = [
+  "create-automation",
+  "manage-skills",
+  "update-profile-memory",
+  "archive-profile-memory",
+  "save-artifact",
+] as const;
 export const SUPER_BOT_BUNDLED_SKILL_NAMES = ["create-profile", "coding-delegation"] as const;
 export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
   "coding-backend-codex",

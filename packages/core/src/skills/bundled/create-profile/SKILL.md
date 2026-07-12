@@ -15,7 +15,7 @@ Create the profile with generated soul files:
 - `INSTRUCTIONS.md` defines operating rules, tool-use posture, uncertainty handling, and when to ask the user.
 - `MEMORY.md` must be empty. Do not invent continuity facts, preferences, or history for a new profile.
 
-Use the available-tools context when it is present. Assign the basic tools by default: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `update_profile_memory`. Recommend or assign additional tools only when they clearly match the user's requested profile purpose. Do not assign every available tool.
+Use the available-tools context when it is present. Assign the basic tools by default: `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search`. Assign the `update-profile-memory` bundled skill for memory writes. Recommend or assign additional tools only when they clearly match the user's requested profile purpose. Do not assign every available tool.
 
 When choosing tools:
 

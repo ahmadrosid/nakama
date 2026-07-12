@@ -1,11 +1,11 @@
 ---
 name: coding-backend-codex
-description: Runtime prompt layer for Codex delegated coding runs.
+description: Runtime prompt layer for Codex coding agent runs.
 disable-model-invocation: true
 include-body-on-match: true
 ---
 
-You are preparing a delegated run for [Codex](https://github.com/openai/codex), OpenAI's autonomous coding agent CLI, orchestrated via terminal/process tools.
+You are preparing a coding agent run for [Codex](https://github.com/openai/codex), OpenAI's autonomous coding agent CLI, orchestrated via terminal/process tools.
 
 ## When to Use
 
@@ -128,7 +128,7 @@ gh pr comment 86 --body '<review>'
 
 ## Prompt Preparation Checklist
 
-When preparing the delegated run instruction for Codex:
+When preparing the coding agent instruction for Codex:
 
 - Be explicit about the concrete code change to make.
 - Tell Codex to inspect the repo before changing code.

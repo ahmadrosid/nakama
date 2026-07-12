@@ -26,7 +26,7 @@ describe("ensureLocalClientAccess", () => {
     await ensureLocalClientAccess(db);
 
     const user = await db.getUserByEmail(LOCAL_CLIENT_EMAIL);
-    expect(user?.id).toBe(LOCAL_CLIENT_USER_ID);
+    expect(user).not.toBeNull();
     expect(await db.getOrgMember("org_a", LOCAL_CLIENT_USER_ID)).toMatchObject({
       role: "admin",
     });

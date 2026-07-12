@@ -1,24 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildSuggestParamsUserPrompt,
   parseSuggestedParams,
   suggestToolParamsFromPrompt,
 } from "./tool-playground-params";
 
 describe("tool playground params", () => {
-  test("buildSuggestParamsUserPrompt includes tool context", () => {
-    const prompt = buildSuggestParamsUserPrompt({
-      toolName: "echo",
-      description: "Echo input",
-      parameters: { type: "object", properties: { query: { type: "string" } } },
-      prompt: "test with hello",
-    });
-
-    expect(prompt).toContain("Tool: echo");
-    expect(prompt).toContain("test with hello");
-    expect(prompt).toContain("Parameter schema:");
-  });
-
   test("parseSuggestedParams accepts plain JSON and fenced JSON", () => {
     expect(parseSuggestedParams('{"query":"hi"}')).toEqual({ query: "hi" });
     expect(parseSuggestedParams('```json\n{"query":"hi"}\n```')).toEqual({ query: "hi" });

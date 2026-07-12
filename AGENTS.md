@@ -73,12 +73,15 @@ Loaded by `loadSoulStack()` (`load.ts`); injected by `composeSoulSystemPrompt()`
 
 ## Tools (`packages/core/src/tools/`)
 
-- `update_profile_memory` — writes to MEMORY.md
-- `archive_profile_memory` — moves bullets from MEMORY.md to memory-archive/
+- `update-profile-memory` skill — writes facts to MEMORY.md via file tools
+- `archive-profile-memory` skill — archives bullets from MEMORY.md to memory-archive/ via file tools
+- `save-artifact` skill — saves persistent text outputs under artifacts/ via write_file
 - `knowledge_base_search` — search uploaded documents
 - `web_search` — web search
 - `email` — list, read, search, and send mail via deployment mailbox settings
 - `search_files` / `ripgrep` — file/content search
+- `bash` (Super Bot) — run shell commands in the profile workspace
+- `coding-delegation` skill — invoke Codex / Claude Code / OpenCode for repo coding work via `bash` and harness CLI templates
 
 ## Tool execution & workspace
 

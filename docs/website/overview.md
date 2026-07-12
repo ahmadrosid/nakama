@@ -55,6 +55,8 @@ You choose which tools a profile can use, such as:
 - Email
 - Skill creation
 
+Bundled skills extend profiles with system workflows such as memory writes (`update-profile-memory`), memory archives (`archive-profile-memory`), artifact saves (`save-artifact`), automations (`create-automation`), skill authoring (`manage-skills`), and the coding agent (`coding-delegation` skill). See [Skills](/skills) and [Coding agent](/coding-agent).
+
 This is how you keep one bot safe and narrow while another bot can be more capable.
 
 ### 4. Channels

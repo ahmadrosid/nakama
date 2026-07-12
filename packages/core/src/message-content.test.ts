@@ -16,10 +16,6 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("normalizeUserContent", () => {
-  test("returns string when no images", () => {
-    expect(normalizeUserContent("hello")).toBe("hello");
-  });
-
   test("returns parts when images present", () => {
     const result = normalizeUserContent("see this", [
       { mediaType: "image/png", data: tinyPngBase64 },

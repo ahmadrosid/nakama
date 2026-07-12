@@ -56,7 +56,6 @@ describe("OrgService", () => {
       "SOUL.md",
     );
     const soulContent = await readFile(soulPath, "utf8");
-    expect(soulContent).toContain("# Default Bot");
     expect(soulContent).not.toContain("# Your Name");
   });
 

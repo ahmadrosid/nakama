@@ -53,7 +53,9 @@ ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
     NAKAMA_PORT=4310 \
     NAKAMA_CONFIG_DIR=/nakama/data \
-    DATABASE_URL=file:/nakama/data/sqlite/nakama.sqlite
+    DATABASE_URL=file:/nakama/data/sqlite/nakama.sqlite \
+    BUN_INSTALL_BIN=/nakama/data/.bun/bin \
+    BUN_INSTALL_GLOBAL_DIR=/nakama/data/.bun/install/global
 
 EXPOSE 4310
 

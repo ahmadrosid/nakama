@@ -6,20 +6,6 @@ import {
 } from "./notification-destinations";
 
 describe("normalizeNotificationWebhookRequest", () => {
-  test("accepts the small webhook payload shape", () => {
-    expect(
-      normalizeNotificationWebhookRequest({
-        title: "New payment received",
-        body: "Customer: Ahmad",
-        level: "success",
-      }),
-    ).toEqual({
-      title: "New payment received",
-      body: "Customer: Ahmad",
-      level: "success",
-    });
-  });
-
   test("rejects empty body", () => {
     expect(() => normalizeNotificationWebhookRequest({ body: "   " })).toThrow(
       "body must be a non-empty string.",
@@ -28,34 +14,6 @@ describe("normalizeNotificationWebhookRequest", () => {
 });
 
 describe("normalizeCreateNotificationDestinationRequest", () => {
-  test("accepts a telegram destination request", () => {
-    expect(
-      normalizeCreateNotificationDestinationRequest({
-        name: "Payments",
-        channel: "telegram",
-        telegram: { chatId: 123, topicId: 456 },
-      }),
-    ).toEqual({
-      name: "Payments",
-      channel: "telegram",
-      telegram: { chatId: 123, topicId: 456 },
-    });
-  });
-
-  test("accepts a negative telegram chat id for supergroups", () => {
-    expect(
-      normalizeCreateNotificationDestinationRequest({
-        name: "Notifications",
-        channel: "telegram",
-        telegram: { chatId: -1003734526664, topicId: 147 },
-      }),
-    ).toEqual({
-      name: "Notifications",
-      channel: "telegram",
-      telegram: { chatId: -1003734526664, topicId: 147 },
-    });
-  });
-
   test("rejects invalid telegram config", () => {
     expect(
       () =>

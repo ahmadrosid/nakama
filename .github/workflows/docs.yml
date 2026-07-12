@@ -25,13 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Configure GitHub Pages
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X PUT "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow || \
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 

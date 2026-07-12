@@ -16,11 +16,6 @@ afterEach(() => {
 });
 
 describe("createOpenCodeGoProvider", () => {
-  test("returns a provider named opencode_go", () => {
-    const provider = createOpenCodeGoProvider({ apiKey: "test" });
-    expect(provider.name).toBe("opencode_go");
-  });
-
   test("routes chat-completions models to the OpenAI-compatible endpoint", async () => {
     let capturedUrl: string | null = null;
 

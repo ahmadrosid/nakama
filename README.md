@@ -43,17 +43,22 @@ You can also run Nakama with Docker.
 ```bash
 # Pull and run the latest image
 docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-config:/root/.nakama ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
 **Build from source:**
 
 ```bash
-# Build the image (uses ./.docker/config.json to avoid macOS keychain prompts)
 ./scripts/docker-build.sh
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+```
 
-# Run the container
-docker run -d -p 4310:4310 -v nakama-config:/root/.nakama nakama
+**Fresh start:**
+
+```bash
+./scripts/docker-reset.sh
+./scripts/docker-build.sh
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
 ```
 
 The dashboard will be available at http://localhost:4310.

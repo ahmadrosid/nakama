@@ -13,7 +13,13 @@ export interface SkillTokenRange {
 }
 
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
-const HIDDEN_SLASH_SKILL_NAMES = new Set<string>(["create-automation", "manage-skills"]);
+const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
+  "create-automation",
+  "manage-skills",
+  "update-profile-memory",
+  "archive-profile-memory",
+  "save-artifact",
+]);
 
 export function findActiveSkillSlashRange(
   value: string,

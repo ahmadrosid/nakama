@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ProfileSummary } from "./contract";
 import {
   filterProfilesForChatAccess,
-  formatProfileSelectionPrompt,
   resolveProfileInScopes,
   resolveProfileInput,
   slugifyProfileName,
@@ -19,6 +18,11 @@ describe("resolveProfileInput", () => {
     expect(resolveProfileInput(profiles, "profile_b")?.id).toBe("profile_b");
     expect(resolveProfileInput(profiles, "Alpha")?.id).toBe("profile_a");
     expect(resolveProfileInput(profiles, "2")?.id).toBe("profile_b");
+  });
+
+  test("matches super bot aliases", () => {
+    expect(resolveProfileInput(profiles, "super_bot")?.id).toBe("super_bot");
+    expect(resolveProfileInput(profiles, "super-bot")?.id).toBe("super_bot");
   });
 
   test("returns undefined for ambiguous input", () => {
@@ -76,13 +80,5 @@ describe("resolveProfileInScopes", () => {
     expect(result).not.toBeNull();
     expect(result && "scope" in result && result.scope.orgId).toBe("org_b");
     expect(result && "profile" in result && result.profile.name).toBe("Gary Vee");
-  });
-});
-
-describe("formatProfileSelectionPrompt", () => {
-  test("shows explicit switch examples", () => {
-    const prompt = formatProfileSelectionPrompt(profiles, "profile_a", "Personal");
-
-    expect(prompt).toContain("Switch with /profile 2, /profile <id>, or /profile <name>");
   });
 });

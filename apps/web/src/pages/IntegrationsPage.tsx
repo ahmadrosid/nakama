@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BellRingIcon,
@@ -46,7 +47,7 @@ const INTEGRATION_SECTIONS = [
   {
     id: "coding-agents",
     label: "Coding agents",
-    description: "Code delegation CLI",
+    description: "Coding agent CLI",
     icon: BotIcon,
   },
   {
@@ -110,16 +111,16 @@ export function IntegrationsPage() {
       <header className="space-y-1">
         <h1 className="type-page-title">Integrations</h1>
         <p className="type-body max-w-2xl">
-          Manage bridge access, coding delegation, Telegram and Discord setup, notification
-          webhooks, and WhatsApp linking from one place.
+          Manage bridge access, coding agents, Telegram and Discord setup, notification webhooks,
+          and WhatsApp linking from one place.
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
-        <aside className="rounded-md border border-border bg-card p-2 lg:sticky lg:top-6">
+      <div className="grid gap-8 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] md:items-start">
+        <aside className="md:sticky md:top-6">
           <nav
             aria-label="Integration settings"
-            className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible"
+            className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
           >
             {INTEGRATION_SECTIONS.map((item) => (
               <SidebarButton
@@ -134,35 +135,25 @@ export function IntegrationsPage() {
           </nav>
         </aside>
 
-        <section className="min-w-0 space-y-6">
+        <section className="min-w-0">
           {section === "token" ? (
-            <div className="space-y-4">
-              <SectionIntro
-                title="Local token"
-                description="This token is shared by local tools and message bridges running on this machine."
-              />
+            <IntegrationSection
+              title="Local token"
+              description="This token is shared by local tools and message bridges running on this machine."
+            >
               <LocalAuthTokenCard />
-            </div>
+            </IntegrationSection>
           ) : null}
 
-          {section === "coding-agents" ? (
-            <div className="space-y-4">
-              <SectionIntro
-                title="Coding agents"
-                description="Choose which CLI agent Nakama can use for delegated code work on this server."
-              />
-              <CodingHarnessSettingsPanel embedded />
-            </div>
-          ) : null}
+          {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
 
           {section === "telegram" ? (
-            <div className="space-y-4">
-              <SectionIntro
-                title="Telegram"
-                description="Connect your Telegram bot, choose the target profile, and finish pairing."
-              />
+            <IntegrationSection
+              title="Telegram"
+              description="Connect your Telegram bot, choose the target profile, and finish pairing."
+            >
               <TelegramSettingsCard />
-            </div>
+            </IntegrationSection>
           ) : null}
 
           {section === "discord" ? (
@@ -176,23 +167,21 @@ export function IntegrationsPage() {
           ) : null}
 
           {section === "notifications" ? (
-            <div className="space-y-4">
-              <SectionIntro
-                title="Notification destinations"
-                description="Create Telegram webhook destinations for alerts and lightweight notifications."
-              />
+            <IntegrationSection
+              title="Notification destinations"
+              description="Create Telegram webhook destinations for alerts and lightweight notifications."
+            >
               <NotificationDestinationsCard />
-            </div>
+            </IntegrationSection>
           ) : null}
 
           {section === "whatsapp" ? (
-            <div className="space-y-4">
-              <SectionIntro
-                title="WhatsApp"
-                description="Enable the bridge, choose a profile, then link a device with QR or pairing code."
-              />
+            <IntegrationSection
+              title="WhatsApp"
+              description="Enable the bridge, choose a profile, then link a device with QR or pairing code."
+            >
               <WhatsAppSettingsCard />
-            </div>
+            </IntegrationSection>
           ) : null}
         </section>
       </div>
@@ -218,34 +207,41 @@ function SidebarButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[11rem] flex-1 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors lg:min-w-0",
+        "flex w-[11rem] shrink-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors md:w-full md:shrink",
         active
-          ? "border-foreground/15 bg-muted text-foreground"
-          : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
+          ? "bg-primary/10 text-foreground"
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
       )}
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-        <Icon className="size-4" strokeWidth={1.75} aria-hidden />
-      </span>
+      <Icon
+        className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")}
+        strokeWidth={1.75}
+        aria-hidden
+      />
       <span className="min-w-0 space-y-0.5">
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="block text-xs text-muted-foreground">{description}</span>
+        <span className="block text-sm font-medium leading-tight">{label}</span>
+        <span className="block text-xs leading-snug text-muted-foreground">{description}</span>
       </span>
     </button>
   );
 }
 
-function SectionIntro({
+function IntegrationSection({
   title,
   description,
+  children,
 }: {
   title: string;
   description: string;
+  children: ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <h2 className="type-section-title">{title}</h2>
-      <p className="text-sm text-muted-foreground">{description}</p>
+    <div className="space-y-4">
+      <div className="space-y-1 px-1">
+        <h2 className="type-section-title text-base">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {children}
     </div>
   );
 }

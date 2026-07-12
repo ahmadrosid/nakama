@@ -128,6 +128,55 @@ describe("coding harness settings routes", () => {
     expect(verified.ready).toBe(true);
   }, 15_000);
 
+  test("install stream uses the database adapter instead of an undefined agent property", async () => {
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const authService = new AuthService();
+    const app = createHonoApp({
+      agent: new AgentService(null, null, databaseAdapter),
+      automationService: {} as any,
+      taskService: {} as any,
+      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+      workerManager: {} as any,
+      mcpService: {} as any,
+      authService,
+      orgService: new OrgService(databaseAdapter, authService),
+      databaseAdapter,
+      webDistDir: null,
+    });
+
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+
+    const installResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses/install", {
+        method: "POST",
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        }),
+        body: JSON.stringify({
+          harnessId: "coding-harness-codex",
+        }),
+      }),
+    );
+
+    expect(installResponse.status).toBe(200);
+    const body = await installResponse.text();
+    expect(body).not.toContain("db.getWorkspaceSettings");
+    expect(body).toContain('"type":"progress"');
+
+    const progressEvents = body
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)) as { type: string; message?: unknown })
+      .filter((event) => event.type === "progress");
+
+    expect(progressEvents.length).toBeGreaterThan(0);
+    for (const event of progressEvents) {
+      expect(typeof event.message).toBe("string");
+    }
+  }, 15_000);
+
   test("verify reports login required when codex is installed but not authenticated", async () => {
     await installFakeBinary(tempBinDir, "codex", "login-required");
 

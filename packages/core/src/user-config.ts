@@ -16,6 +16,7 @@ import type {
 } from "./contract";
 import { ensureDir, readTextOrNull, writePrivateTextFile } from "./fs";
 import {
+  apiKeyEnvVarForProvider,
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
@@ -114,7 +115,10 @@ export function getActiveProviderInstance(
   return findProviderInstance(config, config.defaultProviderId);
 }
 
-export function isProviderConfigured(config: UserConfig | null | undefined): boolean {
+export function isProviderConfigured(
+  config: UserConfig | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
   const active = getActiveProviderInstance(config);
 
   if (!active) {
@@ -125,7 +129,12 @@ export function isProviderConfigured(config: UserConfig | null | undefined): boo
     return Boolean(active.baseUrl?.trim() && active.label.trim());
   }
 
-  return Boolean(active.apiKey.trim());
+  if (active.apiKey.trim()) {
+    return true;
+  }
+
+  const envVar = apiKeyEnvVarForProvider(active.type);
+  return Boolean(envVar && env[envVar]?.trim());
 }
 
 export function isValidTimezone(timezone: string): boolean {

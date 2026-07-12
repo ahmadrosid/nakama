@@ -184,38 +184,6 @@ describe("SkillsService", () => {
     expect(unrelated).toBe("");
   });
 
-  test("matches coding delegation for repo changes but not explain-only requests", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new SkillsService(db);
-    await ensureBundledSkillFiles();
-    await service.syncDiscoveredSkills();
-
-    const skill = (await service.listSkills()).skills.find(
-      (entry) => entry.name === "coding-delegation",
-    );
-
-    expect(skill).toBeDefined();
-
-    await db.assignSkillToProfile(PROFILE_ID, skill!.id);
-
-    const matched = await service.formatMatchedSkillsForPrompt(
-      ORG_ID,
-      PROFILE_ID,
-      "Fix the broken task status rendering in this repository",
-    );
-
-    expect(matched).toContain("Active Skill: coding-delegation");
-    expect(matched).toContain("When delegating:");
-
-    const unrelated = await service.formatMatchedSkillsForPrompt(
-      ORG_ID,
-      PROFILE_ID,
-      "Explain how task queues work",
-    );
-
-    expect(unrelated).toBe("");
-  });
-
   test("creates profile skills and syncs them to the database", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);

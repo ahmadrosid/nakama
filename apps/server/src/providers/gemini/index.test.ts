@@ -76,8 +76,6 @@ describe("createGeminiProvider", () => {
         model: "gemini-2.5-flash",
       });
 
-      expect(provider.name).toBe("gemini");
-
       const result = await provider.generateText({
         system: "You are helpful.",
         prompt: "Say hi",

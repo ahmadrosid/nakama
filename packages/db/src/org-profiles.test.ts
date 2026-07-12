@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
-  DELEGATE_CODING_TASK_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import { ensureBuiltinToolDefinitions } from "./seed";
 import {
   ensureOrgSuperBotProfiles,
@@ -71,12 +69,18 @@ describe("seedOrgDefaultProfile", () => {
   test("assigns default bundled skills but not super bot skills", async () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
+    await upsertSkill(db, "update-profile-memory");
+    await upsertSkill(db, "archive-profile-memory");
+    await upsertSkill(db, "save-artifact");
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
     const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
 
     expect(skillNames).toContain("create-automation");
+    expect(skillNames).toContain("update-profile-memory");
+    expect(skillNames).toContain("archive-profile-memory");
+    expect(skillNames).toContain("save-artifact");
     expect(skillNames).not.toContain("create-profile");
   });
 });
@@ -94,14 +98,13 @@ describe("seedOrgSuperBotProfile", () => {
     expect(orgASuperBot.isSuper).toBe(true);
     expect(orgASuperBot.isDefault).toBe(false);
     expect(orgASuperBot.name).toBe("Super Bot");
-    expect(orgASuperBot.systemPrompt).toBe(SUPER_BOT_SYSTEM_PROMPT);
 
     const orgAList = await db.listProfilesForOrg("org_a");
     expect(orgAList).toHaveLength(1);
     expect(orgAList[0]?.id).toBe(orgASuperBot.id);
   });
 
-  test("assigns builtins, bash, and delegate coding task", async () => {
+  test("assigns builtins and bash", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
@@ -112,7 +115,6 @@ describe("seedOrgSuperBotProfile", () => {
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
-    expect(toolIds).toContain(DELEGATE_CODING_TASK_TOOL_ID);
   });
 
   test("assigns super bot bundled skills", async () => {
@@ -138,17 +140,20 @@ describe("seedOrgSuperBotProfile", () => {
     expect(await db.listProfilesForOrg("org_a")).toHaveLength(1);
   });
 
-  test("backfills newly added builtins on existing super bot", async () => {
+  test("backfills newly added bundled skills on existing super bot", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await ensureBuiltinToolDefinitions(db);
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
-    await db.unassignToolFromProfile(profile.id, BUILTIN_TOOL_IDS.archive_profile_memory);
+    await upsertSkill(db, "update-profile-memory");
+    await upsertSkill(db, "archive-profile-memory");
+    await upsertSkill(db, "save-artifact");
 
     await seedOrgSuperBotProfile(db, "org_a");
 
-    const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
-    expect(toolIds).toContain(BUILTIN_TOOL_IDS.archive_profile_memory);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    expect(skillNames).toContain("update-profile-memory");
+    expect(skillNames).toContain("archive-profile-memory");
+    expect(skillNames).toContain("save-artifact");
   });
 
   test("backfills super bot bundled skills on existing super bot", async () => {

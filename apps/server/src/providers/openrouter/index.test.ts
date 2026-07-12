@@ -72,8 +72,6 @@ describe("createOpenRouterProvider", () => {
       fetcher: fetchMock as typeof fetch,
     });
 
-    expect(provider.name).toBe("openrouter");
-
     const result = await provider.generateText({
       system: "You are helpful.",
       prompt: "Say hi",

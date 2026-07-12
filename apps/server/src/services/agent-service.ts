@@ -51,6 +51,8 @@ import type {
   SyncSkillsResponse,
   SoulStatusResponse,
   CodingHarnessSettingsResponse,
+  CodingAgentLaunchPlanResponse,
+  PrepareCodingAgentLaunchRequest,
   TelegramSettingsResponse,
   DiscordSettingsResponse,
   EmailSettingsResponse,
@@ -122,6 +124,7 @@ import {
   loadUserTranscriptionSettings,
   messageContentHasImages,
   persistInlineAttachmentsInContent,
+  readBundledSkillBody,
   rehydrateAttachmentRefsInContent,
   rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   regenerateTelegramHandshake,
@@ -181,9 +184,21 @@ import {
   getCodingHarnessInstallHint,
   listCodingAgentHarnessStatuses,
   loadCodingAgentWorkspaceSettings,
+  resolveCodingAgentHarness,
   saveCodingAgentWorkspaceSettings,
   verifyCodingAgentHarness,
 } from "./coding-agent-harness-service";
+import {
+  buildCodingAgentCommandTemplate,
+  formatCodingAgentCommandContext,
+  getBackendSkillName,
+} from "./coding-agent-command";
+import { prepareCodingAgentLaunch as buildCodingAgentLaunchPlan } from "./coding-agent-launcher";
+import {
+  getInferenceGatewayBaseUrl,
+  normalizeCodingAgentModel,
+} from "./coding-agent-spawn-env";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -330,6 +345,10 @@ export class AgentService {
 
   async getUserTimezone(): Promise<string> {
     return this.userConfig?.timezone ?? loadUserTimezone();
+  }
+
+  getUserConfig(): UserConfig | null {
+    return this.userConfig;
   }
 
   async setUserTimezone(timezone: string): Promise<string> {
@@ -798,6 +817,35 @@ export class AgentService {
 
   async verifyCodingHarness(harnessId?: string): Promise<VerifyCodingHarnessResponse> {
     return verifyCodingAgentHarness(this.db, harnessId);
+  }
+
+  async prepareCodingAgentLaunch(
+    orgId: string,
+    input: PrepareCodingAgentLaunchRequest,
+    options: {
+      persistSelection?: boolean;
+      orgRole?: OrgRole | null;
+      isPlatformAdmin?: boolean;
+      localCli?: boolean;
+    } = {},
+  ): Promise<CodingAgentLaunchPlanResponse> {
+    return buildCodingAgentLaunchPlan(
+      this.db,
+      {
+        orgId,
+        profileId: input.profileId,
+        backend: input.backend,
+        model: input.model,
+        cwd: input.cwd,
+        passthroughArgs: input.passthroughArgs,
+        persistSelection: options.persistSelection === true,
+      },
+      {
+        orgRole: options.orgRole,
+        isPlatformAdmin: options.isPlatformAdmin,
+        localCli: options.localCli,
+      },
+    );
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
@@ -1591,7 +1639,7 @@ export class AgentService {
   private refreshHarness(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
     const active = getActiveProviderInstance(this.userConfig);
-    this._providerConfigured = isProviderConfigured(this.userConfig);
+    this._providerConfigured = isProviderConfigured(this.userConfig) && provider !== null;
     this.harness = this.createHarness({
       provider,
       providerInstance: active,
@@ -2199,18 +2247,14 @@ export class AgentService {
             context.userMessage,
             {
               appendContext: async (matched) => {
-                if (!profile.isSuper) {
-                  return "";
-                }
-
                 const parts: string[] = [];
 
-                if (matched.some((skill) => skill.name === "create-profile")) {
+                if (profile.isSuper && matched.some((skill) => skill.name === "create-profile")) {
                   parts.push(await this.formatProfileAuthoringToolContext());
                 }
 
                 if (matched.some((skill) => skill.name === "coding-delegation")) {
-                  parts.push(await this.formatCodingDelegationContext());
+                  parts.push(await this.formatCodingDelegationContext(orgId, profileId));
                 }
 
                 return parts.filter(Boolean).join("\n\n");
@@ -2299,23 +2343,52 @@ export class AgentService {
     ].join("\n");
   }
 
-  private async formatCodingDelegationContext(): Promise<string> {
-    const settings = await loadCodingAgentWorkspaceSettings(this.db);
-    const selected = settings.harnesses.find(
-      (harness) => harness.id === settings.selectedHarnessId,
-    );
+  private async formatCodingDelegationContext(
+    orgId: string,
+    profileId: string,
+  ): Promise<string> {
+    try {
+      const harness = await resolveCodingAgentHarness(this.db);
+      const workspaceRoot = getProfileSoulDir(orgId, profileId);
+      const profile = await this.db.getProfile(profileId);
+      const gatewayBaseUrl = getInferenceGatewayBaseUrl();
+      let authToken: string | null = null;
 
-    if (selected) {
+      if (gatewayBaseUrl) {
+        try {
+          authToken = await loadLocalAuthToken();
+        } catch {
+          authToken = null;
+        }
+      }
+
+      const template = buildCodingAgentCommandTemplate(
+        harness,
+        "<task prompt>",
+        workspaceRoot,
+        {
+          model: normalizeCodingAgentModel(profile?.model),
+          gatewayBaseUrl,
+          authToken,
+          orgId,
+          profileId,
+        },
+      );
+      const backendSkillName = getBackendSkillName(harness.kind);
+      const backendSkill = await readBundledSkillBody(backendSkillName);
+
+      return [
+        formatCodingAgentCommandContext(template),
+        "",
+        "# Backend Guidance",
+        backendSkill,
+      ].join("\n");
+    } catch {
       return [
         "# Coding Agent Harness",
-        `The selected coding agent harness is ${selected.name}. When you call delegate_coding_task without specifying a backend, it will use ${selected.name}. Only specify a different backend if the user explicitly asks for it.`,
+        "No coding agent harness is ready. Configure and verify a harness in workspace settings before invoking a coding agent via `bash`.",
       ].join("\n");
     }
-
-    return [
-      "# Coding Agent Harness",
-      "No coding agent harness is selected in workspace settings. delegate_coding_task will fall back to the first installed harness when no backend is specified.",
-    ].join("\n");
   }
 
   private async resolveProfileSystemPrompt(

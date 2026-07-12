@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  apiKeyEnvVarForProvider,
   parseProviderName,
   resolveProvider,
 } from "./provider-resolution";
@@ -69,19 +68,7 @@ describe("resolveProvider", () => {
   });
 });
 
-describe("apiKeyEnvVarForProvider", () => {
-  test("maps providers to env vars", () => {
-    expect(apiKeyEnvVarForProvider("openai")).toBe("OPENAI_API_KEY");
-    expect(apiKeyEnvVarForProvider("anthropic")).toBe("ANTHROPIC_API_KEY");
-    expect(apiKeyEnvVarForProvider("gemini")).toBe("GEMINI_API_KEY");
-    expect(apiKeyEnvVarForProvider("openrouter")).toBe("OPENROUTER_API_KEY");
-    expect(apiKeyEnvVarForProvider("openai_compatible")).toBe(
-      "OPENAI_COMPATIBLE_API_KEY",
-    );
-    expect(apiKeyEnvVarForProvider("opencode_go")).toBe("OPENCODE_GO_API_KEY");
-    expect(apiKeyEnvVarForProvider("deepseek")).toBeNull();
-  });
-
+describe("resolveProvider deepseek", () => {
   test("does not auto-resolve DeepSeek from env API key", () => {
     const provider = resolveProvider({
       env: {

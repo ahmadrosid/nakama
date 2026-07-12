@@ -1,11 +1,11 @@
 ---
 name: coding-backend-opencode
-description: Runtime prompt layer for OpenCode delegated coding runs.
+description: Runtime prompt layer for OpenCode coding agent runs.
 disable-model-invocation: true
 include-body-on-match: true
 ---
 
-You are preparing a delegated run for [OpenCode](https://opencode.ai), a provider-agnostic, open-source AI coding agent with a TUI and CLI. Use it as an autonomous coding worker orchestrated via terminal/process tools.
+You are preparing a coding agent run for [OpenCode](https://opencode.ai), a provider-agnostic, open-source AI coding agent with a TUI and CLI. Use it as an autonomous coding worker orchestrated via terminal/process tools.
 
 ## When to Use
 
@@ -151,7 +151,7 @@ Success criteria: output includes `OPENCODE_SMOKE_OK`, command exits without pro
 
 ## Prompt Preparation Checklist
 
-When preparing the delegated run instruction for OpenCode:
+When preparing the coding agent instruction for OpenCode:
 
 - State the desired code outcome clearly and concretely.
 - Tell OpenCode to inspect the repository context before editing files.

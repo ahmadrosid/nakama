@@ -1,6 +1,8 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useCodingHarnessSettings } from "@/hooks/use-coding-harness-settings";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -72,9 +74,14 @@ export function SkillAssignPicker({
   className,
 }: SkillAssignPickerProps) {
   const [open, setOpen] = useState(false);
+  const { data: codingHarnessSettings } = useCodingHarnessSettings(open);
 
   const availableSkills = skills.filter((skill) => !assignedSkillIds.has(skill.id));
   const onProfileSkills = skills.filter((skill) => assignedSkillIds.has(skill.id));
+
+  function isSkillDisabled(skill: SkillSummary): boolean {
+    return skill.name === "coding-delegation" && codingHarnessSettings?.configured === false;
+  }
 
   if (skills.length === 0) {
     return null;
@@ -107,6 +114,21 @@ export function SkillAssignPicker({
             </DialogDescription>
           </DialogHeader>
 
+          {codingHarnessSettings?.configured === false ? (
+            <div className="border-b border-border/60 px-6 py-3 text-xs text-amber-600 dark:text-amber-300">
+              Install and verify a coding agent in Integrations before assigning this skill.
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="ml-1 h-auto px-0 py-0 text-amber-700 dark:text-amber-200"
+                render={<Link to="/integrations?section=coding-agents" />}
+              >
+                Open Integrations
+              </Button>
+            </div>
+          ) : null}
+
           <Command className="rounded-none bg-transparent">
             <div className="border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
               <CommandInput placeholder="Search skills…" />
@@ -124,12 +146,15 @@ export function SkillAssignPicker({
                       <CommandItem
                         key={skill.id}
                         value={`${skill.name} ${skill.description}`}
-                        disabled={disabled}
+                        disabled={disabled || isSkillDisabled(skill)}
                         className={cn(
                           "items-center gap-3 px-3 py-2.5",
                           onDelete && "[&>svg:last-child]:hidden",
                         )}
                         onSelect={() => {
+                          if (isSkillDisabled(skill)) {
+                            return;
+                          }
                           assignSkill(skill.id, onAssign, setOpen);
                         }}
                       >
@@ -147,6 +172,11 @@ export function SkillAssignPicker({
                           {meta ? (
                             <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
                           ) : null}
+                          {isSkillDisabled(skill) ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-300">
+                              Set up a coding agent first.
+                            </p>
+                          ) : null}
                         </div>
                         <div
                           className="flex shrink-0 items-center gap-1"
@@ -158,11 +188,14 @@ export function SkillAssignPicker({
                             type="button"
                             variant="outline"
                             size="xs"
-                            disabled={disabled}
+                            disabled={disabled || isSkillDisabled(skill)}
                             className="[&_svg]:pointer-events-auto"
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
+                              if (isSkillDisabled(skill)) {
+                                return;
+                              }
                               assignSkill(skill.id, onAssign, setOpen);
                             }}
                           >

@@ -4,7 +4,7 @@ description: Create, update, inspect, or manage reusable profile skills using pr
 include-body-on-match: true
 ---
 
-Use skills for repeatable procedures and workflows the agent should execute later. Do not use skills for user facts, preferences, or observations; use `update_profile_memory` for those.
+Use skills for repeatable procedures and workflows the agent should execute later. Do not use skills for user facts, preferences, or observations; use the `update-profile-memory` skill for those.
 
 Skills live in the active profile workspace under:
 

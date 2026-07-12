@@ -38,7 +38,6 @@ import {
 } from "@nakama/core";
 import {
   BUILTIN_TOOL_IDS,
-  DELEGATE_CODING_TASK_TOOL_ID,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
 import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@nakama/db";
@@ -56,7 +55,7 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.read_file,
   BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
-  BUILTIN_TOOL_IDS.update_profile_memory,
+  BUILTIN_TOOL_IDS.web_fetch,
 ] as const;
 const SOUL_FILE_KEY_BY_NAME = {
   "SOUL.md": "soul",
@@ -263,16 +262,6 @@ export class ProfileService {
       throw new Error("Tool not found.");
     }
 
-    if (request.toolId === DELEGATE_CODING_TASK_TOOL_ID) {
-      await resolveCodingAgentHarness(this.db).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new NakamaApiError(
-          `Configure a ready coding agent harness before assigning this tool. ${message}`,
-          400,
-        );
-      });
-    }
-
     await this.db.assignToolToProfile(profileId, request.toolId);
 
     return this.getProfile(orgId, profileId);
@@ -339,6 +328,16 @@ export class ProfileService {
 
     if (!skill) {
       throw new Error("Skill not found.");
+    }
+
+    if (skill.name === "coding-delegation") {
+      await resolveCodingAgentHarness(this.db).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new NakamaApiError(
+          `Configure a ready coding agent harness before assigning this skill. ${message}`,
+          400,
+        );
+      });
     }
 
     await this.db.assignSkillToProfile(profileId, request.skillId);

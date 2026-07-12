@@ -7,7 +7,7 @@ import type {
   StoredCodingAgentHarnessRecord,
 } from "@nakama/db";
 import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
-import { ensureProcessPath } from "../lib/ensure-process-path";
+import { ensureProcessPath, ensureBunGlobalInstallDirs, getToolExecutionEnv } from "../lib/ensure-process-path";
 
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   installed: boolean;
@@ -24,23 +24,44 @@ interface CodingAgentInstallPlan {
   displayCommand: string;
 }
 
-const INSTALL_PLANS: Record<StoredCodingAgentHarnessKind, CodingAgentInstallPlan> = {
-  codex: {
-    command: "npm",
-    args: ["install", "-g", "@openai/codex"],
-    displayCommand: "npm install -g @openai/codex",
-  },
-  claude_code: {
-    command: "npm",
-    args: ["install", "-g", "@anthropic-ai/claude-code"],
-    displayCommand: "npm install -g @anthropic-ai/claude-code",
-  },
-  opencode: {
-    command: "npm",
-    args: ["install", "-g", "opencode-ai"],
-    displayCommand: "npm install -g opencode-ai",
-  },
+const HARNESS_PACKAGES: Record<StoredCodingAgentHarnessKind, string> = {
+  codex: "@openai/codex",
+  claude_code: "@anthropic-ai/claude-code",
+  opencode: "opencode-ai",
 };
+
+function detectCodingHarnessPackageManager(): "npm" | "bun" {
+  if (Bun.which("npm")) {
+    return "npm";
+  }
+
+  if (Bun.which("bun")) {
+    return "bun";
+  }
+
+  return "npm";
+}
+
+export function buildCodingHarnessInstallPlan(
+  kind: StoredCodingAgentHarnessKind,
+  packageManager: "npm" | "bun" = detectCodingHarnessPackageManager(),
+): CodingAgentInstallPlan {
+  const pkg = HARNESS_PACKAGES[kind];
+
+  if (packageManager === "bun") {
+    return {
+      command: "bun",
+      args: ["install", "-g", "--trust", pkg],
+      displayCommand: `bun install -g --trust ${pkg}`,
+    };
+  }
+
+  return {
+    command: "npm",
+    args: ["install", "-g", pkg],
+    displayCommand: `npm install -g ${pkg}`,
+  };
+}
 
 export interface CodingAgentWorkspaceSettings {
   harnesses: StoredCodingAgentHarnessRecord[];
@@ -182,49 +203,53 @@ export async function saveCodingAgentWorkspaceSettings(
   };
 }
 
+export function isCodingAgentCommand(
+  command: string,
+  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>,
+): boolean {
+  const trimmed = command.trim();
+
+  for (const harness of harnesses) {
+    if (!harness.enabled) {
+      continue;
+    }
+
+    const binary = harness.command.trim();
+
+    if (!binary) {
+      continue;
+    }
+
+    if (trimmed === binary || trimmed.startsWith(`${binary} `)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function resolveCodingAgentHarness(
   db: DatabaseAdapter,
   preferredKind?: StoredCodingAgentHarnessKind | null,
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
-  const enabled = settings.harnesses.filter((harness) => harness.enabled);
+  const statuses = await listCodingAgentHarnessStatuses(db);
+  const enabled = statuses.filter((harness) => harness.enabled);
+  const readyHarnesses = enabled.filter((harness) => harness.ready);
 
-  const candidates: StoredCodingAgentHarnessRecord[] = [];
-
-  if (preferredKind) {
-    const preferred = enabled.find((harness) => harness.kind === preferredKind);
-
-    if (preferred) {
-      candidates.push(preferred);
+  const notReadyError = (harness: CodingAgentHarnessStatus): Error => {
+    if (!harness.installed) {
+      return new Error(`${harness.name} is selected but not installed.`);
     }
-  } else if (settings.selectedHarnessId) {
-    const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
 
-    if (selected) {
-      candidates.push(selected);
-    }
-  }
+    const message =
+      harness.statusMessage ??
+      (harness.nextStep === "login"
+        ? authenticationHelpForHarness(harness.kind)
+        : `${harness.name} is not ready.`);
 
-  for (const harness of enabled) {
-    if (!candidates.includes(harness)) {
-      candidates.push(harness);
-    }
-  }
-
-  for (const candidate of candidates) {
-    const runtime = await getHarnessRuntimeStatus(candidate.command);
-
-    if (runtime.installed) {
-      return {
-        ...candidate,
-        ...runtime,
-        authenticated: null,
-        ready: true,
-        nextStep: null,
-        statusMessage: null,
-      };
-    }
-  }
+    return new Error(message);
+  };
 
   if (preferredKind) {
     const preferred = enabled.find((harness) => harness.kind === preferredKind);
@@ -233,7 +258,38 @@ export async function resolveCodingAgentHarness(
       throw new Error(`Configured coding agent '${preferredKind}' is unavailable.`);
     }
 
-    throw new Error(`${preferred.name} is selected but not installed.`);
+    if (preferred.ready) {
+      return preferred;
+    }
+
+    throw notReadyError(preferred);
+  }
+
+  if (!settings.selectedHarnessId) {
+    if (readyHarnesses.length === 1) {
+      return readyHarnesses[0]!;
+    }
+  } else {
+    const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
+
+    if (selected?.ready) {
+      return selected;
+    }
+  }
+
+  const fallbackReady = readyHarnesses[0];
+
+  if (fallbackReady) {
+    return fallbackReady;
+  }
+
+  const selected = settings.selectedHarnessId
+    ? enabled.find((harness) => harness.id === settings.selectedHarnessId)
+    : undefined;
+  const installed = selected?.installed ? selected : enabled.find((harness) => harness.installed);
+
+  if (installed) {
+    throw notReadyError(installed);
   }
 
   throw new Error(
@@ -350,7 +406,7 @@ async function probeHarnessVersion(command: string): Promise<{
 
   return new Promise((resolve) => {
     const child = spawn(command, ["--version"], {
-      env: process.env,
+      env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -389,7 +445,7 @@ function extractVersion(stdout: string, stderr: string): string | null {
 }
 
 export function getCodingHarnessInstallCommand(kind: StoredCodingAgentHarnessKind): string {
-  return INSTALL_PLANS[kind].displayCommand;
+  return buildCodingHarnessInstallPlan(kind).displayCommand;
 }
 
 export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind): string {
@@ -416,7 +472,10 @@ export async function installCodingAgentHarness(
     throw new Error("Unknown coding harness.");
   }
 
-  const installPlan = INSTALL_PLANS[harness.kind];
+  const installPlan = buildCodingHarnessInstallPlan(harness.kind);
+  if (installPlan.command === "bun") {
+    ensureBunGlobalInstallDirs();
+  }
   const emitProgress = (message: string) => {
     onProgress?.({
       harnessId: harness.id,
@@ -523,7 +582,7 @@ async function runProbeCommand(
   return new Promise((resolve) => {
     const child = spawn(harness.command, args, {
       cwd,
-      env: process.env,
+      env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -640,7 +699,7 @@ async function runInstallCommand(
 
   return new Promise((resolve) => {
     const child = spawn(plan.command, plan.args, {
-      env: process.env,
+      env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -732,6 +791,15 @@ async function runInstallCommand(
 }
 
 function summarizeInstallOutput(output: string): string {
-  const firstLine = output.split(/\r?\n/, 1)[0]?.trim() || output.trim();
-  return firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine;
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const meaningful =
+    lines.find((line) => /^error:/i.test(line)) ??
+    lines.find((line) => /(?:EACCES|ENOENT|EPERM|failed|permission denied)/i.test(line)) ??
+    lines.find((line) => !/^bun (?:add|install) v/i.test(line)) ??
+    lines[0] ??
+    output.trim();
+  return meaningful.length > 180 ? `${meaningful.slice(0, 177)}...` : meaningful;
 }
