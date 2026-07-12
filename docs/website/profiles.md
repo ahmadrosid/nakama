@@ -155,10 +155,10 @@ This data is isolated per org and per profile. Two orgs never read or write the 
 Each profile also sees the default Nakama documentation source in the Knowledge tab:
 
 ```text
-https://ahmadrosid.github.io/nakama/
+https://ahmadrosid.github.io/nakama/llms.txt
 ```
 
-When a user asks about Nakama setup, profiles, tools, orgs, integrations, API, or troubleshooting, the agent can use that inherited source with `web_fetch` or `web_search` before answering detailed product questions.
+When a user asks about Nakama setup, profiles, tools, orgs, integrations, API, or troubleshooting, the agent should `web_fetch` that index first, then `web_fetch` the matching `.md` page (for example `telegram.md` for Telegram setup). Do not use `knowledge_base_search` for inherited documentation — that tool only searches uploaded files.
 
 ## Multi-tenant behavior
 

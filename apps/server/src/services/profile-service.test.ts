@@ -6,6 +6,7 @@ import {
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
+import { NAKAMA_DOCS_LLMS_URL } from "@nakama/core";
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -157,6 +158,7 @@ describe("profile service createProfile", () => {
     expect(tools.map((tool) => tool.name)).toContain("edit_file");
     expect(tools.map((tool) => tool.name)).toContain("search_files");
     expect(tools.map((tool) => tool.name)).toContain("knowledge_base_search");
+    expect(tools.map((tool) => tool.name)).toContain("web_fetch");
     expect(tools.map((tool) => tool.name)).not.toContain("update_profile_memory");
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");
   });
@@ -391,7 +393,7 @@ describe("profile service knowledge base", () => {
     const listed = await service.listKnowledgeBase(ORG_ID, profileId);
     expect(listed.documents).toHaveLength(1);
     expect(listed.documents[0]?.filename).toBe("notes.txt");
-    expect(listed.sources[0]?.url).toBe("https://ahmadrosid.github.io/nakama");
+    expect(listed.sources[0]?.url).toBe(NAKAMA_DOCS_LLMS_URL);
 
     const deleted = await service.deleteKnowledgeBaseDocument(
       ORG_ID,

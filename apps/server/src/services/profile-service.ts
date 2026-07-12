@@ -55,6 +55,7 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.read_file,
   BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
+  BUILTIN_TOOL_IDS.web_fetch,
 ] as const;
 const SOUL_FILE_KEY_BY_NAME = {
   "SOUL.md": "soul",

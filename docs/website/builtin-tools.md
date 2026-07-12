@@ -159,7 +159,7 @@ Search text in files under the profile workspace.
 
 ### `knowledge_base_search`
 
-Search uploaded knowledge base documents for relevant facts. The Knowledge tab can also show inherited URL sources, such as the Nakama documentation; use `web_fetch` or `web_search` for those URL sources.
+Search uploaded knowledge base documents for relevant facts. The Knowledge tab can also show inherited URL sources, such as the Nakama documentation index at `llms.txt`; use `web_fetch` on that index and on specific `.md` pages — not `knowledge_base_search`.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|

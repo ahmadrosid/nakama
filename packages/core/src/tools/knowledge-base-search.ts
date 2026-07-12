@@ -50,7 +50,7 @@ export const knowledgeBaseSearchTool: ToolDefinition<
 > = {
   name: "knowledge_base_search",
   description:
-    "Search uploaded knowledge base documents for relevant facts. Use this for project data and reference docs instead of guessing or loading full files into context.",
+    "Search uploaded knowledge base documents for relevant facts. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs.",
   parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
   run(input, context) {
     return runKnowledgeBaseSearch(input, context);

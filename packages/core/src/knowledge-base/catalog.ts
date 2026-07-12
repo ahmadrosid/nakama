@@ -1,5 +1,5 @@
+import { NAKAMA_DOCS_LLMS_URL, listKnowledgeBaseSources } from "./sources";
 import { listKnowledgeBaseDocuments } from "./store";
-import { listKnowledgeBaseSources } from "./sources";
 
 export async function composeKnowledgeBaseCatalog(
   orgId: string,
@@ -13,25 +13,29 @@ export async function composeKnowledgeBaseCatalog(
     return "";
   }
 
-  const lines = ["# Knowledge Base"];
+  const sections: string[] = [];
 
   if (readyDocuments.length > 0) {
-    lines.push("Use knowledge_base_search to look up facts from uploaded documents on demand.");
-  }
-
-  for (const document of readyDocuments) {
-    lines.push(`- ${document.filename} (${document.mediaType})`);
-  }
-
-  if (sources.length > 0) {
-    lines.push(
-      "Use web_fetch for listed URL sources, or web_search when you need to find a specific page under a source. For Nakama product questions, consult the Nakama documentation before answering detailed setup, profile, tool, org, integration, API, or troubleshooting questions.",
+    sections.push(
+      "# Uploaded documents",
+      "Use knowledge_base_search to look up facts from uploaded documents on demand.",
+      ...readyDocuments.map((document) => `- ${document.filename} (${document.mediaType})`),
     );
   }
 
-  for (const source of sources) {
-    lines.push(`- ${source.title}: ${source.url} — ${source.description}`);
+  if (sources.length > 0) {
+    sections.push(
+      "# Nakama documentation (inherited)",
+      "Do not use knowledge_base_search for Nakama product docs — that tool only searches uploaded files above.",
+      "",
+      "When the user asks about Nakama setup, profiles, tools, organizations, integrations, channels, API, or troubleshooting:",
+      `1. web_fetch ${NAKAMA_DOCS_LLMS_URL} to load the docs index and topic routing`,
+      "2. web_fetch the matching .md page from that index (pages use a .md suffix)",
+      "3. Answer from the fetched page — do not guess product details",
+      "",
+      ...sources.map((source) => `- ${source.title}: ${source.url} — ${source.description}`),
+    );
   }
 
-  return lines.join("\n");
+  return sections.join("\n");
 }

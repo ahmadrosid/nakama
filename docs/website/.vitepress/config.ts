@@ -83,6 +83,74 @@ function buildJsonLd(relativePath: string, title: string, description: string) {
 }
 
 function buildLlmsTxt(pages: string[]) {
+  const topicRoutes = [
+    {
+      topics:
+        "install, run locally, Docker, first-time setup, backup, restore, dev server",
+      page: "getting-started.md",
+    },
+    {
+      topics: "connect Telegram, Telegram bot, pairing, BotFather, dev:telegram, group chat",
+      page: "telegram.md",
+    },
+    {
+      topics: "connect WhatsApp, WhatsApp linking, QR code, pairing code",
+      page: "whatsapp.md",
+    },
+    {
+      topics: "what is Nakama, mental model, organizations, profiles, tools, channels",
+      page: "overview.md",
+    },
+    {
+      topics: "organizations, tenants, roles, members, invites, org admin, multi-tenant",
+      page: "multi-tenancy.md",
+    },
+    {
+      topics: "profiles, soul files, MEMORY.md, knowledge base, artifacts, bot behavior",
+      page: "profiles.md",
+    },
+    {
+      topics: "system prompt, SOUL.md, how prompts are built, agent instructions",
+      page: "agent-prompt.md",
+    },
+    {
+      topics: "builtin tools, read_file, web_search, knowledge_base_search, email, bash",
+      page: "builtin-tools.md",
+    },
+    {
+      topics: "skills, automations, memory skills, save-artifact, manage-skills",
+      page: "skills.md",
+    },
+    {
+      topics: "MCP servers, external tools, MCP integration",
+      page: "mcp.md",
+    },
+    {
+      topics: "coding agent, Codex, Claude Code, OpenCode, dev:cli launch",
+      page: "coding-agent.md",
+    },
+  ] as const
+
+  const docSections = [
+    {
+      heading: 'Install and channels',
+      pages: ['getting-started.md', 'telegram.md', 'whatsapp.md'] as const,
+    },
+    {
+      heading: 'Concepts',
+      pages: ['index.md', 'overview.md', 'multi-tenancy.md', 'profiles.md', 'agent-prompt.md'] as const,
+    },
+    {
+      heading: 'Operations',
+      pages: ['builtin-tools.md', 'skills.md', 'coding-agent.md', 'mcp.md'] as const,
+    },
+  ] as const
+
+  const formatDocLine = (page: string) => {
+    const title = page === 'index.md' ? 'Home' : getPageTitle(page)
+    return `- [${title}](${getMarkdownUrl(page)}): ${getPageDescription(page)}`
+  }
+
   const lines = [
     `# ${SITE_NAME}`,
     '',
@@ -94,17 +162,36 @@ function buildLlmsTxt(pages: string[]) {
     `Website: ${SITE_URL}/`,
     `Repository: https://github.com/ahmadrosid/nakama`,
     '',
-    '## AI-friendly access',
+    '## For AI agents',
     '',
-    '- Markdown mirrors are available for docs pages at the same path with a `.md` suffix.',
-    '- Canonical HTML pages are available under the main docs site.',
+    'This file is the entry point for Nakama product documentation.',
+    'When a user asks about Nakama setup, behavior, integrations, or troubleshooting:',
+    `1. You are reading the index now, or fetch ${SITE_URL}/llms.txt if you do not have it yet.`,
+    '2. Pick the best page from "Topic routing" or "Docs" below.',
+    `3. web_fetch the matching .md page (for example ${SITE_URL}/telegram.md).`,
+    '4. Do not use knowledge_base_search for these URLs — that tool only searches uploaded profile documents.',
+    '5. Answer from the fetched page. Do not guess steps that are not in the docs.',
     '',
-    '## Docs',
+    'Markdown mirrors use a `.md` suffix on the same path as the HTML docs.',
     '',
-    ...pages.map((page) => {
-      const title = page === 'index.md' ? 'Home' : getPageTitle(page)
-      return `- [${title}](${getMarkdownUrl(page)}): ${getPageDescription(page)}`
-    }),
+    '## Topic routing',
+    '',
+    'Match the user question to a page:',
+    '',
+    ...topicRoutes.map(
+      ({ topics, page }) =>
+        `- ${topics} → [${getPageTitle(page)}](${getMarkdownUrl(page)})`,
+    ),
+    '',
+    ...docSections.flatMap((section) => [
+      `## Docs — ${section.heading}`,
+      '',
+      ...section.pages.filter((page) => pages.includes(page)).map(formatDocLine),
+      '',
+    ]),
+    '## All pages',
+    '',
+    ...pages.map(formatDocLine),
   ]
 
   return `${lines.join('\n')}\n`
