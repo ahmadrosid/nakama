@@ -2,6 +2,9 @@ import type { ChatListItem } from "@/lib/chat-history";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 const ARTIFACTS_SEGMENT = "/artifacts/";
+const ARTIFACTS_PREFIX = "artifacts/";
+const ARTIFACT_PATH_IN_TEXT =
+  /\bartifacts\/(?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9][A-Za-z0-9._-]*\b/g;
 
 export interface ChatArtifactRef {
   /** Basename for chip label (e.g. `report.md`). */
@@ -49,8 +52,25 @@ function resolvedWritePath(message: ChatListItem): string | null {
   return result.path;
 }
 
+function bytesWrittenFromMessage(message: ChatListItem): number {
+  const result = getWriteFileResult(message);
+  if (!result || typeof result.bytesWritten !== "number" || !Number.isInteger(result.bytesWritten)) {
+    return 0;
+  }
+
+  return Math.max(0, result.bytesWritten);
+}
+
 function isUnderArtifactsDir(resolvedPath: string): boolean {
-  return resolvedPath.includes(ARTIFACTS_SEGMENT);
+  return (
+    resolvedPath.includes(ARTIFACTS_SEGMENT) ||
+    resolvedPath.startsWith(ARTIFACTS_PREFIX) ||
+    resolvedPath.includes("\\artifacts\\")
+  );
+}
+
+function isArtifactMetaRelativePath(relativePath: string): boolean {
+  return relativePath.endsWith(ARTIFACT_META_SUFFIX);
 }
 
 function isArtifactMetaResolvedPath(resolvedPath: string): boolean {
@@ -59,11 +79,20 @@ function isArtifactMetaResolvedPath(resolvedPath: string): boolean {
 
 export function toArtifactsRelativePath(resolvedPath: string): string | null {
   const markerIndex = resolvedPath.indexOf(ARTIFACTS_SEGMENT);
-  if (markerIndex === -1) {
-    return null;
+  if (markerIndex !== -1) {
+    return resolvedPath.slice(markerIndex + ARTIFACTS_SEGMENT.length);
   }
 
-  return resolvedPath.slice(markerIndex + ARTIFACTS_SEGMENT.length);
+  const windowsMarker = resolvedPath.toLowerCase().indexOf("\\artifacts\\");
+  if (windowsMarker !== -1) {
+    return resolvedPath.slice(windowsMarker + "\\artifacts\\".length).replace(/\\/g, "/");
+  }
+
+  if (resolvedPath.startsWith(ARTIFACTS_PREFIX)) {
+    return resolvedPath.slice(ARTIFACTS_PREFIX.length);
+  }
+
+  return null;
 }
 
 function siblingContentPath(metaResolvedPath: string): string | null {
@@ -112,31 +141,128 @@ function metaContentFromSidecarWrite(message: ChatListItem): string | null {
   return input.content;
 }
 
+export function inferArtifactMimeType(filename: string): string {
+  const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
+
+  switch (extension) {
+    case "md":
+    case "markdown":
+      return "text/markdown";
+    case "html":
+    case "htm":
+      return "text/html";
+    case "json":
+      return "application/json";
+    case "js":
+    case "mjs":
+    case "cjs":
+      return "application/javascript";
+    case "css":
+      return "text/css";
+    case "xml":
+      return "application/xml";
+    case "svg":
+      return "image/svg+xml";
+    case "csv":
+      return "text/csv";
+    case "txt":
+    case "log":
+    default:
+      return "text/plain";
+  }
+}
+
+function relativePathFromWriteMessage(message: ChatListItem): string | null {
+  const resolvedPath = resolvedWritePath(message);
+  if (resolvedPath) {
+    const fromResolved = toArtifactsRelativePath(resolvedPath);
+    if (fromResolved) {
+      return fromResolved;
+    }
+  }
+
+  const inputPath = message.toolInput?.path;
+  if (typeof inputPath !== "string") {
+    return null;
+  }
+
+  const normalized = inputPath.replace(/^\.\//, "");
+  return toArtifactsRelativePath(normalized);
+}
+
+function buildArtifactRef(
+  relativePath: string,
+  meta: Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt">,
+): ChatArtifactRef {
+  const filename = relativePath.split("/").pop() ?? relativePath;
+  return {
+    filename,
+    path: relativePath,
+    mimeType: meta.mimeType,
+    sizeBytes: meta.sizeBytes,
+    savedAt: meta.savedAt,
+  };
+}
+
+function inferredMetaForPath(relativePath: string, sizeBytes = 0): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> {
+  const filename = relativePath.split("/").pop() ?? relativePath;
+  return {
+    mimeType: inferArtifactMimeType(filename),
+    sizeBytes,
+    savedAt: "",
+  };
+}
+
 /**
- * Extract artifact chips from an assistant turn's tool messages.
- * Requires a same-turn content write plus matching `.nakama-meta.json` sidecar write.
+ * Extract `artifacts/...` path mentions from assistant message text.
+ */
+export function extractArtifactPathsFromText(content: string): string[] {
+  const matches = content.match(ARTIFACT_PATH_IN_TEXT) ?? [];
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const match of matches) {
+    const relativePath = match.slice(ARTIFACTS_PREFIX.length);
+    if (!relativePath || isArtifactMetaRelativePath(relativePath) || seen.has(relativePath)) {
+      continue;
+    }
+
+    seen.add(relativePath);
+    paths.push(relativePath);
+  }
+
+  return paths;
+}
+
+/**
+ * Extract artifact chips from an assistant turn's tool messages and text.
+ * Prefers content + `.nakama-meta.json` sidecar pairs; falls back to content-only
+ * writes under artifacts/ and `artifacts/...` mentions in assistant text.
  */
 export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[] {
-  const contentWrites = new Map<string, string>();
+  const contentWrites = new Map<string, { relativePath: string; sizeBytes: number }>();
+  const artifactsByPath = new Map<string, ChatArtifactRef>();
 
   for (const message of messages) {
-    if (!isSuccessfulWrite(message)) {
+    if (!isSuccessfulWrite(message) || message.toolStatus === "running") {
       continue;
     }
 
     const resolvedPath = resolvedWritePath(message);
-    if (!resolvedPath || !isUnderArtifactsDir(resolvedPath) || isArtifactMetaResolvedPath(resolvedPath)) {
+    if (!resolvedPath || isArtifactMetaResolvedPath(resolvedPath)) {
       continue;
     }
 
-    const relativePath = toArtifactsRelativePath(resolvedPath);
-    if (relativePath) {
-      contentWrites.set(resolvedPath, relativePath);
+    const relativePath = relativePathFromWriteMessage(message);
+    if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
+      continue;
     }
-  }
 
-  const artifacts: ChatArtifactRef[] = [];
-  const seenPaths = new Set<string>();
+    contentWrites.set(resolvedPath, {
+      relativePath,
+      sizeBytes: bytesWrittenFromMessage(message),
+    });
+  }
 
   for (const message of messages) {
     if (!isSuccessfulWrite(message) || message.toolStatus === "running") {
@@ -153,8 +279,8 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
       continue;
     }
 
-    const relativePath = contentWrites.get(siblingPath);
-    if (!relativePath) {
+    const contentWrite = contentWrites.get(siblingPath);
+    if (!contentWrite) {
       continue;
     }
 
@@ -163,22 +289,39 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
       continue;
     }
 
-    if (seenPaths.has(relativePath)) {
+    artifactsByPath.set(contentWrite.relativePath, buildArtifactRef(contentWrite.relativePath, meta));
+  }
+
+  for (const contentWrite of contentWrites.values()) {
+    if (artifactsByPath.has(contentWrite.relativePath)) {
       continue;
     }
 
-    seenPaths.add(relativePath);
-    const filename = relativePath.split("/").pop() ?? relativePath;
-    artifacts.push({
-      filename,
-      path: relativePath,
-      mimeType: meta.mimeType,
-      sizeBytes: meta.sizeBytes,
-      savedAt: meta.savedAt,
-    });
+    artifactsByPath.set(
+      contentWrite.relativePath,
+      buildArtifactRef(contentWrite.relativePath, inferredMetaForPath(contentWrite.relativePath, contentWrite.sizeBytes)),
+    );
   }
 
-  return artifacts;
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.content.trim()) {
+      continue;
+    }
+
+    for (const relativePath of extractArtifactPathsFromText(message.content)) {
+      if (artifactsByPath.has(relativePath)) {
+        continue;
+      }
+
+      artifactsByPath.set(relativePath, buildArtifactRef(relativePath, inferredMetaForPath(relativePath)));
+    }
+  }
+
+  return [...artifactsByPath.values()];
+}
+
+export function isHtmlArtifactMimeType(mimeType: string): boolean {
+  return mimeType === "text/html" || mimeType === "application/xhtml+xml";
 }
 
 export function isTextArtifactMimeType(mimeType: string): boolean {
@@ -186,7 +329,8 @@ export function isTextArtifactMimeType(mimeType: string): boolean {
     mimeType.startsWith("text/") ||
     mimeType === "application/json" ||
     mimeType === "application/javascript" ||
-    mimeType === "application/xml"
+    mimeType === "application/xml" ||
+    mimeType === "image/svg+xml"
   );
 }
 
