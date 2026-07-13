@@ -15,6 +15,10 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { useAppContext } from "@/context/app-context";
+import {
+  ChatAttachmentPanelProvider,
+  useChatAttachmentPanel,
+} from "@/context/chat-attachment-panel-context";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import { useBranchSessionMutation, useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import {
@@ -54,6 +58,7 @@ import {
   resolveModelVisionSupport,
 } from "@/lib/models";
 import { SETUP_PATH } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 
 interface SendMessageOptions {
   sessionOverride?: RemoteChatSession;
@@ -711,37 +716,63 @@ export function ChatPage() {
 
   if (isEmptyState) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col justify-center px-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-col mb-12">
-          <ChatWelcome profile={activeProfile} />
-          {composer}
-        </div>
-      </div>
+      <ChatAttachmentPanelProvider>
+        <ChatPageColumn centered>
+          <div className="mx-auto flex w-full max-w-3xl flex-col mb-12">
+            <ChatWelcome profile={activeProfile} />
+            {composer}
+          </div>
+        </ChatPageColumn>
+      </ChatAttachmentPanelProvider>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-6">
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ChatMessageList
-            messages={messages}
-            profileId={profileId}
-            showThinking={showThinking}
-            modelLabel={
-              currentModelSelection ? renderModelLabel(currentModelSelection) : null
-            }
-            branchingMessageId={branchingMessageId}
-            actionsDisabled={busy || readOnlySession}
-            onBranchMessage={(message) => void handleBranchMessage(message)}
-            onRetryMessage={(message) => void handleTryAgainMessage(message)}
-          />
-        </div>
+    <ChatAttachmentPanelProvider>
+      <ChatPageColumn>
+        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ChatMessageList
+              messages={messages}
+              profileId={profileId}
+              showThinking={showThinking}
+              modelLabel={
+                currentModelSelection ? renderModelLabel(currentModelSelection) : null
+              }
+              branchingMessageId={branchingMessageId}
+              actionsDisabled={busy || readOnlySession}
+              onBranchMessage={(message) => void handleBranchMessage(message)}
+              onRetryMessage={(message) => void handleTryAgainMessage(message)}
+            />
+          </div>
 
-        <div className="sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-          {composer}
+          <div className="sticky bottom-0 z-10 mt-auto w-full shrink-0 bg-background/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            {composer}
+          </div>
         </div>
-      </div>
+      </ChatPageColumn>
+    </ChatAttachmentPanelProvider>
+  );
+}
+
+function ChatPageColumn({
+  children,
+  centered = false,
+}: {
+  children: React.ReactNode;
+  centered?: boolean;
+}) {
+  const attachmentPanel = useChatAttachmentPanel();
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col px-6",
+        attachmentPanel.isFullscreen && "hidden",
+        centered && "justify-center",
+      )}
+    >
+      {children}
     </div>
   );
 }
