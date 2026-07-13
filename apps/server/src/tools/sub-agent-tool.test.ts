@@ -73,7 +73,7 @@ describe("sub_agent tool", () => {
 
     await tool.run({ task: "timed", timeoutMs: 999_999 }, TOOL_CONTEXT);
 
-    expect(capturedTimeout).toBe(90_000);
+    expect(capturedTimeout).toBe(600_000);
   });
 
   test("exposes stable tool name", () => {

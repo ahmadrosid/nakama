@@ -727,6 +727,9 @@ export function ChatPage() {
           <ChatMessageList
             messages={messages}
             showThinking={showThinking}
+            modelLabel={
+              currentModelSelection ? renderModelLabel(currentModelSelection) : null
+            }
             branchingMessageId={branchingMessageId}
             actionsDisabled={busy || readOnlySession}
             onBranchMessage={(message) => void handleBranchMessage(message)}

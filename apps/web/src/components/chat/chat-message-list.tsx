@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 interface ChatMessageListProps {
   messages: ChatListItem[];
   showThinking?: boolean;
+  modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
@@ -53,6 +54,7 @@ type MessageTurn =
 export function ChatMessageList({
   messages,
   showThinking = true,
+  modelLabel,
   branchingMessageId,
   actionsDisabled = false,
   onBranchMessage,
@@ -77,6 +79,7 @@ export function ChatMessageList({
               key={turn.messages.map(({ message }) => message.id).join(":")}
               messages={turn.messages}
               showThinking={showThinking}
+              modelLabel={modelLabel}
               branchingMessageId={branchingMessageId}
               actionsDisabled={actionsDisabled}
               onBranchMessage={onBranchMessage}
@@ -119,6 +122,7 @@ function groupMessagesIntoTurns(messages: ChatListItem[]): MessageTurn[] {
 function AssistantTurn({
   messages,
   showThinking,
+  modelLabel,
   branchingMessageId,
   actionsDisabled,
   onBranchMessage,
@@ -126,6 +130,7 @@ function AssistantTurn({
 }: {
   messages: IndexedMessage[];
   showThinking: boolean;
+  modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
@@ -147,6 +152,7 @@ function AssistantTurn({
           }
           segment={segment}
           showThinking={showThinking}
+          modelLabel={modelLabel}
         />
       ))}
       {showActions && anchorMessage ? (

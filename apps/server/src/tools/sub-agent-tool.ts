@@ -36,7 +36,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
         timeoutMs: {
           type: "number",
           description:
-            "Timeout in milliseconds. Defaults to 60000, max 90000. Counts toward the parent web stream budget when streaming.",
+            "Timeout in milliseconds. Defaults to 300000 (5 minutes), max 600000 (10 minutes). Counts toward the parent web stream budget when streaming.",
         },
       },
       required: ["task"],

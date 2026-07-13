@@ -6,7 +6,7 @@ import type {
 } from "@nakama/core/contract";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
-const DEFAULT_STREAM_IDLE_MS = 120_000;
+const DEFAULT_STREAM_IDLE_MS = 600_000;
 
 export async function readStreamEvents(
   body: ReadableStream<Uint8Array>,

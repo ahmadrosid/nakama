@@ -51,7 +51,7 @@ export function createOpenAICompatibleProvider(
     apiKey,
     baseURL: baseUrl,
     maxRetries: 0,
-    timeout: 120_000,
+    timeout: 300_000,
   });
 
   return {

@@ -251,7 +251,7 @@ Run a focused **same-profile** sub-agent for delegated work (research, review, p
 |-----------|------|----------|-------|
 | `task` | string | Yes | Clear instruction for the sub-agent |
 | `context` | string | No | Optional scoped background (not full parent chat history) |
-| `timeoutMs` | number | No | Default 60000, max 90000 |
+| `timeoutMs` | number | No | Default 300000 (5 min), max 600000 (10 min) |
 
 **Returns:** `{ status, summary, output, error? }` where `status` is `success`, `fail`, or `timeout`.
 
@@ -261,7 +261,7 @@ Run a focused **same-profile** sub-agent for delegated work (research, review, p
 - One level of nesting — sub-agents cannot call `sub_agent` again
 - No persisted child chat session — audit via parent tool result + server logs
 - Child runs share the profile workspace; side effects persist even if the parent times out
-- Default timeout counts toward the parent web stream budget (120s total turn limit)
+- Default timeout counts toward the parent web stream budget (10 minute total turn limit)
 
 **Availability:** When assigned to the profile (opt-in; not part of default custom profile assignments).
 

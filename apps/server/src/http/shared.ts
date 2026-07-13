@@ -356,7 +356,7 @@ export function parseChannel(value: string | undefined): AgentChannel {
   );
 }
 
-const STREAM_TIMEOUT_MS = 120_000;
+const STREAM_TIMEOUT_MS = 600_000;
 
 export function streamMessage(
   session: AgentChatSession,

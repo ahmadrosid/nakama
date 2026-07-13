@@ -1,5 +1,5 @@
-export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 60_000;
-export const MAX_SUB_AGENT_TIMEOUT_MS = 90_000;
+export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
+export const MAX_SUB_AGENT_TIMEOUT_MS = 600_000;
 export const MAX_SUB_AGENT_OUTPUT_CHARS = 32_000;
 export const MAX_SUB_AGENT_SUMMARY_CHARS = 2_000;
 const TRUNCATION_MARKER = "\n...[truncated]";
