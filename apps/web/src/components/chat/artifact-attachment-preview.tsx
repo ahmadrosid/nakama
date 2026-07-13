@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
-import { FileDownIcon, FileTextIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+} from "lucide-react";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import {
   buildArtifactContentUrl,
@@ -19,12 +31,30 @@ interface ArtifactAttachmentPreviewProps {
   className?: string;
 }
 
+function downloadActionLabel(mimeType: string, filename: string): string {
+  if (isHtmlArtifactMimeType(mimeType) || filename.toLowerCase().endsWith(".html") || filename.toLowerCase().endsWith(".htm")) {
+    return "Download as HTML";
+  }
+
+  if (mimeType === "text/markdown" || filename.toLowerCase().endsWith(".md")) {
+    return "Download as Markdown";
+  }
+
+  if (mimeType === "application/json" || filename.toLowerCase().endsWith(".json")) {
+    return "Download as JSON";
+  }
+
+  return "Download";
+}
+
 export function ArtifactAttachmentPreview({
   profileId,
   artifact,
   className,
 }: ArtifactAttachmentPreviewProps) {
   const [open, setOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
@@ -32,6 +62,7 @@ export function ArtifactAttachmentPreview({
   const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
   const canPreviewText = isTextArtifactMimeType(artifact.mimeType) && !isHtml;
   const canPreview = isHtml || canPreviewText;
+  const downloadLabel = downloadActionLabel(artifact.mimeType, artifact.filename);
 
   useEffect(() => {
     if (!open || !canPreview) {
@@ -84,15 +115,106 @@ export function ArtifactAttachmentPreview({
     };
   }, [open, canPreview, isHtml, profileId, artifact.path]);
 
-  const downloadAction = (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={`Download ${artifact.filename}`}
-      render={<a href={downloadUrl} download={artifact.filename} />}
-    >
-      <FileDownIcon className="size-4" aria-hidden />
-    </Button>
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setFullscreen(false);
+      setCopied(false);
+    }
+  }
+
+  async function copyArtifact() {
+    try {
+      let text = content;
+      if (!text) {
+        const result = await client.readProfileArtifactContent(profileId, artifact.path, {
+          inline: true,
+        });
+        text = new TextDecoder().decode(result.data);
+        setContent(text);
+      }
+
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      // Clipboard may be unavailable outside secure contexts.
+    }
+  }
+
+  const headerActions = (
+    <>
+      <div className="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-border bg-muted">
+        <button
+          type="button"
+          className="px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
+          disabled={loading && !content}
+          onClick={() => void copyArtifact()}
+        >
+          {copied ? (
+            <span className="inline-flex items-center gap-1.5">
+              <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              Copied
+            </span>
+          ) : (
+            "Copy"
+          )}
+        </button>
+        <div className="w-px self-stretch bg-border" aria-hidden />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="More artifact actions"
+                className="inline-flex items-center justify-center px-1.5 text-foreground transition-colors hover:bg-muted/80"
+              />
+            }
+          >
+            <ChevronDownIcon className="size-3.5" aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => {
+                const link = document.createElement("a");
+                link.href = downloadUrl;
+                link.download = artifact.filename;
+                link.rel = "noopener";
+                document.body.append(link);
+                link.click();
+                link.remove();
+              }}
+            >
+              {downloadLabel}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+        onClick={() => setFullscreen((current) => !current)}
+      >
+        {fullscreen ? (
+          <Minimize2Icon className="size-4" aria-hidden />
+        ) : (
+          <Maximize2Icon className="size-4" aria-hidden />
+        )}
+      </Button>
+    </>
   );
 
   return (
@@ -119,24 +241,17 @@ export function ArtifactAttachmentPreview({
 
       <AttachmentDetailPanel
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         title={artifact.filename}
-        headerActions={downloadAction}
-        className={isHtml ? "max-w-3xl" : undefined}
+        headerActions={headerActions}
+        className={cn(
+          isHtml && !fullscreen && "max-w-3xl",
+          fullscreen && "inset-0 max-w-none border-l-0",
+        )}
         bodyClassName={isHtml ? "flex flex-col overflow-hidden p-0" : undefined}
       >
         {isHtml ? (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-xs text-muted-foreground">
-              <span>{artifact.mimeType}</span>
-              {artifact.sizeBytes > 0 ? (
-                <>
-                  <span>·</span>
-                  <span>{formatBytes(artifact.sizeBytes)}</span>
-                </>
-              ) : null}
-            </div>
-
             {loading ? (
               <div className="flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
                 <Spinner className="size-4" />
