@@ -9,6 +9,8 @@ const healthyStatus: SystemStatusResponse = {
     apiVersion: 1,
     providerConfigured: true,
     userConfigured: true,
+    composioConfigured: false,
+    composioAvailable: false,
   },
   automationWorker: {
     ok: true,

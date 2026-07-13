@@ -7,7 +7,7 @@ import {
 } from "@/components/DiscordAllowedUsersDialog";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   InputGroup,
@@ -72,11 +72,14 @@ function DiscordPairingGuide({ inviteUrl }: { inviteUrl: string | null }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-foreground">Link in Discord</p>
         {inviteUrl ? (
-          <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-            <a href={inviteUrl} target="_blank" rel="noreferrer">
-              Invite bot to server
-            </a>
-          </Button>
+          <a
+            href={inviteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 text-xs")}
+          >
+            Invite bot to server
+          </a>
         ) : null}
       </div>
       <div className="overflow-hidden border border-border">
