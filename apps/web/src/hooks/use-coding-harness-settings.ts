@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   CodingHarnessInstallRequest,
+  CodingHarnessSettingsResponse,
   UpdateCodingHarnessSettingsRequest,
   VerifyCodingHarnessRequest,
 } from "@nakama/core/contract";
@@ -44,7 +45,7 @@ export function useVerifyCodingHarness() {
     onSuccess: (result) => {
       queryClient.setQueryData(
         queryKeys.codingHarnesses.settings,
-        (current) => {
+        (current: CodingHarnessSettingsResponse | undefined) => {
           if (!current || !result.harnessId) {
             return current;
           }
