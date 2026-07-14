@@ -1,0 +1,31 @@
+# Integrations
+
+Use **Integrations** in the Nakama dashboard to connect channels, bridge workers, and external tool providers.
+
+This page is a guide to the dashboard sections. For setup steps, use the linked docs for each integration.
+
+## Available sections
+
+- [Telegram](/telegram): configure the bot token, pairing flow, allowed users, and bridge worker behavior
+- [WhatsApp](/whatsapp): link a phone number, pair accounts, and manage the WhatsApp bridge
+- [Discord](/discord): save the bot token, invite the bot, pair users, and run the Discord worker
+- [Coding Agent](/coding-agent): install and verify Codex, Claude Code, or OpenCode harnesses from the dashboard
+- [Composio](/composio): connect SaaS toolkits with per-user OAuth and assign them to profiles
+- [MCP Servers](/mcp): connect external MCP servers and expose their tools to profiles
+
+## What lives in Integrations
+
+The dashboard groups together deployment-level and organization-level configuration that is not tied to a single profile page.
+
+Common examples:
+
+- channel credentials such as Telegram, WhatsApp, and Discord tokens
+- bridge worker controls and pairing codes
+- coding-agent harness installation and readiness checks
+- Composio toolkit enablement and OAuth connection management
+
+## Related docs
+
+- [Getting Started](/getting-started)
+- [Overview](/overview)
+- [Profiles](/profiles)

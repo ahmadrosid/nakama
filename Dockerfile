@@ -2,8 +2,10 @@
 # Build: ./scripts/docker-build.sh
 # Run:   docker run -d -p 4310:4310 -v nakama-data:/nakama/data nakama
 
+ARG BUILDPLATFORM
+
 # --- Build web dashboard (devDependencies stay in this stage only) ---
-FROM --platform=linux/amd64 oven/bun:1.3-slim AS web-builder
+FROM --platform=${BUILDPLATFORM} oven/bun:1.3-slim AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -14,7 +16,7 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/web build
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM --platform=linux/amd64 oven/bun:1.3-slim AS runtime
+FROM oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
 COPY package.json bun.lock ./

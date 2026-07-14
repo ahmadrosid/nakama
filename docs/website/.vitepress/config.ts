@@ -19,6 +19,7 @@ const pageDescriptions: Record<string, string> = {
   'agent-prompt.md': 'Understand how Nakama builds the final system prompt from soul files, tools, bundled system skills, and runtime context.',
   'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory and artifact workflows use file tools plus bundled skills.',
   'skills.md': 'Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.',
+  'integrations.md': 'See which dashboard integration sections manage channels, coding-agent harnesses, Composio, and related deployment settings.',
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
   'composio.md': 'Connect SaaS apps through Composio with org-scoped OAuth and profile toolkit assignment.',
   'coding-agent.md': 'Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional inference gateway routing through your Nakama provider.',
@@ -36,6 +37,7 @@ const pageTitles: Record<string, string> = {
   'agent-prompt.md': 'Agent Prompt',
   'builtin-tools.md': 'Builtin Tools',
   'skills.md': 'Skills',
+  'integrations.md': 'Integrations',
   'mcp.md': 'MCP Servers',
   'composio.md': 'Composio',
   'coding-agent.md': 'Coding Agent',
@@ -122,6 +124,10 @@ function buildLlmsTxt(pages: string[]) {
       page: "builtin-tools.md",
     },
     {
+      topics: "integrations page, channel settings, bridge workers, coding-agent settings, dashboard integrations",
+      page: "integrations.md",
+    },
+    {
       topics: "skills, automations, memory skills, save-artifact, manage-skills",
       page: "skills.md",
     },
@@ -146,7 +152,7 @@ function buildLlmsTxt(pages: string[]) {
     },
     {
       heading: 'Operations',
-      pages: ['builtin-tools.md', 'skills.md', 'coding-agent.md', 'mcp.md', 'composio.md'] as const,
+      pages: ['builtin-tools.md', 'skills.md', 'integrations.md', 'coding-agent.md', 'mcp.md', 'composio.md'] as const,
     },
   ] as const
 
@@ -284,6 +290,7 @@ export default defineConfig({
         items: [
           { text: 'Builtin Tools', link: '/builtin-tools' },
           { text: 'Skills', link: '/skills' },
+          { text: 'Integrations', link: '/integrations' },
           { text: 'Coding Agent', link: '/coding-agent' },
           { text: 'MCP Servers', link: '/mcp' },
         ],
