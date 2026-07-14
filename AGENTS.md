@@ -81,6 +81,7 @@ Loaded by `loadSoulStack()` (`load.ts`); injected by `composeSoulSystemPrompt()`
 - `email` — list, read, search, and send mail via deployment mailbox settings
 - `search_files` / `ripgrep` — file/content search
 - `bash` (Super Bot) — run shell commands in the profile workspace
+- `sub_agent` (opt-in) — run a focused same-profile sub-agent for delegated research, review, or planning; returns a structured result (not for repo coding — use `coding-delegation` + `bash`)
 - `coding-delegation` skill — invoke Codex / Claude Code / OpenCode for repo coding work via `bash` and harness CLI templates
 - Composio — hybrid org toolkit catalog + per-user OAuth via Integrations (see `docs/website/composio.md`)
 
@@ -102,6 +103,7 @@ Type: `packages/core/src/contract.ts` (`ToolContext`). Populated by the server, 
 | Field | Set in chat | Set in playground |
 |---|---|---|
 | `orgId`, `profileId`, `sessionId` | Yes | `profileId` resolved server-side |
+| `agentDepth` | When sub-agent nesting | No |
 | `workspaceRoot` | Yes (via helper below) | Yes (via helper below) |
 | `userId` | When known | Yes |
 

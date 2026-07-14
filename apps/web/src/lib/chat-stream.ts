@@ -71,13 +71,135 @@ export function formatToolResult(tool: string | undefined, result: unknown): str
     return formatBashToolResult(result);
   }
 
+  if (isSubAgentTool(tool)) {
+    return formatSubAgentToolResult(result);
+  }
+
   return formatDefaultToolResult(result);
+}
+
+export function isSubAgentTool(tool: string | undefined): boolean {
+  return tool === "sub_agent";
+}
+
+export type SubAgentToolStatus = "success" | "fail" | "timeout";
+
+export interface ParsedSubAgentResult {
+  status: SubAgentToolStatus;
+  summary: string;
+  output: string;
+  error?: string;
+}
+
+export function parseSubAgentResult(result: unknown): ParsedSubAgentResult | null {
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+
+  const record = result as {
+    status?: unknown;
+    summary?: unknown;
+    output?: unknown;
+    error?: unknown;
+  };
+
+  const status =
+    record.status === "success" || record.status === "fail" || record.status === "timeout"
+      ? record.status
+      : null;
+
+  if (!status) {
+    return null;
+  }
+
+  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+  const output = typeof record.output === "string" ? record.output.trim() : "";
+  const error = typeof record.error === "string" && record.error.trim() ? record.error.trim() : undefined;
+
+  return {
+    status,
+    summary,
+    output,
+    ...(error ? { error } : {}),
+  };
+}
+
+export function formatSubAgentTitle(input?: Record<string, unknown>): string {
+  const task = typeof input?.task === "string" ? input.task.trim() : "";
+
+  if (!task) {
+    return "Sub-agent";
+  }
+
+  return truncateDisplay(task.split("\n")[0] ?? task, 56);
+}
+
+export function formatSubAgentSubtitle(
+  input: Record<string, unknown> | undefined,
+  result: unknown,
+  running: boolean,
+): string {
+  if (running) {
+    const context = typeof input?.context === "string" ? input.context.trim() : "";
+
+    if (context) {
+      return truncateDisplay(context.split("\n")[0] ?? context, 72);
+    }
+
+    return "Working…";
+  }
+
+  const parsed = parseSubAgentResult(result);
+
+  if (!parsed) {
+    return "Sub-agent finished";
+  }
+
+  if (parsed.status === "timeout") {
+    return parsed.error ?? "Timed out";
+  }
+
+  if (parsed.status === "fail") {
+    return parsed.error ?? (parsed.summary || "Failed");
+  }
+
+  if (parsed.summary) {
+    return truncateDisplay(parsed.summary.split("\n")[0] ?? parsed.summary, 96);
+  }
+
+  return "Completed";
+}
+
+export function formatSubAgentToolResult(result: unknown): string | null {
+  const parsed = parseSubAgentResult(result);
+
+  if (!parsed) {
+    return formatDefaultToolResult(result);
+  }
+
+  if (parsed.output) {
+    return parsed.output;
+  }
+
+  if (parsed.summary) {
+    return parsed.summary;
+  }
+
+  if (parsed.error) {
+    return parsed.error;
+  }
+
+  return null;
 }
 
 export function formatToolSummary(
   tool: string | undefined,
   input?: Record<string, unknown>,
 ): string | null {
+  if (isSubAgentTool(tool) && typeof input?.task === "string" && input.task.trim()) {
+    return input.task.trim();
+  }
+
   if (tool === "bash" && typeof input?.command === "string" && input.command.trim()) {
     return input.command.trim();
   }
@@ -126,6 +248,10 @@ export function formatToolActionLabel(
   input?: Record<string, unknown>,
 ): string {
   const summary = formatToolSummary(tool, input);
+
+  if (isSubAgentTool(tool)) {
+    return formatSubAgentTitle(input);
+  }
 
   if (tool === "bash" && summary) {
     return `Ran ${truncateDisplay(summary.split("\n")[0] ?? summary, 96)}`;
@@ -311,6 +437,7 @@ export function buildStreamHandlers(
           {
             id: event.toolCallId,
             role: "tool",
+            createdAt: new Date().toISOString(),
             content: event.tool,
             toolCallId: event.toolCallId,
             tool: event.tool,

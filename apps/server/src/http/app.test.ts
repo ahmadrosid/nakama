@@ -890,6 +890,25 @@ describe("createHonoApp", () => {
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
     });
+
+    test("returns 403 when viewers send session messages", async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const session = await setupFreshInstallSession(app, options.databaseAdapter, "viewer@example.com", "viewer");
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/sessions/session_1/messages", {
+          method: "POST",
+          headers: session.headers({
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          body: JSON.stringify({ message: "hello" }),
+        }),
+      );
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
+    });
   });
 
   describe("platform admin routes", () => {

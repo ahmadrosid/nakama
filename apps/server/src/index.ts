@@ -29,6 +29,8 @@ import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./tools/automation-tools";
+import { createSubAgentTool } from "./tools/sub-agent-tool";
+import { registerSubAgentTool } from "./services/tool-resolver";
 import { NAKAMA_API_VERSION } from "@nakama/core";
 import {
   DEFAULT_SERVER_HOST,
@@ -73,6 +75,7 @@ const authService = new AuthService();
 
 const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
 const agent = new AgentService(userConfig, provider, database.adapter, llmUsageTracker);
+registerSubAgentTool(createSubAgentTool(agent));
 await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
 const mcpClientManager = new McpClientManager();

@@ -182,6 +182,16 @@ import {
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createTodoTools } from "../tools/todo-tools";
+import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
+import {
+  buildSubAgentPrompt,
+  buildSubAgentResult,
+  DEFAULT_SUB_AGENT_TIMEOUT_MS,
+  failSubAgentResult,
+  MAX_SUB_AGENT_TIMEOUT_MS,
+  type SubAgentRunInput,
+  type SubAgentRunResult,
+} from "../tools/sub-agent-shared";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import {
   getCodingHarnessInstallCommand,
@@ -253,6 +263,8 @@ interface StoredSession {
   profileId: string;
   session: AgentChatSession;
 }
+
+export type { SubAgentRunInput, SubAgentRunResult };
 
 export interface SessionAccessOptions {
   orgRole?: OrgRole | null;
@@ -956,6 +968,94 @@ export class AgentService {
     });
 
     return session.send(prompt);
+  }
+
+  async runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
+    const startedAt = Date.now();
+
+    if (!this._providerConfigured) {
+      return failSubAgentResult("Provider is not configured.");
+    }
+
+    const task = input.task.trim();
+
+    if (!task) {
+      return failSubAgentResult("task is required.");
+    }
+
+    const timeoutMs = clampSubAgentTimeout(input.timeoutMs);
+    const profile = await this.requireProfile(input.orgId, input.profileId);
+    const tools = await this.resolveProfileTools(profile, {
+      includeAutomationTools: false,
+      includeTodoTools: false,
+      includeQuestionTools: false,
+      includeSubAgentTool: false,
+      userId: input.userId,
+    });
+    const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
+      input.orgId,
+      input.profileId,
+      profile.systemPrompt,
+    );
+    const childSystemPrompt = [
+      systemPrompt.trim(),
+      "",
+      "You are running as a focused sub-agent delegated from a parent conversation.",
+      "Complete the assigned task and return a clear final answer.",
+      "Do not spawn sub-agents.",
+    ].join("\n");
+    const userTimezone = await this.getUserTimezone();
+    const userContext = await this.loadUserContextForUser(input.orgId, input.userId);
+    const harness = this.createHarnessForProfile(profile);
+    const prompt = buildSubAgentPrompt(task, input.context);
+
+    const session = harness.createChatSession({
+      channel: "subagent",
+      tools,
+      systemPrompt: childSystemPrompt,
+      userContext,
+      enableToolLoop: true,
+      soul: soulActive,
+      userTimezone,
+      toolContext: buildToolExecutionContext({
+        orgId: input.orgId,
+        profileId: input.profileId,
+        userId: input.userId,
+        clientOrigin: input.clientOrigin,
+        agentDepth: input.agentDepth,
+      }),
+    });
+
+    const sendPromise = session.send(prompt).then((reply) => ({
+      kind: "success" as const,
+      reply: reply.trim(),
+    }));
+
+    const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
+      setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
+    });
+
+    const outcome = await Promise.race([sendPromise, timeoutPromise]);
+    const durationMs = Date.now() - startedAt;
+
+    if (outcome.kind === "timeout") {
+      console.info(
+        `[sub_agent] timeout org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`,
+      );
+      return buildSubAgentResult("timeout", "", "Sub-agent timed out.");
+    }
+
+    if (!outcome.reply) {
+      console.info(
+        `[sub_agent] fail org=${input.orgId} profile=${input.profileId} durationMs=${durationMs} reason=empty_reply`,
+      );
+      return buildSubAgentResult("fail", "", "Sub-agent returned no final reply.");
+    }
+
+    console.info(
+      `[sub_agent] success org=${input.orgId} profile=${input.profileId} durationMs=${durationMs}`,
+    );
+    return buildSubAgentResult("success", outcome.reply);
   }
 
   async runTaskPrompt(taskId: string, profileId: string, prompt: string): Promise<string> {
@@ -2178,12 +2278,20 @@ export class AgentService {
 
   private async resolveProfileTools(
     profile: StoredProfileRecord,
-    options: { includeAutomationTools?: boolean; includeTodoTools?: boolean; userId?: string | null } = {},
+    options: {
+      includeAutomationTools?: boolean;
+      includeTodoTools?: boolean;
+      includeQuestionTools?: boolean;
+      includeSubAgentTool?: boolean;
+      userId?: string | null;
+    } = {},
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
     const tools = await resolveProfileStoredTools(storedTools, this.db);
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
+    const includeQuestionTools = options.includeQuestionTools ?? true;
+    const includeSubAgentTool = options.includeSubAgentTool ?? true;
 
     let resolved = [...tools];
 
@@ -2234,7 +2342,7 @@ export class AgentService {
       resolved = [...resolved, ...this.todoTools];
     }
 
-    if (this.questionTools.length > 0) {
+    if (includeQuestionTools && this.questionTools.length > 0) {
       resolved = [...resolved, ...this.questionTools];
     }
 
@@ -2251,6 +2359,10 @@ export class AgentService {
 
     if (profile.isSuper) {
       resolved = [...resolved, ...this.superBotTools];
+    }
+
+    if (!includeSubAgentTool) {
+      resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
 
     return resolved;
@@ -2610,10 +2722,19 @@ function parseAgentChannel(value: string): AgentChannel | null {
     value === "whatsapp" ||
     value === "discord" ||
     value === "automation" ||
-    value === "task"
+    value === "task" ||
+    value === "subagent"
   ) {
     return value;
   }
 
   return null;
+}
+
+function clampSubAgentTimeout(timeoutMs: number | undefined): number {
+  if (timeoutMs == null || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return DEFAULT_SUB_AGENT_TIMEOUT_MS;
+  }
+
+  return Math.min(Math.floor(timeoutMs), MAX_SUB_AGENT_TIMEOUT_MS);
 }

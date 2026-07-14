@@ -101,6 +101,37 @@ test("data export downloads zip bytes with filename metadata", async () => {
   expect(Array.from(new Uint8Array(result.data))).toEqual([1, 2, 3]);
 });
 
+test("readProfileArtifactContent fetches artifact bytes with inline query", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = createClient({
+    baseUrl: "http://localhost:4310",
+    authToken: "local-auth-token",
+    orgId: "org_test",
+    fetch: async (input, init) => {
+      fetchCalls.push({ input, init });
+      return new Response("# Report", {
+        headers: {
+          "Content-Type": "text/markdown",
+          "Content-Disposition": 'inline; filename="report.md"',
+        },
+      });
+    },
+  });
+
+  const result = await client.readProfileArtifactContent("profile_1", "weekly/report.md", {
+    inline: true,
+  });
+
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=weekly%2Freport.md&inline=1",
+  );
+  const headers = new Headers(fetchCalls[0]!.init?.headers);
+  expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
+  expect(headers.get("X-Org-Id")).toBe("org_test");
+  expect(result.contentType).toBe("text/markdown");
+  expect(new TextDecoder().decode(result.data)).toBe("# Report");
+});
+
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
   const client = createClient({

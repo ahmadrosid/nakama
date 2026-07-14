@@ -344,18 +344,19 @@ export function parseChannel(value: string | undefined): AgentChannel {
     value === "whatsapp" ||
     value === "discord" ||
     value === "automation" ||
-    value === "task"
+    value === "task" ||
+    value === "subagent"
   ) {
     return value;
   }
 
   throw new NakamaApiError(
-    "Invalid channel. Expected cli, web, telegram, whatsapp, discord, automation, or task.",
+    "Invalid channel. Expected cli, web, telegram, whatsapp, discord, automation, task, or subagent.",
     400,
   );
 }
 
-const STREAM_TIMEOUT_MS = 120_000;
+const STREAM_TIMEOUT_MS = 600_000;
 
 export function streamMessage(
   session: AgentChatSession,

@@ -1,6 +1,6 @@
 import { builtinTools } from "@nakama/core";
 import { preinstalledMcpServers } from "@nakama/core/mcp/preinstalled";
-import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
+import { BUILTIN_TOOL_IDS, SUB_AGENT_TOOL_ID } from "@nakama/core/tools/protected";
 import { ensureLocalClientAccess } from "./local-client";
 import { ensureOrgSuperBotProfiles } from "./org-profiles";
 import type { DatabaseAdapter } from "./types";
@@ -13,7 +13,7 @@ const DEPRECATED_BUILTIN_TOOL_NAMES = new Set([
   "create_skill",
 ]);
 const DEPRECATED_SERVER_TOOL_NAMES = new Set(["delegate_coding_task"]);
-const SUPPORTED_TOOL_HANDLER_TYPES = new Set(["builtin", "bash", "javascript"]);
+const SUPPORTED_TOOL_HANDLER_TYPES = new Set(["builtin", "bash", "javascript", "sub_agent"]);
 
 export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeLegacyBuiltinTools(db);
@@ -21,6 +21,7 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeDeprecatedServerTools(db);
   await removeUnsupportedTools(db);
   await ensureBuiltinToolDefinitions(db);
+  await ensureSubAgentToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
   await ensureOrgSuperBotProfiles(db);
@@ -116,6 +117,22 @@ export async function ensureBuiltinToolDefinitions(db: DatabaseAdapter): Promise
       updatedAt: now,
     });
   }
+}
+
+export async function ensureSubAgentToolDefinition(db: DatabaseAdapter): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.getTool(SUB_AGENT_TOOL_ID);
+
+  await db.upsertTool({
+    id: SUB_AGENT_TOOL_ID,
+    name: "sub_agent",
+    description:
+      "Run a focused same-profile sub-agent for delegated research, review, planning, or debugging. Returns a structured result for the parent to summarize. Not for repo coding work — use bash with coding-delegation for that.",
+    handlerType: "sub_agent",
+    handlerConfig: {},
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
 }
 
 export async function ensurePreinstalledMcpServers(db: DatabaseAdapter): Promise<void> {

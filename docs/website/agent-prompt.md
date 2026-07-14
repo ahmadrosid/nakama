@@ -82,11 +82,11 @@ Profiles do not use dedicated memory or artifact builtins. The chat wrapper nudg
 |-------|-------------|---------|
 | `update-profile-memory` | `read_file` + `edit_file` | Append facts and preferences to active `MEMORY.md` |
 | `archive-profile-memory` | `read_file` + `edit_file` | Move bullets from `MEMORY.md` into `memory-archive/` without deleting them |
-| `save-artifact` | `write_file` | Save persistent text outputs under `artifacts/` with metadata for the dashboard |
+| `save-artifact` | `write_file` | Save persistent text outputs under `artifacts/` with metadata for the dashboard; on web chat, paired saves also show as message attachment chips |
 
 The skills catalog is always visible. When a user message matches a skill description, Nakama can attach the full skill body for that turn (`include-body-on-match: true`).
 
-Active `MEMORY.md` is also composed into the soul stack. Archived content under `memory-archive/` is not loaded automatically — the agent uses `search_files` or `read_file` to retrieve it. Artifacts under `artifacts/` are not loaded into chat — users browse them in the dashboard Artifacts tab or download via the API.
+Active `MEMORY.md` is also composed into the soul stack. Archived content under `memory-archive/` is not loaded automatically — the agent uses `search_files` or `read_file` to retrieve it. Artifacts under `artifacts/` are not loaded into the agent prompt — users browse them in the dashboard Artifacts tab, download via the API, or open them from web chat attachment chips on assistant messages.
 
 See [Skills](/skills) for the bundled skill list and [Profiles](/profiles) for where memory and artifact files live on disk.
 

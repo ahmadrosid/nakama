@@ -66,7 +66,7 @@ export interface AutomationUnreadSummary {
   byAutomationId: Record<string, number>;
 }
 
-export type AgentChannel = "web" | "cli" | "telegram" | "whatsapp" | "discord" | "automation" | "task";
+export type AgentChannel = "web" | "cli" | "telegram" | "whatsapp" | "discord" | "automation" | "task" | "subagent";
 
 export const NAKAMA_API_VERSION = 1;
 
@@ -1571,6 +1571,8 @@ export interface ToolContext {
   orgId?: string;
   profileId?: string;
   sessionId?: string;
+  /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
+  agentDepth?: number;
   /** Browser origin for OAuth callbacks during this tool run. */
   clientOrigin?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */

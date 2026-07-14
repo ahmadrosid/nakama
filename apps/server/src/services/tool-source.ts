@@ -47,6 +47,11 @@ const BASH_SOURCE = {
   displayPath: "apps/server/src/tools/bash.ts",
 };
 
+const SUB_AGENT_SOURCE = {
+  filePath: path.join(serverSrcDir, "tools/sub-agent-tool.ts"),
+  displayPath: "apps/server/src/tools/sub-agent-tool.ts",
+};
+
 export async function readToolSource(record: StoredToolRecord): Promise<ToolSourceResponse> {
   if (record.handlerType === "javascript") {
     return readJavascriptToolSource(record);
@@ -54,6 +59,10 @@ export async function readToolSource(record: StoredToolRecord): Promise<ToolSour
 
   if (record.handlerType === "bash") {
     return readFixedToolSource(BASH_SOURCE, "typescript");
+  }
+
+  if (record.handlerType === "sub_agent") {
+    return readFixedToolSource(SUB_AGENT_SOURCE, "typescript");
   }
 
   if (record.handlerType === "builtin") {

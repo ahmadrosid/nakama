@@ -122,6 +122,22 @@
     animation: todo-text-shimmer 2s linear infinite;
   }
 
+  .thinking-shimmer-text {
+    background-image: linear-gradient(
+      90deg,
+      var(--foreground) 0%,
+      var(--foreground) 40%,
+      var(--primary) 50%,
+      var(--foreground) 60%,
+      var(--foreground) 100%
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: todo-text-shimmer 4s linear infinite;
+  }
+
   @keyframes todo-text-shimmer {
     from {
       background-position: 200% center;
@@ -133,7 +149,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .todo-shimmer-text {
+    .todo-shimmer-text,
+    .thinking-shimmer-text {
       animation: none;
       background: none;
       background-clip: unset;
@@ -170,6 +187,164 @@
   @media (prefers-reduced-motion: reduce) {
     .skeleton-shimmer::after {
       animation: none;
+    }
+  }
+
+  .subagent-mark-active .subagent-dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  .subagent-mark-active .subagent-edge {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+
+  .subagent-mark-active .subagent-dot-top {
+    animation: subagent-walk-dot-top 2.7s ease-in-out infinite;
+  }
+
+  .subagent-mark-active .subagent-dot-br {
+    animation: subagent-walk-dot-br 2.7s ease-in-out infinite;
+  }
+
+  .subagent-mark-active .subagent-dot-bl {
+    animation: subagent-walk-dot-bl 2.7s ease-in-out infinite;
+  }
+
+  .subagent-mark-active .subagent-edge-top-br {
+    animation: subagent-walk-edge-top-br 2.7s ease-in-out infinite;
+  }
+
+  .subagent-mark-active .subagent-edge-br-bl {
+    animation: subagent-walk-edge-br-bl 2.7s ease-in-out infinite;
+  }
+
+  .subagent-mark-active .subagent-edge-bl-top {
+    animation: subagent-walk-edge-bl-top 2.7s ease-in-out infinite;
+  }
+
+  @keyframes subagent-walk-dot-top {
+    0%,
+    4% {
+      opacity: 0;
+      transform: scale(0);
+    }
+
+    10%,
+    88% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    96%,
+    100% {
+      opacity: 0;
+      transform: scale(0);
+    }
+  }
+
+  @keyframes subagent-walk-dot-br {
+    0%,
+    36% {
+      opacity: 0;
+      transform: scale(0);
+    }
+
+    42%,
+    88% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    96%,
+    100% {
+      opacity: 0;
+      transform: scale(0);
+    }
+  }
+
+  @keyframes subagent-walk-dot-bl {
+    0%,
+    60% {
+      opacity: 0;
+      transform: scale(0);
+    }
+
+    66%,
+    88% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    96%,
+    100% {
+      opacity: 0;
+      transform: scale(0);
+    }
+  }
+
+  @keyframes subagent-walk-edge-top-br {
+    0%,
+    10% {
+      stroke-dashoffset: 1;
+    }
+
+    38%,
+    88% {
+      stroke-dashoffset: 0;
+    }
+
+    96%,
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  @keyframes subagent-walk-edge-br-bl {
+    0%,
+    38% {
+      stroke-dashoffset: 1;
+    }
+
+    62%,
+    88% {
+      stroke-dashoffset: 0;
+    }
+
+    96%,
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  @keyframes subagent-walk-edge-bl-top {
+    0%,
+    62% {
+      stroke-dashoffset: 1;
+    }
+
+    86%,
+    88% {
+      stroke-dashoffset: 0;
+    }
+
+    96%,
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .subagent-mark-active .subagent-dot,
+    .subagent-mark-active .subagent-edge {
+      animation: none;
+      opacity: 1;
+      transform: none;
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
     }
   }
 }

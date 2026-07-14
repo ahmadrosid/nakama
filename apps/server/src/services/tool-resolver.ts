@@ -6,6 +6,12 @@ import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { bashTool, runBash } from "../tools/bash";
 import { loadJavascriptTool } from "./javascript-tool-loader";
 
+let registeredSubAgentTool: ToolDefinition | null = null;
+
+export function registerSubAgentTool(tool: ToolDefinition): void {
+  registeredSubAgentTool = tool;
+}
+
 export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
   emailConfigured: boolean,
@@ -64,6 +70,10 @@ async function resolveStoredTool(
     return serverTools.get(record.name) ?? null;
   }
 
+  if (record.handlerType === "sub_agent") {
+    return serverTools.get(record.name) ?? null;
+  }
+
   if (record.handlerType === "javascript") {
     return loadJavascriptTool(record);
   }
@@ -73,8 +83,13 @@ async function resolveStoredTool(
 
 function buildServerTools(db?: DatabaseAdapter): Map<string, ToolDefinition> {
   const bash = db ? createCodingAgentAwareBashTool(db) : bashTool;
+  const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
-  return new Map<string, ToolDefinition>([[bash.name, bash]]);
+  if (registeredSubAgentTool) {
+    map.set(registeredSubAgentTool.name, registeredSubAgentTool);
+  }
+
+  return map;
 }
 
 function createCodingAgentAwareBashTool(db: DatabaseAdapter): ToolDefinition {

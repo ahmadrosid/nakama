@@ -11,7 +11,9 @@ The mental model:
 - Nakama runs the configured coding-agent CLI through the `bash` tool
 - Nakama summarizes stdout/stderr and continues the conversation
 
-There is no separate delegate builtin. The workflow is **`bash` + the `coding-delegation` skill + a configured coding-agent harness** in Integrations.
+There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-delegation` skill + a configured coding-agent harness** in Integrations.
+
+For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for Codex / Claude Code / OpenCode on large repo changes.
 
 ## Why use a coding agent
 

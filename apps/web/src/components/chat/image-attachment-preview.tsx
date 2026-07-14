@@ -1,6 +1,6 @@
 import { ImageIcon, XIcon } from "lucide-react";
-import { useState } from "react";
-import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
+import { useEffect, useId } from "react";
+import { useOptionalChatAttachmentPanel } from "@/context/chat-attachment-panel-context";
 import { cn } from "@/lib/utils";
 
 interface ImageAttachmentPreviewProps {
@@ -28,9 +28,59 @@ export function ImageAttachmentPreview({
   onRemove,
   className,
 }: ImageAttachmentPreviewProps) {
-  const [open, setOpen] = useState(false);
-  const interactive = !onRemove && Boolean(url || description?.trim() || caption?.trim());
+  const panelId = useId();
+  const attachmentPanel = useOptionalChatAttachmentPanel();
+  const show = attachmentPanel?.show;
+  const hide = attachmentPanel?.hide;
+  const interactive =
+    !onRemove &&
+    Boolean(attachmentPanel) &&
+    Boolean(url || description?.trim() || caption?.trim());
   const chipPreview = previewText(description, caption);
+
+  useEffect(() => {
+    if (!hide) {
+      return;
+    }
+
+    return () => {
+      hide(panelId);
+    };
+  }, [hide, panelId]);
+
+  function openPanel() {
+    if (!show) {
+      return;
+    }
+
+    show({
+      id: panelId,
+      title: "Image",
+      content: (
+        <div className="space-y-4">
+          {url ? (
+            <img
+              src={url}
+              alt=""
+              className="max-h-[min(50vh,28rem)] w-full rounded-lg border border-border object-contain"
+            />
+          ) : null}
+          {caption?.trim() ? (
+            <section className="space-y-1">
+              <h3 className="text-xs font-medium text-muted-foreground">Message</h3>
+              <p className="whitespace-pre-wrap text-sm text-foreground">{caption.trim()}</p>
+            </section>
+          ) : null}
+          {description?.trim() ? (
+            <section className="space-y-1">
+              <h3 className="text-xs font-medium text-muted-foreground">Description</h3>
+              <p className="whitespace-pre-wrap text-sm text-foreground">{description.trim()}</p>
+            </section>
+          ) : null}
+        </div>
+      ),
+    });
+  }
 
   const chip = (
     <>
@@ -54,66 +104,40 @@ export function ImageAttachmentPreview({
     </>
   );
 
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2 text-left transition-colors hover:bg-muted/70",
+          className,
+        )}
+        onClick={openPanel}
+      >
+        {chip}
+      </button>
+    );
+  }
+
   return (
-    <>
-      {interactive ? (
+    <div
+      className={cn(
+        "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2",
+        onRemove ? "pr-8" : undefined,
+        className,
+      )}
+    >
+      {chip}
+      {onRemove ? (
         <button
           type="button"
-          className={cn(
-            "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2 text-left transition-colors hover:bg-muted/70",
-            className,
-          )}
-          onClick={() => setOpen(true)}
+          className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Remove image"
+          onClick={onRemove}
         >
-          {chip}
+          <XIcon className="size-3" />
         </button>
-      ) : (
-        <div
-          className={cn(
-            "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2",
-            onRemove ? "pr-8" : undefined,
-            className,
-          )}
-        >
-          {chip}
-          {onRemove ? (
-            <button
-              type="button"
-              className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition-colors hover:text-foreground"
-              aria-label="Remove image"
-              onClick={onRemove}
-            >
-              <XIcon className="size-3" />
-            </button>
-          ) : null}
-        </div>
-      )}
-
-      {interactive ? (
-        <AttachmentDetailPanel open={open} onOpenChange={setOpen} title="Image">
-          <div className="space-y-4">
-            {url ? (
-              <img
-                src={url}
-                alt=""
-                className="max-h-[min(50vh,28rem)] w-full rounded-lg border border-border object-contain"
-              />
-            ) : null}
-            {caption?.trim() ? (
-              <section className="space-y-1">
-                <h3 className="text-xs font-medium text-muted-foreground">Message</h3>
-                <p className="whitespace-pre-wrap text-sm text-foreground">{caption.trim()}</p>
-              </section>
-            ) : null}
-            {description?.trim() ? (
-              <section className="space-y-1">
-                <h3 className="text-xs font-medium text-muted-foreground">Description</h3>
-                <p className="whitespace-pre-wrap text-sm text-foreground">{description.trim()}</p>
-              </section>
-            ) : null}
-          </div>
-        </AttachmentDetailPanel>
       ) : null}
-    </>
+    </div>
   );
 }

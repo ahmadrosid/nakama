@@ -11,10 +11,12 @@ export const BUILTIN_TOOL_IDS = {
 } as const;
 
 export const BASH_TOOL_ID = "tool_bash";
+export const SUB_AGENT_TOOL_ID = "tool_sub_agent";
 
 export const PROTECTED_TOOL_IDS = new Set<string>([
   ...Object.values(BUILTIN_TOOL_IDS),
   BASH_TOOL_ID,
+  SUB_AGENT_TOOL_ID,
 ]);
 
 export function isProtectedToolId(toolId: string): boolean {

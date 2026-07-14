@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
 import { chatMessagesToListItems } from "./chat-history";
+import { extractTurnArtifacts } from "./chat-artifacts";
 
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -100,5 +101,61 @@ describe("chatMessagesToListItems", () => {
       content: "",
       imageAttachments: [{ mediaType: "image/unknown", description: "Legacy description only." }],
     });
+  });
+
+  test("derives artifact refs from persisted write_file tool messages after hydration", () => {
+    const artifactsRoot = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+    const metaJson = JSON.stringify({
+      mimeType: "text/markdown",
+      savedAt: "2026-07-13T10:00:00.000Z",
+      sizeBytes: 12,
+    });
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          { id: "tool_content", name: "write_file", arguments: { path: "artifacts/report.md", content: "# Report" } },
+          {
+            id: "tool_meta",
+            name: "write_file",
+            arguments: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "tool_content",
+        name: "write_file",
+        content: JSON.stringify({
+          path: `${artifactsRoot}/report.md`,
+          bytesWritten: 8,
+        }),
+      },
+      {
+        role: "tool",
+        toolCallId: "tool_meta",
+        name: "write_file",
+        content: JSON.stringify({
+          path: `${artifactsRoot}/report.md.nakama-meta.json`,
+          bytesWritten: metaJson.length,
+        }),
+      },
+      { role: "assistant", content: "Saved the report for you." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+    const assistantTurnItems = items.filter((item) => item.role !== "user");
+    const artifacts = extractTurnArtifacts(assistantTurnItems);
+
+    expect(artifacts).toEqual([
+      {
+        filename: "report.md",
+        path: "report.md",
+        mimeType: "text/markdown",
+        sizeBytes: 12,
+        savedAt: "2026-07-13T10:00:00.000Z",
+      },
+    ]);
   });
 });

@@ -42,6 +42,7 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
   });
   const artifactPathQuery = z.object({
     path: z.string().min(1),
+    inline: z.enum(["0", "1"]).optional(),
   });
   const listProfilesSchema = z.object({}).passthrough().openapi("ListProfilesResponse");
   const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
@@ -179,7 +180,7 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
     method: "get",
     path: "/v1/profiles/{profileId}/artifacts/content",
     tags: ["Profiles"],
-    summary: "Download an artifact for a profile",
+    summary: "Read artifact bytes for a profile (org members; list/delete remain platform-admin)",
     operationId: "getProfileArtifactContent",
     request: { params: profileIdParam, query: artifactPathQuery },
     responses: {
@@ -345,7 +346,6 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
   });
 
   app.get("/v1/profiles/:profileId/artifacts/content", async (c) => {
-    requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -356,10 +356,11 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
 
     const artifact = await agent.readProfileArtifact(orgId, profileId, artifactPath);
     const downloadName = (artifactPath.split("/").pop() ?? "artifact").replace(/["\\]/g, "_");
+    const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
     return new Response(artifact.bytes, {
       headers: {
         "Content-Type": artifact.contentType,
-        "Content-Disposition": `attachment; filename="${downloadName}"`,
+        "Content-Disposition": `${disposition}; filename="${downloadName}"`,
       },
     });
   });

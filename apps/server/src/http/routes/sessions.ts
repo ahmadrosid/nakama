@@ -19,14 +19,14 @@ import {
   streamMessage,
   getRequestAuth,
 } from "../shared";
-import { requireActiveOrgIdFromContext } from "../org-guards";
+import { requireActiveOrgIdFromContext, requireNotViewerFromContext } from "../org-guards";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { HonoApp } from "../types";
 
 export function registerSessionRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent } = options;
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
-  const agentChannelSchema = z.enum(["web", "cli", "telegram", "whatsapp", "discord", "automation", "task"]).openapi("AgentChannel");
+  const agentChannelSchema = z.enum(["web", "cli", "telegram", "whatsapp", "discord", "automation", "task", "subagent"]).openapi("AgentChannel");
   const createSessionRequestSchema = z.object({
     channel: agentChannelSchema,
     profileId: z.string().optional(),
@@ -287,6 +287,7 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
   });
 
   app.post("/v1/sessions/:sessionId/messages", async (c) => {
+    requireNotViewerFromContext(c);
     const sessionId = decodeURIComponent(c.req.param("sessionId"));
     const session = await agent.resolveSession(sessionId);
 

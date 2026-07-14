@@ -678,6 +678,26 @@ export class NakamaClient {
     );
   }
 
+  async readProfileArtifactContent(
+    profileId: string,
+    artifactPath: string,
+    options: { inline?: boolean } = {},
+  ): Promise<{ contentType: string; data: ArrayBuffer }> {
+    const query = new URLSearchParams({ path: artifactPath });
+    if (options.inline) {
+      query.set("inline", "1");
+    }
+
+    const response = await this.fetchRaw(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+    );
+
+    return {
+      contentType: response.headers.get("Content-Type") ?? "application/octet-stream",
+      data: await response.arrayBuffer(),
+    };
+  }
+
   async listKnowledgeBase(profileId: string): Promise<ListKnowledgeBaseResponse> {
     return this.request<ListKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
