@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -7,9 +7,11 @@ import {
   runDeleteFile,
   runEditFile,
   runReadFile,
+  runWriteDocx,
   runWriteFile,
   setDefaultFileGuardOptions,
 } from "./builtin";
+import { convertDocxToMarkdown } from "../docx-text";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -340,6 +342,126 @@ describe("file builtin tools", () => {
     expect(result.endLine).toBe(1);
     expect(result.totalLines).toBe(1);
     expect(result.truncated).toBe(false);
+  });
+
+  test("write_file refuses Word extensions instead of faking a document", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+
+    expect(
+      runWriteFile(
+        { path: path.join(tempDir, "laporan.docx"), content: "<html><body>hi</body></html>" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/write_docx/);
+
+    expect(
+      runWriteFile(
+        { path: path.join(tempDir, "laporan.doc"), content: "<html><body>hi</body></html>" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/write_docx/);
+  });
+
+  test("write_docx produces a real Word archive that reads back as markdown", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-docx-"));
+    const targetPath = path.join(tempDir, "laporan.docx");
+
+    const result = await runWriteDocx(
+      {
+        path: targetPath,
+        markdown: "# Laporan\n\nSkor **79** dari 100.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n",
+      },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    const bytes = await readFile(result.path);
+    // A real .docx is a ZIP archive: local file header magic `PK\x03\x04`.
+    expect(bytes.subarray(0, 4).toString("hex")).toBe("504b0304");
+
+    const markdown = await convertDocxToMarkdown(bytes);
+    expect(markdown).toContain("# Laporan");
+    expect(markdown).toContain("**79**");
+    expect(markdown).toContain("| 1");
+  });
+
+  test("write_docx does not overwrite an existing artifact", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-docx-"));
+    await mkdir(path.join(tempDir, "artifacts"), { recursive: true });
+
+    const first = await runWriteDocx(
+      { path: "artifacts/laporan.docx", markdown: "# Pertama" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+    const second = await runWriteDocx(
+      { path: "artifacts/laporan.docx", markdown: "# Kedua" },
+      PROFILE_CONTEXT,
+      { workspaceRoot: tempDir },
+    );
+
+    expect(second.path).not.toBe(first.path);
+    expect(path.basename(second.path)).toMatch(/^laporan-\d{4}-\d{2}-\d{2}\.docx$/);
+    expect(await convertDocxToMarkdown(await readFile(first.path))).toContain("# Pertama");
+    expect(await convertDocxToMarkdown(await readFile(second.path))).toContain("# Kedua");
+  });
+
+  test("write_docx rejects a non-.docx path", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-docx-"));
+
+    expect(
+      runWriteDocx(
+        { path: path.join(tempDir, "laporan.txt"), markdown: "# Hi" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/\.docx/);
+  });
+
+  test("read_file converts a .docx to markdown instead of decoding it as utf-8", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    const targetPath = path.join(tempDir, "laporan.docx");
+    await copyFile(
+      path.join(import.meta.dir, "..", "__fixtures__", "sample.docx"),
+      targetPath,
+    );
+
+    const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
+
+    expect(result.content).toContain("# Laporan Mingguan");
+    expect(result.content).toContain("**teks tebal**");
+  });
+
+  test("read_file reads HTML that was saved under a .doc name", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    const targetPath = path.join(tempDir, "lama.doc");
+    await writeFile(
+      targetPath,
+      "<html><head><style>body { color: #333; }</style></head><body><h1>Judul</h1></body></html>",
+      "utf8",
+    );
+
+    const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
+
+    expect(result.content).toContain("# Judul");
+    expect(result.content).not.toContain("color: #333");
+  });
+
+  test("read_file rejects a genuine legacy OLE .doc with an actionable message", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    const targetPath = path.join(tempDir, "lama.doc");
+    // OLE compound file magic: a real Word 97-2003 document.
+    await writeFile(targetPath, Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+
+    expect(
+      runReadFile({ path: targetPath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+    ).rejects.toThrow(/Convert the file to \.docx/);
   });
 
   test("read_file resolves relative paths from profile workspace", async () => {

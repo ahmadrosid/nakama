@@ -681,11 +681,14 @@ export class NakamaClient {
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean } = {},
+    options: { inline?: boolean; render?: "markdown" } = {},
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
       query.set("inline", "1");
+    }
+    if (options.render) {
+      query.set("render", options.render);
     }
 
     const response = await this.fetchRaw(

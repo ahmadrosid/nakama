@@ -12,11 +12,20 @@ setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
+  const readCalls: Array<{ render?: "markdown" }> = [];
   const agent = {
-    readProfileArtifact: async () => ({
-      bytes: new TextEncoder().encode("# Report"),
-      contentType: "text/markdown",
-    }),
+    readProfileArtifact: async (
+      _orgId: string,
+      _profileId: string,
+      _filename: string,
+      options: { render?: "markdown" } = {},
+    ) => {
+      readCalls.push(options);
+      return {
+        bytes: new TextEncoder().encode("# Report"),
+        contentType: "text/markdown",
+      };
+    },
     listProfileArtifacts: async () => ({
       profileId: "profile_1",
       directory: "/tmp/artifacts",
@@ -32,6 +41,7 @@ function createApp() {
   return {
     databaseAdapter,
     authService,
+    readCalls,
     app: createHonoApp({
       agent: agent as never,
       automationService: {} as never,
@@ -124,6 +134,36 @@ describe("profile artifact content auth", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
+  });
+
+  test("forwards render=markdown so a .docx is converted for preview", async () => {
+    const { app, databaseAdapter, readCalls } = createApp();
+    const memberSession = await setupFreshInstallSession(app, databaseAdapter, "render@example.com", "member");
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=laporan.docx&inline=1&render=markdown",
+        {
+          headers: memberSession.headers({}, memberSession.orgId),
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(readCalls.at(-1)?.render).toBe("markdown");
+  });
+
+  test("serves raw bytes when render is not requested", async () => {
+    const { app, databaseAdapter, readCalls } = createApp();
+    const memberSession = await setupFreshInstallSession(app, databaseAdapter, "raw@example.com", "member");
+
+    await app.fetch(
+      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=laporan.docx", {
+        headers: memberSession.headers({}, memberSession.orgId),
+      }),
+    );
+
+    expect(readCalls.at(-1)?.render).toBeUndefined();
   });
 
   test("org member cannot list artifacts", async () => {

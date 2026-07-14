@@ -1,5 +1,6 @@
 export const BUILTIN_TOOL_IDS = {
   write_file: "tool_write_file",
+  write_docx: "tool_write_docx",
   delete_file: "tool_delete_file",
   edit_file: "tool_edit_file",
   read_file: "tool_read_file",
