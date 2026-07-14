@@ -354,7 +354,8 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
       return json({ error: "path is required" }, 400);
     }
 
-    const artifact = await agent.readProfileArtifact(orgId, profileId, artifactPath);
+    const render = c.req.query("render") === "markdown" ? ("markdown" as const) : undefined;
+    const artifact = await agent.readProfileArtifact(orgId, profileId, artifactPath, { render });
     const downloadName = (artifactPath.split("/").pop() ?? "artifact").replace(/["\\]/g, "_");
     const disposition = c.req.query("inline") === "1" ? "inline" : "attachment";
     return new Response(artifact.bytes, {

@@ -1,4 +1,19 @@
+import { inferArtifactMimeType } from "@nakama/core/artifact-mime";
 import type { ChatListItem } from "@/lib/chat-history";
+
+export {
+  artifactCodeLanguage,
+  inferArtifactMimeType,
+  isDocxFile,
+  isHtmlArtifactMimeType,
+  isLegacyDocFile,
+  isMarkdownArtifactMimeType,
+  isTextArtifactMimeType,
+  isUnknownArtifactMimeType,
+  LEGACY_DOC_UNSUPPORTED_MESSAGE,
+  looksLikeUtf8Text,
+  resolveArtifactMimeType,
+} from "@nakama/core/artifact-mime";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 const ARTIFACTS_SEGMENT = "/artifacts/";
@@ -23,7 +38,11 @@ interface WriteFileResult {
 }
 
 function isWriteFileTool(message: ChatListItem): boolean {
-  return message.role === "tool" && message.tool === "write_file";
+  // write_docx reports the same { path, bytesWritten } result, so its output becomes
+  // an artifact chip too.
+  return (
+    message.role === "tool" && (message.tool === "write_file" || message.tool === "write_docx")
+  );
 }
 
 function getWriteFileResult(message: ChatListItem): WriteFileResult | null {
@@ -139,37 +158,6 @@ function metaContentFromSidecarWrite(message: ChatListItem): string | null {
   }
 
   return input.content;
-}
-
-export function inferArtifactMimeType(filename: string): string {
-  const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
-
-  switch (extension) {
-    case "md":
-    case "markdown":
-      return "text/markdown";
-    case "html":
-    case "htm":
-      return "text/html";
-    case "json":
-      return "application/json";
-    case "js":
-    case "mjs":
-    case "cjs":
-      return "application/javascript";
-    case "css":
-      return "text/css";
-    case "xml":
-      return "application/xml";
-    case "svg":
-      return "image/svg+xml";
-    case "csv":
-      return "text/csv";
-    case "txt":
-    case "log":
-    default:
-      return "text/plain";
-  }
 }
 
 function relativePathFromWriteMessage(message: ChatListItem): string | null {
@@ -318,20 +306,6 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
   }
 
   return [...artifactsByPath.values()];
-}
-
-export function isHtmlArtifactMimeType(mimeType: string): boolean {
-  return mimeType === "text/html" || mimeType === "application/xhtml+xml";
-}
-
-export function isTextArtifactMimeType(mimeType: string): boolean {
-  return (
-    mimeType.startsWith("text/") ||
-    mimeType === "application/json" ||
-    mimeType === "application/javascript" ||
-    mimeType === "application/xml" ||
-    mimeType === "image/svg+xml"
-  );
 }
 
 export function buildArtifactContentUrl(profileId: string, artifactPath: string, inline = false): string {

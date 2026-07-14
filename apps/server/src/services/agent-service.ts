@@ -2122,9 +2122,14 @@ export class AgentService {
     return listArtifacts(orgId, profileId);
   }
 
-  async readProfileArtifact(orgId: string, profileId: string, filename: string) {
+  async readProfileArtifact(
+    orgId: string,
+    profileId: string,
+    filename: string,
+    options: { render?: "markdown" } = {},
+  ) {
     await this.requireProfile(orgId, profileId);
-    return readArtifactFile({ orgId, profileId, filename });
+    return readArtifactFile({ orgId, profileId, filename, render: options.render });
   }
 
   async deleteProfileArtifact(

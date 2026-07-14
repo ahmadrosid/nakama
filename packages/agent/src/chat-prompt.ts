@@ -134,6 +134,12 @@ export function buildChatSystemPrompt(
         "Use the save-artifact skill when it is active to save persistent reports, summaries, or generated text under artifacts/ for later access in the dashboard. Do not use artifacts/ for soul files or MEMORY.md.",
       );
     }
+
+    if (tools.some((tool) => tool.name === "write_docx")) {
+      sections.push(
+        "When the user asks for a Word document, use write_docx with Markdown content. Never write HTML or WordprocessingML to a .docx or .doc path with write_file — those formats are archives, not text, and Word will show the markup as raw text.",
+      );
+    }
   }
 
   if (isMessagingChannel(options.channel)) {
