@@ -55,7 +55,7 @@ export function ProfileCreateDialog({
   const [profileId, setProfileId] = useState("");
   const profileIdEditedRef = useRef(false);
   const [prompt, setPrompt] = useState(defaultCreatePrompt);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const avatarFileRef = useRef<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [toolIds, setToolIds] = useState<string[]>([]);
 
@@ -99,7 +99,7 @@ export function ProfileCreateDialog({
 
       return null;
     });
-    setAvatarFile(null);
+    avatarFileRef.current = null;
   }, [open]);
 
   function handleAvatarSelected(event: ChangeEvent<HTMLInputElement>) {
@@ -119,7 +119,7 @@ export function ProfileCreateDialog({
 
       return null;
     });
-    setAvatarFile(file);
+    avatarFileRef.current = file;
     setAvatarPreview(URL.createObjectURL(file));
   }
 
@@ -158,6 +158,7 @@ export function ProfileCreateDialog({
         systemPrompt: prompt.trim() || undefined,
       });
 
+      const avatarFile = avatarFileRef.current;
       if (avatarFile) {
         const attachment = await fileToImageAttachment(avatarFile);
 
@@ -235,7 +236,7 @@ export function ProfileCreateDialog({
 
                 return null;
               });
-              setAvatarFile(null);
+              avatarFileRef.current = null;
             }}
             onToolSelect={handleToolSelect}
             onRemoveTool={handleRemoveTool}
