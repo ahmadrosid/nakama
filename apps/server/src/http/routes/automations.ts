@@ -186,10 +186,13 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.post("/v1/automations", async (c) => {
-    requireNotViewerFromContext(c);
+    const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateAutomationRequest>(c.req.raw);
-    const automation = await automationService.create(orgId, body, body.profileId);
+    const automation = await automationService.create(orgId, body, body.profileId, {
+      orgRole: auth.orgRole,
+      isPlatformAdmin: auth.isPlatformAdmin,
+    });
     return json<AutomationResponse>({ automation }, 201);
   });
 

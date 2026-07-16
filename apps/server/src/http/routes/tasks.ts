@@ -167,12 +167,15 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/tasks", async (c) => {
-    requireNotViewerFromContext(c);
+    const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateTaskRequest>(c.req.raw);
 
     try {
-      const task = await taskService.create(orgId, body, body.profileId);
+      const task = await taskService.create(orgId, body, body.profileId, {
+        orgRole: auth.orgRole,
+        isPlatformAdmin: auth.isPlatformAdmin,
+      });
       return json<TaskResponse>({ task }, 201);
     } catch (error) {
       if (error instanceof Error) {
@@ -202,13 +205,15 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.put("/v1/tasks/:taskId", async (c) => {
-    requireNotViewerFromContext(c);
+    const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const taskId = decodeURIComponent(c.req.param("taskId"));
     const body = await readJson<UpdateTaskRequest>(c.req.raw);
 
     try {
-      const task = await taskService.update(taskId, orgId, body);
+      const task = await taskService.update(taskId, orgId, body, {
+        access: { orgRole: auth.orgRole, isPlatformAdmin: auth.isPlatformAdmin },
+      });
       return json<TaskResponse>({ task });
     } catch (error) {
       if (error instanceof Error) {
