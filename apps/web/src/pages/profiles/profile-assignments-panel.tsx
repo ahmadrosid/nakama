@@ -308,6 +308,7 @@ export function ProfileAssignmentsPanel({ state }: { state: ProfilesPageState })
                           ))}
                         </ul>
                       )}
+                    </div>
 
     </>
   );
