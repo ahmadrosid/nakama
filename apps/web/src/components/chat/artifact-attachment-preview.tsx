@@ -3,8 +3,8 @@ import { FileTextIcon } from "lucide-react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import {
   ArtifactAttachmentPanelBody,
-  downloadActionLabel,
 } from "@/components/chat/artifact-attachment-panel-body";
+import { downloadActionLabel } from "@/components/chat/artifact-attachment-panel-body.shared";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
