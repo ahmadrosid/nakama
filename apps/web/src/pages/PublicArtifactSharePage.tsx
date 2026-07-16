@@ -96,7 +96,12 @@ export function PublicArtifactSharePage() {
 
         setMetadata(meta);
 
-        if (!meta.inlineAllowed) {
+        const resolvedMime = resolveArtifactMimeType(meta.mimeType, meta.filename);
+        const previewAsHtml = isHtmlArtifactMimeType(resolvedMime);
+
+        // HTML is blocked from inline API serving (same-origin XSS) but still previewed
+        // here via a sandboxed iframe srcDoc on the web app origin.
+        if (!meta.inlineAllowed && !previewAsHtml) {
           setContent(null);
           setLoading(false);
           return;
@@ -164,7 +169,12 @@ export function PublicArtifactSharePage() {
         </div>
       </header>
 
-      <main className={cn("mx-auto max-w-5xl px-4 py-6", isHtml && "h-[calc(100svh-4rem)]")}>
+      <main
+        className={cn(
+          "mx-auto max-w-5xl px-4 py-6",
+          isHtml && "flex h-[calc(100svh-4rem)] flex-col",
+        )}
+      >
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : error ? (
