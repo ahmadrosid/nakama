@@ -238,6 +238,7 @@ export function ArtifactStreamingPanelBridge({
           handoffTarget.relativePath,
           handoffTarget.tool,
         );
+        const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
 
         update(handoffTarget.toolCallId, {
           title: filename,
@@ -246,6 +247,7 @@ export function ArtifactStreamingPanelBridge({
             sizeBytes: new TextEncoder().encode(text).byteLength,
           }),
           defaultWidth: artifactPanelDefaultWidth(artifact.filename, artifact.mimeType),
+          bodyClassName: isHtml ? "flex flex-col overflow-hidden p-0" : undefined,
           content: buildStablePanelBody({
             artifact,
             content: text,

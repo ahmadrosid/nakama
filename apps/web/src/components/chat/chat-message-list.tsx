@@ -41,6 +41,8 @@ interface ChatMessageListProps {
   modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
+  /** True while the assistant reply SSE stream is in flight. */
+  streamActive?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   emptyMessage?: string;
@@ -61,6 +63,7 @@ export function ChatMessageList({
   modelLabel,
   branchingMessageId,
   actionsDisabled = false,
+  streamActive = false,
   onBranchMessage,
   onRetryMessage,
   emptyMessage,
@@ -87,6 +90,7 @@ export function ChatMessageList({
               modelLabel={modelLabel}
               branchingMessageId={branchingMessageId}
               actionsDisabled={actionsDisabled}
+              streamActive={streamActive}
               onBranchMessage={onBranchMessage}
               onRetryMessage={onRetryMessage}
             />
@@ -131,6 +135,7 @@ function AssistantTurn({
   modelLabel,
   branchingMessageId,
   actionsDisabled,
+  streamActive,
   onBranchMessage,
   onRetryMessage,
 }: {
@@ -140,6 +145,7 @@ function AssistantTurn({
   modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
+  streamActive: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
@@ -149,7 +155,9 @@ function AssistantTurn({
   const turnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
-  const showActions = turnComplete && anchorMessage != null;
+  // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
+  const showArtifacts = !streamActive && turnComplete && artifacts.length > 0;
+  const showActions = !streamActive && turnComplete && anchorMessage != null;
 
   return (
     <div className="group flex w-full max-w-full flex-col gap-3 mr-auto ml-0 items-start justify-start">
@@ -165,7 +173,7 @@ function AssistantTurn({
           modelLabel={modelLabel}
         />
       ))}
-      {profileId && turnComplete && artifacts.length > 0 ? (
+      {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {
             const chipId = `${turnKey}:${artifact.path}`;
