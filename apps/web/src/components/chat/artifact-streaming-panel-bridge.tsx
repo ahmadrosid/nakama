@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
-import { findLatestStreamingArtifact } from "@/lib/chat-stream-artifact";
+import {
+  findCompletedContentArtifact,
+  findLatestStreamingArtifact,
+} from "@/lib/chat-stream-artifact";
 import {
   artifactCodeLanguage,
   inferArtifactMimeType,
@@ -9,11 +12,16 @@ import {
   isHtmlArtifactMimeType,
   isLegacyDocFile,
   isMarkdownArtifactMimeType,
-  toArtifactsRelativePath,
   type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
 import { client, formatError } from "@/lib/client";
+
+interface EligibleStreamTarget {
+  toolCallId: string;
+  relativePath: string;
+  tool: string;
+}
 
 function buildStreamingArtifactRef(
   filename: string,
@@ -32,6 +40,67 @@ function buildStreamingArtifactRef(
   };
 }
 
+function buildStreamingPanelBody({
+  artifact,
+  content,
+  tool,
+}: {
+  artifact: ChatArtifactRef;
+  content: string;
+  tool: string;
+}) {
+  const mimeType = artifact.mimeType;
+  const isWordDocument =
+    isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
+  const isHtml = isHtmlArtifactMimeType(mimeType);
+  const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+  const language = artifactCodeLanguage(artifact.filename);
+
+  return (
+    <ArtifactAttachmentPanelBody
+      isHtml={false}
+      isMarkdown={isMarkdown && !isHtml}
+      language={language}
+      mimeType={mimeType}
+      loading={false}
+      error={null}
+      content={content || null}
+      canPreview
+      artifact={artifact}
+      streaming
+    />
+  );
+}
+
+function buildStablePanelBody({
+  artifact,
+  content,
+  tool,
+}: {
+  artifact: ChatArtifactRef;
+  content: string;
+  tool: string;
+}) {
+  const mimeType = artifact.mimeType;
+  const isWordDocument =
+    isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
+  const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+
+  return (
+    <ArtifactAttachmentPanelBody
+      isHtml={isHtmlArtifactMimeType(mimeType)}
+      isMarkdown={isMarkdown}
+      language={artifactCodeLanguage(artifact.filename)}
+      mimeType={mimeType}
+      loading={false}
+      error={null}
+      content={content}
+      canPreview
+      artifact={artifact}
+    />
+  );
+}
+
 export function ArtifactStreamingPanelBridge({
   messages,
   profileId,
@@ -42,10 +111,22 @@ export function ArtifactStreamingPanelBridge({
   const { show, update, activeId } = useChatAttachmentPanel();
   const dismissedRef = useRef(new Set<string>());
   const openedRef = useRef<string | null>(null);
+  const lastEligibleRef = useRef<EligibleStreamTarget | null>(null);
+  const handedOffRef = useRef(new Set<string>());
   const streaming = useMemo(() => findLatestStreamingArtifact(messages), [messages]);
 
   useEffect(() => {
-    if (!profileId || !streaming) {
+    if (streaming?.parsed.eligible && streaming.parsed.relativePath) {
+      lastEligibleRef.current = {
+        toolCallId: streaming.toolCallId,
+        relativePath: streaming.parsed.relativePath,
+        tool: streaming.tool,
+      };
+    }
+  }, [streaming]);
+
+  useEffect(() => {
+    if (!profileId || !streaming?.parsed.eligible || !streaming.parsed.relativePath) {
       return;
     }
 
@@ -56,30 +137,18 @@ export function ArtifactStreamingPanelBridge({
     }
 
     const filename = streaming.parsed.filename ?? "Writing artifact…";
-    const relativePath = streaming.parsed.relativePath ?? filename;
-    const artifact = buildStreamingArtifactRef(filename, relativePath, streaming.tool);
-    const mimeType = artifact.mimeType;
-    const isWordDocument =
-      isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
-    const isHtml = isHtmlArtifactMimeType(mimeType);
-    const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
-    const language = artifactCodeLanguage(artifact.filename);
-    const content = streaming.parsed.content ?? "";
-
-    const body = (
-      <ArtifactAttachmentPanelBody
-        isHtml={false}
-        isMarkdown={isMarkdown && !isHtml}
-        language={language}
-        mimeType={mimeType}
-        loading={false}
-        error={null}
-        content={content || null}
-        canPreview
-        artifact={artifact}
-        streaming
-      />
+    const artifact = buildStreamingArtifactRef(
+      filename,
+      streaming.parsed.relativePath,
+      streaming.tool,
     );
+    const body = buildStreamingPanelBody({
+      artifact,
+      content: streaming.parsed.content ?? "",
+      tool: streaming.tool,
+    });
+    const isMarkdown = isMarkdownArtifactMimeType(artifact.mimeType);
+    const language = artifactCodeLanguage(artifact.filename);
 
     if (activeId === panelId) {
       update(panelId, {
@@ -108,84 +177,66 @@ export function ArtifactStreamingPanelBridge({
     });
   }, [activeId, profileId, show, streaming, update]);
 
+  const handoffTarget = useMemo(() => {
+    const candidate = lastEligibleRef.current;
+
+    if (!candidate || dismissedRef.current.has(candidate.toolCallId)) {
+      return null;
+    }
+
+    if (activeId !== candidate.toolCallId && openedRef.current !== candidate.toolCallId) {
+      return null;
+    }
+
+    return findCompletedContentArtifact(messages, candidate.toolCallId);
+  }, [activeId, messages]);
+
   useEffect(() => {
-    if (!profileId || !streaming) {
+    if (!profileId || !handoffTarget) {
       return;
     }
 
-    const completed = messages.find(
-      (message) =>
-        message.toolCallId === streaming.toolCallId &&
-        message.role === "tool" &&
-        message.toolStatus === "done" &&
-        message.toolResult != null,
-    );
-
-    if (!completed || dismissedRef.current.has(streaming.toolCallId)) {
+    if (handedOffRef.current.has(handoffTarget.toolCallId)) {
       return;
     }
 
-    const result =
-      typeof completed.toolResult === "object" && completed.toolResult !== null
-        ? (completed.toolResult as { path?: string; error?: string })
-        : null;
-
-    if (!result || typeof result.error === "string" || typeof result.path !== "string") {
-      return;
-    }
-
-    const relativePath = toArtifactsRelativePath(result.path);
-
-    if (!relativePath) {
-      return;
-    }
+    handedOffRef.current.add(handoffTarget.toolCallId);
 
     let cancelled = false;
 
     void client
-      .readProfileArtifactContent(profileId, relativePath, {
+      .readProfileArtifactContent(profileId, handoffTarget.relativePath, {
         inline: true,
-        render: streaming.tool === "write_docx" ? "markdown" : undefined,
+        render: handoffTarget.tool === "write_docx" ? "markdown" : undefined,
       })
       .then((response) => {
-        if (cancelled || activeId !== streaming.toolCallId) {
+        if (cancelled || activeId !== handoffTarget.toolCallId) {
           return;
         }
 
         const text = new TextDecoder().decode(response.data);
+        const filename = handoffTarget.relativePath.split("/").pop() ?? handoffTarget.relativePath;
         const artifact = buildStreamingArtifactRef(
-          relativePath.split("/").pop() ?? relativePath,
-          relativePath,
-          streaming.tool,
+          filename,
+          handoffTarget.relativePath,
+          handoffTarget.tool,
         );
-        const mimeType = artifact.mimeType;
-        const isWordDocument =
-          isDocxFile(artifact.filename, mimeType) ||
-          isLegacyDocFile(artifact.filename, mimeType);
-        const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
 
-        update(streaming.toolCallId, {
-          content: (
-            <ArtifactAttachmentPanelBody
-              isHtml={isHtmlArtifactMimeType(mimeType)}
-              isMarkdown={isMarkdown}
-              language={artifactCodeLanguage(artifact.filename)}
-              mimeType={mimeType}
-              loading={false}
-              error={null}
-              content={text}
-              canPreview
-              artifact={artifact}
-            />
-          ),
+        update(handoffTarget.toolCallId, {
+          title: filename,
+          content: buildStablePanelBody({
+            artifact,
+            content: text,
+            tool: handoffTarget.tool,
+          }),
         });
       })
       .catch((error) => {
-        if (cancelled || activeId !== streaming.toolCallId) {
+        if (cancelled || activeId !== handoffTarget.toolCallId) {
           return;
         }
 
-        update(streaming.toolCallId, {
+        update(handoffTarget.toolCallId, {
           content: (
             <p className="p-4 text-sm text-destructive">{formatError(error)}</p>
           ),
@@ -195,7 +246,7 @@ export function ArtifactStreamingPanelBridge({
     return () => {
       cancelled = true;
     };
-  }, [activeId, messages, profileId, streaming, update]);
+  }, [activeId, handoffTarget, profileId, update]);
 
   return null;
 }

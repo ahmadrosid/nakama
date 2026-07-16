@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatListItem } from "@/lib/chat-history";
 import {
+  findCompletedContentArtifact,
   findLatestStreamingArtifact,
   upsertStreamingToolMessage,
 } from "./chat-stream-artifact";
@@ -55,6 +56,17 @@ describe("upsertStreamingToolMessage", () => {
       }),
     ).toEqual([]);
   });
+
+  test("ignores meta sidecar writes", () => {
+    expect(
+      upsertStreamingToolMessage([], {
+        toolCallId: "call_meta",
+        tool: "write_file",
+        accumulatedArguments:
+          '{"path":"artifacts/report.md.nakama-meta.json","content":"{}"}',
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("findLatestStreamingArtifact", () => {
@@ -78,5 +90,51 @@ describe("findLatestStreamingArtifact", () => {
       filename: "a.md",
       content: "hello",
     });
+  });
+});
+
+describe("findCompletedContentArtifact", () => {
+  const ARTIFACTS_ROOT = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+
+  test("returns completed content artifact path", () => {
+    const messages: ChatListItem[] = [
+      {
+        id: "call_1",
+        role: "tool",
+        content: "write_file completed",
+        toolCallId: "call_1",
+        tool: "write_file",
+        toolStatus: "done",
+        toolResult: {
+          path: `${ARTIFACTS_ROOT}/report.md`,
+          bytesWritten: 12,
+        },
+      },
+    ];
+
+    expect(findCompletedContentArtifact(messages, "call_1")).toEqual({
+      toolCallId: "call_1",
+      tool: "write_file",
+      relativePath: "report.md",
+    });
+  });
+
+  test("ignores completed meta sidecar writes", () => {
+    const messages: ChatListItem[] = [
+      {
+        id: "call_meta",
+        role: "tool",
+        content: "write_file completed",
+        toolCallId: "call_meta",
+        tool: "write_file",
+        toolStatus: "done",
+        toolResult: {
+          path: `${ARTIFACTS_ROOT}/report.md.nakama-meta.json`,
+          bytesWritten: 12,
+        },
+      },
+    ];
+
+    expect(findCompletedContentArtifact(messages, "call_meta")).toBeNull();
   });
 });

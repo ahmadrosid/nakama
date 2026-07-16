@@ -11,7 +11,10 @@ export interface StreamingArtifactToolInput {
 }
 
 function isArtifactMetaRelativePath(relativePath: string): boolean {
-  return relativePath.endsWith(ARTIFACT_META_SUFFIX);
+  return (
+    relativePath.endsWith(ARTIFACT_META_SUFFIX) ||
+    relativePath.includes(".nakama-meta")
+  );
 }
 
 function isArtifactRelativePath(relativePath: string): boolean {

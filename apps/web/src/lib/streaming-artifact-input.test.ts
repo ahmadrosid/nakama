@@ -81,6 +81,20 @@ describe("parseStreamingArtifactToolInput", () => {
     });
   });
 
+  test("rejects partial meta sidecar paths while streaming", () => {
+    expect(
+      parseStreamingArtifactToolInput(
+        "write_file",
+        '{"path":"artifacts/report.md.nakama-meta","content":"{}"}',
+      ),
+    ).toEqual({
+      eligible: false,
+      relativePath: null,
+      filename: null,
+      content: null,
+    });
+  });
+
   test("rejects non-artifact paths", () => {
     expect(
       parseStreamingArtifactToolInput("write_file", '{"path":"SOUL.md","content":"x"}'),

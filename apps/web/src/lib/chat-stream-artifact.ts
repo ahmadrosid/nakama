@@ -1,4 +1,5 @@
 import type { ChatListItem } from "@/lib/chat-history";
+import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 import {
   parseStreamingArtifactToolInput,
   type StreamingArtifactToolInput,
@@ -30,7 +31,7 @@ export function findLatestStreamingArtifact(
       message.toolInputAccumulatedJson,
     );
 
-    if (!parsed.eligible && parsed.content === null) {
+    if (!parsed.eligible) {
       continue;
     }
 
@@ -49,6 +50,64 @@ export function findLatestStreamingArtifact(
   return null;
 }
 
+export interface CompletedContentArtifact {
+  toolCallId: string;
+  tool: string;
+  relativePath: string;
+}
+
+function isContentArtifactTool(tool: string | undefined): boolean {
+  return tool === "write_file" || tool === "write_docx";
+}
+
+function relativePathFromCompletedTool(message: ChatListItem): string | null {
+  const result =
+    typeof message.toolResult === "object" && message.toolResult !== null
+      ? (message.toolResult as { path?: string; error?: string })
+      : null;
+
+  if (!result || typeof result.error === "string" || typeof result.path !== "string") {
+    return null;
+  }
+
+  const relativePath = toArtifactsRelativePath(result.path);
+
+  if (!relativePath || relativePath.includes(".nakama-meta")) {
+    return null;
+  }
+
+  return relativePath;
+}
+
+export function findCompletedContentArtifact(
+  messages: ChatListItem[],
+  toolCallId: string,
+): CompletedContentArtifact | null {
+  const message = messages.find(
+    (entry) =>
+      entry.toolCallId === toolCallId &&
+      entry.role === "tool" &&
+      entry.toolStatus === "done" &&
+      isContentArtifactTool(entry.tool),
+  );
+
+  if (!message?.toolCallId || !message.tool) {
+    return null;
+  }
+
+  const relativePath = relativePathFromCompletedTool(message);
+
+  if (!relativePath) {
+    return null;
+  }
+
+  return {
+    toolCallId: message.toolCallId,
+    tool: message.tool,
+    relativePath,
+  };
+}
+
 export function upsertStreamingToolMessage(
   messages: ChatListItem[],
   event: {
@@ -64,7 +123,7 @@ export function upsertStreamingToolMessage(
     return messages;
   }
 
-  if (!parsed.eligible && parsed.content === null) {
+  if (!parsed.eligible) {
     return messages;
   }
 
