@@ -96,7 +96,6 @@ export function TaskDetailDialog({
         task={task}
         profiles={profiles}
         busy={busy}
-        onOpenChange={onOpenChange}
         onSave={onSave}
         onDelete={onDelete}
         onRun={onRun}
@@ -109,7 +108,6 @@ function TaskDetailDialogContent({
   task,
   profiles,
   busy,
-  onOpenChange,
   onSave,
   onDelete,
   onRun,
@@ -117,7 +115,6 @@ function TaskDetailDialogContent({
   task: StoredTask;
   profiles: ProfileSummary[];
   busy: boolean;
-  onOpenChange: (open: boolean) => void;
   onSave: TaskDetailDialogProps["onSave"];
   onDelete: TaskDetailDialogProps["onDelete"];
   onRun: TaskDetailDialogProps["onRun"];
