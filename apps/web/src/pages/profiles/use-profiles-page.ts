@@ -106,6 +106,7 @@ export function useProfilesPage() {
   const [savedPrompt, setSavedPrompt] = useState("");
   const [savedModel, setSavedModel] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<ProfileSaveStatus>("idle");
+  const [syncedDetailId, setSyncedDetailId] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
@@ -437,31 +438,30 @@ export function useProfilesPage() {
     }
   }, [profiles, searchParams, setSelectedId]);
 
+  const detailId = detail?.id ?? null;
+
+  if (detailId !== syncedDetailId) {
+    setSyncedDetailId(detailId);
+
+    if (detail) {
+      setEditName(detail.name);
+      setEditPrompt(detail.systemPrompt);
+      setEditModel(detail.model);
+      setSavedName(detail.name);
+      setSavedPrompt(detail.systemPrompt);
+      setSavedModel(detail.model);
+      setSaveStatus("idle");
+    }
+  }
+
   useEffect(() => {
-    if (!detail) {
+    if (!detailId) {
       return;
     }
 
     clearScheduledSave();
     pendingSaveRef.current = false;
-    setEditName(detail.name);
-    setEditPrompt(detail.systemPrompt);
-    setEditModel(detail.model);
-    setSavedName(detail.name);
-    setSavedPrompt(detail.systemPrompt);
-    setSavedModel(detail.model);
-    editStateRef.current = {
-      ...editStateRef.current,
-      editName: detail.name,
-      editPrompt: detail.systemPrompt,
-      editModel: detail.model,
-      savedName: detail.name,
-      savedPrompt: detail.systemPrompt,
-      savedModel: detail.model,
-      detail,
-    };
-    setSaveStatus("idle");
-  }, [detail?.id]);
+  }, [clearScheduledSave, detailId]);
 
   useEffect(() => {
     return () => {

@@ -35,7 +35,6 @@ export function AutomationsDetailPanel({
     runsLoading,
     setDeleteRunTarget,
     refetchRuns,
-    goToCreateAutomation,
   } = state;
 
   if (loading) {
