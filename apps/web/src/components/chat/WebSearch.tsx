@@ -3,7 +3,7 @@
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
 import styles from "./WebSearch.module.css";
-import type { WebSearchSiteState, WebSearchSource } from "./web-search.shared";
+import type { WebSearchSiteState, WebSearchSource, WebSourceCardMode } from "./web-search.shared";
 
 const GLOBE_MERIDIANS = {
   L: "M6.057 11.565 C2.081 11.565 0.371 8.159 0.371 5.964 C0.371 3.642 2.152 0.329 6.05 0.329",
@@ -142,6 +142,36 @@ function CheckIcon() {
   );
 }
 
+function LinkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+export interface WebSourceCardProps {
+  mode: WebSourceCardMode;
+  headerText: string;
+  sources: WebSearchSource[];
+  siteStates: WebSearchSiteState[];
+  isComplete: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  formatDisplayUrl?: (source: WebSearchSource) => string;
+}
+
 export interface WebSearchProps {
   query: string;
   sources: WebSearchSource[];
@@ -165,25 +195,39 @@ export function formatWebSearchDisplayUrl(source: WebSearchSource): string {
   }
 }
 
-export function WebSearch({
-  query,
+export function WebSourceCard({
+  mode,
+  headerText,
   sources,
   siteStates,
   isComplete,
   open,
   onOpenChange,
   formatDisplayUrl = formatWebSearchDisplayUrl,
-}: WebSearchProps) {
-  const headerLabel = isComplete ? "Searched" : "Searching";
+}: WebSourceCardProps) {
+  const headerLabel =
+    mode === "fetch"
+      ? isComplete
+        ? "Fetched"
+        : "Fetching"
+      : isComplete
+        ? "Searched"
+        : "Searching";
+  const quoteHeader = mode === "search" || !/^\d+ pages$/.test(headerText);
 
   return (
     <div className={styles.ws} data-state={isComplete ? "done" : "loading"}>
       <div className={styles.wsRow}>
-        <SearchIcon />
+        {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
 
         <span className={styles.wsLabel}>
           <span className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}>
-            {headerLabel} <span className={styles.wsQuote}>&ldquo;{query}&rdquo;</span>
+            {headerLabel}{" "}
+            {quoteHeader ? (
+              <span className={styles.wsQuote}>&ldquo;{headerText}&rdquo;</span>
+            ) : (
+              <span className={styles.wsQuote}>{headerText}</span>
+            )}
           </span>
           {sources.length > 0 ? (
             <button
@@ -260,5 +304,28 @@ export function WebSearch({
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function WebSearch({
+  query,
+  sources,
+  siteStates,
+  isComplete,
+  open,
+  onOpenChange,
+  formatDisplayUrl,
+}: WebSearchProps) {
+  return (
+    <WebSourceCard
+      mode="search"
+      headerText={query}
+      sources={sources}
+      siteStates={siteStates}
+      isComplete={isComplete}
+      open={open}
+      onOpenChange={onOpenChange}
+      formatDisplayUrl={formatDisplayUrl}
+    />
   );
 }

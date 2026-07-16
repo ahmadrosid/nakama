@@ -157,12 +157,12 @@ export function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
     const urlMatch = block.match(/^URL:\s*(.+)$/m);
     const url = urlMatch?.[1]?.trim();
 
-    if (!url) {
+    if (!url || !titleMatch) {
       continue;
     }
 
     const normalized = normalizeSourceUrl(url);
-    const title = titleMatch?.[1]?.trim() || normalized.url;
+    const title = titleMatch[1]?.trim() || normalized.url;
 
     sources.push({
       title,

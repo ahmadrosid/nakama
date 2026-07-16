@@ -14,12 +14,17 @@ import {
   parseSubAgentResult,
 } from "@/lib/chat-stream";
 import { isWebSearchTool } from "@/lib/chat-stream-web-search";
+import { isWebFetchTool } from "@/lib/chat-stream-web-fetch";
 import {
   shouldRenderWebSearchToolRow,
   WebSearchToolRow,
 } from "@/components/chat/WebSearchToolRow";
+import {
+  shouldRenderWebFetchToolRow,
+  WebFetchToolRow,
+} from "@/components/chat/WebFetchToolRow";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
-import { ThinkingContent } from "@/components/chat/thinking-content";
+import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import { cn } from "@/lib/utils";
 
 import {
@@ -29,10 +34,12 @@ export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
   modelLabel,
+  turnComplete = false,
 }: {
   segment: AssistantTurnSegment;
   showThinking?: boolean;
   modelLabel?: string | null;
+  turnComplete?: boolean;
 }) {
   if (segment.kind === "work") {
     return (
@@ -40,6 +47,7 @@ export function AssistantTurnSegmentView({
         thinking={showThinking ? segment.thinking : undefined}
         tools={segment.tools}
         modelLabel={modelLabel}
+        turnComplete={turnComplete}
       />
     );
   }
@@ -47,7 +55,9 @@ export function AssistantTurnSegmentView({
   return (
     <Message from="assistant" className="max-w-full mr-0 ml-0 items-start justify-start">
       <MessageContent className="max-w-full ml-0 group-[.is-user]:ml-0">
-        {showThinking && segment.thinking ? <ThinkingBlock message={segment.thinking} /> : null}
+        {showThinking && segment.thinking ? (
+          <ThinkingBlock message={segment.thinking} turnComplete={turnComplete} />
+        ) : null}
         <AssistantTextContent message={segment.message} />
       </MessageContent>
     </Message>
@@ -80,8 +90,10 @@ function AssistantWorkGroup({
   const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
   const isThinking = Boolean(thinking?.thinkingStreaming);
   const subAgentOnly = visibleTools.every((tool) => isSubAgentTool(tool.tool));
-  const webSearchOnly = visibleTools.every((tool) => isWebSearchTool(tool.tool));
-  const dedicatedOnly = subAgentOnly || webSearchOnly;
+  const webSourceOnly = visibleTools.every(
+    (tool) => isWebSearchTool(tool.tool) || isWebFetchTool(tool.tool),
+  );
+  const dedicatedOnly = subAgentOnly || webSourceOnly;
   const [open, setOpen] = useState(hasRunningTools || isThinking || dedicatedOnly);
 
   useEffect(() => {
@@ -101,7 +113,7 @@ function AssistantWorkGroup({
     );
   }
 
-  if (webSearchOnly) {
+  if (webSourceOnly) {
     return (
       <div className="w-full max-w-full space-y-3">
         {thinking ? <ThinkingBlock message={thinking} /> : null}
@@ -162,32 +174,14 @@ function formatWorkGroupLabel(toolCount: number): string {
 
 function ThinkingBlock({ message }: { message: ChatListItem }) {
   const isStreaming = Boolean(message.thinkingStreaming);
-  const text = message.thinking?.trim();
-  const shouldAutoOpen = Boolean(text) && Boolean(message.streaming);
-  const [open, setOpen] = useState(isStreaming || shouldAutoOpen);
-
-  useEffect(() => {
-    if (isStreaming || shouldAutoOpen) {
-      setOpen(true);
-    }
-  }, [isStreaming, shouldAutoOpen]);
-
-  if (!text && !isStreaming) {
-    return null;
-  }
 
   return (
-    <div className="w-full max-w-full">
-      <CollapsibleTrigger
-        open={open}
-        onToggle={() => setOpen((current) => !current)}
-        label={isStreaming ? "Thinking…" : "Thought"}
-        labelClassName={isStreaming ? "thinking-shimmer-text" : undefined}
-      />
-      {open && text ? (
-        <ThinkingContent className="mt-2 pl-5">{text}</ThinkingContent>
-      ) : null}
-    </div>
+    <ThinkingReasoning
+      text={message.thinking ?? ""}
+      isStreaming={isStreaming}
+      startedAt={message.createdAt}
+      className="w-full max-w-full"
+    />
   );
 }
 
@@ -198,15 +192,21 @@ function ThinkingInline({
   message: ChatListItem;
   isLast: boolean;
 }) {
+  const isStreaming = Boolean(message.thinkingStreaming);
   const text = message.thinking?.trim();
 
-  if (!text) {
+  if (!text && !isStreaming) {
     return null;
   }
 
   return (
     <div className={cn("relative", !isLast && "pb-3")}>
-      <ThinkingContent>{text}</ThinkingContent>
+      <ThinkingReasoning
+        text={message.thinking ?? ""}
+        isStreaming={isStreaming}
+        startedAt={message.createdAt}
+        variant="inline"
+      />
     </div>
   );
 }
@@ -258,7 +258,11 @@ function useElapsedSeconds(active: boolean, startedAt?: string): number {
 }
 
 function isDedicatedTool(tool: ChatListItem): boolean {
-  return isSubAgentTool(tool.tool) || shouldRenderWebSearchToolRow(tool);
+  return (
+    isSubAgentTool(tool.tool) ||
+    shouldRenderWebSearchToolRow(tool) ||
+    shouldRenderWebFetchToolRow(tool)
+  );
 }
 
 function DedicatedToolRow({
@@ -270,6 +274,14 @@ function DedicatedToolRow({
   modelLabel?: string | null;
   isLast?: boolean;
 }) {
+  if (isWebFetchTool(message.tool)) {
+    if (shouldRenderWebFetchToolRow(message)) {
+      return <WebFetchToolRow message={message} />;
+    }
+
+    return <ToolTimelineItem message={message} isLast={isLast} />;
+  }
+
   if (isWebSearchTool(message.tool)) {
     if (shouldRenderWebSearchToolRow(message)) {
       return <WebSearchToolRow message={message} />;

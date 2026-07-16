@@ -299,6 +299,47 @@ describe("chatMessagesToListItems", () => {
     expect(webSearchItems[0]?.toolCallId).toBe("srvtool_abc");
   });
 
+  test("preserves web_fetch tool rows from persisted tool messages", () => {
+    const fetchResult = {
+      url: "https://example.com/start",
+      finalUrl: "https://example.com/docs",
+      status: 200,
+      contentType: "text/markdown",
+      bytes: 42,
+      content: "# Docs",
+    };
+    const messages: ChatMessage[] = [
+      { role: "user", content: "Fetch the docs page" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "tool_fetch_1",
+            name: "web_fetch",
+            arguments: { url: "https://example.com/docs" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "tool_fetch_1",
+        name: "web_fetch",
+        content: JSON.stringify(fetchResult),
+      },
+      { role: "assistant", content: "Here is the page." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+
+    expect(items.find((item) => item.tool === "web_fetch")).toMatchObject({
+      role: "tool",
+      toolStatus: "done",
+      toolInput: { url: "https://example.com/docs" },
+      toolResult: fetchResult,
+    });
+  });
+
   test("preserves Exa MCP web search tool rows from persisted tool messages", () => {
     const exaResult = {
       text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
