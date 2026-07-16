@@ -3,7 +3,7 @@ import { encodeModelSelection, resolveModelThinkingSupport, resolveModelVisionSu
 
 function group(
   providerId: string,
-  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek",
+  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek" | "cerebras",
   flags?: { supportsThinking?: boolean; supportsVision?: boolean },
 ) {
   return [
@@ -91,6 +91,22 @@ describe("resolveModelThinkingSupport", () => {
       ),
     ).toBe(true);
   });
+
+  test("treats cerebras models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras", { supportsThinking: true }),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("resolveModelVisionSupport", () => {
@@ -131,5 +147,21 @@ describe("resolveModelVisionSupport", () => {
         group("openai-1", "openai", { supportsVision: false }),
       ),
     ).toBe(false);
+  });
+
+  test("treats cerebras models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras", { supportsVision: true }),
+      ),
+    ).toBe(true);
   });
 });

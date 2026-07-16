@@ -40,6 +40,35 @@ export function openRouterCustomModelsToCatalog(
   }));
 }
 
+function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
+  if (entry.supportsThinking !== undefined) {
+    return entry.supportsThinking;
+  }
+
+  return false;
+}
+
+export function cerebrasCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+): ProviderModelOption[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    name: entry.name?.trim() || entry.id,
+    provider: "cerebras" as const,
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxOutputTokens: DEFAULT_MAX_OUTPUT,
+    supportsThinking: resolveCerebrasCatalogThinking(entry),
+    ...(entry.supportsVision !== undefined ? { supportsVision: entry.supportsVision } : {}),
+    ...(entry.default ? { default: true } : {}),
+    ...(entry.inputPerMillionUsd !== undefined
+      ? { inputPerMillionUsd: entry.inputPerMillionUsd }
+      : {}),
+    ...(entry.outputPerMillionUsd !== undefined
+      ? { outputPerMillionUsd: entry.outputPerMillionUsd }
+      : {}),
+  }));
+}
+
 export function catalogCustomModelsToCatalog(
   entries: CustomModelEntry[],
   staticModels: ProviderModelOption[],
@@ -192,6 +221,17 @@ export function getModelsForProviderInstance(
     );
   }
 
+  if (instance.type === "cerebras") {
+    const entries = instance.customModels ?? [];
+    const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "cerebras");
+    const catalog = entries.length
+      ? cerebrasCustomModelsToCatalog(entries)
+      : staticModels;
+    return annotate(
+      ensureCurrentModelInCatalog(catalog, currentModel, "cerebras"),
+    );
+  }
+
   if (
     instance.type === "openai" ||
     instance.type === "anthropic" ||
@@ -242,6 +282,24 @@ export function resolveOpenRouterDefaultModel(
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??
     "anthropic/claude-sonnet-4-6"
+  );
+}
+
+export function resolveCerebrasDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = cerebrasCustomModelsToCatalog(customModels ?? []);
+  return (
+    catalog.find((entry) => entry.default)?.id ??
+    catalog[0]?.id ??
+    "gpt-oss-120b"
   );
 }
 

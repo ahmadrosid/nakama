@@ -47,6 +47,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "cerebras" ||
     provider === "openai_compatible" ||
     provider === "opencode_go"
   ) {
@@ -62,6 +63,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = 
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "cerebras", label: "Cerebras" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
@@ -73,6 +75,10 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
 
   if (provider === "openrouter") {
     return "sk-or-v1-…";
+  }
+
+  if (provider === "cerebras") {
+    return "csk-…";
   }
 
   if (provider === "gemini") {
@@ -174,6 +180,29 @@ export function validateOpenRouterModelsInput(
   return null;
 }
 
+export function validateCerebrasModelsInput(
+  models: Array<{
+    id: string;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>,
+): string | null {
+  const listError = validateCustomModelsInput(models);
+  if (listError) {
+    return listError;
+  }
+
+  for (const row of models) {
+    const hasInput = row.inputPerMillionUsd !== undefined;
+    const hasOutput = row.outputPerMillionUsd !== undefined;
+    if (hasInput !== hasOutput) {
+      return `Model "${row.id.trim()}" must set both input and output $/1M rates, or leave both blank.`;
+    }
+  }
+
+  return null;
+}
+
 const OPENCODE_GO_MODEL_ID_PATTERN = /^opencode-go\/[\w.-]+$/;
 
 export function validateOpenCodeGoModelId(model: string): string | null {
@@ -206,6 +235,46 @@ export function validateOpenCodeGoModelsInput(
   }
 
   return null;
+}
+
+export function modelsFromCerebrasRows(
+  rows: Array<{
+    id: string;
+    name?: string;
+    default?: boolean;
+    supportsThinking?: boolean;
+    supportsVision?: boolean;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>,
+): ProviderModelOption[] {
+  const models: ProviderModelOption[] = [];
+
+  for (const row of rows) {
+    const id = row.id.trim();
+    if (!id) {
+      continue;
+    }
+
+    models.push({
+      id,
+      name: row.name?.trim() || id,
+      provider: "cerebras" as const,
+      ...(row.default ? { default: true } : {}),
+      ...(row.supportsThinking !== undefined
+        ? { supportsThinking: row.supportsThinking }
+        : {}),
+      ...(row.supportsVision !== undefined ? { supportsVision: row.supportsVision } : {}),
+      ...(row.inputPerMillionUsd !== undefined
+        ? { inputPerMillionUsd: row.inputPerMillionUsd }
+        : {}),
+      ...(row.outputPerMillionUsd !== undefined
+        ? { outputPerMillionUsd: row.outputPerMillionUsd }
+        : {}),
+    });
+  }
+
+  return models;
 }
 
 export function modelsFromOpenRouterRows(
@@ -325,6 +394,13 @@ export function appendOpenRouterModelRow(
   ];
 }
 
+export function resolveCerebrasSetupModel(
+  rows: Array<{ id: string; default?: boolean }>,
+  selectedModel: string,
+): string {
+  return resolveOpenRouterSetupModel(rows, selectedModel);
+}
+
 export function resolveOpenRouterSetupModel(
   rows: Array<{ id: string; default?: boolean }>,
   selectedModel: string,
@@ -408,6 +484,13 @@ export function buildConfigureProviderRequest(options: {
   }
 
   if (options.provider === "openrouter" && options.customModels?.length) {
+    return {
+      ...request,
+      customModels: options.customModels,
+    };
+  }
+
+  if (options.provider === "cerebras" && options.customModels?.length) {
     return {
       ...request,
       customModels: options.customModels,
@@ -609,7 +692,8 @@ export function resolveModelThinkingSupport(
   if (
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
-    model.provider === "deepseek"
+    model.provider === "deepseek" ||
+    model.provider === "cerebras"
   ) {
     return model.supportsThinking === true;
   }
@@ -652,7 +736,7 @@ export function resolveModelVisionSupport(
     return undefined;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek") {
+  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras") {
     return model.supportsVision === true;
   }
 

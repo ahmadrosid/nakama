@@ -46,6 +46,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   ]),
   openai_compatible: new Set<string>(),
   deepseek: new Set<string>(),
+  cerebras: new Set<string>(),
   opencode_go: new Set<string>(),
 };
 

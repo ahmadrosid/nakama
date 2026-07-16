@@ -20,7 +20,9 @@ import {
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
+import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { ProviderSelect } from "@/components/ProviderSelect";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
   apiKeyPlaceholder,
@@ -63,38 +65,20 @@ export function ProviderSetupForm({
       )}
 
       <FormField id="provider" label="Provider" density={density}>
-        <Select
+        <ProviderSelect
+          id="provider"
           value={isBrowsing ? "__browse__" : form.selectedProvider}
           disabled={form.busy}
-          onValueChange={(v) => {
-            if (v === "__browse__") {
+          onValueChange={(nextValue) => {
+            if (nextValue === "__browse__") {
               setIsBrowsing(true);
-            } else if (isSelectedProvider(v)) {
-              setIsBrowsing(false);
-              form.handleProviderSelect(v);
+              return;
             }
+
+            setIsBrowsing(false);
+            form.handleProviderSelect(nextValue);
           }}
-        >
-          <SelectTrigger
-            id="provider"
-            className={density === "compact" ? "w-full" : "w-full sm:max-w-sm"}
-          >
-            <SelectValue>
-              {isBrowsing
-                ? "Browse models.dev…"
-                : (PROVIDER_OPTIONS.find((o) => o.id === form.selectedProvider)?.label ??
-                  form.selectedProvider)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {PROVIDER_OPTIONS.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.label}
-              </SelectItem>
-            ))}
-            <SelectItem value="__browse__">Browse models.dev…</SelectItem>
-          </SelectContent>
-        </Select>
+        />
       </FormField>
 
       {isBrowsing ? (
@@ -104,34 +88,6 @@ export function ProviderSetupForm({
         />
       ) : (
         <>
-          {form.selectedProvider === "openai_compatible" ? (
-            <CustomProviderFields
-              displayName={form.displayName}
-              baseUrl={form.baseUrl}
-              apiKey={form.apiKey}
-              customModels={form.customModels}
-              disabled={form.busy}
-              density={density}
-              showThinkingToggle
-              displayNameError={form.displayNameError}
-              baseUrlError={form.baseUrlError}
-              modelsError={form.modelsError}
-              onDisplayNameChange={form.setDisplayName}
-              onBaseUrlChange={form.setBaseUrl}
-              onCustomModelsChange={form.setCustomModels}
-            />
-          ) : null}
-
-          {form.selectedProvider === "openrouter" ? (
-            <OpenRouterProviderModelFields
-              customModels={form.openRouterModels}
-              disabled={form.busy}
-              density={density}
-              modelsError={form.openRouterModelsError}
-              onCustomModelsChange={form.handleOpenRouterModelsChange}
-            />
-          ) : null}
-
           <FormField
             id="api-key"
             label={form.selectedProvider === "openai_compatible" ? "API key (optional)" : "API key"}
@@ -176,7 +132,46 @@ export function ProviderSetupForm({
             </InputGroup>
           </FormField>
 
+          {form.selectedProvider === "openai_compatible" ? (
+            <CustomProviderFields
+              displayName={form.displayName}
+              baseUrl={form.baseUrl}
+              apiKey={form.apiKey}
+              customModels={form.customModels}
+              disabled={form.busy}
+              density={density}
+              showThinkingToggle
+              displayNameError={form.displayNameError}
+              baseUrlError={form.baseUrlError}
+              modelsError={form.modelsError}
+              onDisplayNameChange={form.setDisplayName}
+              onBaseUrlChange={form.setBaseUrl}
+              onCustomModelsChange={form.setCustomModels}
+            />
+          ) : null}
+
+          {form.selectedProvider === "openrouter" ? (
+            <OpenRouterProviderModelFields
+              customModels={form.openRouterModels}
+              disabled={form.busy}
+              density={density}
+              modelsError={form.openRouterModelsError}
+              onCustomModelsChange={form.handleOpenRouterModelsChange}
+            />
+          ) : null}
+
+          {form.selectedProvider === "cerebras" ? (
+            <CerebrasProviderModelFields
+              customModels={form.cerebrasModels}
+              disabled={form.busy}
+              density={density}
+              modelsError={form.cerebrasModelsError}
+              onCustomModelsChange={form.handleCerebrasModelsChange}
+            />
+          ) : null}
+
           {form.selectedProvider !== "openrouter" &&
+          form.selectedProvider !== "cerebras" &&
           form.selectedProvider !== "openai_compatible" ? (
             <FormField id="model" label="Model" density={density}>
               <Select
@@ -227,12 +222,4 @@ export function ProviderSetupForm({
       )}
     </form>
   );
-}
-
-function isSelectedProvider(value: string | null): value is SelectedProvider {
-  if (value == null) {
-    return false;
-  }
-
-  return PROVIDER_OPTIONS.some((option) => option.id === value);
 }

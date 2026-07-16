@@ -173,4 +173,25 @@ describe("applyProviderInstanceUpdate", () => {
     expect(modelExistsOnInstance(updated, "gpt-5.4")).toBe(true);
     expect(modelExistsOnInstance(updated, "gpt-5.3-codex")).toBe(false);
   });
+
+  test("validates cerebras models against shortlist and static catalog", () => {
+    const withShortlist = createProviderInstance({
+      id: "cb-1",
+      type: "cerebras",
+      label: "Cerebras",
+      customModels: [{ id: "gpt-oss-120b", name: "GPT OSS 120B", default: true }],
+    });
+
+    expect(modelExistsOnInstance(withShortlist, "gpt-oss-120b")).toBe(true);
+    expect(modelExistsOnInstance(withShortlist, "gemma-4-31b")).toBe(false);
+
+    const withoutShortlist = createProviderInstance({
+      id: "cb-2",
+      type: "cerebras",
+      label: "Cerebras",
+    });
+
+    expect(modelExistsOnInstance(withoutShortlist, "gemma-4-31b")).toBe(true);
+    expect(modelExistsOnInstance(withoutShortlist, "unknown-model")).toBe(false);
+  });
 });

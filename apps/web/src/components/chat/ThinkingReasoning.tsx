@@ -163,6 +163,7 @@ export function ThinkingReasoning({
 
   const expanded = done ? open : true;
   const showTimeline = sentences.length > 0 || Boolean(children);
+  const anchored = expanded && (sentences.length > 0 || Boolean(children));
 
   const toggle = () => {
     if (!done) {
@@ -175,7 +176,7 @@ export function ThinkingReasoning({
     <div
       className={cn(
         styles.root,
-        (sentences.length > 0 || (isWorkActive && children)) && styles.rootAnchored,
+        anchored && styles.rootAnchored,
         className,
       )}
     >

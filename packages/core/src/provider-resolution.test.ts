@@ -12,6 +12,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("cerebras")).toBe("cerebras");
   });
 
   test("rejects unknown values", () => {
@@ -77,5 +78,17 @@ describe("resolveProvider deepseek", () => {
     });
 
     expect(provider).toBeNull();
+  });
+});
+
+describe("resolveProvider cerebras", () => {
+  test("auto-resolves Cerebras when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        CEREBRAS_API_KEY: "sk-test",
+      },
+    });
+
+    expect(provider).toBe("cerebras");
   });
 });

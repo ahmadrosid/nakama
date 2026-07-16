@@ -7,6 +7,7 @@ import type { ProviderName } from "@nakama/core";
 import type { ProviderModelOption as ContractProviderModelOption } from "@nakama/core/contract";
 import {
   resolveCompatibleDefaultModel,
+  resolveCerebrasDefaultModel,
   resolveOpenRouterDefaultModel,
 } from "./compatible-models";
 
@@ -126,6 +127,40 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsThinking: true,
     inputPerMillionUsd: 0.435,
     outputPerMillionUsd: 0.87,
+  },
+  {
+    id: "gpt-oss-120b",
+    name: "OpenAI GPT OSS",
+    provider: "cerebras",
+    contextWindow: 131_072,
+    maxOutputTokens: 40_960,
+    default: true,
+    supportsThinking: true,
+    supportsVision: false,
+    inputPerMillionUsd: 0.35,
+    outputPerMillionUsd: 0.75,
+  },
+  {
+    id: "gemma-4-31b",
+    name: "Gemma 4 31B",
+    provider: "cerebras",
+    contextWindow: 131_072,
+    maxOutputTokens: 40_960,
+    supportsThinking: true,
+    supportsVision: true,
+    inputPerMillionUsd: 0.99,
+    outputPerMillionUsd: 1.49,
+  },
+  {
+    id: "zai-glm-4.7",
+    name: "Z.ai GLM 4.7",
+    provider: "cerebras",
+    contextWindow: 131_072,
+    maxOutputTokens: 40_960,
+    supportsThinking: true,
+    supportsVision: false,
+    inputPerMillionUsd: 2.25,
+    outputPerMillionUsd: 2.75,
   },
   {
     id: "opencode-go/glm-5.1",
@@ -285,6 +320,10 @@ export function validateOpenRouterCustomModels(entries: unknown): CustomModelEnt
   return models;
 }
 
+export function validateCerebrasCustomModels(entries: unknown): CustomModelEntry[] {
+  return validateCustomModels(entries);
+}
+
 export function isOpenCodeGoModelId(model: string): boolean {
   return model.trim().startsWith("opencode-go/");
 }
@@ -329,6 +368,10 @@ export function getDefaultModel(
     return resolveOpenRouterDefaultModel(customModels);
   }
 
+  if (provider === "cerebras" && customModels?.length) {
+    return resolveCerebrasDefaultModel(customModels);
+  }
+
   if (
     (provider === "openai" ||
       provider === "anthropic" ||
@@ -350,6 +393,8 @@ export function getDefaultModel(
           ? "gemini-2.5-flash"
           : provider === "deepseek"
             ? "deepseek-v4-flash"
+          : provider === "cerebras"
+            ? "gpt-oss-120b"
           : provider === "opencode_go"
             ? "opencode-go/kimi-k2.7-code"
             : "gpt-5.4";
@@ -371,6 +416,14 @@ export function resolveModel(
     return trimmed;
   }
 
+  if (trimmed && provider === "cerebras" && customModels?.length) {
+    if (findCustomModel(customModels, trimmed)) {
+      return trimmed;
+    }
+
+    return resolveCerebrasDefaultModel(customModels, trimmed);
+  }
+
   if (trimmed && provider === "openai_compatible") {
     if (findCustomModel(customModels, trimmed)) {
       return trimmed;
@@ -385,6 +438,7 @@ export function resolveModel(
       provider === "anthropic" ||
       provider === "gemini" ||
       provider === "deepseek" ||
+      provider === "cerebras" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -429,6 +483,15 @@ export function modelSupportsVision(
 
   if (provider === "openai_compatible" || provider === "opencode_go" || provider === "deepseek") {
     return false;
+  }
+
+  if (provider === "cerebras") {
+    if (custom?.supportsVision !== undefined) {
+      return custom.supportsVision;
+    }
+
+    const catalog = getModelById(modelId);
+    return catalog?.supportsVision ?? false;
   }
 
   const catalog = getModelById(modelId);
