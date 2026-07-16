@@ -174,9 +174,6 @@
 .timeline {
   position: relative;
   margin-top: 8px;
-  margin-left: 4px;
-  border-left: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-  padding-left: 12px;
 }
 
 .timeline .viewport {

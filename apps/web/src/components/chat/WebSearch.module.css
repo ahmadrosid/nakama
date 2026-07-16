@@ -23,22 +23,55 @@
   align-items: center;
   gap: 6px;
   min-height: 20px;
+  width: 100%;
 }
 
-.wsRow > svg {
+.wsRowButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--c-muted);
+  transition: color 0.16s var(--ease);
+}
+
+.wsRowButton:hover {
+  color: var(--c-text);
+}
+
+.wsRow > svg,
+.wsRowButton > svg {
   flex: none;
   color: var(--c-muted);
   margin-left: -1px;
 }
 
+.wsRowButton:hover > svg {
+  color: var(--c-muted);
+}
+
 .wsLabel {
-  display: inline-flex;
+  display: flex;
+  flex: 1;
   align-items: center;
-  gap: 4px;
-  font-weight: 550;
-  color: var(--c-text);
-  white-space: nowrap;
   min-width: 0;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.wsRowButton .wsLabel {
+  color: inherit;
+}
+
+.wsRow .wsLabel {
+  color: var(--c-text);
 }
 
 .wsQuote {
@@ -70,26 +103,26 @@
   color: var(--c-text);
 }
 
-.wsChevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border: none;
-  background: none;
-  color: var(--c-subtle);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: color 0.16s var(--ease), transform 0.28s var(--ease);
+.wsRowButton .wsShimmer.isDone {
+  -webkit-text-fill-color: currentColor;
+  color: currentColor;
 }
 
-.wsChevron:hover {
+.wsChevronIcon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: var(--c-subtle);
+  transition: transform 0.2s var(--ease), color 0.16s var(--ease);
+}
+
+.wsRowButton:hover .wsChevronIcon {
   color: var(--c-muted);
 }
 
-.wsChevron[aria-expanded="false"] {
-  transform: rotate(180deg);
+.wsChevronCollapsed {
+  transform: rotate(-90deg);
 }
 
 .wsCollapsible {

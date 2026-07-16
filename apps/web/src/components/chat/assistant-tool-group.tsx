@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, WrenchIcon } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import type { ChatListItem } from "@/lib/chat-history";
 import {
@@ -11,6 +11,7 @@ import {
   formatToolCommand,
   formatToolResult,
   isSubAgentTool,
+  isToolResultError,
   parseSubAgentResult,
 } from "@/lib/chat-stream";
 import {
@@ -25,6 +26,7 @@ import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
 import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
+import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { cn } from "@/lib/utils";
 
 import {
@@ -112,26 +114,15 @@ function AssistantWorkGroup({
       startedAt={thinking.createdAt}
       className="w-full max-w-full"
     >
-      {visibleTools.map((tool, index) =>
-        isDedicatedTool(tool) ? (
-          <div
-            key={tool.id}
-            className={cn("relative", index < visibleTools.length - 1 && "pb-3")}
-          >
-            <DedicatedToolRow
-              message={tool}
-              modelLabel={modelLabel}
-              isLast={index === visibleTools.length - 1}
-            />
-          </div>
-        ) : (
-          <ToolTimelineItem
-            key={tool.id}
-            message={tool}
-            isLast={index === visibleTools.length - 1}
-          />
-        ),
-      )}
+      {visibleTools.map((tool, index) => (
+        <TimelineStep key={tool.id} isLast={index === visibleTools.length - 1}>
+          {isDedicatedTool(tool) ? (
+            <DedicatedToolRow message={tool} modelLabel={modelLabel} />
+          ) : (
+            <ToolTimelineItem message={tool} />
+          )}
+        </TimelineStep>
+      ))}
     </ThinkingReasoning>
   );
 }
@@ -148,6 +139,7 @@ function ToolOnlyWorkGroup({
   const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
   const isWorkActive = !turnComplete || hasRunningTools;
   const [open, setOpen] = useState(isWorkActive);
+  const elapsedSeconds = useWorkDuration(isWorkActive, tools[0]?.createdAt);
 
   useEffect(() => {
     if (isWorkActive) {
@@ -161,46 +153,83 @@ function ToolOnlyWorkGroup({
     return () => window.clearTimeout(timerId);
   }, [isWorkActive]);
 
-  const label = formatWorkGroupLabel(tools.length);
+  const done = !isWorkActive;
+  const expanded = done ? open : true;
+  const toolLabel = tools.length === 1 ? "1 tool" : `${tools.length} tools`;
 
   return (
-    <div className="w-full max-w-full">
-      <CollapsibleTrigger
-        open={open}
-        onToggle={() => setOpen((current) => !current)}
-        label={label}
-      />
-      {open ? (
-        <TimelineBody>
-          {tools.map((tool, index) =>
-            isDedicatedTool(tool) ? (
-              <div key={tool.id} className={cn("relative", index < tools.length - 1 && "pb-3")}>
-                <DedicatedToolRow
-                  message={tool}
-                  modelLabel={modelLabel}
-                  isLast={index === tools.length - 1}
-                />
-              </div>
+    <div className={cn(thinkingStyles.root, "w-full max-w-full")}>
+      <div className="flex min-w-0 gap-2">
+        <TimelineRail showLine={expanded && tools.length > 0} />
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            className={cn(
+              thinkingStyles.header,
+              done && thinkingStyles.headerClickable,
+              expanded && thinkingStyles.headerExpanded,
+            )}
+            aria-expanded={expanded}
+            aria-label="Toggle tools"
+            onClick={() => done && setOpen((current) => !current)}
+          >
+            {done ? (
+              <span className={thinkingStyles.label}>
+                <span className={thinkingStyles.verb}>Used</span> {toolLabel} ·{" "}
+                {formatElapsedSeconds(elapsedSeconds)}
+              </span>
             ) : (
-              <ToolTimelineItem
-                key={tool.id}
-                message={tool}
-                isLast={index === tools.length - 1}
-              />
-            ),
-          )}
-        </TimelineBody>
-      ) : null}
+              <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>Working…</span>
+            )}
+            {done ? (
+              <svg
+                className={thinkingStyles.chevron}
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                aria-hidden="true"
+              >
+                <path
+                  d="m4.5 15.75 7.5-7.5 7.5 7.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : null}
+          </button>
+
+          <div
+            className={cn(
+              thinkingStyles.collapsible,
+              !expanded && thinkingStyles.collapsibleCollapsed,
+            )}
+          >
+            <div className={thinkingStyles.inner}>
+              <div className={thinkingStyles.timeline}>
+                <div className={thinkingStyles.tools}>
+                  {tools.map((tool, index) => (
+                    <div
+                      key={tool.id}
+                      className={cn("timeline-tool-content [&_.wsRow>svg]:ml-0", index < tools.length - 1 && "pb-3")}
+                    >
+                      {isDedicatedTool(tool) ? (
+                        <DedicatedToolRow message={tool} modelLabel={modelLabel} />
+                      ) : (
+                        <ToolTimelineItem message={tool} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
-
-function formatWorkGroupLabel(toolCount: number): string {
-  if (toolCount === 1) {
-    return "Called 1 tool";
-  }
-
-  return `Called ${toolCount} tools`;
 }
 
 function ThinkingBlock({
@@ -245,6 +274,42 @@ function formatElapsedSeconds(totalSeconds: number): string {
   return remainderMinutes > 0 ? `${hours}h ${remainderMinutes}m` : `${hours}h`;
 }
 
+function useWorkDuration(active: boolean, startedAt?: string): number {
+  const anchorRef = useRef<number | null>(null);
+  const frozenRef = useRef<number | null>(null);
+  const [elapsed, setElapsed] = useState(1);
+
+  useEffect(() => {
+    if (anchorRef.current === null) {
+      const parsed = startedAt ? new Date(startedAt).getTime() : Number.NaN;
+      anchorRef.current = Number.isNaN(parsed) ? Date.now() : parsed;
+    }
+
+    if (!active) {
+      if (frozenRef.current === null) {
+        frozenRef.current = Math.max(
+          1,
+          Math.floor((Date.now() - anchorRef.current) / 1000),
+        );
+      }
+      setElapsed(frozenRef.current);
+      return;
+    }
+
+    frozenRef.current = null;
+
+    const update = () => {
+      setElapsed(Math.max(1, Math.floor((Date.now() - anchorRef.current!) / 1000)));
+    };
+
+    update();
+    const intervalId = window.setInterval(update, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [active, startedAt]);
+
+  return elapsed;
+}
+
 function useElapsedSeconds(active: boolean, startedAt?: string): number {
   const anchorRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -284,18 +349,16 @@ function isDedicatedTool(tool: ChatListItem): boolean {
 function DedicatedToolRow({
   message,
   modelLabel,
-  isLast = false,
 }: {
   message: ChatListItem;
   modelLabel?: string | null;
-  isLast?: boolean;
 }) {
   if (isWebFetchTool(message.tool)) {
     if (shouldRenderWebFetchToolRow(message)) {
       return <WebFetchToolRow message={message} />;
     }
 
-    return <ToolTimelineItem message={message} isLast={isLast} />;
+    return <ToolTimelineItem message={message} />;
   }
 
   if (isWebSearchTool(message.tool)) {
@@ -303,7 +366,7 @@ function DedicatedToolRow({
       return <WebSearchToolRow message={message} />;
     }
 
-    return <ToolTimelineItem message={message} isLast={isLast} />;
+    return <ToolTimelineItem message={message} />;
   }
 
   return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
@@ -370,8 +433,11 @@ function SubAgentToolRow({
             type="button"
             aria-expanded={expanded}
             onClick={() => setOpen((current) => !current)}
-            className="flex items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="flex w-full items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
+            <span className="min-w-0 flex-1">
+              {expanded ? "Hide full output" : "Show full output"}
+            </span>
             <ChevronDownIcon
               className={cn(
                 "size-3.5 shrink-0 transition-transform duration-200",
@@ -379,7 +445,6 @@ function SubAgentToolRow({
               )}
               aria-hidden
             />
-            <span>{expanded ? "Hide full output" : "Show full output"}</span>
           </button>
           {expanded && output ? <DetailBlock label="Output" content={output} tone="output" /> : null}
         </div>
@@ -434,22 +499,22 @@ function SubAgentMark({ className, active }: { className?: string; active?: bool
   );
 }
 
-function ToolTimelineItem({
-  message,
-  isLast,
-}: {
-  message: ChatListItem;
-  isLast: boolean;
-}) {
+function ToolTimelineItem({ message }: { message: ChatListItem }) {
   const isRunning = message.toolStatus === "running";
   const label = formatToolActionLabel(message.tool, message.toolInput);
-  const command = formatToolCommand(message.tool, message.toolInput);
+  const command =
+    message.tool === "bash"
+      ? formatToolCommand(message.tool, message.toolInput)
+      : null;
   const output =
     message.toolStatus === "done"
       ? formatToolResult(message.tool, message.toolResult)
       : null;
+  const isError =
+    message.toolStatus === "done" &&
+    isToolResultError(message.toolResult, output);
   const hasDetails = Boolean(isRunning || command || output);
-  const [open, setOpen] = useState(isRunning);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (isRunning) {
@@ -457,17 +522,16 @@ function ToolTimelineItem({
       return;
     }
 
-    if (message.toolStatus === "done") {
-      setOpen(false);
-    }
+    setOpen(false);
   }, [isRunning, message.toolStatus]);
 
   return (
-    <div className={cn("relative", !isLast && "pb-3")}>
+    <div>
       <CollapsibleTrigger
         open={open}
         onToggle={() => hasDetails && setOpen((current) => !current)}
         label={label}
+        labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
         disabled={!hasDetails}
         className="pl-0"
       />
@@ -477,7 +541,11 @@ function ToolTimelineItem({
           {isRunning ? (
             <p className="font-mono text-xs text-muted-foreground">Waiting for output…</p>
           ) : output ? (
-            <DetailBlock label="Output" content={output} tone="output" />
+            <DetailBlock
+              label={isError ? "Error" : "Output"}
+              content={output}
+              tone={isError ? "error" : "output"}
+            />
           ) : command ? null : (
             <p className="font-mono text-xs text-muted-foreground">No output returned.</p>
           )}
@@ -485,6 +553,10 @@ function ToolTimelineItem({
       ) : null}
     </div>
   );
+}
+
+function DefaultToolIcon({ className }: { className?: string }) {
+  return <WrenchIcon className={cn("size-3.5 shrink-0 text-muted-foreground", className)} aria-hidden />;
 }
 
 function CollapsibleTrigger({
@@ -513,9 +585,9 @@ function CollapsibleTrigger({
         className,
       )}
     >
-      {disabled ? (
-        <span className="size-3.5 shrink-0" aria-hidden />
-      ) : (
+      <DefaultToolIcon />
+      <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>{label}</span>
+      {disabled ? null : (
         <ChevronDownIcon
           className={cn(
             "size-3.5 shrink-0 transition-transform duration-200",
@@ -524,14 +596,36 @@ function CollapsibleTrigger({
           aria-hidden
         />
       )}
-      <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>{label}</span>
     </button>
   );
 }
 
-function TimelineBody({ children }: { children: ReactNode }) {
+function TimelineRail({ showLine = true }: { showLine?: boolean }) {
   return (
-    <div className="relative mt-2 ml-1 border-l border-border/70 pl-3">{children}</div>
+    <div className="relative w-2 shrink-0 self-stretch">
+      {showLine ? (
+        <div
+          className="pointer-events-none absolute left-1/2 top-[10px] bottom-0 w-px -translate-x-1/2 bg-border/70"
+          aria-hidden
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Vertical connector between tool steps — line sits in a left rail, clear of icons. */
+function TimelineStep({
+  children,
+  isLast,
+}: {
+  children: ReactNode;
+  isLast: boolean;
+}) {
+  return (
+    <div className={cn("flex min-w-0 gap-2", !isLast && "pb-3")}>
+      <TimelineRail showLine={!isLast} />
+      <div className="timeline-tool-content min-w-0 flex-1 [&_.wsRow>svg]:ml-0">{children}</div>
+    </div>
   );
 }
 
@@ -542,17 +636,33 @@ function DetailBlock({
 }: {
   label: string;
   content: string;
-  tone: "command" | "output";
+  tone: "command" | "output" | "error";
 }) {
   return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-border/70 bg-muted/20">
-      <div className="border-b border-border/70 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+    <div
+      className={cn(
+        "mt-2 overflow-hidden rounded-lg border bg-muted/20",
+        tone === "error" ? "border-red-300/70 dark:border-red-900/70" : "border-border/70",
+      )}
+    >
+      <div
+        className={cn(
+          "border-b px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.08em]",
+          tone === "error"
+            ? "border-red-300/70 text-red-600 dark:border-red-900/70 dark:text-red-400"
+            : "border-border/70 text-muted-foreground",
+        )}
+      >
         {label}
       </div>
       <pre
         className={cn(
           "max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
-          tone === "output" ? "text-emerald-700 dark:text-emerald-300" : "text-foreground",
+          tone === "error"
+            ? "text-red-700 dark:text-red-300"
+            : tone === "output"
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-foreground",
         )}
       >
         {content}

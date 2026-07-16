@@ -79,6 +79,30 @@ export function formatToolResult(tool: string | undefined, result: unknown): str
   return formatDefaultToolResult(result);
 }
 
+export function isToolResultError(result: unknown, formattedOutput: string | null): boolean {
+  if (typeof result === "object" && result !== null) {
+    const record = result as { error?: unknown; exitCode?: number | null; timedOut?: boolean };
+    const error = record.error;
+
+    if (typeof error === "string" && error.trim()) {
+      return true;
+    }
+
+    if (record.timedOut || (record.exitCode != null && record.exitCode !== 0)) {
+      return true;
+    }
+  }
+
+  if (
+    formattedOutput &&
+    /^(unknown tool|error:|failed\b|\[stderr\]|\[exit code|\[timed out\])/i.test(formattedOutput)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isSubAgentTool(tool: string | undefined): boolean {
   return tool === "sub_agent";
 }

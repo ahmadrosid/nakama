@@ -22,6 +22,20 @@ interface PublicShareMetadata {
   inlineAllowed: boolean;
 }
 
+const HIDDEN_SCROLLBAR_STYLE = `<style data-nakama-share-preview>html,body{scrollbar-width:none;-ms-overflow-style:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}</style>`;
+
+function htmlForSharePreview(html: string): string {
+  if (/<head[\s>]/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${HIDDEN_SCROLLBAR_STYLE}`);
+  }
+
+  if (/<html[\s>]/i.test(html)) {
+    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${HIDDEN_SCROLLBAR_STYLE}</head>`);
+  }
+
+  return `${HIDDEN_SCROLLBAR_STYLE}${html}`;
+}
+
 export function PublicArtifactSharePage() {
   const { token = "" } = useParams();
   const [loading, setLoading] = useState(true);
@@ -122,7 +136,7 @@ export function PublicArtifactSharePage() {
         );
 
         if (isHtmlArtifactMimeType(contentType)) {
-          setContent(new TextDecoder().decode(bytes));
+          setContent(htmlForSharePreview(new TextDecoder().decode(bytes)));
         } else if (looksLikeUtf8Text(bytes)) {
           setContent(new TextDecoder().decode(bytes));
         } else {
@@ -149,7 +163,12 @@ export function PublicArtifactSharePage() {
   const downloadUrl = `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`;
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    <div
+      className={cn(
+        "bg-background text-foreground",
+        isHtml ? "flex h-svh flex-col overflow-hidden" : "min-h-svh",
+      )}
+    >
       <header className="border-b border-border px-4 py-3">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="min-w-0">
@@ -171,8 +190,9 @@ export function PublicArtifactSharePage() {
 
       <main
         className={cn(
-          "mx-auto max-w-5xl px-4 py-6",
-          isHtml && "flex h-[calc(100svh-4rem)] flex-col",
+          isHtml
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+            : "mx-auto max-w-5xl px-4 py-6",
         )}
       >
         {loading ? (

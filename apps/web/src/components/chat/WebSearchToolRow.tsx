@@ -10,13 +10,16 @@ import {
 export function WebSearchToolRow({ message }: { message: ChatListItem }) {
   const state = buildWebSearchToolState(message);
   const isRunning = state.status === "running";
-  const [open, setOpen] = useState(isRunning);
+  const [open, setOpen] = useState(false);
   const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
 
   useEffect(() => {
     if (isRunning) {
       setOpen(true);
+      return;
     }
+
+    setOpen(false);
   }, [isRunning]);
 
   if (!shouldRenderWebSearchToolRow(message)) {
