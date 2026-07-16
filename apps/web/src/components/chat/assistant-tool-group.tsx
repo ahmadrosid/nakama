@@ -76,60 +76,88 @@ function AssistantWorkGroup({
   thinking,
   tools,
   modelLabel,
+  turnComplete = false,
 }: {
   thinking?: ChatListItem;
   tools: ChatListItem[];
   modelLabel?: string | null;
+  turnComplete?: boolean;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
+  const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
+  const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
+  const isWorkActive = !turnComplete || isThinkingStreaming || hasRunningTools;
 
   if (visibleTools.length === 0) {
-    return thinking ? <ThinkingBlock message={thinking} /> : null;
+    return thinking ? (
+      <ThinkingBlock message={thinking} turnComplete={turnComplete} />
+    ) : null;
   }
 
-  const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
-  const isThinking = Boolean(thinking?.thinkingStreaming);
-  const subAgentOnly = visibleTools.every((tool) => isSubAgentTool(tool.tool));
-  const webSourceOnly = visibleTools.every(
-    (tool) => isWebSearchTool(tool.tool) || isWebFetchTool(tool.tool),
-  );
-  const dedicatedOnly = subAgentOnly || webSourceOnly;
-  const [open, setOpen] = useState(hasRunningTools || isThinking || dedicatedOnly);
-
-  useEffect(() => {
-    if (hasRunningTools || isThinking) {
-      setOpen(true);
-    }
-  }, [hasRunningTools, isThinking]);
-
-  if (subAgentOnly) {
+  if (!thinking) {
     return (
-      <div className="w-full max-w-full space-y-3">
-        {thinking ? <ThinkingBlock message={thinking} /> : null}
-        {visibleTools.map((tool) => (
-          <SubAgentToolRow key={tool.id} message={tool} modelLabel={modelLabel} />
-        ))}
-      </div>
+      <ToolOnlyWorkGroup
+        tools={visibleTools}
+        modelLabel={modelLabel}
+        turnComplete={turnComplete}
+      />
     );
   }
 
-  if (webSourceOnly) {
-    return (
-      <div className="w-full max-w-full space-y-3">
-        {thinking ? <ThinkingBlock message={thinking} /> : null}
-        {visibleTools.map((tool, index) => (
+  return (
+    <ThinkingReasoning
+      text={thinking.thinking ?? ""}
+      isThinkingStreaming={isThinkingStreaming}
+      isWorkActive={isWorkActive}
+      startedAt={thinking.createdAt}
+      className="w-full max-w-full"
+    >
+      {visibleTools.map((tool, index) =>
+        isDedicatedTool(tool) ? (
           <DedicatedToolRow
             key={tool.id}
             message={tool}
             modelLabel={modelLabel}
             isLast={index === visibleTools.length - 1}
           />
-        ))}
-      </div>
-    );
-  }
+        ) : (
+          <ToolTimelineItem
+            key={tool.id}
+            message={tool}
+            isLast={index === visibleTools.length - 1}
+          />
+        ),
+      )}
+    </ThinkingReasoning>
+  );
+}
 
-  const label = formatWorkGroupLabel(visibleTools.length);
+function ToolOnlyWorkGroup({
+  tools,
+  modelLabel,
+  turnComplete = false,
+}: {
+  tools: ChatListItem[];
+  modelLabel?: string | null;
+  turnComplete?: boolean;
+}) {
+  const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
+  const isWorkActive = !turnComplete || hasRunningTools;
+  const [open, setOpen] = useState(isWorkActive);
+
+  useEffect(() => {
+    if (isWorkActive) {
+      setOpen(true);
+      return;
+    }
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const delay = reducedMotion ? 0 : 360;
+    const timerId = window.setTimeout(() => setOpen(false), delay);
+    return () => window.clearTimeout(timerId);
+  }, [isWorkActive]);
+
+  const label = formatWorkGroupLabel(tools.length);
 
   return (
     <div className="w-full max-w-full">
@@ -140,21 +168,20 @@ function AssistantWorkGroup({
       />
       {open ? (
         <TimelineBody>
-          {thinking ? <ThinkingInline message={thinking} isLast={visibleTools.length === 0} /> : null}
-          {visibleTools.map((tool, index) =>
+          {tools.map((tool, index) =>
             isDedicatedTool(tool) ? (
-              <div key={tool.id} className={cn("relative", index < visibleTools.length - 1 && "pb-3")}>
+              <div key={tool.id} className={cn("relative", index < tools.length - 1 && "pb-3")}>
                 <DedicatedToolRow
                   message={tool}
                   modelLabel={modelLabel}
-                  isLast={index === visibleTools.length - 1}
+                  isLast={index === tools.length - 1}
                 />
               </div>
             ) : (
               <ToolTimelineItem
                 key={tool.id}
                 message={tool}
-                isLast={index === visibleTools.length - 1}
+                isLast={index === tools.length - 1}
               />
             ),
           )}
@@ -172,42 +199,27 @@ function formatWorkGroupLabel(toolCount: number): string {
   return `Called ${toolCount} tools`;
 }
 
-function ThinkingBlock({ message }: { message: ChatListItem }) {
-  const isStreaming = Boolean(message.thinkingStreaming);
+function ThinkingBlock({
+  message,
+  turnComplete = false,
+}: {
+  message: ChatListItem;
+  turnComplete?: boolean;
+}) {
+  const isThinkingStreaming = Boolean(message.thinkingStreaming);
+  const isWorkActive =
+    !turnComplete ||
+    isThinkingStreaming ||
+    Boolean(message.streaming && !message.content.trim());
 
   return (
     <ThinkingReasoning
       text={message.thinking ?? ""}
-      isStreaming={isStreaming}
+      isThinkingStreaming={isThinkingStreaming}
+      isWorkActive={isWorkActive}
       startedAt={message.createdAt}
       className="w-full max-w-full"
     />
-  );
-}
-
-function ThinkingInline({
-  message,
-  isLast,
-}: {
-  message: ChatListItem;
-  isLast: boolean;
-}) {
-  const isStreaming = Boolean(message.thinkingStreaming);
-  const text = message.thinking?.trim();
-
-  if (!text && !isStreaming) {
-    return null;
-  }
-
-  return (
-    <div className={cn("relative", !isLast && "pb-3")}>
-      <ThinkingReasoning
-        text={message.thinking ?? ""}
-        isStreaming={isStreaming}
-        startedAt={message.createdAt}
-        variant="inline"
-      />
-    </div>
   );
 }
 
