@@ -325,12 +325,7 @@ function SubAgentToolRow({
     message.toolStatus === "done" ? formatSubAgentToolResult(message.toolResult) : null;
   const hasExpandableOutput = Boolean(output && (!parsed?.summary || output !== parsed.summary));
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (isRunning) {
-      setOpen(false);
-    }
-  }, [isRunning]);
+  const expanded = !isRunning && open;
 
   const statusTone =
     parsed?.status === "fail"
@@ -373,20 +368,20 @@ function SubAgentToolRow({
         <div className="pl-6">
           <button
             type="button"
-            aria-expanded={open}
+            aria-expanded={expanded}
             onClick={() => setOpen((current) => !current)}
             className="flex items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronDownIcon
               className={cn(
                 "size-3.5 shrink-0 transition-transform duration-200",
-                !open && "-rotate-90",
+                !expanded && "-rotate-90",
               )}
               aria-hidden
             />
-            <span>{open ? "Hide full output" : "Show full output"}</span>
+            <span>{expanded ? "Hide full output" : "Show full output"}</span>
           </button>
-          {open && output ? <DetailBlock label="Output" content={output} tone="output" /> : null}
+          {expanded && output ? <DetailBlock label="Output" content={output} tone="output" /> : null}
         </div>
       ) : null}
 

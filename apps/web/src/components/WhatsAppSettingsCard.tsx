@@ -41,13 +41,13 @@ export function WhatsAppSettingsCard({
   const [qrWasVisible, setQrWasVisible] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!settings) {
-      return;
-    }
+  const settingsProfileId = settings?.profileId;
 
-    setProfileId(settings.profileId);
-  }, [settings?.profileId]);
+  useEffect(() => {
+    if (settingsProfileId !== undefined) {
+      setProfileId(settingsProfileId);
+    }
+  }, [settingsProfileId]);
 
   const configured = settings?.configured === true;
   const worker = status?.whatsappWorker;

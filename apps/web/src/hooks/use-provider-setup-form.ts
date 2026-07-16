@@ -8,6 +8,7 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useModelsQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
+import type { ProviderModelOption } from "@nakama/core/contract";
 import {
   appendOpenRouterModelRow,
   buildCreateProviderRequest,
@@ -29,13 +30,15 @@ interface UseProviderSetupFormOptions {
   onSuccess?: (result: CreateProviderResponse) => void;
 }
 
+const EMPTY_CATALOG: ProviderModelOption[] = [];
+
 export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) {
   const { createProvider } = useAppContext();
   const { isAuthenticated } = useAuth();
   const { data: catalogResponse, error: catalogQueryError } = useModelsQuery({
     enabled: isAuthenticated,
   });
-  const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? [];
+  const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
 
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");
   const [apiKey, setApiKey] = useState("");
