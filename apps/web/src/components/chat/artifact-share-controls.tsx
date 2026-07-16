@@ -1,5 +1,5 @@
 import { CheckIcon, LinkIcon, Loader2Icon, Share2Icon, UnlinkIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,13 +34,12 @@ export function ArtifactShareControls({
   const orgId = activeOrg?.id ?? "";
   const [copied, setCopied] = useState(false);
   const [storedUrl, setStoredUrl] = useState<string | null>(null);
-  const [storedShareId, setStoredShareId] = useState<string | null>(null);
+  const storedShareIdRef = useRef<string | null>(null);
 
   const statusQuery = useArtifactShareStatusQuery(profileId, artifactPath, orgId);
   const publishMutation = usePublishArtifactShareMutation();
   const revokeMutation = useRevokeArtifactShareMutation();
 
-  const activeShareId = statusQuery.data?.id ?? storedShareId;
   const shareUrl = storedUrl;
   const isShared = Boolean(statusQuery.data?.active || storedUrl);
 
@@ -51,7 +50,7 @@ export function ArtifactShareControls({
 
     const stored = readStoredArtifactShare({ orgId, profileId, artifactPath });
     setStoredUrl(stored?.shareUrl ?? null);
-    setStoredShareId(stored?.shareId ?? null);
+    storedShareIdRef.current = stored?.shareId ?? null;
   }, [orgId, profileId, artifactPath, statusQuery.dataUpdatedAt]);
 
   useEffect(() => {
@@ -85,7 +84,7 @@ export function ArtifactShareControls({
           shareUrl: result.shareUrl,
         });
         setStoredUrl(result.shareUrl);
-        setStoredShareId(result.id);
+        storedShareIdRef.current = result.id;
         await copyLink(result.shareUrl);
         return;
       }
@@ -105,7 +104,7 @@ export function ArtifactShareControls({
           shareUrl: fallback,
         });
         setStoredUrl(fallback);
-        setStoredShareId(result.id);
+        storedShareIdRef.current = result.id;
         await copyLink(fallback);
         toast("Set Web Public URL in Settings for external sharing.");
         return;
@@ -127,15 +126,16 @@ export function ArtifactShareControls({
   }
 
   async function handleRevoke() {
-    if (!orgId || !activeShareId) {
+    const shareId = statusQuery.data?.id ?? storedShareIdRef.current;
+    if (!orgId || !shareId) {
       return;
     }
 
     try {
-      await revokeMutation.mutateAsync({ profileId, shareId: activeShareId, path: artifactPath });
+      await revokeMutation.mutateAsync({ profileId, shareId, path: artifactPath });
       clearStoredArtifactShare({ orgId, profileId, artifactPath });
       setStoredUrl(null);
-      setStoredShareId(null);
+      storedShareIdRef.current = null;
       toast("Share link revoked");
     } catch (error) {
       toast(formatError(error));
