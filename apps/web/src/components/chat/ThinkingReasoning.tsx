@@ -5,10 +5,7 @@ import { ThinkingState } from "@/components/chat/ThinkingState";
 import { splitThinkingLines } from "@/lib/thinking-text";
 import { cn } from "@/lib/utils";
 
-const SENT_H = 40;
-const GAP = 4;
-const MAX_H = 180;
-const FADE = 16;
+const MAX_H = 100;
 const COLLAPSE_BEAT = 360;
 
 export interface ThinkingReasoningProps {
@@ -49,39 +46,22 @@ function useThinkingElapsed(isWorkActive: boolean, startedAt?: string): number {
 function ThinkingReasoningViewport({
   sentences,
   isWorkActive,
-  done,
-  expanded,
 }: {
   sentences: string[];
   isWorkActive: boolean;
-  done: boolean;
-  expanded: boolean;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [fade, setFade] = useState({ top: false, bottom: true });
+  const [fade, setFade] = useState({ top: false, bottom: false });
 
-  const count = sentences.length;
-  const contentH = count > 0 ? count * SENT_H + (count - 1) * GAP : 0;
-  const capped = contentH > MAX_H;
-  const viewH = capped ? MAX_H : contentH;
-  const scrollable = done && expanded;
-  const translate = scrollable ? 0 : capped ? MAX_H - FADE - contentH : 0;
-  const showTop = scrollable ? fade.top : capped;
-  const showBottom = scrollable ? fade.bottom : capped;
-  const mask = capped
-    ? `linear-gradient(to bottom, transparent 0, #000 ${showTop ? FADE : 0}px, #000 calc(100% - ${showBottom ? FADE : 0}px), transparent 100%)`
-    : "none";
-
-  useEffect(() => {
-    if (!isWorkActive || scrollable) {
-      return;
-    }
-    setFade({ top: false, bottom: capped });
-  }, [capped, isWorkActive, scrollable, count]);
-
-  const handleScroll = () => {
+  const updateFade = () => {
     const element = viewportRef.current;
     if (!element) {
+      return;
+    }
+
+    const overflows = element.scrollHeight > element.clientHeight + 1;
+    if (!overflows) {
+      setFade({ top: false, bottom: false });
       return;
     }
 
@@ -91,24 +71,50 @@ function ThinkingReasoningViewport({
     });
   };
 
-  if (count === 0) {
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) {
+      return;
+    }
+
+    if (isWorkActive) {
+      element.scrollTop = element.scrollHeight;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      updateFade();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [sentences, isWorkActive]);
+
+  const handleScroll = () => {
+    updateFade();
+  };
+
+  if (sentences.length === 0) {
     return null;
   }
+
+  const mask =
+    fade.top || fade.bottom
+      ? `linear-gradient(to bottom, transparent 0, #000 ${fade.top ? 12 : 0}px, #000 calc(100% - ${fade.bottom ? 12 : 0}px), transparent 100%)`
+      : undefined;
 
   return (
     <div
       ref={viewportRef}
-      className={cn(styles.viewport, scrollable && styles.viewportScroll)}
+      className={cn(styles.viewport, styles.viewportScroll)}
       style={{
-        height: `${viewH}px`,
+        maxHeight: `${MAX_H}px`,
         maskImage: mask,
         WebkitMaskImage: mask,
       }}
       onScroll={handleScroll}
     >
-      <div className={styles.stream} style={{ transform: `translateY(${translate}px)` }}>
-        {sentences.map((line) => (
-          <p key={line} className={styles.sentence}>
+      <div className={styles.stream}>
+        {sentences.map((line, index) => (
+          <p key={`${index}:${line}`} className={styles.sentence}>
             {line}
           </p>
         ))}
@@ -163,7 +169,6 @@ export function ThinkingReasoning({
 
   const expanded = done ? open : true;
   const showTimeline = sentences.length > 0 || Boolean(children);
-  const anchored = expanded && (sentences.length > 0 || Boolean(children));
 
   const toggle = () => {
     if (!done) {
@@ -176,7 +181,6 @@ export function ThinkingReasoning({
     <div
       className={cn(
         styles.root,
-        anchored && styles.rootAnchored,
         className,
       )}
     >
@@ -226,8 +230,6 @@ export function ThinkingReasoning({
                 <ThinkingReasoningViewport
                   sentences={sentences}
                   isWorkActive={isWorkActive}
-                  done={done}
-                  expanded={expanded}
                 />
               ) : null}
               {children ? (

@@ -53,7 +53,7 @@ export function AssistantTurnSegmentView({
 
   return (
     <Message from="assistant" className="max-w-full mr-0 ml-0 items-start justify-start">
-      <MessageContent className="w-full max-w-full ml-0 group-[.is-user]:ml-0">
+      <MessageContent className="w-full max-w-full ml-0 gap-1 group-[.is-user]:ml-0">
         {showThinking && segment.thinking ? (
           <ThinkingBlock message={segment.thinking} />
         ) : null}

@@ -10,10 +10,6 @@
   animation: tr-block-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.rootAnchored {
-  min-height: 206px;
-}
-
 @keyframes tr-block-in {
   from {
     opacity: 0;
@@ -87,9 +83,7 @@
 }
 
 .viewport {
-  margin-top: 6px;
   overflow: hidden;
-  transition: height 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .viewportScroll {
@@ -104,15 +98,12 @@
 .stream {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
+  gap: 2px;
 }
 
 .sentence {
   margin: 0;
-  height: 40px;
-  line-height: 20px;
+  line-height: 18px;
   font-size: 13px;
   font-weight: 425;
   color: var(--c-muted);
@@ -173,7 +164,7 @@
 
 .timeline {
   position: relative;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .timeline .viewport {
@@ -186,7 +177,7 @@
 }
 
 .toolsAfterReasoning {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {
