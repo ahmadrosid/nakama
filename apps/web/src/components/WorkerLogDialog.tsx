@@ -29,6 +29,11 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
   const content = activeTab === "stdout" ? (data?.stdout ?? "") : (data?.stderr ?? "");
   const isEmpty = !isLoading && !errorMessage && content.length === 0;
 
+  function selectTab(tab: "stdout" | "stderr") {
+    setActiveTab(tab);
+    setCopied(false);
+  }
+
   async function copyLogs() {
     if (!content) {
       return;
@@ -51,13 +56,10 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
 
   useEffect(() => {
     if (open) {
+      setCopied(false);
       void refetch();
     }
   }, [open, refetch]);
-
-  useEffect(() => {
-    setCopied(false);
-  }, [activeTab, content]);
 
   useEffect(() => {
     return () => {
@@ -80,7 +82,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setActiveTab("stdout")}
+            onClick={() => selectTab("stdout")}
             className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               activeTab === "stdout"
@@ -92,7 +94,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("stderr")}
+            onClick={() => selectTab("stderr")}
             className={cn(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               activeTab === "stderr"
@@ -123,7 +125,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             size="sm"
             className="text-xs"
             disabled={isLoading || clearLogs.isPending}
-            onClick={() => void refetch()}
+            onClick={() => void refetch().then(() => setCopied(false))}
           >
             Refresh
           </Button>
@@ -135,7 +137,10 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             disabled={isLoading || clearLogs.isPending}
             onClick={() => {
               if (confirm("Are you sure you want to clear the logs?")) {
-                void clearLogs.mutateAsync().then(() => refetch());
+                void clearLogs.mutateAsync().then(() => {
+                  setCopied(false);
+                  return refetch();
+                });
               }
             }}
           >

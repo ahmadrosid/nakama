@@ -6,7 +6,7 @@ import type {
   ListComposioToolkitsResponse,
 } from "@nakama/core/contract";
 import { MoreHorizontalIcon, SearchIcon } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import {
   useComposioSettings,
   useComposioToolkits,
@@ -234,10 +234,6 @@ function ComposioToolkitList({
   const query = deferredSearch.trim().toLowerCase();
   const isSearching = query.length > 0;
 
-  useEffect(() => {
-    setVisibleCount(CATALOG_PAGE_SIZE);
-  }, [query]);
-
   const rows = useMemo(() => {
     const orgBySlug = new Map(data.orgToolkits.map((toolkit) => [toolkit.toolkitSlug, toolkit]));
     const userByToolkitId = new Map(
@@ -266,7 +262,7 @@ function ComposioToolkitList({
     if (isSearching) {
       const matches = rows.filter((row) => matchesToolkitSearch(row.catalog, query));
       return isOrgAdmin
-        ? [...matches].sort(compareToolkitRows)
+        ? matches.toSorted(compareToolkitRows)
         : matches.filter((row) => row.orgToolkit?.status === "enabled");
     }
 
@@ -274,7 +270,7 @@ function ComposioToolkitList({
       return activeRows.filter((row) => row.orgToolkit?.status === "enabled");
     }
 
-    return [...rows].sort(compareToolkitRows);
+    return rows.toSorted(compareToolkitRows);
   }, [activeRows, isOrgAdmin, isSearching, query, rows]);
 
   const displayedRows = filteredRows.slice(0, visibleCount);
@@ -299,7 +295,10 @@ function ComposioToolkitList({
           />
           <Input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setVisibleCount(CATALOG_PAGE_SIZE);
+            }}
             placeholder={
               isOrgAdmin ? "Search apps to enable (Gmail, Slack, GitHub…)" : "Search enabled apps…"
             }

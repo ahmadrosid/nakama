@@ -6,7 +6,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";

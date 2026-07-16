@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 
 export function AuthGuard() {
   const { isAuthenticated, isLoading } = useAuth();

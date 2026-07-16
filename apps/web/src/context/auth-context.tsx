@@ -1,32 +1,14 @@
 import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import { client } from "@/lib/client";
 import { queryClient } from "@/lib/query-client";
-import type { AuthUserResponse, SetupAuthRequest, UserOrgSummary } from "@nakama/core/contract";
-
-interface AuthContextValue {
-  user: AuthUserResponse | null;
-  orgs: UserOrgSummary[];
-  activeOrg: UserOrgSummary | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  setup: (request: SetupAuthRequest) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  switchOrg: (orgId: string) => Promise<void>;
-  createOrg: (input: { name: string; slug: string }) => Promise<void>;
-  updateOrg: (orgId: string, input: { name: string }) => Promise<void>;
-  refreshSession: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import type { SetupAuthRequest, UserOrgSummary, AuthUserResponse } from "@nakama/core/contract";
+import { AuthContext, type AuthContextValue } from "@/context/auth-context-shared";
 
 function refreshAuthenticatedQueries(): void {
   void queryClient.invalidateQueries();
@@ -166,12 +148,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const value = useContext(AuthContext);
-  if (!value) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return value;
 }

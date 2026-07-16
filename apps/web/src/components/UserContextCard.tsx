@@ -16,7 +16,7 @@ import {
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 

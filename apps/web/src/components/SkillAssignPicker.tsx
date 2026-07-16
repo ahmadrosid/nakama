@@ -1,4 +1,5 @@
 import type { SkillSummary } from "@nakama/core/contract";
+import { RUNTIME_ONLY_BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -76,14 +77,16 @@ export function SkillAssignPicker({
   const [open, setOpen] = useState(false);
   const { data: codingHarnessSettings } = useCodingHarnessSettings(open);
 
-  const availableSkills = skills.filter((skill) => !assignedSkillIds.has(skill.id));
-  const onProfileSkills = skills.filter((skill) => assignedSkillIds.has(skill.id));
+  const runtimeOnlySkillNames = new Set<string>(RUNTIME_ONLY_BUNDLED_SKILL_NAMES);
+  const librarySkills = skills.filter((skill) => !runtimeOnlySkillNames.has(skill.name));
+  const availableSkills = librarySkills.filter((skill) => !assignedSkillIds.has(skill.id));
+  const onProfileSkills = librarySkills.filter((skill) => assignedSkillIds.has(skill.id));
 
   function isSkillDisabled(skill: SkillSummary): boolean {
     return skill.name === "coding-delegation" && codingHarnessSettings?.configured === false;
   }
 
-  if (skills.length === 0) {
+  if (librarySkills.length === 0) {
     return null;
   }
 
@@ -106,7 +109,7 @@ export function SkillAssignPicker({
           setOpen(nextOpen);
         }}
       >
-        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl">
           <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
             <DialogTitle>Manage skills</DialogTitle>
             <DialogDescription>
@@ -158,8 +161,8 @@ export function SkillAssignPicker({
                           assignSkill(skill.id, onAssign, setOpen);
                         }}
                       >
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="truncate text-sm font-medium leading-none">{skill.name}</p>
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <p className="truncate text-sm font-medium leading-tight">{skill.name}</p>
                           {description ? (
                             <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
                               {description}
@@ -246,9 +249,9 @@ export function SkillAssignPicker({
                         )}
                         onSelect={() => {}}
                       >
-                        <div className="min-w-0 flex-1 space-y-1">
+                        <div className="min-w-0 flex-1 space-y-2">
                           <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-medium leading-none text-muted-foreground">
+                            <p className="truncate text-sm font-medium leading-tight text-muted-foreground">
                               {skill.name}
                             </p>
                             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

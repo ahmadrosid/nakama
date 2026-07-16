@@ -1,6 +1,6 @@
 import type { SystemStatusResponse } from "@nakama/core/contract";
 import { describe, expect, test } from "bun:test";
-import { buildServiceColumns, deriveSummary } from "./StatusPage";
+import { buildServiceColumns, deriveSummary } from "./status-page.shared";
 
 const healthyStatus: SystemStatusResponse = {
   checkedAt: "2026-06-22T10:00:00.000Z",

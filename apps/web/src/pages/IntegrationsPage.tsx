@@ -18,7 +18,7 @@ import { NotificationDestinationsCard } from "@/components/NotificationDestinati
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";

@@ -1,20 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
-import { CheckIcon, CopyIcon, RefreshCwIcon, ScanQrCodeIcon } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { WorkerActionBar } from "@/components/WorkerActionBar";
-import { Button } from "@/components/ui/button";
+import { WhatsAppSettingsCardContent } from "@/components/whatsapp-settings-card-content";
+import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
@@ -25,32 +14,11 @@ import {
 } from "@/hooks/use-whatsapp-settings";
 import { formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
 
 interface WhatsAppSettingsCardProps {
   embedded?: boolean;
   submitLabel?: string;
   onSaveSuccess?: () => void;
-}
-
-function SettingsRow({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 export function WhatsAppSettingsCard({
@@ -130,8 +98,7 @@ export function WhatsAppSettingsCard({
   const linkingAfterScan =
     configured && !paired && running && !qrCode && (qrWasVisible || connected) && useQrLinking;
   const showReconnect = configured && !showQr && !awaitingQr;
-  const profileChanged = configured && profileId !== settings?.profileId;
-  const canSave = !configured || profileChanged;
+  const canSave = !configured || profileId !== settings?.profileId;
   const actionLabel = submitLabel ?? (configured ? "Save" : "Enable WhatsApp");
 
   const statusLine =
@@ -249,310 +216,74 @@ export function WhatsAppSettingsCard({
     });
   }
 
-  if (isLoading) {
-    const skeleton = (
-      <div className="h-16 animate-pulse rounded-lg bg-muted px-4" aria-hidden="true" />
-    );
+  function handleProfileChange(nextProfileId: string) {
+    setProfileId(nextProfileId);
+    setHint(null);
+    setFormError(null);
 
+    if (!configured || nextProfileId === settings?.profileId) {
+      return;
+    }
+
+    saveMutation.mutate(
+      { profileId: nextProfileId.trim() || "default" },
+      {
+        onSuccess: () => {
+          setHint("Reply profile saved.");
+        },
+        onError: (error) => {
+          setFormError(formatError(error));
+        },
+      },
+    );
+  }
+
+  if (isLoading) {
     if (embedded) {
-      return skeleton;
+      return SETTINGS_CARD_LOADING_SKELETON;
     }
 
     return (
       <Card className="w-full shadow-none">
-        <CardContent className="py-3">{skeleton}</CardContent>
+        <CardContent className="py-3">{SETTINGS_CARD_LOADING_SKELETON}</CardContent>
       </Card>
     );
   }
 
   const content = (
-    <div className="divide-y divide-border">
-      {!embedded ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium text-foreground">WhatsApp</p>
-            <p className="text-xs text-muted-foreground">{headerSubtitle}</p>
-          </div>
-          <span
-            className={cn(
-              "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-              paired && running && !showQr
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
-                : configured
-                  ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100"
-                  : "border-border bg-muted text-muted-foreground",
-            )}
-          >
-            {statusBadge}
-          </span>
-        </div>
-      ) : null}
-
-      {linkedNumber ? (
-        <SettingsRow label="Linked account" description="From your WhatsApp session">
-          <span className="text-sm text-foreground">{linkedNumber}</span>
-        </SettingsRow>
-      ) : null}
-
-      <SettingsRow label="Reply as" description="Which agent answers on WhatsApp">
-        <Select
-          value={profileId}
-          disabled={saveMutation.isPending || profiles.length === 0}
-          onValueChange={(value) => {
-            if (!value) {
-              return;
-            }
-
-            const nextProfileId = String(value);
-            setProfileId(nextProfileId);
-            setHint(null);
-            setFormError(null);
-
-            if (!configured || nextProfileId === settings?.profileId) {
-              return;
-            }
-
-            saveMutation.mutate(
-              { profileId: nextProfileId.trim() || "default" },
-              {
-                onSuccess: () => {
-                  setHint("Reply profile saved.");
-                },
-                onError: (error) => {
-                  setFormError(formatError(error));
-                },
-              },
-            );
-          }}
-        >
-          <SelectTrigger id="whatsapp-profile" className="w-[11rem] sm:w-[13rem]">
-            <SelectValue placeholder="Profile">
-              {profiles.find((profile) => profile.id === profileId)?.name}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent align="end">
-            {profiles.map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                <span className="flex items-center gap-2">
-                  <ProfileAvatar profile={profile} size="sm" />
-                  <span>{profile.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-
-      {configured ? (
-        <div className={cn("divide-y divide-border", !paired && "bg-muted/20")}>
-          <SettingsRow
-            label="Pairing code"
-            description={
-              pairingCode
-                ? "Open Linked Devices in WhatsApp and enter this code."
-                : paired
-                  ? "This number is linked. Generate a new code only if you need to relink."
-                  : "Optional — use this instead of scanning the QR code."
-            }
-          >
-            {pairingCode ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
-                  {pairingCode}
-                </code>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void copyPairingCode()}
-                >
-                  {copied ? (
-                    <CheckIcon
-                      className="size-3.5 text-emerald-600 dark:text-emerald-400"
-                      aria-hidden
-                    />
-                  ) : (
-                    <CopyIcon className="size-3.5" aria-hidden />
-                  )}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={regenerateMutation.isPending || saveMutation.isPending}
-                  onClick={handleRegeneratePairingCode}
-                >
-                  {regenerateMutation.isPending ? (
-                    <Spinner />
-                  ) : (
-                    <>
-                      <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                      New code
-                    </>
-                  )}
-                </Button>
-              </div>
-            ) : paired ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={regenerateMutation.isPending || saveMutation.isPending}
-                onClick={handleRegeneratePairingCode}
-              >
-                {regenerateMutation.isPending ? (
-                  <Spinner />
-                ) : (
-                  <>
-                    <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                    New code
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={regenerateMutation.isPending || saveMutation.isPending}
-                onClick={handleRegeneratePairingCode}
-              >
-                {regenerateMutation.isPending ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Generating…
-                  </>
-                ) : (
-                  "Generate pairing code"
-                )}
-              </Button>
-            )}
-          </SettingsRow>
-
-          {pairingCode ? (
-            <ol className="list-decimal space-y-1 px-4 py-3 pl-8 text-xs text-muted-foreground">
-              <li>Open WhatsApp on your phone</li>
-              <li>Go to Settings, then Linked Devices</li>
-              <li>Choose Link with phone number and enter this code</li>
-            </ol>
-          ) : null}
-
-          {showQr ? (
-            <div className="space-y-3 px-4 py-4">
-              <div className="flex items-center gap-2">
-                <ScanQrCodeIcon className="size-4 text-primary" aria-hidden />
-                <p className="text-sm font-medium text-foreground">Scan QR code</p>
-              </div>
-              <div className="flex justify-center">
-                <div className="inline-flex rounded-xl border border-border bg-white p-3">
-                  <QRCodeSVG value={qrCode!} size={180} />
-                </div>
-              </div>
-              <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-                <li>Open WhatsApp on your phone</li>
-                <li>Go to Settings, then Linked Devices</li>
-                <li>Tap <strong>Link a Device</strong> and scan this code</li>
-              </ol>
-            </div>
-          ) : linkingAfterScan ? (
-            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              Linking your WhatsApp account…
-            </div>
-          ) : bridgeStarting ? (
-            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              Bridge starting — enter the pairing code in WhatsApp
-            </div>
-          ) : awaitingQr ? (
-            <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              Preparing QR code…
-            </div>
-          ) : null}
-
-          {showReconnect ? (
-            <SettingsRow
-              label="Reconnect"
-              description={
-                paired
-                  ? "Unlinks the current session so you can scan a new QR code"
-                  : "Clears a stuck session so you can link again with a QR code"
-              }
-            >
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={
-                  reconnectMutation.isPending ||
-                  saveMutation.isPending ||
-                  regenerateMutation.isPending
-                }
-                onClick={handleReconnect}
-              >
-                {reconnectMutation.isPending ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Resetting…
-                  </>
-                ) : (
-                  <>
-                    <ScanQrCodeIcon className="size-3.5" aria-hidden="true" />
-                    Reconnect with QR
-                  </>
-                )}
-              </Button>
-            </SettingsRow>
-          ) : null}
-        </div>
-      ) : null}
-
-      {configured ? (
-        <SettingsRow
-          label="Bridge worker"
-          description={running ? "Running" : "Stopped"}
-        >
-          <WorkerActionBar
-            workerName="whatsapp"
-            running={running}
-            pm2Managed={worker?.process?.managed ?? false}
-          />
-        </SettingsRow>
-      ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        {statusLine ? (
-          <p
-            className={cn(
-              "min-w-0 text-xs",
-              formError || loadError ? "text-destructive" : "text-emerald-200",
-            )}
-            role={formError || loadError ? "alert" : "status"}
-          >
-            {statusLine}
-          </p>
-        ) : (
-          <span />
-        )}
-        <Button
-          type="button"
-          size="sm"
-          disabled={saveMutation.isPending || !canSave}
-          onClick={handleSave}
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Spinner className="mr-2" />
-              Saving…
-            </>
-          ) : (
-            actionLabel
-          )}
-        </Button>
-      </div>
-    </div>
+    <WhatsAppSettingsCardContent
+      embedded={embedded}
+      headerSubtitle={headerSubtitle}
+      statusBadge={statusBadge}
+      configured={configured}
+      paired={paired}
+      running={running}
+      showQr={showQr}
+      linkedNumber={linkedNumber}
+      profileId={profileId}
+      profiles={profiles}
+      savePending={saveMutation.isPending}
+      onProfileChange={handleProfileChange}
+      pairingCode={pairingCode}
+      copied={copied}
+      onCopyPairingCode={() => void copyPairingCode()}
+      onRegeneratePairingCode={handleRegeneratePairingCode}
+      regeneratePending={regenerateMutation.isPending}
+      qrCode={qrCode}
+      linkingAfterScan={linkingAfterScan}
+      bridgeStarting={bridgeStarting}
+      awaitingQr={awaitingQr}
+      showReconnect={showReconnect}
+      onReconnect={handleReconnect}
+      reconnectPending={reconnectMutation.isPending}
+      worker={worker}
+      statusLine={statusLine}
+      formError={formError}
+      loadError={loadError}
+      canSave={canSave}
+      actionLabel={actionLabel}
+      onSave={handleSave}
+    />
   );
 
   if (embedded) {

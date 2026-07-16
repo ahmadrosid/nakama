@@ -6,11 +6,11 @@ import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
 import {
   ToolPlaygroundOutput,
   ToolPlaygroundRunForm,
-  useToolPlaygroundRun,
 } from "@/components/tools/ToolPlaygroundPanel";
+import { useToolPlaygroundRun } from "@/components/tools/use-tool-playground-run";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery, useToolQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {

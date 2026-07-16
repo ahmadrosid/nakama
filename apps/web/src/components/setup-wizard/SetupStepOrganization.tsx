@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { useAuth } from "@/context/auth-context";
-import type { SetupAccountDraft } from "@/components/setup-wizard/SetupWizard";
+import { useAuth } from "@/context/use-auth";
+import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
 
 interface SetupStepOrganizationProps {
   account: SetupAccountDraft;

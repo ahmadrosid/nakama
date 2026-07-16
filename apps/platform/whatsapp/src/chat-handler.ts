@@ -415,6 +415,10 @@ function looksLikePairingCodeAttempt(text: string): boolean {
   return trimmed === trimmed.toUpperCase() && /^[A-Z0-9-]{4,12}$/.test(trimmed);
 }
 
+export function resetChatLocksForTests(): void {
+  chatLocks.clear();
+}
+
 async function withChatLock(jid: string, fn: () => Promise<void>): Promise<void> {
   const previous = chatLocks.get(jid) ?? Promise.resolve();
   let release!: () => void;

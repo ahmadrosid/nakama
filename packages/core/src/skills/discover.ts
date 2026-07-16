@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
+import { pickPreferredSkillSourcePath } from "./dedupe";
 import {
   resolveSkillDiscoveryDirs,
   SKILL_FILE_NAME,
@@ -33,33 +34,26 @@ export async function discoverSkills(
       }
 
       const directory = path.join(rootDir, entry.name);
-      const skillFilePath = path.join(directory, SKILL_FILE_NAME);
+      const skill = await discoverSkillDirectory(directory);
 
-      if (!(await pathExists(skillFilePath))) {
+      if (!skill) {
         continue;
       }
 
-      try {
-        const content = await readFile(skillFilePath, "utf8");
-        const parsed = parseSkillMarkdown(content, skillFilePath);
-        const toolPath = await findSkillToolPath(directory);
+      const existing = discovered.get(skill.name);
 
-        discovered.set(skillFilePath, {
-          name: parsed.frontmatter.name,
-          description: parsed.frontmatter.description,
-          disableModelInvocation: parsed.frontmatter.disableModelInvocation ?? false,
-          includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
-          directory,
-          skillFilePath,
-          body: parsed.body,
-          hasTool: toolPath !== null,
-          toolPath,
-        });
-      } catch (error) {
-        console.warn(
-          `[nakama:skills] Skipping ${skillFilePath}:`,
-          error instanceof Error ? error.message : error,
-        );
+      if (!existing) {
+        discovered.set(skill.name, skill);
+        continue;
+      }
+
+      const preferredDirectory = pickPreferredSkillSourcePath(
+        existing.directory,
+        skill.directory,
+      );
+
+      if (preferredDirectory === skill.directory) {
+        discovered.set(skill.name, skill);
       }
     }
   }
@@ -67,6 +61,40 @@ export async function discoverSkills(
   return Array.from(discovered.values()).sort((left, right) =>
     left.name.localeCompare(right.name),
   );
+}
+
+export async function discoverSkillDirectory(
+  directory: string,
+): Promise<DiscoveredSkill | null> {
+  const skillFilePath = path.join(directory, SKILL_FILE_NAME);
+
+  if (!(await pathExists(skillFilePath))) {
+    return null;
+  }
+
+  try {
+    const content = await readFile(skillFilePath, "utf8");
+    const parsed = parseSkillMarkdown(content, skillFilePath);
+    const toolPath = await findSkillToolPath(directory);
+
+    return {
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      disableModelInvocation: parsed.frontmatter.disableModelInvocation ?? false,
+      includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
+      directory,
+      skillFilePath,
+      body: parsed.body,
+      hasTool: toolPath !== null,
+      toolPath,
+    };
+  } catch (error) {
+    console.warn(
+      `[nakama:skills] Skipping ${skillFilePath}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
 }
 
 async function findSkillToolPath(directory: string): Promise<string | null> {

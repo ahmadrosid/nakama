@@ -42,7 +42,7 @@ export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowse
   const [hideDeprecated, setHideDeprecated] = useState(true);
 
   const sortedRows = useMemo(() => {
-    return [...rows].sort(compareModelRows);
+    return rows.toSorted(compareModelRows);
   }, [rows]);
 
   const filtered = useMemo(() => {

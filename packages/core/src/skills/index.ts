@@ -1,4 +1,5 @@
 export * from "./compose";
+export * from "./dedupe";
 export * from "./discover";
 export * from "./load-tool";
 export * from "./match";
@@ -7,11 +8,5 @@ export * from "./paths";
 export * from "./types";
 export * from "./write";
 export * from "./bundled/install";
-export {
-  BUNDLED_SKILL_NAMES,
-  DEFAULT_BUNDLED_SKILL_NAMES,
-  RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
-  SUPER_BOT_BUNDLED_SKILL_NAMES,
-  readBundledSkillBody,
-  readBundledSkillMarkdown,
-} from "./bundled/index";
+export * from "./bundled-names";
+export { readBundledSkillBody, readBundledSkillMarkdown } from "./bundled/index";

@@ -1,6 +1,5 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { XIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,16 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ExpandableTextarea } from "@/components/ui/expandable-textarea";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
@@ -27,7 +18,6 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { fileToImageAttachment } from "@/lib/profile-images";
-import { cn } from "@/lib/utils";
 
 interface ProfileCreateDialogProps {
   open: boolean;
@@ -205,188 +195,48 @@ export function ProfileCreateDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 overflow-y-auto pr-1">
-            {submitError ? (
-              <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {submitError}
-              </p>
-            ) : null}
+          <ProfileCreateDialogForm
+            busy={busy}
+            submitError={submitError}
+            name={name}
+            profileId={profileId}
+            profileIdHasValue={profileIdHasValue}
+            profileIdValid={profileIdValid}
+            profileIdHelpText={profileIdHelpText}
+            prompt={prompt}
+            avatarPreview={avatarPreview}
+            avatarInputRef={createAvatarInputRef}
+            tools={tools}
+            selectableTools={selectableTools}
+            selectedTools={selectedTools}
+            onNameChange={(value) => {
+              setSubmitError(null);
+              setName(value);
+            }}
+            onProfileIdChange={(value) => {
+              setSubmitError(null);
+              setProfileIdEdited(true);
+              setProfileId(value);
+            }}
+            onPromptChange={(value) => {
+              setSubmitError(null);
+              setPrompt(value);
+            }}
+            onAvatarSelected={handleAvatarSelected}
+            onClearAvatar={() => {
+              setSubmitError(null);
+              setAvatarPreview((current) => {
+                if (current) {
+                  URL.revokeObjectURL(current);
+                }
 
-            <div className="mt-4 grid min-h-0 gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-6">
-              <div className="space-y-4">
-                <Field label="Name" htmlFor="create-profile-name">
-                  <Input
-                    id="create-profile-name"
-                    placeholder="Research assistant"
-                    value={name}
-                    disabled={busy}
-                    className="focus-visible:ring-1 focus-visible:ring-inset"
-                    autoFocus
-                    onChange={(event) => {
-                      setSubmitError(null);
-                      setName(event.target.value);
-                    }}
-                  />
-                </Field>
-
-                <Field label="Profile id" htmlFor="create-profile-id">
-                  <Input
-                    id="create-profile-id"
-                    placeholder="research-assistant"
-                    value={profileId}
-                    disabled={busy}
-                    className="font-mono text-sm focus-visible:ring-1 focus-visible:ring-inset aria-invalid:ring-1 aria-invalid:ring-inset"
-                    aria-invalid={profileIdHasValue && !profileIdValid}
-                    onChange={(event) => {
-                      setSubmitError(null);
-                      setProfileIdEdited(true);
-                      setProfileId(event.target.value);
-                    }}
-                  />
-                  <p
-                    className={cn(
-                      "text-xs",
-                      profileIdHasValue && !profileIdValid
-                        ? "text-destructive"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {profileIdHelpText}
-                  </p>
-                </Field>
-
-                <Field label="Avatar">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
-                      {avatarPreview ? (
-                        <img src={avatarPreview} alt="" className="size-full object-cover" />
-                      ) : (
-                        <span className="text-lg font-medium text-muted-foreground">
-                          {name.trim().charAt(0).toUpperCase() || "?"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <input
-                        ref={createAvatarInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        className="hidden"
-                        disabled={busy}
-                        onChange={handleAvatarSelected}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => createAvatarInputRef.current?.click()}
-                      >
-                        Choose image
-                      </Button>
-                      {avatarPreview ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => {
-                            setSubmitError(null);
-                            setAvatarPreview((current) => {
-                              if (current) {
-                                URL.revokeObjectURL(current);
-                              }
-
-                              return null;
-                            });
-                            setAvatarFile(null);
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </Field>
-              </div>
-
-              <div className="space-y-4">
-                <ExpandableTextarea
-                  label="System prompt"
-                  htmlFor="create-profile-prompt"
-                  value={prompt}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setSubmitError(null);
-                    setPrompt(event.target.value);
-                  }}
-                />
-
-                <Field label="Tools">
-                  {tools.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No tools available.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex flex-col gap-2">
-                        <Select
-                          value=""
-                          disabled={busy || selectableTools.length === 0}
-                          onValueChange={(value) => handleToolSelect(value != null ? String(value) : "")}
-                        >
-                          <SelectTrigger
-                            className="w-full focus-visible:ring-1 focus-visible:ring-inset"
-                            aria-label="Tool to assign"
-                          >
-                            <SelectValue
-                              placeholder={
-                                selectableTools.length === 0 ? "All tools added" : "Add a tool…"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectableTools.map((tool) => (
-                              <SelectItem key={tool.id} value={tool.id}>
-                                {tool.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Selecting a tool adds it right away. Remove any you do not want below.
-                        </p>
-                      </div>
-
-                      <div className="rounded-md border border-border bg-muted/20 p-2">
-                        {selectedTools.length > 0 ? (
-                          <div className="max-h-32 overflow-y-auto pr-1">
-                            <ul className="flex flex-wrap gap-2">
-                              {selectedTools.map((tool) => (
-                                <li key={tool.id}>
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                                    disabled={busy}
-                                    onClick={() => handleRemoveTool(tool.id)}
-                                    aria-label={`Remove ${tool.name}`}
-                                    title={tool.name}
-                                  >
-                                    <span className="max-w-52 truncate">{tool.name}</span>
-                                    <XIcon className="size-3.5 text-muted-foreground" aria-hidden />
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No tools added yet.</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </Field>
-              </div>
-            </div>
-          </div>
+                return null;
+              });
+              setAvatarFile(null);
+            }}
+            onToolSelect={handleToolSelect}
+            onRemoveTool={handleRemoveTool}
+          />
 
           <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
             <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
@@ -399,26 +249,5 @@ export function ProfileCreateDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-  className,
-}: {
-  label: string;
-  htmlFor?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <label className="text-xs text-muted-foreground" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

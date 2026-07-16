@@ -1,10 +1,4 @@
 import { useEffect, useState } from "react";
-import {
-  ChevronDownIcon,
-  ChevronUpIcon,
-  CopyIcon,
-  DownloadIcon,
-} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+import { CodingHarnessHarnessRow } from "@/components/coding-harness-harness-row";
+import { CodingHarnessSettingsFooter } from "@/components/coding-harness-settings-footer";
 import {
   codingHarnessSettingsQueryOptions,
   useCodingHarnessSettings,
@@ -80,9 +75,7 @@ export function CodingHarnessSettingsPanel({
     setFormError(null);
 
     saveMutation.mutate(
-      {
-        selectedHarnessId,
-      },
+      { selectedHarnessId },
       {
         onSuccess: (saved) => {
           const selected = saved.harnesses.find((harness) => harness.id === selectedHarnessId);
@@ -226,175 +219,32 @@ export function CodingHarnessSettingsPanel({
         ) : null}
 
         <div className="space-y-3">
-          {settings.harnesses.map((harness) => {
-            const selected = selectedHarnessId === harness.id;
-            const expanded = expandedHarnessId === harness.id;
-
-            return (
-              <div
-                key={harness.id}
-                className={cn(
-                  "overflow-hidden rounded-lg border transition-colors",
-                  expanded && "divide-y",
-                  selected
-                    ? cn(
-                        "border-primary/35 bg-primary/[0.06]",
-                        expanded && "divide-primary/25",
-                      )
-                    : cn("border-border bg-background", expanded && "divide-border"),
-                )}
-              >
-                <div className="flex items-start gap-3 px-4 py-3.5">
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => selectHarness(harness.id)}
-                  >
-                    <span className="min-w-0 flex-1 space-y-2">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">{harness.name}</span>
-                        {harness.version ? (
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                            {harness.version}
-                          </span>
-                        ) : null}
-                      </span>
-
-                      <span className="flex flex-wrap gap-1.5 text-xs">
-                        <StatusChip
-                          variant={harness.installed ? "solid-ok" : "solid-warn"}
-                          label={harness.installed ? "Installed" : "Not installed"}
-                        />
-                        <StatusChip
-                          variant={
-                            !harness.installed
-                              ? "muted"
-                              : harness.authenticated === true
-                                ? "ok"
-                                : harness.authenticated === false
-                                  ? "solid-warn"
-                                  : "muted"
-                          }
-                          label={
-                            !harness.installed
-                              ? "Waiting for install"
-                              : harness.authenticated === true
-                                ? "Logged in"
-                                : harness.authenticated === false
-                                  ? "Needs login"
-                                  : "Login not checked"
-                          }
-                        />
-                        <StatusChip
-                          variant={harness.ready ? "ok" : "muted"}
-                          label={harness.ready ? "Ready" : "Not ready yet"}
-                        />
-                      </span>
-                    </span>
-                  </button>
-
-                  <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                    {selected ? (
-                      <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                        Selected
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                      aria-expanded={expanded}
-                      aria-label={expanded ? `Collapse ${harness.name}` : `Expand ${harness.name}`}
-                      onClick={() => toggleExpanded(harness.id)}
-                    >
-                      {expanded ? (
-                        <ChevronUpIcon className="size-4" aria-hidden />
-                      ) : (
-                        <ChevronDownIcon className="size-4" aria-hidden />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {expanded ? (
-                  <div
-                    className={cn("px-4 py-3", selected ? "bg-primary/[0.04]" : "bg-muted/20")}
-                  >
-                    <p className="text-sm text-muted-foreground">
-                      {!harness.installed
-                        ? harness.installHint
-                        : harness.statusMessage ?? "Run the readiness check to confirm login."}
-                    </p>
-
-                    {!harness.installed ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <code className="rounded-md border border-border bg-background px-2 py-1 text-xs">
-                            {harness.installCommand}
-                          </code>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              void copyInstallCommand(harness.installCommand);
-                            }}
-                          >
-                            <CopyIcon className="size-3.5" />
-                            Copy install
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => handleInstall(harness.id, harness.name)}
-                            disabled={installingId === harness.id}
-                          >
-                            {installingId === harness.id ? (
-                              <Spinner className="size-3.5" />
-                            ) : (
-                              <DownloadIcon className="size-3.5" />
-                            )}
-                            {installingId === harness.id ? "Installing…" : "Install"}
-                          </Button>
-                        </div>
-                        {installingId === harness.id && installProgress ? (
-                          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                            {installProgress}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+          {settings.harnesses.map((harness) => (
+            <CodingHarnessHarnessRow
+              key={harness.id}
+              harness={harness}
+              selected={selectedHarnessId === harness.id}
+              expanded={expandedHarnessId === harness.id}
+              installingId={installingId}
+              installProgress={installProgress}
+              onSelect={() => selectHarness(harness.id)}
+              onToggleExpanded={() => toggleExpanded(harness.id)}
+              onCopyInstallCommand={(command) => {
+                void copyInstallCommand(command);
+              }}
+              onInstall={() => handleInstall(harness.id, harness.name)}
+            />
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <p className="text-xs text-muted-foreground">
-            Nakama should only enable code delegation after the selected agent is ready.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={handleRefresh}>
-              Check again
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleVerify}
-              disabled={verifyMutation.isPending || !selectedHarnessId}
-            >
-              {verifyMutation.isPending ? <Spinner className="size-4" /> : "Run readiness check"}
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={saveMutation.isPending || !selectedHarnessId}
-            >
-              {saveMutation.isPending ? <Spinner className="size-4" /> : "Save selected agent"}
-            </Button>
-          </div>
-        </div>
+        <CodingHarnessSettingsFooter
+          verifyPending={verifyMutation.isPending}
+          savePending={saveMutation.isPending}
+          selectedHarnessId={selectedHarnessId}
+          onRefresh={handleRefresh}
+          onVerify={handleVerify}
+          onSave={handleSave}
+        />
       </CardContent>
     </Card>
   );
@@ -445,28 +295,6 @@ function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolea
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function StatusChip({
-  variant,
-  label,
-}: {
-  variant: "solid-ok" | "ok" | "solid-warn" | "muted";
-  label: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5",
-        variant === "solid-ok" && "bg-primary text-primary-foreground",
-        variant === "ok" && "border border-primary/20 bg-primary/5 text-primary",
-        variant === "solid-warn" && "bg-accent-500/15 text-accent-600 dark:text-accent-400",
-        variant === "muted" && "bg-muted/80 text-muted-foreground",
-      )}
-    >
-      {label}
-    </span>
   );
 }
 

@@ -1,5 +1,5 @@
 import type { CreateSkillRequest } from "@nakama/core/contract";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,10 +22,9 @@ interface SkillCreateDialogProps {
   onSubmit: (request: CreateSkillRequest) => Promise<void>;
 }
 
-const defaultBody = `# Skill instructions
+const bodyPlaceholder = `# Skill instructions
 
-Describe when the agent should use this skill and what steps to follow.
-`;
+Describe when the agent should use this skill and what steps to follow.`;
 
 export function SkillCreateDialog({
   open,
@@ -36,7 +35,7 @@ export function SkillCreateDialog({
 }: SkillCreateDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [body, setBody] = useState(defaultBody);
+  const [body, setBody] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canSubmit = name.trim().length > 0 && description.trim().length > 0;
@@ -48,11 +47,11 @@ export function SkillCreateDialog({
 
     setName("");
     setDescription("");
-    setBody(defaultBody);
+    setBody("");
     setSubmitError(null);
   }, [open]);
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!canSubmit || busy || !profileId) {
@@ -78,7 +77,7 @@ export function SkillCreateDialog({
       <DialogContent className="gap-6 p-6 sm:max-w-2xl">
         <form className="space-y-6" onSubmit={handleSubmit}>
           <DialogHeader className="gap-2">
-            <DialogTitle>Add skill</DialogTitle>
+            <DialogTitle>Create skill</DialogTitle>
             <DialogDescription>
               Create a workflow skill for this profile. It is saved under{" "}
               <code className="rounded bg-muted px-1 py-0.5">
@@ -138,6 +137,7 @@ export function SkillCreateDialog({
                 value={body}
                 disabled={busy}
                 rows={8}
+                placeholder={bodyPlaceholder}
                 className="min-h-40 max-h-64 overflow-y-auto font-mono text-sm"
                 onChange={(event) => setBody(event.target.value)}
               />
@@ -158,7 +158,7 @@ export function SkillCreateDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !canSubmit || !profileId}>
-              {busy ? <Spinner className="size-4" /> : "Add skill"}
+              {busy ? <Spinner className="size-4" /> : "Create skill"}
             </Button>
           </DialogFooter>
         </form>

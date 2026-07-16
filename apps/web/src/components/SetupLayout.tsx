@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useAppContext } from "@/context/app-context";
+import { useAppContext } from "@/context/use-app-context";
 
 interface SetupLayoutProps {
   children: ReactNode;

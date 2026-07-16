@@ -1,37 +1,16 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
+import {
+  ChatAttachmentPanelContext,
+  type ChatAttachmentPanelConfig,
+} from "@/context/chat-attachment-panel-context-shared";
 
 const DEFAULT_PANEL_WIDTH = 448;
-
-export interface ChatAttachmentPanelConfig {
-  id: string;
-  title: string;
-  content: ReactNode;
-  headerActions?: ReactNode;
-  bodyClassName?: string;
-  defaultWidth?: number;
-  resizable?: boolean;
-  fullscreen?: boolean;
-  onClose?: () => void;
-}
-
-interface ChatAttachmentPanelContextValue {
-  isOpen: boolean;
-  activeId: string | null;
-  isFullscreen: boolean;
-  show: (config: ChatAttachmentPanelConfig) => void;
-  update: (id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => void;
-  hide: (id?: string) => void;
-}
-
-const ChatAttachmentPanelContext = createContext<ChatAttachmentPanelContextValue | null>(null);
 
 export function ChatAttachmentPanelProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(null);
@@ -110,18 +89,4 @@ export function ChatAttachmentPanelProvider({ children }: { children: ReactNode 
       </div>
     </ChatAttachmentPanelContext.Provider>
   );
-}
-
-export function useChatAttachmentPanel(): ChatAttachmentPanelContextValue {
-  const context = useContext(ChatAttachmentPanelContext);
-
-  if (!context) {
-    throw new Error("useChatAttachmentPanel must be used within ChatAttachmentPanelProvider");
-  }
-
-  return context;
-}
-
-export function useOptionalChatAttachmentPanel(): ChatAttachmentPanelContextValue | null {
-  return useContext(ChatAttachmentPanelContext);
 }

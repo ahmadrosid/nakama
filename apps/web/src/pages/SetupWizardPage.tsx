@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { SetupWizard } from "@/components/setup-wizard/SetupWizard";
 import { SetupLayout } from "@/components/SetupLayout";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/context/auth-context";
-import { useAppContext } from "@/context/app-context";
+import { useAuth } from "@/context/use-auth";
+import { useAppContext } from "@/context/use-app-context";
 import { pathForPage, SETUP_PATH } from "@/lib/navigation";
 
 export function SetupWizardPage() {

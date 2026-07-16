@@ -106,10 +106,14 @@ function readStringArray(value: unknown): string[] | undefined {
     return undefined;
   }
 
-  const items = value
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  const items = value.flatMap((entry) => {
+    if (typeof entry !== "string") {
+      return [];
+    }
+
+    const trimmed = entry.trim();
+    return trimmed ? [trimmed] : [];
+  });
 
   return items.length > 0 ? items : undefined;
 }

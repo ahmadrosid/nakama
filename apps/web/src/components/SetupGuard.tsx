@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
-import { useAppContext } from "@/context/app-context";
+import { useAppContext } from "@/context/use-app-context";
 import { SETUP_PATH } from "@/lib/navigation";
 
 export function SetupGuard() {

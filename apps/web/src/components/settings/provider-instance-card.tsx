@@ -4,33 +4,19 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { useMemo, useState } from "react";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
-import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
-import {
-  CatalogProviderModelFields,
-  isCatalogShortlistProvider,
-} from "@/components/CatalogProviderModelFields";
-import { CustomProviderFields } from "@/components/CustomProviderFields";
-import { normalizeModelListRows, type ModelListRow } from "@/components/ModelListEditor";
+import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { type ModelListRow } from "@/components/ModelListEditor";
+import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
+  ProviderCatalogManageDialog,
+  ProviderCompatibleEditDialog,
+  ProviderCompatibleManageDialog,
+  ProviderOpenRouterManageDialog,
+  ProviderReplaceKeyDialog,
+} from "@/components/settings/provider-instance-dialogs";
 import { formatError } from "@/lib/client";
 import {
-  apiKeyPlaceholder,
   formatProviderLabel,
   type SelectedProvider,
   validateApiKeyForProvider,
@@ -43,7 +29,7 @@ import {
 import {
   seedManageModelRows,
   seedOpenRouterManageModelRows,
-} from "./provider-settings-shared";
+} from "@/components/settings/provider-settings-seed";
 
 export function ProviderInstanceCard({
   instance,
@@ -222,6 +208,13 @@ export function ProviderInstanceCard({
     );
   };
 
+  const handleManageModelsChange = (rows: ModelListRow[]) => {
+    setManageModels(rows);
+    if (dialogError) {
+      setDialogError(null);
+    }
+  };
+
   return (
     <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0">
       <div className="min-w-0 space-y-0.5">
@@ -257,178 +250,78 @@ export function ProviderInstanceCard({
         </Button>
       </div>
 
-      <Dialog open={replaceKeyOpen} onOpenChange={setReplaceKeyOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {instance.hasApiKey ? "Update API key" : "Add API key"} for {instance.label}
-            </DialogTitle>
-          </DialogHeader>
-          <InputGroup>
-            <InputGroupInput
-              type={showApiKey ? "text" : "password"}
-              autoComplete="off"
-              placeholder={apiKeyPlaceholder(providerType)}
-              value={apiKey}
-              disabled={busy}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                size="icon-sm"
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                onClick={() => setShowApiKey((current) => !current)}
-              >
-                {showApiKey ? <EyeOffIcon /> : <EyeIcon />}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-          {dialogError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {dialogError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setReplaceKeyOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" disabled={busy || !apiKey.trim()} onClick={() => void handleReplaceKey()}>
-              {busy ? <Spinner className="mr-2" /> : null}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ProviderReplaceKeyDialog
+        open={replaceKeyOpen}
+        instance={instance}
+        providerType={providerType}
+        apiKey={apiKey}
+        showApiKey={showApiKey}
+        busy={busy}
+        dialogError={dialogError}
+        onOpenChange={setReplaceKeyOpen}
+        onApiKeyChange={setApiKey}
+        onToggleShowApiKey={() => setShowApiKey((current) => !current)}
+        onSave={() => void handleReplaceKey()}
+      />
 
       {isCompatible ? (
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Edit provider</DialogTitle>
-            </DialogHeader>
-            <CustomProviderFields
-              displayName={editLabel}
-              baseUrl={editBaseUrl}
-              apiKey=""
-              customModels={manageModels.length ? manageModels : seedManageModelRows(instance.customModels, instanceModels)}
-              disabled={busy}
-              showThinkingToggle
-              displayNameError={null}
-              baseUrlError={null}
-              modelsError={null}
-              onDisplayNameChange={setEditLabel}
-              onBaseUrlChange={setEditBaseUrl}
-              onCustomModelsChange={setManageModels}
-            />
-            {dialogError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {dialogError}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button type="button" disabled={busy} onClick={() => void saveCompatible()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ProviderCompatibleEditDialog
+          open={editOpen}
+          busy={busy}
+          dialogError={dialogError}
+          editLabel={editLabel}
+          editBaseUrl={editBaseUrl}
+          manageModels={
+            manageModels.length
+              ? manageModels
+              : seedManageModelRows(instance.customModels, instanceModels)
+          }
+          onOpenChange={setEditOpen}
+          onDisplayNameChange={setEditLabel}
+          onBaseUrlChange={setEditBaseUrl}
+          onCustomModelsChange={setManageModels}
+          onSave={() => void saveCompatible()}
+        />
       ) : null}
 
       {isCompatible ? (
-        <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-          <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Manage models</DialogTitle>
-            </DialogHeader>
-            <CustomProviderFields
-              displayName={instance.label}
-              baseUrl={instance.baseUrl ?? ""}
-              apiKey=""
-              customModels={manageModels}
-              disabled={busy}
-              showThinkingToggle
-              displayNameError={null}
-              baseUrlError={null}
-              modelsError={null}
-              onDisplayNameChange={() => {}}
-              onBaseUrlChange={() => {}}
-              onCustomModelsChange={setManageModels}
-            />
-            {dialogError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {dialogError}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button type="button" disabled={busy} onClick={() => void saveCompatible()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ProviderCompatibleManageDialog
+          open={manageOpen}
+          busy={busy}
+          dialogError={dialogError}
+          instance={instance}
+          manageModels={manageModels}
+          onOpenChange={setManageOpen}
+          onCustomModelsChange={setManageModels}
+          onSave={() => void saveCompatible()}
+        />
       ) : null}
 
       {isOpenRouter ? (
-        <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-          <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Manage models</DialogTitle>
-              <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
-            </DialogHeader>
-            <OpenRouterProviderModelFields
-              customModels={manageModels}
-              disabled={busy}
-              modelsError={dialogError}
-              onCustomModelsChange={(rows) => {
-                setManageModels(rows);
-                if (dialogError) {
-                  setDialogError(null);
-                }
-              }}
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setManageOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="button" disabled={busy} onClick={() => void saveOpenRouter()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ProviderOpenRouterManageDialog
+          open={manageOpen}
+          busy={busy}
+          dialogError={dialogError}
+          manageModels={manageModels}
+          onOpenChange={setManageOpen}
+          onCustomModelsChange={handleManageModelsChange}
+          onSave={() => void saveOpenRouter()}
+        />
       ) : null}
 
       {isCatalogShortlist ? (
-        <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-          <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Manage models</DialogTitle>
-              <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
-            </DialogHeader>
-            <CatalogProviderModelFields
-              provider={providerType}
-              providerInstanceId={instance.id}
-              customModels={manageModels}
-              catalogModels={catalogModelsForType}
-              disabled={busy}
-              modelsError={dialogError}
-              onCustomModelsChange={(rows) => {
-                setManageModels(rows);
-                if (dialogError) {
-                  setDialogError(null);
-                }
-              }}
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setManageOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="button" disabled={busy} onClick={() => void saveCatalogShortlist()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ProviderCatalogManageDialog
+          open={manageOpen}
+          busy={busy}
+          dialogError={dialogError}
+          providerType={providerType}
+          instanceId={instance.id}
+          manageModels={manageModels}
+          catalogModelsForType={catalogModelsForType}
+          onOpenChange={setManageOpen}
+          onCustomModelsChange={handleManageModelsChange}
+          onSave={() => void saveCatalogShortlist()}
+        />
       ) : null}
     </div>
   );

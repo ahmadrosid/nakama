@@ -14,8 +14,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAppContext } from "@/context/app-context";
-import { useAuth } from "@/context/auth-context";
+import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
@@ -199,6 +199,7 @@ export function Layout() {
             className={
               page === "chat" ||
               page === "tasks" ||
+              page === "automations" ||
               location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
                 ? "flex min-h-0 flex-1 flex-col overflow-hidden"
                 : "min-h-0 flex-1 overflow-y-auto p-6"
