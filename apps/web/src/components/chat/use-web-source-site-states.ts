@@ -3,6 +3,7 @@ import type { WebSearchSiteState } from "@/components/chat/web-search.shared";
 
 const STAGGER_LOADING_MS = 150;
 const STAGGER_DONE_MS = 400;
+const STAGGER_TICK_MS = 50;
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -34,6 +35,18 @@ function buildInitialSiteStates(
   return Array.from({ length: count }, () => "pending");
 }
 
+function siteStateAtElapsed(index: number, elapsed: number): WebSearchSiteState {
+  const loadingAt = STAGGER_LOADING_MS * (index + 1);
+  const doneAt = loadingAt + STAGGER_DONE_MS;
+  if (elapsed >= doneAt) {
+    return "done";
+  }
+  if (elapsed >= loadingAt) {
+    return "loading";
+  }
+  return "pending";
+}
+
 export function useWebSourceSiteStates(
   sourceCount: number,
   status: "running" | "done",
@@ -45,56 +58,44 @@ export function useWebSourceSiteStates(
   const staggerRunRef = useRef(0);
 
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
     if (status === "running") {
       setSiteStates(buildInitialSiteStates(sourceCount, "running", reducedMotion));
-    } else if (sourceCount === 0) {
-      setSiteStates([]);
-    } else if (reducedMotion) {
-      setSiteStates(Array.from({ length: sourceCount }, () => "done"));
-    } else {
-      const runId = staggerRunRef.current + 1;
-      staggerRunRef.current = runId;
-
-      setSiteStates(Array.from({ length: sourceCount }, () => "pending"));
-
-      for (let index = 0; index < sourceCount; index += 1) {
-        timers.push(
-          setTimeout(() => {
-            if (staggerRunRef.current !== runId) {
-              return;
-            }
-
-            setSiteStates((current) =>
-              current.map((value, currentIndex) =>
-                currentIndex === index ? "loading" : value,
-              ),
-            );
-          }, STAGGER_LOADING_MS * (index + 1)),
-        );
-
-        timers.push(
-          setTimeout(() => {
-            if (staggerRunRef.current !== runId) {
-              return;
-            }
-
-            setSiteStates((current) =>
-              current.map((value, currentIndex) =>
-                currentIndex === index ? "done" : value,
-              ),
-            );
-          }, STAGGER_LOADING_MS * (index + 1) + STAGGER_DONE_MS),
-        );
-      }
+      return;
     }
 
-    return () => {
-      for (const timer of timers) {
-        clearTimeout(timer);
+    if (sourceCount === 0) {
+      setSiteStates([]);
+      return;
+    }
+
+    if (reducedMotion) {
+      setSiteStates(Array.from({ length: sourceCount }, () => "done"));
+      return;
+    }
+
+    const runId = staggerRunRef.current + 1;
+    staggerRunRef.current = runId;
+    const startedAt = Date.now();
+    const finishAt = STAGGER_LOADING_MS * sourceCount + STAGGER_DONE_MS;
+
+    setSiteStates(Array.from({ length: sourceCount }, () => "pending"));
+
+    const intervalId = setInterval(() => {
+      if (staggerRunRef.current !== runId) {
+        return;
       }
-    };
+
+      const elapsed = Date.now() - startedAt;
+      setSiteStates(
+        Array.from({ length: sourceCount }, (_, index) => siteStateAtElapsed(index, elapsed)),
+      );
+
+      if (elapsed >= finishAt) {
+        clearInterval(intervalId);
+      }
+    }, STAGGER_TICK_MS);
+
+    return () => clearInterval(intervalId);
   }, [reducedMotion, sourceCount, status]);
 
   return siteStates;
