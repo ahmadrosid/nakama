@@ -1,5 +1,5 @@
 import type { CreateSkillRequest } from "@nakama/core/contract";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,7 +51,7 @@ export function SkillCreateDialog({
     setSubmitError(null);
   }, [open]);
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!canSubmit || busy || !profileId) {
