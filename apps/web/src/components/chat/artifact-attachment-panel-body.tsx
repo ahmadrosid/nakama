@@ -55,6 +55,7 @@ export function ArtifactAttachmentPanelBody({
   canPreview,
   artifact,
   streaming = false,
+  htmlSandbox = "allow-scripts allow-forms allow-popups",
 }: {
   isHtml: boolean;
   isMarkdown: boolean;
@@ -65,6 +66,7 @@ export function ArtifactAttachmentPanelBody({
   canPreview: boolean;
   artifact: ChatArtifactRef;
   streaming?: boolean;
+  htmlSandbox?: string;
 }) {
   if (isHtml) {
     return (
@@ -82,7 +84,7 @@ export function ArtifactAttachmentPanelBody({
           <iframe
             title={artifact.filename}
             srcDoc={content}
-            sandbox="allow-scripts allow-forms allow-popups"
+            sandbox={htmlSandbox}
             className="min-h-0 w-full flex-1 border-0 bg-background"
           />
         ) : null}

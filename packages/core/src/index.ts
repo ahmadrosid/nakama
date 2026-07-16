@@ -2,6 +2,8 @@ export * from "./agent-todo";
 export * from "./agent-questionnaire";
 export * from "./api-error";
 export * from "./artifacts";
+export * from "./artifact-shares";
+export * from "./artifact-mime";
 export * from "./automation-validate";
 export * from "./automation-delivery";
 export * from "./automation-run-read";

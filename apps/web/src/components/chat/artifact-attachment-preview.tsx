@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileTextIcon } from "lucide-react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
+import { ArtifactShareControls } from "@/components/chat/artifact-share-controls";
 import {
   ArtifactAttachmentPanelBody,
 } from "@/components/chat/artifact-attachment-panel-body";
@@ -168,6 +169,13 @@ export function ArtifactAttachmentPreview({
           filename={artifact.filename}
           onCopy={() => void copyArtifact()}
           onToggleFullscreen={() => setFullscreen((current) => !current)}
+          additionalMenuItems={
+            <ArtifactShareControls
+              profileId={profileId}
+              artifactPath={artifact.path}
+              asMenuItem
+            />
+          }
         />
       ),
       resizable: !fullscreen,

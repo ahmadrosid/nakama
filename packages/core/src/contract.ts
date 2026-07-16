@@ -1400,6 +1400,40 @@ export interface DeleteArtifactResponse {
   filename: string;
 }
 
+export interface PublishArtifactShareRequest {
+  path: string;
+}
+
+export interface PublishArtifactShareResponse {
+  id: string;
+  token: string;
+  shareUrl: string | null;
+  sharePath: string;
+  webPublicUrlConfigured: boolean;
+  refreshed: boolean;
+}
+
+export interface ArtifactShareStatusResponse {
+  id: string;
+  active: boolean;
+  sharePath: string;
+  shareUrl: string | null;
+  webPublicUrlConfigured: boolean;
+  createdAt: string;
+}
+
+export interface RevokeArtifactShareResponse {
+  revoked: boolean;
+  id: string;
+}
+
+export interface PublicArtifactShareResponse {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  inlineAllowed: boolean;
+}
+
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
 export interface KnowledgeBaseDocument {

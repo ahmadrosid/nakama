@@ -2,8 +2,10 @@
  * Adapted from AIcss Web Search (https://www.aicss.dev/components/web-search).
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
+import { ChevronDownIcon } from "lucide-react";
 import styles from "./WebSearch.module.css";
 import type { WebSearchSiteState, WebSearchSource, WebSourceCardMode } from "./web-search.shared";
+import { cn } from "@/lib/utils";
 
 const GLOBE_MERIDIANS = {
   L: "M6.057 11.565 C2.081 11.565 0.371 8.159 0.371 5.964 C0.371 3.642 2.152 0.329 6.05 0.329",
@@ -76,24 +78,6 @@ function SearchIcon() {
       aria-hidden
     >
       <path d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-    </svg>
-  );
-}
-
-function CaretIcon() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m4.5 15.75 7.5-7.5 7.5 7.5" />
     </svg>
   );
 }
@@ -205,39 +189,54 @@ export function WebSourceCard({
         : "Searching";
   const quoteHeader = mode === "search" || !/^\d+ pages$/.test(headerText);
 
+  const canExpand = sources.length > 0;
+  const leadingIcon = (
+    <span className={styles.wsIcon}>
+      {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
+    </span>
+  );
+  const headerContent = (
+    <>
+      {leadingIcon}
+      <span className={styles.wsLabel}>
+        <span className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}>
+          {headerLabel}{" "}
+          {quoteHeader ? (
+            <span className={styles.wsQuote}>&ldquo;{headerText}&rdquo;</span>
+          ) : (
+            <span className={styles.wsQuote}>{headerText}</span>
+          )}
+        </span>
+      </span>
+      {canExpand ? (
+        <ChevronDownIcon
+          className={cn(styles.wsChevronIcon, !open && styles.wsChevronCollapsed)}
+          aria-hidden
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <div className={styles.ws} data-state={isComplete ? "done" : "loading"}>
-      <div className={styles.wsRow}>
-        {mode === "fetch" ? <LinkIcon /> : <SearchIcon />}
+      {canExpand ? (
+        <button
+          type="button"
+          className={styles.wsRowButton}
+          aria-expanded={open}
+          aria-label="Toggle results"
+          onClick={() => onOpenChange(!open)}
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div className={styles.wsRow}>{headerContent}</div>
+      )}
 
-        <span className={styles.wsLabel}>
-          <span className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}>
-            {headerLabel}{" "}
-            {quoteHeader ? (
-              <span className={styles.wsQuote}>&ldquo;{headerText}&rdquo;</span>
-            ) : (
-              <span className={styles.wsQuote}>{headerText}</span>
-            )}
-          </span>
-          {sources.length > 0 ? (
-            <button
-              type="button"
-              className={styles.wsChevron}
-              aria-label="Toggle results"
-              aria-expanded={open}
-              onClick={() => onOpenChange(!open)}
-            >
-              <CaretIcon />
-            </button>
-          ) : null}
-        </span>
-      </div>
-
-      {sources.length > 0 ? (
+      {canExpand ? (
         <div className={`${styles.wsCollapsible}${open ? "" : ` ${styles.isCollapsed}`}`}>
           <div className={styles.wsCollapsibleInner}>
             <div className={styles.wsResults}>
-              <span className={styles.wsRail} aria-hidden />
               <ul className={styles.wsList}>
                 {sources.map((source, index) => {
                   const state = siteStates[index] ?? "pending";

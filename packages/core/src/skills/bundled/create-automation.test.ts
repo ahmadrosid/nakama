@@ -154,6 +154,12 @@ describe("bundled save-artifact skill", () => {
         (skill) => skill.name,
       ),
     ).toEqual(["save-artifact"]);
+
+    expect(
+      matchSkillsForMessage([discovered], "move it to artifact please").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["save-artifact"]);
   });
 });
 

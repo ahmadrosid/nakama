@@ -16,6 +16,10 @@ import type {
   CreateSessionResponse,
   CreateToolRequest,
   DeleteArtifactResponse,
+  ArtifactShareStatusResponse,
+  PublishArtifactShareRequest,
+  PublishArtifactShareResponse,
+  RevokeArtifactShareResponse,
   DeleteKnowledgeBaseResponse,
   DocumentAttachment,
   DraftAutomationResponse,
@@ -677,6 +681,39 @@ export class NakamaClient {
     const query = new URLSearchParams({ path: filename });
     return this.request<DeleteArtifactResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts?${query.toString()}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async publishProfileArtifactShare(
+    profileId: string,
+    path: string,
+  ): Promise<PublishArtifactShareResponse> {
+    return this.request<PublishArtifactShareResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares`,
+      {
+        method: "POST",
+        body: JSON.stringify({ path } satisfies PublishArtifactShareRequest),
+      },
+    );
+  }
+
+  async getProfileArtifactShareStatus(
+    profileId: string,
+    path: string,
+  ): Promise<ArtifactShareStatusResponse | null> {
+    const query = new URLSearchParams({ path });
+    return this.request<ArtifactShareStatusResponse | null>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/status?${query.toString()}`,
+    );
+  }
+
+  async revokeProfileArtifactShare(
+    profileId: string,
+    shareId: string,
+  ): Promise<RevokeArtifactShareResponse> {
+    return this.request<RevokeArtifactShareResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/${encodeURIComponent(shareId)}`,
       { method: "DELETE" },
     );
   }

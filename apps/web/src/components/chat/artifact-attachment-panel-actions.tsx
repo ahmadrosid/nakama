@@ -22,6 +22,7 @@ export function ArtifactAttachmentPanelActions({
   filename,
   onCopy,
   onToggleFullscreen,
+  additionalMenuItems,
 }: {
   copied: boolean;
   loading: boolean;
@@ -32,6 +33,7 @@ export function ArtifactAttachmentPanelActions({
   filename: string;
   onCopy: () => void;
   onToggleFullscreen: () => void;
+  additionalMenuItems?: React.ReactNode;
 }) {
   return (
     <>
@@ -82,6 +84,7 @@ export function ArtifactAttachmentPanelActions({
             >
               {downloadLabel}
             </DropdownMenuItem>
+            {additionalMenuItems}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

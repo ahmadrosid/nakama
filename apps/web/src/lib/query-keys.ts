@@ -40,6 +40,8 @@ export const queryKeys = {
   },
   artifacts: {
     profile: (profileId: string) => ["artifacts", profileId] as const,
+    shareStatus: (profileId: string, path: string) =>
+      ["artifacts", profileId, "share", path] as const,
   },
   timezones: {
     catalog: ["timezones", "catalog"] as const,

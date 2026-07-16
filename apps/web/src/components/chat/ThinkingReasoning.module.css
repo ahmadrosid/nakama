@@ -4,7 +4,7 @@
   --c-verb: var(--muted-foreground);
   display: flex;
   flex-direction: column;
-  width: 360px;
+  width: 70%;
   max-width: 100%;
   font-family: system-ui, -apple-system, sans-serif;
   animation: tr-block-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -174,9 +174,6 @@
 .timeline {
   position: relative;
   margin-top: 8px;
-  margin-left: 4px;
-  border-left: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-  padding-left: 12px;
 }
 
 .timeline .viewport {

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { ArtifactShareControls } from "@/components/chat/artifact-share-controls";
 import { useArtifactsQuery, useDeleteArtifactMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { client } from "@/lib/client";
@@ -157,6 +158,11 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <ArtifactShareControls
+                      profileId={profileId}
+                      artifactPath={artifact.filename}
+                      compact
+                    />
                     <a
                       href={getArtifactDownloadUrl(profileId, artifact.filename)}
                       className={cn(buttonVariants({ variant: "outline", size: "sm" }))}

@@ -12,6 +12,7 @@ import { registerModelRoutes } from "./routes/models";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerSessionRoutes } from "./routes/sessions";
 import { registerProfileRoutes } from "./routes/profiles";
+import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerMcpRoutes } from "./routes/mcp";
 import { registerSkillRoutes } from "./routes/skills";
 import { registerToolRoutes } from "./routes/tools";
@@ -71,6 +72,7 @@ export function createHonoApp(options: ServerOptions) {
   registerUserContextRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
+  registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);

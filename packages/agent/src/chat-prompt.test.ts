@@ -69,6 +69,8 @@ test("buildChatSystemPrompt includes artifact skill pointer when write_file is a
   );
 
   expect(prompt).toContain("save-artifact skill");
+  expect(prompt).toContain("never invoke save-artifact");
+  expect(prompt).toContain("artifacts/, not the profile workspace root");
   expect(prompt).not.toContain("save_artifact");
 });
 

@@ -10,13 +10,16 @@ import {
 export function WebFetchToolRow({ message }: { message: ChatListItem }) {
   const state = buildWebFetchToolState(message);
   const isRunning = state.status === "running";
-  const [open, setOpen] = useState(isRunning || state.sources.length <= 1);
+  const [open, setOpen] = useState(false);
   const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
 
   useEffect(() => {
     if (isRunning) {
       setOpen(true);
+      return;
     }
+
+    setOpen(false);
   }, [isRunning]);
 
   if (!shouldRenderWebFetchToolRow(message)) {

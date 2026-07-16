@@ -13,6 +13,7 @@ import type {
   StoredSkillRecord,
   StoredOrgMemberRecord,
   StoredOrgInviteRecord,
+  StoredArtifactShareRecord,
   StoredOrganizationRecord,
   StoredUserOrganizationRecord,
   StoredProfileRecord,
@@ -62,6 +63,8 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const orgMembers = new Map<string, StoredOrgMemberRecord>();
   const orgInvites = new Map<string, StoredOrgInviteRecord>();
   const orgInvitesByTokenHash = new Map<string, StoredOrgInviteRecord>();
+  const artifactShares = new Map<string, StoredArtifactShareRecord>();
+  const artifactSharesByTokenHash = new Map<string, StoredArtifactShareRecord>();
   let llmUsageStats: StoredLlmUsageStatsRecord | null = null;
   const llmUsageByModel = new Map<string, StoredLlmUsageModelStatsRecord>();
   let workspaceSettings: StoredWorkspaceSettingsRecord | null = null;
@@ -267,6 +270,67 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       const updated = { ...invite, acceptedAt };
       orgInvites.set(id, updated);
       orgInvitesByTokenHash.set(updated.tokenHash, updated);
+    },
+
+    async createArtifactShare(record) {
+      artifactShares.set(record.id, record);
+      if (!record.revokedAt) {
+        artifactSharesByTokenHash.set(record.tokenHash, record);
+      }
+    },
+
+    async updateArtifactShareSnapshot(id, snapshot) {
+      const existing = artifactShares.get(id);
+      if (!existing) {
+        return;
+      }
+
+      const updated = { ...existing, ...snapshot };
+      artifactShares.set(id, updated);
+      if (!updated.revokedAt) {
+        artifactSharesByTokenHash.set(updated.tokenHash, updated);
+      }
+    },
+
+    async getArtifactShareByTokenHash(tokenHash) {
+      const share = artifactSharesByTokenHash.get(tokenHash);
+      return share && !share.revokedAt ? share : null;
+    },
+
+    async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {
+      for (const share of artifactShares.values()) {
+        if (
+          share.orgId === orgId &&
+          share.profileId === profileId &&
+          share.sourcePath === sourcePath &&
+          !share.revokedAt
+        ) {
+          return share;
+        }
+      }
+
+      return null;
+    },
+
+    async getArtifactShareById(orgId, profileId, shareId) {
+      const share = artifactShares.get(shareId);
+      if (!share || share.orgId !== orgId || share.profileId !== profileId) {
+        return null;
+      }
+
+      return share;
+    },
+
+    async revokeArtifactShare(id, revokedAt) {
+      const share = artifactShares.get(id);
+      if (!share || share.revokedAt) {
+        return false;
+      }
+
+      const updated = { ...share, revokedAt };
+      artifactShares.set(id, updated);
+      artifactSharesByTokenHash.delete(updated.tokenHash);
+      return true;
     },
 
     async listAutomations() {

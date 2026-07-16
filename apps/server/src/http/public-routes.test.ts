@@ -10,4 +10,8 @@ describe("isPublicRouteRequest", () => {
     expect(isPublicRouteRequest("GET", "/v1/composio/toolkits")).toBe(false);
     expect(isPublicRouteRequest("POST", "/v1/composio/toolkits/gmail/connect")).toBe(false);
   });
+
+  test("allows public artifact share reads", () => {
+    expect(isPublicRouteRequest("GET", "/v1/public/artifact-shares/tok123")).toBe(true);
+  });
 });

@@ -12,6 +12,10 @@ export function getProfileArtifactsDir(orgId: string, profileId: string): string
   return join(getProfileSoulDir(orgId, profileId), "artifacts");
 }
 
+export function getArtifactSharesDir(orgId: string): string {
+  return join(getUserConfigDir(), "orgs", orgId, "artifact-shares");
+}
+
 export async function resolveSoulStackForProfile(
   orgId: string,
   profileId: string,

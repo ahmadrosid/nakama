@@ -336,6 +336,21 @@ export interface StoredOrgInviteRecord {
   createdAt: string;
 }
 
+export interface StoredArtifactShareRecord {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sourcePath: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  tokenHash: string;
+  storagePath: string;
+  createdByUserId: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 export interface StoredChannelOrgMappingRecord {
   channel: ChannelType;
   channelUserId: string;
@@ -394,6 +409,24 @@ export interface DatabaseAdapter {
   getOrgInviteByTokenHash(tokenHash: string): Promise<StoredOrgInviteRecord | null>;
   getPendingOrgInvite(orgId: string, email: string): Promise<StoredOrgInviteRecord | null>;
   markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
+
+  createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
+  updateArtifactShareSnapshot(
+    id: string,
+    snapshot: Pick<StoredArtifactShareRecord, "filename" | "mimeType" | "sizeBytes" | "storagePath">,
+  ): Promise<void>;
+  getArtifactShareByTokenHash(tokenHash: string): Promise<StoredArtifactShareRecord | null>;
+  getActiveArtifactShareByPath(
+    orgId: string,
+    profileId: string,
+    sourcePath: string,
+  ): Promise<StoredArtifactShareRecord | null>;
+  getArtifactShareById(
+    orgId: string,
+    profileId: string,
+    shareId: string,
+  ): Promise<StoredArtifactShareRecord | null>;
+  revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;

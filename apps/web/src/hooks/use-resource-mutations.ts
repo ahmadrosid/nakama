@@ -384,6 +384,54 @@ export function useDeleteArtifactMutation() {
   });
 }
 
+export function useArtifactShareStatusQuery(
+  profileId: string,
+  artifactPath: string,
+  orgId: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.artifacts.shareStatus(profileId, artifactPath),
+    queryFn: () => client.getProfileArtifactShareStatus(profileId, artifactPath),
+    enabled: Boolean(profileId && artifactPath && orgId),
+  });
+}
+
+export function usePublishArtifactShareMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ profileId, path }: { profileId: string; path: string }) =>
+      client.publishProfileArtifactShare(profileId, path),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.artifacts.shareStatus(variables.profileId, variables.path),
+      });
+    },
+  });
+}
+
+export function useRevokeArtifactShareMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      shareId,
+    }: {
+      profileId: string;
+      shareId: string;
+      path?: string;
+    }) => client.revokeProfileArtifactShare(profileId, shareId),
+    onSuccess: async (_data, variables) => {
+      if (variables.path) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.artifacts.shareStatus(variables.profileId, variables.path),
+        });
+      }
+    },
+  });
+}
+
 export function useSoulFileQuery(
   profileId: string | null,
   fileKey: string | null,

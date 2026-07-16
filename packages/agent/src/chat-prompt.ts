@@ -131,7 +131,9 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "write_file")) {
       sections.push(
-        "Use the save-artifact skill when it is active to save persistent reports, summaries, or generated text under artifacts/ for later access in the dashboard. Do not use artifacts/ for soul files or MEMORY.md.",
+        "Skills are workflow instructions, not callable tools — never invoke save-artifact (or other skills) as a tool.",
+        "When the user wants output kept or mentions artifacts, use write_file to save under artifacts/ (follow the save-artifact skill when active, including the metadata sidecar). Durable deliverables such as reports, slide decks, and exports belong under artifacts/, not the profile workspace root.",
+        "Do not use artifacts/ for soul files or MEMORY.md.",
       );
     }
 

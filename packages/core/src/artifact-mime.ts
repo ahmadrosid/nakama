@@ -194,3 +194,13 @@ export function looksLikeUtf8Text(bytes: Uint8Array): boolean {
     return false;
   }
 }
+
+/** MIME types that must not be served inline on the app origin (public shares). */
+export function isBrowserExecutableArtifactMimeType(mimeType: string): boolean {
+  const normalized = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+  return (
+    normalized === "text/html" ||
+    normalized === "application/xhtml+xml" ||
+    normalized.startsWith("image/svg")
+  );
+}

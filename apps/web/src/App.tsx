@@ -19,6 +19,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { SetupWizardPage } from "@/pages/SetupWizardPage";
 import { SystemPage } from "@/pages/SystemPage";
 import { ToolPlaygroundPage } from "@/pages/ToolPlaygroundPage";
+import { PublicArtifactSharePage } from "@/pages/PublicArtifactSharePage";
 import { StatusPage } from "@/pages/StatusPage";
 import { TasksPage } from "@/pages/TasksPage";
 
@@ -40,6 +41,7 @@ function AppShell() {
           <Routes>
             <Route path="/setup" element={<SetupWizardPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/s/:token" element={<PublicArtifactSharePage />} />
             <Route element={<AuthGuard />}>
               <Route element={<SetupGuard />}>
                 <Route element={<Layout />}>
