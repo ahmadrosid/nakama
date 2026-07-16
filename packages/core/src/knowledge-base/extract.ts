@@ -1,8 +1,12 @@
+import { DOCX_MEDIA_TYPE, LEGACY_DOC_MEDIA_TYPE } from "../artifact-mime";
+import { convertDocxToMarkdown } from "../docx-text";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
 import { extractPdfText } from "../pdf-text";
 
 const KB_ALLOWED_MEDIA_TYPES = new Set([
   "application/pdf",
+  DOCX_MEDIA_TYPE,
+  LEGACY_DOC_MEDIA_TYPE,
   "text/plain",
   "text/csv",
   "text/markdown",
@@ -10,6 +14,8 @@ const KB_ALLOWED_MEDIA_TYPES = new Set([
 
 const KB_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
+  ".docx": DOCX_MEDIA_TYPE,
+  ".doc": LEGACY_DOC_MEDIA_TYPE,
   ".txt": "text/plain",
   ".md": "text/markdown",
   ".csv": "text/csv",
@@ -49,12 +55,18 @@ export async function extractText(
 
   if (!KB_ALLOWED_MEDIA_TYPES.has(normalized)) {
     throw new Error(
-      `Unsupported knowledge base document type: ${mediaType}. Allowed: txt, md, csv, pdf.`,
+      `Unsupported knowledge base document type: ${mediaType}. Allowed: txt, md, csv, pdf, docx.`,
     );
   }
 
   if (normalized === "application/pdf") {
     return extractPdfText(bytes);
+  }
+
+  // Word-named uploads are decided by their bytes: a real .docx, a legacy OLE .doc
+  // (rejected with an actionable message), or HTML saved under a Word extension.
+  if (normalized === DOCX_MEDIA_TYPE || normalized === LEGACY_DOC_MEDIA_TYPE) {
+    return convertDocxToMarkdown(bytes);
   }
 
   return bytes.toString("utf8").trim();

@@ -1,6 +1,8 @@
 import { readFile, readdir, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { inferArtifactMimeType, isDocxFile, isLegacyDocFile } from "./artifact-mime";
+import { convertDocxToMarkdown } from "./docx-text";
 import type {
   ArtifactFile,
   DeleteArtifactResponse,
@@ -86,8 +88,10 @@ async function readArtifactMeta(
     const raw = await readFile(metaPath, "utf8");
     return artifactMetaSchema.parse(JSON.parse(raw));
   } catch {
+    // Artifacts written straight to disk (no `save-artifact` sidecar) still need
+    // an accurate type, otherwise the UI cannot preview them.
     return {
-      mimeType: "application/octet-stream",
+      mimeType: inferArtifactMimeType(path.basename(filePath)),
       savedAt: fallbackSavedAt,
       sizeBytes: fallbackSizeBytes,
     };
@@ -98,6 +102,11 @@ export async function readArtifactFile(input: {
   orgId: string;
   profileId: string;
   filename: string;
+  /**
+   * Convert the artifact to Markdown for preview instead of serving raw bytes.
+   * Downloads must stay byte-exact, so this is opt-in.
+   */
+  render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
   const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
   const resolvedArtifactsDir = await realpath(artifactsDir);
@@ -114,6 +123,19 @@ export async function readArtifactFile(input: {
 
   const metadata = await readArtifactMeta(filePath, fileStat.size, fileStat.mtime.toISOString());
   const bytes = await readFile(filePath);
+  const filename = path.basename(filePath);
+
+  const isWordLike =
+    isDocxFile(filename, metadata.mimeType) || isLegacyDocFile(filename, metadata.mimeType);
+
+  if (input.render === "markdown" && isWordLike) {
+    const markdown = await convertDocxToMarkdown(bytes);
+    return {
+      bytes: Buffer.from(markdown, "utf8"),
+      contentType: "text/markdown",
+      filePath,
+    };
+  }
 
   return {
     bytes,

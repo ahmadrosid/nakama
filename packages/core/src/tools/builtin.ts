@@ -2,6 +2,9 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
+import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
+import { convertDocxToMarkdown } from "../docx-text";
+import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { getProfileSoulDir } from "../soul/resolve";
 import { getCustomToolsDir, guardFilePath, PathGuardError, type PathGuardOptions } from "./paths";
@@ -23,6 +26,14 @@ export const writeFileInputSchema = z
   .object({
     path: requiredTrimmedString("path"),
     content: requiredTrimmedString("content"),
+    cwd: trimmedOptionalString,
+  })
+  .strict();
+
+export const writeDocxInputSchema = z
+  .object({
+    path: requiredTrimmedString("path"),
+    markdown: requiredTrimmedString("markdown"),
     cwd: trimmedOptionalString,
   })
   .strict();
@@ -61,6 +72,7 @@ export const readFileInputSchema = z
   .strict();
 
 export type WriteFileInput = z.infer<typeof writeFileInputSchema>;
+export type WriteDocxInput = z.infer<typeof writeDocxInputSchema>;
 export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
 export type EditFileInput = z.infer<typeof editFileInputSchema>;
 export type ReadFileInput = z.infer<typeof readFileInputSchema>;
@@ -168,12 +180,33 @@ function buildFileGuardOptions(
 export const writeFileTool: ToolDefinition<WriteFileInput, WriteFileOutput> = {
   name: "write_file",
   description:
-    "Write text content to a file in the active profile workspace. Creates parent directories if needed.",
+    "Write text content to a file in the active profile workspace. Creates parent directories if needed. Cannot produce Word documents — use write_docx for .docx.",
   parameters: jsonSchemaFromZod(writeFileInputSchema),
   run(input, context) {
     return runWriteFile(input, context);
   },
 };
+
+/**
+ * A `.docx` is a ZIP archive and a `.doc` is an OLE container; neither can be written
+ * as UTF-8 text. Left unguarded, a model asked for a Word document saves HTML under a
+ * `.docx` name, and Word then renders the stylesheet as visible text.
+ */
+function refuseWordExtension(targetPath: string): void {
+  const filename = path.basename(targetPath);
+
+  if (isDocxFile(filename)) {
+    throw new Error(
+      "write_file writes UTF-8 text and cannot produce a valid .docx (it is a ZIP archive). Use the write_docx tool with Markdown content instead.",
+    );
+  }
+
+  if (isLegacyDocFile(filename)) {
+    throw new Error(
+      "write_file cannot produce a valid .doc. Use the write_docx tool to create a .docx instead.",
+    );
+  }
+}
 
 export async function runWriteFile(
   input: unknown,
@@ -181,6 +214,7 @@ export async function runWriteFile(
   options: FileToolRunOptions = {},
 ): Promise<WriteFileOutput> {
   const parsed = parseToolInput(writeFileInputSchema, input);
+  refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
   const guardOptions = buildFileGuardOptions(context, options);
 
@@ -217,6 +251,41 @@ export async function runWriteFile(
   await writeFile(filePath, parsed.content, "utf8");
 
   return { path: filePath, bytesWritten: contentBytes };
+}
+
+export const writeDocxTool: ToolDefinition<WriteDocxInput, WriteFileOutput> = {
+  name: "write_docx",
+  description:
+    "Create a real Microsoft Word (.docx) document from Markdown. Headings, bold/italic, lists, tables, and code blocks are converted. Use this whenever the user asks for a Word document — write_file cannot produce one.",
+  parameters: jsonSchemaFromZod(writeDocxInputSchema),
+  run(input, context) {
+    return runWriteDocx(input, context);
+  },
+};
+
+export async function runWriteDocx(
+  input: unknown,
+  context: ToolContext,
+  options: FileToolRunOptions = {},
+): Promise<WriteFileOutput> {
+  const parsed = parseToolInput(writeDocxInputSchema, input);
+
+  if (!isDocxFile(path.basename(parsed.path))) {
+    throw new Error("write_docx requires a path ending in .docx");
+  }
+
+  const bytes = await markdownToDocx(parsed.markdown);
+  const guardOptions = buildFileGuardOptions(context, options);
+  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, bytes.length, guardOptions);
+  // Same rule as write_file: never silently overwrite an existing artifact.
+  const filePath = isArtifactPath(parsed.path)
+    ? await uniqueArtifactPath(guarded.resolved)
+    : guarded.resolved;
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, bytes);
+
+  return { path: filePath, bytesWritten: bytes.length };
 }
 
 export const deleteFileTool: ToolDefinition<DeleteFileInput, DeleteFileOutput> = {
@@ -259,6 +328,8 @@ export async function runEditFile(
   options: FileToolRunOptions = {},
 ): Promise<EditFileOutput> {
   const parsed = parseToolInput(editFileInputSchema, input);
+  // Editing a Word document as UTF-8 text would corrupt the archive.
+  refuseWordExtension(parsed.path);
 
   const guardOptions = buildFileGuardOptions(context, options);
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
@@ -552,10 +623,27 @@ function applyEditPlans(content: string, plans: PlannedEdit[]): string {
   return nextContent;
 }
 
+/**
+ * Word documents are ZIP archives, not UTF-8, so decoding them as text yields
+ * mojibake. Convert `.docx` to Markdown instead, which keeps headings and tables
+ * legible to the model while still being plain text to every caller downstream.
+ */
+async function readFileAsText(filePath: string): Promise<string> {
+  const filename = path.basename(filePath);
+
+  // Word-named files are judged by their bytes: a real .docx archive, a legacy OLE
+  // .doc, or (commonly) HTML that an agent saved under a Word extension.
+  if (isDocxFile(filename) || isLegacyDocFile(filename)) {
+    return convertDocxToMarkdown(await readFile(filePath));
+  }
+
+  return readFile(filePath, "utf8");
+}
+
 export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
   name: "read_file",
   description:
-    "Read text from a file in the active profile workspace. Use offset/limit for large files.",
+    "Read text from a file in the active profile workspace. Word .docx files are converted to Markdown. Use offset/limit for large files.",
   parameters: jsonSchemaFromZod(readFileInputSchema),
   run(input, context) {
     return runReadFile(input, context);
@@ -599,7 +687,7 @@ export async function runReadFile(
     );
   }
 
-  const rawContent = await readFile(filePath, "utf8");
+  const rawContent = await readFileAsText(filePath);
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;
   const startLine = Math.min(
@@ -626,6 +714,7 @@ export async function runReadFile(
 
 export const builtinTools: ToolDefinition[] = [
   writeFileTool,
+  writeDocxTool,
   deleteFileTool,
   editFileTool,
   readFileTool,

@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./agent-questionnaire": "./src/agent-questionnaire.ts",
+    "./artifact-mime": "./src/artifact-mime.ts",
     "./agent-todo": "./src/agent-todo.ts",
     "./api-error": "./src/api-error.ts",
     "./bridge-api": "./src/bridge-api.ts",
@@ -44,13 +45,17 @@
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
+    "docx": "^9.7.1",
     "imapflow": "^1.4.2",
     "mailparser": "^3.9.11",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.6",
     "nanoid": "^5.1.11",
     "nodemailer": "^9.0.1",
     "pdf-parse": "2.4.5",
     "rehype-parse": "^9.0.1",
     "rehype-remark": "^10.0.1",
+    "remark-gfm": "^4.0.1",
     "remark-stringify": "^11.0.0",
     "unified": "^11.0.5",
     "zod": "^4.4.3"

@@ -6,6 +6,7 @@ import {
   Maximize2Icon,
   Minimize2Icon,
 } from "lucide-react";
+import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,9 +17,16 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useChatAttachmentPanel } from "@/context/chat-attachment-panel-context";
 import {
+  artifactCodeLanguage,
   buildArtifactContentUrl,
+  isDocxFile,
   isHtmlArtifactMimeType,
+  isLegacyDocFile,
+  isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
+  isUnknownArtifactMimeType,
+  looksLikeUtf8Text,
+  resolveArtifactMimeType,
   type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
@@ -32,20 +40,33 @@ interface ArtifactAttachmentPreviewProps {
   className?: string;
 }
 
-function downloadActionLabel(mimeType: string, filename: string): string {
-  if (
-    isHtmlArtifactMimeType(mimeType) ||
-    filename.toLowerCase().endsWith(".html") ||
-    filename.toLowerCase().endsWith(".htm")
-  ) {
+/** Highlighting a very large file blocks the main thread, so show it as plain text. */
+const MAX_HIGHLIGHTED_CHARS = 200_000;
+
+/**
+ * Wrap file content in a markdown code fence, using a fence long enough to survive
+ * backtick runs inside the content itself.
+ */
+function toCodeFence(content: string, language: string): string {
+  const longestRun = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+
+function downloadActionLabel(mimeType: string): string {
+  if (isHtmlArtifactMimeType(mimeType)) {
     return "Download as HTML";
   }
 
-  if (mimeType === "text/markdown" || filename.toLowerCase().endsWith(".md")) {
+  if (isDocxFile("", mimeType) || isLegacyDocFile("", mimeType)) {
+    return "Download as Word";
+  }
+
+  if (isMarkdownArtifactMimeType(mimeType)) {
     return "Download as Markdown";
   }
 
-  if (mimeType === "application/json" || filename.toLowerCase().endsWith(".json")) {
+  if (mimeType === "application/json") {
     return "Download as JSON";
   }
 
@@ -66,40 +87,62 @@ export function ArtifactAttachmentPreview({
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
-  const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
-  const canPreviewText = isTextArtifactMimeType(artifact.mimeType) && !isHtml;
-  const canPreview = isHtml || canPreviewText;
-  const downloadLabel = downloadActionLabel(artifact.mimeType, artifact.filename);
+  // The saved mime type can be missing or generic (`application/octet-stream`) for
+  // artifacts written without a metadata sidecar, so fall back to the extension.
+  const mimeType = resolveArtifactMimeType(artifact.mimeType, artifact.filename);
+  const isHtml = isHtmlArtifactMimeType(mimeType);
+  // A Word-named file may be a real .docx, a legacy .doc, or HTML in disguise. The
+  // server decides from the bytes and hands back Markdown either way.
+  const isWordDocument =
+    isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
+  const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+  const language = artifactCodeLanguage(artifact.filename);
+  // An unrecognized extension is not proof of a binary file — `write_file` only ever
+  // writes UTF-8 — so fetch it and let the bytes themselves decide.
+  const canPreview =
+    isHtml ||
+    isWordDocument ||
+    isTextArtifactMimeType(mimeType) ||
+    isUnknownArtifactMimeType(mimeType);
+  const downloadLabel = downloadActionLabel(mimeType);
 
   useEffect(() => {
-    if (!open || !canPreview) {
+    // Content is fetched once per artifact and kept: reopening the same file must
+    // show it immediately instead of spinning through another round trip.
+    if (!open || !canPreview || content !== null) {
       return;
     }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setContent(null);
 
     void client
-      .readProfileArtifactContent(profileId, artifact.path, { inline: true })
+      .readProfileArtifactContent(profileId, artifact.path, {
+        inline: true,
+        // A .docx is a ZIP archive; ask the server to convert it to Markdown for preview.
+        render: isWordDocument ? "markdown" : undefined,
+      })
       .then((result) => {
         if (cancelled) {
           return;
         }
 
-        const contentType = result.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
-        if (isHtml) {
-          if (!isHtmlArtifactMimeType(contentType) && contentType !== "application/octet-stream") {
-            setError("Preview is not available for this file type. Download instead.");
-            return;
-          }
+        const contentType = resolveArtifactMimeType(result.contentType, artifact.filename);
+        const servedAsHtml = isHtmlArtifactMimeType(contentType);
 
-          setContent(new TextDecoder().decode(result.data));
+        // Never let an HTML payload reach the text branch, or a non-HTML payload
+        // reach the iframe: the served type must agree with what we are about to render.
+        if (isHtml ? !servedAsHtml : servedAsHtml) {
+          setError("Preview is not available for this file type. Download instead.");
           return;
         }
 
-        if (!isTextArtifactMimeType(contentType) || isHtmlArtifactMimeType(contentType)) {
+        if (
+          !isHtml &&
+          !isTextArtifactMimeType(contentType) &&
+          !looksLikeUtf8Text(new Uint8Array(result.data))
+        ) {
           setError("Preview is not available for this file type. Download instead.");
           return;
         }
@@ -120,7 +163,16 @@ export function ArtifactAttachmentPreview({
     return () => {
       cancelled = true;
     };
-  }, [open, canPreview, isHtml, profileId, artifact.path]);
+  }, [
+    open,
+    canPreview,
+    content,
+    isHtml,
+    isWordDocument,
+    profileId,
+    artifact.path,
+    artifact.filename,
+  ]);
 
   useEffect(() => {
     if (!copied) {
@@ -137,12 +189,13 @@ export function ArtifactAttachmentPreview({
     };
   }, [hide, id]);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    update(id, {
+  /**
+   * The panel's title, actions, and body are built here and nowhere else. `show()`
+   * replaces the whole config rather than merging, so building it in two places let
+   * a re-open drop the header actions (the Copy button) until some state changed.
+   */
+  function buildPanelConfig() {
+    return {
       title: artifact.filename,
       headerActions: (
         <>
@@ -218,13 +271,27 @@ export function ArtifactAttachmentPreview({
       bodyClassName: isHtml ? "flex flex-col overflow-hidden p-0" : undefined,
       content: renderPanelBody({
         isHtml,
+        isMarkdown,
+        language,
+        mimeType,
         loading,
         error,
         content,
         canPreview,
         artifact,
       }),
-    });
+    };
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    update(id, buildPanelConfig());
+    // buildPanelConfig is re-created every render, so the primitives it reads are the
+    // dependencies here; listing the function itself would loop on every update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     open,
     update,
@@ -232,6 +299,9 @@ export function ArtifactAttachmentPreview({
     artifact,
     fullscreen,
     isHtml,
+    isMarkdown,
+    language,
+    mimeType,
     loading,
     error,
     content,
@@ -247,6 +317,8 @@ export function ArtifactAttachmentPreview({
       if (!text) {
         const result = await client.readProfileArtifactContent(profileId, artifact.path, {
           inline: true,
+          // Copying the raw bytes of a .docx would put ZIP garbage on the clipboard.
+          render: isWordDocument ? "markdown" : undefined,
         });
         text = new TextDecoder().decode(result.data);
         setContent(text);
@@ -263,24 +335,27 @@ export function ArtifactAttachmentPreview({
     setFullscreen(false);
     setCopied(false);
     show({
+      ...buildPanelConfig(),
       id,
-      title: artifact.filename,
-      defaultWidth: isHtml ? 768 : 448,
+      defaultWidth: isHtml || isMarkdown || language ? 768 : 448,
       resizable: true,
       fullscreen: false,
-      bodyClassName: isHtml ? "flex flex-col overflow-hidden p-0" : undefined,
+      // Already-fetched content reopens instantly; only a cold open spins.
+      content: renderPanelBody({
+        isHtml,
+        isMarkdown,
+        language,
+        mimeType,
+        loading: canPreview && content === null && error === null,
+        error,
+        content,
+        canPreview,
+        artifact,
+      }),
       onClose: () => {
         setFullscreen(false);
         setCopied(false);
       },
-      content: renderPanelBody({
-        isHtml,
-        loading: canPreview,
-        error: null,
-        content: null,
-        canPreview,
-        artifact,
-      }),
     });
   }
 
@@ -307,8 +382,35 @@ export function ArtifactAttachmentPreview({
   );
 }
 
+function renderTextContent({
+  content,
+  isMarkdown,
+  language,
+}: {
+  content: string;
+  isMarkdown: boolean;
+  language: string | null;
+}) {
+  if (isMarkdown) {
+    return <MessageResponse className="text-sm">{content}</MessageResponse>;
+  }
+
+  if (language && content.length <= MAX_HIGHLIGHTED_CHARS) {
+    return <MessageResponse className="text-sm">{toCodeFence(content, language)}</MessageResponse>;
+  }
+
+  return (
+    <pre className="max-h-[min(50vh,28rem)] overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap text-foreground">
+      {content}
+    </pre>
+  );
+}
+
 function renderPanelBody({
   isHtml,
+  isMarkdown,
+  language,
+  mimeType,
   loading,
   error,
   content,
@@ -316,6 +418,9 @@ function renderPanelBody({
   artifact,
 }: {
   isHtml: boolean;
+  isMarkdown: boolean;
+  language: string | null;
+  mimeType: string;
   loading: boolean;
   error: string | null;
   content: string | null;
@@ -355,7 +460,7 @@ function renderPanelBody({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{artifact.mimeType}</span>
+        <span>{mimeType}</span>
         {artifact.sizeBytes > 0 ? (
           <>
             <span>·</span>
@@ -373,11 +478,7 @@ function renderPanelBody({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {!loading && !error && content ? (
-        <pre className="max-h-[min(50vh,28rem)] overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap text-foreground">
-          {content}
-        </pre>
-      ) : null}
+      {!loading && !error && content ? renderTextContent({ content, isMarkdown, language }) : null}
 
       {!loading && !error && !canPreview ? (
         <p className="text-sm text-muted-foreground">

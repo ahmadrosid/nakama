@@ -1,10 +1,10 @@
 import type { DocumentAttachment } from "@nakama/core/contract";
+import { DOCX_MEDIA_TYPE } from "@nakama/core/artifact-mime";
 import { normalizeDocumentMediaType, parseDocumentDataUrl } from "@nakama/core/message-content";
 
-export const KNOWLEDGE_BASE_ACCEPT =
-  ".pdf,.txt,.md,.csv,application/pdf,text/plain,text/csv,text/markdown";
+export const KNOWLEDGE_BASE_ACCEPT = `.pdf,.docx,.txt,.md,.csv,application/pdf,${DOCX_MEDIA_TYPE},text/plain,text/csv,text/markdown`;
 
-const KB_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv"]);
+const KB_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv"]);
 
 export function isKnowledgeBaseFile(file: File): boolean {
   const filename = file.name.trim();
@@ -14,6 +14,7 @@ export function isKnowledgeBaseFile(file: File): boolean {
   return (
     KB_EXTENSIONS.has(extension) ||
     mediaType === "application/pdf" ||
+    mediaType === DOCX_MEDIA_TYPE ||
     mediaType === "text/plain" ||
     mediaType === "text/csv" ||
     mediaType === "text/markdown"

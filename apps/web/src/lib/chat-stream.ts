@@ -257,7 +257,7 @@ export function formatToolActionLabel(
     return `Ran ${truncateDisplay(summary.split("\n")[0] ?? summary, 96)}`;
   }
 
-  if (tool === "write_file" && typeof input?.path === "string") {
+  if ((tool === "write_file" || tool === "write_docx") && typeof input?.path === "string") {
     return `Wrote ${basename(input.path)}`;
   }
 
