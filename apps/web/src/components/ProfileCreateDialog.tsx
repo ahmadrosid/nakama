@@ -1,5 +1,5 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +53,7 @@ export function ProfileCreateDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [profileId, setProfileId] = useState("");
-  const [profileIdEdited, setProfileIdEdited] = useState(false);
+  const profileIdEditedRef = useRef(false);
   const [prompt, setPrompt] = useState(defaultCreatePrompt);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -68,17 +68,18 @@ export function ProfileCreateDialog({
   const profileIdHelpText = !profileIdHasValue || profileIdValid
     ? "Auto-generated from the name. Use letters, numbers, `_`, or `-`."
     : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
-  const availableTools = tools.filter((tool) => !toolIds.includes(tool.id));
+  const toolIdSet = useMemo(() => new Set(toolIds), [toolIds]);
+  const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
-  const selectedTools = tools.filter((tool) => toolIds.includes(tool.id));
+  const selectedTools = tools.filter((tool) => toolIdSet.has(tool.id));
 
   useEffect(() => {
-    if (!open || profileIdEdited) {
+    if (!open || profileIdEditedRef.current) {
       return;
     }
 
     setProfileId(name.trim() ? slugifyProfileName(name) : "");
-  }, [name, open, profileIdEdited]);
+  }, [name, open]);
 
   useEffect(() => {
     if (open) {
@@ -88,7 +89,7 @@ export function ProfileCreateDialog({
     setSubmitError(null);
     setName("");
     setProfileId("");
-    setProfileIdEdited(false);
+    profileIdEditedRef.current = false;
     setPrompt(defaultCreatePrompt);
     setToolIds([]);
     setAvatarPreview((current) => {
@@ -123,7 +124,7 @@ export function ProfileCreateDialog({
   }
 
   function handleToolSelect(toolId: string) {
-    if (!toolId || toolIds.includes(toolId)) {
+    if (!toolId || toolIdSet.has(toolId)) {
       return;
     }
 
@@ -170,12 +171,14 @@ export function ProfileCreateDialog({
         }
       }
 
-      for (const toolId of toolIds) {
-        await assignToolMutation.mutateAsync({
-          profileId: response.profile.id,
-          toolId,
-        });
-      }
+      await Promise.all(
+        toolIds.map((toolId) =>
+          assignToolMutation.mutateAsync({
+            profileId: response.profile.id,
+            toolId,
+          }),
+        ),
+      );
 
       onOpenChange(false);
       onCreated(response.profile.id);
@@ -215,7 +218,7 @@ export function ProfileCreateDialog({
             }}
             onProfileIdChange={(value) => {
               setSubmitError(null);
-              setProfileIdEdited(true);
+              profileIdEditedRef.current = true;
               setProfileId(value);
             }}
             onPromptChange={(value) => {

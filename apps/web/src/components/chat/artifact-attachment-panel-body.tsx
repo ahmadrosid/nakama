@@ -82,7 +82,7 @@ export function ArtifactAttachmentPanelBody({
           <iframe
             title={artifact.filename}
             srcDoc={content}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-forms allow-popups"
             className="min-h-0 w-full flex-1 border-0 bg-background"
           />
         ) : null}

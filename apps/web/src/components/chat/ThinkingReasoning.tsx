@@ -107,8 +107,8 @@ function ThinkingReasoningViewport({
       onScroll={handleScroll}
     >
       <div className={styles.stream} style={{ transform: `translateY(${translate}px)` }}>
-        {sentences.map((line, index) => (
-          <p key={`${index}:${line.slice(0, 24)}`} className={styles.sentence}>
+        {sentences.map((line) => (
+          <p key={line} className={styles.sentence}>
             {line}
           </p>
         ))}

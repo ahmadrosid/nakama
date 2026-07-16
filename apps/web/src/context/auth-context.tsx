@@ -18,8 +18,7 @@ async function loadSessionState(): Promise<{
   user: AuthUserResponse;
   orgs: UserOrgSummary[];
 }> {
-  const user = await client.getMe();
-  const { orgs } = await client.listUserOrgs();
+  const [user, { orgs }] = await Promise.all([client.getMe(), client.listUserOrgs()]);
   return { user, orgs };
 }
 
@@ -99,9 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const created = await client.createUserOrganization(input);
-      const { orgs: nextOrgs } = await client.listUserOrgs();
+      const [{ orgs: nextOrgs }, nextUser] = await Promise.all([
+        client.listUserOrgs(),
+        client.setActiveOrg(created.organization.id),
+      ]);
       setOrgs(nextOrgs);
-      const nextUser = await client.setActiveOrg(created.organization.id);
       setUser(nextUser);
       refreshAuthenticatedQueries();
     },

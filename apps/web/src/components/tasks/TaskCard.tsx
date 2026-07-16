@@ -1,4 +1,5 @@
 import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
+import type { KeyboardEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Loader2Icon, PencilIcon, PlayIcon } from "lucide-react";
@@ -42,10 +43,19 @@ export function TaskCard({
   const showStart = !isRunning && !isStarting;
   const profileLabel = profile?.name ?? task.profileId;
 
+  function handleFocusKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onFocus();
+    }
+  }
+
   return (
-    <article
+    <div
       ref={setNodeRef}
       style={style}
+      role="button"
+      tabIndex={dragDisabled ? -1 : 0}
       className={cn(
         "rounded-md border border-border bg-card p-3",
         dragDisabled ? "cursor-default" : "cursor-grab active:cursor-grabbing",
@@ -54,6 +64,7 @@ export function TaskCard({
       )}
       {...(dragDisabled ? {} : { ...attributes, ...listeners })}
       onClick={onFocus}
+      onKeyDown={handleFocusKeyDown}
       aria-current={isFocused ? "true" : undefined}
     >
       <div className="flex items-start gap-2">
@@ -109,6 +120,6 @@ export function TaskCard({
           </Button>
         </div>
       </div>
-    </article>
+    </div>
   );
 }

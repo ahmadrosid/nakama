@@ -943,7 +943,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-medium text-muted-foreground">{label}</label>
+      <p className="mb-2 block text-xs font-medium text-muted-foreground">{label}</p>
       {children}
       {hint ? (
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>

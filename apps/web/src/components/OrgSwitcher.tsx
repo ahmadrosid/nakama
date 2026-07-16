@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Building2Icon,
   ChevronsUpDownIcon,
@@ -49,18 +49,18 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const { user, orgs, activeOrg, switchOrg, createOrg, updateOrg } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editingOrg, setEditingOrg] = useState<UserOrgSummary | null>(null);
+  const editingOrgRef = useRef<UserOrgSummary | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
+  const slugEditedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!slugEdited) {
+    if (!slugEditedRef.current) {
       setSlug(slugifyOrganizationName(name));
     }
-  }, [name, slugEdited]);
+  }, [name]);
 
   if (!user || orgs.length === 0) {
     return null;
@@ -69,7 +69,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const label = activeOrg?.name ?? "Organization";
 
   function openEditDialog(org: UserOrgSummary) {
-    setEditingOrg(org);
+    editingOrgRef.current = org;
     setName(org.name);
     setError(null);
     setEditOpen(true);
@@ -99,7 +99,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       setCreateOpen(false);
       setName("");
       setSlug("");
-      setSlugEdited(false);
+      slugEditedRef.current = false;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create organization");
     } finally {
@@ -109,7 +109,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
 
   async function handleEdit(event: React.FormEvent) {
     event.preventDefault();
-    if (!editingOrg) {
+    if (!editingOrgRef.current) {
       return;
     }
 
@@ -124,9 +124,9 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
     setIsSubmitting(true);
 
     try {
-      await updateOrg(editingOrg.id, { name: trimmedName });
+      await updateOrg(editingOrgRef.current.id, { name: trimmedName });
       setEditOpen(false);
-      setEditingOrg(null);
+      editingOrgRef.current = null;
       setName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update organization");
@@ -205,9 +205,9 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                 onClick={() => {
                   setError(null);
                   setName("");
-                  setSlug("");
-                  setSlugEdited(false);
-                  setCreateOpen(true);
+      setSlug("");
+      slugEditedRef.current = false;
+      setCreateOpen(true);
                 }}
               >
                 <PlusIcon className="size-4" />
@@ -245,7 +245,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                   id="create-org-slug"
                   value={slug}
                   onChange={(event) => {
-                    setSlugEdited(true);
+                    slugEditedRef.current = true;
                     setSlug(event.target.value);
                   }}
                   placeholder="acme-corp"
@@ -268,7 +268,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
         onOpenChange={(open) => {
           setEditOpen(open);
           if (!open) {
-            setEditingOrg(null);
+            editingOrgRef.current = null;
             setError(null);
           }
         }}

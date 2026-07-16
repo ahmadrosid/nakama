@@ -126,6 +126,9 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
 
 export type ChatComposerProps = ChatComposerMinimalProps | ChatComposerFullProps;
 
+const EMPTY_TODOS: AgentTodo[] = [];
+const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
+
 export function ChatComposer(props: ChatComposerProps) {
   const {
     chatStatus,
@@ -138,9 +141,9 @@ export function ChatComposer(props: ChatComposerProps) {
     onStop,
     className,
     footerClassName,
-    todos = [],
+    todos = EMPTY_TODOS,
     questionnaire = null,
-    queuedMessages = [],
+    queuedMessages = EMPTY_QUEUED_MESSAGES,
     onSubmitQuestionnaire,
   } = props;
 

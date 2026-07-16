@@ -509,7 +509,7 @@ export const PromptInputTextarea = ({
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
-  const [isComposing, setIsComposing] = useState(false);
+  const isComposingRef = useRef(false);
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = useCallback(
     (e) => {
@@ -522,7 +522,7 @@ export const PromptInputTextarea = ({
       }
 
       if (e.key === "Enter") {
-        if (isComposing || e.nativeEvent.isComposing) {
+        if (isComposingRef.current || e.nativeEvent.isComposing) {
           return;
         }
         if (e.shiftKey) {
@@ -555,7 +555,7 @@ export const PromptInputTextarea = ({
         }
       }
     },
-    [onKeyDown, isComposing, attachments]
+    [onKeyDown, attachments]
   );
 
   const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = useCallback(
@@ -596,8 +596,12 @@ export const PromptInputTextarea = ({
     [attachments, longPasteWordThreshold]
   );
 
-  const handleCompositionEnd = useCallback(() => setIsComposing(false), []);
-  const handleCompositionStart = useCallback(() => setIsComposing(true), []);
+  const handleCompositionEnd = useCallback(() => {
+    isComposingRef.current = false;
+  }, []);
+  const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true;
+  }, []);
 
   const controlledProps = controller
     ? {

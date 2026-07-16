@@ -48,26 +48,31 @@ export function Layout() {
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
-  const navGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter((item) => {
-          if (item.id === "soul") {
-            return canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role);
-          }
+  const navGroups = useMemo(() => {
+    const groups: typeof NAV_GROUPS = [];
 
-          if (item.id === "integrations") {
-            return canAccessIntegrationsPage(activeOrg?.role);
-          }
+    for (const group of NAV_GROUPS) {
+      const items = group.items.filter((item) => {
+        if (item.id === "soul") {
+          return canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role);
+        }
 
-          return (
-            !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || user?.isPlatformAdmin === true
-          );
-        }),
-      })).filter((group) => group.items.length > 0),
-    [activeOrg?.role, user?.isPlatformAdmin],
-  );
+        if (item.id === "integrations") {
+          return canAccessIntegrationsPage(activeOrg?.role);
+        }
+
+        return (
+          !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || user?.isPlatformAdmin === true
+        );
+      });
+
+      if (items.length > 0) {
+        groups.push({ ...group, items });
+      }
+    }
+
+    return groups;
+  }, [activeOrg?.role, user?.isPlatformAdmin]);
 
   return (
     <TooltipProvider delay={0}>

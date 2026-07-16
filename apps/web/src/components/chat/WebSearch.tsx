@@ -278,7 +278,7 @@ export function WebSourceCard({
 
                   return (
                     <li
-                      key={`${source.url}-${index}`}
+                      key={source.url}
                       className={styles.wsSite}
                       data-state={state}
                       style={{ animationDelay: `${index * 40}ms` }}

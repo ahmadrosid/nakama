@@ -1,6 +1,11 @@
 function splitSentences(paragraph: string): string[] {
   const matches = paragraph.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
-  return matches?.map((part) => part.trim()).filter(Boolean) ?? [paragraph];
+  return (
+    matches?.flatMap((part) => {
+      const trimmed = part.trim();
+      return trimmed ? [trimmed] : [];
+    }) ?? [paragraph]
+  );
 }
 
 export function splitThinkingLines(text: string): string[] {

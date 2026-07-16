@@ -21,12 +21,14 @@ import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
+const artifactTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatTimestamp(value: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
+    return artifactTimestampFormatter.format(new Date(value));
   } catch {
     return value;
   }

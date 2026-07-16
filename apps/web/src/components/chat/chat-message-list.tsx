@@ -241,10 +241,15 @@ function findAssistantTurnAnchor(messages: ChatListItem[]): ChatListItem | null 
 }
 
 function assistantTurnContent(messages: ChatListItem[]): string {
-  return messages
-    .filter((message) => message.role === "assistant" && message.content.trim())
-    .map((message) => message.content.trim())
-    .join("\n\n");
+  const parts: string[] = [];
+
+  for (const message of messages) {
+    if (message.role === "assistant" && message.content.trim()) {
+      parts.push(message.content.trim());
+    }
+  }
+
+  return parts.join("\n\n");
 }
 
 function isBranchableAssistantMessage(message: ChatListItem): boolean {

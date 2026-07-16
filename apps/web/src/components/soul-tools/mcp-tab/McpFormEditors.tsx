@@ -1,9 +1,14 @@
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { emptyHeaderRow, type McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+function mcpArgKey(arg: string, index: number, args: string[]): string {
+  const priorMatches = args.slice(0, index).filter((value) => value === arg).length;
+  return priorMatches === 0 ? arg : `${arg}:${priorMatches + 1}`;
+}
 
 export function McpFormField({
   label,
@@ -113,7 +118,7 @@ export function McpArgsEditor({
     >
       {args.map((arg, index) => (
         <span
-          key={`${index}-${arg}`}
+          key={mcpArgKey(arg, index, args)}
           className="inline-flex h-5 max-w-full shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/50 pl-1.5 pr-0.5 text-xs text-foreground"
         >
           <span className="truncate">{arg}</span>
@@ -161,6 +166,15 @@ export function McpHeadersEditor({
   valuePlaceholder?: string;
   onChange: (headers: McpHeaderRow[]) => void;
 }) {
+  const rowKeysRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    while (rowKeysRef.current.length < headers.length) {
+      rowKeysRef.current.push(crypto.randomUUID());
+    }
+    rowKeysRef.current.length = headers.length;
+  }, [headers.length]);
+
   function updateRow(index: number, field: keyof McpHeaderRow, value: string) {
     onChange(
       headers.map((row, rowIndex) =>
@@ -170,6 +184,7 @@ export function McpHeadersEditor({
   }
 
   function removeRow(index: number) {
+    rowKeysRef.current.splice(index, 1);
     onChange(headers.filter((_, rowIndex) => rowIndex !== index));
   }
 
@@ -177,7 +192,7 @@ export function McpHeadersEditor({
     <div className="space-y-2">
       <ul className="space-y-2">
         {headers.map((row, index) => (
-          <li key={index} className="flex items-start gap-2">
+          <li key={row.key.trim() || rowKeysRef.current[index]} className="flex items-start gap-2">
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
               <Input
                 value={row.key}
@@ -218,7 +233,10 @@ export function McpHeadersEditor({
         variant="outline"
         size="sm"
         disabled={disabled}
-        onClick={() => onChange([...headers, emptyHeaderRow()])}
+        onClick={() => {
+          rowKeysRef.current.push(crypto.randomUUID());
+          onChange([...headers, emptyHeaderRow()]);
+        }}
       >
         <PlusIcon className="size-4" aria-hidden />
         Add header

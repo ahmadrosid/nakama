@@ -36,20 +36,24 @@ export function TranscriptionSettingsCard() {
     [modelsResponse?.models],
   );
 
-  const transcriptionModelGroups = useMemo(
-    () =>
-      providerModelGroups
-        .filter((group) => group.models.some((model) => model.provider === "openai"))
-        .map((group) => ({
+  const transcriptionModelGroups = useMemo(() => {
+    const groups: typeof providerModelGroups = [];
+
+    for (const group of providerModelGroups) {
+      if (group.models.some((model) => model.provider === "openai")) {
+        groups.push({
           ...group,
           models: TRANSCRIPTION_MODEL_OPTIONS.map((option) => ({
             id: option.id,
             name: option.name,
             provider: "openai" as const,
           })),
-        })),
-    [providerModelGroups],
-  );
+        });
+      }
+    }
+
+    return groups;
+  }, [providerModelGroups]);
 
   const transcriptionUnavailable = transcriptionModelGroups.length === 0;
 
