@@ -33,22 +33,25 @@ export function VisionSettingsCard() {
     [modelsResponse?.models],
   );
 
-  const visionModelGroups = useMemo(
-    () =>
-      providerModelGroups
-        .map((group) => ({
-          ...group,
-          models: group.models.filter(
-            (model) =>
-              resolveModelVisionSupport(
-                encodeModelSelection(group.providerId, model.id),
-                providerModelGroups,
-              ) === true,
-          ),
-        }))
-        .filter((group) => group.models.length > 0),
-    [providerModelGroups],
-  );
+  const visionModelGroups = useMemo(() => {
+    const groups: typeof providerModelGroups = [];
+
+    for (const group of providerModelGroups) {
+      const models = group.models.filter(
+        (model) =>
+          resolveModelVisionSupport(
+            encodeModelSelection(group.providerId, model.id),
+            providerModelGroups,
+          ) === true,
+      );
+
+      if (models.length > 0) {
+        groups.push({ ...group, models });
+      }
+    }
+
+    return groups;
+  }, [providerModelGroups]);
 
   const visionUnavailable = visionModelGroups.length === 0;
 

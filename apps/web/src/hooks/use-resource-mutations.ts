@@ -122,17 +122,6 @@ export function useUploadProfileAvatarMutation() {
   });
 }
 
-export function useDeleteProfileAvatarMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (profileId: string) => client.deleteProfileAvatar(profileId),
-    onSuccess: async (_data, profileId) => {
-      await invalidateProfileQueries(queryClient, profileId);
-    },
-  });
-}
-
 export function useAssignToolMutation() {
   const queryClient = useQueryClient();
 
@@ -296,17 +285,6 @@ export function useDeleteSkillMutation() {
   });
 }
 
-export function useSyncSkillsMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () => client.syncSkills(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
-    },
-  });
-}
-
 export function useAssignSkillMutation() {
   const queryClient = useQueryClient();
 
@@ -338,14 +316,6 @@ export function useUnassignSkillMutation() {
         }),
       ]);
     },
-  });
-}
-
-export function useSessionsQuery(profileId: string, channel: AgentChannel = "web") {
-  return useQuery({
-    queryKey: queryKeys.sessions(profileId, channel),
-    queryFn: async () => (await client.listSessions(profileId, channel)).sessions,
-    enabled: Boolean(profileId),
   });
 }
 

@@ -1,6 +1,5 @@
 import type { ProfileSummary, SessionSummary } from "@nakama/core/contract";
 import { RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,63 +10,6 @@ import {
 } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { formatSessionTitle, groupSessionsByDate } from "@/pages/history-page.shared";
-
-const sectionClass = "rounded-md border border-border bg-card";
-
-export function HistoryProfileSidebar({
-  profiles,
-  profileId,
-  busy,
-  onProfileSelect,
-  onGoToProfiles,
-}: {
-  profiles: ProfileSummary[];
-  profileId: string;
-  busy: boolean;
-  onProfileSelect: (profileId: string) => void;
-  onGoToProfiles: () => void;
-}) {
-  return (
-    <aside className="h-full border-b border-border p-4 lg:border-r lg:border-b-0">
-      <div className="space-y-3">
-        <div>
-          <h2 className="type-section-title">Profiles</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Choose which chat history to view.</p>
-        </div>
-
-        {profiles.length === 0 ? (
-          <Button type="button" variant="outline" size="sm" onClick={onGoToProfiles}>
-            Go to Profiles
-          </Button>
-        ) : (
-          <div className="space-y-1">
-            {profiles.map((profile) => {
-              const active = profile.id === profileId;
-
-              return (
-                <button
-                  key={profile.id}
-                  type="button"
-                  disabled={busy}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50",
-                    active
-                      ? "border-foreground/15 bg-muted text-foreground"
-                      : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
-                  )}
-                  onClick={() => onProfileSelect(profile.id)}
-                >
-                  <ProfileAvatar profile={profile} size="xs" />
-                  <span className="truncate">{profile.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
 
 export function HistorySessionsPanel({
   profiles,
@@ -191,14 +133,6 @@ export function HistorySessionsPanel({
         </div>
       )}
     </div>
-  );
-}
-
-export function HistoryPageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <section className={cn(sectionClass, "overflow-hidden")}>
-      <div className="grid min-h-[100vh] lg:grid-cols-[240px_minmax(0,1fr)]">{children}</div>
-    </section>
   );
 }
 

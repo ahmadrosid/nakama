@@ -19,41 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { SOUL_FILES } from "@/components/soul-tools/soul-files";
 import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
-
-export const SOUL_FILES = [
-  {
-    key: "soul" as const,
-    label: "SOUL.md",
-    description: "Identity, worldview, and opinions",
-    writable: true,
-  },
-  {
-    key: "style" as const,
-    label: "STYLE.md",
-    description: "Voice, tone, and formatting",
-    writable: true,
-  },
-  {
-    key: "instructions" as const,
-    label: "INSTRUCTIONS.md",
-    description: "Operating instructions and workflows",
-    writable: true,
-  },
-  {
-    key: "memory" as const,
-    label: "MEMORY.md",
-    description: "Continuity and context to carry forward",
-    writable: true,
-  },
-] satisfies Array<{
-  key: keyof SoulStackFiles;
-  label: string;
-  description: string;
-  writable: boolean;
-}>;
 
 export function SoulTabPanel({
   embedded,

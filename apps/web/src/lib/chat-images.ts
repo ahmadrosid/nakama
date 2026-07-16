@@ -153,10 +153,6 @@ export function stripImageDescriptionsFromDisplayText(
     .trim();
 }
 
-export function parseLegacyImageDescriptionText(text: string): string | null {
-  return parseImageDescriptionText(text);
-}
-
 export function filePartsToDisplayDocuments(files: FileUIPart[]): DisplayDocument[] {
   const documents: DisplayDocument[] = [];
 

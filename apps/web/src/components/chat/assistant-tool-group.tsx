@@ -13,8 +13,18 @@ import {
   isSubAgentTool,
   parseSubAgentResult,
 } from "@/lib/chat-stream";
+import {
+  isWebSearchTool,
+  shouldRenderWebSearchToolRow,
+} from "@/lib/chat-stream-web-search";
+import {
+  isWebFetchTool,
+  shouldRenderWebFetchToolRow,
+} from "@/lib/chat-stream-web-fetch";
+import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
+import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
-import { ThinkingContent } from "@/components/chat/thinking-content";
+import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import { cn } from "@/lib/utils";
 
 import {
@@ -24,10 +34,12 @@ export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
   modelLabel,
+  turnComplete = false,
 }: {
   segment: AssistantTurnSegment;
   showThinking?: boolean;
   modelLabel?: string | null;
+  turnComplete?: boolean;
 }) {
   if (segment.kind === "work") {
     return (
@@ -35,6 +47,7 @@ export function AssistantTurnSegmentView({
         thinking={showThinking ? segment.thinking : undefined}
         tools={segment.tools}
         modelLabel={modelLabel}
+        turnComplete={turnComplete}
       />
     );
   }
@@ -42,7 +55,9 @@ export function AssistantTurnSegmentView({
   return (
     <Message from="assistant" className="max-w-full mr-0 ml-0 items-start justify-start">
       <MessageContent className="max-w-full ml-0 group-[.is-user]:ml-0">
-        {showThinking && segment.thinking ? <ThinkingBlock message={segment.thinking} /> : null}
+        {showThinking && segment.thinking ? (
+          <ThinkingBlock message={segment.thinking} turnComplete={turnComplete} />
+        ) : null}
         <AssistantTextContent message={segment.message} />
       </MessageContent>
     </Message>
@@ -61,40 +76,92 @@ function AssistantWorkGroup({
   thinking,
   tools,
   modelLabel,
+  turnComplete = false,
 }: {
   thinking?: ChatListItem;
   tools: ChatListItem[];
   modelLabel?: string | null;
+  turnComplete?: boolean;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
+  const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
+  const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
+  const isWorkActive = !turnComplete || isThinkingStreaming || hasRunningTools;
 
   if (visibleTools.length === 0) {
-    return thinking ? <ThinkingBlock message={thinking} /> : null;
+    return thinking ? (
+      <ThinkingBlock message={thinking} turnComplete={turnComplete} />
+    ) : null;
   }
 
-  const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
-  const isThinking = Boolean(thinking?.thinkingStreaming);
-  const subAgentOnly = visibleTools.every((tool) => isSubAgentTool(tool.tool));
-  const [open, setOpen] = useState(hasRunningTools || isThinking || subAgentOnly);
-
-  useEffect(() => {
-    if (hasRunningTools || isThinking) {
-      setOpen(true);
-    }
-  }, [hasRunningTools, isThinking]);
-
-  if (subAgentOnly) {
+  if (!thinking) {
     return (
-      <div className="w-full max-w-full space-y-3">
-        {thinking ? <ThinkingBlock message={thinking} /> : null}
-        {visibleTools.map((tool) => (
-          <SubAgentToolRow key={tool.id} message={tool} modelLabel={modelLabel} />
-        ))}
-      </div>
+      <ToolOnlyWorkGroup
+        tools={visibleTools}
+        modelLabel={modelLabel}
+        turnComplete={turnComplete}
+      />
     );
   }
 
-  const label = formatWorkGroupLabel(visibleTools.length);
+  return (
+    <ThinkingReasoning
+      text={thinking.thinking ?? ""}
+      isThinkingStreaming={isThinkingStreaming}
+      isWorkActive={isWorkActive}
+      startedAt={thinking.createdAt}
+      className="w-full max-w-full"
+    >
+      {visibleTools.map((tool, index) =>
+        isDedicatedTool(tool) ? (
+          <div
+            key={tool.id}
+            className={cn("relative", index < visibleTools.length - 1 && "pb-3")}
+          >
+            <DedicatedToolRow
+              message={tool}
+              modelLabel={modelLabel}
+              isLast={index === visibleTools.length - 1}
+            />
+          </div>
+        ) : (
+          <ToolTimelineItem
+            key={tool.id}
+            message={tool}
+            isLast={index === visibleTools.length - 1}
+          />
+        ),
+      )}
+    </ThinkingReasoning>
+  );
+}
+
+function ToolOnlyWorkGroup({
+  tools,
+  modelLabel,
+  turnComplete = false,
+}: {
+  tools: ChatListItem[];
+  modelLabel?: string | null;
+  turnComplete?: boolean;
+}) {
+  const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
+  const isWorkActive = !turnComplete || hasRunningTools;
+  const [open, setOpen] = useState(isWorkActive);
+
+  useEffect(() => {
+    if (isWorkActive) {
+      setOpen(true);
+      return;
+    }
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const delay = reducedMotion ? 0 : 360;
+    const timerId = window.setTimeout(() => setOpen(false), delay);
+    return () => window.clearTimeout(timerId);
+  }, [isWorkActive]);
+
+  const label = formatWorkGroupLabel(tools.length);
 
   return (
     <div className="w-full max-w-full">
@@ -105,17 +172,20 @@ function AssistantWorkGroup({
       />
       {open ? (
         <TimelineBody>
-          {thinking ? <ThinkingInline message={thinking} isLast={visibleTools.length === 0} /> : null}
-          {visibleTools.map((tool, index) =>
-            isSubAgentTool(tool.tool) ? (
-              <div key={tool.id} className={cn("relative", index < visibleTools.length - 1 && "pb-3")}>
-                <SubAgentToolRow message={tool} modelLabel={modelLabel} />
+          {tools.map((tool, index) =>
+            isDedicatedTool(tool) ? (
+              <div key={tool.id} className={cn("relative", index < tools.length - 1 && "pb-3")}>
+                <DedicatedToolRow
+                  message={tool}
+                  modelLabel={modelLabel}
+                  isLast={index === tools.length - 1}
+                />
               </div>
             ) : (
               <ToolTimelineItem
                 key={tool.id}
                 message={tool}
-                isLast={index === visibleTools.length - 1}
+                isLast={index === tools.length - 1}
               />
             ),
           )}
@@ -133,54 +203,27 @@ function formatWorkGroupLabel(toolCount: number): string {
   return `Called ${toolCount} tools`;
 }
 
-function ThinkingBlock({ message }: { message: ChatListItem }) {
-  const isStreaming = Boolean(message.thinkingStreaming);
-  const text = message.thinking?.trim();
-  const shouldAutoOpen = Boolean(text) && Boolean(message.streaming);
-  const [open, setOpen] = useState(isStreaming || shouldAutoOpen);
-
-  useEffect(() => {
-    if (isStreaming || shouldAutoOpen) {
-      setOpen(true);
-    }
-  }, [isStreaming, shouldAutoOpen]);
-
-  if (!text && !isStreaming) {
-    return null;
-  }
-
-  return (
-    <div className="w-full max-w-full">
-      <CollapsibleTrigger
-        open={open}
-        onToggle={() => setOpen((current) => !current)}
-        label={isStreaming ? "Thinking…" : "Thought"}
-        labelClassName={isStreaming ? "thinking-shimmer-text" : undefined}
-      />
-      {open && text ? (
-        <ThinkingContent className="mt-2 pl-5">{text}</ThinkingContent>
-      ) : null}
-    </div>
-  );
-}
-
-function ThinkingInline({
+function ThinkingBlock({
   message,
-  isLast,
+  turnComplete = false,
 }: {
   message: ChatListItem;
-  isLast: boolean;
+  turnComplete?: boolean;
 }) {
-  const text = message.thinking?.trim();
-
-  if (!text) {
-    return null;
-  }
+  const isThinkingStreaming = Boolean(message.thinkingStreaming);
+  const isWorkActive =
+    !turnComplete ||
+    isThinkingStreaming ||
+    Boolean(message.streaming && !message.content.trim());
 
   return (
-    <div className={cn("relative", !isLast && "pb-3")}>
-      <ThinkingContent>{text}</ThinkingContent>
-    </div>
+    <ThinkingReasoning
+      text={message.thinking ?? ""}
+      isThinkingStreaming={isThinkingStreaming}
+      isWorkActive={isWorkActive}
+      startedAt={message.createdAt}
+      className="w-full max-w-full"
+    />
   );
 }
 
@@ -230,6 +273,42 @@ function useElapsedSeconds(active: boolean, startedAt?: string): number {
   return elapsed;
 }
 
+function isDedicatedTool(tool: ChatListItem): boolean {
+  return (
+    isSubAgentTool(tool.tool) ||
+    shouldRenderWebSearchToolRow(tool) ||
+    shouldRenderWebFetchToolRow(tool)
+  );
+}
+
+function DedicatedToolRow({
+  message,
+  modelLabel,
+  isLast = false,
+}: {
+  message: ChatListItem;
+  modelLabel?: string | null;
+  isLast?: boolean;
+}) {
+  if (isWebFetchTool(message.tool)) {
+    if (shouldRenderWebFetchToolRow(message)) {
+      return <WebFetchToolRow message={message} />;
+    }
+
+    return <ToolTimelineItem message={message} isLast={isLast} />;
+  }
+
+  if (isWebSearchTool(message.tool)) {
+    if (shouldRenderWebSearchToolRow(message)) {
+      return <WebSearchToolRow message={message} />;
+    }
+
+    return <ToolTimelineItem message={message} isLast={isLast} />;
+  }
+
+  return <SubAgentToolRow message={message} modelLabel={modelLabel} />;
+}
+
 function SubAgentToolRow({
   message,
   modelLabel,
@@ -246,12 +325,7 @@ function SubAgentToolRow({
     message.toolStatus === "done" ? formatSubAgentToolResult(message.toolResult) : null;
   const hasExpandableOutput = Boolean(output && (!parsed?.summary || output !== parsed.summary));
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (isRunning) {
-      setOpen(false);
-    }
-  }, [isRunning]);
+  const expanded = !isRunning && open;
 
   const statusTone =
     parsed?.status === "fail"
@@ -294,20 +368,20 @@ function SubAgentToolRow({
         <div className="pl-6">
           <button
             type="button"
-            aria-expanded={open}
+            aria-expanded={expanded}
             onClick={() => setOpen((current) => !current)}
             className="flex items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronDownIcon
               className={cn(
                 "size-3.5 shrink-0 transition-transform duration-200",
-                !open && "-rotate-90",
+                !expanded && "-rotate-90",
               )}
               aria-hidden
             />
-            <span>{open ? "Hide full output" : "Show full output"}</span>
+            <span>{expanded ? "Hide full output" : "Show full output"}</span>
           </button>
-          {open && output ? <DetailBlock label="Output" content={output} tone="output" /> : null}
+          {expanded && output ? <DetailBlock label="Output" content={output} tone="output" /> : null}
         </div>
       ) : null}
 
@@ -486,6 +560,3 @@ function DetailBlock({
     </div>
   );
 }
-
-// Keep export for any external usage/tests.
-export const AssistantToolGroup = AssistantWorkGroup;

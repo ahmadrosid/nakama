@@ -99,6 +99,8 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
       const limit = (model.limit as Record<string, number> | undefined) ?? {};
       const modalities = (model.modalities as Record<string, string[]> | undefined) ?? {};
 
+      const inputModalities = new Set(modalities.input ?? []);
+
       rows.push({
         providerId,
         providerName,
@@ -110,7 +112,7 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
         context: (limit.context as number | undefined) ?? 0,
         toolCall: !!(model.tool_call as boolean | undefined),
         reasoning: !!(model.reasoning as boolean | undefined),
-        vision: (modalities.input ?? []).includes("image"),
+        vision: inputModalities.has("image"),
         isZen: providerId === "opencode",
         nakamaProvider,
         supported,

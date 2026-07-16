@@ -8,9 +8,9 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { HistoryDeleteDialog } from "@/pages/history-delete-dialog";
 import {
   HistoryPageShell,
-  HistoryProfileSidebar,
-  HistorySessionsPanel,
-} from "@/pages/history-page-sections";
+} from "@/pages/history-page-shell";
+import { HistoryProfileSidebar } from "@/pages/history-profile-sidebar";
+import { HistorySessionsPanel } from "@/pages/history-sessions-panel";
 
 export function HistoryPage() {
   const { navigateToPage, navigateToChat } = useAppNavigation();

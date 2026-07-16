@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import type { UpdateEmailSettingsRequest } from "@nakama/core/contract";
+import { useEffect, useReducer } from "react";
+import type { EmailSettingsResponse, UpdateEmailSettingsRequest } from "@nakama/core/contract";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,83 @@ import {
 import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
 
+type EmailSettingsState = {
+  imapHost: string;
+  imapPort: string;
+  imapSecure: boolean;
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: boolean;
+  username: string;
+  password: string;
+  from: string;
+  fromName: string;
+  showPassword: boolean;
+  testRecipient: string;
+  hint: string | null;
+  formError: string | null;
+};
+
+const initialEmailSettingsState: EmailSettingsState = {
+  imapHost: "",
+  imapPort: "993",
+  imapSecure: true,
+  smtpHost: "",
+  smtpPort: "587",
+  smtpSecure: false,
+  username: "",
+  password: "",
+  from: "",
+  fromName: "",
+  showPassword: false,
+  testRecipient: "",
+  hint: null,
+  formError: null,
+};
+
+type EmailSettingsAction =
+  | { type: "clear-on-close" }
+  | { type: "sync-from-settings"; settings: EmailSettingsResponse }
+  | { type: "patch"; values: Partial<EmailSettingsState> }
+  | { type: "toggle-show-password" };
+
+function emailSettingsReducer(
+  state: EmailSettingsState,
+  action: EmailSettingsAction,
+): EmailSettingsState {
+  switch (action.type) {
+    case "clear-on-close":
+      return {
+        ...state,
+        hint: null,
+        formError: null,
+        showPassword: false,
+      };
+    case "sync-from-settings": {
+      const { settings } = action;
+      return {
+        ...state,
+        imapHost: settings.imapHost ?? "",
+        imapPort: String(settings.imapPort ?? 993),
+        imapSecure: settings.imapSecure ?? true,
+        smtpHost: settings.smtpHost ?? "",
+        smtpPort: String(settings.smtpPort ?? 587),
+        smtpSecure: settings.smtpSecure ?? false,
+        username: settings.username ?? "",
+        from: settings.from ?? settings.username ?? "",
+        fromName: settings.fromName ?? "",
+        password: "",
+      };
+    }
+    case "patch":
+      return { ...state, ...action.values };
+    case "toggle-show-password":
+      return { ...state, showPassword: !state.showPassword };
+    default:
+      return state;
+  }
+}
+
 export function EmailSettingsDialog({
   open,
   onOpenChange,
@@ -33,21 +110,7 @@ export function EmailSettingsDialog({
   });
   const saveMutation = useSaveEmailSettings();
   const testMutation = useSendEmailTest();
-
-  const [imapHost, setImapHost] = useState("");
-  const [imapPort, setImapPort] = useState("993");
-  const [imapSecure, setImapSecure] = useState(true);
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpSecure, setSmtpSecure] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [from, setFrom] = useState("");
-  const [fromName, setFromName] = useState("");
-  const [testRecipient, setTestRecipient] = useState("");
-  const [hint, setHint] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(emailSettingsReducer, initialEmailSettingsState);
 
   const passwordPlaceholder = settings?.passwordMasked
     ? `Saved (${settings.passwordMasked})`
@@ -55,9 +118,7 @@ export function EmailSettingsDialog({
 
   useEffect(() => {
     if (!open) {
-      setHint(null);
-      setFormError(null);
-      setShowPassword(false);
+      dispatch({ type: "clear-on-close" });
       return;
     }
 
@@ -65,64 +126,60 @@ export function EmailSettingsDialog({
       return;
     }
 
-    setImapHost(settings.imapHost ?? "");
-    setImapPort(String(settings.imapPort ?? 993));
-    setImapSecure(settings.imapSecure ?? true);
-    setSmtpHost(settings.smtpHost ?? "");
-    setSmtpPort(String(settings.smtpPort ?? 587));
-    setSmtpSecure(settings.smtpSecure ?? false);
-    setUsername(settings.username ?? "");
-    setFrom(settings.from ?? settings.username ?? "");
-    setFromName(settings.fromName ?? "");
-    setPassword("");
+    dispatch({ type: "sync-from-settings", settings });
   }, [open, settings]);
 
   useEffect(() => {
-    if (user?.email && !testRecipient) {
-      setTestRecipient(user.email);
+    if (user?.email && !state.testRecipient) {
+      dispatch({ type: "patch", values: { testRecipient: user.email } });
     }
-  }, [user?.email, testRecipient]);
+  }, [user?.email, state.testRecipient]);
 
   const handleSave = () => {
-    setFormError(null);
-    setHint(null);
+    dispatch({ type: "patch", values: { formError: null, hint: null } });
 
     const request: UpdateEmailSettingsRequest = {
-      imapHost: imapHost.trim(),
-      imapPort: Number(imapPort),
-      imapSecure,
-      smtpHost: smtpHost.trim(),
-      smtpPort: Number(smtpPort),
-      smtpSecure,
-      username: username.trim(),
-      from: from.trim(),
-      fromName: fromName.trim(),
-      ...(password.trim() ? { password: password.trim() } : {}),
+      imapHost: state.imapHost.trim(),
+      imapPort: Number(state.imapPort),
+      imapSecure: state.imapSecure,
+      smtpHost: state.smtpHost.trim(),
+      smtpPort: Number(state.smtpPort),
+      smtpSecure: state.smtpSecure,
+      username: state.username.trim(),
+      from: state.from.trim(),
+      fromName: state.fromName.trim(),
+      ...(state.password.trim() ? { password: state.password.trim() } : {}),
     };
 
     saveMutation.mutate(request, {
       onSuccess: (saved) => {
-        setPassword("");
-        setHint(saved.configured ? "Settings saved." : "Saved, but mailbox is not fully configured yet.");
+        dispatch({
+          type: "patch",
+          values: {
+            password: "",
+            hint: saved.configured
+              ? "Settings saved."
+              : "Saved, but mailbox is not fully configured yet.",
+          },
+        });
       },
       onError: (err) => {
-        setFormError(formatError(err));
+        dispatch({ type: "patch", values: { formError: formatError(err) } });
       },
     });
   };
 
   const handleTestSend = () => {
-    setFormError(null);
-    setHint(null);
+    dispatch({ type: "patch", values: { formError: null, hint: null } });
 
     testMutation.mutate(
-      { to: testRecipient.trim() || undefined },
+      { to: state.testRecipient.trim() || undefined },
       {
         onSuccess: (result) => {
-          setHint(`Test email sent to ${result.to}.`);
+          dispatch({ type: "patch", values: { hint: `Test email sent to ${result.to}.` } });
         },
         onError: (err) => {
-          setFormError(formatError(err));
+          dispatch({ type: "patch", values: { formError: formatError(err) } });
         },
       },
     );
@@ -159,40 +216,60 @@ export function EmailSettingsDialog({
         ) : (
           <>
             <EmailSettingsFormFields
-              fromName={fromName}
-              from={from}
-              username={username}
-              password={password}
-              showPassword={showPassword}
+              fromName={state.fromName}
+              from={state.from}
+              username={state.username}
+              password={state.password}
+              showPassword={state.showPassword}
               passwordPlaceholder={passwordPlaceholder}
-              imapHost={imapHost}
-              imapPort={imapPort}
-              imapSecure={imapSecure}
-              smtpHost={smtpHost}
-              smtpPort={smtpPort}
-              smtpSecure={smtpSecure}
-              onFromNameChange={setFromName}
-              onFromChange={setFrom}
-              onUsernameChange={setUsername}
-              onPasswordChange={setPassword}
-              onShowPasswordToggle={() => setShowPassword((value) => !value)}
-              onImapHostChange={setImapHost}
-              onImapPortChange={setImapPort}
-              onImapSecureChange={setImapSecure}
-              onSmtpHostChange={setSmtpHost}
-              onSmtpPortChange={setSmtpPort}
-              onSmtpSecureChange={setSmtpSecure}
+              imapHost={state.imapHost}
+              imapPort={state.imapPort}
+              imapSecure={state.imapSecure}
+              smtpHost={state.smtpHost}
+              smtpPort={state.smtpPort}
+              smtpSecure={state.smtpSecure}
+              onFromNameChange={(value) =>
+                dispatch({ type: "patch", values: { fromName: value } })
+              }
+              onFromChange={(value) => dispatch({ type: "patch", values: { from: value } })}
+              onUsernameChange={(value) =>
+                dispatch({ type: "patch", values: { username: value } })
+              }
+              onPasswordChange={(value) =>
+                dispatch({ type: "patch", values: { password: value } })
+              }
+              onShowPasswordToggle={() => dispatch({ type: "toggle-show-password" })}
+              onImapHostChange={(value) =>
+                dispatch({ type: "patch", values: { imapHost: value } })
+              }
+              onImapPortChange={(value) =>
+                dispatch({ type: "patch", values: { imapPort: value } })
+              }
+              onImapSecureChange={(value) =>
+                dispatch({ type: "patch", values: { imapSecure: value } })
+              }
+              onSmtpHostChange={(value) =>
+                dispatch({ type: "patch", values: { smtpHost: value } })
+              }
+              onSmtpPortChange={(value) =>
+                dispatch({ type: "patch", values: { smtpPort: value } })
+              }
+              onSmtpSecureChange={(value) =>
+                dispatch({ type: "patch", values: { smtpSecure: value } })
+              }
             />
 
             <EmailSettingsFooter
-              hint={hint}
-              formError={formError}
-              testRecipient={testRecipient}
+              hint={state.hint}
+              formError={state.formError}
+              testRecipient={state.testRecipient}
               userEmail={user?.email}
               testPending={testMutation.isPending}
               savePending={saveMutation.isPending}
               configured={settings?.configured ?? false}
-              onTestRecipientChange={setTestRecipient}
+              onTestRecipientChange={(value) =>
+                dispatch({ type: "patch", values: { testRecipient: value } })
+              }
               onTestSend={handleTestSend}
               onSave={handleSave}
             />

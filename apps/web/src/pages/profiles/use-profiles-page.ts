@@ -122,16 +122,6 @@ export function useProfilesPage() {
     selectedId,
     detail,
   });
-  editStateRef.current = {
-    editName,
-    editPrompt,
-    editModel,
-    savedName,
-    savedPrompt,
-    savedModel,
-    selectedId,
-    detail,
-  };
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(modelsResponse?.models ?? []),
@@ -321,7 +311,31 @@ export function useProfilesPage() {
     }
   }, [scheduleSave, updateMutation]);
 
-  performSaveRef.current = performSave;
+  useEffect(() => {
+    editStateRef.current = {
+      editName,
+      editPrompt,
+      editModel,
+      savedName,
+      savedPrompt,
+      savedModel,
+      selectedId,
+      detail,
+    };
+  }, [
+    detail,
+    editModel,
+    editName,
+    editPrompt,
+    savedModel,
+    savedName,
+    savedPrompt,
+    selectedId,
+  ]);
+
+  useEffect(() => {
+    performSaveRef.current = performSave;
+  }, [performSave]);
 
   const flushSave = useCallback(async (): Promise<boolean> => {
     clearScheduledSave();

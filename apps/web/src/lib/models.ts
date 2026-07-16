@@ -217,11 +217,17 @@ export function modelsFromOpenRouterRows(
     outputPerMillionUsd?: number;
   }>,
 ): ProviderModelOption[] {
-  return rows
-    .filter((row) => row.id.trim())
-    .map((row) => ({
-      id: row.id.trim(),
-      name: row.name?.trim() || row.id.trim(),
+  const models: ProviderModelOption[] = [];
+
+  for (const row of rows) {
+    const id = row.id.trim();
+    if (!id) {
+      continue;
+    }
+
+    models.push({
+      id,
+      name: row.name?.trim() || id,
       provider: "openrouter" as const,
       ...(row.default ? { default: true } : {}),
       ...(row.inputPerMillionUsd !== undefined
@@ -230,7 +236,10 @@ export function modelsFromOpenRouterRows(
       ...(row.outputPerMillionUsd !== undefined
         ? { outputPerMillionUsd: row.outputPerMillionUsd }
         : {}),
-    }));
+    });
+  }
+
+  return models;
 }
 
 export function appendOpenRouterModelRow(
@@ -251,9 +260,20 @@ export function appendOpenRouterModelRow(
   inputPerMillionUsd?: number;
   outputPerMillionUsd?: number;
 }> {
-  const base = rows
-    .filter((row) => row.id.trim())
-    .map((row) => ({
+  const base: Array<{
+    id: string;
+    name: string;
+    default?: boolean;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }> = [];
+
+  for (const row of rows) {
+    if (!row.id.trim()) {
+      continue;
+    }
+
+    base.push({
       id: row.id,
       name: row.name ?? row.id,
       ...(row.default ? { default: true } : {}),
@@ -263,7 +283,8 @@ export function appendOpenRouterModelRow(
       ...(row.outputPerMillionUsd !== undefined
         ? { outputPerMillionUsd: row.outputPerMillionUsd }
         : {}),
-    }));
+    });
+  }
 
   if (base.some((row) => row.id === modelId)) {
     return base.map((row) => ({
@@ -341,20 +362,6 @@ export function getModelDisplayName(
   }
 
   return models.find((model) => model.id === modelId)?.name ?? modelId;
-}
-
-export function resolveModelForProvider(
-  provider: SelectedProvider,
-  catalogModel: string,
-  customModel?: string,
-): string {
-  const custom = customModel?.trim();
-
-  if (provider === "openrouter" && custom) {
-    return custom;
-  }
-
-  return catalogModel;
 }
 
 export function buildCreateProviderRequest(options: {
@@ -661,12 +668,21 @@ export const TRANSCRIPTION_MODEL_OPTIONS = [
 export function modelsFromCustomRows(
   rows: Array<{ id: string; name?: string; default?: boolean; inputPerMillionUsd?: number; outputPerMillionUsd?: number }>,
 ): ProviderModelOption[] {
-  return rows
-    .filter((row) => row.id.trim())
-    .map((row) => ({
-      id: row.id.trim(),
-      name: row.name?.trim() || row.id.trim(),
+  const models: ProviderModelOption[] = [];
+
+  for (const row of rows) {
+    const id = row.id.trim();
+    if (!id) {
+      continue;
+    }
+
+    models.push({
+      id,
+      name: row.name?.trim() || id,
       provider: "openai_compatible" as const,
       ...(row.default ? { default: true } : {}),
-    }));
+    });
+  }
+
+  return models;
 }

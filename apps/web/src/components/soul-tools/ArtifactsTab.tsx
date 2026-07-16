@@ -1,6 +1,6 @@
 import type { ArtifactFile } from "@nakama/core/contract";
-import { FileDownIcon, FileTextIcon, ImageIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { FileDownIcon, FileTextIcon, ImageIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import {
@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useArtifactsQuery, useDeleteArtifactMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
@@ -20,12 +21,14 @@ import { cn } from "@/lib/utils";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
+const artifactTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatTimestamp(value: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
+    return artifactTimestampFormatter.format(new Date(value));
   } catch {
     return value;
   }
@@ -46,6 +49,7 @@ function ArtifactIcon({ mimeType }: { mimeType: string }) {
 
 export function ArtifactsTab({ profileId }: { profileId: string | null }) {
   const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const {
     data,
     isLoading,
@@ -54,6 +58,20 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
     refetch,
   } = useArtifactsQuery(profileId);
   const deleteMutation = useDeleteArtifactMutation();
+
+  const filteredArtifacts = useMemo(() => {
+    const artifacts = data?.artifacts ?? [];
+    const trimmed = searchQuery.trim().toLowerCase();
+
+    if (!trimmed) {
+      return artifacts;
+    }
+
+    return artifacts.filter((artifact) => {
+      const haystack = `${artifact.filename} ${artifact.mimeType}`.toLowerCase();
+      return haystack.includes(trimmed);
+    });
+  }, [data?.artifacts, searchQuery]);
 
   if (!profileId) {
     return null;
@@ -75,17 +93,34 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
     <>
       <div className="space-y-4">
         <section className={sectionClass}>
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
-              <p className="text-xs text-muted-foreground">
-                Persistent files saved by the agent under `artifacts/`.
-              </p>
+          <div className="space-y-3 border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Artifacts</h2>
+                <p className="text-xs text-muted-foreground">
+                  Persistent files saved by the agent under `artifacts/`.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+                {isFetching ? <Spinner className="mr-2 size-4" /> : null}
+                Refresh
+              </Button>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
-              {isFetching ? <Spinner className="mr-2 size-4" /> : null}
-              Refresh
-            </Button>
+
+            {data && data.artifacts.length > 0 ? (
+              <div className="relative">
+                <SearchIcon
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search files…"
+                  className="h-8 border-border/60 bg-muted/20 pl-8 text-sm shadow-none focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10 dark:bg-muted/15 dark:focus-visible:bg-background/60"
+                />
+              </div>
+            ) : null}
           </div>
 
           {isLoading ? (
@@ -99,9 +134,13 @@ export function ArtifactsTab({ profileId }: { profileId: string | null }) {
             <div className="px-4 py-6 text-sm text-muted-foreground">
               No artifacts yet.
             </div>
+          ) : filteredArtifacts.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground">
+              No artifacts match &ldquo;{searchQuery.trim()}&rdquo;.
+            </div>
           ) : (
             <ul className="divide-y divide-border">
-              {data.artifacts.map((artifact) => (
+              {filteredArtifacts.map((artifact) => (
                 <li
                   key={artifact.filename}
                   className="flex items-center justify-between gap-3 px-4 py-3"

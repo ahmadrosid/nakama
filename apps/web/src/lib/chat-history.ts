@@ -7,6 +7,10 @@ import type {
 import { parseAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import { extractThinkingFromAssistantMessage } from "@nakama/core/thinking-content";
 import { userContentToDisplayDocuments, userContentToDisplayImageAttachments, userContentToDisplayImages, stripImageDescriptionsFromDisplayText } from "@/lib/chat-images";
+import {
+  extractWebSearchBlocksFromProviderContent,
+  WEB_SEARCH_TOOL_NAME,
+} from "@/lib/chat-stream-web-search";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -166,6 +170,14 @@ export function chatMessagesToListItems(
   }
 
   const items: ChatListItem[] = [];
+  const hydratedToolCallIds = new Set<string>();
+  const persistedWebSearchToolIds = new Set<string>();
+
+  for (const message of messages) {
+    if (message.role === "tool" && message.name === WEB_SEARCH_TOOL_NAME) {
+      persistedWebSearchToolIds.add(message.toolCallId);
+    }
+  }
 
   for (const [index, message] of messages.entries()) {
     const meta = messageMeta[index];
@@ -198,6 +210,29 @@ export function chatMessagesToListItems(
         continue;
       }
 
+      for (const block of extractWebSearchBlocksFromProviderContent(message.providerContent)) {
+        if (
+          hydratedToolCallIds.has(block.toolCallId) ||
+          persistedWebSearchToolIds.has(block.toolCallId)
+        ) {
+          continue;
+        }
+
+        hydratedToolCallIds.add(block.toolCallId);
+        items.push({
+          id: block.toolCallId,
+          historyIndex: index,
+          createdAt: meta?.createdAt,
+          role: "tool",
+          content: `${WEB_SEARCH_TOOL_NAME} completed`,
+          toolCallId: block.toolCallId,
+          tool: WEB_SEARCH_TOOL_NAME,
+          toolStatus: "done",
+          toolInput: block.query ? { query: block.query } : undefined,
+          toolResult: block.result,
+        });
+      }
+
       const thinking = extractThinkingFromAssistantMessage(message);
 
       items.push({
@@ -212,6 +247,7 @@ export function chatMessagesToListItems(
     }
 
     if (message.role === "tool") {
+      hydratedToolCallIds.add(message.toolCallId);
       items.push({
         id: message.toolCallId,
         historyIndex: index,

@@ -10,7 +10,7 @@ import type {
 import type { ChatStatus } from "ai";
 import type { FileUIPart } from "ai";
 import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   PromptInput,
@@ -126,6 +126,10 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
 
 export type ChatComposerProps = ChatComposerMinimalProps | ChatComposerFullProps;
 
+const EMPTY_TODOS: AgentTodo[] = [];
+const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
+const EMPTY_SKILLS: SkillSummary[] = [];
+
 export function ChatComposer(props: ChatComposerProps) {
   const {
     chatStatus,
@@ -138,9 +142,9 @@ export function ChatComposer(props: ChatComposerProps) {
     onStop,
     className,
     footerClassName,
-    todos = [],
+    todos = EMPTY_TODOS,
     questionnaire = null,
-    queuedMessages = [],
+    queuedMessages = EMPTY_QUEUED_MESSAGES,
     onSubmitQuestionnaire,
   } = props;
 
@@ -149,7 +153,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const hasQuestionnaire = Boolean(questionnaire && questionnaire.questions.length > 0);
   const hasQueuedMessages = queuedMessages.length > 0;
   const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
-  const availableSkills = isMinimal ? [] : (props.availableSkills ?? []);
+  const availableSkills = isMinimal ? EMPTY_SKILLS : (props.availableSkills ?? EMPTY_SKILLS);
+  const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = error ?? attachmentError;
 
@@ -209,6 +214,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
               <PromptInputBody>
                 <ChatComposerTextarea
+                  key={skillPickerKey}
                   className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
                   placeholder={placeholder}
                   disabled={disabled}
@@ -259,6 +265,7 @@ export function ChatComposer(props: ChatComposerProps) {
         ) : null}
         <PromptInputBody>
           <ChatComposerTextarea
+            key={skillPickerKey}
             className={
               isMinimal
                 ? "min-h-10 max-h-32 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
@@ -330,17 +337,8 @@ function ChatComposerTextarea({
     [availableSkills, slashRange],
   );
   const pickerOpen = Boolean(slashRange && availableSkills.length > 0 && !disabled);
-
-  useEffect(() => {
-    setSlashRange(null);
-    setActiveIndex(0);
-  }, [availableSkills]);
-
-  useEffect(() => {
-    if (activeIndex >= suggestions.length) {
-      setActiveIndex(Math.max(0, suggestions.length - 1));
-    }
-  }, [activeIndex, suggestions.length]);
+  const safeActiveIndex =
+    suggestions.length === 0 ? 0 : Math.min(activeIndex, suggestions.length - 1);
 
   const updateSlashRange = useCallback((value: string, cursorIndex: number) => {
     setSlashRange(findActiveSkillSlashRange(value, cursorIndex));
@@ -381,7 +379,7 @@ function ChatComposerTextarea({
       {pickerOpen ? (
         <ChatSkillPicker
           skills={suggestions}
-          activeIndex={activeIndex}
+          activeIndex={safeActiveIndex}
           onSelect={selectSkill}
         />
       ) : null}
@@ -429,7 +427,7 @@ function ChatComposerTextarea({
 
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            const skill = suggestions[activeIndex];
+            const skill = suggestions[safeActiveIndex];
             if (skill) {
               selectSkill(skill);
             }

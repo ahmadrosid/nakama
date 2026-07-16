@@ -158,4 +158,235 @@ describe("chatMessagesToListItems", () => {
       },
     ]);
   });
+
+  test("hydrates web_search tool rows from assistant providerContent", () => {
+    const messages: ChatMessage[] = [
+      { role: "user", content: "Search the web for JWT security" },
+      {
+        role: "assistant",
+        content: "Here is what I found about JWT security.",
+        providerContent: [
+          {
+            type: "server_tool_use",
+            id: "srvtool_abc",
+            name: "web_search",
+            input: { query: "JWT security best practices" },
+          },
+          {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtool_abc",
+            content: [
+              {
+                type: "web_search_result",
+                title: "JWT Security Best Practices",
+                url: "https://auth0.com/blog/jwt-security-best-practices",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+
+    expect(items).toHaveLength(3);
+    expect(items[1]).toMatchObject({
+      role: "tool",
+      tool: "web_search",
+      toolStatus: "done",
+      toolCallId: "srvtool_abc",
+      toolInput: { query: "JWT security best practices" },
+    });
+    expect(items[2]).toMatchObject({
+      role: "assistant",
+      content: "Here is what I found about JWT security.",
+    });
+  });
+
+  test("does not duplicate web_search when a persisted tool row exists", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: "Searching…",
+        providerContent: [
+          {
+            type: "server_tool_use",
+            id: "srvtool_abc",
+            name: "web_search",
+            input: { query: "JWT" },
+          },
+          {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtool_abc",
+            content: [
+              {
+                type: "web_search_result",
+                title: "JWT",
+                url: "https://example.com/jwt",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "srvtool_abc",
+        name: "web_search",
+        content: JSON.stringify([
+          {
+            type: "web_search_result",
+            title: "JWT",
+            url: "https://example.com/jwt",
+          },
+        ]),
+      },
+      { role: "assistant", content: "Done." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+    const webSearchItems = items.filter((item) => item.tool === "web_search");
+
+    expect(webSearchItems).toHaveLength(1);
+    expect(webSearchItems[0]?.toolCallId).toBe("srvtool_abc");
+    expect(webSearchItems[0]?.historyIndex).toBe(1);
+  });
+
+  test("does not duplicate web_search when assistant had only toolCalls", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "srvtool_abc", name: "web_search", arguments: { query: "JWT" } }],
+        providerContent: [
+          {
+            type: "server_tool_use",
+            id: "srvtool_abc",
+            name: "web_search",
+            input: { query: "JWT" },
+          },
+          {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtool_abc",
+            content: [
+              {
+                type: "web_search_result",
+                title: "JWT",
+                url: "https://example.com/jwt",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "srvtool_abc",
+        name: "web_search",
+        content: JSON.stringify([
+          {
+            type: "web_search_result",
+            title: "JWT",
+            url: "https://example.com/jwt",
+          },
+        ]),
+      },
+      { role: "assistant", content: "Done." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+    const webSearchItems = items.filter((item) => item.tool === "web_search");
+
+    expect(webSearchItems).toHaveLength(1);
+    expect(webSearchItems[0]?.toolCallId).toBe("srvtool_abc");
+  });
+
+  test("preserves web_fetch tool rows from persisted tool messages", () => {
+    const fetchResult = {
+      url: "https://example.com/start",
+      finalUrl: "https://example.com/docs",
+      status: 200,
+      contentType: "text/markdown",
+      bytes: 42,
+      content: "# Docs",
+    };
+    const messages: ChatMessage[] = [
+      { role: "user", content: "Fetch the docs page" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "tool_fetch_1",
+            name: "web_fetch",
+            arguments: { url: "https://example.com/docs" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "tool_fetch_1",
+        name: "web_fetch",
+        content: JSON.stringify(fetchResult),
+      },
+      { role: "assistant", content: "Here is the page." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+
+    expect(items.find((item) => item.tool === "web_fetch")).toMatchObject({
+      role: "tool",
+      toolStatus: "done",
+      toolInput: { url: "https://example.com/docs" },
+      toolResult: fetchResult,
+    });
+  });
+
+  test("preserves Exa MCP web search tool rows from persisted tool messages", () => {
+    const exaResult = {
+      text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
+    };
+    const messages: ChatMessage[] = [
+      { role: "user", content: "Search for JWT security" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "tool_exa_1",
+            name: "exa__web_search_exa",
+            arguments: { query: "JWT security best practices" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolCallId: "tool_exa_1",
+        name: "exa__web_search_exa",
+        content: JSON.stringify(exaResult),
+      },
+      { role: "assistant", content: "Here is what I found." },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+
+    expect(items.find((item) => item.tool === "exa__web_search_exa")).toMatchObject({
+      role: "tool",
+      toolStatus: "done",
+      toolInput: { query: "JWT security best practices" },
+      toolResult: exaResult,
+    });
+  });
+
+  test("does not hydrate web_search when providerContent lacks hosted search", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: "Plain answer.",
+        providerContent: [{ type: "text", text: "Plain answer." }],
+      },
+    ];
+
+    const items = chatMessagesToListItems(messages);
+
+    expect(items.filter((item) => item.tool === "web_search")).toHaveLength(0);
+  });
 });

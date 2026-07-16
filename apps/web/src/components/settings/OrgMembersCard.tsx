@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useReducer } from "react";
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/context/use-auth";
@@ -21,6 +21,98 @@ import {
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
 
+type OrgMembersState = {
+  inviteOpen: boolean;
+  addOpen: boolean;
+  editOpen: boolean;
+  editingMember: OrgMemberSummary | null;
+  inviteEmail: string;
+  inviteRole: OrgRole;
+  addName: string;
+  addEmail: string;
+  addPhone: string;
+  addRole: OrgRole;
+  editName: string;
+  editPhone: string;
+  editRole: OrgRole;
+  formError: string | null;
+  secretHint: string | null;
+  secretValue: string | null;
+};
+
+const initialOrgMembersState: OrgMembersState = {
+  inviteOpen: false,
+  addOpen: false,
+  editOpen: false,
+  editingMember: null,
+  inviteEmail: "",
+  inviteRole: "member",
+  addName: "",
+  addEmail: "",
+  addPhone: "",
+  addRole: "member",
+  editName: "",
+  editPhone: "",
+  editRole: "member",
+  formError: null,
+  secretHint: null,
+  secretValue: null,
+};
+
+type OrgMembersAction =
+  | { type: "reset-invite" }
+  | { type: "reset-add" }
+  | { type: "reset-edit" }
+  | { type: "clear-secrets" }
+  | { type: "patch"; values: Partial<OrgMembersState> }
+  | { type: "open-edit"; member: OrgMemberSummary };
+
+function orgMembersReducer(state: OrgMembersState, action: OrgMembersAction): OrgMembersState {
+  switch (action.type) {
+    case "reset-invite":
+      return {
+        ...state,
+        inviteEmail: "",
+        inviteRole: "member",
+        formError: null,
+      };
+    case "reset-add":
+      return {
+        ...state,
+        addName: "",
+        addEmail: "",
+        addPhone: "",
+        addRole: "member",
+        formError: null,
+      };
+    case "reset-edit":
+      return {
+        ...state,
+        editingMember: null,
+        editName: "",
+        editPhone: "",
+        editRole: "member",
+        formError: null,
+      };
+    case "clear-secrets":
+      return { ...state, secretHint: null, secretValue: null };
+    case "open-edit":
+      return {
+        ...state,
+        editingMember: action.member,
+        editName: action.member.name ?? "",
+        editPhone: action.member.phone ?? "",
+        editRole: action.member.role,
+        formError: null,
+        editOpen: true,
+      };
+    case "patch":
+      return { ...state, ...action.values };
+    default:
+      return state;
+  }
+}
+
 export function OrgMembersCard() {
   const { user, activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
@@ -32,23 +124,7 @@ export function OrgMembersCard() {
   const addMutation = useAddOrgMember(orgId ?? "");
   const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
   const removeMutation = useRemoveOrgMember(orgId ?? "");
-
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<OrgMemberSummary | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<OrgRole>("member");
-  const [addName, setAddName] = useState("");
-  const [addEmail, setAddEmail] = useState("");
-  const [addPhone, setAddPhone] = useState("");
-  const [addRole, setAddRole] = useState<OrgRole>("member");
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editRole, setEditRole] = useState<OrgRole>("member");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [secretHint, setSecretHint] = useState<string | null>(null);
-  const [secretValue, setSecretValue] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(orgMembersReducer, initialOrgMembersState);
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
@@ -56,93 +132,84 @@ export function OrgMembersCard() {
 
   const members = data?.members ?? [];
 
-  function resetInviteForm() {
-    setInviteEmail("");
-    setInviteRole("member");
-    setFormError(null);
-  }
-
-  function resetAddForm() {
-    setAddName("");
-    setAddEmail("");
-    setAddPhone("");
-    setAddRole("member");
-    setFormError(null);
-  }
-
-  function resetEditForm() {
-    setEditingMember(null);
-    setEditName("");
-    setEditPhone("");
-    setEditRole("member");
-    setFormError(null);
-  }
-
-  function clearSecrets() {
-    setSecretHint(null);
-    setSecretValue(null);
-  }
-
   async function copySecret(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      setSecretHint("Copied to clipboard.");
+      dispatch({ type: "patch", values: { secretHint: "Copied to clipboard." } });
     } catch {
-      setSecretHint("Could not copy — select and copy manually.");
+      dispatch({
+        type: "patch",
+        values: { secretHint: "Could not copy — select and copy manually." },
+      });
     }
   }
 
   function handleInviteSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setFormError(null);
-    clearSecrets();
+    dispatch({ type: "patch", values: { formError: null } });
+    dispatch({ type: "clear-secrets" });
 
-    const email = inviteEmail.trim();
+    const email = state.inviteEmail.trim();
     if (!email) {
-      setFormError("Email is required.");
+      dispatch({ type: "patch", values: { formError: "Email is required." } });
       return;
     }
 
     inviteMutation.mutate(
-      { email, role: inviteRole },
+      { email, role: state.inviteRole },
       {
         onSuccess: (result) => {
-          setSecretValue(result.token);
-          setSecretHint("Share this invite token with the recipient.");
-          setInviteOpen(false);
-          resetInviteForm();
+          dispatch({
+            type: "patch",
+            values: {
+              secretValue: result.token,
+              secretHint: "Share this invite token with the recipient.",
+              inviteOpen: false,
+            },
+          });
+          dispatch({ type: "reset-invite" });
         },
-        onError: (err) => setFormError(formatError(err)),
+        onError: (err) =>
+          dispatch({ type: "patch", values: { formError: formatError(err) } }),
       },
     );
   }
 
   function handleAddSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setFormError(null);
-    clearSecrets();
+    dispatch({ type: "patch", values: { formError: null } });
+    dispatch({ type: "clear-secrets" });
 
-    const name = addName.trim();
-    const email = addEmail.trim();
-    const phone = addPhone.trim();
+    const name = state.addName.trim();
+    const email = state.addEmail.trim();
+    const phone = state.addPhone.trim();
 
     if (!name || !email) {
-      setFormError("Name and email are required.");
+      dispatch({ type: "patch", values: { formError: "Name and email are required." } });
       return;
     }
 
     addMutation.mutate(
-      { name, email, phone, role: addRole },
+      { name, email, phone, role: state.addRole },
       {
         onSuccess: (result) => {
           if (result.temporaryPassword) {
-            setSecretValue(result.temporaryPassword);
-            setSecretHint("Share this temporary password once. It will not be shown again.");
+            dispatch({
+              type: "patch",
+              values: {
+                secretValue: result.temporaryPassword,
+                secretHint:
+                  "Share this temporary password once. It will not be shown again.",
+                addOpen: false,
+              },
+            });
+          } else {
+            dispatch({ type: "patch", values: { addOpen: false } });
           }
-          setAddOpen(false);
-          resetAddForm();
+          dispatch({ type: "reset-add" });
         },
-        onError: (err) => setFormError(formatError(err)),
+        onError: (err) =>
+          dispatch({ type: "patch", values: { formError: formatError(err) } }),
       },
     );
   }
@@ -150,41 +217,33 @@ export function OrgMembersCard() {
   function handleRoleChange(userId: string, role: OrgRole) {
     updateMemberMutation.mutate(
       { userId, request: { role } },
-      { onError: (err) => setFormError(formatError(err)) },
+      { onError: (err) => dispatch({ type: "patch", values: { formError: formatError(err) } }) },
     );
-  }
-
-  function openEditDialog(member: OrgMemberSummary) {
-    setEditingMember(member);
-    setEditName(member.name ?? "");
-    setEditPhone(member.phone ?? "");
-    setEditRole(member.role);
-    setFormError(null);
-    setEditOpen(true);
   }
 
   function handleEditSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!editingMember) {
+    if (!state.editingMember) {
       return;
     }
 
-    setFormError(null);
+    dispatch({ type: "patch", values: { formError: null } });
     updateMemberMutation.mutate(
       {
-        userId: editingMember.userId,
+        userId: state.editingMember.userId,
         request: {
-          name: editName,
-          phone: editPhone,
-          role: editRole,
+          name: state.editName,
+          phone: state.editPhone,
+          role: state.editRole,
         },
       },
       {
         onSuccess: () => {
-          setEditOpen(false);
-          resetEditForm();
+          dispatch({ type: "patch", values: { editOpen: false } });
+          dispatch({ type: "reset-edit" });
         },
-        onError: (err) => setFormError(formatError(err)),
+        onError: (err) =>
+          dispatch({ type: "patch", values: { formError: formatError(err) } }),
       },
     );
   }
@@ -194,13 +253,13 @@ export function OrgMembersCard() {
       return;
     }
 
-    setFormError(null);
+    dispatch({ type: "patch", values: { formError: null } });
     removeMutation.mutate(userId, {
-      onError: (err) => setFormError(formatError(err)),
+      onError: (err) => dispatch({ type: "patch", values: { formError: formatError(err) } }),
     });
   }
 
-  const statusLine = formError ?? (loadError ? formatError(loadError) : null);
+  const statusLine = state.formError ?? (loadError ? formatError(loadError) : null);
 
   return (
     <>
@@ -209,22 +268,22 @@ export function OrgMembersCard() {
           <OrgMembersCardHeader
             orgName={activeOrg.name}
             onInvite={() => {
-              resetInviteForm();
-              clearSecrets();
-              setInviteOpen(true);
+              dispatch({ type: "reset-invite" });
+              dispatch({ type: "clear-secrets" });
+              dispatch({ type: "patch", values: { inviteOpen: true } });
             }}
             onAddMember={() => {
-              resetAddForm();
-              clearSecrets();
-              setAddOpen(true);
+              dispatch({ type: "reset-add" });
+              dispatch({ type: "clear-secrets" });
+              dispatch({ type: "patch", values: { addOpen: true } });
             }}
           />
 
-          {secretValue ? (
+          {state.secretValue ? (
             <OrgMembersSecretBanner
-              secretHint={secretHint}
-              secretValue={secretValue}
-              onCopy={() => void copySecret(secretValue)}
+              secretHint={state.secretHint}
+              secretValue={state.secretValue}
+              onCopy={() => void copySecret(state.secretValue!)}
             />
           ) : null}
 
@@ -236,7 +295,7 @@ export function OrgMembersCard() {
               updatePending={updateMemberMutation.isPending}
               removePending={removeMutation.isPending}
               onRoleChange={handleRoleChange}
-              onEdit={openEditDialog}
+              onEdit={(member) => dispatch({ type: "open-edit", member })}
               onRemove={handleRemove}
             />
 
@@ -250,60 +309,64 @@ export function OrgMembersCard() {
       </Card>
 
       <OrgMemberInviteDialog
-        open={inviteOpen}
-        inviteEmail={inviteEmail}
-        inviteRole={inviteRole}
-        formError={formError}
+        open={state.inviteOpen}
+        inviteEmail={state.inviteEmail}
+        inviteRole={state.inviteRole}
+        formError={state.formError}
         pending={inviteMutation.isPending}
         onOpenChange={(open) => {
-          setInviteOpen(open);
+          dispatch({ type: "patch", values: { inviteOpen: open } });
           if (!open) {
-            resetInviteForm();
+            dispatch({ type: "reset-invite" });
           }
         }}
-        onInviteEmailChange={setInviteEmail}
-        onInviteRoleChange={setInviteRole}
+        onInviteEmailChange={(value) =>
+          dispatch({ type: "patch", values: { inviteEmail: value } })
+        }
+        onInviteRoleChange={(value) =>
+          dispatch({ type: "patch", values: { inviteRole: value } })
+        }
         onSubmit={handleInviteSubmit}
       />
 
       <OrgMemberAddDialog
-        open={addOpen}
-        addName={addName}
-        addEmail={addEmail}
-        addPhone={addPhone}
-        addRole={addRole}
-        formError={formError}
+        open={state.addOpen}
+        addName={state.addName}
+        addEmail={state.addEmail}
+        addPhone={state.addPhone}
+        addRole={state.addRole}
+        formError={state.formError}
         pending={addMutation.isPending}
         onOpenChange={(open) => {
-          setAddOpen(open);
+          dispatch({ type: "patch", values: { addOpen: open } });
           if (!open) {
-            resetAddForm();
+            dispatch({ type: "reset-add" });
           }
         }}
-        onAddNameChange={setAddName}
-        onAddEmailChange={setAddEmail}
-        onAddPhoneChange={setAddPhone}
-        onAddRoleChange={setAddRole}
+        onAddNameChange={(value) => dispatch({ type: "patch", values: { addName: value } })}
+        onAddEmailChange={(value) => dispatch({ type: "patch", values: { addEmail: value } })}
+        onAddPhoneChange={(value) => dispatch({ type: "patch", values: { addPhone: value } })}
+        onAddRoleChange={(value) => dispatch({ type: "patch", values: { addRole: value } })}
         onSubmit={handleAddSubmit}
       />
 
       <OrgMemberEditDialog
-        open={editOpen}
-        editingMember={editingMember}
-        editName={editName}
-        editPhone={editPhone}
-        editRole={editRole}
-        formError={formError}
+        open={state.editOpen}
+        editingMember={state.editingMember}
+        editName={state.editName}
+        editPhone={state.editPhone}
+        editRole={state.editRole}
+        formError={state.formError}
         pending={updateMemberMutation.isPending}
         onOpenChange={(open) => {
-          setEditOpen(open);
+          dispatch({ type: "patch", values: { editOpen: open } });
           if (!open) {
-            resetEditForm();
+            dispatch({ type: "reset-edit" });
           }
         }}
-        onEditNameChange={setEditName}
-        onEditPhoneChange={setEditPhone}
-        onEditRoleChange={setEditRole}
+        onEditNameChange={(value) => dispatch({ type: "patch", values: { editName: value } })}
+        onEditPhoneChange={(value) => dispatch({ type: "patch", values: { editPhone: value } })}
+        onEditRoleChange={(value) => dispatch({ type: "patch", values: { editRole: value } })}
         onSubmit={handleEditSubmit}
       />
     </>

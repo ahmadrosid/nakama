@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-export function SwarmMetricTile({
+function SwarmMetricTile({
   label,
   value,
   hint,

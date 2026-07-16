@@ -45,17 +45,6 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
 
   const waitingForMessages = isLoading || (isFetching && messages.length === 0);
 
-  // Reset local state when switching tasks (must run before applying query data).
-  useEffect(() => {
-    setMessages([]);
-    setSessionId(task.sessionId);
-    setError(null);
-    setBusy(false);
-    setCanStop(false);
-    streamAbortRef.current?.abort();
-    streamAbortRef.current = null;
-  }, [task.id]);
-
   useEffect(() => {
     if (!data) {
       return;
@@ -68,7 +57,7 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
     if (!task.sessionId && data.sessionId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
     }
-  }, [data, queryClient, task.id, task.sessionId]);
+  }, [data, queryClient, task.sessionId]);
 
   const chatStatus = useMemo(
     () => deriveChatStatus(busy, error, messages),

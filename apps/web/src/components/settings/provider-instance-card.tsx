@@ -51,8 +51,8 @@ export function ProviderInstanceCard({
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [editLabel, setEditLabel] = useState(instance.label);
-  const [editBaseUrl, setEditBaseUrl] = useState(instance.baseUrl ?? "");
+  const [editLabel, setEditLabel] = useState("");
+  const [editBaseUrl, setEditBaseUrl] = useState("");
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
   const providerType = instance.type as SelectedProvider;
@@ -104,6 +104,13 @@ export function ProviderInstanceCard({
     }
 
     setManageOpen(true);
+  };
+
+  const openEdit = () => {
+    setEditLabel(instance.label);
+    setEditBaseUrl(instance.baseUrl ?? "");
+    setDialogError(null);
+    setEditOpen(true);
   };
 
   const runUpdate = async (
@@ -227,7 +234,7 @@ export function ProviderInstanceCard({
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {isCompatible ? (
-          <Button type="button" size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+          <Button type="button" size="sm" variant="outline" onClick={openEdit}>
             Edit
           </Button>
         ) : null}

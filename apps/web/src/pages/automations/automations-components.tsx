@@ -492,7 +492,7 @@ export function RunHistoryList({
   );
 }
 
-export function RunHistoryItem({
+function RunHistoryItem({
   run,
   expanded,
   busy,
@@ -715,7 +715,7 @@ export function RunHistoryItem({
   );
 }
 
-export function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
+function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
   const className = "mt-0.5 size-4 shrink-0";
 
   if (status === "completed") {
@@ -729,7 +729,7 @@ export function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
   return <Loader2Icon className={cn(className, "animate-spin text-muted-foreground")} aria-hidden />;
 }
 
-export function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
+function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
   return (
     <span
       className={cn(
@@ -744,7 +744,7 @@ export function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
   );
 }
 
-export function DeliverySettingsFields({
+function DeliverySettingsFields({
   delivery,
   busy,
   onChange,
@@ -832,7 +832,7 @@ export function DeliverySettingsFields({
   );
 }
 
-export function DeliveryStatusBadge({
+function DeliveryStatusBadge({
   status,
   error,
 }: {
@@ -875,7 +875,7 @@ export function AutomationStateBadge({ enabled }: { enabled: boolean }) {
   );
 }
 
-export function AutomationStateDot({ enabled }: { enabled: boolean }) {
+function AutomationStateDot({ enabled }: { enabled: boolean }) {
   return (
     <span
       className={cn(
@@ -932,7 +932,7 @@ export function SoftPill({
   );
 }
 
-export function Field({
+function Field({
   label,
   hint,
   children,
@@ -943,7 +943,7 @@ export function Field({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-medium text-muted-foreground">{label}</label>
+      <p className="mb-2 block text-xs font-medium text-muted-foreground">{label}</p>
       {children}
       {hint ? (
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>
@@ -952,7 +952,7 @@ export function Field({
   );
 }
 
-export function MetaRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function MetaRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
