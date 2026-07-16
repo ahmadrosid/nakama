@@ -3,12 +3,11 @@ import { AlertTriangleIcon, KanbanIcon, PlusIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
-import { TaskBoard } from "@/components/tasks/TaskBoard";
-import { TaskBoardSkeleton } from "@/components/tasks/TaskBoardSkeleton";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { TaskRunHistoryPanel } from "@/components/tasks/TaskRunHistoryPanel";
+import { TasksPageBoardSection } from "@/components/tasks/tasks-page-board-section";
+import { TasksPageMetrics } from "@/components/tasks/tasks-page-metrics";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useCreateTaskMutation,
@@ -237,107 +236,27 @@ export function TasksPage() {
         </header>
 
         {!isLoading || tasks.length > 0 ? (
-          <div className="@container/metrics mt-5 min-w-0">
-            <div
-              className={cn(
-                "grid grid-cols-1 gap-2 sm:gap-3",
-                "@sm/metrics:grid-cols-2 @2xl/metrics:grid-cols-4",
-              )}
-            >
-            <SwarmMetricTile
-              label="Total tasks"
-              value={metrics.total}
-              hint="All columns"
-              compact={showHistoryPanel}
-            />
-            <SwarmMetricTile
-              label="In progress"
-              value={metrics.inProgress}
-              hint="Agents currently running"
-              highlight={metrics.inProgress > 0}
-              compact={showHistoryPanel}
-            />
-            <SwarmMetricTile
-              label="Completed"
-              value={metrics.done}
-              hint="Successful runs"
-              compact={showHistoryPanel}
-            />
-            <SwarmMetricTile
-              label="Failed"
-              value={metrics.failed}
-              hint="Needs attention"
-              warn={metrics.failed > 0}
-              compact={showHistoryPanel}
-            />
-            </div>
-          </div>
+          <TasksPageMetrics metrics={metrics} compact={showHistoryPanel} />
         ) : null}
 
-        <div className="mt-6 space-y-4">
-          {errorMessage ? (
-            <Card className="border-red-200 bg-red-50 shadow-none dark:border-red-900/40 dark:bg-red-950/20">
-              <CardContent className="flex flex-wrap items-start gap-3 p-4">
-                <AlertTriangleIcon
-                  className="mt-0.5 size-5 shrink-0 text-red-700 dark:text-red-300"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-sm font-medium text-red-900 dark:text-red-100">
-                    Something went wrong
-                  </p>
-                  <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="border-red-300 bg-white text-red-900 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
-                    onClick={() => {
-                      setPageError(null);
-                      void refetch();
-                    }}
-                  >
-                    Try again
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {isLoading && tasks.length === 0 ? (
-            <TaskBoardSkeleton />
-          ) : tasks.length === 0 ? (
-            <Card className="border-dashed shadow-none">
-              <CardContent className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-                <div className="flex size-12 items-center justify-center rounded-full border border-border bg-muted/40">
-                  <KanbanIcon className="size-6 text-muted-foreground" aria-hidden />
-                </div>
-                <div className="max-w-sm space-y-1.5">
-                  <p className="text-sm font-semibold text-foreground">No tasks yet</p>
-                  <p className="text-sm text-muted-foreground">
-                    Create your first swarm task to assign work to an agent profile.
-                  </p>
-                </div>
-                <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
-                  <PlusIcon className="size-4" data-icon="inline-start" aria-hidden />
-                  Create task
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <TaskBoard
-              tasks={tasks}
-              profileById={profileById}
-              runningTaskIds={runningTaskIds}
-              startingTaskId={startingTaskId}
-              focusedTaskId={focusedTaskId}
-              onMoveTask={handleMoveTask}
-              onFocusTask={handleFocusTask}
-              onOpenTask={setDetailTask}
-              onStartTask={handleStartTask}
-            />
-          )}
-        </div>
+        <TasksPageBoardSection
+          isLoading={isLoading}
+          tasks={tasks}
+          errorMessage={errorMessage}
+          profileById={profileById}
+          runningTaskIds={runningTaskIds}
+          startingTaskId={startingTaskId}
+          focusedTaskId={focusedTaskId}
+          onRetry={() => {
+            setPageError(null);
+            void refetch();
+          }}
+          onCreateOpen={() => setCreateOpen(true)}
+          onMoveTask={handleMoveTask}
+          onFocusTask={handleFocusTask}
+          onOpenTask={setDetailTask}
+          onStartTask={handleStartTask}
+        />
       </div>
 
       {showHistoryPanel && focusedTask ? (
@@ -370,55 +289,5 @@ export function TasksPage() {
         onRun={() => handleRun()}
       />
     </div>
-  );
-}
-
-function SwarmMetricTile({
-  label,
-  value,
-  hint,
-  highlight = false,
-  warn = false,
-  compact = false,
-}: {
-  label: string;
-  value: number;
-  hint: string;
-  highlight?: boolean;
-  warn?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <Card
-      className={cn(
-        "min-w-0 overflow-hidden shadow-none",
-        highlight && "border-amber-300/50 bg-amber-50/40 dark:border-amber-800/40 dark:bg-amber-950/20",
-        warn && value > 0 && "border-red-300/50 bg-red-50/40 dark:border-red-900/40 dark:bg-red-950/20",
-      )}
-    >
-      <CardHeader className="flex flex-row items-start justify-between gap-2 p-3 pb-1">
-        <CardDescription className="min-w-0 truncate text-xs">{label}</CardDescription>
-        <CardTitle
-          className={cn(
-            "shrink-0 tabular-nums",
-            compact ? "text-lg @sm/metrics:text-xl" : "text-xl @sm/metrics:text-2xl",
-          )}
-        >
-          {value}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-3 pb-3 pt-0">
-        <p
-          className={cn(
-            "text-muted-foreground",
-            compact
-              ? "line-clamp-2 text-[11px] @sm/metrics:line-clamp-1 @sm/metrics:text-xs"
-              : "line-clamp-2 text-xs @sm/metrics:line-clamp-1",
-          )}
-        >
-          {hint}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
