@@ -1,6 +1,10 @@
 import { MessageResponse } from "@/components/ai-elements/message";
 import { Spinner } from "@/components/ui/spinner";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
+import {
+  ARTIFACT_HTML_IFRAME_SANDBOX,
+  htmlForArtifactPreview,
+} from "@/lib/artifact-html-preview";
 
 /** Highlighting a very large file blocks the main thread, so show it as plain text. */
 const MAX_HIGHLIGHTED_CHARS = 200_000;
@@ -55,7 +59,7 @@ export function ArtifactAttachmentPanelBody({
   canPreview,
   artifact,
   streaming = false,
-  htmlSandbox = "allow-scripts allow-forms allow-popups",
+  htmlSandbox = ARTIFACT_HTML_IFRAME_SANDBOX,
 }: {
   isHtml: boolean;
   isMarkdown: boolean;
@@ -83,9 +87,13 @@ export function ArtifactAttachmentPanelBody({
         {!loading && !error && content ? (
           <iframe
             title={artifact.filename}
-            srcDoc={content}
+            srcDoc={htmlForArtifactPreview(content)}
             sandbox={htmlSandbox}
+            tabIndex={0}
             className="min-h-0 w-full flex-1 border-0 bg-background"
+            onLoad={(event) => {
+              event.currentTarget.focus();
+            }}
           />
         ) : null}
 

@@ -260,3 +260,5 @@ export function useArtifactShareControls({
     handleRevoke,
   };
 }
+
+export type ArtifactShareControlsState = ReturnType<typeof useArtifactShareControls>;
