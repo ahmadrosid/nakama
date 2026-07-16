@@ -3,13 +3,9 @@ import type {
   ConfigureProviderResponse,
   CreateProviderRequest,
   CreateProviderResponse,
-  HealthResponse,
-  ModelsResponse,
 } from "@nakama/core/contract";
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   type ReactNode,
 } from "react";
@@ -19,21 +15,9 @@ import {
   useHealthQuery,
   useModelsQuery,
 } from "@/hooks/use-app-queries";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
-
-interface AppContextValue {
-  health: HealthResponse | null;
-  models: ModelsResponse | null;
-  loading: boolean;
-  error: string | null;
-  createProvider: (request: CreateProviderRequest) => Promise<CreateProviderResponse>;
-  configureProvider: (
-    request: ConfigureProviderRequest,
-  ) => Promise<ConfigureProviderResponse>;
-}
-
-const AppContext = createContext<AppContextValue | null>(null);
+import { AppContext } from "@/context/app-context-shared";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -95,14 +79,4 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-export function useAppContext(): AppContextValue {
-  const value = useContext(AppContext);
-
-  if (!value) {
-    throw new Error("useAppContext must be used within AppProvider");
-  }
-
-  return value;
 }

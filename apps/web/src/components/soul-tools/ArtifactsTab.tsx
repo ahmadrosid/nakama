@@ -1,7 +1,8 @@
 import type { ArtifactFile } from "@nakama/core/contract";
 import { FileDownIcon, FileTextIcon, ImageIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Dialog,
   DialogContent,

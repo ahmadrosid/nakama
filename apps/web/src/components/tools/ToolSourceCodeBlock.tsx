@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { languageFromSourcePath } from "@/components/tools/tool-source-code-block.shared";
 
 function buildFencedCode(content: string, language: string): string {
   let fence = "```";
@@ -9,29 +10,6 @@ function buildFencedCode(content: string, language: string): string {
   }
 
   return `${fence}${language}\n${content}\n${fence}`;
-}
-
-export function languageFromSourcePath(path: string): string {
-  const dot = path.lastIndexOf(".");
-
-  if (dot === -1) {
-    return "javascript";
-  }
-
-  switch (path.slice(dot)) {
-    case ".ts":
-      return "typescript";
-    case ".tsx":
-      return "tsx";
-    case ".js":
-      return "javascript";
-    case ".jsx":
-      return "jsx";
-    case ".json":
-      return "json";
-    default:
-      return "javascript";
-  }
 }
 
 export function ToolSourceCodeBlock({

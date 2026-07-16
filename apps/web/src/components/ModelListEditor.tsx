@@ -195,22 +195,3 @@ export function ModelListEditor({
     </div>
   );
 }
-
-export function normalizeModelListRows(models: ModelListRow[]): CustomModelEntry[] {
-  return models
-    .map((row) => ({
-      id: row.id.trim(),
-      ...(row.name?.trim() ? { name: row.name.trim() } : {}),
-      ...(row.default ? { default: true } : {}),
-      ...(row.supportsThinking !== undefined
-        ? { supportsThinking: row.supportsThinking }
-        : {}),
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
-    }))
-    .filter((row) => row.id.length > 0);
-}

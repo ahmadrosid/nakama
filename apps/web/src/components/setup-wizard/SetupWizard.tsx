@@ -5,34 +5,16 @@ import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrgani
 import { SetupStepAccount } from "@/components/setup-wizard/SetupStepAccount";
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
-import { useAppContext } from "@/context/app-context";
+import { useAppContext } from "@/context/use-app-context";
 import { client } from "@/lib/client";
 import { pathForPage } from "@/lib/navigation";
 
-export interface SetupOrganizationDraft {
-  name: string;
-  slug: string;
-}
-
-export interface SetupAccountDraft {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-}
-
-export const SETUP_STEPS = [
-  { id: 1, label: "Account", required: true },
-  { id: 2, label: "Organization", required: true },
-  { id: 3, label: "Provider", required: true },
-  { id: 4, label: "About You", required: false },
-] as const;
-
-export type SetupStepId = (typeof SETUP_STEPS)[number]["id"];
-
-export interface SetupWizardProps {
-  onComplete?: () => void;
-}
+import {
+  SETUP_STEPS,
+  type SetupAccountDraft,
+  type SetupStepId,
+  type SetupWizardProps,
+} from "@/components/setup-wizard/setup-wizard.shared";
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const navigate = useNavigate();

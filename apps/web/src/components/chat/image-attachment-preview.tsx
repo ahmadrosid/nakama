@@ -1,6 +1,6 @@
 import { ImageIcon, XIcon } from "lucide-react";
 import { useEffect, useId } from "react";
-import { useOptionalChatAttachmentPanel } from "@/context/chat-attachment-panel-context";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { cn } from "@/lib/utils";
 
 interface ImageAttachmentPreviewProps {

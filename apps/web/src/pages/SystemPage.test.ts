@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveSystemTab, visibleSystemTabs } from "./SystemPage";
+import { resolveSystemTab, visibleSystemTabs } from "./system-page.shared";
 
 describe("SystemPage tab access", () => {
   test("shows data portability only to platform admins", () => {

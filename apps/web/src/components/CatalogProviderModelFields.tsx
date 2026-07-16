@@ -11,20 +11,15 @@ import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { useModelsQuery } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
-import { filterModelsByProvider, formatProviderLabel, type SelectedProvider } from "@/lib/models";
+import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
-const CATALOG_SHORTLIST_PROVIDERS = ["openai", "anthropic", "gemini", "deepseek", "opencode_go"] as const;
-
-export type CatalogShortlistProvider = (typeof CATALOG_SHORTLIST_PROVIDERS)[number];
+import {
+  CATALOG_SHORTLIST_PROVIDERS,
+  type CatalogShortlistProvider,
+} from "@/components/catalog-provider-model-fields.shared";
 
 const CATALOG_THINKING_TOGGLE_PROVIDERS = new Set<CatalogShortlistProvider>(["deepseek"]);
-
-export function isCatalogShortlistProvider(
-  provider: SelectedProvider,
-): provider is CatalogShortlistProvider {
-  return (CATALOG_SHORTLIST_PROVIDERS as readonly string[]).includes(provider);
-}
 
 function mergeBrowseModels(
   staticCatalog: ProviderModelOption[],
@@ -109,7 +104,13 @@ export function CatalogProviderModelFields({
   }, [canDiscoverRemote, provider, remoteResponse?.models, staticCatalog]);
 
   const usedIds = useMemo(
-    () => new Set(customModels.map((model) => model.id.trim()).filter(Boolean)),
+    () =>
+      new Set(
+        customModels.flatMap((model) => {
+          const id = model.id.trim();
+          return id ? [id] : [];
+        }),
+      ),
     [customModels],
   );
 

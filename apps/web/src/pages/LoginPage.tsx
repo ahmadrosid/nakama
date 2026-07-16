@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/auth-context";
-import { useAppContext } from "@/context/app-context";
+import { useAuth } from "@/context/use-auth";
+import { useAppContext } from "@/context/use-app-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SETUP_PATH } from "@/lib/navigation";

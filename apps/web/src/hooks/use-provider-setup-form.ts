@@ -1,10 +1,11 @@
 import type { CreateProviderResponse, ProviderModelOption } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { normalizeModelListRows, type ModelListRow } from "@/components/ModelListEditor";
+import type { ModelListRow } from "@/components/ModelListEditor";
+import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
-import { useAppContext } from "@/context/app-context";
-import { useAuth } from "@/context/auth-context";
+import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import { useModelsQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {

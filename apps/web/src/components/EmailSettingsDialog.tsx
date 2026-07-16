@@ -20,7 +20,7 @@ import {
   useSaveEmailSettings,
   useSendEmailTest,
 } from "@/hooks/use-email-settings";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
 
 export function EmailSettingsDialog({

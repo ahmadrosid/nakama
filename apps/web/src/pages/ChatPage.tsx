@@ -14,11 +14,9 @@ import type { RemoteChatSession } from "@nakama/client";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
-import { useAppContext } from "@/context/app-context";
-import {
-  ChatAttachmentPanelProvider,
-  useChatAttachmentPanel,
-} from "@/context/chat-attachment-panel-context";
+import { useAppContext } from "@/context/use-app-context";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import { useBranchSessionMutation, useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import {

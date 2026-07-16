@@ -6,12 +6,11 @@ import type {
 import { useMemo, useState } from "react";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
-import {
-  CatalogProviderModelFields,
-  isCatalogShortlistProvider,
-} from "@/components/CatalogProviderModelFields";
+import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
-import { normalizeModelListRows, type ModelListRow } from "@/components/ModelListEditor";
+import { type ModelListRow } from "@/components/ModelListEditor";
+import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,7 +42,7 @@ import {
 import {
   seedManageModelRows,
   seedOpenRouterManageModelRows,
-} from "./provider-settings-shared";
+} from "@/components/settings/provider-settings-seed";
 
 export function ProviderInstanceCard({
   instance,

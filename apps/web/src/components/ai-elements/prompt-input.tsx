@@ -60,6 +60,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  LocalReferencedSourcesContext,
+  type ReferencedSourcesContext,
+} from "@/components/ai-elements/prompt-input-referenced-sources-context";
 
 // ============================================================================
 // Helpers
@@ -369,30 +373,6 @@ export const usePromptInputAttachments = () => {
     );
   }
   return context;
-};
-
-// ============================================================================
-// Referenced Sources (Local to PromptInput)
-// ============================================================================
-
-export interface ReferencedSourcesContext {
-  sources: (SourceDocumentUIPart & { id: string })[];
-  add: (sources: SourceDocumentUIPart[] | SourceDocumentUIPart) => void;
-  remove: (id: string) => void;
-  clear: () => void;
-}
-
-export const LocalReferencedSourcesContext =
-  createContext<ReferencedSourcesContext | null>(null);
-
-export const usePromptInputReferencedSources = () => {
-  const ctx = useContext(LocalReferencedSourcesContext);
-  if (!ctx) {
-    throw new Error(
-      "usePromptInputReferencedSources must be used within a LocalReferencedSourcesContext.Provider"
-    );
-  }
-  return ctx;
 };
 
 export type PromptInputActionAddAttachmentsProps = ComponentProps<

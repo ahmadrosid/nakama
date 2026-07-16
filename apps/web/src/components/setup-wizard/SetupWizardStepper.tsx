@@ -1,4 +1,4 @@
-import { SETUP_STEPS, type SetupStepId } from "@/components/setup-wizard/SetupWizard";
+import { SETUP_STEPS, type SetupStepId } from "@/components/setup-wizard/setup-wizard.shared";
 import { cn } from "@/lib/utils";
 
 interface SetupWizardStepperProps {

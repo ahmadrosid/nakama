@@ -5,7 +5,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { useTheme } from "@/context/theme-context";
+import { useTheme } from "@/context/use-theme";
 import { isTheme, type Theme } from "@/lib/theme";
 
 const THEME_OPTIONS: {

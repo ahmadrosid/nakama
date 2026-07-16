@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import {
   AssistantTurnSegmentView,
-  segmentAssistantTurn,
 } from "@/components/chat/assistant-tool-group";
+import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
 import {
   Conversation,
   ConversationContent,
