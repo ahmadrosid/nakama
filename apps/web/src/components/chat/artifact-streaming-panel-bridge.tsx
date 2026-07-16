@@ -44,11 +44,9 @@ function buildStreamingArtifactRef(
 function buildStreamingPanelBody({
   artifact,
   content,
-  tool,
 }: {
   artifact: ChatArtifactRef;
   content: string;
-  tool: string;
 }) {
   const mimeType = artifact.mimeType;
   const isWordDocument =
@@ -75,11 +73,9 @@ function buildStreamingPanelBody({
 function buildStablePanelBody({
   artifact,
   content,
-  tool,
 }: {
   artifact: ChatArtifactRef;
   content: string;
-  tool: string;
 }) {
   const mimeType = artifact.mimeType;
   const isWordDocument =
@@ -145,7 +141,6 @@ export function ArtifactStreamingPanelBridge({
     const body = buildStreamingPanelBody({
       artifact,
       content: streaming.parsed.content ?? "",
-      tool: streaming.tool,
     });
     const defaultWidth = artifactPanelDefaultWidth(artifact.filename, artifact.mimeType);
     const subtitle = artifactPanelSubtitle({
@@ -251,7 +246,6 @@ export function ArtifactStreamingPanelBridge({
           content: buildStablePanelBody({
             artifact,
             content: text,
-            tool: handoffTarget.tool,
           }),
         });
       })
