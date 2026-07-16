@@ -126,13 +126,6 @@ export function mergeOpenRouterModelOptions(
   ];
 }
 
-function openRouterModelDisplayName(
-  rows: OpenRouterModelRow[],
-  modelId: string,
-): string | undefined {
-  return rows.find((row) => row.id === modelId)?.name;
-}
-
 function truncateDescription(text: string, maxLength = 120): string {
   const trimmed = text.trim();
   if (trimmed.length <= maxLength) {

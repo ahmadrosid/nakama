@@ -364,20 +364,6 @@ export function getModelDisplayName(
   return models.find((model) => model.id === modelId)?.name ?? modelId;
 }
 
-function resolveModelForProvider(
-  provider: SelectedProvider,
-  catalogModel: string,
-  customModel?: string,
-): string {
-  const custom = customModel?.trim();
-
-  if (provider === "openrouter" && custom) {
-    return custom;
-  }
-
-  return catalogModel;
-}
-
 export function buildCreateProviderRequest(options: {
   apiKey: string;
   provider: SelectedProvider;
