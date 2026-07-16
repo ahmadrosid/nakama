@@ -12,7 +12,7 @@ const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
 
 const pageDescriptions: Record<string, string> = {
   'index.md': 'Nakama is AI agents that work with your team — with profiles, tools, channels, and multi-tenant workspaces.',
-  'getting-started.md': 'Install Nakama with Bun or Docker, run the server, and complete first-time setup.',
+  'getting-started.md': 'Install Nakama with Bun or Docker, use managed hosting at getnakama.cloud, and complete first-time setup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, and channels.',
   'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
   'profiles.md': 'See how Nakama profiles define bot behavior, soul files, memory, tools, and model selection.',
@@ -92,7 +92,7 @@ function buildLlmsTxt(pages: string[]) {
   const topicRoutes = [
     {
       topics:
-        "install, run locally, Docker, first-time setup, backup, restore, dev server",
+        "install, run locally, Docker, managed hosting, Nakama Cloud, getnakama.cloud, first-time setup, backup, restore, dev server",
       page: "getting-started.md",
     },
     {

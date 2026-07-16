@@ -1,21 +1,21 @@
-# Getting Started
+# AI agents that work with your team
 
-Nakama can run locally with Bun or in Docker.
+Give each agent a role, assign tools and memory, and run your whole nakama from one self-hosted deployment.
 
-## Why Nakama exists?
+Set up the server once, create organizations and profiles, give each agent its role, and let people collaborate with the right member of your nakama for each task.
 
-Nakama is an open-source platform for building teams of AI agents.
+Nakama can run locally with Bun, in Docker, or on [managed hosting](https://getnakama.cloud/).
 
-Where a single personal assistant tries to do everything, Nakama lets you assemble a nakama — agents with distinct roles that work together. A researcher, a writer, an operator: each profile is an agent with its own soul, tools, and memory.
+## Managed hosting
 
-Multi-tenant by default: each organization is an isolated boundary with its own profiles, members, tools, and memory. One deployment can serve many clients — agencies and service companies get a separate org, agents, and data per client.
+If you do not want to run your own server, use [Nakama Cloud](https://getnakama.cloud/). Sign up, create an instance, and open your dedicated URL (for example `acme.getnakama.cloud`). The first 24 hours are free with no credit card required. Complete Nakama's first-time setup wizard in the browser and you are live.
 
 ## Before you start
 
 You need:
 
 - An LLM provider API key
-- [Bun](https://bun.sh) if you want to run from source
+- [Bun](https://bun.sh) if you want to run from source (not needed for [managed hosting](https://getnakama.cloud/) or Docker)
 
 ## Run locally
 
