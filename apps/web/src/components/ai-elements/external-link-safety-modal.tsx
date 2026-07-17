@@ -16,7 +16,11 @@ import { splitExternalUrl } from "@/lib/external-link-url";
 const LEARN_MORE_HREF =
   "https://www.cisa.gov/secure-our-world/recognize-and-report-phishing";
 
-export function ExternalLinkSafetyModal({
+export function ExternalLinkSafetyModal(props: LinkSafetyModalProps) {
+  return <ExternalLinkSafetyModalContent key={props.url} {...props} />;
+}
+
+function ExternalLinkSafetyModalContent({
   url,
   isOpen,
   onClose,
@@ -81,7 +85,7 @@ export function ExternalLinkSafetyModal({
               rel="noreferrer"
               target="_blank"
             >
-              How to recognize phishing (CISA)
+              Learn more
             </a>
           </DialogDescription>
 
