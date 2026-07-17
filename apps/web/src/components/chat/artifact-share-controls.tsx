@@ -2,22 +2,35 @@ import { EyeIcon, Loader2Icon, Share2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { ArtifactSharePublishDialog } from "@/components/chat/artifact-share-publish-dialog";
-import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
+import {
+  useArtifactShareControls,
+  type ArtifactShareControlsState,
+} from "@/components/chat/use-artifact-share-controls";
 
-export function ArtifactShareControls({
-  profileId,
-  artifactPath,
-  compact = false,
-  asMenuItem = false,
+export function ArtifactShareMenuItem({
+  share,
 }: {
-  profileId: string;
-  artifactPath: string;
-  compact?: boolean;
-  asMenuItem?: boolean;
+  share: ArtifactShareControlsState;
 }) {
-  const share = useArtifactShareControls({ profileId, artifactPath });
+  return (
+    <DropdownMenuItem
+      className="cursor-pointer"
+      disabled={share.busy || !share.orgId}
+      onClick={share.handleShareClick}
+    >
+      Share artifact
+    </DropdownMenuItem>
+  );
+}
 
-  const publishDialog = (
+export function ArtifactSharePublishDialogFromState({
+  share,
+  artifactPath,
+}: {
+  share: ArtifactShareControlsState;
+  artifactPath: string;
+}) {
+  return (
     <ArtifactSharePublishDialog
       open={share.publishDialogOpen}
       artifactPath={artifactPath}
@@ -42,20 +55,33 @@ export function ArtifactShareControls({
       onConfirmPublish={() => void share.confirmPublish()}
     />
   );
+}
+
+function buildPublishDialog(
+  share: ArtifactShareControlsState,
+  artifactPath: string,
+) {
+  return (
+    <ArtifactSharePublishDialogFromState share={share} artifactPath={artifactPath} />
+  );
+}
+
+export function ArtifactShareControls({
+  profileId,
+  artifactPath,
+  compact = false,
+  asMenuItem = false,
+}: {
+  profileId: string;
+  artifactPath: string;
+  compact?: boolean;
+  asMenuItem?: boolean;
+}) {
+  const share = useArtifactShareControls({ profileId, artifactPath });
+  const publishDialog = buildPublishDialog(share, artifactPath);
 
   if (asMenuItem) {
-    return (
-      <>
-        <DropdownMenuItem
-          className="cursor-pointer"
-          disabled={share.busy || !share.orgId}
-          onClick={share.handleShareClick}
-        >
-          Share artifact
-        </DropdownMenuItem>
-        {publishDialog}
-      </>
-    );
+    return <ArtifactShareMenuItem share={share} />;
   }
 
   if (compact) {

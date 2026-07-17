@@ -26,6 +26,7 @@ import {
   isOpenRouterModelSlug,
   resolveModel,
   validateOpenCodeGoCustomModels,
+  validateCerebrasCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
 
@@ -79,6 +80,14 @@ export function modelExistsOnInstance(
 
   if (instance.type === "openrouter" && isOpenRouterModelSlug(trimmed)) {
     return true;
+  }
+
+  if (instance.type === "cerebras") {
+    if (instance.customModels?.length) {
+      return findCustomModel(instance.customModels, trimmed) !== undefined;
+    }
+
+    return Boolean(getModelById(trimmed)?.provider === "cerebras");
   }
 
   if (instance.type === "openai_compatible") {
@@ -169,6 +178,8 @@ export function applyProviderInstanceUpdate(
       }
     } else if (instance.type === "openrouter") {
       next.customModels = validateOpenRouterCustomModels(request.customModels);
+    } else if (instance.type === "cerebras") {
+      next.customModels = validateCerebrasCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
     } else if (
@@ -228,6 +239,13 @@ function buildProviderFieldsFromRequest(
   if (type === "openrouter") {
     const customModels = request.customModels?.length
       ? validateOpenRouterCustomModels(request.customModels)
+      : undefined;
+    return { ...(customModels ? { customModels } : {}) };
+  }
+
+  if (type === "cerebras") {
+    const customModels = request.customModels?.length
+      ? validateCerebrasCustomModels(request.customModels)
       : undefined;
     return { ...(customModels ? { customModels } : {}) };
   }

@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { FileTextIcon } from "lucide-react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
-import { ArtifactShareControls } from "@/components/chat/artifact-share-controls";
+import {
+  ArtifactShareMenuItem,
+  ArtifactSharePublishDialogFromState,
+} from "@/components/chat/artifact-share-controls";
+import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
 import {
   ArtifactAttachmentPanelBody,
 } from "@/components/chat/artifact-attachment-panel-body";
@@ -38,6 +42,7 @@ export function ArtifactAttachmentPreview({
   className,
 }: ArtifactAttachmentPreviewProps) {
   const { show, update, hide, activeId } = useChatAttachmentPanel();
+  const share = useArtifactShareControls({ profileId, artifactPath: artifact.path });
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -159,24 +164,24 @@ export function ArtifactAttachmentPreview({
         sizeBytes: artifact.sizeBytes,
       }),
       headerActions: (
-        <ArtifactAttachmentPanelActions
-          copied={copied}
-          loading={loading}
-          content={content}
-          fullscreen={fullscreen}
-          downloadLabel={downloadLabel}
-          downloadUrl={downloadUrl}
-          filename={artifact.filename}
-          onCopy={() => void copyArtifact()}
-          onToggleFullscreen={() => setFullscreen((current) => !current)}
-          additionalMenuItems={
-            <ArtifactShareControls
-              profileId={profileId}
-              artifactPath={artifact.path}
-              asMenuItem
-            />
-          }
-        />
+        <>
+          <ArtifactAttachmentPanelActions
+            copied={copied}
+            loading={loading}
+            content={content}
+            fullscreen={fullscreen}
+            downloadLabel={downloadLabel}
+            downloadUrl={downloadUrl}
+            filename={artifact.filename}
+            onCopy={() => void copyArtifact()}
+            onToggleFullscreen={() => setFullscreen((current) => !current)}
+            additionalMenuItems={<ArtifactShareMenuItem share={share} />}
+          />
+          <ArtifactSharePublishDialogFromState
+            share={share}
+            artifactPath={artifact.path}
+          />
+        </>
       ),
       resizable: !fullscreen,
       fullscreen,
@@ -209,6 +214,8 @@ export function ArtifactAttachmentPreview({
     copied,
     downloadLabel,
     downloadUrl,
+    share.busy,
+    share.publishDialogOpen,
   ]);
 
   async function copyArtifact() {

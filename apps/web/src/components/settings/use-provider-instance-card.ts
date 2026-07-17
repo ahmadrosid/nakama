@@ -8,6 +8,7 @@ import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-
 import { type ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import {
+  seedCerebrasManageModelRows,
   seedManageModelRows,
   seedOpenRouterManageModelRows,
 } from "@/components/settings/provider-settings-seed";
@@ -17,6 +18,7 @@ import {
   type SelectedProvider,
   validateApiKeyForProvider,
   validateBaseUrlInput,
+  validateCerebrasModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenCodeGoModelsInput,
@@ -50,6 +52,7 @@ export function useProviderInstanceCard({
   const providerType = instance.type as SelectedProvider;
   const isCompatible = providerType === "openai_compatible";
   const isOpenRouter = providerType === "openrouter";
+  const isCerebras = providerType === "cerebras";
   const isCatalogShortlist = isCatalogShortlistProvider(providerType);
 
   const catalogModelsForType = useMemo(
@@ -81,6 +84,14 @@ export function useProviderInstanceCard({
     } else if (isOpenRouter) {
       setManageModels(
         seedOpenRouterManageModelRows(
+          instance.customModels,
+          null,
+          instanceModels[0]?.name,
+        ),
+      );
+    } else if (isCerebras) {
+      setManageModels(
+        seedCerebrasManageModelRows(
           instance.customModels,
           null,
           instanceModels[0]?.name,
@@ -190,6 +201,20 @@ export function useProviderInstanceCard({
     );
   };
 
+  const saveCerebras = async () => {
+    const modelsError = validateCerebrasModelsInput(manageModels);
+
+    if (modelsError) {
+      setDialogError(modelsError);
+      return;
+    }
+
+    await runUpdate(
+      { customModels: normalizeModelListRows(manageModels) },
+      () => setManageOpen(false),
+    );
+  };
+
   const saveCatalogShortlist = async () => {
     const modelsError =
       providerType === "opencode_go"
@@ -222,6 +247,7 @@ export function useProviderInstanceCard({
     providerType,
     isCompatible,
     isOpenRouter,
+    isCerebras,
     isCatalogShortlist,
     catalogModelsForType,
     description,
@@ -250,6 +276,7 @@ export function useProviderInstanceCard({
     handleDelete,
     saveCompatible,
     saveOpenRouter,
+    saveCerebras,
     saveCatalogShortlist,
     handleManageModelsChange,
   };

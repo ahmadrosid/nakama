@@ -168,6 +168,38 @@ describe("getModelsForProviderInstance openrouter", () => {
   });
 });
 
+describe("getModelsForProviderInstance cerebras", () => {
+  test("uses shortlist only when custom models are saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "cb-1",
+      type: "cerebras",
+      label: "Cerebras",
+      apiKey: "csk-test",
+      createdAt: "2026-07-16T10:00:00.000Z",
+      customModels: [{ id: "gpt-oss-120b", name: "GPT OSS 120B", supportsThinking: true }],
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]?.id).toBe("gpt-oss-120b");
+    expect(models[0]?.supportsThinking).toBe(true);
+    expect(models[0]?.providerId).toBe("cb-1");
+    expect(models.some((model) => model.id === "gemma-4-31b")).toBe(false);
+  });
+
+  test("falls back to static catalog when no shortlist is saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "cb-1",
+      type: "cerebras",
+      label: "Cerebras",
+      apiKey: "csk-test",
+      createdAt: "2026-07-16T10:00:00.000Z",
+    });
+
+    expect(models.some((model) => model.id === "gpt-oss-120b")).toBe(true);
+    expect(models.some((model) => model.id === "gemma-4-31b")).toBe(true);
+  });
+});
+
 describe("getModelsForProviderInstance openai_compatible", () => {
   test("maps supportsThinking from custom models into the catalog", () => {
     const models = getModelsForProviderInstance({

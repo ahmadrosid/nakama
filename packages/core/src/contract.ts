@@ -1496,6 +1496,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "cerebras"
   | "openai_compatible"
   | "opencode_go";
 

@@ -64,6 +64,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   openrouter: "OpenRouter",
   gemini: "Gemini",
   deepseek: "DeepSeek",
+  cerebras: "Cerebras",
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
 };
@@ -532,6 +533,7 @@ function loadProvidersFromSections(
     const customModels =
       type === "openai_compatible" ||
       type === "openrouter" ||
+      type === "cerebras" ||
       type === "opencode_go"
         ? parseCustomModelsJson(values.models_json)
         : undefined;

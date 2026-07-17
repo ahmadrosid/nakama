@@ -16,6 +16,7 @@ export function normalizeModelListRows(models: ModelListRow[]): CustomModelEntry
         ...(row.supportsThinking !== undefined
           ? { supportsThinking: row.supportsThinking }
           : {}),
+        ...(row.supportsVision !== undefined ? { supportsVision: row.supportsVision } : {}),
         ...(row.inputPerMillionUsd !== undefined
           ? { inputPerMillionUsd: row.inputPerMillionUsd }
           : {}),

@@ -13,6 +13,10 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
+import {
+  ARTIFACT_HTML_IFRAME_SANDBOX,
+  htmlForArtifactPreview,
+} from "@/lib/artifact-html-preview";
 import { cn } from "@/lib/utils";
 
 interface PublicShareMetadata {
@@ -20,20 +24,6 @@ interface PublicShareMetadata {
   mimeType: string;
   sizeBytes: number;
   inlineAllowed: boolean;
-}
-
-const HIDDEN_SCROLLBAR_STYLE = `<style data-nakama-share-preview>html,body{scrollbar-width:none;-ms-overflow-style:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}</style>`;
-
-function htmlForSharePreview(html: string): string {
-  if (/<head[\s>]/i.test(html)) {
-    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${HIDDEN_SCROLLBAR_STYLE}`);
-  }
-
-  if (/<html[\s>]/i.test(html)) {
-    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${HIDDEN_SCROLLBAR_STYLE}</head>`);
-  }
-
-  return `${HIDDEN_SCROLLBAR_STYLE}${html}`;
 }
 
 export function PublicArtifactSharePage() {
@@ -136,7 +126,7 @@ export function PublicArtifactSharePage() {
         );
 
         if (isHtmlArtifactMimeType(contentType)) {
-          setContent(htmlForSharePreview(new TextDecoder().decode(bytes)));
+          setContent(htmlForArtifactPreview(new TextDecoder().decode(bytes)));
         } else if (looksLikeUtf8Text(bytes)) {
           setContent(new TextDecoder().decode(bytes));
         } else {
@@ -209,7 +199,7 @@ export function PublicArtifactSharePage() {
             content={content}
             canPreview={canPreview}
             artifact={artifact}
-            htmlSandbox="allow-same-origin"
+            htmlSandbox={ARTIFACT_HTML_IFRAME_SANDBOX}
           />
         ) : (
           <div className="space-y-3 text-sm text-muted-foreground">

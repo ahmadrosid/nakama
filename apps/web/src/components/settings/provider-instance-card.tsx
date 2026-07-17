@@ -6,12 +6,14 @@ import type {
 import { Button } from "@/components/ui/button";
 import {
   ProviderCatalogManageDialog,
+  ProviderCerebrasManageDialog,
   ProviderCompatibleEditDialog,
   ProviderCompatibleManageDialog,
   ProviderOpenRouterManageDialog,
   ProviderReplaceKeyDialog,
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
+import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 
 export function ProviderInstanceCard({
   instance,
@@ -50,7 +52,7 @@ export function ProviderInstanceCard({
             Edit
           </Button>
         ) : null}
-        {card.isCompatible || card.isOpenRouter || card.isCatalogShortlist ? (
+        {card.isCompatible || card.isOpenRouter || card.isCerebras || card.isCatalogShortlist ? (
           <Button type="button" size="sm" variant="outline" onClick={card.openManage}>
             Manage
           </Button>
@@ -129,12 +131,24 @@ export function ProviderInstanceCard({
         />
       ) : null}
 
+      {card.isCerebras ? (
+        <ProviderCerebrasManageDialog
+          open={card.manageOpen}
+          busy={card.busy}
+          dialogError={card.dialogError}
+          manageModels={card.manageModels}
+          onOpenChange={card.setManageOpen}
+          onCustomModelsChange={card.handleManageModelsChange}
+          onSave={() => void card.saveCerebras()}
+        />
+      ) : null}
+
       {card.isCatalogShortlist ? (
         <ProviderCatalogManageDialog
           open={card.manageOpen}
           busy={card.busy}
           dialogError={card.dialogError}
-          providerType={card.providerType}
+          providerType={card.providerType as CatalogShortlistProvider}
           instanceId={instance.id}
           manageModels={card.manageModels}
           catalogModelsForType={card.catalogModelsForType}

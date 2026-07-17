@@ -171,7 +171,6 @@ function AssistantTurn({
           segment={segment}
           showThinking={showThinking}
           modelLabel={modelLabel}
-          turnComplete={turnComplete}
         />
       ))}
       {profileId && showArtifacts ? (

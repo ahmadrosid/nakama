@@ -1,4 +1,5 @@
 export * from "./anthropic";
+export * from "./cerebras";
 export * from "./create";
 export * from "./gemini";
 export * from "./models";

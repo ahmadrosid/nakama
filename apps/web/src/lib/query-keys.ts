@@ -76,6 +76,7 @@ export const queryKeys = {
   userContext: ["userContext"] as const,
   modelsDev: ["modelsDev"] as const,
   openRouterModels: ["openRouterModels"] as const,
+  cerebrasModels: ["cerebrasModels"] as const,
   workerLogs: ["workerLogs"] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
 } as const;

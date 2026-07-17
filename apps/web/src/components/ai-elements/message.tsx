@@ -1,5 +1,6 @@
 "use client";
 
+import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/use-theme";
 import { cjk } from "@streamdown/cjk";
@@ -9,7 +10,7 @@ import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { memo } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type LinkSafetyModalProps } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -50,12 +51,22 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
+function renderExternalLinkSafetyModal(props: LinkSafetyModalProps) {
+  return <ExternalLinkSafetyModal {...props} />;
+}
+
+const linkSafety = {
+  enabled: true,
+  renderModal: renderExternalLinkSafetyModal,
+} as const;
+
 const MessageResponseBody = memo(
   ({
     className,
     lineNumbers = false,
     controls = { code: { copy: true, download: false } },
     shikiTheme,
+    linkSafety: linkSafetyOverride,
     ...props
   }: MessageResponseProps) => (
     <Streamdown
@@ -65,6 +76,7 @@ const MessageResponseBody = memo(
       )}
       controls={controls}
       lineNumbers={lineNumbers}
+      linkSafety={linkSafetyOverride ?? linkSafety}
       plugins={streamdownPlugins}
       shikiTheme={shikiTheme}
       {...props}
@@ -73,7 +85,8 @@ const MessageResponseBody = memo(
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
     nextProps.isAnimating === nextProps.isAnimating &&
-    prevProps.shikiTheme === nextProps.shikiTheme,
+    prevProps.shikiTheme === nextProps.shikiTheme &&
+    prevProps.linkSafety === nextProps.linkSafety,
 );
 
 MessageResponseBody.displayName = "MessageResponseBody";

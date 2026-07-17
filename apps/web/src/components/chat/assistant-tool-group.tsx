@@ -36,12 +36,10 @@ export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
   modelLabel,
-  turnComplete = false,
 }: {
   segment: AssistantTurnSegment;
   showThinking?: boolean;
   modelLabel?: string | null;
-  turnComplete?: boolean;
 }) {
   if (segment.kind === "work") {
     return (
@@ -49,16 +47,15 @@ export function AssistantTurnSegmentView({
         thinking={showThinking ? segment.thinking : undefined}
         tools={segment.tools}
         modelLabel={modelLabel}
-        turnComplete={turnComplete}
       />
     );
   }
 
   return (
     <Message from="assistant" className="max-w-full mr-0 ml-0 items-start justify-start">
-      <MessageContent className="max-w-full ml-0 group-[.is-user]:ml-0">
+      <MessageContent className="w-full max-w-full ml-0 gap-1 group-[.is-user]:ml-0">
         {showThinking && segment.thinking ? (
-          <ThinkingBlock message={segment.thinking} turnComplete={turnComplete} />
+          <ThinkingBlock message={segment.thinking} />
         ) : null}
         <AssistantTextContent message={segment.message} />
       </MessageContent>
@@ -78,31 +75,25 @@ function AssistantWorkGroup({
   thinking,
   tools,
   modelLabel,
-  turnComplete = false,
 }: {
   thinking?: ChatListItem;
   tools: ChatListItem[];
   modelLabel?: string | null;
-  turnComplete?: boolean;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
   const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
   const hasRunningTools = visibleTools.some((tool) => tool.toolStatus === "running");
-  const isWorkActive = !turnComplete || isThinkingStreaming || hasRunningTools;
+  const isWorkActive = isThinkingStreaming || hasRunningTools;
 
   if (visibleTools.length === 0) {
     return thinking ? (
-      <ThinkingBlock message={thinking} turnComplete={turnComplete} />
+      <ThinkingBlock message={thinking} />
     ) : null;
   }
 
   if (!thinking) {
     return (
-      <ToolOnlyWorkGroup
-        tools={visibleTools}
-        modelLabel={modelLabel}
-        turnComplete={turnComplete}
-      />
+      <ToolOnlyWorkGroup tools={visibleTools} modelLabel={modelLabel} />
     );
   }
 
@@ -130,14 +121,12 @@ function AssistantWorkGroup({
 function ToolOnlyWorkGroup({
   tools,
   modelLabel,
-  turnComplete = false,
 }: {
   tools: ChatListItem[];
   modelLabel?: string | null;
-  turnComplete?: boolean;
 }) {
   const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
-  const isWorkActive = !turnComplete || hasRunningTools;
+  const isWorkActive = hasRunningTools;
   const [open, setOpen] = useState(isWorkActive);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools[0]?.createdAt);
 
@@ -224,18 +213,9 @@ function ToolOnlyWorkGroup({
   );
 }
 
-function ThinkingBlock({
-  message,
-  turnComplete = false,
-}: {
-  message: ChatListItem;
-  turnComplete?: boolean;
-}) {
+function ThinkingBlock({ message }: { message: ChatListItem }) {
   const isThinkingStreaming = Boolean(message.thinkingStreaming);
-  const isWorkActive =
-    !turnComplete ||
-    isThinkingStreaming ||
-    Boolean(message.streaming && !message.content.trim());
+  const isWorkActive = isThinkingStreaming;
 
   return (
     <ThinkingReasoning

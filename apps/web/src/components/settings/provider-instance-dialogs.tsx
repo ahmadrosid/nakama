@@ -3,6 +3,7 @@ import type {
   ProviderModelOption,
 } from "@nakama/core/contract";
 import type { ModelListRow } from "@/components/ModelListEditor";
+import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
@@ -236,6 +237,49 @@ export function ProviderOpenRouterManageDialog({
           <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
         </DialogHeader>
         <OpenRouterProviderModelFields
+          customModels={manageModels}
+          disabled={busy}
+          modelsError={dialogError}
+          onCustomModelsChange={onCustomModelsChange}
+        />
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={busy} onClick={onSave}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ProviderCerebrasManageDialog({
+  open,
+  busy,
+  dialogError,
+  manageModels,
+  onOpenChange,
+  onCustomModelsChange,
+  onSave,
+}: {
+  open: boolean;
+  busy: boolean;
+  dialogError: string | null;
+  manageModels: ModelListRow[];
+  onOpenChange: (open: boolean) => void;
+  onCustomModelsChange: (rows: ModelListRow[]) => void;
+  onSave: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Manage models</DialogTitle>
+          <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
+        </DialogHeader>
+        <CerebrasProviderModelFields
           customModels={manageModels}
           disabled={busy}
           modelsError={dialogError}

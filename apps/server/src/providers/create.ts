@@ -11,6 +11,7 @@ import {
   type UserConfig,
 } from "@nakama/core";
 import { resolveModel } from "./models";
+import { createCerebrasProvider } from "./cerebras";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
 import { createOpenCodeGoProvider } from "./opencode-go";
@@ -72,6 +73,12 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       return createOpenCodeGoProvider({
         apiKey: options.apiKey,
         model,
+      });
+    case "cerebras":
+      return createCerebrasProvider({
+        apiKey: options.apiKey,
+        model,
+        customModels: options.instance?.customModels,
       });
     case "openai_compatible": {
       const displayName = options.instance?.label?.trim();

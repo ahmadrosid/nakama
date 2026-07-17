@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
+import type { CerebrasModelRow } from "@/lib/cerebras-models";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
@@ -14,12 +15,15 @@ import {
   defaultModelForProvider,
   filterModelsByProvider,
   getModelDisplayName,
+  modelsFromCerebrasRows,
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
   type SelectedProvider,
+  resolveCerebrasSetupModel,
   resolveOpenRouterSetupModel,
   validateApiKeyForProvider,
   validateBaseUrlInput,
+  validateCerebrasModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenRouterModelsInput,
@@ -47,6 +51,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const [selectedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
   const [openRouterModelsError, setOpenRouterModelsError] = useState<string | null>(null);
+  const [cerebrasModels, setCerebrasModels] = useState<ModelListRow[]>([]);
+  const [cerebrasModelsError, setCerebrasModelsError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([{ id: "", name: "" }]);
@@ -72,13 +78,17 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       return modelsFromOpenRouterRows(openRouterModels);
     }
 
+    if (selectedProvider === "cerebras") {
+      return modelsFromCerebrasRows(cerebrasModels);
+    }
+
     const catalogModels = filterModelsByProvider(catalog, selectedProvider);
     const catalogIds = new Set(catalogModels.map((model) => model.id));
     const extras = extraModels.filter(
       (model) => model.provider === selectedProvider && !catalogIds.has(model.id),
     );
     return [...catalogModels, ...extras];
-  }, [catalog, selectedProvider, customModels, openRouterModels, extraModels]);
+  }, [catalog, selectedProvider, customModels, openRouterModels, cerebrasModels, extraModels]);
 
   useEffect(() => {
     if (filteredModels.length === 0) {
@@ -124,9 +134,18 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setOpenRouterModels([{ id: "", name: "" }]);
       }
 
+      if (provider === "cerebras" && cerebrasModels.length === 0) {
+        setCerebrasModels([{ id: "", name: "" }]);
+      }
+
       if (provider !== "openrouter") {
         setOpenRouterModels([]);
         setOpenRouterModelsError(null);
+      }
+
+      if (provider !== "cerebras") {
+        setCerebrasModels([]);
+        setCerebrasModelsError(null);
       }
 
       if (provider !== "openai_compatible") {
@@ -136,7 +155,49 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setModelsError(null);
       }
     },
-    [openRouterModels.length],
+    [openRouterModels.length, cerebrasModels.length],
+  );
+
+  const selectCerebrasModel = useCallback(
+    (
+      modelId: string,
+      modelName: string,
+      flags?: {
+        supportsThinking?: boolean;
+        supportsVision?: boolean;
+        inputPerMillionUsd?: number;
+        outputPerMillionUsd?: number;
+      },
+    ) => {
+      setCerebrasModels((current) => {
+        if (current.some((model) => model.id === modelId)) {
+          return current;
+        }
+
+        return [
+          ...current.filter((row) => row.id.trim()),
+          {
+            id: modelId,
+            name: modelName,
+            ...(flags?.supportsThinking !== undefined
+              ? { supportsThinking: flags.supportsThinking }
+              : {}),
+            ...(flags?.supportsVision !== undefined
+              ? { supportsVision: flags.supportsVision }
+              : {}),
+            ...(flags?.inputPerMillionUsd !== undefined
+              ? { inputPerMillionUsd: flags.inputPerMillionUsd }
+              : {}),
+            ...(flags?.outputPerMillionUsd !== undefined
+              ? { outputPerMillionUsd: flags.outputPerMillionUsd }
+              : {}),
+          },
+        ];
+      });
+      setSelectedModel(modelId);
+      setCerebrasModelsError(null);
+    },
+    [],
   );
 
   const selectOpenRouterModel = useCallback(
@@ -213,6 +274,18 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     [handleProviderSelect, selectOpenRouterModel],
   );
 
+  const handleCerebrasBrowseSelect = useCallback(
+    (row: CerebrasModelRow) => {
+      selectCerebrasModel(row.id, row.name, {
+        supportsThinking: row.reasoning,
+        supportsVision: row.vision,
+        inputPerMillionUsd: row.inputPerMillionUsd,
+        outputPerMillionUsd: row.outputPerMillionUsd,
+      });
+    },
+    [selectCerebrasModel],
+  );
+
   const handleOpenRouterBrowseSelect = useCallback(
     (row: OpenRouterModelRow) => {
       selectOpenRouterModel(row.id, row.name, {
@@ -224,6 +297,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   );
 
   const { onSuccess } = options;
+
+  const handleCerebrasModelsChange = useCallback((rows: ModelListRow[]) => {
+    setCerebrasModels(rows);
+    setCerebrasModelsError(null);
+  }, []);
 
   const handleOpenRouterModelsChange = useCallback((rows: ModelListRow[]) => {
     setOpenRouterModels(rows);
@@ -240,6 +318,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         selectedProvider === "openrouter"
           ? validateOpenRouterModelsInput(openRouterModels)
           : null;
+      const nextCerebrasModelsError =
+        selectedProvider === "cerebras"
+          ? validateCerebrasModelsInput(cerebrasModels)
+          : null;
       const nextDisplayNameError =
         selectedProvider === "openai_compatible"
           ? validateDisplayNameInput(displayName)
@@ -254,6 +336,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
       setOpenRouterModelsError(nextOpenRouterModelsError);
+      setCerebrasModelsError(nextCerebrasModelsError);
       setDisplayNameError(nextDisplayNameError);
       setBaseUrlError(nextBaseUrlError);
       setModelsError(nextModelsError);
@@ -264,6 +347,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       }
 
       if (nextOpenRouterModelsError) {
+        return;
+      }
+
+      if (nextCerebrasModelsError) {
         return;
       }
 
@@ -284,6 +371,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       const modelToSave =
         selectedProvider === "openrouter"
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
+          : selectedProvider === "cerebras"
+            ? resolveCerebrasSetupModel(cerebrasModels, selectedModel)
           : selectedModel;
 
       setBusy(true);
@@ -302,6 +391,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
                 ? normalizeModelListRows(customModels)
                 : selectedProvider === "openrouter"
                   ? normalizeModelListRows(openRouterModels)
+                  : selectedProvider === "cerebras"
+                    ? normalizeModelListRows(cerebrasModels)
                   : selectedProvider === "opencode_go" && modelToSave
                     ? normalizeModelListRows([
                         {
@@ -317,6 +408,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setApiKeyTouched(false);
         setShowApiKey(false);
         setOpenRouterModels([]);
+        setCerebrasModels([]);
         onSuccess?.(result);
       } catch (err) {
         setFormError(formatError(err));
@@ -329,6 +421,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       apiKey,
       baseUrl,
       openRouterModels,
+      cerebrasModels,
       customModels,
       displayName,
       selectedModel,
@@ -348,6 +441,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     selectedModel,
     openRouterModels,
     openRouterModelsError,
+    cerebrasModels,
+    cerebrasModelsError,
     displayName,
     baseUrl,
     customModels,
@@ -363,11 +458,13 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     setBaseUrl,
     setCustomModels,
     handleOpenRouterModelsChange,
+    handleCerebrasModelsChange,
     handleApiKeyBlur,
     handleApiKeyChange,
     handleProviderSelect,
     handleBrowseSelect,
     handleOpenRouterBrowseSelect,
+    handleCerebrasBrowseSelect,
     handleSubmit,
     formatSuccessMessage: (result: CreateProviderResponse) =>
       `${result.provider.label} connected with ${getModelDisplayName(catalog, result.initialModel)}.`,

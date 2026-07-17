@@ -78,4 +78,15 @@ describe("resolveModel", () => {
     expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
+
+  test("resolves catalog models for Cerebras", () => {
+    expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
+    expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
+  });
+
+  test("uses cerebras custom model shortlist when provided", () => {
+    const customModels = [{ id: "zai-glm-4.7", name: "GLM 4.7", default: true }];
+    expect(resolveModel("cerebras", "zai-glm-4.7", customModels)).toBe("zai-glm-4.7");
+    expect(resolveModel("cerebras", "unknown-model", customModels)).toBe("zai-glm-4.7");
+  });
 });

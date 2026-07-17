@@ -37,6 +37,7 @@ export function seedOpenRouterManageModelRows(
       name: model.name ?? model.id,
       default: model.default,
       supportsThinking: model.supportsThinking,
+      supportsVision: model.supportsVision,
       inputPerMillionUsd: model.inputPerMillionUsd,
       outputPerMillionUsd: model.outputPerMillionUsd,
     }));
@@ -54,4 +55,12 @@ export function seedOpenRouterManageModelRows(
   }
 
   return [{ id: "", name: "" }];
+}
+
+export function seedCerebrasManageModelRows(
+  customModels: CustomModelEntry[] | undefined,
+  currentModel?: string | null,
+  currentModelName?: string | null,
+): ModelListRow[] {
+  return seedOpenRouterManageModelRows(customModels, currentModel, currentModelName);
 }
