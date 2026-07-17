@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { XIcon } from "lucide-react";
 import type { LinkSafetyModalProps } from "streamdown";
 
@@ -25,10 +25,6 @@ export function ExternalLinkSafetyModal({
   const [copied, setCopied] = useState(false);
   const { prefix, host, suffix } = splitExternalUrl(url);
 
-  useEffect(() => {
-    if (!isOpen) setCopied(false);
-  }, [isOpen]);
-
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(url);
@@ -39,16 +35,21 @@ export function ExternalLinkSafetyModal({
     }
   }
 
+  function handleClose() {
+    setCopied(false);
+    onClose();
+  }
+
   function handleConfirm() {
     onConfirm();
-    onClose();
+    handleClose();
   }
 
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) handleClose();
       }}
     >
       <DialogContent
@@ -62,7 +63,7 @@ export function ExternalLinkSafetyModal({
           </DialogTitle>
           <button
             className="-m-1.5 flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            onClick={onClose}
+            onClick={handleClose}
             title="Close"
             type="button"
           >
