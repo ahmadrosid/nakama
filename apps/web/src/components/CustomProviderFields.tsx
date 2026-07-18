@@ -12,6 +12,7 @@ interface CustomProviderFieldsProps {
   apiKey: string;
   customModels: ModelListRow[];
   disabled?: boolean;
+  identityReadOnly?: boolean;
   density?: "default" | "compact";
   showModelsEditor?: boolean;
   showThinkingToggle?: boolean;
@@ -28,6 +29,7 @@ export function CustomProviderFields({
   baseUrl,
   customModels,
   disabled,
+  identityReadOnly = false,
   density = "default",
   showModelsEditor = true,
   showThinkingToggle = false,
@@ -39,6 +41,7 @@ export function CustomProviderFields({
   onCustomModelsChange,
 }: CustomProviderFieldsProps) {
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const identityDisabled = disabled || identityReadOnly;
 
   const handleBrowseSelect = (_provider: string, modelId: string, row: ModelsDevRow) => {
     const nextModel = { id: modelId, name: row.modelName };
@@ -73,7 +76,8 @@ export function CustomProviderFields({
           <InputGroupInput
             id="provider-display-name"
             value={displayName}
-            disabled={disabled}
+            disabled={identityDisabled}
+            readOnly={identityReadOnly}
             placeholder="Ollama"
             aria-invalid={displayNameError != null}
             onChange={(event) => onDisplayNameChange(event.target.value)}
@@ -101,7 +105,8 @@ export function CustomProviderFields({
           <InputGroupInput
             id="provider-base-url"
             value={baseUrl}
-            disabled={disabled}
+            disabled={identityDisabled}
+            readOnly={identityReadOnly}
             placeholder="http://localhost:11434/v1"
             aria-invalid={baseUrlError != null}
             onChange={(event) => onBaseUrlChange(event.target.value)}

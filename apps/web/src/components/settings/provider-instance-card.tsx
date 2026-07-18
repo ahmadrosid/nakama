@@ -101,7 +101,7 @@ export function ProviderInstanceCard({
           onOpenChange={card.setEditOpen}
           onDisplayNameChange={card.setEditLabel}
           onBaseUrlChange={card.setEditBaseUrl}
-          onCustomModelsChange={card.setManageModels}
+          onCustomModelsChange={card.handleManageModelsChange}
           onSave={() => void card.saveCompatible()}
         />
       ) : null}
@@ -114,8 +114,8 @@ export function ProviderInstanceCard({
           instance={instance}
           manageModels={card.manageModels}
           onOpenChange={card.setManageOpen}
-          onCustomModelsChange={card.setManageModels}
-          onSave={() => void card.saveCompatible()}
+          onCustomModelsChange={card.handleManageModelsChange}
+          onSave={() => void card.saveCompatibleManage()}
         />
       ) : null}
 

@@ -189,6 +189,7 @@ export function ProviderCompatibleManageDialog({
           apiKey=""
           customModels={manageModels}
           disabled={busy}
+          identityReadOnly
           showThinkingToggle
           displayNameError={null}
           baseUrlError={null}

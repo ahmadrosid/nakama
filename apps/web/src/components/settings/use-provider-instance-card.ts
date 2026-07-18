@@ -112,6 +112,7 @@ export function useProviderInstanceCard({
   const openEdit = () => {
     setEditLabel(instance.label);
     setEditBaseUrl(instance.baseUrl ?? "");
+    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
     setDialogError(null);
     setEditOpen(true);
   };
@@ -166,8 +167,8 @@ export function useProviderInstanceCard({
 
   const saveCompatible = async () => {
     const displayNameError = validateDisplayNameInput(editLabel);
-    const baseUrlError = isCompatible ? validateBaseUrlInput(editBaseUrl) : null;
-    const modelsError = isCompatible ? validateCustomModelsInput(manageModels) : null;
+    const baseUrlError = validateBaseUrlInput(editBaseUrl);
+    const modelsError = validateCustomModelsInput(manageModels);
 
     if (displayNameError || baseUrlError || modelsError) {
       setDialogError(displayNameError ?? baseUrlError ?? modelsError);
@@ -180,10 +181,21 @@ export function useProviderInstanceCard({
         baseUrl: editBaseUrl,
         customModels: normalizeModelListRows(manageModels),
       },
-      () => {
-        setEditOpen(false);
-        setManageOpen(false);
-      },
+      () => setEditOpen(false),
+    );
+  };
+
+  const saveCompatibleManage = async () => {
+    const modelsError = validateCustomModelsInput(manageModels);
+
+    if (modelsError) {
+      setDialogError(modelsError);
+      return;
+    }
+
+    await runUpdate(
+      { customModels: normalizeModelListRows(manageModels) },
+      () => setManageOpen(false),
     );
   };
 
@@ -275,6 +287,7 @@ export function useProviderInstanceCard({
     handleReplaceKey,
     handleDelete,
     saveCompatible,
+    saveCompatibleManage,
     saveOpenRouter,
     saveCerebras,
     saveCatalogShortlist,
