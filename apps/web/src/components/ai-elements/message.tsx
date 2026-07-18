@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
+import { MarkdownA } from "@/components/ai-elements/markdown-a";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/use-theme";
 import { cjk } from "@streamdown/cjk";
@@ -8,9 +9,8 @@ import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
-import type { ComponentProps, HTMLAttributes } from "react";
-import { memo } from "react";
-import { Streamdown, type LinkSafetyModalProps } from "streamdown";
+import { memo, type ComponentProps, type HTMLAttributes } from "react";
+import { Streamdown, type Components, type LinkSafetyModalProps } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -60,6 +60,13 @@ const linkSafety = {
   renderModal: renderExternalLinkSafetyModal,
 } as const;
 
+function mergeMarkdownComponents(userComponents?: Components): Components {
+  return {
+    ...userComponents,
+    a: MarkdownA,
+  };
+}
+
 const MessageResponseBody = memo(
   ({
     className,
@@ -67,6 +74,7 @@ const MessageResponseBody = memo(
     controls = { code: { copy: true, download: false } },
     shikiTheme,
     linkSafety: linkSafetyOverride,
+    components: userComponents,
     ...props
   }: MessageResponseProps) => (
     <Streamdown
@@ -74,6 +82,7 @@ const MessageResponseBody = memo(
         "chat-markdown size-full text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className,
       )}
+      components={mergeMarkdownComponents(userComponents)}
       controls={controls}
       lineNumbers={lineNumbers}
       linkSafety={linkSafetyOverride ?? linkSafety}
@@ -86,7 +95,8 @@ const MessageResponseBody = memo(
     prevProps.children === nextProps.children &&
     nextProps.isAnimating === nextProps.isAnimating &&
     prevProps.shikiTheme === nextProps.shikiTheme &&
-    prevProps.linkSafety === nextProps.linkSafety,
+    prevProps.linkSafety === nextProps.linkSafety &&
+    prevProps.components === nextProps.components,
 );
 
 MessageResponseBody.displayName = "MessageResponseBody";

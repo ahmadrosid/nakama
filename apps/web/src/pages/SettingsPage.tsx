@@ -116,12 +116,15 @@ export function SettingsPage() {
           <ProviderSettingsCard formError={formError} onFormError={setFormError} />
 
           <Card className="w-full shadow-none">
-            <CardContent className="divide-y divide-border p-0">
+            <CardContent className="p-0">
               <WebPublicUrlSettingsRow />
-              <VisionSettingsCard />
-              <TranscriptionSettingsCard />
             </CardContent>
           </Card>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <VisionSettingsCard />
+            <TranscriptionSettingsCard />
+          </div>
 
           {formError ? (
             <p className="text-sm text-destructive" role="alert">

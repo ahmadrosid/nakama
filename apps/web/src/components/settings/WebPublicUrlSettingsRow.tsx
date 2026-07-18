@@ -64,8 +64,7 @@ export function WebPublicUrlSettingsRow() {
       <div className="space-y-0.5">
         <p className="text-sm font-medium text-foreground">Public web URL</p>
         <p className="text-xs text-muted-foreground">
-          Used for OAuth callbacks from Telegram, WhatsApp, and Composio connect links. Stored in
-          ~/.nakama/config.ini. Auto-detected during setup.
+          Base URL for OAuth callbacks. Saved to ~/.nakama/config.ini.
         </p>
         {data?.envOverride ? (
           <p className="text-xs text-amber-800 dark:text-amber-200">

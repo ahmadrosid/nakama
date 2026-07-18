@@ -3,7 +3,7 @@ import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
 import { persistWebPublicUrl, getWebPublicUrlSettings, resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { errorResponse, readJson } from "../shared";
+import { errorResponse } from "../shared";
 import type { HonoApp } from "../types";
 
 const DOCS_HTML = `<!doctype html>
@@ -163,7 +163,8 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
 
   app.openapi(updateWebPublicUrlRoute, async (c) => {
     requireOrgAdminFromContext(c);
-    const body = await readJson<{ webPublicUrl?: string }>(c.req.raw);
+    // OpenAPI middleware already validated the JSON body.
+    const body = c.req.valid("json");
     const webPublicUrl = resolveRequestClientOrigin(c.req.raw, body.webPublicUrl);
 
     if (!webPublicUrl) {

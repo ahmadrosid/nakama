@@ -53,10 +53,12 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
       <Card className="w-full shadow-none">
         <CardHeader className="border-b border-border px-4 py-3">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>LLM providers</CardTitle>
-              <CardDescription>
-                Add providers and manage models. Pick any configured model in chat.
+            <div className="min-w-0 space-y-0.5">
+              <CardTitle className="text-sm font-medium leading-snug tracking-normal">
+                LLM providers
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Connect providers and choose models for chat.
               </CardDescription>
             </div>
             {isConfigured ? (
