@@ -20,7 +20,7 @@ The key is stored in `~/.nakama/composio/config.ini` on the Nakama server.
 ## Setup
 
 1. As an org admin, open **Integrations → Composio** and save your Composio **project API key**.
-2. Confirm `/health` reports `composioConfigured: true` and `composioAvailable: true`.
+2. Confirm `/health` reports `composioConfigured: true`. Reachability (`composioAvailable`) is on `GET /v1/system/status` under `server`.
 3. As an org admin, **enable** a toolkit for the organization.
 4. As any org member, click **Connect your account** and complete OAuth in the browser.
 5. Click **Sync tools** after connecting.
