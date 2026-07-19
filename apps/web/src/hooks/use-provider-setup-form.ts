@@ -7,14 +7,17 @@ import type { CerebrasModelRow } from "@/lib/cerebras-models";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
-import { useModelsQuery } from "@/hooks/use-app-queries";
+import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
   appendOpenRouterModelRow,
   buildCreateProviderRequest,
   defaultModelForProvider,
   filterModelsByProvider,
+  firstAvailableProviderOption,
   getModelDisplayName,
+  hasOpenCodeZenProvider,
+  isProviderTypeAlreadyConfigured,
   modelsFromCerebrasRows,
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
@@ -41,7 +44,23 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const { data: catalogResponse, error: catalogQueryError } = useModelsQuery({
     enabled: isAuthenticated,
   });
+  const { data: providersResponse } = useProvidersQuery({
+    enabled: isAuthenticated,
+  });
   const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
+
+  const configuredTypes = useMemo(() => {
+    const types = new Set<string>();
+    for (const provider of providersResponse?.providers ?? []) {
+      types.add(provider.type);
+    }
+    return types;
+  }, [providersResponse?.providers]);
+
+  const openCodeZenConfigured = useMemo(
+    () => hasOpenCodeZenProvider(providersResponse?.providers ?? []),
+    [providersResponse?.providers],
+  );
 
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");
   const [apiKey, setApiKey] = useState("");
@@ -68,6 +87,16 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       setFormError(formatError(catalogQueryError));
     }
   }, [catalogQueryError]);
+
+  useEffect(() => {
+    setSelectedProvider((current) => {
+      if (!isProviderTypeAlreadyConfigured(current, configuredTypes)) {
+        return current;
+      }
+
+      return firstAvailableProviderOption(configuredTypes, current);
+    });
+  }, [configuredTypes]);
 
   const filteredModels = useMemo(() => {
     if (selectedProvider === "openai_compatible") {
@@ -128,6 +157,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const handleProviderSelect = useCallback(
     (provider: SelectedProvider) => {
+      if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
+        return;
+      }
+
       setSelectedProvider(provider);
 
       if (provider === "openrouter" && openRouterModels.length === 0) {
@@ -155,7 +188,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setModelsError(null);
       }
     },
-    [openRouterModels.length, cerebrasModels.length],
+    [configuredTypes, openRouterModels.length, cerebrasModels.length],
   );
 
   const selectCerebrasModel = useCallback(
@@ -217,6 +250,14 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const handleBrowseSelect = useCallback(
     (provider: SelectedProvider, modelId: string, row: ModelsDevRow) => {
+      if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
+        return;
+      }
+
+      if (row.isZen && openCodeZenConfigured) {
+        return;
+      }
+
       handleProviderSelect(provider);
       if (provider === "openrouter") {
         selectOpenRouterModel(modelId, row.modelName);
@@ -271,7 +312,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setBaseUrl(row.apiUrl.replace(/\/$/, ""));
       }
     },
-    [handleProviderSelect, selectOpenRouterModel],
+    [configuredTypes, openCodeZenConfigured, handleProviderSelect, selectOpenRouterModel],
   );
 
   const handleCerebrasBrowseSelect = useCallback(
@@ -368,6 +409,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         return;
       }
 
+      if (isProviderTypeAlreadyConfigured(selectedProvider, configuredTypes)) {
+        setFormError("This provider is already added.");
+        return;
+      }
+
       const modelToSave =
         selectedProvider === "openrouter"
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
@@ -426,6 +472,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       displayName,
       selectedModel,
       selectedProvider,
+      configuredTypes,
       createProvider,
       onSuccess,
       filteredModels,
@@ -434,6 +481,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   return {
     catalog,
+    configuredTypes,
+    openCodeZenConfigured,
     selectedProvider,
     apiKey,
     showApiKey,

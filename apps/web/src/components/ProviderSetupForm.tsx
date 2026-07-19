@@ -69,6 +69,7 @@ export function ProviderSetupForm({
           id="provider"
           value={isBrowsing ? "__browse__" : form.selectedProvider}
           disabled={form.busy}
+          configuredTypes={form.configuredTypes}
           onValueChange={(nextValue) => {
             if (nextValue === "__browse__") {
               setIsBrowsing(true);
@@ -84,6 +85,8 @@ export function ProviderSetupForm({
       {isBrowsing ? (
         <ModelsBrowseList
           onSelect={handleBrowseSelect}
+          configuredTypes={form.configuredTypes}
+          openCodeZenConfigured={form.openCodeZenConfigured}
           className="h-72 rounded-md border border-border"
         />
       ) : (

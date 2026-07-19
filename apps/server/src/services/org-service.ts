@@ -1,4 +1,5 @@
 import { NakamaApiError, generateTemporaryPassword } from "@nakama/core";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   AddOrgMemberResponse,
   CreateOrganizationRequest,
@@ -384,6 +385,10 @@ export class OrgService {
     const members: OrgMemberSummary[] = [];
 
     for (const record of records) {
+      if (record.userId === LOCAL_CLIENT_USER_ID) {
+        continue;
+      }
+
       const user = await this.databaseAdapter.getUserById(record.userId);
       if (!user) {
         continue;

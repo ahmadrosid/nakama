@@ -17,7 +17,7 @@ import {
   resolveProfileInScopes,
   type ProfileScope,
 } from "@nakama/core/profiles";
-import type { ChatInputCommandInteraction, Message } from "discord.js";
+import type { ChatInputCommandInteraction, Message, TextBasedChannel } from "discord.js";
 import {
   clearActiveStream,
   isAbortError,
@@ -47,6 +47,10 @@ import {
   replyAsChat,
   type DiscordMessenger,
 } from "./messenger";
+import {
+  deliverDiscordTurnArtifactShares,
+  maybeSendRequestedDiscordArtifactAttachment,
+} from "./channel-artifact-flow";
 import type { SessionStore } from "./session-store";
 import { DiscordTodoStatusMessage } from "./todo-status-message";
 import { createTypingLoop } from "./typing-indicator";
@@ -167,9 +171,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       await handleChatMessage(
+        channel,
         withGroupContext({ message: messageText }, isGuild),
         conversationKey,
         messenger,
+        messageText,
       );
     });
   }
@@ -234,6 +240,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           stopActiveStream(conversationKey);
           const session = await resolveSession(conversationKey);
           await session.clear();
+          clearSessionArtifactState(conversationKey);
           await messenger.send("History cleared.");
           return;
         }
@@ -337,11 +344,27 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function handleChatMessage(
+    channel: TextBasedChannel,
     input: SendMessageInput,
     conversationKey: string,
     messenger: DiscordMessenger,
+    attachUserText: string,
   ): Promise<void> {
     const session = await resolveSession(conversationKey);
+    const profileId = sessionStore.get(conversationKey)?.profileId;
+
+    if (profileId) {
+      await maybeSendRequestedDiscordArtifactAttachment({
+        channel,
+        client,
+        conversationKey,
+        profileId,
+        attachUserText,
+        sessionStore,
+        messenger,
+      });
+    }
+
     const signal = registerActiveStream(conversationKey);
     const typingLoop = createTypingLoop(messenger);
     const todoStatus = new DiscordTodoStatusMessage(messenger);
@@ -404,10 +427,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await replyAsChat(messenger, reply);
-      return;
+    } else {
+      await messenger.send("(empty reply)");
     }
 
-    await messenger.send("(empty reply)");
+    if (profileId) {
+      await deliverDiscordTurnArtifactShares({
+        client,
+        session,
+        conversationKey,
+        profileId,
+        sessionStore,
+        messenger,
+      });
+    }
   }
 
   async function ensureOrgReady(
@@ -674,6 +707,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     return pickProfileForOrg(profiles, config.profileId).id;
+  }
+
+  function clearSessionArtifactState(conversationKey: string): void {
+    const existing = sessionStore.get(conversationKey);
+    if (!existing) {
+      return;
+    }
+
+    sessionStore.set(conversationKey, {
+      sessionId: existing.sessionId,
+      profileId: existing.profileId,
+      updatedAt: new Date().toISOString(),
+    });
+    void sessionStore.save();
   }
 }
 

@@ -7,6 +7,8 @@ export * from "./artifact-mime";
 export * from "./automation-validate";
 export * from "./automation-delivery";
 export * from "./automation-run-read";
+export * from "./channel-artifacts";
+export * from "./channel-artifact-delivery";
 export * from "./channels";
 export * from "./automation-scheduler";
 export * from "./automation-worker";

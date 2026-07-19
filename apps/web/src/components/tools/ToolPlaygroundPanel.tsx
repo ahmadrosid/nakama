@@ -22,8 +22,7 @@ export function ToolPlaygroundRunForm({
       <div>
         <h3 className="type-section-title">Run</h3>
         <p className="type-body mt-1 text-xs">
-          Execute this tool outside chat with real side effects. Relative paths resolve against the
-          assigned profile workspace under{" "}
+          Real side effects. Relative paths resolve in the assigned profile workspace under{" "}
           <code className="type-code">~/.nakama/orgs/…/profiles/…/</code>.
         </p>
       </div>

@@ -66,7 +66,12 @@ export function useProviderInstanceCard({
   );
 
   const description = useMemo(() => {
-    const parts = [formatProviderLabel(providerType, instance.label)];
+    const parts: string[] = [];
+    const typeLabel = formatProviderLabel(providerType, instance.label);
+
+    if (typeLabel !== instance.label.trim()) {
+      parts.push(typeLabel);
+    }
 
     if (instance.hasApiKey) {
       parts.push("API key saved");

@@ -1,11 +1,37 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 export const SETTINGS_CARD_LOADING_SKELETON = (
   <div className="h-16 animate-pulse rounded-lg bg-muted px-4" aria-hidden="true" />
 );
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+
+export function PairingStepTile({
+  step,
+  title,
+  description,
+  className,
+}: {
+  step: number;
+  title: string;
+  description: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("p-3", className)}>
+      <div className="flex items-start gap-2">
+        <span className="w-4 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+          {step}.
+        </span>
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function SettingsRow({
   label,
@@ -85,7 +111,9 @@ export function IntegrationSettingsFooter({
         <p
           className={cn(
             "min-w-0 text-xs",
-            formError || loadError ? "text-destructive" : "text-emerald-200",
+            formError || loadError
+              ? "text-destructive"
+              : "text-emerald-800 dark:text-emerald-200",
           )}
           role={formError || loadError ? "alert" : "status"}
         >

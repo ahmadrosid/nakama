@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { ImageIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -80,8 +79,6 @@ export function VisionSettingsCard() {
 
   return (
     <SettingsModelTile
-      icon={ImageIcon}
-      iconClassName="bg-blue-500/15 text-blue-400"
       title="Image parsing model"
       footer={
         savedHint || formError ? (

@@ -153,6 +153,18 @@ Agents can write normal Markdown-style replies. Nakama sends them as plain Disco
 
 Discord has a 2000-character limit per message. Nakama automatically chunks longer replies.
 
+## Saved artifacts and share links
+
+When the agent saves a file with the `save-artifact` skill (content file plus `.nakama-meta.json` sidecar in the same turn), Nakama posts a **Publish-style share link** after the reply in Discord.
+
+- The link uses the same unguessable `/s/{token}` URLs as dashboard Publish — no Nakama login required to open it.
+- Anyone who can read the Discord message can open the link until the share is revoked from the web app.
+- Set **Web Public URL** in Nakama settings (or `NAKAMA_WEB_PUBLIC_URL`) so channel footers include absolute links.
+
+To receive the file itself in Discord, ask in plain language — for example, “send the file” or “attach it”. Nakama sends a native Discord file attachment when the file is within Discord’s size limit. If the file is too large, use the share link instead.
+
+Unpaired saves (content without a sidecar in the same turn) do not produce share links or attachments.
+
 ## Configuration notes
 
 Nakama stores Discord bridge settings under its local config directory (default `~/.nakama/discord/`).

@@ -68,6 +68,76 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = 
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
 
+/** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
+export function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
+  return provider === "openai_compatible";
+}
+
+export function isProviderTypeAlreadyConfigured(
+  provider: SelectedProvider,
+  configuredTypes: ReadonlySet<string>,
+): boolean {
+  if (allowsMultipleProviderInstances(provider)) {
+    return false;
+  }
+
+  return configuredTypes.has(provider);
+}
+
+export function firstAvailableProviderOption(
+  configuredTypes: ReadonlySet<string>,
+  preferred: SelectedProvider = "openai",
+): SelectedProvider {
+  if (!isProviderTypeAlreadyConfigured(preferred, configuredTypes)) {
+    return preferred;
+  }
+
+  const next = PROVIDER_OPTIONS.find(
+    (option) => !isProviderTypeAlreadyConfigured(option.id, configuredTypes),
+  );
+
+  return next?.id ?? "openai_compatible";
+}
+
+/** OpenCode Zen free catalog — not OpenCode Go (`/zen/go`). */
+export function isOpenCodeZenBaseUrl(baseUrl: string | null | undefined): boolean {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname.toLowerCase() !== "opencode.ai") {
+      return false;
+    }
+
+    const path = url.pathname.toLowerCase();
+    return /\/zen(\/|$)/.test(path) && !/\/zen\/go(\/|$)/.test(path);
+  } catch {
+    const normalized = trimmed.toLowerCase();
+    return (
+      normalized.includes("opencode.ai/zen") && !normalized.includes("opencode.ai/zen/go")
+    );
+  }
+}
+
+export function hasOpenCodeZenProvider(
+  providers: ReadonlyArray<{ type: string; baseUrl?: string | null; label?: string | null }>,
+): boolean {
+  return providers.some((provider) => {
+    if (provider.type !== "openai_compatible") {
+      return false;
+    }
+
+    if (isOpenCodeZenBaseUrl(provider.baseUrl)) {
+      return true;
+    }
+
+    return provider.label?.trim().toLowerCase() === "opencode zen";
+  });
+}
+
 export function apiKeyPlaceholder(provider: SelectedProvider): string {
   if (provider === "anthropic") {
     return "sk-ant-…";

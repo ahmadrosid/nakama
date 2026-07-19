@@ -10,7 +10,11 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { PROVIDER_OPTIONS, type SelectedProvider } from "@/lib/models";
+import {
+  isProviderTypeAlreadyConfigured,
+  PROVIDER_OPTIONS,
+  type SelectedProvider,
+} from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 export type ProviderSelectValue = SelectedProvider | "__browse__";
@@ -20,12 +24,13 @@ interface ProviderSelectProps {
   value: ProviderSelectValue;
   onValueChange: (value: ProviderSelectValue) => void;
   disabled?: boolean;
+  configuredTypes?: ReadonlySet<string>;
   className?: string;
 }
 
 const BROWSE_OPTION = {
   id: "__browse__" as const,
-  label: "Browse models.dev…",
+  label: "Browse free models…",
 };
 
 export function ProviderSelect({
@@ -33,9 +38,11 @@ export function ProviderSelect({
   value,
   onValueChange,
   disabled = false,
+  configuredTypes,
   className,
 }: ProviderSelectProps) {
   const [open, setOpen] = useState(false);
+  const configured = configuredTypes ?? EMPTY_CONFIGURED_TYPES;
 
   const selectedLabel = useMemo(() => {
     if (value === "__browse__") {
@@ -44,6 +51,21 @@ export function ProviderSelect({
 
     return PROVIDER_OPTIONS.find((option) => option.id === value)?.label ?? value;
   }, [value]);
+
+  const sortedOptions = useMemo(() => {
+    const available: typeof PROVIDER_OPTIONS = [];
+    const alreadyAdded: typeof PROVIDER_OPTIONS = [];
+
+    for (const option of PROVIDER_OPTIONS) {
+      if (isProviderTypeAlreadyConfigured(option.id, configured)) {
+        alreadyAdded.push(option);
+      } else {
+        available.push(option);
+      }
+    }
+
+    return [...available, ...alreadyAdded];
+  }, [configured]);
 
   return (
     <Popover
@@ -73,24 +95,8 @@ export function ProviderSelect({
           <CommandList className="max-h-72 p-1">
             <CommandEmpty>No provider found.</CommandEmpty>
             <CommandGroup className="p-1">
-              {PROVIDER_OPTIONS.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  value={`${option.label} ${option.id}`}
-                  data-checked={value === option.id ? true : undefined}
-                  onSelect={() => {
-                    onValueChange(option.id);
-                    setOpen(false);
-                  }}
-                >
-                  {option.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup className="p-1">
               <CommandItem
-                value={`${BROWSE_OPTION.label} models.dev browse catalog`}
+                value={`${BROWSE_OPTION.label} models.dev browse catalog free`}
                 data-checked={value === BROWSE_OPTION.id ? true : undefined}
                 onSelect={() => {
                   onValueChange(BROWSE_OPTION.id);
@@ -100,9 +106,39 @@ export function ProviderSelect({
                 {BROWSE_OPTION.label}
               </CommandItem>
             </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup className="p-1">
+              {sortedOptions.map((option) => {
+                const alreadyConfigured = isProviderTypeAlreadyConfigured(option.id, configured);
+
+                return (
+                  <CommandItem
+                    key={option.id}
+                    value={`${option.label} ${option.id}`}
+                    disabled={alreadyConfigured}
+                    data-checked={value === option.id ? true : undefined}
+                    onSelect={() => {
+                      if (alreadyConfigured) {
+                        return;
+                      }
+
+                      onValueChange(option.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {alreadyConfigured ? (
+                      <span className="text-xs text-muted-foreground">Already added</span>
+                    ) : null}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
   );
 }
+
+const EMPTY_CONFIGURED_TYPES: ReadonlySet<string> = new Set();

@@ -23,9 +23,10 @@ describe("artifact shares", () => {
     await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
   });
 
-  test("generateArtifactShareToken returns high-entropy share tokens", () => {
+  test("generateArtifactShareToken returns high-entropy share tokens without underscores", () => {
     const token = generateArtifactShareToken();
-    expect(token.startsWith("tc_share_")).toBe(true);
+    expect(token.startsWith("nkshare")).toBe(true);
+    expect(token).not.toContain("_");
     expect(token.length).toBeGreaterThan(40);
   });
 

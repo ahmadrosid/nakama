@@ -72,6 +72,8 @@ Persistent outputs (reports, summaries, generated text, Word documents) are not 
 
 On web chat, `write_file` and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
 
+On **Telegram** and **Discord**, the same paired saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram#saved-artifacts-and-share-links) and [Discord](/discord#saved-artifacts-and-share-links).
+
 | Content type | Preview behavior |
 |--------------|------------------|
 | HTML (`.html`, `text/html`) | Sandboxed iframe render |

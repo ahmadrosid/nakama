@@ -300,7 +300,7 @@ export function OrgMembersCard() {
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
           <OrgMembersCardHeader
-            orgName={activeOrg.name}
+            orgId={activeOrg.id}
             onInvite={() => {
               dispatch({ type: "reset-invite" });
               dispatch({ type: "clear-secrets" });

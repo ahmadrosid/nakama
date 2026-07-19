@@ -1,33 +1,8 @@
 import type { ReactNode } from "react";
+import { PairingStepTile } from "@/components/integration-settings.shared";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { DISCORD_DEVELOPER_PORTAL_URL, DISCORD_SETUP_GUIDE_URL } from "@/lib/integration-docs";
 import { cn } from "@/lib/utils";
-
-function PairingStepTile({
-  step,
-  title,
-  description,
-  className,
-}: {
-  step: number;
-  title: string;
-  description: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("p-3", className)}>
-      <div className="flex items-start gap-2">
-        <span className="w-4 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-          {step}.
-        </span>
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function DiscordPairingGuide({ inviteUrl }: { inviteUrl: string | null }) {
   return (

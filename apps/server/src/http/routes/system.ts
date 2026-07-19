@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { isComposioConfiguredAsync, NAKAMA_API_VERSION } from "@nakama/core";
+import type { UpdateWebPublicUrlRequest } from "@nakama/core/contract";
 import { persistWebPublicUrl, getWebPublicUrlSettings, resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { errorResponse } from "../shared";
+import { errorResponse, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const DOCS_HTML = `<!doctype html>
@@ -161,10 +162,11 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
     return c.json(await getWebPublicUrlSettings(), 200);
   });
 
-  app.openapi(updateWebPublicUrlRoute, async (c) => {
+  app.openAPIRegistry.registerPath(updateWebPublicUrlRoute);
+
+  app.put("/v1/system/web-public-url", async (c) => {
     requireOrgAdminFromContext(c);
-    // OpenAPI middleware already validated the JSON body.
-    const body = c.req.valid("json");
+    const body = await readJson<UpdateWebPublicUrlRequest>(c.req.raw);
     const webPublicUrl = resolveRequestClientOrigin(c.req.raw, body.webPublicUrl);
 
     if (!webPublicUrl) {

@@ -20,9 +20,79 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   IntegrationSettingsFooter,
   IntegrationStatusHeader,
+  PairingStepTile,
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { cn } from "@/lib/utils";
+
+function TelegramPairingGuide() {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <p className="text-xs font-medium text-foreground">Link in Telegram</p>
+      <div className="overflow-hidden border border-border">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <PairingStepTile
+            step={1}
+            title="Open the bot"
+            className="border-b border-border sm:border-b-0 sm:border-r"
+            description="Start a private chat with your bot."
+          />
+          <PairingStepTile
+            step={2}
+            title="Send the code"
+            description="Paste the pairing code and send it."
+          />
+        </div>
+      </div>
+
+      <details className="group">
+        <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
+          Using the bot in a group?
+        </summary>
+        <div className="mt-3 overflow-hidden border border-border">
+          <PairingStepTile
+            step={1}
+            title="Pair privately first"
+            className="border-b border-border"
+            description="Link your account in a private chat before using groups."
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2">
+            <PairingStepTile
+              step={2}
+              title="Disable Group Privacy"
+              className="border-b border-border sm:border-b-0 sm:border-r"
+              description={
+                <>
+                  Turn it off in{" "}
+                  <a
+                    href="https://t.me/BotFather"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    @BotFather
+                  </a>{" "}
+                  so @mentions work.
+                </>
+              }
+            />
+            <PairingStepTile
+              step={3}
+              title="Re-add the bot"
+              className="border-b border-border"
+              description="Remove and re-add the bot after changing Group Privacy."
+            />
+          </div>
+          <PairingStepTile
+            step={4}
+            title="Trigger in the group"
+            description="@mention the bot, reply to it, or use a slash command."
+          />
+        </div>
+      </details>
+    </div>
+  );
+}
 
 export type TelegramSettingsCardView = {
   embedded: boolean;
@@ -138,31 +208,16 @@ export function TelegramSettingsCardContent({
           <SettingsRow
             label="Pairing code"
             description={
-              isPaired
-                ? "Telegram is linked. Generate a new code to link another account."
-                : pairingCode
-                  ? "Send this code to your bot in Telegram to finish linking."
+              pairingCode
+                ? isPaired
+                  ? "Message this code to your bot to link another account."
+                  : "Message this code to your bot to finish linking."
+                : isPaired
+                  ? "Linked. Generate a new code to add another account."
                   : "Generate a code, then message it to your bot once."
             }
           >
-            {isPaired ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={regeneratePending || savePending}
-                onClick={onRegenerateHandshake}
-              >
-                {regeneratePending ? (
-                  <Spinner />
-                ) : (
-                  <>
-                    <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                    New code
-                  </>
-                )}
-              </Button>
-            ) : pairingCode ? (
+            {pairingCode ? (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
                   {pairingCode}
@@ -188,6 +243,23 @@ export function TelegramSettingsCardContent({
                   )}
                 </Button>
               </div>
+            ) : isPaired ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={regeneratePending || savePending}
+                onClick={onRegenerateHandshake}
+              >
+                {regeneratePending ? (
+                  <Spinner />
+                ) : (
+                  <>
+                    <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+                    New code
+                  </>
+                )}
+              </Button>
             ) : (
               <Button
                 type="button"
@@ -207,22 +279,7 @@ export function TelegramSettingsCardContent({
             )}
           </SettingsRow>
 
-          {!isPaired && pairingCode ? (
-            <ol className="list-decimal space-y-1 px-4 py-3 pl-8 text-xs text-muted-foreground">
-              <li>Open your bot in the Telegram app</li>
-              <li>Paste or type the pairing code as a message</li>
-              <li>For groups: link in a private chat first.</li>
-              <li>
-                In @BotFather, disable Group Privacy for the bot if you want @mentions to work
-                reliably.
-              </li>
-              <li>If you changed Group Privacy, remove the bot from the group and add it back.</li>
-              <li>
-                Add the bot to the group, then trigger it with an @mention, a reply, or a slash
-                command.
-              </li>
-            </ol>
-          ) : null}
+          {pairingCode ? <TelegramPairingGuide /> : null}
         </div>
       ) : null}
 
