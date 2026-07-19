@@ -77,7 +77,11 @@ export interface HealthResponse {
   userConfigured: boolean;
   /** A Composio project API key is saved on this server. */
   composioConfigured: boolean;
-  /** Nakama can reach the Composio API with the saved key. */
+  /**
+   * Whether Nakama can reach the Composio API with the saved key.
+   * Probed only on `GET /v1/system/status` (`server.composioAvailable`).
+   * `GET /health` always returns `false` so liveness stays local and fast.
+   */
   composioAvailable: boolean;
 }
 

@@ -365,6 +365,8 @@ describe("createHonoApp", () => {
       ok: true,
       providerConfigured: true,
       userConfigured: false,
+      // /health stays local — never probes Composio reachability
+      composioAvailable: false,
     });
   });
 

@@ -7,7 +7,7 @@ import type {
 } from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
 import { nanoid } from "nanoid";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { RemoteChatSession } from "@nakama/client";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
@@ -22,6 +22,7 @@ import {
 import {
   buildChatBasePath,
   buildChatPath,
+  buildNewChatPath,
   chatMessagesToListItems,
   isReadOnlySessionChannel,
   parseChatRouteParams,
@@ -67,7 +68,7 @@ export function useChatPage() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
@@ -90,7 +91,6 @@ export function useChatPage() {
   const isSendingRef = useRef(false);
   const skipNextProfileSessionRef = useRef(false);
   const loadedRouteRef = useRef<string | null>(null);
-  const profileSwitchInFlightRef = useRef(false);
   const profileIdRef = useRef(profileId);
 
   useEffect(() => {
@@ -230,8 +230,10 @@ export function useChatPage() {
       setError(null);
       setAgentTodos([]);
       setAgentQuestionnaire(null);
+      // Session routes remount ChatPage on /chat — pass profile in the query so it survives.
+      // The ?new=1 handler then replaces the URL with bare /chat.
       if (location.pathname !== buildChatBasePath()) {
-        navigate(buildChatBasePath(), { replace: true });
+        navigate(buildNewChatPath(nextProfileId), { replace: true });
       }
     },
     [location.pathname, navigate],
@@ -293,19 +295,19 @@ export function useChatPage() {
   );
 
   const handleProfileSwitch = useCallback(
-    async (nextProfileId: string) => {
+    (nextProfileId: string) => {
       if (!nextProfileId || nextProfileId === profileId || busy) {
         return;
       }
-      profileSwitchInFlightRef.current = true;
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
-      profileSwitchInFlightRef.current = false;
     },
     [profileId, busy, enterDraftChat],
   );
 
-  useEffect(() => {
+  // Layout effect so session is cleared before the syncChatUrl effect can
+  // re-push the previous /chat/:profile/:session URL (first-click blink).
+  useLayoutEffect(() => {
     if (searchParams.get("new") !== "1") {
       return;
     }
@@ -314,13 +316,22 @@ export function useChatPage() {
     const draftKey = readRequestedDraftKeyFromNewChatSearch(location.search);
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
     const requestedDraft = inlineDraft ?? storedDraft;
-    setSearchParams({}, { replace: true });
     const targetProfileId = requestedProfile || profileIdRef.current;
-    if (!targetProfileId) {
-      return;
-    }
 
+    if (targetProfileId) {
+      localStorage.removeItem(sessionStorageKey(targetProfileId));
+    }
     skipNextProfileSessionRef.current = true;
+    loadedRouteRef.current = null;
+    messageQueueRef.current = [];
+    isSendingRef.current = false;
+    setQueuedMessages([]);
+    setSession(null);
+    setSessionChannel("web");
+    setMessages([]);
+    setError(null);
+    setAgentTodos([]);
+    setAgentQuestionnaire(null);
 
     if (requestedProfile && requestedProfile !== profileIdRef.current) {
       setProfileId(requestedProfile);
@@ -330,8 +341,8 @@ export function useChatPage() {
       setComposerDraft(requestedDraft);
     }
 
-    enterDraftChat(targetProfileId);
-  }, [searchParams, setSearchParams, enterDraftChat, location.search]);
+    navigate(buildChatBasePath(), { replace: true });
+  }, [searchParams, navigate, location.search]);
 
   useEffect(() => {
     if (!profileId || routeSession) {
@@ -345,7 +356,7 @@ export function useChatPage() {
   }, [profileId, routeSession, enterDraftChat]);
 
   useEffect(() => {
-    if (!routeSession || profileSwitchInFlightRef.current) {
+    if (!routeSession) {
       return;
     }
     const routeKey = `${routeSession.profileId}:${routeSession.sessionId}`;
@@ -358,11 +369,16 @@ export function useChatPage() {
   }, [routeSession, resumeSession]);
 
   useEffect(() => {
-    if (!session || !profileId || profileSwitchInFlightRef.current) {
+    if (!session || !profileId) {
+      return;
+    }
+    // Stale session state must never overwrite an intentional draft /chat URL.
+    // send/resume call syncChatUrl explicitly when a session should be reflected.
+    if (location.pathname === buildChatBasePath()) {
       return;
     }
     syncChatUrl(profileId, session.id);
-  }, [session, profileId, syncChatUrl]);
+  }, [session, profileId, syncChatUrl, location.pathname]);
 
   useEffect(() => {
     void loadProfiles();

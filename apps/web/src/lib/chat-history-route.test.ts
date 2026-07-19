@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildChatPath,
+  buildNewChatPath,
   chatProfileIdFromPath,
   parseChatRouteParams,
   readRequestedDraftFromNewChatSearch,
@@ -18,6 +19,15 @@ describe("chat history route helpers", () => {
       sessionId: "s",
     });
     expect(parseChatRouteParams({ profileId: "", sessionId: "s" })).toBeNull();
+  });
+
+  test("buildNewChatPath carries profile so ChatPage remount keeps the selection", () => {
+    const path = buildNewChatPath("gary-vee");
+    const url = new URL(path, "http://nakama.local");
+    expect(url.pathname).toBe("/chat");
+    expect(url.searchParams.get("new")).toBe("1");
+    expect(url.searchParams.get("profile")).toBe("gary-vee");
+    expect(readRequestedProfileFromNewChatSearch(url.search)).toBe("gary-vee");
   });
 
   test("reads the requested profile only for new chat links", () => {

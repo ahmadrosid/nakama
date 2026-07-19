@@ -69,6 +69,7 @@ export function ChatPageContent(state: ChatPageState) {
         activeProfile={activeProfile}
         availableSkills={availableSkills}
         onProfileSwitch={handleProfileSwitch}
+        showProfileSwitch={!isEmptyState}
         showOfflineHint={showOfflineHint}
         providerConfigured={health?.providerConfigured}
         onNavigateSetup={navigateSetup}
@@ -100,8 +101,14 @@ export function ChatPageContent(state: ChatPageState) {
     return (
       <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
         <ChatPageColumn centered>
-          <div className="mx-auto flex w-full max-w-3xl flex-col mb-12">
-            <ChatWelcome profile={activeProfile} />
+          <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+            <ChatWelcome
+              profile={activeProfile}
+              profileId={profileId}
+              profiles={profiles}
+              onProfileSwitch={handleProfileSwitch}
+              profileSwitchDisabled={busy}
+            />
             {composer}
           </div>
         </ChatPageColumn>

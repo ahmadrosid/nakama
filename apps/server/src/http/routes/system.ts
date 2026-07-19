@@ -28,14 +28,19 @@ const DOCS_HTML = `<!doctype html>
 `;
 
 export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void {
-  const { agent, databaseAdapter, systemStatus, composioService } = options;
+  const { agent, databaseAdapter, systemStatus } = options;
   const healthResponseSchema = z.object({
     ok: z.literal(true),
     apiVersion: z.number().int(),
     providerConfigured: z.boolean(),
     userConfigured: z.boolean(),
-    composioConfigured: z.boolean(),
-    composioAvailable: z.boolean(),
+    composioConfigured: z.boolean().openapi({
+      description: "Whether a Composio project API key is saved locally.",
+    }),
+    composioAvailable: z.boolean().openapi({
+      description:
+        "Whether Composio is reachable. Always false on /health (no live probe). Check GET /v1/system/status for the probed value.",
+    }),
   }).openapi("HealthResponse");
   const systemStatusSchema = z.object({ ok: z.boolean() }).passthrough().openapi("SystemStatusResponse");
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
@@ -141,6 +146,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
   });
 
   app.openapi(healthRoute, async (c) => {
+    // Local checks only — Composio reachability is on GET /v1/system/status.
     const humanUserCount = (await databaseAdapter?.countHumanUsers()) ?? 0;
     const composioConfigured = await isComposioConfiguredAsync();
     return c.json({
@@ -149,7 +155,7 @@ export function registerSystemRoutes(app: HonoApp, options: ServerOptions): void
       providerConfigured: agent.providerConfigured,
       userConfigured: humanUserCount > 0,
       composioConfigured,
-      composioAvailable: composioConfigured ? await (composioService?.isReachable() ?? false) : false,
+      composioAvailable: false,
     }, 200);
   });
 

@@ -11,7 +11,6 @@ import type { ChatStatus } from "ai";
 import type { FileUIPart } from "ai";
 import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   PromptInput,
   PromptInputBody,
@@ -63,6 +62,7 @@ import {
 } from "@/components/chat/ChatMessageQueuePanel";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { cn } from "@/lib/utils";
@@ -108,6 +108,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   profiles: ProfileSummary[];
   activeProfile?: ProfileSummary;
   onProfileSwitch: (profileId: string) => void;
+  showProfileSwitch?: boolean;
   showOfflineHint?: boolean;
   providerConfigured?: boolean;
   onNavigateSetup?: () => void;
@@ -460,51 +461,20 @@ function ChatComposerFullFooter({
         aria-label="Composer options"
         className={composerToolbarClass}
       >
-        <PromptInputTools className="gap-1.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={
-                    props.activeProfile
-                      ? `Switch profile (${props.activeProfile.name})`
-                      : "Switch profile"
-                  }
-                  title={props.activeProfile?.name ?? "Switch profile"}
-                  className={cn(composerIconButtonClass, "p-0")}
-                />
-              }
-            >
-              {props.activeProfile ? (
-                <ProfileAvatar profile={props.activeProfile} size="sm" className="size-7" />
-              ) : (
-                <span className="text-xs font-medium">?</span>
-              )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-52 w-auto">
-              {props.profiles.map((profile) => (
-                <DropdownMenuItem
-                  key={profile.id}
-                  disabled={profile.id === props.profileId}
-                  onClick={() => void props.onProfileSwitch(profile.id)}
-                >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span className="whitespace-nowrap">
-                      {profile.name}
-                      {profile.isSuper ? " (super)" : ""}
-                    </span>
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </PromptInputTools>
-
-        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+        {props.showProfileSwitch !== false ? (
+          <>
+            <PromptInputTools className="gap-1.5">
+              <ChatProfileSwitcher
+                profileId={props.profileId}
+                profiles={props.profiles}
+                activeProfile={props.activeProfile}
+                onProfileSwitch={props.onProfileSwitch}
+                disabled={busy || disabled}
+              />
+            </PromptInputTools>
+            <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+          </>
+        ) : null}
 
         {props.providerConfigured ? (
           <PromptInputSelect

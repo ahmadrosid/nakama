@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 export function ProfilesDialogs(state: ProfilesPageState) {
@@ -46,7 +48,13 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     unassignMcpMutation,
     unassignSkillMutation,
     handleRemoveAssignmentConfirm,
+    profiles,
   } = state;
+  const { navigateToNewChat } = useAppNavigation();
+  const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const onAskSuperBot = superBotProfileId
+    ? () => navigateToNewChat(superBotProfileId)
+    : undefined;
 
   return (
     <>
@@ -55,6 +63,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         tools={allTools}
         onOpenChange={handleCreateOpenChange}
         onCreated={(profileId) => setSelectedId(profileId)}
+        onAskSuperBot={onAskSuperBot}
       />
 
       <SkillCreateDialog

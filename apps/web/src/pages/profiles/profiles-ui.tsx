@@ -223,10 +223,12 @@ export function ProfilesEmptyState({
   variant,
   disabled,
   onCreate,
+  onAskSuperBot,
 }: {
   variant: "compact" | "full";
   disabled?: boolean;
   onCreate: () => void;
+  onAskSuperBot?: () => void;
 }) {
   const isCompact = variant === "compact";
 
@@ -268,10 +270,23 @@ export function ProfilesEmptyState({
         ) : null}
       </div>
 
-      <Button type="button" size={isCompact ? "sm" : "default"} disabled={disabled} onClick={onCreate}>
-        <PlusIcon className="size-4" aria-hidden />
-        {isCompact ? "Create profile" : "New profile"}
-      </Button>
+      <div className="flex flex-col items-center gap-2">
+        <Button type="button" size={isCompact ? "sm" : "default"} disabled={disabled} onClick={onCreate}>
+          <PlusIcon className="size-4" aria-hidden />
+          {isCompact ? "Create profile" : "New profile"}
+        </Button>
+        {onAskSuperBot ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            onClick={onAskSuperBot}
+          >
+            Ask Super Bot
+          </Button>
+        ) : null}
+      </div>
 
       {!isCompact ? (
         <ol className="w-full max-w-md space-y-3 border-t border-border pt-6 text-left">

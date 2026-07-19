@@ -148,6 +148,7 @@ export class SystemStatusService {
       providerConfigured: this.agent.providerConfigured,
       userConfigured: humanUserCount > 0,
       composioConfigured,
+      // Live probe — intentional here; /health skips this to stay fast.
       composioAvailable: composioConfigured
         ? await (this.composioService?.isReachable() ?? false)
         : false,

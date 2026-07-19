@@ -30,7 +30,7 @@ If a session or channel config omits a profile id — or names one that does not
 
 Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` when those builtins are available. Default and super-bot profiles also receive bundled skills (memory, automations, skill authoring) when installed on the server. Assign more tools, MCP servers, and skills from the dashboard.
 
-Super Bot can also create profiles from chat. For profile-creation requests, it uses a Super Bot-only bundled skill that guides soul-file generation, keeps `MEMORY.md` empty, and uses the current tool inventory to recommend a small relevant starter set.
+Super Bot can also create profiles from chat using a confirm-first factory. For profile-creation requests, it drafts soul files and a tool plan in chat, waits for your explicit OK, then calls `create_profile`. New profiles keep `MEMORY.md` empty and receive basic file/knowledge tools automatically; extra tools still need an explicit ask. On the Profiles page, use **Ask Super Bot** (empty state or create dialog) when a Super Bot profile exists.
 
 Super Bot can hand coding tasks to a dedicated coding agent via the `coding-delegation` skill and `bash`. See [Coding agent](/coding-agent).
 

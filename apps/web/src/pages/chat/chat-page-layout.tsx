@@ -1,4 +1,5 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { cn } from "@/lib/utils";
 
@@ -24,18 +25,34 @@ export function ChatPageColumn({
   );
 }
 
-export function ChatWelcome({ profile }: { profile: ProfileSummary | undefined }) {
+export function ChatWelcome({
+  profile,
+  profileId,
+  profiles,
+  onProfileSwitch,
+  profileSwitchDisabled = false,
+}: {
+  profile: ProfileSummary | undefined;
+  profileId: string;
+  profiles: ProfileSummary[];
+  onProfileSwitch: (profileId: string) => void;
+  profileSwitchDisabled?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-4 px-2">
-      <div className="min-w-0 text-left">
-        <h2 className="type-section-title text-xl tracking-tight">
-          Hi, good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}!
-        </h2>
-        <p className="type-body mt-1 max-w-sm">
-          {profile?.isSuper
-            ? "Ask anything, attach images, or run tools."
-            : "What can I help you with today?"}
-        </p>
+    <div className="flex flex-col gap-2 px-2">
+      <h2 className="type-section-title text-xl tracking-tight">
+        Hi, good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}!
+      </h2>
+      <div className="flex items-center gap-2 self-start">
+        <span className="type-body text-sm text-muted-foreground">Select profile</span>
+        <ChatProfileSwitcher
+          variant="prominent"
+          profileId={profileId}
+          profiles={profiles}
+          activeProfile={profile}
+          onProfileSwitch={onProfileSwitch}
+          disabled={profileSwitchDisabled}
+        />
       </div>
     </div>
   );

@@ -4,24 +4,43 @@ description: Create, design, or set up a new bot profile with soul files and app
 include-body-on-match: true
 ---
 
-When the user asks to create a profile, turn the request into a complete profile setup.
+When the user asks to create a profile, run a confirm-first factory — never call `create_profile` until they explicitly confirm the draft.
 
-Clarify only when the profile's purpose, audience, or permissions are materially unclear. Otherwise proceed with a concise, useful interpretation of the request.
+## 1. Clarify only when needed
 
-Create the profile with generated soul files:
+Ask follow-ups only when purpose, audience, or permissions are materially unclear. Otherwise interpret the request concisely and move to the draft.
 
-- `SOUL.md` defines who the profile is, what it values, what it helps with, and its boundaries.
-- `STYLE.md` defines voice, tone, formatting, and communication preferences.
-- `INSTRUCTIONS.md` defines operating rules, tool-use posture, uncertainty handling, and when to ask the user.
-- `MEMORY.md` must be empty. Do not invent continuity facts, preferences, or history for a new profile.
+## 2. Draft in chat first
 
-Use the available-tools context when it is present. Assign the basic tools by default: `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search`. Assign the `update-profile-memory` bundled skill for memory writes. Recommend or assign additional tools only when they clearly match the user's requested profile purpose. Do not assign every available tool.
+Post a reviewable draft before any tool call:
 
-When choosing tools:
+- Proposed **name** and optional **id**
+- Full proposed `SOUL.md` (who it is, values, help scope, boundaries)
+- Full proposed `STYLE.md` (voice, tone, formatting)
+- Full proposed `INSTRUCTIONS.md` (operating rules, tool posture, when to ask the user)
+- `MEMORY.md` must be **empty**. Do not invent continuity facts, preferences, or history.
 
-- Prefer small, relevant tool sets.
-- Treat custom tools as optional capabilities that need a clear fit.
-- Avoid powerful or externally visible tools unless the user asked for that capability.
-- Summarize which tools were assigned and why.
+Also include a **tool plan**:
 
-The profile should be ready to use after creation: name, soul files, empty memory, and a practical starter tool set.
+- Server auto-assigns these basics on create when available: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, `web_fetch`, plus default bundled skills (including `update-profile-memory`).
+- Recommend optional extras from the available-tools context only when they clearly match the requested purpose.
+- Do not assign every available tool. Avoid powerful or externally visible tools unless the user asked for that capability.
+- Extra tools still need an explicit user ask after create (`assign_tool_to_profile`).
+
+Never set `isSuper: true` unless the user explicitly asked for a super profile. Prefer refusing agent-initiated super creation and directing them to the dashboard.
+
+## 3. Wait for explicit confirmation
+
+Always wait for a clear OK (for example “yes, create it”) even when the request looked complete.
+
+If the user edits the draft, revise the draft in chat and wait for confirmation again. Do not call `create_profile` on edit-only messages.
+
+## 4. Create only after OK
+
+After confirmation, call `create_profile` with `name`, optional `id`, and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`.
+
+Then summarize:
+
+- Profile id and name
+- How to open it in the dashboard (Profiles → select the new profile)
+- Which basics were auto-assigned vs any extras still waiting on an explicit assign ask

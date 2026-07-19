@@ -29,8 +29,7 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (isAuthenticated) {
-    navigate(resolvePostAuthPath(health, from), { replace: true });
-    return null;
+    return <Navigate to={resolvePostAuthPath(health, from)} replace />;
   }
 
   if (health?.userConfigured === false) {
