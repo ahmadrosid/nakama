@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { MicIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -85,8 +84,6 @@ export function TranscriptionSettingsCard() {
 
   return (
     <SettingsModelTile
-      icon={MicIcon}
-      iconClassName="bg-emerald-500/15 text-emerald-400"
       title="Audio transcription model"
       footer={
         savedHint || formError ? (

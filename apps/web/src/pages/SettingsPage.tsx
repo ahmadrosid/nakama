@@ -121,10 +121,12 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <VisionSettingsCard />
-            <TranscriptionSettingsCard />
-          </div>
+          <Card className="w-full shadow-none">
+            <CardContent className="divide-y divide-border p-0">
+              <VisionSettingsCard />
+              <TranscriptionSettingsCard />
+            </CardContent>
+          </Card>
 
           {formError ? (
             <p className="text-sm text-destructive" role="alert">

@@ -149,6 +149,9 @@ export function ProviderCompatibleEditDialog({
           </p>
         ) : null}
         <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button type="button" disabled={busy} onClick={onSave}>
             Save
           </Button>
@@ -182,6 +185,7 @@ export function ProviderCompatibleManageDialog({
       <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Manage models</DialogTitle>
+          <DialogDescription>Edit the shortlist available in chat for this provider.</DialogDescription>
         </DialogHeader>
         <CustomProviderFields
           displayName={instance.label}
@@ -204,6 +208,9 @@ export function ProviderCompatibleManageDialog({
           </p>
         ) : null}
         <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button type="button" disabled={busy} onClick={onSave}>
             Save
           </Button>
