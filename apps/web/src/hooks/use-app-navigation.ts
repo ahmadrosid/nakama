@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
-  buildChatBasePath,
   buildChatPath,
+  buildNewChatPath,
   type RequestedChatSession,
   MAX_URL_CHAT_DRAFT_LENGTH,
   storeChatDraft,
@@ -22,21 +22,20 @@ export function useAppNavigation() {
       navigate(toolPlaygroundPath(toolId));
     },
     navigateToNewChat(profileId?: string | null, options?: { draft?: string }) {
-      const params = new URLSearchParams({ new: "1", _: String(Date.now()) });
-      if (profileId) {
-        params.set("profile", profileId);
-      }
-
       const draft = options?.draft?.trim();
-      if (draft) {
-        if (draft.length <= MAX_URL_CHAT_DRAFT_LENGTH) {
-          params.set("draft", draft);
-        } else {
-          params.set("draftKey", storeChatDraft(draft));
-        }
+      if (!draft) {
+        navigate(buildNewChatPath(profileId));
+        return;
       }
 
-      navigate(`${buildChatBasePath()}?${params.toString()}`);
+      const url = new URL(buildNewChatPath(profileId), "http://nakama.local");
+      if (draft.length <= MAX_URL_CHAT_DRAFT_LENGTH) {
+        url.searchParams.set("draft", draft);
+      } else {
+        url.searchParams.set("draftKey", storeChatDraft(draft));
+      }
+
+      navigate(`${url.pathname}?${url.searchParams.toString()}`);
     },
   };
 }

@@ -21,6 +21,20 @@ export function buildChatBasePath(): string {
   return "/chat";
 }
 
+/**
+ * Draft chat URL used when starting a new chat (or switching profiles while on a
+ * session route). `/chat` and `/chat/:profileId/:sessionId` are separate routes,
+ * so navigating between them remounts ChatPage — the profile must travel in the
+ * query string or the remounted page falls back to the default profile.
+ */
+export function buildNewChatPath(profileId?: string | null): string {
+  const params = new URLSearchParams({ new: "1", _: String(Date.now()) });
+  if (profileId) {
+    params.set("profile", profileId);
+  }
+  return `${buildChatBasePath()}?${params.toString()}`;
+}
+
 /** Profile id from `?new=1&profile=…` when opening a new chat (e.g. Super Bot from Tools). */
 export function readRequestedProfileFromNewChatSearch(search: string): string | null {
   const params = new URLSearchParams(search);
