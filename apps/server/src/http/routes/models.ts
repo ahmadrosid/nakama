@@ -44,9 +44,9 @@ import { NakamaApiError } from "@nakama/core";
 import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
-import { errorResponse, json, readJson } from "../shared";
+import { errorResponse, json, readJson, getRequestAuth } from "../shared";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { installCodingAgentHarness } from "../../services/coding-agent-harness-service";
+import { installCodingAgentHarness } from "../../services/coding-harness-service";
 import { streamCodingHarnessInstall } from "../coding-harness-install-stream";
 
 export function registerModelRoutes(app: HonoApp, options: ServerOptions): void {
@@ -471,12 +471,14 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   }));
 
   app.get("/v1/models", async (c) => {
+    getRequestAuth(c);
     const source = c.req.query("source");
     const modelsSource = source === "remote" ? ("remote" as const) : ("catalog" as const);
     return json<ModelsResponse>(await agent.getModels({ source: modelsSource }));
   });
 
   app.post("/v1/models/discover", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<DiscoverModelsRequest>(c.req.raw);
 
     try {
@@ -488,16 +490,19 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.get("/v1/providers", async () => {
+  app.get("/v1/providers", async (c) => {
+    getRequestAuth(c);
     return json<ListProvidersResponse>(await agent.listProviders());
   });
 
   app.post("/v1/providers", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<CreateProviderRequest>(c.req.raw);
     return json<CreateProviderResponse>(await agent.createProvider(body));
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
     return json<UpdateProviderResponse>(
       await agent.updateProvider(decodeURIComponent(c.req.param("providerId")), body),
@@ -505,45 +510,54 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
+    getRequestAuth(c);
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId"))),
     );
   });
 
   app.put("/v1/settings/provider", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<ConfigureProviderRequest>(c.req.raw);
     const result = await agent.configureProvider(body);
     return json<ConfigureProviderResponse>(result);
   });
 
-  app.get("/v1/timezones", async () => {
+  app.get("/v1/timezones", async (c) => {
+    getRequestAuth(c);
     return json<ListTimezonesResponse>(await getTimezoneCatalog());
   });
 
-  app.get("/v1/settings/timezone", async () => {
+  app.get("/v1/settings/timezone", async (c) => {
+    getRequestAuth(c);
     return json<TimezoneSettingsResponse>({ timezone: await agent.getUserTimezone() });
   });
 
   app.put("/v1/settings/timezone", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateTimezoneRequest>(c.req.raw);
     const timezone = await agent.setUserTimezone(body.timezone);
     return json<TimezoneSettingsResponse>({ timezone });
   });
 
-  app.get("/v1/settings/thinking", async () => {
+  app.get("/v1/settings/thinking", async (c) => {
+    getRequestAuth(c);
     return json<ThinkingSettingsResponse>(await agent.getThinkingSettings());
   });
 
   app.put("/v1/settings/thinking", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateThinkingRequest>(c.req.raw);
     return json<ThinkingSettingsResponse>(await agent.setThinkingSettings(body));
   });
 
-  app.get("/v1/settings/vision", async () => {
+  app.get("/v1/settings/vision", async (c) => {
+    getRequestAuth(c);
     return json<VisionSettingsResponse>(await agent.getVisionSettings());
   });
 
   app.put("/v1/settings/vision", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateVisionRequest>(c.req.raw);
 
     try {
@@ -558,11 +572,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.get("/v1/settings/transcription", async () => {
+  app.get("/v1/settings/transcription", async (c) => {
+    getRequestAuth(c);
     return json<TranscriptionSettingsResponse>(await agent.getTranscriptionSettings());
   });
 
   app.put("/v1/settings/transcription", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateTranscriptionRequest>(c.req.raw);
 
     try {
@@ -578,6 +594,7 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   });
 
   app.post("/v1/audio/transcribe", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<TranscribeAudioRequest>(c.req.raw);
 
     try {
@@ -693,11 +710,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     });
   });
 
-  app.get("/v1/settings/telegram", async () => {
+  app.get("/v1/settings/telegram", async (c) => {
+    getRequestAuth(c);
     return json<TelegramSettingsResponse>(await agent.getTelegramSettings());
   });
 
   app.put("/v1/settings/telegram", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateTelegramSettingsRequest>(c.req.raw);
 
     try {
@@ -711,7 +730,8 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.post("/v1/settings/telegram/handshake", async () => {
+  app.post("/v1/settings/telegram/handshake", async (c) => {
+    getRequestAuth(c);
     try {
       return json<TelegramSettingsResponse>(await agent.regenerateTelegramHandshake());
     } catch (error) {
@@ -720,11 +740,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.get("/v1/settings/discord", async () => {
+  app.get("/v1/settings/discord", async (c) => {
+    getRequestAuth(c);
     return json<DiscordSettingsResponse>(await agent.getDiscordSettings());
   });
 
   app.put("/v1/settings/discord", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateDiscordSettingsRequest>(c.req.raw);
 
     try {
@@ -738,7 +760,8 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.post("/v1/settings/discord/handshake", async () => {
+  app.post("/v1/settings/discord/handshake", async (c) => {
+    getRequestAuth(c);
     try {
       return json<DiscordSettingsResponse>(await agent.regenerateDiscordHandshake());
     } catch (error) {
@@ -747,11 +770,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.get("/v1/settings/composio", async () => {
+  app.get("/v1/settings/composio", async (c) => {
+    getRequestAuth(c);
     return json<ComposioSettingsResponse>(await agent.getComposioSettings());
   });
 
   app.put("/v1/settings/composio", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateComposioSettingsRequest>(c.req.raw);
 
     try {
@@ -764,11 +789,13 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
       return errorResponse(message, 400);
     }
   });
-  app.get("/v1/settings/whatsapp", async () => {
+  app.get("/v1/settings/whatsapp", async (c) => {
+    getRequestAuth(c);
     return json<WhatsAppSettingsResponse>(await agent.getWhatsAppSettings());
   });
 
   app.put("/v1/settings/whatsapp", async (c) => {
+    getRequestAuth(c);
     const body = await readJson<UpdateWhatsAppSettingsRequest>(c.req.raw);
 
     try {
@@ -777,12 +804,14 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);
     }
   });
 
-  app.post("/v1/settings/whatsapp/pairing-code", async () => {
+  app.post("/v1/settings/whatsapp/pairing-code", async (c) => {
+    getRequestAuth(c);
     try {
       return json<WhatsAppSettingsResponse>(await agent.regenerateWhatsAppPairingCode());
     } catch (error) {
@@ -791,7 +820,8 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     }
   });
 
-  app.post("/v1/settings/whatsapp/reconnect", async () => {
+  app.post("/v1/settings/whatsapp/reconnect", async (c) => {
+    getRequestAuth(c);
     try {
       await workerManager.stopWorker("whatsapp").catch(() => {});
       const settings = await resetWhatsAppSessionForReconnect();
