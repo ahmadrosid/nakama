@@ -88,6 +88,7 @@ export async function deliverTelegramTurnArtifactShares(input: {
   });
 
   if (footer.trim()) {
-    await input.messenger.sendPlain(footer);
+    // Raw: share tokens must not pass through markdown underscore stripping.
+    await input.messenger.sendRaw(footer);
   }
 }

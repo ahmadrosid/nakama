@@ -10,7 +10,8 @@ export function formatError(error: unknown): string {
 }
 
 export function stripMarkdownForTelegram(text: string): string {
-  let result = text.trim();
+  const protectedUrls = protectBareUrls(text.trim());
+  let result = protectedUrls.text;
 
   result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => code.trim());
   result = result.replace(/`([^`]+)`/g, "$1");
@@ -21,7 +22,7 @@ export function stripMarkdownForTelegram(text: string): string {
   result = result.replace(/^#{1,6}\s+/gm, "");
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
 
-  return result.trim();
+  return restoreBareUrls(result, protectedUrls.urls).trim();
 }
 
 export function prepareTelegramReply(text: string): string {
@@ -38,6 +39,29 @@ export function renderTelegramRichText(text: string): string {
   const formattedText = renderInlineTelegramFormatting(escapedText);
 
   return restoreProtectedBlocks(formattedText, protectedBlocks.blocks).trim();
+}
+
+/** Placeholder bare http(s) URLs so underscore italic stripping cannot mangle path tokens. */
+function protectBareUrls(text: string): { text: string; urls: string[] } {
+  const urls: string[] = [];
+  // Stop at whitespace, markdown/HTML delimiters, and common trailing punctuation.
+  const protectedText = text.replace(/https?:\/\/[^\s<>\]"'()]+/g, (url) => {
+    const token = `@@TCURL${urls.length}@@`;
+    urls.push(url);
+    return token;
+  });
+
+  return { text: protectedText, urls };
+}
+
+function restoreBareUrls(text: string, urls: string[]): string {
+  let result = text;
+
+  for (let index = 0; index < urls.length; index++) {
+    result = result.replace(`@@TCURL${index}@@`, urls[index]!);
+  }
+
+  return result;
 }
 
 function protectFencedCodeBlocks(text: string): { text: string; blocks: string[] } {

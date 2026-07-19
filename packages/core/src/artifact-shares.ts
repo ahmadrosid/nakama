@@ -5,7 +5,9 @@ import { getArtifactSharesDir } from "./soul/resolve";
 import { pathExists } from "./fs";
 
 export function generateArtifactShareToken(): string {
-  return `tc_share_${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
+  // No underscores: plain-text markdown strippers treat `_word_` as italic and can
+  // corrupt share URLs in channel footers (Telegram sendPlain path).
+  return `nkshare${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 export function buildArtifactSharePath(token: string): string {
