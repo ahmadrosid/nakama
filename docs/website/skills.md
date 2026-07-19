@@ -131,7 +131,7 @@ Selecting a skill inserts an explicit invocation like:
 
 The composer highlights the selected skill, but the message still sends as plain text so it works with the normal skill matcher.
 
-Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts.
+Nakama also ships bundled skills for system workflows. The `create-profile` bundled skill is assigned only to Super Bot, so profile-authoring instructions load when Super Bot is asked to create a profile without adding those instructions to ordinary profile prompts. That skill runs a confirm-first factory: draft soul files in chat, wait for explicit confirmation, then create.
 
 For more detail, see [Agent prompts](/agent-prompt).
 

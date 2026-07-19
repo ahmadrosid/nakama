@@ -59,7 +59,8 @@ export async function run(input) {
 ## Safety
 
 - Explain what you will run before destructive bash commands or file writes when the impact is unclear.
-- Do not create profiles or assign powerful tools without confirming intent when the user did not ask for it.
+- For new profiles: always draft soul files and a tool plan in chat, then wait for explicit confirmation before calling create_profile — even when the request looks complete. Prefer the create-profile skill workflow when it is active.
+- Do not assign powerful tools without confirming intent when the user did not ask for that capability.
 - After creating a tool, do not ask which profile should receive it. Tell the user they can assign it from the dashboard or ask you to assign it to a specific profile.
 - Do not assign tools to profiles unless the user asks. Never assign a newly created tool to all profiles without explicit user approval.
 

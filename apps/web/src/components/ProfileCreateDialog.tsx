@@ -24,6 +24,7 @@ interface ProfileCreateDialogProps {
   tools: ToolSummary[];
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
+  onAskSuperBot?: () => void;
 }
 
 const defaultCreatePrompt = "You are a helpful assistant.";
@@ -103,6 +104,7 @@ export function ProfileCreateDialog({
   tools,
   onCreated,
   onOpenChange,
+  onAskSuperBot,
 }: ProfileCreateDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,6 +113,7 @@ export function ProfileCreateDialog({
           tools={tools}
           onCreated={onCreated}
           onOpenChange={onOpenChange}
+          onAskSuperBot={onAskSuperBot}
         />
       ) : null}
     </Dialog>
@@ -121,10 +124,12 @@ function ProfileCreateDialogContent({
   tools,
   onCreated,
   onOpenChange,
+  onAskSuperBot,
 }: {
   tools: ToolSummary[];
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
+  onAskSuperBot?: () => void;
 }) {
   const createMutation = useCreateProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
@@ -254,6 +259,24 @@ function ProfileCreateDialogContent({
           <DialogTitle>Create profile</DialogTitle>
           <DialogDescription>
             Name, profile id, and system prompt for the new bot profile.
+            {onAskSuperBot ? (
+              <>
+                {" "}
+                Or{" "}
+                <button
+                  type="button"
+                  className="text-foreground underline underline-offset-2"
+                  disabled={busy}
+                  onClick={() => {
+                    onOpenChange(false);
+                    onAskSuperBot();
+                  }}
+                >
+                  ask Super Bot
+                </button>{" "}
+                to draft one from chat.
+              </>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
 

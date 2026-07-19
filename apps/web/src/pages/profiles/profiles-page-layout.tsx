@@ -11,6 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
 import { sectionClass } from "@/pages/profiles/profiles-page.shared";
@@ -45,6 +47,11 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     setCreateOpen,
     openDeleteDialog,
   } = state;
+  const { navigateToNewChat } = useAppNavigation();
+  const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const onAskSuperBot = superBotProfileId
+    ? () => navigateToNewChat(superBotProfileId)
+    : undefined;
 
   if (profilesLoading && profiles.length === 0) {
     return <PageState message="Loading profiles…" />;
@@ -152,6 +159,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                   variant="compact"
                   disabled={busy}
                   onCreate={() => setCreateOpen(true)}
+                  onAskSuperBot={onAskSuperBot}
                 />
               ) : filteredProfiles.length === 0 ? (
                 <EmptyMessage
@@ -182,6 +190,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                     variant="full"
                     disabled={busy}
                     onCreate={() => setCreateOpen(true)}
+                    onAskSuperBot={onAskSuperBot}
                   />
                 </div>
               ) : detailLoading && !detail ? (

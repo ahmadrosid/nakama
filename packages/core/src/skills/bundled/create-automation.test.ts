@@ -53,6 +53,23 @@ describe("bundled create-profile skill", () => {
       ),
     ).toEqual(["create-profile"]);
   });
+
+  test("body requires draft-and-confirm before create_profile", async () => {
+    const content = await readBundledSkillMarkdown("create-profile");
+    const parsed = parseSkillMarkdown(content, "create-profile/SKILL.md");
+    const body = parsed.body.toLowerCase();
+
+    expect(body).toContain("draft");
+    expect(body).toMatch(/confirm|confirmation|explicit/);
+    expect(body).toContain("create_profile");
+    expect(body).not.toMatch(/otherwise proceed/);
+    expect(body).toContain("memory.md");
+    expect(body).toMatch(/empty/);
+    expect(body).toContain("web_fetch");
+    expect(body).toMatch(/isSuper|is super|super profile/i);
+    expect(body).toMatch(/revise|edit/);
+    expect(body).toMatch(/open|dashboard|profiles/);
+  });
 });
 
 describe("bundled manage-skills skill", () => {
