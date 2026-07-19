@@ -21,6 +21,7 @@ export function WebPublicUrlSettingsRow() {
   const handleSave = () => {
     setFormError(null);
     setSavedHint(null);
+    saveMutation.reset();
 
     const trimmed = value.trim();
     if (!trimmed) {
@@ -44,6 +45,7 @@ export function WebPublicUrlSettingsRow() {
       setValue(window.location.origin);
       setSavedHint(null);
       setFormError(null);
+      saveMutation.reset();
     }
   };
 
@@ -91,6 +93,7 @@ export function WebPublicUrlSettingsRow() {
             setValue(event.target.value);
             setSavedHint(null);
             setFormError(null);
+            saveMutation.reset();
           }}
           placeholder="https://nakama.example.com"
           className="min-w-0 flex-1"
