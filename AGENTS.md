@@ -7,7 +7,7 @@ A multi-tenant, multi-agent platform (monorepo). Each **organization** is a flat
 - **Runtime:** Bun 1.3+. Use `bun install`, `bun run`, `bun test`.
 - **Dev servers:** `bun run dev:server` (HTTP API), `bun run dev:web` (dashboard), `bun run dev:cli` (CLI).
 
-`apps/` holds server, web UI, CLI, telegram, and whatsapp apps.
+`apps/` holds `server`, `web`, `cli`, and channel workers under `apps/platform/` (telegram, whatsapp, discord, automation).
 
 ## Multi-tenancy
 
@@ -48,12 +48,13 @@ Every authenticated API call (except `/v1/auth/*` and `/v1/platform/*`) requires
 
 ## System prompt — where to make changes
 
-The system prompt is built in three layers:
+Soul + skills catalog/capability are merged in `agent-service` `resolveProfileSystemPrompt` before `generateReply`:
 
 | What you want to change | File | Function |
 |---|---|---|
 | Static chat structure (identity, USER.md, tools, timezone, channel rules) | `packages/agent/src/chat-prompt.ts` | `buildChatSystemPrompt` |
 | Soul/identity content (SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md) | `packages/core/src/soul/compose.ts` | `composeSoulSystemPrompt` |
+| Skills catalog, matched skill bodies, agent-browser capability | `packages/core/src/skills/compose.ts` | `composeSkillsCatalog`, `composeMatchedSkillsPrompt`, `composeAgentBrowserCapabilityPrompt` |
 | Dynamic per-turn context (current date, etc.) | `packages/agent/src/chat.ts` | `generateReply` |
 
 `generateReply` is the final dispatch point — it calls `provider.generateChat()` / `provider.streamChat()` with the assembled system prompt string.
@@ -84,7 +85,12 @@ Loaded by `loadSoulStack()` (`load.ts`); injected by `composeSoulSystemPrompt()`
 - `sub_agent` (opt-in) — run a focused same-profile sub-agent for delegated research, review, or planning; returns a structured result (not for repo coding — use `coding-delegation` + `bash`)
 - `coding-delegation` skill — invoke Codex / Claude Code / OpenCode for repo coding work via `bash` and harness CLI templates
 - `agent-browser` skill (opt-in) — interactive browser automation via `bash` and the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI (login walls, forms, snapshots with `@e` refs); requires host `agent-browser` + Chrome install; fresh session each run — see `docs/website/agent-browser.md`
+- `create-profile` skill (Super Bot only) — confirm-first profile factory; calls `create_profile` only after explicit confirmation (`packages/core/src/skills/bundled/create-profile/`, tool in `apps/server/src/tools/super-bot-tools.ts`)
 - Composio — hybrid org toolkit catalog + per-user OAuth via Integrations (see `docs/website/composio.md`)
+
+## Channel artifacts (Telegram / Discord)
+
+Attach/share flows for profile artifacts: `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`. Per-channel handlers: `apps/platform/{telegram,discord}/src/channel-artifact-flow.ts`.
 
 ## Tool execution & workspace
 
@@ -162,6 +168,6 @@ Super Bot tool-authoring rules (write modules to `~/.nakama/tools/`, export `run
 - Routes live in `apps/server/src/http/routes/*`.
 - Auth and CSRF checks live in `apps/server/src/http/auth-middleware.ts` with helpers in `shared.ts`.
 - OpenAPI: `/openapi.json` is served dynamically from the Hono app; route registration (`apps/server/src/http/openapi.ts`) is the source of truth.
-- **Platform-admin-only routes:** profiles, tools, MCP servers, skills (mutations). Org admins cannot create profiles — they use profiles provisioned by the platform admin.
+- **Platform-admin-only routes:** profiles, tools, MCP servers, skills (mutations). Org admins cannot create profiles via the API/UI — they use profiles provisioned by the platform admin (or Super Bot via the confirm-first `create-profile` skill + `create_profile` tool).
 - **Org-admin routes:** member list, invite, add, remove, role change under `/v1/orgs/{orgId}/…`.
 - **Viewer restrictions:** `requireNotViewer` on worker control and agent-invocation paths.
