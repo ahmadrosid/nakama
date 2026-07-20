@@ -42,7 +42,7 @@ Nakama includes these builtins:
 | `bash` | Super Bot only | No | Run shell commands in the profile workspace |
 | `sub_agent` | No | No | Opt-in: delegate to a same-profile sub-agent (see below) |
 
-**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-delegation` skill — see [Coding agent](/coding-agent). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`.
+**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-delegation` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Skills](/skills#agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`.
 
 ## Choosing tools for a profile
 
@@ -274,7 +274,7 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 
-**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow.
+**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/skills#agent-browser) skill.
 
 ### `sub_agent`
 
