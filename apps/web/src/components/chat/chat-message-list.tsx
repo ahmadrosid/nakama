@@ -26,7 +26,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThinkingState } from "@/components/chat/ThinkingState";
 import { formatSessionTimestamp, type ChatListItem } from "@/lib/chat-history";
+import {
+  awaitingModelLabel,
+  isAwaitingModelResponse,
+} from "@/lib/chat-stream";
 import { isPastedTextDocument } from "@/lib/pasted-text";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
@@ -71,6 +76,11 @@ export function ChatMessageList({
   contentClassName,
 }: ChatMessageListProps) {
   const turns = groupMessagesIntoTurns(messages);
+  const showAwaitingPlaceholder =
+    streamActive && isAwaitingModelResponse(messages);
+  const awaitingLabel = showAwaitingPlaceholder
+    ? awaitingModelLabel(messages)
+    : null;
 
   return (
     <Conversation className={cn("min-h-0 flex-1", className)}>
@@ -78,7 +88,7 @@ export function ChatMessageList({
         {messages.length === 0 && emptyMessage ? (
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         ) : null}
-        {turns.map((turn) =>
+        {turns.map((turn, turnIndex) =>
           turn.kind === "user" ? (
             <ChatMessageRow key={turn.message.id} message={turn.message} />
           ) : (
@@ -91,6 +101,9 @@ export function ChatMessageList({
               branchingMessageId={branchingMessageId}
               actionsDisabled={actionsDisabled}
               streamActive={streamActive}
+              awaitingLabel={
+                turnIndex === turns.length - 1 ? awaitingLabel : null
+              }
               onBranchMessage={onBranchMessage}
               onRetryMessage={onRetryMessage}
             />
@@ -136,6 +149,7 @@ function AssistantTurn({
   branchingMessageId,
   actionsDisabled,
   streamActive,
+  awaitingLabel,
   onBranchMessage,
   onRetryMessage,
 }: {
@@ -146,6 +160,7 @@ function AssistantTurn({
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   streamActive: boolean;
+  awaitingLabel?: "Thinking…" | "Working…" | null;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
@@ -173,6 +188,7 @@ function AssistantTurn({
           modelLabel={modelLabel}
         />
       ))}
+      {awaitingLabel ? <ThinkingState label={awaitingLabel} /> : null}
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {

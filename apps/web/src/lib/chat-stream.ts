@@ -401,6 +401,71 @@ export function deriveChatStatus(
   return "ready";
 }
 
+/** Messages after the latest user message (current assistant turn). */
+export function latestAssistantTurnMessages(messages: ChatListItem[]): ChatListItem[] {
+  let start = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      start = index + 1;
+      break;
+    }
+  }
+
+  return messages.slice(start);
+}
+
+/**
+ * True when the SSE turn is still in flight but the transcript has no live
+ * activity (no thinking stream, no running tool, no text tokens yet). Covers
+ * first-token wait and the gap after tools before the next model turn.
+ */
+export function isAwaitingModelResponse(messages: ChatListItem[]): boolean {
+  const turn = latestAssistantTurnMessages(messages);
+
+  if (turn.length === 0) {
+    return false;
+  }
+
+  if (turn.some((message) => message.role === "tool" && message.toolStatus === "running")) {
+    return false;
+  }
+
+  if (turn.some((message) => message.role === "assistant" && message.thinkingStreaming)) {
+    return false;
+  }
+
+  if (
+    turn.some(
+      (message) =>
+        message.role === "assistant" && message.streaming && message.content.trim().length > 0,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    turn.some(
+      (message) =>
+        message.role === "assistant" && message.streaming && message.content.trim().length === 0,
+    )
+  ) {
+    return true;
+  }
+
+  return turn.some((message) => message.role === "tool" || message.role === "assistant");
+}
+
+export function awaitingModelLabel(messages: ChatListItem[]): "Thinking…" | "Working…" {
+  const turn = latestAssistantTurnMessages(messages);
+  const hasTools = turn.some((message) => message.role === "tool");
+  const hasThinkingText = turn.some(
+    (message) => message.role === "assistant" && Boolean(message.thinking?.trim()),
+  );
+
+  return hasTools || hasThinkingText ? "Working…" : "Thinking…";
+}
+
 export function buildStreamHandlers(
   setMessages: Dispatch<SetStateAction<ChatListItem[]>>,
   options: {
@@ -423,6 +488,16 @@ export function buildStreamHandlers(
           return next;
         }
 
+        // After tools the prior assistant is finalized; seed a new streaming
+        // message so post-tool thinking is not dropped.
+        next.push({
+          id: nanoid(),
+          role: "assistant",
+          content: "",
+          streaming: true,
+          thinking: delta,
+          thinkingStreaming: true,
+        });
         return next;
       });
     },
