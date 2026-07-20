@@ -1,8 +1,9 @@
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { emptyHeaderRow, type McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { createClientId, syncRowKeys } from "@/lib/client-id";
 import { cn } from "@/lib/utils";
 
 function mcpArgKey(arg: string, index: number, args: string[]): string {
@@ -167,13 +168,7 @@ export function McpHeadersEditor({
   onChange: (headers: McpHeaderRow[]) => void;
 }) {
   const rowKeysRef = useRef<string[]>([]);
-
-  useEffect(() => {
-    while (rowKeysRef.current.length < headers.length) {
-      rowKeysRef.current.push(crypto.randomUUID());
-    }
-    rowKeysRef.current.length = headers.length;
-  }, [headers.length]);
+  syncRowKeys(rowKeysRef.current, headers.length);
 
   function updateRow(index: number, field: keyof McpHeaderRow, value: string) {
     onChange(
@@ -234,7 +229,7 @@ export function McpHeadersEditor({
         size="sm"
         disabled={disabled}
         onClick={() => {
-          rowKeysRef.current.push(crypto.randomUUID());
+          rowKeysRef.current.push(createClientId());
           onChange([...headers, emptyHeaderRow()]);
         }}
       >
