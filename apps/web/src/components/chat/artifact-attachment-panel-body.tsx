@@ -9,6 +9,31 @@ import {
 /** Highlighting a very large file blocks the main thread, so show it as plain text. */
 const MAX_HIGHLIGHTED_CHARS = 200_000;
 
+type ArtifactPanelSharedProps = {
+  loading: boolean;
+  error: string | null;
+  canPreview: boolean;
+  artifact: ChatArtifactRef;
+};
+
+export type ArtifactAttachmentPanelBodyProps =
+  | (ArtifactPanelSharedProps & {
+      kind: "image";
+      imagePreviewUrl?: string | null;
+    })
+  | (ArtifactPanelSharedProps & {
+      kind: "html";
+      content: string | null;
+      htmlSandbox?: string;
+    })
+  | (ArtifactPanelSharedProps & {
+      kind: "text";
+      content: string | null;
+      format: "markdown" | "plain";
+      language: string | null;
+      streaming?: boolean;
+    });
+
 function toCodeFence(content: string, language: string): string {
   const longestRun = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
@@ -17,16 +42,16 @@ function toCodeFence(content: string, language: string): string {
 
 function renderTextContent({
   content,
-  isMarkdown,
+  format,
   language,
   streaming = false,
 }: {
   content: string;
-  isMarkdown: boolean;
+  format: "markdown" | "plain";
   language: string | null;
   streaming?: boolean;
 }) {
-  if (isMarkdown) {
+  if (format === "markdown") {
     return (
       <MessageResponse className="text-sm" isAnimating={streaming}>
         {content}
@@ -49,119 +74,118 @@ function renderTextContent({
   );
 }
 
-export function ArtifactAttachmentPanelBody({
-  isHtml,
-  isImage = false,
-  isMarkdown,
-  language,
+function LoadingState({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={
+        compact
+          ? "flex items-center gap-2 text-sm text-muted-foreground"
+          : "flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted-foreground"
+      }
+    >
+      <Spinner className="size-4" />
+      Loading preview…
+    </div>
+  );
+}
+
+function UnavailablePreview({ padded }: { padded: boolean }) {
+  return (
+    <p className={padded ? "p-4 text-sm text-muted-foreground" : "text-sm text-muted-foreground"}>
+      Preview is not available for this file type. Download the artifact instead.
+    </p>
+  );
+}
+
+function ArtifactAttachmentImageBody({
   loading,
   error,
-  content,
   imagePreviewUrl = null,
   canPreview,
   artifact,
-  streaming = false,
-  htmlSandbox = ARTIFACT_HTML_IFRAME_SANDBOX,
-}: {
-  isHtml: boolean;
-  isImage?: boolean;
-  isMarkdown: boolean;
-  language: string | null;
-  loading: boolean;
-  error: string | null;
-  content: string | null;
-  imagePreviewUrl?: string | null;
-  canPreview: boolean;
-  artifact: ChatArtifactRef;
-  streaming?: boolean;
-  htmlSandbox?: string;
-}) {
-  if (isImage) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
-            <Spinner className="size-4" />
-            Loading preview…
-          </div>
-        ) : null}
-
-        {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-
-        {!loading && !error && imagePreviewUrl ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-            <img
-              src={imagePreviewUrl}
-              alt={artifact.filename}
-              className="max-h-[min(70vh,48rem)] max-w-full rounded-lg border border-border bg-muted/20 object-contain"
-            />
-          </div>
-        ) : null}
-
-        {!loading && !error && !imagePreviewUrl && !canPreview ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            Preview is not available for this file type. Download the artifact instead.
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (isHtml) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
-            <Spinner className="size-4" />
-            Loading preview…
-          </div>
-        ) : null}
-
-        {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-
-        {!loading && !error && content ? (
-          <iframe
-            title={artifact.filename}
-            srcDoc={htmlForArtifactPreview(content)}
-            sandbox={htmlSandbox}
-            className="min-h-0 w-full flex-1 border-0 bg-background"
-          />
-        ) : null}
-
-        {!loading && !error && !content && !canPreview ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            Preview is not available for this file type. Download the artifact instead.
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
+}: Extract<ArtifactAttachmentPanelBodyProps, { kind: "image" }>) {
   return (
-    <div className="space-y-4">
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner className="size-4" />
-          Loading preview…
+    <div className="flex min-h-0 flex-1 flex-col">
+      {loading ? <LoadingState /> : null}
+      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
+      {!loading && !error && imagePreviewUrl ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+          <img
+            src={imagePreviewUrl}
+            alt={artifact.filename}
+            className="max-h-[min(70vh,48rem)] max-w-full rounded-lg border border-border bg-muted/20 object-contain"
+          />
         </div>
       ) : null}
+      {!loading && !error && !imagePreviewUrl && !canPreview ? (
+        <UnavailablePreview padded />
+      ) : null}
+    </div>
+  );
+}
 
+function ArtifactAttachmentHtmlBody({
+  loading,
+  error,
+  content,
+  canPreview,
+  artifact,
+  htmlSandbox = ARTIFACT_HTML_IFRAME_SANDBOX,
+}: Extract<ArtifactAttachmentPanelBodyProps, { kind: "html" }>) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {loading ? <LoadingState /> : null}
+      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
+      {!loading && !error && content ? (
+        <iframe
+          title={artifact.filename}
+          srcDoc={htmlForArtifactPreview(content)}
+          sandbox={htmlSandbox}
+          className="min-h-0 w-full flex-1 border-0 bg-background"
+        />
+      ) : null}
+      {!loading && !error && !content && !canPreview ? <UnavailablePreview padded /> : null}
+    </div>
+  );
+}
+
+function ArtifactAttachmentTextBody({
+  loading,
+  error,
+  content,
+  format,
+  language,
+  streaming = false,
+  canPreview,
+}: Extract<ArtifactAttachmentPanelBodyProps, { kind: "text" }>) {
+  return (
+    <div className="space-y-4">
+      {loading ? <LoadingState compact /> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
       {!loading && !error && content
         ? renderTextContent({
             content,
-            isMarkdown,
+            format,
             language,
             streaming,
           })
         : null}
-
-      {!loading && !error && !canPreview ? (
-        <p className="text-sm text-muted-foreground">
-          Preview is not available for this file type. Download the artifact instead.
-        </p>
-      ) : null}
+      {!loading && !error && !canPreview ? <UnavailablePreview padded={false} /> : null}
     </div>
   );
+}
+
+export function ArtifactAttachmentPanelBody(props: ArtifactAttachmentPanelBodyProps) {
+  switch (props.kind) {
+    case "image":
+      return <ArtifactAttachmentImageBody {...props} />;
+    case "html":
+      return <ArtifactAttachmentHtmlBody {...props} />;
+    case "text":
+      return <ArtifactAttachmentTextBody {...props} />;
+    default: {
+      const _exhaustive: never = props;
+      return _exhaustive;
+    }
+  }
 }

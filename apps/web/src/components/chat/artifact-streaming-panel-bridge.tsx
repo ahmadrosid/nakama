@@ -57,8 +57,8 @@ function buildStreamingPanelBody({
 
   return (
     <ArtifactAttachmentPanelBody
-      isHtml={false}
-      isMarkdown={isMarkdown && !isHtml}
+      kind="text"
+      format={isMarkdown && !isHtml ? "markdown" : "plain"}
       language={language}
       loading={false}
       error={null}
@@ -82,10 +82,23 @@ function buildStablePanelBody({
     isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
 
+  if (isHtmlArtifactMimeType(mimeType)) {
+    return (
+      <ArtifactAttachmentPanelBody
+        kind="html"
+        loading={false}
+        error={null}
+        content={content}
+        canPreview
+        artifact={artifact}
+      />
+    );
+  }
+
   return (
     <ArtifactAttachmentPanelBody
-      isHtml={isHtmlArtifactMimeType(mimeType)}
-      isMarkdown={isMarkdown}
+      kind="text"
+      format={isMarkdown ? "markdown" : "plain"}
       language={artifactCodeLanguage(artifact.filename)}
       loading={false}
       error={null}

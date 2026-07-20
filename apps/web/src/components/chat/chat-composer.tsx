@@ -162,7 +162,7 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <div className={cn("w-full shrink-0 space-y-2", className)}>
       <p
-        className={`min-h-5 text-sm ${displayError ? "text-destructive" : "invisible"}`}
+        className={`min-h-5 px-2 text-sm ${displayError ? "text-destructive" : "invisible"}`}
         role={displayError ? "alert" : undefined}
         aria-hidden={!displayError}
       >

@@ -190,17 +190,28 @@ export function PublicArtifactSharePage() {
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : artifact && canPreview ? (
-          <ArtifactAttachmentPanelBody
-            isHtml={isHtml}
-            isMarkdown={isMarkdown}
-            language={language}
-            loading={false}
-            error={null}
-            content={content}
-            canPreview={canPreview}
-            artifact={artifact}
-            htmlSandbox={ARTIFACT_HTML_IFRAME_SANDBOX}
-          />
+          isHtml ? (
+            <ArtifactAttachmentPanelBody
+              kind="html"
+              loading={false}
+              error={null}
+              content={content}
+              canPreview={canPreview}
+              artifact={artifact}
+              htmlSandbox={ARTIFACT_HTML_IFRAME_SANDBOX}
+            />
+          ) : (
+            <ArtifactAttachmentPanelBody
+              kind="text"
+              format={isMarkdown ? "markdown" : "plain"}
+              language={language}
+              loading={false}
+              error={null}
+              content={content}
+              canPreview={canPreview}
+              artifact={artifact}
+            />
+          )
         ) : (
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>This file is available for download.</p>

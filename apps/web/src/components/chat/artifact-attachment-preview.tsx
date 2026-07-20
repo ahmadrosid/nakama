@@ -175,16 +175,39 @@ export function ArtifactAttachmentPreview({
   }, [hide, id]);
 
   function buildPanelBody(loadingOverride?: boolean) {
+    const loadingState = loadingOverride ?? loading;
+    if (isImage) {
+      return (
+        <ArtifactAttachmentPanelBody
+          kind="image"
+          loading={loadingState}
+          error={error}
+          imagePreviewUrl={imagePreviewUrl}
+          canPreview={canPreview}
+          artifact={artifact}
+        />
+      );
+    }
+    if (isHtml) {
+      return (
+        <ArtifactAttachmentPanelBody
+          kind="html"
+          loading={loadingState}
+          error={error}
+          content={content}
+          canPreview={canPreview}
+          artifact={artifact}
+        />
+      );
+    }
     return (
       <ArtifactAttachmentPanelBody
-        isHtml={isHtml}
-        isImage={isImage}
-        isMarkdown={isMarkdown}
+        kind="text"
+        format={isMarkdown ? "markdown" : "plain"}
         language={language}
-        loading={loadingOverride ?? loading}
+        loading={loadingState}
         error={error}
         content={content}
-        imagePreviewUrl={imagePreviewUrl}
         canPreview={canPreview}
         artifact={artifact}
       />
