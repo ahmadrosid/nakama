@@ -1,6 +1,9 @@
 import type { ComposioToolErrorResult, ToolContext, ToolDefinition } from "@nakama/core";
 import { emptyObjectSchema } from "@nakama/core";
-import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
+import {
+  isLoopbackComposioCallbackBaseUrl,
+  resolveComposioCallbackBaseUrl,
+} from "./composio-callback-url";
 import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
 import { sanitizeLlmToolNamePart } from "./mcp-tool-bridge";
@@ -123,6 +126,16 @@ export async function buildComposioConnectTools(
           const callbackBaseUrl = resolveComposioCallbackBaseUrl({
             clientOrigin: context.clientOrigin,
           });
+
+          if (isLoopbackComposioCallbackBaseUrl(callbackBaseUrl)) {
+            return {
+              error:
+                "Cannot start Composio OAuth from this channel: the callback URL is localhost. Set a reachable public web URL (Settings → Web public URL, or NAKAMA_WEB_PUBLIC_URL), restart the Telegram/WhatsApp/Discord bridge, then ask again.",
+              code: "COMPOSIO_POLICY",
+              toolkitSlug,
+            } satisfies ComposioToolErrorResult;
+          }
+
           const { redirectUrl } = await composioService.connectToolkit(
             orgId,
             userId,

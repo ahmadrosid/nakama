@@ -44,10 +44,11 @@ If you used org-shared connections before this model, existing connected toolkit
 - **Web chat:** callback URL comes from the browser automatically (`window.location.origin`).
 - **Setup wizard:** silently saves `window.location.origin` during first-time setup (no extra step shown).
 - **Settings:** org admins can view or change the public web URL under Settings.
-- **Telegram / WhatsApp / Discord:** bridges read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL` env override) and pass it on each message so OAuth links open on a reachable host.
+- **Telegram / WhatsApp / Discord / CLI:** these bridges authenticate as the local client user. Composio still uses the **earliest human org admin's** connected accounts (so OAuth completed in the web Integrations UI works on Telegram). Bridges also read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL`) and pass it on each message so new OAuth links open on a reachable host — localhost callbacks are rejected.
 - The OAuth callback (`/v1/composio/oauth/callback`) is public — Composio redirects the browser there without a Nakama login cookie. After success, close the tab and continue in chat.
 - Auth failures return `COMPOSIO_NOT_CONNECTED`; the agent should call `composio__connect_account` and share the link.
 - Automations without a user context do not resolve personal Composio tools.
+- Composio is **org-scoped**: enable toolkits and assign them to a profile in the same org your Telegram `/org` selection uses.
 
 ## Related docs
 
