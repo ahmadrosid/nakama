@@ -1,9 +1,10 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
 import { PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
+import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
 
@@ -31,13 +32,8 @@ export function ModelListEditor({
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);
-
-  useEffect(() => {
-    while (rowKeysRef.current.length < models.length) {
-      rowKeysRef.current.push(crypto.randomUUID());
-    }
-    rowKeysRef.current.length = models.length;
-  }, [models.length]);
+  // Keep React keys available on the first paint (avoids undefined keys + useEffect).
+  syncRowKeys(rowKeysRef.current, models.length);
 
   const updateRow = (index: number, patch: Partial<ModelListRow>) => {
     onChange(
@@ -183,7 +179,7 @@ export function ModelListEditor({
           variant="outline"
           disabled={disabled}
           onClick={() => {
-            rowKeysRef.current.push(crypto.randomUUID());
+            rowKeysRef.current.push(createClientId());
             onChange([...models, emptyRow()]);
           }}
         >
