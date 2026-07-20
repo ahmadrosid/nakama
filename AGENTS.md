@@ -83,7 +83,7 @@ Loaded by `loadSoulStack()` (`load.ts`); injected by `composeSoulSystemPrompt()`
 - `bash` (Super Bot) — run shell commands in the profile workspace
 - `sub_agent` (opt-in) — run a focused same-profile sub-agent for delegated research, review, or planning; returns a structured result (not for repo coding — use `coding-delegation` + `bash`)
 - `coding-delegation` skill — invoke Codex / Claude Code / OpenCode for repo coding work via `bash` and harness CLI templates
-- `agent-browser` skill (opt-in) — interactive browser automation via `bash` and the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI (login walls, forms, snapshots with `@e` refs); requires host `agent-browser` + Chrome install; fresh session each run
+- `agent-browser` skill (opt-in) — interactive browser automation via `bash` and the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI (login walls, forms, snapshots with `@e` refs); requires host `agent-browser` + Chrome install; fresh session each run — see `docs/website/agent-browser.md`
 - Composio — hybrid org toolkit catalog + per-user OAuth via Integrations (see `docs/website/composio.md`)
 
 ## Tool execution & workspace

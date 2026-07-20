@@ -23,6 +23,7 @@ const pageDescriptions: Record<string, string> = {
   'mcp.md': 'Connect external MCP servers to Nakama profiles and expose new tools safely.',
   'composio.md': 'Connect SaaS apps through Composio with org-scoped OAuth and profile toolkit assignment.',
   'coding-agent.md': 'Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional inference gateway routing through your Nakama provider.',
+  'agent-browser.md': 'Drive interactive, login-walled websites from Nakama chat or automations with the agent-browser skill and bash.',
   'telegram.md': 'Set up Nakama as a Telegram bot with pairing, commands, and group behavior.',
   'whatsapp.md': 'Set up Nakama on WhatsApp with linking, commands, and troubleshooting.',
   'discord.md': 'Set up Nakama as a Discord bot with pairing, slash commands, and server behavior.',
@@ -41,6 +42,7 @@ const pageTitles: Record<string, string> = {
   'mcp.md': 'MCP Servers',
   'composio.md': 'Composio',
   'coding-agent.md': 'Coding Agent',
+  'agent-browser.md': 'Agent Browser',
   'telegram.md': 'Telegram',
   'whatsapp.md': 'WhatsApp',
   'discord.md': 'Discord',
@@ -148,6 +150,10 @@ function buildLlmsTxt(pages: string[]) {
       page: "coding-agent.md",
     },
     {
+      topics: "agent-browser, browser automation, login wall, snapshot, bash browser, interactive web",
+      page: "agent-browser.md",
+    },
+    {
       topics: "sub-agent, sub_agent, delegation, research, review, planning",
       page: "builtin-tools.md",
     },
@@ -164,7 +170,7 @@ function buildLlmsTxt(pages: string[]) {
     },
     {
       heading: 'Operations',
-      pages: ['builtin-tools.md', 'skills.md', 'integrations.md', 'coding-agent.md', 'mcp.md', 'composio.md'] as const,
+      pages: ['builtin-tools.md', 'skills.md', 'integrations.md', 'coding-agent.md', 'agent-browser.md', 'mcp.md', 'composio.md'] as const,
     },
   ] as const
 
@@ -305,6 +311,7 @@ export default defineConfig({
           { text: 'Skills', link: '/skills' },
           { text: 'Integrations', link: '/integrations' },
           { text: 'Coding Agent', link: '/coding-agent' },
+          { text: 'Agent Browser', link: '/agent-browser' },
           { text: 'MCP Servers', link: '/mcp' },
           { text: 'Composio', link: '/composio' },
         ],

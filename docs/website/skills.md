@@ -159,7 +159,7 @@ Profiles receive bundled skills for common workflows:
 - `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
 - `save-artifact` — save persistent text outputs under `artifacts/` via `write_file`
 - `coding-delegation` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
-- `agent-browser` — interactive browser automation via `bash` and the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI (opt-in; not auto-assigned)
+- `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
 New custom profiles receive the file tools and `knowledge_base_search` by default when those builtins are available. Default and super-bot profiles also receive the bundled skills above when they are installed and synced on the server (except opt-in skills such as `agent-browser`). Super Bot also receives `bash` for one-off host commands and coding-agent workflows.
 
@@ -181,25 +181,7 @@ The `coding-delegation` bundled skill teaches when to invoke a coding agent and 
 
 ### Agent browser
 
-The `agent-browser` bundled skill teaches agents to drive the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI through `bash` for interactive browsing: open pages, take accessibility snapshots with element refs, click/fill (including login within one run), screenshot, and close.
-
-**Prerequisites**
-
-- Profile has **`bash`** assigned (Super Bot has it by default; other profiles need a platform admin to assign it)
-- Platform admin assigns the **`agent-browser`** skill (opt-in — not auto-assigned to Super Bot or default profiles)
-- Host has the CLI and Chrome: `npm install -g agent-browser && agent-browser install`
-
-**When to use**
-
-| Need | Use |
-|------|-----|
-| Public page text / Markdown | [`web_fetch`](/builtin-tools#web_fetch) |
-| Discover sources | [`web_search`](/builtin-tools#web_search) |
-| Login walls, forms, clicks, client-rendered UI | `agent-browser` skill + `bash` |
-
-**Session policy:** Within one chat turn or automation run, reuse the agent-browser daemon so login and navigation stay coherent, then `close`. Across runs, sessions are fresh — no sticky auth by default.
-
-Works the same in interactive chat and automations once the profile has bash + the skill and the host CLI is installed.
+The `agent-browser` bundled skill teaches agents to drive interactive browsers through `bash` for login walls, forms, and client-rendered pages. Setup, usage, session policy, and troubleshooting are in [Agent browser](/agent-browser).
 
 ## Sync behavior
 
@@ -234,12 +216,13 @@ Viewers cannot invoke agents, so they cannot trigger skills either.
 - Use a **builtin tool** for a native capability like web search or file access
 - Use **`save-artifact`** with **`write_file`** or **`write_docx`** for persistent reports, summaries, generated text, and Word documents under `artifacts/`
 - Use **`coding-delegation`** with **`bash`** when repo work is better handled by a dedicated coding agent ([setup](/coding-agent))
-- Use **`agent-browser`** with **`bash`** for login walls, forms, and interactive browsing ([details](/skills#agent-browser))
+- Use **`agent-browser`** with **`bash`** for login walls, forms, and interactive browsing ([setup](/agent-browser))
 - Use an **MCP server** for external tool integrations
 
 ## Next steps
 
 - [Profiles](/profiles) — how skills attach to a bot
 - [Coding agent](/coding-agent) — harness setup and the `coding-delegation` skill
+- [Agent browser](/agent-browser) — interactive browsing via `bash` and the `agent-browser` skill
 - [Builtin tools](/builtin-tools) — the actions a profile can take
 - [MCP servers](/mcp) — external tools assigned to a profile
