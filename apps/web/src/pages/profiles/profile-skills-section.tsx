@@ -42,7 +42,7 @@ export function ProfileSkillsSection({
             skills={allSkills}
             assignedSkillIds={assignedSkillIds}
             disabled={busy}
-            buttonLabel="Manage skills"
+            buttonLabel="Add skills"
             onAssign={onAssign}
             onDelete={onDelete}
           />

@@ -10,6 +10,7 @@ import type {
   ToolDefinition,
 } from "@nakama/core";
 import {
+  BUNDLED_SKILL_NAMES,
   composeMatchedSkillsPrompt,
   composeSkillsCatalog,
   createId,
@@ -26,6 +27,8 @@ import {
   type DiscoveredSkill,
 } from "@nakama/core";
 import type { DatabaseAdapter, StoredSkillRecord } from "@nakama/db";
+
+const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
 export class SkillsService {
   constructor(private readonly db: DatabaseAdapter) {}
@@ -134,6 +137,10 @@ export class SkillsService {
 
   async deleteSkill(skillId: string): Promise<void> {
     const record = await this.requireSkill(skillId);
+
+    if (bundledSkillNames.has(record.name)) {
+      throw new Error("Bundled system skills cannot be deleted.");
+    }
 
     if (record.sourcePath) {
       await deleteSkillDirectory(record.sourcePath);

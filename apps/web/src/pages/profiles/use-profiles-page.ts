@@ -703,16 +703,14 @@ export function useProfilesPage() {
       return;
     }
 
-    if (!window.confirm(`Delete skill "${skill.name}"? This removes it from every profile.`)) {
-      return;
-    }
-
+    // Confirmation lives in SkillAssignPicker — window.confirm cannot run while that Dialog is open.
     setError(null);
 
     try {
       await deleteSkillMutation.mutateAsync(skillId);
     } catch (err) {
       setError(formatError(err));
+      throw err;
     }
   }
 

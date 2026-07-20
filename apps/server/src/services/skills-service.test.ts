@@ -220,6 +220,21 @@ describe("SkillsService", () => {
     expect(listed.skills.some((skill) => skill.name === "notes")).toBe(false);
   });
 
+  test("rejects deleting bundled system skills", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+
+    const listed = await service.listSkills();
+    const agentBrowser = listed.skills.find((skill) => skill.name === "agent-browser");
+    expect(agentBrowser).toBeTruthy();
+
+    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
+      "Bundled system skills cannot be deleted.",
+    );
+  });
+
   test("deduplicates skills discovered from global and profile directories", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);

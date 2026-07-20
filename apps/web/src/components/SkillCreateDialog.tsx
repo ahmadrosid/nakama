@@ -92,11 +92,7 @@ function SkillCreateDialogContent({
         <DialogHeader className="gap-2">
           <DialogTitle>Create skill</DialogTitle>
           <DialogDescription>
-            Create a workflow skill for this profile. It is saved under{" "}
-            <code className="rounded bg-muted px-1 py-0.5">
-              ~/.nakama/profiles/&lt;profile&gt;/skills/
-            </code>
-            .
+            Create a workflow skill for this profile.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,7 +162,7 @@ function SkillCreateDialogContent({
           ) : null}
         </div>
 
-        <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
+        <DialogFooter className="gap-3 border-t-0 bg-transparent pt-0 sm:justify-end">
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
