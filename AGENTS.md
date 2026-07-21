@@ -8,6 +8,25 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 - Servers: `bun run dev:server` | `dev:web` | `dev:cli`
 - Layout: `apps/{server,web,cli}`, channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
 
+## Docker
+
+One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310
+
+```bash
+# Prebuilt
+docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+
+# Build from source (uses buildx; default linux/amd64 -t nakama)
+./scripts/docker-build.sh
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+
+# Fresh start (removes container, volume, image)
+./scripts/docker-reset.sh
+./scripts/docker-build.sh
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+```
+
 ## Multi-tenancy
 
 Orgs isolate profiles, sessions, automations, tasks, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
