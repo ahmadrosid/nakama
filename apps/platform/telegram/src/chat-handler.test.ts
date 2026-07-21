@@ -22,13 +22,20 @@ setDefaultTimeout(10_000);
 async function waitForCondition(
   condition: () => boolean,
   message: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  // Prefer real intervals over setTimeout(0) spins — under CI's concurrent
+  // workspace load, session I/O can easily take tens of ms before sendStream runs.
+  const timeoutMs = options.timeoutMs ?? 2_000;
+  const intervalMs = options.intervalMs ?? 10;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
     if (condition()) {
       return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
   throw new Error(message);
@@ -905,7 +912,10 @@ describe("createChatHandler security", () => {
 
       const authStore = new TelegramAuthStore();
       await authStore.reload();
-      const { client, calls, getStreamControl } = createMockClient({ streaming: true });
+      const { client, calls, getStreamControl } = createMockClient({
+        streaming: true,
+        autoComplete: false,
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
@@ -930,16 +940,22 @@ describe("createChatHandler security", () => {
 
       const chatPromise = handleMessage(chatAttempt.ctx);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(getStreamControl()?.signal).toBeDefined();
+      try {
+        await waitForCondition(
+          () => getStreamControl()?.signal != null,
+          "Expected in-flight stream control before /stop",
+        );
 
-      await handleMessage(stopAttempt.ctx);
+        await handleMessage(stopAttempt.ctx);
+        await chatPromise;
 
-      await chatPromise;
-
-      expect(calls.sendStream).toBe(1);
-      expect(stopAttempt.replies).toEqual([]);
-      expect(chatAttempt.replies).toEqual(["Stopped."]);
+        expect(calls.sendStream).toBe(1);
+        expect(stopAttempt.replies).toEqual([]);
+        expect(chatAttempt.replies).toEqual(["Stopped."]);
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
     });
   });
 
@@ -1097,7 +1113,7 @@ describe("createChatHandler security", () => {
 
       const authStore = new TelegramAuthStore();
       await authStore.reload();
-      const { client } = createMockClient({
+      const { client, getStreamControl } = createMockClient({
         streaming: true,
         autoComplete: false,
         steps: [
@@ -1134,22 +1150,30 @@ describe("createChatHandler security", () => {
 
       const chatPromise = handleMessage(chatAttempt.ctx);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      await handleMessage(stopAttempt.ctx);
-      await chatPromise;
+      try {
+        await waitForCondition(
+          () => getStreamControl()?.signal != null,
+          "Expected in-flight stream control before /stop",
+        );
+        await handleMessage(stopAttempt.ctx);
+        await chatPromise;
 
-      expect(chatAttempt.replies).toEqual([
-        "🛠️ Working\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        "Stopped.",
-      ]);
-      expect(chatAttempt.edits).toEqual([
-        {
-          chatId: 4242,
-          messageId: 1,
-          text: "⏹️ Stopped\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        },
-      ]);
-      expect(stopAttempt.replies).toEqual([]);
+        expect(chatAttempt.replies).toEqual([
+          "🛠️ Working\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
+          "Stopped.",
+        ]);
+        expect(chatAttempt.edits).toEqual([
+          {
+            chatId: 4242,
+            messageId: 1,
+            text: "⏹️ Stopped\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
+          },
+        ]);
+        expect(stopAttempt.replies).toEqual([]);
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
     });
   });
 
