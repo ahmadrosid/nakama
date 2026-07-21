@@ -8,6 +8,10 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 - Servers: `bun run dev:server` | `dev:web` | `dev:cli`
 - Layout: `apps/{server,web,cli}`, channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
 
+## GitHub
+
+Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Do not use the API, browser, or scraping.
+
 ## Docker
 
 One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310
