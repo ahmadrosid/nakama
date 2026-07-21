@@ -50,14 +50,36 @@ export function createHonoApp(options: ServerOptions) {
   });
 
   app.use("*", async (c, next) => {
+    const applySecurityHeaders = (response: Response) => {
+      const headers = new Headers(response.headers);
+      headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("X-Frame-Options", "DENY");
+      headers.set("X-XSS-Protection", "1; mode=block");
+      headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+      headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';");
+      // Only enable HSTS if the request is secure (HTTPS)
+      if (new URL(c.req.url).protocol === "https:") {
+        headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      }
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    };
+
     if (options.webDistDir) {
       const staticResponse = tryServeStaticWeb(c.req.raw, options.webDistDir);
       if (staticResponse) {
-        return staticResponse;
+        return applySecurityHeaders(staticResponse);
       }
     }
 
     await next();
+
+    // Apply security headers to the final response
+    const finalResponse = c.res;
+    c.res = applySecurityHeaders(finalResponse);
   });
 
   app.use("*", createAuthMiddleware(options));
