@@ -466,7 +466,7 @@ export function SkillAssignPicker({
       return true;
     }
 
-    if (skill.name === "coding-delegation" && codingHarnessSettings?.configured === false) {
+    if (skill.name === "coding-agent" && codingHarnessSettings?.configured === false) {
       return true;
     }
 
@@ -476,7 +476,7 @@ export function SkillAssignPicker({
 
   function isSkillDisabled(skill: SkillSummary): boolean {
     return (
-      (skill.name === "coding-delegation" && codingHarnessSettings?.configured === false) ||
+      (skill.name === "coding-agent" && codingHarnessSettings?.configured === false) ||
       isAgentBrowserDisabled(skill)
     );
   }

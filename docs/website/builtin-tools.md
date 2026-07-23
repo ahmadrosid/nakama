@@ -42,7 +42,7 @@ Nakama includes these builtins:
 | `bash` | Super Bot only | No | Run shell commands in the profile workspace |
 | `sub_agent` | No | No | Opt-in: delegate to a same-profile sub-agent (see below) |
 
-**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-delegation` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`.
+**New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`.
 
 ## Choosing tools for a profile
 
@@ -53,7 +53,7 @@ Good starting patterns:
 - **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
 - **Ops bot**: file tools, bundled `save-artifact` skill, `email`
 - **Delegation bot**: `sub_agent` for in-process research/review/planning subtasks
-- **Coding agent (Super Bot or custom)**: `bash`, `coding-delegation` skill, plus a configured harness in Integrations
+- **Coding agent (Super Bot or custom)**: `bash`, `coding-agent` skill, plus a configured harness in Integrations
 
 ## Memory workflows
 
@@ -86,7 +86,7 @@ Legacy `.doc` (Word 97–2003) is not supported for generation or preview. Binar
 
 ## Coding agent
 
-Repo coding work is not a separate builtin. Profiles with the `coding-delegation` skill invoke Codex, Claude Code, or OpenCode through `bash`. You can also launch a harness directly with `bun run dev:cli -- launch`. See [Coding agent](/coding-agent) for setup, the inference gateway, CLI flags, and runtime behavior.
+Repo coding work is not a separate builtin. Profiles with the `coding-agent` skill invoke Codex, Claude Code, or OpenCode through `bash`. You can also launch a harness directly with `bun run dev:cli -- launch`. See [Coding agent](/coding-agent) for setup, the inference gateway, CLI flags, and runtime behavior.
 
 ## Tool reference
 
@@ -278,7 +278,7 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 ### `sub_agent`
 
-Run a focused **same-profile** sub-agent for delegated work (research, review, planning, debugging). The parent receives a structured result to summarize for the user. This is a Nakama-native in-process agent loop — **not** the external coding-agent path (`bash` + `coding-delegation`).
+Run a focused **same-profile** sub-agent for delegated work (research, review, planning, debugging). The parent receives a structured result to summarize for the user. This is a Nakama-native in-process agent loop — **not** the external coding-agent path (`bash` + `coding-agent`).
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|

@@ -127,7 +127,7 @@ export async function ensureSubAgentToolDefinition(db: DatabaseAdapter): Promise
     id: SUB_AGENT_TOOL_ID,
     name: "sub_agent",
     description:
-      "Run a focused same-profile sub-agent for delegated research, review, planning, or debugging. Returns a structured result for the parent to summarize. Not for repo coding work — use bash with coding-delegation for that.",
+      "Run a focused same-profile sub-agent for delegated research, review, planning, or debugging. Returns a structured result for the parent to summarize. Not for repo coding work — use bash with coding-agent for that.",
     handlerType: "sub_agent",
     handlerConfig: {},
     createdAt: existing?.createdAt ?? now,

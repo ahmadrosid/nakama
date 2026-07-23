@@ -330,7 +330,7 @@ export class ProfileService {
       throw new Error("Skill not found.");
     }
 
-    if (skill.name === "coding-delegation") {
+    if (skill.name === "coding-agent") {
       await resolveCodingAgentHarness(this.db).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         throw new NakamaApiError(

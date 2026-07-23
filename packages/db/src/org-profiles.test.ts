@@ -121,7 +121,7 @@ describe("seedOrgSuperBotProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "create-profile");
-    await upsertSkill(db, "coding-delegation");
+    await upsertSkill(db, "coding-agent");
     await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
@@ -129,7 +129,7 @@ describe("seedOrgSuperBotProfile", () => {
 
     expect(skillNames).toContain("create-automation");
     expect(skillNames).toContain("create-profile");
-    expect(skillNames).toContain("coding-delegation");
+    expect(skillNames).toContain("coding-agent");
     expect(skillNames).not.toContain("agent-browser");
   });
 

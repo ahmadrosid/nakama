@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addOrgIdColumnIfMissing,
+  migrateCodingDelegationSkillName,
   migrateDatabase,
   moveProfileJoinReferences,
   resolveSchemaPath,
@@ -186,6 +187,51 @@ describe("legacy profile id migration", () => {
       expect(tasks.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
       expect(automations.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
       expect(foreignKeyViolations).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("coding-delegation skill rename migration", () => {
+  test("renames coding-delegation skill records to coding-agent", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO skills (
+          id,
+          name,
+          description,
+          source_path,
+          has_tool,
+          disable_model_invocation,
+          enabled,
+          created_at,
+          updated_at
+        ) VALUES (
+          'skill_coding',
+          'coding-delegation',
+          'Delegate repo work to a coding agent',
+          '/tmp/.nakama/agent/skills/coding-delegation/SKILL.md',
+          0,
+          0,
+          1,
+          '2026-06-19T00:00:00.000Z',
+          '2026-06-19T00:00:00.000Z'
+        );
+      `);
+
+      migrateCodingDelegationSkillName(db);
+
+      const skill = db
+        .prepare("SELECT name, source_path FROM skills WHERE id = ?")
+        .get("skill_coding") as { name: string; source_path: string };
+
+      expect(skill.name).toBe("coding-agent");
+      expect(skill.source_path).toBe("/tmp/.nakama/agent/skills/coding-agent/SKILL.md");
     } finally {
       db.close();
     }

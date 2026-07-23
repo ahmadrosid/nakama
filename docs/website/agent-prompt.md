@@ -52,7 +52,7 @@ The chat runtime then wraps the profile prompt with general chat instructions:
 - Memory and skill rules when `read_file` and `edit_file` are available (bundled `update-profile-memory` and `archive-profile-memory` skills)
 - Artifact guidance when `write_file` is available (bundled `save-artifact` skill)
 - Word-document guidance when `write_docx` is available (use Markdown input; never target `.docx` paths with `write_file`)
-- Coding-agent harness context when `coding-delegation` matches ([Coding agent](/coding-agent))
+- Coding-agent harness context when `coding-agent` matches ([Coding agent](/coding-agent))
 - Telegram or WhatsApp behavior when the message comes from those channels
 - Discord behavior when the message comes from a server channel (public replies)
 

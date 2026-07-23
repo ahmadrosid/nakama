@@ -98,7 +98,7 @@ Path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Load
 | `search_files` / `ripgrep` | File/content search |
 | `bash` | Super Bot — profile workspace shell |
 | `sub_agent` | Opt-in same-profile delegate (not repo coding) |
-| `coding-delegation` | Codex / Claude Code / OpenCode via `bash` |
+| `coding-agent` | Codex / Claude Code / OpenCode via `bash` |
 | `agent-browser` | Opt-in browser CLI; needs host install — `docs/website/agent-browser.md` |
 | `create-profile` | Super Bot only, confirm-first — `apps/server/src/tools/super-bot-tools.ts` |
 | Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |

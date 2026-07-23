@@ -1,5 +1,5 @@
 ---
-name: coding-delegation
+name: coding-agent
 description: Invoke a dedicated coding agent (Codex, Claude Code, or OpenCode) for bug fixes, feature implementation, file edits, repository changes, or targeted validation when the user wants changes made in the current project. Nakama handles ordinary explanation, brainstorming, and non-editing chat; use this skill when repo work is better done by a coding agent.
 include-body-on-match: true
 ---

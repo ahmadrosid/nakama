@@ -19,6 +19,7 @@ export function migrateDatabase(db: Database): void {
   migrateProfileOrgColumns(db);
   migrateBrowserSessionsTable(db);
   migrateLegacyProfileIds(db);
+  migrateCodingDelegationSkillName(db);
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
   migrateAttachmentsTable(db);
@@ -540,6 +541,32 @@ function migrateLegacyProfileIds(db: Database): void {
     throw error;
   } finally {
     db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
+export function migrateCodingDelegationSkillName(db: Database): void {
+  const rows = db
+    .prepare("SELECT id, source_path FROM skills WHERE name = ?")
+    .all("coding-delegation") as Array<{ id: string; source_path: string }>;
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const update = db.prepare(`
+    UPDATE skills
+    SET name = ?, source_path = ?, updated_at = ?
+    WHERE id = ?
+  `);
+
+  for (const row of rows) {
+    update.run(
+      "coding-agent",
+      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      now,
+      row.id,
+    );
   }
 }
 
