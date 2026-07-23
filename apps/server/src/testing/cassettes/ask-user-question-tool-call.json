@@ -1,17 +1,78 @@
 {
   "version": 1,
   "name": "ask-user-question-tool-call",
-  "recordedAt": "2026-07-23T14:32:26.609Z",
+  "recordedAt": "2026-07-23T16:25:57.862Z",
   "request": {
     "method": "POST",
-    "url": "https://api.openai.com/v1/chat/completions"
+    "url": "https://api.openai.com/v1/chat/completions",
+    "body": {
+      "model": "gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text."
+        },
+        {
+          "role": "user",
+          "content": "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "ask_user_question",
+            "description": "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "questions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prompt": {
+                        "type": "string"
+                      },
+                      "choices": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "allowCustomAnswer": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "prompt",
+                      "choices"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "title",
+                "questions"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
   },
   "response": {
     "status": 200,
     "body": {
-      "id": "chatcmpl-E4olFDxkusv4VN1Mb7t1Gfzc2hUqj",
+      "id": "chatcmpl-E4qX6b51AJTPFXcMCkKMUn6BWC2Zd",
       "object": "chat.completion",
-      "created": 1784817145,
+      "created": 1784823956,
       "model": "gpt-4o-mini-2024-07-18",
       "choices": [
         {
@@ -21,11 +82,11 @@
             "content": null,
             "tool_calls": [
               {
-                "id": "call_SqUd6XHTXdIpFAokPwbuzpXi",
+                "id": "call_9T8GElrkTJ4tDegzLmjbLQ59",
                 "type": "function",
                 "function": {
                   "name": "ask_user_question",
-                  "arguments": "{\"title\":\"Timezone Selection\",\"questions\":[{\"prompt\":\"Please select your timezone:\",\"choices\":[\"UTC-5:00 (Eastern Time)\",\"UTC-6:00 (Central Time)\",\"UTC-7:00 (Mountain Time)\",\"UTC-8:00 (Pacific Time)\"]}]}"
+                  "arguments": "{\"title\":\"What is your timezone?\",\"questions\":[{\"prompt\":\"Please select your timezone:\",\"choices\":[\"Pacific Standard Time (PST)\",\"Eastern Standard Time (EST)\",\"Central Standard Time (CST)\",\"Greenwich Mean Time (GMT)\"]}]}"
                 }
               }
             ],
@@ -38,8 +99,8 @@
       ],
       "usage": {
         "prompt_tokens": 137,
-        "completion_tokens": 71,
-        "total_tokens": 208,
+        "completion_tokens": 65,
+        "total_tokens": 202,
         "prompt_tokens_details": {
           "cached_tokens": 0,
           "audio_tokens": 0

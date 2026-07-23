@@ -5,18 +5,28 @@ import { setupServer } from "msw/node";
 
 export type LlmCassetteMode = "auto" | "record" | "replay";
 
-export type LlmCassette = {
-  version: 1;
-  name: string;
-  recordedAt: string;
+export type LlmCassetteExchange = {
   request: {
     method: string;
     url: string;
+    /** Chat completions JSON body (messages, tools, model, …). */
+    body?: unknown;
   };
   response: {
     status: number;
     body: unknown;
   };
+};
+
+export type LlmCassette = {
+  version: 1 | 2;
+  name: string;
+  recordedAt: string;
+  /** @deprecated Prefer `exchanges`. Kept for v1 cassettes. */
+  request?: LlmCassetteExchange["request"];
+  /** @deprecated Prefer `exchanges`. Kept for v1 cassettes. */
+  response?: LlmCassetteExchange["response"];
+  exchanges?: LlmCassetteExchange[];
 };
 
 /** Shared cassette root for all server LLM live tests. */
@@ -44,6 +54,23 @@ export function cassetteFilePath(
   return join(cassettesDir, `${name.replaceAll("/", "-")}.json`);
 }
 
+export function normalizeCassetteExchanges(cassette: LlmCassette): LlmCassetteExchange[] {
+  if (cassette.exchanges?.length) {
+    return cassette.exchanges;
+  }
+
+  if (cassette.request && cassette.response) {
+    return [
+      {
+        request: cassette.request,
+        response: cassette.response,
+      },
+    ];
+  }
+
+  return [];
+}
+
 export async function loadCassette(filePath: string): Promise<LlmCassette | null> {
   const file = Bun.file(filePath);
   if (!(await file.exists())) {
@@ -61,8 +88,11 @@ export async function saveCassette(filePath: string, cassette: LlmCassette): Pro
 /**
  * Record/replay LLM HTTP via MSW.
  *
- * - replay: serve cassette (no network)
- * - record: hit the real API with `bypass()`, then save cassette
+ * Supports multiple exchanges per cassette (multi-turn chats).
+ * v1 single request/response cassettes still replay.
+ *
+ * - replay: serve cassette exchanges in order (no network)
+ * - record: hit the real API with `bypass()`, then save all exchanges
  * - auto: replay if cassette exists, otherwise record
  */
 export async function withMswCassette<T>(
@@ -88,14 +118,31 @@ export async function withMswCassette<T>(
     );
   }
 
-  let recorded: LlmCassette | null = null;
+  const replayExchanges = existing ? normalizeCassetteExchanges(existing) : [];
+  let replayIndex = 0;
+  const recordedExchanges: LlmCassetteExchange[] = [];
 
   server.use(
     http.post(url, async ({ request }) => {
-      if (shouldReplay && existing) {
-        return HttpResponse.json(existing.response.body, {
-          status: existing.response.status,
+      if (shouldReplay) {
+        const exchange = replayExchanges[replayIndex];
+        if (!exchange) {
+          throw new Error(
+            `MSW cassette ${name} ran out of exchanges at index ${replayIndex}. Re-record with LLM_VCR_MODE=record.`,
+          );
+        }
+        replayIndex += 1;
+        return HttpResponse.json(exchange.response.body, {
+          status: exchange.response.status,
         });
+      }
+
+      const requestBodyText = await request.clone().text();
+      let requestBody: unknown = requestBodyText;
+      try {
+        requestBody = JSON.parse(requestBodyText);
+      } catch {
+        // keep raw text
       }
 
       const response = await fetch(bypass(request));
@@ -109,19 +156,17 @@ export async function withMswCassette<T>(
         throw new Error(`LLM request failed (${response.status}): ${detail}`);
       }
 
-      recorded = {
-        version: 1,
-        name,
-        recordedAt: new Date().toISOString(),
+      recordedExchanges.push({
         request: {
           method: "POST",
           url: request.url,
+          body: requestBody,
         },
         response: {
           status: response.status,
           body,
         },
-      };
+      });
 
       return HttpResponse.json(body, { status: response.status });
     }),
@@ -132,8 +177,16 @@ export async function withMswCassette<T>(
   try {
     const result = await fn();
 
-    if (recorded) {
-      await saveCassette(filePath, recorded);
+    if (recordedExchanges.length > 0) {
+      const first = recordedExchanges[0]!;
+      await saveCassette(filePath, {
+        version: recordedExchanges.length > 1 ? 2 : 1,
+        name,
+        recordedAt: new Date().toISOString(),
+        request: first.request,
+        response: first.response,
+        ...(recordedExchanges.length > 1 ? { exchanges: recordedExchanges } : {}),
+      });
     }
 
     return result;

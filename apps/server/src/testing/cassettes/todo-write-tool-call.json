@@ -1,17 +1,86 @@
 {
   "version": 1,
   "name": "todo-write-tool-call",
-  "recordedAt": "2026-07-23T14:47:58.619Z",
+  "recordedAt": "2026-07-23T16:25:54.126Z",
   "request": {
     "method": "POST",
-    "url": "https://api.openai.com/v1/chat/completions"
+    "url": "https://api.openai.com/v1/chat/completions",
+    "body": {
+      "model": "gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant. For complex multi-step requests, you must call the todo_write tool to create an internal task plan before doing the work. Use merge=false for the initial plan. Keep exactly one task in_progress. Do not answer in plain text."
+        },
+        {
+          "role": "user",
+          "content": "Plan how you would research, draft, and review a short blog post about TypeScript enums. Use the todo_write tool with at least 3 tasks."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "todo_write",
+            "description": "Create or update the internal task plan for complex multi-step work. Use when a request has 3+ distinct steps. Initialize at the start, keep one task in_progress, and mark tasks completed as you finish them.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "merge": {
+                  "type": "boolean",
+                  "description": "If true, update todos by id. If false, replace the entire task plan."
+                },
+                "todos": {
+                  "type": "array",
+                  "description": "Todo items to create or update.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Stable todo identifier."
+                      },
+                      "content": {
+                        "type": "string",
+                        "description": "Todo description. Required when creating a new todo."
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "in_progress",
+                          "completed",
+                          "cancelled"
+                        ],
+                        "description": "Current todo status."
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "merge",
+                "todos"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
   },
   "response": {
     "status": 200,
     "body": {
-      "id": "chatcmpl-E4p0HPcC0ipFVT8VjP1HRh8A4PKRM",
+      "id": "chatcmpl-E4qX2Hp0uzOyGDBAoBkN4ybyMXn0O",
       "object": "chat.completion",
-      "created": 1784818077,
+      "created": 1784823952,
       "model": "gpt-4o-mini-2024-07-18",
       "choices": [
         {
@@ -21,11 +90,11 @@
             "content": null,
             "tool_calls": [
               {
-                "id": "call_26fd0TR8JOmP1B9bOevhWL3u",
+                "id": "call_HZLAKIz8XxQLKTiui7tx1U7P",
                 "type": "function",
                 "function": {
                   "name": "todo_write",
-                  "arguments": "{\"merge\":false,\"todos\":[{\"id\":\"task_1\",\"content\":\"Research TypeScript enums, including their purpose, syntax, and examples.\",\"status\":\"in_progress\"},{\"id\":\"task_2\",\"content\":\"Draft a blog post outlining the key points about TypeScript enums, including examples and use cases.\",\"status\":\"pending\"},{\"id\":\"task_3\",\"content\":\"Review the draft for clarity, accuracy, and conciseness before publishing.\",\"status\":\"pending\"}]}"
+                  "arguments": "{\"merge\":false,\"todos\":[{\"id\":\"task_1\",\"content\":\"Research TypeScript enums by finding definitions, examples, and best practices.\",\"status\":\"in_progress\"},{\"id\":\"task_2\",\"content\":\"Draft the blog post based on the research findings.\",\"status\":\"pending\"},{\"id\":\"task_3\",\"content\":\"Review the draft for clarity, accuracy, and completeness before publishing.\",\"status\":\"pending\"}]}"
                 }
               }
             ],
@@ -38,8 +107,8 @@
       ],
       "usage": {
         "prompt_tokens": 241,
-        "completion_tokens": 103,
-        "total_tokens": 344,
+        "completion_tokens": 92,
+        "total_tokens": 333,
         "prompt_tokens_details": {
           "cached_tokens": 0,
           "audio_tokens": 0
