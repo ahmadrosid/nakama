@@ -3,7 +3,11 @@
  *
  *   bun run view:cassettes
  *   → http://localhost:8766/viewer.html
+ *
+ * Lists cassettes dynamically via GET /api/cassettes.
  */
+import { readdir } from "node:fs/promises";
+
 const port = Number(process.env.CASSETTE_VIEWER_PORT ?? 8766);
 const root = import.meta.dir;
 
@@ -24,10 +28,28 @@ function resolvePath(pathname: string): string | null {
   return `${root}/${relative}`;
 }
 
+async function listCassetteFiles(): Promise<string[]> {
+  const entries = await readdir(root);
+  return entries
+    .filter((name) => name.endsWith(".json"))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 const server = Bun.serve({
   port,
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/cassettes") {
+      const cassettes = await listCassetteFiles();
+      return Response.json(
+        { cassettes },
+        {
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
+
     const filePath = resolvePath(url.pathname);
 
     if (!filePath) {

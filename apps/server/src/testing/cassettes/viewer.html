@@ -235,12 +235,6 @@
   </main>
 
   <script>
-    const KNOWN = [
-      "ask-user-question-tool-call.json",
-      "todo-write-tool-call.json",
-      "super-bot-create-profile.json",
-    ];
-
     const cache = new Map();
     const selectEl = document.getElementById("cassette");
     const viewEl = document.getElementById("view");
@@ -537,32 +531,45 @@
       upsertOption(name);
     }
 
+    async function listCassetteNames() {
+      const res = await fetch("./api/cassettes", { cache: "no-store" });
+      if (!res.ok) throw new Error(`api/cassettes: ${res.status}`);
+      const data = await res.json();
+      const names = Array.isArray(data?.cassettes) ? data.cassettes : [];
+      return names.filter((name) => typeof name === "string" && name.endsWith(".json"));
+    }
+
     async function loadKnown() {
       statusEl.textContent = "Loading…";
       const previous = selectEl.value;
       selectEl.innerHTML = `<option value="">Select cassette…</option>`;
       const loaded = [];
 
-      for (const name of KNOWN) {
+      let names = [];
+      try {
+        names = await listCassetteNames();
+      } catch {
+        statusEl.innerHTML = `<span class="error">Could not list cassettes.</span> Run <code>bun run view:cassettes</code>`;
+        viewEl.innerHTML = `<p class="empty">Serve this folder with <code>bun run view:cassettes</code>, or open/drop a .json file.</p>`;
+        return;
+      }
+
+      for (const name of names) {
         try {
           await loadFromUrl(name);
           loaded.push(name);
         } catch {
-          /* skip missing */
+          /* skip unreadable */
         }
       }
 
       if (loaded.length) {
         statusEl.textContent = `${loaded.length} loaded`;
-        const preferred = loaded.includes(previous)
-          ? previous
-          : loaded.includes("super-bot-create-profile.json")
-            ? "super-bot-create-profile.json"
-            : loaded[0];
+        const preferred = loaded.includes(previous) ? previous : loaded[0];
         setActive(preferred);
       } else {
-        statusEl.innerHTML = `<span class="error">Could not fetch cassettes.</span> Run <code>bun run view:cassettes</code>`;
-        viewEl.innerHTML = `<p class="empty">Serve this folder with <code>bun run view:cassettes</code>, or open/drop a .json file.</p>`;
+        statusEl.textContent = "No cassettes found";
+        viewEl.innerHTML = `<p class="empty">No <code>*.json</code> cassettes in this folder yet.</p>`;
       }
     }
 

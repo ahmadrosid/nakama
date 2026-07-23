@@ -23,7 +23,6 @@ import { MessageResponse } from "@/components/ai-elements/message";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -42,7 +41,6 @@ import { cn } from "@/lib/utils";
 import {
   formatRunDuration,
   groupRunsByDay,
-  runHistoryShellClass,
   runPreviewText,
   summarizeAutomationListMeta,
 } from "@/pages/automations/automations-page.shared";
@@ -449,8 +447,7 @@ export function RunHistoryList({
   onDeleteRun: (run: AutomationRunRecord) => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(() => {
-    const running = runs.find((run) => run.status === "running");
-    return running?.id ?? runs[0]?.id ?? null;
+    return runs.find((run) => run.status === "running")?.id ?? null;
   });
 
   useEffect(() => {
@@ -464,15 +461,11 @@ export function RunHistoryList({
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {groups.map((group) => (
-        <section key={group.label} className="space-y-2">
-          <div className="sticky top-0 z-10 -mx-1 bg-card/95 px-1 pb-1 pt-0.5 backdrop-blur">
-            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              {group.label}
-            </p>
-          </div>
-          <ul className="space-y-2">
+        <section key={group.label}>
+          <p className="sticky top-0 z-10 bg-card pb-2 text-xs text-muted-foreground">{group.label}</p>
+          <ul className="divide-y divide-border/60 border-y border-border/60">
             {group.runs.map((run) => (
               <RunHistoryItem
                 key={run.id}
@@ -513,6 +506,14 @@ function RunHistoryItem({
   const hasBody = hasOutput || hasError || isRunning;
   const previewText = runPreviewText(run);
   const duration = formatRunDuration(run.startedAt, run.completedAt);
+  const statusLabel =
+    run.status === "completed" ? "Completed" : run.status === "failed" ? "Failed" : "Running";
+  const metaParts = [
+    statusLabel,
+    formatSessionRelativeTime(run.startedAt),
+    duration,
+    run.deliveryStatus === "failed" ? "Delivery failed" : null,
+  ].filter(Boolean);
   const copyText = [hasError ? run.error : null, hasOutput ? run.output : null]
     .filter(Boolean)
     .join("\n\n");
@@ -531,186 +532,134 @@ function RunHistoryItem({
 
   return (
     <li>
-      <article
-        className={cn(
-          "overflow-hidden rounded-lg border bg-card/90 transition-all",
-          runHistoryShellClass(run.status),
-        )}
-      >
-        <div className="flex items-start gap-2 px-4 py-3.5 transition-colors hover:bg-muted/25">
-          <button
-            type="button"
-            className={cn(
-              "flex min-w-0 flex-1 items-start gap-3 text-left",
-              !hasBody && "cursor-default",
-            )}
-            disabled={!hasBody}
-            aria-expanded={hasBody ? expanded : undefined}
-            aria-label={
-              hasBody
-                ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
-                : `Run from ${formatSessionRelativeTime(run.startedAt)}`
-            }
-            onClick={() => {
-              if (hasBody) {
-                onToggle();
-              }
-            }}
-          >
-            <RunStatusIcon status={run.status} />
-
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <RunStatusBadge status={run.status} />
-                {run.deliveryStatus ? (
-                  <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
-                ) : null}
-                {isUnread ? (
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    New
-                  </span>
-                ) : null}
-                <span className="text-xs text-muted-foreground" aria-hidden>
-                  ·
-                </span>
-                <time
-                  className="text-xs text-muted-foreground"
-                  dateTime={run.startedAt}
-                  title={formatSessionTimestamp(run.startedAt)}
-                >
-                  {formatSessionRelativeTime(run.startedAt)}
-                </time>
-                {duration ? (
-                  <>
-                    <span className="text-xs text-muted-foreground" aria-hidden>
-                      ·
-                    </span>
-                    <span className="text-xs text-muted-foreground">{duration}</span>
-                  </>
-                ) : null}
-              </div>
-
-              {previewText ? (
-                <p
-                  className={cn(
-                    "line-clamp-2 pr-2 text-sm leading-relaxed",
-                    run.status === "failed" ? "text-destructive" : "text-muted-foreground",
-                  )}
-                >
-                  {previewText}
-                </p>
-              ) : null}
-            </div>
-
-            {hasBody ? (
-              <ChevronRightIcon
-                className={cn(
-                  "mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                  expanded && "rotate-90",
-                )}
-                aria-hidden
-              />
-            ) : null}
-          </button>
-
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
-              disabled={busy}
-              aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-              onClick={onDelete}
-            >
-              <Trash2Icon className="size-4" aria-hidden />
-            </Button>
-          </div>
-        </div>
-
-        <div
+      <div className="flex items-start gap-2 py-3">
+        <button
+          type="button"
           className={cn(
-            "grid transition-[grid-template-rows] duration-200 ease-out",
-            expanded && hasBody ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+            "flex min-w-0 flex-1 items-start gap-2.5 text-left",
+            !hasBody && "cursor-default",
           )}
+          disabled={!hasBody}
+          aria-expanded={hasBody ? expanded : undefined}
+          aria-label={
+            hasBody
+              ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
+              : `Run from ${formatSessionRelativeTime(run.startedAt)}`
+          }
+          onClick={() => {
+            if (hasBody) {
+              onToggle();
+            }
+          }}
         >
-          <div className="overflow-hidden">
-            <div className="border-t border-border/60 bg-muted/10 px-4 py-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="type-code text-muted-foreground" title={formatSessionTimestamp(run.startedAt)}>
-                  {formatSessionTimestamp(run.startedAt)}
-                  {run.completedAt
-                    ? ` → ${formatSessionTimestamp(run.completedAt)}`
-                    : isRunning
-                      ? " · running"
-                      : ""}
-                </p>
-                {copyText ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1.5 px-2 text-xs"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleCopy();
-                    }}
-                  >
-                    <CopyIcon className="size-3.5" aria-hidden />
-                    Copy
-                  </Button>
-                ) : null}
-              </div>
+          <RunStatusIcon status={run.status} />
 
-              {(run.deliveryStatus || hasError || hasOutput) && (
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {run.deliveryStatus ? (
-                    <DeliveryStatusBadge status={run.deliveryStatus} error={run.deliveryError} />
-                  ) : null}
-                  {hasError ? <SoftPill label="Has error" tone="danger" /> : null}
-                  {hasOutput ? <SoftPill label="Has output" tone="default" /> : null}
-                </div>
-              )}
-
-              <Separator className="mb-4 bg-border/60" />
-
-              {hasDeliveryError ? (
-                <div className="mb-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-3">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-destructive">
-                    Delivery error
-                  </p>
-                  <p className="whitespace-pre-wrap break-words text-sm text-destructive">
-                    {run.deliveryError}
-                  </p>
-                </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              {isUnread ? (
+                <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unread" />
               ) : null}
-
-              {isRunning && !hasOutput && !hasError ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2Icon className="size-4 animate-spin" aria-hidden />
-                  Run in progress…
-                </div>
-              ) : null}
-
-              {hasError && hasOutput ? (
-                <p className="mb-3 whitespace-pre-wrap break-words text-sm text-destructive">
-                  {run.error}
-                </p>
-              ) : null}
-
-              {hasOutput ? (
-                <div className="max-h-[min(70vh,28rem)] overflow-auto">
-                  <MessageResponse>{run.output ?? ""}</MessageResponse>
-                </div>
-              ) : null}
-
-              {!hasOutput && !hasError && !isRunning ? (
-                <p className="text-sm text-muted-foreground">No output returned.</p>
-              ) : null}
+              <span className="truncate" title={formatSessionTimestamp(run.startedAt)}>
+                {metaParts.join(" · ")}
+              </span>
             </div>
+
+            {previewText ? (
+              <p
+                className={cn(
+                  "mt-0.5 line-clamp-1 text-sm",
+                  run.status === "failed" ? "text-destructive" : "text-foreground/80",
+                )}
+              >
+                {previewText}
+              </p>
+            ) : null}
           </div>
+
+          {hasBody ? (
+            <ChevronRightIcon
+              className={cn(
+                "mt-0.5 size-4 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+                expanded && "rotate-90",
+              )}
+              aria-hidden
+            />
+          ) : null}
+        </button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+          disabled={busy}
+          aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
+          onClick={onDelete}
+        >
+          <Trash2Icon className="size-4" aria-hidden />
+        </Button>
+      </div>
+
+      {expanded && hasBody ? (
+        <div className="pb-3 pl-7">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="type-code text-muted-foreground" title={formatSessionTimestamp(run.startedAt)}>
+              {formatSessionTimestamp(run.startedAt)}
+              {run.completedAt
+                ? ` → ${formatSessionTimestamp(run.completedAt)}`
+                : isRunning
+                  ? " · running"
+                  : ""}
+            </p>
+            {copyText ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleCopy();
+                }}
+              >
+                <CopyIcon className="size-3.5" aria-hidden />
+                Copy
+              </Button>
+            ) : null}
+          </div>
+
+          {hasDeliveryError ? (
+            <p className="mb-3 whitespace-pre-wrap break-words text-sm text-destructive">
+              {run.deliveryError}
+            </p>
+          ) : null}
+
+          {isRunning && !hasOutput && !hasError ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" aria-hidden />
+              Run in progress…
+            </div>
+          ) : null}
+
+          {hasError && hasOutput ? (
+            <p className="mb-3 whitespace-pre-wrap break-words text-sm text-destructive">{run.error}</p>
+          ) : null}
+
+          {hasOutput ? (
+            <div className="max-h-[min(70vh,28rem)] overflow-auto">
+              <MessageResponse>{run.output ?? ""}</MessageResponse>
+            </div>
+          ) : null}
+
+          {!hasOutput && hasError ? (
+            <p className="whitespace-pre-wrap break-words text-sm text-destructive">{run.error}</p>
+          ) : null}
+
+          {!hasOutput && !hasError && !isRunning ? (
+            <p className="text-sm text-muted-foreground">No output returned.</p>
+          ) : null}
         </div>
-      </article>
+      ) : null}
     </li>
   );
 }
@@ -727,21 +676,6 @@ function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
   }
 
   return <Loader2Icon className={cn(className, "animate-spin text-muted-foreground")} aria-hidden />;
-}
-
-function RunStatusBadge({ status }: { status: AutomationRunStatus }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
-        status === "completed" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        status === "failed" && "bg-destructive/10 text-destructive",
-        status === "running" && "bg-muted text-muted-foreground",
-      )}
-    >
-      {status}
-    </span>
-  );
 }
 
 function DeliverySettingsFields({
@@ -832,35 +766,6 @@ function DeliverySettingsFields({
   );
 }
 
-function DeliveryStatusBadge({
-  status,
-  error,
-}: {
-  status: NonNullable<AutomationRunRecord["deliveryStatus"]>;
-  error?: string | null;
-}) {
-  const label =
-    status === "sent"
-      ? "Delivered"
-      : status === "failed"
-        ? "Delivery failed"
-        : "Delivery skipped";
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
-        status === "sent" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        status === "failed" && "bg-destructive/10 text-destructive",
-        status === "skipped" && "bg-muted text-muted-foreground",
-      )}
-      title={error ?? undefined}
-    >
-      {label}
-    </span>
-  );
-}
-
 export function AutomationStateBadge({ enabled }: { enabled: boolean }) {
   return (
     <span
@@ -884,30 +789,6 @@ function AutomationStateDot({ enabled }: { enabled: boolean }) {
       )}
       aria-hidden
     />
-  );
-}
-
-export function MetaStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "default" | "attention";
-}) {
-  return (
-    <div className="rounded-md border border-border/60 px-3 py-3">
-      <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-sm font-medium",
-          tone === "attention" ? "text-primary" : "text-foreground",
-        )}
-      >
-        {value}
-      </p>
-    </div>
   );
 }
 

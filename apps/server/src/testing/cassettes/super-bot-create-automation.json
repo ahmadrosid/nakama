@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "name": "super-bot-create-automation",
+  "recordedAt": "2026-07-23T17:14:03.301Z",
+  "request": {
+    "method": "POST",
+    "url": "https://api.deepseek.com/chat/completions",
+    "body": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Super Bot, the Nakama orchestrator. Manage profiles, tools, automations, and one-off host tasks.\n\n## Tools\nread/write/edit/delete_file, search_files, web_search, bash (Super Bot only), create_profile/get_profile/list_profiles, create_tool/list_tools/assign_tool_to_profile, create_automation/list_automations/delete_automation/run_automation. Tool schemas are authoritative; persistent tools use JavaScript only (see tool authoring rules).\n\n## Automations\nConfirm schedule in the user's timezone, then create_automation (manual, 5-field cron, or runAt ISO one-shot). Prefer runAt for one-time reminders. Set delivery for Telegram/WhatsApp/email when asked; omit when results only need saving. Test via list_automations → run_automation. Default to Super Bot unless told to target another profile.\n\n## Profiles\nAlways draft soul files and a tool plan in chat, then wait for explicit confirmation before calling create_profile — even when the request looks complete. Prefer the create-profile skill when active.\n\n## Safety\n- Explain destructive bash/file writes when impact is unclear.\n- Don't assign powerful tools unless the user asked for that capability.\n- After create_tool, don't solicit assignment; say they can assign from the dashboard or ask you. Never mass-assign without explicit approval.\n\nBe concise. After tools, summarize results clearly.\n\n## Tool authoring rules (mandatory)\nWhen creating a persistent tool:\n- Call list_tools first to check whether the requested tool name already exists\n- Do not call list_profiles or assign_tool_to_profile during tool creation\n- If the same name already exists, do not create a duplicate placeholder or pretend it works\n- If the existing tool is stale or broken, say it must be repaired or replaced before it can be used\n- Write a JavaScript file to ~/.nakama/tools/<tool-name>.js using write_file\n- Export async function run(input, context) and optional export const parameters\n- Register with create_tool using handlerType \"javascript\" and handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n- If the user provides curl/bash example commands, translate them into JavaScript code inside the tool\n- The only accepted handlerType for agent-authored tools is \"javascript\"\n- Do NOT write bash scripts (.sh) or shell wrappers for tools\n- Do NOT create .sh, .bash, .command, or wrapper files for persistent tools\n- Use bash only for one-off host tasks, never for tool implementations\n- If you wrote a shell file by mistake, delete it and replace it with a .js module before continuing\n- Never describe a placeholder or partial setup as a working tool\n- A tool is registered after list_tools, write_file, and create_tool succeed\n- After registration succeeds, tell the user they can assign the tool to a profile from the dashboard if needed\n- Use assign_tool_to_profile only when the user explicitly asks to assign the tool to a profile\n- Never assign a newly created tool to all profiles without explicit user approval in chat\n\n# Active Skill: create-automation\nWhen the user wants something scheduled or automated, explain your plan clearly in their timezone.\n\nUse `create_automation` to save recurring, one-time, or manual automations after confirming the schedule with the user.\n\nWhen the user asks to run or test a saved automation, use `list_automations` to find it, then `run_automation`, and summarize the result.\n\nWhen the user wants run results sent to Telegram, WhatsApp, or email, set `create_automation` delivery (channel and email `to` when needed). Put only the task in `prompt` — the server sends results after each run.\n\nDo not add delivery when the user only wants results saved in run history.\n\nFor recurring tasks, use trigger type `schedule` with 5-field cron syntax and include timezone when it differs from the user's timezone.\n\nFor one-time reminders (e.g. \"tomorrow at 8pm\", \"next Friday at noon\"), use trigger type `runAt` with `at` as an ISO-8601 datetime in UTC. Never use day-of-week-only cron for a specific date."
+        },
+        {
+          "role": "user",
+          "content": "Remind me every Monday at 9am Asia/Jakarta to review open tasks. Just save the results — no delivery."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "create_automation",
+            "description": "Create and save an automation that runs a prompt on a schedule, at a specific time once, or manually. When the user wants results sent to Telegram, WhatsApp, or email after each run, set delivery — the server sends automatically; put only the task in prompt.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Short title for the automation."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "One sentence summary of what the automation does."
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "The task prompt to execute when the automation runs. Describe the work only — do not include delivery instructions when delivery is set."
+                },
+                "trigger": {
+                  "type": "object",
+                  "description": "Manual: { \"type\": \"manual\" }. Recurring: { \"type\": \"schedule\", \"cron\": \"0 8 * * *\", \"timezone\": \"America/Los_Angeles\" }. One-time: { \"type\": \"runAt\", \"at\": \"2026-06-27T13:00:00.000Z\", \"timezone\": \"Asia/Jakarta\" }.",
+                  "additionalProperties": true
+                },
+                "delivery": {
+                  "type": "object",
+                  "description": "Optional. When the user wants run results sent somewhere: { \"channel\": \"telegram\" | \"whatsapp\" | \"email\", \"to\": \"user@example.com\" (required for email), \"notifyOn\": \"success\" | \"failure\" | \"both\" }. Omit when the user only wants results saved.",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "name",
+                "description",
+                "prompt",
+                "trigger"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "list_automations",
+            "description": "List saved automations with their schedule and status.",
+            "parameters": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "delete_automation",
+            "description": "Delete a saved automation by id.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "automationId": {
+                  "type": "string",
+                  "description": "Automation id to delete."
+                }
+              },
+              "required": [
+                "automationId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "run_automation",
+            "description": "Run a saved automation immediately when the user asks to trigger or test it from chat. Returns the run output or error.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "automationId": {
+                  "type": "string",
+                  "description": "Automation id to run (use list_automations to find it)."
+                }
+              },
+              "required": [
+                "automationId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "081b4fed-45d4-467b-8334-34ed0b633035",
+      "object": "chat.completion",
+      "created": 1784826841,
+      "model": "deepseek-v4-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "reasoning_content": "The user wants a recurring automation every Monday at 9am Asia/Jakarta timezone. Since they said \"no delivery\", I'll omit the delivery parameter. Let me create this.\n\nTrigger type: schedule with cron `0 9 * * 1` (at 9am, every Monday, where 1 = Monday in cron). Timezone: Asia/Jakarta.",
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_00_u365XXmDB8HETNM9REMf5589",
+                "type": "function",
+                "function": {
+                  "name": "create_automation",
+                  "arguments": "{\"name\": \"Weekly Open Tasks Review Reminder\", \"description\": \"Reminds every Monday at 9am Jakarta time to review open tasks.\", \"prompt\": \"Remind the user to review their open tasks. List any outstanding or incomplete tasks and summarize what needs attention this week.\", \"trigger\": {\"type\": \"schedule\", \"cron\": \"0 9 * * 1\", \"timezone\": \"Asia/Jakarta\"}}"
+                }
+              }
+            ]
+          },
+          "logprobs": null,
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 1729,
+        "completion_tokens": 242,
+        "total_tokens": 1971,
+        "prompt_tokens_details": {
+          "cached_tokens": 1664
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 78
+        },
+        "prompt_cache_hit_tokens": 1664,
+        "prompt_cache_miss_tokens": 65
+      },
+      "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402"
+    }
+  }
+}

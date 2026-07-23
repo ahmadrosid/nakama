@@ -1,13 +1,11 @@
 import { RefreshCwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { formatFutureRelativeTime, formatSessionRelativeTime } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import {
   AutomationDetailActions,
   AutomationStateBadge,
   ListSkeleton,
-  MetaStat,
   RunHistoryList,
   SoftPill,
 } from "@/pages/automations/automations-components";
@@ -89,35 +87,15 @@ export function AutomationDetailPanel(state: DetailState) {
         className="mb-5 lg:hidden"
       />
 
-      <div className="mb-5 grid gap-3 rounded-lg border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetaStat
-          label="Trigger"
-          value={selected.trigger.type === "manual" ? "Manual" : "Scheduled"}
-          tone="default"
-        />
-        <MetaStat
-          label="Next run"
-          value={selected.nextRunAt ? formatFutureRelativeTime(selected.nextRunAt) : "Not scheduled"}
-          tone="default"
-        />
-        <MetaStat
-          label="Last run"
-          value={selected.lastRunAt ? formatSessionRelativeTime(selected.lastRunAt) : "No runs yet"}
-          tone="default"
-        />
-        <MetaStat
-          label="Unread runs"
-          value={String(selectedRunSummary.unread)}
-          tone={selectedRunSummary.unread > 0 ? "attention" : "default"}
-        />
-      </div>
-
       <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
         <SoftPill label={`${runs.length} total`} />
         <SoftPill label={`${selectedRunSummary.completed} success`} tone="success" />
         <SoftPill label={`${selectedRunSummary.failed} failed`} tone="danger" />
         {selectedRunSummary.running > 0 ? (
           <SoftPill label={`${selectedRunSummary.running} running`} tone="default" />
+        ) : null}
+        {selectedRunSummary.unread > 0 ? (
+          <SoftPill label={`${selectedRunSummary.unread} unread`} />
         ) : null}
       </div>
 
@@ -161,12 +139,6 @@ export function AutomationDetailPanel(state: DetailState) {
         )}
       </div>
 
-      <div className="type-body mt-5 rounded-md border border-border bg-muted/40 p-3 text-xs lg:hidden dark:bg-muted/30">
-        <p className="font-medium text-foreground">How it works</p>
-        <p className="mt-2">
-          Run now triggers a manual execution. Scheduled automations run automatically when enabled.
-        </p>
-      </div>
     </div>
   );
 }
