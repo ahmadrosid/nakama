@@ -8,19 +8,23 @@ import {
 import { filterRowsBySearch } from "@/components/model-browse-utils";
 import { Input } from "@/components/ui/input";
 
+export interface CatalogModelsBrowseQuery {
+  canFetch?: boolean;
+  isLoading?: boolean;
+  isFetching?: boolean;
+  error?: Error | null;
+  onRefresh?: () => void;
+  refreshDisabled?: boolean;
+}
+
 export interface CatalogModelsBrowseListProps<T extends { id: string; name: string }> {
   rows: T[];
   onSelect: (row: T) => void;
   className?: string;
-  isLoading?: boolean;
-  isFetching?: boolean;
-  error?: Error | null;
-  canFetch?: boolean;
+  query?: CatalogModelsBrowseQuery;
   idleMessage?: string;
   emptyMessage?: string;
   status?: ReactNode | ((context: { filteredCount: number; filteredRows: T[] }) => ReactNode);
-  onRefresh?: () => void;
-  refreshDisabled?: boolean;
   toDisplayRow?: (row: T) => BrowseModelRowDisplay;
   filterRows?: (rows: T[], search: string, hideDeprecated: boolean) => T[];
   isDeprecated?: (row: T) => boolean;
@@ -31,20 +35,23 @@ export function CatalogModelsBrowseList<T extends { id: string; name: string }>(
   rows,
   onSelect,
   className,
-  isLoading = false,
-  isFetching = false,
-  error = null,
-  canFetch = true,
+  query,
   idleMessage,
   emptyMessage,
   status,
-  onRefresh,
-  refreshDisabled = false,
   toDisplayRow = (row) => ({ id: row.id, name: row.name }),
   filterRows,
   isDeprecated,
   toolbarTrailing,
 }: CatalogModelsBrowseListProps<T>) {
+  const {
+    canFetch = true,
+    isLoading = false,
+    isFetching = false,
+    error = null,
+    onRefresh,
+    refreshDisabled = false,
+  } = query ?? {};
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [hideDeprecated, setHideDeprecated] = useState(true);

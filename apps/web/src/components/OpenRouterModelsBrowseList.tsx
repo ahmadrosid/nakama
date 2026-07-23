@@ -39,8 +39,7 @@ export function OpenRouterModelsBrowseList({
       rows={catalogRows}
       onSelect={onSelect}
       className={className}
-      isLoading={isLoading}
-      error={error}
+      query={{ isLoading, error }}
       isDeprecated={(row) => row.deprecated}
       toolbarTrailing={
         <Select

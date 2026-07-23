@@ -70,14 +70,16 @@ export function RemoteModelsBrowseList({
       rows={data ?? EMPTY_ROWS}
       onSelect={onSelect}
       className={className}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      error={error}
-      canFetch={canFetch}
+      query={{
+        isLoading,
+        isFetching,
+        error,
+        canFetch,
+        onRefresh: () => void refetch(),
+        refreshDisabled: isFetching,
+      }}
       idleMessage="Enter a base URL before browsing models."
       emptyMessage={`No models found on this ${browseLabel}.`}
-      onRefresh={() => void refetch()}
-      refreshDisabled={isFetching}
       status={({ filteredCount }) =>
         canFetch
           ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`

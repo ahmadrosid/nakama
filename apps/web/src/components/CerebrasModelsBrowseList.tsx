@@ -27,8 +27,7 @@ export function CerebrasModelsBrowseList({
       rows={data?.rows ?? EMPTY_ROWS}
       onSelect={onSelect}
       className={className}
-      isLoading={isLoading}
-      error={error}
+      query={{ isLoading, error }}
       isDeprecated={(row) => row.deprecated}
       toDisplayRow={capabilityBrowseRowToDisplayRow}
       filterRows={(rows, search, hideDeprecated) =>

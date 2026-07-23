@@ -29,9 +29,7 @@ export function FireworksModelsBrowseList({
       rows={data?.rows ?? []}
       onSelect={onSelect}
       className={className}
-      isLoading={isLoading}
-      error={error}
-      canFetch={canFetch}
+      query={{ isLoading, error, canFetch }}
       idleMessage="Enter an API key to browse Fireworks models."
       isDeprecated={(row) => row.deprecated === true}
       toDisplayRow={capabilityBrowseRowToDisplayRow}
