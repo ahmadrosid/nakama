@@ -16,6 +16,8 @@ export interface RemoteModelRow {
 
 export type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 
+const EMPTY_ROWS: RemoteModelRow[] = [];
+
 interface RemoteModelsBrowseListProps {
   onSelect: RemoteBrowseSelectHandler;
   className?: string;
@@ -77,7 +79,7 @@ export function RemoteModelsBrowseList({
     staleTime: 1000 * 30,
   });
 
-  const rows = data ?? [];
+  const rows = data ?? EMPTY_ROWS;
   const filtered = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
     if (!query) {

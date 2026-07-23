@@ -1,10 +1,10 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
-  formatBrowseCapabilities,
   ModelBrowseShell,
   VirtualModelBrowseList,
 } from "@/components/ModelBrowseShell";
+import { formatBrowseCapabilities } from "@/components/model-browse-utils";
 import { Input } from "@/components/ui/input";
 import { useCerebrasModels } from "@/hooks/use-cerebras-models";
 import type { CerebrasModelRow } from "@/lib/cerebras-models";

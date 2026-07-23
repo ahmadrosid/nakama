@@ -1,10 +1,10 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
-  formatBrowseCapabilities,
   ModelBrowseShell,
   VirtualModelBrowseList,
 } from "@/components/ModelBrowseShell";
+import { formatBrowseCapabilities } from "@/components/model-browse-utils";
 import {
   Select,
   SelectContent,
