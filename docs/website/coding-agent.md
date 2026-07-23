@@ -11,7 +11,7 @@ The mental model:
 - Nakama runs the configured coding-agent CLI through the `bash` tool
 - Nakama summarizes stdout/stderr and continues the conversation
 
-There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-delegation` skill + a configured coding-agent harness** in Integrations.
+There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill + a configured coding-agent harness** in Integrations.
 
 For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for Codex / Claude Code / OpenCode on large repo changes.
 
@@ -23,20 +23,20 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 
 - **Nakama** stays the conversation owner, permission boundary, and summarizer
 - **Coding agent** (Codex, Claude Code, or OpenCode) runs the heavy repo work on the server
-- **Super Bot** is the default profile with `bash` and the `coding-delegation` skill; other profiles can opt in
+- **Super Bot** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
 
 ## How the pieces fit together
 
 | Piece | Role |
 |-------|------|
 | **Coding-agent harness** | Workspace setting: which CLI is installed, authenticated, and selected |
-| **`coding-delegation` skill** | Teaches when to invoke a coding agent, how to build the `bash` command, and how to summarize results |
+| **`coding-agent` skill** | Teaches when to invoke a coding agent, how to build the `bash` command, and how to summarize results |
 | **`bash` tool** | Runs the coding-agent CLI in the profile workspace |
 | **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`) injected on matched turns |
 
 ```text
 User message (coding task)
-  → skill matcher activates coding-delegation
+  → skill matcher activates coding-agent
   → Nakama injects harness context + backend CLI guidance
   → Nakama agent calls bash with the coding-agent command
   → Nakama agent summarizes the result for the user
@@ -139,13 +139,13 @@ If `~/.claude/settings.json` forces Bedrock or another upstream, env injection m
 | Requirement | Super Bot | Other profiles |
 |-------------|-----------|----------------|
 | `bash` | Assigned by default | Assign manually |
-| `coding-delegation` skill | Assigned by default | Assign manually |
+| `coding-agent` skill | Assigned by default | Assign manually |
 
-Nakama blocks assigning `coding-delegation` until a harness is ready. The skill picker links to Integrations when setup is incomplete.
+Nakama blocks assigning `coding-agent` until a harness is ready. The skill picker links to Integrations when setup is incomplete.
 
 ### 3. Chat from a profile with coding-agent access
 
-When the user's message looks like a code-change request, the skill matcher attaches the full `coding-delegation` body plus harness context for that turn. The agent should call `bash` with an appropriate `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
+When the user's message looks like a code-change request, the skill matcher attaches the full `coding-agent` body plus harness context for that turn. The agent should call `bash` with an appropriate `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
 
 ## Launch directly (CLI)
 
@@ -211,7 +211,7 @@ Keep work **on the Nakama agent** (file tools only, no coding CLI) when the user
 - Small, single-file edits that fit a simple tool loop
 - Advice without repo changes
 
-The `coding-delegation` skill description is tuned so explain-only messages do not auto-match.
+The `coding-agent` skill description is tuned so explain-only messages do not auto-match.
 
 ## Runtime behavior
 
@@ -238,7 +238,7 @@ Runs execute in the **active profile workspace** when delegated from chat (`~/.n
 
 ## Permissions
 
-| Actor | Configure harnesses | Assign `coding-delegation` | Use coding agent in chat | `nakama launch` |
+| Actor | Configure harnesses | Assign `coding-agent` | Use coding agent in chat | `nakama launch` |
 |-------|---------------------|----------------------------|--------------------------|-----------------|
 | Platform admin | Yes | Yes | Yes | Yes |
 | Org admin | No | No | Yes (on assigned profiles) | Yes |
@@ -265,6 +265,6 @@ Harness settings are deployment-wide. Tool and skill assignment remain per profi
 ## Next steps
 
 - [Builtin tools](/builtin-tools) — `bash` parameters and scope
-- [Skills](/skills) — bundled skills catalog, including `coding-delegation`
+- [Skills](/skills) — bundled skills catalog, including `coding-agent`
 - [Profiles](/profiles) — Super Bot and per-profile tool access
 - [Agent prompts](/agent-prompt) — how matched skills and harness context join the system prompt

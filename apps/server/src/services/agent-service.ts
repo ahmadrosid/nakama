@@ -2568,7 +2568,7 @@ export class AgentService {
                   parts.push(await this.formatProfileAuthoringToolContext());
                 }
 
-                if (matched.some((skill) => skill.name === "coding-delegation")) {
+                if (matched.some((skill) => skill.name === "coding-agent")) {
                   parts.push(await this.formatCodingDelegationContext(orgId, profileId));
                 }
 

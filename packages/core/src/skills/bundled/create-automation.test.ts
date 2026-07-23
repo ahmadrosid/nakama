@@ -202,7 +202,7 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("archive-profile-memory");
     expect(created).toContain("save-artifact");
     expect(created).toContain("create-profile");
-    expect(created).toContain("coding-delegation");
+    expect(created).toContain("coding-agent");
     expect(created).toContain("coding-backend-codex");
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");

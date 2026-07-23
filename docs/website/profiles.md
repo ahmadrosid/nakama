@@ -32,7 +32,7 @@ Platform admins create extra profiles inside the **active org**. Each new profil
 
 Super Bot can also create profiles from chat using a confirm-first factory. For profile-creation requests, it drafts soul files and a tool plan in chat, waits for your explicit OK, then calls `create_profile`. New profiles keep `MEMORY.md` empty and receive basic file/knowledge tools automatically; extra tools still need an explicit ask. On the Profiles page, use **Ask Super Bot** (empty state or create dialog) when a Super Bot profile exists.
 
-Super Bot can hand coding tasks to a dedicated coding agent via the `coding-delegation` skill and `bash`. See [Coding agent](/coding-agent).
+Super Bot can hand coding tasks to a dedicated coding agent via the `coding-agent` skill and `bash`. See [Coding agent](/coding-agent).
 
 ## What a profile contains
 

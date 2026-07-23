@@ -19,6 +19,7 @@ export function migrateDatabase(db: Database): void {
   migrateProfileOrgColumns(db);
   migrateBrowserSessionsTable(db);
   migrateLegacyProfileIds(db);
+  migrateCodingDelegationSkillName(db);
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
   migrateAttachmentsTable(db);
@@ -540,6 +541,62 @@ function migrateLegacyProfileIds(db: Database): void {
     throw error;
   } finally {
     db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
+export function migrateCodingDelegationSkillName(db: Database): void {
+  const legacyRows = db
+    .prepare("SELECT id, source_path FROM skills WHERE name = ?")
+    .all("coding-delegation") as Array<{ id: string; source_path: string }>;
+
+  if (legacyRows.length === 0) {
+    return;
+  }
+
+  const canonical = db
+    .prepare("SELECT id FROM skills WHERE name = ?")
+    .get("coding-agent") as { id: string } | null;
+
+  if (canonical) {
+    const reassignProfileSkill = db.prepare(`
+      UPDATE profile_skills
+      SET skill_id = ?
+      WHERE skill_id = ?
+        AND NOT EXISTS (
+          SELECT 1
+          FROM profile_skills existing
+          WHERE existing.profile_id = profile_skills.profile_id
+            AND existing.skill_id = ?
+        )
+    `);
+    const deleteProfileSkill = db.prepare(
+      "DELETE FROM profile_skills WHERE skill_id = ?",
+    );
+    const deleteSkill = db.prepare("DELETE FROM skills WHERE id = ?");
+
+    for (const row of legacyRows) {
+      reassignProfileSkill.run(canonical.id, row.id, canonical.id);
+      deleteProfileSkill.run(row.id);
+      deleteSkill.run(row.id);
+    }
+
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const update = db.prepare(`
+    UPDATE skills
+    SET name = ?, source_path = ?, updated_at = ?
+    WHERE id = ?
+  `);
+
+  for (const row of legacyRows) {
+    update.run(
+      "coding-agent",
+      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      now,
+      row.id,
+    );
   }
 }
 

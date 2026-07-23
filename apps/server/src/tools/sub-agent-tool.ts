@@ -21,7 +21,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
   return {
     name: SUB_AGENT_TOOL_NAME,
     description:
-      "Delegate focused work to a same-profile sub-agent (research, review, planning, debugging). Provide a clear task and optional context. Returns status, summary, and output for you to synthesize for the user. Cannot nest sub-agents. For repo coding work, use bash with coding-delegation instead.",
+      "Delegate focused work to a same-profile sub-agent (research, review, planning, debugging). Provide a clear task and optional context. Returns status, summary, and output for you to synthesize for the user. Cannot nest sub-agents. For repo coding work, use bash with coding-agent instead.",
     parameters: {
       type: "object",
       properties: {

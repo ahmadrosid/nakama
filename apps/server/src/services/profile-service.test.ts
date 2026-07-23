@@ -326,7 +326,7 @@ describe("profile service assignSkill", () => {
     }
   });
 
-  test("blocks coding-delegation until a coding harness is ready", async () => {
+  test("blocks coding-agent until a coding harness is ready", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-assign-skill-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     process.env.PATH = tempConfigDir;
@@ -337,9 +337,9 @@ describe("profile service assignSkill", () => {
     const now = new Date().toISOString();
     await db.upsertSkill({
       id: "skill_coding_delegation",
-      name: "coding-delegation",
+      name: "coding-agent",
       description: "Delegate coding work",
-      sourcePath: "/tmp/coding-delegation",
+      sourcePath: "/tmp/coding-agent",
       hasTool: false,
       disableModelInvocation: false,
       enabled: true,
