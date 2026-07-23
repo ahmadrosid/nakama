@@ -15,11 +15,6 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-function isTokenDebugEnabled(): boolean {
-  const value = process.env.NAKAMA_DEBUG_TOKENS?.trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
 export type ToolTokenEstimate = {
   name: string;
   chars: number;
@@ -196,86 +191,14 @@ function estimateChatOutputTokens(result: ChatCompletionResult): number {
   return total;
 }
 
-function formatTokenDebugSummary(
-  modelId: string,
-  estimate: ChatTokenEstimateBreakdown,
-  recorded: { inputTokens: number; outputTokens: number; source: "provider" | "estimate" },
-): string {
-  const lines = [
-    `[nakama:tokens] summary model=${modelId} recordedInput=${recorded.inputTokens} recordedOutput=${recorded.outputTokens} source=${recorded.source} estimatedInput=${estimate.totalEstimatedInputTokens}`,
-    `  system: ${estimate.systemTokens} tokens (${estimate.systemChars} chars)`,
-  ];
-
-  for (const section of estimate.systemSections.slice(0, 12)) {
-    lines.push(`    - ${section.title}: ${section.tokens} tokens (${section.chars} chars)`);
-  }
-
-  if (estimate.systemSections.length > 12) {
-    lines.push(`    - … ${estimate.systemSections.length - 12} more system sections`);
-  }
-
-  lines.push(
-    `  tools: ${estimate.toolsTokens} tokens (${estimate.toolsChars} chars) across ${estimate.toolsCount} tools`,
-  );
-
-  for (const [index, tool] of estimate.toolsBySize.slice(0, 25).entries()) {
-    lines.push(
-      `    ${String(index + 1).padStart(2, " ")}. ${tool.name}: ${tool.tokens} tokens (desc ${tool.descriptionChars}, params ${tool.parametersChars})`,
-    );
-  }
-
-  if (estimate.toolsBySize.length > 25) {
-    const rest = estimate.toolsBySize.slice(25);
-    const restTokens = rest.reduce((sum, tool) => sum + tool.tokens, 0);
-    lines.push(`    … ${rest.length} more tools totaling ~${restTokens} tokens`);
-  }
-
-  lines.push(
-    `  messages: ${estimate.messagesTokens} tokens across ${estimate.messageCount} messages (${estimate.messagesByRole.user} user / ${estimate.messagesByRole.assistant} assistant / ${estimate.messagesByRole.tool} tool)`,
-  );
-
-  return lines.join("\n");
-}
-
-function dumpChatTokenDebug(
-  modelId: string,
-  input: GenerateChatInput,
-  result: ChatCompletionResult,
-  recorded: { inputTokens: number; outputTokens: number; source: "provider" | "estimate" },
-): void {
-  if (!isTokenDebugEnabled()) {
-    return;
-  }
-
-  const estimate = estimateChatInputBreakdown(input);
-  console.info(formatTokenDebugSummary(modelId, estimate, recorded));
-  console.info(
-    "[nakama:tokens]",
-    JSON.stringify({
-      modelId,
-      estimate,
-      providerUsage: result.usage
-        ? {
-            inputTokens: result.usage.inputTokens,
-            outputTokens: result.usage.outputTokens,
-            totalTokens: result.usage.totalTokens,
-          }
-        : null,
-      recorded,
-    }),
-  );
-}
-
 export function wrapProviderWithUsageTracking(
   provider: ProviderClient,
   tracker: LlmUsageTracker,
   modelId: string,
 ): ProviderClient {
   function recordChat(input: GenerateChatInput, result: ChatCompletionResult): void {
-    const source = result.usage ? "provider" : "estimate";
     const inputTokens = result.usage?.inputTokens ?? estimateChatInputTokens(input);
     const outputTokens = result.usage?.outputTokens ?? estimateChatOutputTokens(result);
-    dumpChatTokenDebug(modelId, input, result, { inputTokens, outputTokens, source });
     tracker.record(modelId, inputTokens, outputTokens);
   }
 
@@ -298,32 +221,6 @@ export function wrapProviderWithUsageTracking(
       const result = await provider.generateText(input);
       const inputTokens = result.usage?.inputTokens ?? estimateTextInputTokens(input);
       const outputTokens = result.usage?.outputTokens ?? estimateTokens(result.content);
-      if (isTokenDebugEnabled()) {
-        console.info(
-          "[nakama:tokens]",
-          JSON.stringify({
-            modelId,
-            kind: "text",
-            estimate: {
-              systemTokens: estimateTokens(input.system),
-              promptTokens: estimateTokens(input.prompt),
-              totalEstimatedInputTokens: estimateTextInputTokens(input),
-            },
-            providerUsage: result.usage
-              ? {
-                  inputTokens: result.usage.inputTokens,
-                  outputTokens: result.usage.outputTokens,
-                  totalTokens: result.usage.totalTokens,
-                }
-              : null,
-            recorded: {
-              inputTokens,
-              outputTokens,
-              source: result.usage ? "provider" : "estimate",
-            },
-          }),
-        );
-      }
       tracker.record(modelId, inputTokens, outputTokens);
       return result;
     },
