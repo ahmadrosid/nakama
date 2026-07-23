@@ -10,7 +10,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## LLM cassette tests (MSW)
 
-For live provider tests: record one real HTTP call, commit the cassette, replay offline thereafter. Use `withMswCassette` from `apps/server/src/tools/llm-msw-cassette.ts`; store cassettes next to the test under `__cassettes__/`. Name live tests `*.llm.test.ts`.
+For live provider tests: record one real HTTP call, commit the cassette, replay offline thereafter. Helper: `apps/server/src/testing/llm-msw-cassette.ts` (`withMswCassette`). Cassettes live in `apps/server/src/testing/cassettes/`. Name live tests `*.llm.test.ts`.
 
 ```bash
 bun test path/to/foo.llm.test.ts                 # replay (default when cassette exists)

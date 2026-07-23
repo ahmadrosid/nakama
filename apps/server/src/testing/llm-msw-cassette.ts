@@ -19,6 +19,9 @@ export type LlmCassette = {
   };
 };
 
+/** Shared cassette root for all server LLM live tests. */
+export const LLM_CASSETTES_DIR = join(import.meta.dir, "cassettes");
+
 const server = setupServer();
 
 function resolveMode(explicit?: LlmCassetteMode): LlmCassetteMode {
@@ -34,7 +37,10 @@ function resolveMode(explicit?: LlmCassetteMode): LlmCassetteMode {
   return process.env.CI ? "replay" : "auto";
 }
 
-export function cassetteFilePath(cassettesDir: string, name: string): string {
+export function cassetteFilePath(
+  name: string,
+  cassettesDir: string = LLM_CASSETTES_DIR,
+): string {
   return join(cassettesDir, `${name.replaceAll("/", "-")}.json`);
 }
 
@@ -63,14 +69,15 @@ export async function withMswCassette<T>(
   name: string,
   fn: () => Promise<T>,
   options: {
-    cassettesDir: string;
+    cassettesDir?: string;
     mode?: LlmCassetteMode;
     /** URL pattern for MSW. Defaults to OpenAI chat completions. */
     url?: string | RegExp;
-  },
+  } = {},
 ): Promise<T> {
   const mode = resolveMode(options.mode);
-  const filePath = cassetteFilePath(options.cassettesDir, name);
+  const cassettesDir = options.cassettesDir ?? LLM_CASSETTES_DIR;
+  const filePath = cassetteFilePath(name, cassettesDir);
   const existing = await loadCassette(filePath);
   const url = options.url ?? "https://api.openai.com/v1/chat/completions";
 

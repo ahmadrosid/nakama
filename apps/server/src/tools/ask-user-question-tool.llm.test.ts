@@ -15,9 +15,8 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
 import { createAskUserQuestionTools } from "./ask-user-question-tool";
-import { cassetteFilePath, loadCassette, withMswCassette } from "./llm-msw-cassette";
+import { cassetteFilePath, loadCassette, withMswCassette } from "../testing/llm-msw-cassette";
 
-const cassettesDir = `${import.meta.dir}/__cassettes__`;
 const cassetteName = "ask-user-question-tool-call";
 
 async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
@@ -45,7 +44,7 @@ async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
 }
 
 test("ask_user_question schema is callable by a real OpenAI model", async () => {
-  const cassettePath = cassetteFilePath(cassettesDir, cassetteName);
+  const cassettePath = cassetteFilePath(cassetteName);
   const existing = await loadCassette(cassettePath);
   const mode = process.env.LLM_VCR_MODE?.trim().toLowerCase();
   const instance = await resolveOpenAiInstance();
@@ -126,5 +125,5 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
 
     const stored = await tool.run(args, { sessionId: "session_llm" });
     expect(stored).toHaveProperty("questionnaire");
-  }, { cassettesDir });
+  });
 });
