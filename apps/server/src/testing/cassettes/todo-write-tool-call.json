@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "name": "todo-write-tool-call",
+  "recordedAt": "2026-07-23T14:47:58.619Z",
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "chatcmpl-E4p0HPcC0ipFVT8VjP1HRh8A4PKRM",
+      "object": "chat.completion",
+      "created": 1784818077,
+      "model": "gpt-4o-mini-2024-07-18",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_26fd0TR8JOmP1B9bOevhWL3u",
+                "type": "function",
+                "function": {
+                  "name": "todo_write",
+                  "arguments": "{\"merge\":false,\"todos\":[{\"id\":\"task_1\",\"content\":\"Research TypeScript enums, including their purpose, syntax, and examples.\",\"status\":\"in_progress\"},{\"id\":\"task_2\",\"content\":\"Draft a blog post outlining the key points about TypeScript enums, including examples and use cases.\",\"status\":\"pending\"},{\"id\":\"task_3\",\"content\":\"Review the draft for clarity, accuracy, and conciseness before publishing.\",\"status\":\"pending\"}]}"
+                }
+              }
+            ],
+            "refusal": null,
+            "annotations": []
+          },
+          "logprobs": null,
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 241,
+        "completion_tokens": 103,
+        "total_tokens": 344,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": "fp_67faaa3b02"
+    }
+  }
+}
