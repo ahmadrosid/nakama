@@ -3,12 +3,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev --port 3004",
-    "build": "vitepress build",
-    "preview": "vitepress preview",
+    "dev": "next dev -p 3004",
+    "build": "next build && bun run generate-mirrors",
+    "generate-mirrors": "bun run scripts/postbuild.ts",
+    "preview": "bunx serve out -p 3004 -c serve.json",
     "screenshots": "./scripts/capture-setup-screenshots.sh"
   },
+  "dependencies": {
+    "fumadocs-core": "^16.0.0",
+    "fumadocs-mdx": "^14.0.0",
+    "fumadocs-ui": "^16.0.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
-    "vitepress": "^1.6.3"
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.0.0"
   }
 }
