@@ -304,7 +304,7 @@ export class NakamaClient {
     baseUrl?: string;
     apiKey?: string;
     providerId?: string;
-    provider?: "ollama";
+    provider?: "ollama" | "openai_compatible";
     hostMode?: "local" | "cloud";
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {

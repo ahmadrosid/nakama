@@ -19,11 +19,12 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
-import { ModelListEditor } from "@/components/ModelListEditor";
 import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
@@ -181,29 +182,38 @@ export function ProviderSetupForm({
                 onHostModeChange={form.handleOllamaHostModeChange}
                 onBaseUrlChange={form.setBaseUrl}
               />
-              <FormField
-                id="ollama-models"
-                label="Models"
+              <BrowsableModelFields
+                fieldId="ollama-models"
+                customModels={form.customModels}
+                disabled={form.busy}
                 density={density}
-                footer={
-                  form.modelsError ? (
-                    <p className="text-sm text-destructive" role="alert">
-                      {form.modelsError}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Enter model ids from your Ollama host (for example{" "}
-                      <span className="font-mono">llama3.2</span>).
-                    </p>
-                  )
+                modelsError={form.modelsError}
+                browseLabel="Browse Ollama"
+                showPricing={false}
+                showThinkingToggle={false}
+                footerHint={
+                  <>
+                    Add models by ID or browse live models from your Ollama host (for example{" "}
+                    <span className="font-mono">llama3.2</span>).
+                  </>
                 }
-              >
-                <ModelListEditor
-                  models={form.customModels}
-                  disabled={form.busy}
-                  onChange={form.setCustomModels}
-                />
-              </FormField>
+                onCustomModelsChange={form.setCustomModels}
+                toModelRow={(row: { id: string; name: string }) => ({
+                  id: row.id,
+                  name: row.name,
+                })}
+                renderBrowse={(onSelect) => (
+                  <RemoteModelsBrowseList
+                    onSelect={onSelect}
+                    className="h-72 rounded-md border border-border"
+                    baseUrl={form.baseUrl}
+                    apiKey={form.apiKey}
+                    provider="ollama"
+                    hostMode={form.ollamaHostMode}
+                    browseLabel="Ollama"
+                  />
+                )}
+              />
             </>
           ) : null}
 

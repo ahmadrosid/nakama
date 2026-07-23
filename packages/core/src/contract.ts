@@ -1147,8 +1147,8 @@ export interface DiscoverModelsRequest {
   baseUrl?: string;
   apiKey?: string;
   providerId?: string;
-  /** When set to `ollama`, discovery uses Ollama-specific fetch (including `/api/tags` fallback). */
-  provider?: "ollama";
+  /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
+  provider?: "ollama" | "openai_compatible";
   hostMode?: OllamaHostMode;
 }
 

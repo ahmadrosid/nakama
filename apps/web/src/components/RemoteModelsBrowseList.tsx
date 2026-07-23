@@ -93,22 +93,20 @@ export function RemoteModelsBrowseList({
   return (
     <ModelBrowseShell
       className={className}
-      isLoading={isLoading || (isFetching && rows.length === 0)}
-      error={
+      isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
+      error={canFetch ? error : null}
+      isEmpty={!canFetch || filtered.length === 0}
+      emptyMessage={
         !canFetch
           ? "Enter a base URL before browsing models."
-          : error
-            ? error instanceof Error
-              ? error.message
-              : String(error)
-            : null
+          : `No models found on this ${browseLabel}.`
       }
-      isEmpty={filtered.length === 0}
-      emptyMessage={`No models found on this ${browseLabel}.`}
       status={
         <div className="flex items-center justify-between gap-2">
           <span>
-            {filtered.length} model{filtered.length === 1 ? "" : "s"} from {browseLabel}
+            {canFetch
+              ? `${filtered.length} model${filtered.length === 1 ? "" : "s"} from ${browseLabel}`
+              : `Browse models from your ${browseLabel}`}
           </span>
           <button
             type="button"

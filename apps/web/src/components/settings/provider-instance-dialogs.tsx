@@ -146,6 +146,12 @@ export function ProviderCompatibleEditDialog({
   editLabel,
   editBaseUrl,
   manageModels,
+  apiKey = "",
+  browseSource = "remote",
+  remoteProvider = "openai_compatible",
+  providerInstanceId,
+  hostMode,
+  browseLabel,
   onOpenChange,
   onDisplayNameChange,
   onBaseUrlChange,
@@ -158,6 +164,12 @@ export function ProviderCompatibleEditDialog({
   editLabel: string;
   editBaseUrl: string;
   manageModels: ModelListRow[];
+  apiKey?: string;
+  browseSource?: "remote" | "models.dev";
+  remoteProvider?: "ollama" | "openai_compatible";
+  providerInstanceId?: string;
+  hostMode?: "local" | "cloud";
+  browseLabel?: string;
   onOpenChange: (open: boolean) => void;
   onDisplayNameChange: (value: string) => void;
   onBaseUrlChange: (value: string) => void;
@@ -176,13 +188,18 @@ export function ProviderCompatibleEditDialog({
       <CustomProviderFields
         displayName={editLabel}
         baseUrl={editBaseUrl}
-        apiKey=""
+        apiKey={apiKey}
         customModels={manageModels}
         disabled={busy}
         showThinkingToggle
         displayNameError={null}
         baseUrlError={null}
         modelsError={null}
+        browseSource={browseSource}
+        remoteProvider={remoteProvider}
+        providerInstanceId={providerInstanceId}
+        hostMode={hostMode}
+        browseLabel={browseLabel}
         onDisplayNameChange={onDisplayNameChange}
         onBaseUrlChange={onBaseUrlChange}
         onCustomModelsChange={onCustomModelsChange}

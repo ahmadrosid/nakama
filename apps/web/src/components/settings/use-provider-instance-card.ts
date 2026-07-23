@@ -236,6 +236,7 @@ export function useProviderInstanceCard({
   return {
     providerType,
     isCompatibleLike,
+    isOllama,
     isOpenRouter,
     isCerebras,
     isCatalogShortlist,

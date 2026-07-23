@@ -3,6 +3,13 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
+import {
+  KeyRoundIcon,
+  ListIcon,
+  PencilIcon,
+  Trash2Icon,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
@@ -15,6 +22,42 @@ import {
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
 import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function ProviderActionButton({
+  label,
+  disabled,
+  destructive,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  destructive?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            disabled={disabled}
+            aria-label={label}
+            className={destructive ? "text-muted-foreground hover:text-destructive" : undefined}
+            onClick={onClick}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function ProviderInstanceCard({
   instance,
@@ -53,34 +96,31 @@ export function ProviderInstanceCard({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1">
         {card.isCompatibleLike ? (
-          <Button type="button" size="sm" variant="outline" onClick={card.openEdit}>
-            Edit
-          </Button>
+          <ProviderActionButton label="Edit" onClick={card.openEdit}>
+            <PencilIcon className="size-3.5" />
+          </ProviderActionButton>
         ) : null}
         {canManage ? (
-          <Button type="button" size="sm" variant="outline" onClick={card.openManage}>
-            Manage
-          </Button>
+          <ProviderActionButton label="Manage models" onClick={card.openManage}>
+            <ListIcon className="size-3.5" />
+          </ProviderActionButton>
         ) : null}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
+        <ProviderActionButton
+          label={instance.hasApiKey ? "Update key" : "Add key"}
           onClick={() => card.setReplaceKeyOpen(true)}
         >
-          {instance.hasApiKey ? "Update key" : "Add key"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
+          <KeyRoundIcon className="size-3.5" />
+        </ProviderActionButton>
+        <ProviderActionButton
+          label="Remove"
+          destructive
           disabled={card.busy}
           onClick={() => void card.handleDelete()}
         >
-          Remove
-        </Button>
+          <Trash2Icon className="size-3.5" />
+        </ProviderActionButton>
       </div>
 
       <ProviderReplaceKeyDialog
@@ -105,6 +145,10 @@ export function ProviderInstanceCard({
           editLabel={card.editLabel}
           editBaseUrl={card.editBaseUrl}
           manageModels={card.editManageModels}
+          providerInstanceId={instance.id}
+          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          hostMode={instance.hostMode ?? undefined}
+          browseLabel={card.isOllama ? "Ollama" : undefined}
           onOpenChange={card.setEditOpen}
           onDisplayNameChange={card.setEditLabel}
           onBaseUrlChange={card.setEditBaseUrl}
@@ -133,6 +177,11 @@ export function ProviderInstanceCard({
               displayNameError={null}
               baseUrlError={null}
               modelsError={null}
+              browseSource="remote"
+              remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+              providerInstanceId={instance.id}
+              hostMode={instance.hostMode ?? undefined}
+              browseLabel={card.isOllama ? "Ollama" : undefined}
               onDisplayNameChange={() => {}}
               onBaseUrlChange={() => {}}
               onCustomModelsChange={card.handleManageModelsChange}

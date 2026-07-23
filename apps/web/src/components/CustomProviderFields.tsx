@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { ModelListEditor, type ModelListRow } from "@/components/ModelListEditor";
+import { ModelsBrowseList } from "@/components/ModelsBrowseList";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
@@ -19,6 +20,15 @@ interface CustomProviderFieldsProps {
   displayNameError?: string | null;
   baseUrlError?: string | null;
   modelsError?: string | null;
+  /**
+   * `remote` fetches models from the provider endpoint via /v1/models/discover.
+   * `models.dev` browses the public models.dev catalog (setup helper for custom endpoints).
+   */
+  browseSource?: "remote" | "models.dev";
+  remoteProvider?: "ollama" | "openai_compatible";
+  providerInstanceId?: string;
+  hostMode?: "local" | "cloud";
+  browseLabel?: string;
   onDisplayNameChange: (value: string) => void;
   onBaseUrlChange: (value: string) => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
@@ -27,6 +37,7 @@ interface CustomProviderFieldsProps {
 export function CustomProviderFields({
   displayName,
   baseUrl,
+  apiKey,
   customModels,
   disabled,
   identityReadOnly = false,
@@ -36,14 +47,22 @@ export function CustomProviderFields({
   displayNameError,
   baseUrlError,
   modelsError,
+  browseSource = "remote",
+  remoteProvider = "openai_compatible",
+  providerInstanceId,
+  hostMode,
+  browseLabel,
   onDisplayNameChange,
   onBaseUrlChange,
   onCustomModelsChange,
 }: CustomProviderFieldsProps) {
   const [isBrowsing, setIsBrowsing] = useState(false);
   const identityDisabled = disabled || identityReadOnly;
+  const resolvedBrowseLabel =
+    browseLabel ??
+    (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
 
-  const handleBrowseSelect = (_provider: string, modelId: string, row: ModelsDevRow) => {
+  const handleModelsDevSelect = (_provider: string, modelId: string, row: ModelsDevRow) => {
     const nextModel = { id: modelId, name: row.modelName };
     if (customModels.some((model) => model.id === nextModel.id)) {
       setIsBrowsing(false);
@@ -51,6 +70,16 @@ export function CustomProviderFields({
     }
 
     onCustomModelsChange([...customModels, nextModel]);
+    setIsBrowsing(false);
+  };
+
+  const handleRemoteSelect = (row: { id: string; name: string }) => {
+    if (customModels.some((model) => model.id === row.id)) {
+      setIsBrowsing(false);
+      return;
+    }
+
+    onCustomModelsChange([...customModels, { id: row.id, name: row.name }]);
     setIsBrowsing(false);
   };
 
@@ -124,15 +153,34 @@ export function CustomProviderFields({
               <p className="text-sm text-destructive" role="alert">
                 {modelsError}
               </p>
-            ) : null
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {browseSource === "remote"
+                  ? `Add models by ID or browse live models from ${resolvedBrowseLabel}.`
+                  : "Add models by ID or browse models.dev."}
+              </p>
+            )
           }
         >
           {isBrowsing ? (
             <div className="space-y-2">
-              <ModelsBrowseList
-                onSelect={handleBrowseSelect}
-                className="h-72 rounded-md border border-border"
-              />
+              {browseSource === "remote" ? (
+                <RemoteModelsBrowseList
+                  onSelect={handleRemoteSelect}
+                  className="h-72 rounded-md border border-border"
+                  providerId={providerInstanceId}
+                  baseUrl={baseUrl}
+                  apiKey={apiKey}
+                  provider={remoteProvider}
+                  hostMode={hostMode}
+                  browseLabel={resolvedBrowseLabel}
+                />
+              ) : (
+                <ModelsBrowseList
+                  onSelect={handleModelsDevSelect}
+                  className="h-72 rounded-md border border-border"
+                />
+              )}
               <div className="flex justify-end">
                 <Button type="button" size="sm" variant="outline" onClick={() => setIsBrowsing(false)}>
                   Back
@@ -140,15 +188,18 @@ export function CustomProviderFields({
               </div>
             </div>
           ) : (
-            <>
-              <ModelListEditor
-                models={customModels}
-                disabled={disabled}
-                showThinkingToggle={showThinkingToggle}
-                onBrowse={() => setIsBrowsing(true)}
-                onChange={onCustomModelsChange}
-              />
-            </>
+            <ModelListEditor
+              models={customModels}
+              disabled={disabled}
+              showThinkingToggle={showThinkingToggle}
+              browseLabel={
+                browseSource === "remote"
+                  ? `Browse ${resolvedBrowseLabel}`
+                  : "Browse models.dev"
+              }
+              onBrowse={() => setIsBrowsing(true)}
+              onChange={onCustomModelsChange}
+            />
           )}
         </FormField>
       ) : null}
