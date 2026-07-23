@@ -78,7 +78,7 @@ Nakama can run:
 - Locally with Bun for development
 - In Docker on your own infrastructure
 
-See [Getting Started](/getting-started) for setup steps.
+See [Quickstart](/quickstart) for setup steps.
 
 ## Typical setup
 

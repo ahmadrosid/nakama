@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vitepress dev --port 3004",
     "build": "vitepress build",
-    "preview": "vitepress preview"
+    "preview": "vitepress preview",
+    "screenshots": "./scripts/capture-setup-screenshots.sh"
   },
   "devDependencies": {
     "vitepress": "^1.6.3"

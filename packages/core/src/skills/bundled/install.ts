@@ -15,10 +15,8 @@ async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
     const oldDir = path.join(skillsRoot, oldName);
     const newDir = path.join(skillsRoot, newName);
 
-    let oldExists = false;
     try {
       await access(oldDir);
-      oldExists = true;
     } catch {
       continue;
     }

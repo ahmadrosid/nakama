@@ -139,7 +139,7 @@ Open **Integrations → WhatsApp** and check the **Reply as** profile. That is t
 
 ## Next steps
 
-- [Getting Started](/getting-started)
+- [Quickstart](/quickstart)
 - [Profiles](/profiles)
 - [Discord](/discord)
 - [Telegram](/telegram)

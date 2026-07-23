@@ -35,3 +35,10 @@
 
   --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #f59e0b 30%, #fbbf24);
 }
+
+.vp-doc img {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  margin: 1rem 0;
+  max-width: 100%;
+}

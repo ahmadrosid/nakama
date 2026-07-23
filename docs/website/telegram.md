@@ -384,7 +384,7 @@ Generate a new pairing code from **Integrations → Telegram** and send it to th
 
 ## Next steps
 
-- [Getting Started](/getting-started)
+- [Quickstart](/quickstart)
 - [Profiles](/profiles)
 - [Discord](/discord)
 - [WhatsApp](/whatsapp)
