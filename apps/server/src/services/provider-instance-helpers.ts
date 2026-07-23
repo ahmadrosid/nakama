@@ -1,9 +1,16 @@
 import {
+  defaultOllamaBaseUrl,
+  defaultOllamaLabel,
   findCustomModel,
+  isOllamaCloudInstance,
   isValidBaseUrl,
   normalizeBaseUrl,
+  ollamaRequiresApiKey,
+  parseOllamaHostMode,
+  resolveOllamaHostMode,
   validateCustomModels,
   validateDisplayName,
+  type OllamaHostMode,
 } from "@nakama/core";
 import type {
   CreateProviderRequest,
@@ -27,6 +34,7 @@ import {
   resolveModel,
   validateOpenCodeGoCustomModels,
   validateCerebrasCustomModels,
+  validateOllamaCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
 
@@ -38,8 +46,12 @@ export function toProviderInstanceSummary(
     id: instance.id,
     type: instance.type,
     label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
-    hasApiKey: Boolean(instance.apiKey.trim()) || instance.type === "openai_compatible",
+    hasApiKey:
+      Boolean(instance.apiKey.trim()) ||
+      instance.type === "openai_compatible" ||
+      (instance.type === "ollama" && !isOllamaCloudInstance(instance)),
     baseUrl: instance.baseUrl ?? null,
+    hostMode: instance.type === "ollama" ? resolveOllamaHostMode(instance) : null,
     ...(instance.customModels?.length ? { customModels: instance.customModels } : {}),
     modelCount,
     createdAt: instance.createdAt,
@@ -90,6 +102,14 @@ export function modelExistsOnInstance(
     return Boolean(getModelById(trimmed)?.provider === "cerebras");
   }
 
+  if (instance.type === "ollama") {
+    if (instance.customModels?.length) {
+      return findCustomModel(instance.customModels, trimmed) !== undefined;
+    }
+
+    return false;
+  }
+
   if (instance.type === "openai_compatible") {
     return isCompatibleModelId(trimmed, instance.customModels);
   }
@@ -128,15 +148,29 @@ export function buildProviderInstanceFromCreateRequest(
   const trimmedKey = request.apiKey.trim();
   const apiKey = trimmedKey;
 
-  if (!apiKey && type !== "openai_compatible") {
+  if (!apiKey && type !== "openai_compatible" && type !== "ollama") {
     throw new Error("API key is required.");
+  }
+
+  if (type === "ollama") {
+    const hostMode = resolveOllamaHostMode({
+      hostMode: request.hostMode,
+      baseUrl: request.baseUrl,
+    });
+
+    if (ollamaRequiresApiKey(hostMode) && !apiKey) {
+      throw new Error("API key is required for Ollama Cloud.");
+    }
   }
 
   const fields = buildProviderFieldsFromRequest(request);
   const rawLabel = request.label?.trim()
     ? validateProviderInstanceLabel(request.label, type)
     : fields.label;
-  const label = normalizeProviderInstanceLabel(type, rawLabel, existing);
+  const label =
+    type === "ollama" && fields.hostMode
+      ? normalizeProviderInstanceLabel(type, rawLabel, existing, { hostMode: fields.hostMode })
+      : normalizeProviderInstanceLabel(type, rawLabel, existing);
 
   return {
     id: createProviderInstanceId(),
@@ -170,6 +204,10 @@ export function applyProviderInstanceUpdate(
     next.baseUrl = normalized;
   }
 
+  if (request.hostMode !== undefined && instance.type === "ollama") {
+    next.hostMode = request.hostMode;
+  }
+
   if (request.customModels !== undefined) {
     if (instance.type === "openai_compatible") {
       next.customModels = validateCustomModels(request.customModels);
@@ -180,6 +218,8 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateOpenRouterCustomModels(request.customModels);
     } else if (instance.type === "cerebras") {
       next.customModels = validateCerebrasCustomModels(request.customModels);
+    } else if (instance.type === "ollama") {
+      next.customModels = validateOllamaCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
     } else if (
@@ -192,13 +232,51 @@ export function applyProviderInstanceUpdate(
     }
   }
 
+  if (next.type === "ollama") {
+    const hostMode = resolveOllamaHostMode(next);
+
+    if (ollamaRequiresApiKey(hostMode) && !next.apiKey.trim()) {
+      throw new Error("API key is required for Ollama Cloud.");
+    }
+  }
+
   return next;
 }
 
 function buildProviderFieldsFromRequest(
   request: CreateProviderRequest,
-): Pick<ProviderInstance, "baseUrl" | "customModels" | "label"> {
+): Pick<ProviderInstance, "baseUrl" | "customModels" | "label" | "hostMode"> {
   const type = request.type;
+
+  if (type === "ollama") {
+    const resolvedHostMode: OllamaHostMode =
+      request.hostMode ??
+      (request.baseUrl?.includes("ollama.com") ? "cloud" : "local");
+    const baseUrl = normalizeBaseUrl(
+      request.baseUrl?.trim() || defaultOllamaBaseUrl(resolvedHostMode),
+    );
+
+    if (!isValidBaseUrl(baseUrl)) {
+      throw new Error("A valid http(s) base URL is required.");
+    }
+
+    const customModels = request.customModels?.length
+      ? validateOllamaCustomModels(request.customModels)
+      : request.model?.trim()
+        ? validateOllamaCustomModels([{ id: request.model.trim(), default: true }])
+        : undefined;
+
+    if (!customModels?.length) {
+      throw new Error("At least one Ollama model is required.");
+    }
+
+    return {
+      baseUrl,
+      hostMode: resolvedHostMode,
+      customModels,
+      label: defaultOllamaLabel(resolvedHostMode),
+    };
+  }
 
   if (type === "opencode_go") {
     let customModels = request.customModels?.length

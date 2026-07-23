@@ -1088,6 +1088,7 @@ export interface ProviderInstanceSummary {
   label: string;
   hasApiKey: boolean;
   baseUrl?: string | null;
+  hostMode?: OllamaHostMode | null;
   customModels?: CustomModelEntry[];
   modelCount: number;
   createdAt: string;
@@ -1104,6 +1105,7 @@ export interface CreateProviderRequest {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1117,6 +1119,7 @@ export interface UpdateProviderRequest {
   label?: string;
   apiKey?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1144,6 +1147,9 @@ export interface DiscoverModelsRequest {
   baseUrl?: string;
   apiKey?: string;
   providerId?: string;
+  /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
+  provider?: "ollama" | "openai_compatible";
+  hostMode?: OllamaHostMode;
 }
 
 export interface ConfigureProviderRequest {
@@ -1152,6 +1158,7 @@ export interface ConfigureProviderRequest {
   model?: string;
   displayName?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1532,8 +1539,11 @@ export type ProviderName =
   | "gemini"
   | "deepseek"
   | "cerebras"
+  | "ollama"
   | "openai_compatible"
   | "opencode_go";
+
+export type OllamaHostMode = "local" | "cloud";
 
 export type GenerateTextFormat = "json" | "text";
 

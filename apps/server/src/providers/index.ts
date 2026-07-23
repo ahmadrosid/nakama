@@ -7,5 +7,7 @@ export * from "./compatible-models";
 export * from "./openai";
 export * from "./openai-compatible";
 export * from "./opencode-go";
+export * from "./ollama";
+export { fetchOllamaModels } from "./ollama/models";
 export * from "./openrouter";
 export * from "./pricing";

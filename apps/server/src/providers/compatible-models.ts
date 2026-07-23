@@ -8,7 +8,6 @@ import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS, getDefaultModel } from "./models";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
-
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_OUTPUT = 8_192;
 
@@ -145,12 +144,13 @@ export function mergeOpenRouterCatalog(
 
 export function customModelsToCatalog(
   entries: CustomModelEntry[],
+  provider: ProviderName = "openai_compatible",
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
       id: entry.id,
       name: entry.name?.trim() || entry.id,
-      provider: "openai_compatible",
+      provider,
       contextWindow: DEFAULT_CONTEXT_WINDOW,
       maxOutputTokens: DEFAULT_MAX_OUTPUT,
     };
@@ -232,6 +232,17 @@ export function getModelsForProviderInstance(
     );
   }
 
+  if (instance.type === "ollama") {
+    const entries = instance.customModels ?? [];
+    return annotate(
+      ensureCurrentModelInCatalog(
+        customModelsToCatalog(entries, "ollama"),
+        currentModel,
+        "ollama",
+      ),
+    );
+  }
+
   if (
     instance.type === "openai" ||
     instance.type === "anthropic" ||
@@ -301,6 +312,26 @@ export function resolveCerebrasDefaultModel(
     catalog[0]?.id ??
     "gpt-oss-120b"
   );
+}
+
+export function resolveOllamaDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = customModelsToCatalog(customModels ?? [], "ollama");
+  const fallback = catalog.find((entry) => entry.default)?.id ?? catalog[0]?.id;
+
+  if (!fallback) {
+    throw new Error("At least one Ollama model is required.");
+  }
+
+  return fallback;
 }
 
 export async function fetchRemoteOpenAIModels(

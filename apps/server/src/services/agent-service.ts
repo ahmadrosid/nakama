@@ -100,9 +100,14 @@ import {
   composeSoulSystemPrompt,
   createId,
   nanoid,
+  defaultOllamaBaseUrl,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
+  ollamaRequiresApiKey,
+  readEnvValue,
+  apiKeyEnvVarForProvider,
+  resolveOllamaHostMode,
   getProfileSoulDir,
   deleteArtifactFile,
   readArtifactFile,
@@ -162,6 +167,7 @@ import {
   createProviderFromActiveConfig,
   createProviderFromSources,
   fetchRemoteOpenAIModels,
+  fetchOllamaModels,
   AVAILABLE_MODELS,
   catalogCustomModelsToCatalog,
   getModelById,
@@ -1516,13 +1522,19 @@ export class AgentService {
       throw new Error("baseUrl or providerId is required.");
     }
 
-    const entries = await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
+    const entries =
+      request.provider === "ollama"
+        ? await fetchOllamaModels(baseUrl, request.apiKey ?? "")
+        : await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
+
+    const probeType = request.provider === "ollama" ? ("ollama" as const) : ("openai_compatible" as const);
     const probeInstance = {
       id: "discover",
-      type: "openai_compatible" as const,
-      label: "Discover",
+      type: probeType,
+      label: probeType === "ollama" ? "Ollama" : "Discover",
       apiKey: request.apiKey ?? "",
       baseUrl,
+      ...(request.hostMode ? { hostMode: request.hostMode } : {}),
       customModels: entries,
       createdAt: new Date(0).toISOString(),
     };
@@ -1533,7 +1545,7 @@ export class AgentService {
       providers: [],
       models,
       catalog: AVAILABLE_MODELS,
-      provider: "openai_compatible",
+      provider: probeType,
       displayName: null,
       customModels: entries,
     };
@@ -1547,6 +1559,46 @@ export class AgentService {
 
     if (!instance) {
       throw new Error("Provider not found.");
+    }
+
+    if (instance.type === "ollama" || instance.type === "openai_compatible") {
+      const hostMode =
+        instance.type === "ollama" ? resolveOllamaHostMode(instance) : undefined;
+      const apiKey =
+        instance.apiKey.trim() ||
+        (instance.type === "ollama"
+          ? readEnvValue(process.env, apiKeyEnvVarForProvider("ollama") ?? "") || ""
+          : "");
+
+      if (instance.type === "ollama" && ollamaRequiresApiKey(hostMode!) && !apiKey.trim()) {
+        throw new Error("Add an API key before discovering Ollama Cloud models.");
+      }
+
+      const baseUrl =
+        instance.baseUrl?.trim() ||
+        (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
+
+      if (!baseUrl) {
+        throw new Error("A base URL is required to discover models.");
+      }
+
+      const entries =
+        instance.type === "ollama"
+          ? await fetchOllamaModels(baseUrl, apiKey)
+          : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+      const remoteInstance = { ...instance, customModels: entries };
+      const models = getModelsForProviderInstance(remoteInstance);
+
+      return {
+        currentProviderId: providerId,
+        providers: [],
+        models,
+        catalog: AVAILABLE_MODELS,
+        provider: instance.type,
+        displayName: instance.label,
+        baseUrl,
+        customModels: entries,
+      };
     }
 
     if (instance.type !== "openai") {
@@ -1775,6 +1827,7 @@ export class AgentService {
       model: request.model,
       label: request.displayName,
       baseUrl: request.baseUrl,
+      hostMode: request.hostMode,
       customModels: request.customModels,
     });
 

@@ -8,6 +8,13 @@ import {
   serializeCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
+import {
+  defaultOllamaBaseUrl,
+  defaultOllamaLabel,
+  ollamaRequiresApiKey,
+  parseOllamaHostMode,
+  resolveOllamaHostMode,
+} from "./ollama-provider-config";
 import type {
   CustomModelEntry,
   ProviderChatOptions,
@@ -36,6 +43,7 @@ export interface ProviderInstance {
   label: string;
   apiKey: string;
   baseUrl?: string;
+  hostMode?: import("./contract").OllamaHostMode;
   customModels?: CustomModelEntry[];
   createdAt: string;
 }
@@ -65,6 +73,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   gemini: "Gemini",
   deepseek: "DeepSeek",
   cerebras: "Cerebras",
+  ollama: "Ollama",
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
 };
@@ -76,7 +85,22 @@ export function createProviderInstanceId(): string {
 export function defaultProviderLabel(
   type: UserProviderName,
   existing: ProviderInstance[],
+  options?: { hostMode?: import("./contract").OllamaHostMode },
 ): string {
+  if (type === "ollama" && options?.hostMode) {
+    const base = defaultOllamaLabel(options.hostMode);
+    const sameMode = existing.filter(
+      (entry) =>
+        entry.type === "ollama" && resolveOllamaHostMode(entry) === options.hostMode,
+    );
+
+    if (sameMode.length === 0) {
+      return base;
+    }
+
+    return `${base} (${sameMode.length + 1})`;
+  }
+
   const base = PROVIDER_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
   const sameType = existing.filter((entry) => entry.type === type);
 
@@ -91,6 +115,7 @@ export function normalizeProviderInstanceLabel(
   type: UserProviderName,
   label: string | undefined,
   existing: ProviderInstance[],
+  options?: { hostMode?: import("./contract").OllamaHostMode },
 ): string {
   const trimmed = label?.trim();
 
@@ -98,7 +123,7 @@ export function normalizeProviderInstanceLabel(
     return trimmed;
   }
 
-  return defaultProviderLabel(type, existing);
+  return defaultProviderLabel(type, existing, options);
 }
 
 export function findProviderInstance(
@@ -130,6 +155,26 @@ export function isProviderConfigured(
 
   if (active.type === "openai_compatible") {
     return Boolean(active.baseUrl?.trim() && active.label.trim());
+  }
+
+  if (active.type === "ollama") {
+    const hostMode = resolveOllamaHostMode(active);
+    const baseUrl = active.baseUrl?.trim() || defaultOllamaBaseUrl(hostMode);
+
+    if (!baseUrl) {
+      return false;
+    }
+
+    if (ollamaRequiresApiKey(hostMode)) {
+      if (active.apiKey.trim()) {
+        return true;
+      }
+
+      const envVar = apiKeyEnvVarForProvider(active.type);
+      return Boolean(envVar && env[envVar]?.trim());
+    }
+
+    return true;
   }
 
   if (active.apiKey.trim()) {
@@ -534,9 +579,11 @@ function loadProvidersFromSections(
       type === "openai_compatible" ||
       type === "openrouter" ||
       type === "cerebras" ||
+      type === "ollama" ||
       type === "opencode_go"
         ? parseCustomModelsJson(values.models_json)
         : undefined;
+    const hostMode = type === "ollama" ? parseOllamaHostMode(values.host_mode) ?? undefined : undefined;
     const createdAt = values.created_at?.trim() || new Date(0).toISOString();
 
     providers.push({
@@ -545,6 +592,7 @@ function loadProvidersFromSections(
       label,
       apiKey,
       ...(baseUrl ? { baseUrl } : {}),
+      ...(hostMode ? { hostMode } : {}),
       ...(customModels ? { customModels } : {}),
       createdAt,
     });
@@ -565,6 +613,10 @@ function buildProviderSectionValues(provider: ProviderInstance): Record<string, 
 
   if (provider.baseUrl?.trim()) {
     values.base_url = normalizeBaseUrl(provider.baseUrl);
+  }
+
+  if (provider.type === "ollama" && provider.hostMode) {
+    values.host_mode = provider.hostMode;
   }
 
   if (provider.customModels?.length) {

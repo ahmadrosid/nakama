@@ -26,7 +26,8 @@ export function seedManageModelRows(
   }));
 }
 
-export function seedOpenRouterManageModelRows(
+/** Seeds OpenRouter / Cerebras (and similar) manage dialogs. */
+export function seedShortlistManageModelRows(
   customModels: CustomModelEntry[] | undefined,
   currentModel?: string | null,
   currentModelName?: string | null,
@@ -55,12 +56,4 @@ export function seedOpenRouterManageModelRows(
   }
 
   return [{ id: "", name: "" }];
-}
-
-export function seedCerebrasManageModelRows(
-  customModels: CustomModelEntry[] | undefined,
-  currentModel?: string | null,
-  currentModelName?: string | null,
-): ModelListRow[] {
-  return seedOpenRouterManageModelRows(customModels, currentModel, currentModelName);
 }

@@ -4,6 +4,13 @@ export const queryKeys = {
   providers: ["providers"] as const,
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,
+  remoteModelDiscovery: (options: {
+    providerId?: string;
+    baseUrl?: string;
+    provider?: string;
+    hostMode?: string;
+    apiKey?: string;
+  }) => ["remoteModelDiscovery", options] as const,
   systemStatus: ["systemStatus"] as const,
   webPublicUrl: ["system", "webPublicUrl"] as const,
   profiles: {

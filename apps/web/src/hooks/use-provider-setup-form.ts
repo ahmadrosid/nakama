@@ -1,10 +1,8 @@
-import type { CreateProviderResponse, ProviderModelOption } from "@nakama/core/contract";
+import type { CreateProviderResponse, OllamaHostMode, ProviderModelOption } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
-import type { CerebrasModelRow } from "@/lib/cerebras-models";
-import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
@@ -13,6 +11,7 @@ import {
   appendOpenRouterModelRow,
   buildCreateProviderRequest,
   defaultModelForProvider,
+  defaultOllamaSetupBaseUrl,
   filterModelsByProvider,
   firstAvailableProviderOption,
   getModelDisplayName,
@@ -72,6 +71,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const [openRouterModelsError, setOpenRouterModelsError] = useState<string | null>(null);
   const [cerebrasModels, setCerebrasModels] = useState<ModelListRow[]>([]);
   const [cerebrasModelsError, setCerebrasModelsError] = useState<string | null>(null);
+  const [ollamaHostMode, setOllamaHostMode] = useState<OllamaHostMode>("local");
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([{ id: "", name: "" }]);
@@ -99,8 +99,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   }, [configuredTypes]);
 
   const filteredModels = useMemo(() => {
-    if (selectedProvider === "openai_compatible") {
-      return modelsFromCustomRows(customModels);
+    if (selectedProvider === "openai_compatible" || selectedProvider === "ollama") {
+      return modelsFromCustomRows(customModels).map((model) =>
+        selectedProvider === "ollama" ? { ...model, provider: "ollama" as const } : model,
+      );
     }
 
     if (selectedProvider === "openrouter") {
@@ -119,6 +121,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     return [...catalogModels, ...extras];
   }, [catalog, selectedProvider, customModels, openRouterModels, cerebrasModels, extraModels]);
 
+  const ollamaApiKeyOptions = useMemo(
+    () => ({ ollamaHostMode }),
+    [ollamaHostMode],
+  );
+
   useEffect(() => {
     if (filteredModels.length === 0) {
       return;
@@ -135,8 +142,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const handleApiKeyBlur = useCallback(() => {
     setApiKeyTouched(true);
-    setApiKeyError(validateApiKeyForProvider(apiKey, selectedProvider));
-  }, [apiKey, selectedProvider]);
+    setApiKeyError(validateApiKeyForProvider(apiKey, selectedProvider, ollamaApiKeyOptions));
+  }, [apiKey, selectedProvider, ollamaApiKeyOptions]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
@@ -147,12 +154,12 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       }
 
       if (apiKeyTouched) {
-        setApiKeyError(validateApiKeyForProvider(value, selectedProvider));
+        setApiKeyError(validateApiKeyForProvider(value, selectedProvider, ollamaApiKeyOptions));
       } else if (apiKeyError) {
         setApiKeyError(null);
       }
     },
-    [apiKeyTouched, apiKeyError, formError, selectedProvider],
+    [apiKeyTouched, apiKeyError, formError, selectedProvider, ollamaApiKeyOptions],
   );
 
   const handleProviderSelect = useCallback(
@@ -171,6 +178,12 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setCerebrasModels([{ id: "", name: "" }]);
       }
 
+      if (provider === "ollama") {
+        setOllamaHostMode("local");
+        setBaseUrl(defaultOllamaSetupBaseUrl("local"));
+        setCustomModels([{ id: "", name: "" }]);
+      }
+
       if (provider !== "openrouter") {
         setOpenRouterModels([]);
         setOpenRouterModelsError(null);
@@ -181,56 +194,19 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setCerebrasModelsError(null);
       }
 
-      if (provider !== "openai_compatible") {
+      if (provider !== "openai_compatible" && provider !== "ollama") {
         setBaseUrl("");
         setDisplayNameError(null);
         setBaseUrlError(null);
         setModelsError(null);
       }
+
+      if (provider === "openai_compatible") {
+        setBaseUrl("");
+        setCustomModels([{ id: "", name: "" }]);
+      }
     },
     [configuredTypes, openRouterModels.length, cerebrasModels.length],
-  );
-
-  const selectCerebrasModel = useCallback(
-    (
-      modelId: string,
-      modelName: string,
-      flags?: {
-        supportsThinking?: boolean;
-        supportsVision?: boolean;
-        inputPerMillionUsd?: number;
-        outputPerMillionUsd?: number;
-      },
-    ) => {
-      setCerebrasModels((current) => {
-        if (current.some((model) => model.id === modelId)) {
-          return current;
-        }
-
-        return [
-          ...current.filter((row) => row.id.trim()),
-          {
-            id: modelId,
-            name: modelName,
-            ...(flags?.supportsThinking !== undefined
-              ? { supportsThinking: flags.supportsThinking }
-              : {}),
-            ...(flags?.supportsVision !== undefined
-              ? { supportsVision: flags.supportsVision }
-              : {}),
-            ...(flags?.inputPerMillionUsd !== undefined
-              ? { inputPerMillionUsd: flags.inputPerMillionUsd }
-              : {}),
-            ...(flags?.outputPerMillionUsd !== undefined
-              ? { outputPerMillionUsd: flags.outputPerMillionUsd }
-              : {}),
-          },
-        ];
-      });
-      setSelectedModel(modelId);
-      setCerebrasModelsError(null);
-    },
-    [],
   );
 
   const selectOpenRouterModel = useCallback(
@@ -315,34 +291,26 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     [configuredTypes, openCodeZenConfigured, handleProviderSelect, selectOpenRouterModel],
   );
 
-  const handleCerebrasBrowseSelect = useCallback(
-    (row: CerebrasModelRow) => {
-      selectCerebrasModel(row.id, row.name, {
-        supportsThinking: row.reasoning,
-        supportsVision: row.vision,
-        inputPerMillionUsd: row.inputPerMillionUsd,
-        outputPerMillionUsd: row.outputPerMillionUsd,
-      });
-    },
-    [selectCerebrasModel],
-  );
-
-  const handleOpenRouterBrowseSelect = useCallback(
-    (row: OpenRouterModelRow) => {
-      selectOpenRouterModel(row.id, row.name, {
-        inputPerMillionUsd: row.inputPerMillionUsd,
-        outputPerMillionUsd: row.outputPerMillionUsd,
-      });
-    },
-    [selectOpenRouterModel],
-  );
-
   const { onSuccess } = options;
 
   const handleCerebrasModelsChange = useCallback((rows: ModelListRow[]) => {
     setCerebrasModels(rows);
     setCerebrasModelsError(null);
   }, []);
+
+  const handleOllamaHostModeChange = useCallback(
+    (hostMode: OllamaHostMode) => {
+      setOllamaHostMode(hostMode);
+      if (apiKeyTouched) {
+        setApiKeyError(
+          validateApiKeyForProvider(apiKey, "ollama", { ollamaHostMode: hostMode }),
+        );
+      } else {
+        setApiKeyError(null);
+      }
+    },
+    [apiKey, apiKeyTouched],
+  );
 
   const handleOpenRouterModelsChange = useCallback((rows: ModelListRow[]) => {
     setOpenRouterModels(rows);
@@ -354,7 +322,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       event.preventDefault();
 
       const trimmedKey = apiKey.trim();
-      const nextApiKeyError = validateApiKeyForProvider(trimmedKey, selectedProvider);
+      const nextApiKeyError = validateApiKeyForProvider(
+        trimmedKey,
+        selectedProvider,
+        ollamaApiKeyOptions,
+      );
       const nextOpenRouterModelsError =
         selectedProvider === "openrouter"
           ? validateOpenRouterModelsInput(openRouterModels)
@@ -368,9 +340,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
           ? validateDisplayNameInput(displayName)
           : null;
       const nextBaseUrlError =
-        selectedProvider === "openai_compatible" ? validateBaseUrlInput(baseUrl) : null;
+        selectedProvider === "openai_compatible" || selectedProvider === "ollama"
+          ? validateBaseUrlInput(baseUrl)
+          : null;
       const nextModelsError =
-        selectedProvider === "openai_compatible"
+        selectedProvider === "openai_compatible" || selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
           : null;
 
@@ -401,7 +375,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       }
 
       if (nextBaseUrlError) {
-        document.getElementById("provider-base-url")?.focus();
+        document.getElementById(
+          selectedProvider === "ollama" ? "ollama-base-url" : "provider-base-url",
+        )?.focus();
         return;
       }
 
@@ -419,7 +395,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
           : selectedProvider === "cerebras"
             ? resolveCerebrasSetupModel(cerebrasModels, selectedModel)
-          : selectedModel;
+            : selectedProvider === "ollama"
+              ? resolveOpenRouterSetupModel(customModels, selectedModel)
+              : selectedModel;
 
       setBusy(true);
       setFormError(null);
@@ -432,22 +410,23 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
             model: modelToSave || undefined,
             displayName,
             baseUrl,
+            hostMode: selectedProvider === "ollama" ? ollamaHostMode : undefined,
             customModels:
-              selectedProvider === "openai_compatible"
+              selectedProvider === "openai_compatible" || selectedProvider === "ollama"
                 ? normalizeModelListRows(customModels)
                 : selectedProvider === "openrouter"
                   ? normalizeModelListRows(openRouterModels)
                   : selectedProvider === "cerebras"
                     ? normalizeModelListRows(cerebrasModels)
-                  : selectedProvider === "opencode_go" && modelToSave
-                    ? normalizeModelListRows([
-                        {
-                          id: modelToSave,
-                          name: getModelDisplayName(filteredModels, modelToSave),
-                          default: true,
-                        },
-                      ])
-                    : undefined,
+                    : selectedProvider === "opencode_go" && modelToSave
+                      ? normalizeModelListRows([
+                          {
+                            id: modelToSave,
+                            name: getModelDisplayName(filteredModels, modelToSave),
+                            default: true,
+                          },
+                        ])
+                      : undefined,
           }),
         );
         setApiKey("");
@@ -455,6 +434,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setShowApiKey(false);
         setOpenRouterModels([]);
         setCerebrasModels([]);
+        setCustomModels([{ id: "", name: "" }]);
         onSuccess?.(result);
       } catch (err) {
         setFormError(formatError(err));
@@ -468,6 +448,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       baseUrl,
       openRouterModels,
       cerebrasModels,
+      ollamaHostMode,
+      ollamaApiKeyOptions,
       customModels,
       displayName,
       selectedModel,
@@ -492,6 +474,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     openRouterModelsError,
     cerebrasModels,
     cerebrasModelsError,
+    ollamaHostMode,
     displayName,
     baseUrl,
     customModels,
@@ -508,12 +491,11 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     setCustomModels,
     handleOpenRouterModelsChange,
     handleCerebrasModelsChange,
+    handleOllamaHostModeChange,
     handleApiKeyBlur,
     handleApiKeyChange,
     handleProviderSelect,
     handleBrowseSelect,
-    handleOpenRouterBrowseSelect,
-    handleCerebrasBrowseSelect,
     handleSubmit,
     formatSuccessMessage: (result: CreateProviderResponse) =>
       `${result.provider.label} connected with ${getModelDisplayName(catalog, result.initialModel)}.`,

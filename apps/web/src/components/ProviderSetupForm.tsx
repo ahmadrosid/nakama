@@ -19,9 +19,12 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
+import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
@@ -29,6 +32,7 @@ import {
   type SelectedProvider,
   PROVIDER_OPTIONS,
 } from "@/lib/models";
+import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 
 interface ProviderSetupFormProps {
   submitLabel?: string;
@@ -45,6 +49,10 @@ export function ProviderSetupForm({
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
+  const apiKeyOptional =
+    form.selectedProvider === "openai_compatible" ||
+    (form.selectedProvider === "ollama" && !ollamaKeyRequired);
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
@@ -93,7 +101,7 @@ export function ProviderSetupForm({
         <>
           <FormField
             id="api-key"
-            label={form.selectedProvider === "openai_compatible" ? "API key (optional)" : "API key"}
+            label={apiKeyOptional ? "API key (optional)" : "API key"}
             density={density}
             footer={
               form.apiKeyError ? (
@@ -163,6 +171,52 @@ export function ProviderSetupForm({
             />
           ) : null}
 
+          {form.selectedProvider === "ollama" ? (
+            <>
+              <OllamaProviderSetupFields
+                hostMode={form.ollamaHostMode}
+                baseUrl={form.baseUrl}
+                disabled={form.busy}
+                density={density}
+                baseUrlError={form.baseUrlError}
+                onHostModeChange={form.handleOllamaHostModeChange}
+                onBaseUrlChange={form.setBaseUrl}
+              />
+              <BrowsableModelFields
+                fieldId="ollama-models"
+                customModels={form.customModels}
+                disabled={form.busy}
+                density={density}
+                modelsError={form.modelsError}
+                browseLabel="Browse Ollama"
+                showPricing={false}
+                showThinkingToggle={false}
+                footerHint={
+                  <>
+                    Add models by ID or browse live models from your Ollama host (for example{" "}
+                    <span className="font-mono">llama3.2</span>).
+                  </>
+                }
+                onCustomModelsChange={form.setCustomModels}
+                toModelRow={(row: { id: string; name: string }) => ({
+                  id: row.id,
+                  name: row.name,
+                })}
+                renderBrowse={(onSelect) => (
+                  <RemoteModelsBrowseList
+                    onSelect={onSelect}
+                    className="h-72 rounded-md border border-border"
+                    baseUrl={form.baseUrl}
+                    apiKey={form.apiKey}
+                    provider="ollama"
+                    hostMode={form.ollamaHostMode}
+                    browseLabel="Ollama"
+                  />
+                )}
+              />
+            </>
+          ) : null}
+
           {form.selectedProvider === "cerebras" ? (
             <CerebrasProviderModelFields
               customModels={form.cerebrasModels}
@@ -175,6 +229,7 @@ export function ProviderSetupForm({
 
           {form.selectedProvider !== "openrouter" &&
           form.selectedProvider !== "cerebras" &&
+          form.selectedProvider !== "ollama" &&
           form.selectedProvider !== "openai_compatible" ? (
             <FormField id="model" label="Model" density={density}>
               <Select
@@ -208,7 +263,7 @@ export function ProviderSetupForm({
               type="submit"
               disabled={
                 form.busy ||
-                (form.selectedProvider !== "openai_compatible" && !form.apiKey.trim())
+                (!apiKeyOptional && !form.apiKey.trim())
               }
             >
               {form.busy ? (
