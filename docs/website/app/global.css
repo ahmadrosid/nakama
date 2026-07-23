@@ -10,10 +10,36 @@
 
 .dark {
   --color-fd-primary: #f59e0b;
-  --color-fd-background: #0a0a0b;
+  --color-fd-background: #000000;
   --color-fd-card: #111113;
   --color-fd-muted: #18181b;
   --color-fd-border: #27272a;
+}
+
+/* Landing page — Fumadocs-inspired dark / gold */
+.landing {
+  --landing-brand: #fff383;
+  --landing-brand-strong: #fbbf24;
+  --landing-orange: #fc7744;
+  --landing-fg: #e4e2d0;
+  color: var(--landing-fg);
+  background: #000;
+}
+
+.landing-header {
+  background: color-mix(in oklab, #000 72%, transparent);
+}
+
+.landing-accent {
+  color: var(--landing-brand);
+}
+
+.landing-section-title {
+  color: var(--landing-brand);
+}
+
+.landing-lede .landing-accent {
+  color: var(--landing-brand);
 }
 
 .prose img {
@@ -23,32 +49,16 @@
   max-width: 100%;
 }
 
-.hero-gradient {
-  background: linear-gradient(120deg, #d97706 30%, #fbbf24);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.dark .hero-gradient {
-  background: linear-gradient(120deg, #f59e0b 30%, #fbbf24);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 .hero-section {
-  background:
-    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(217, 119, 6, 0.14), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 0% 50%, rgba(251, 191, 36, 0.08), transparent),
-    radial-gradient(ellipse 40% 35% at 100% 20%, rgba(217, 119, 6, 0.06), transparent);
+  background: #000;
 }
 
-.dark .hero-section {
+.hero-frame {
   background:
-    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(245, 158, 11, 0.16), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 0% 50%, rgba(251, 191, 36, 0.08), transparent),
-    radial-gradient(ellipse 40% 35% at 100% 20%, rgba(245, 158, 11, 0.08), transparent);
+    radial-gradient(ellipse 70% 60% at 78% 42%, rgba(252, 119, 68, 0.28), transparent 58%),
+    radial-gradient(ellipse 55% 50% at 18% 8%, rgba(90, 100, 40, 0.22), transparent 52%),
+    radial-gradient(ellipse 40% 35% at 55% 0%, rgba(255, 243, 131, 0.08), transparent 50%),
+    #090908;
 }
 
 .hero-glow::before,
@@ -56,86 +66,103 @@
   content: '';
   position: absolute;
   border-radius: 9999px;
-  filter: blur(80px);
-  opacity: 0.45;
+  filter: blur(70px);
+  opacity: 0.55;
 }
 
 .hero-glow::before {
-  top: -6rem;
-  left: 50%;
-  width: min(42rem, 90vw);
-  height: 16rem;
-  transform: translateX(-50%);
-  background: rgba(217, 119, 6, 0.22);
+  top: 10%;
+  right: 5%;
+  width: min(26rem, 55vw);
+  height: min(26rem, 55vw);
+  background: rgba(252, 119, 68, 0.4);
 }
 
 .hero-glow::after {
-  right: -8rem;
-  bottom: 2rem;
-  width: 20rem;
-  height: 20rem;
-  background: rgba(251, 191, 36, 0.12);
+  top: -10%;
+  left: -5%;
+  width: 18rem;
+  height: 18rem;
+  background: rgba(120, 130, 50, 0.18);
 }
 
-.dark .hero-glow::before {
-  background: rgba(245, 158, 11, 0.18);
-}
-
-.dark .hero-glow::after {
-  background: rgba(251, 191, 36, 0.1);
-}
-
-.hero-grid {
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    color-mix(in oklab, var(--color-fd-border) 70%, transparent) 1px,
-    transparent 0
-  );
-  background-size: 24px 24px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 85%);
+.hero-noise {
   opacity: 0.35;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
-.hero-title {
-  text-shadow: 0 0 40px rgba(217, 119, 6, 0.15);
+.hero-orb {
+  top: 8%;
+  right: -6%;
+  width: min(28rem, 70vw);
+  height: min(28rem, 70vw);
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 42% 38%, rgba(255, 210, 120, 0.95) 0%, transparent 28%),
+    radial-gradient(circle at 55% 55%, rgba(252, 119, 68, 0.95) 0%, transparent 48%),
+    radial-gradient(circle at 50% 50%, rgba(160, 40, 10, 0.7) 0%, transparent 62%);
+  mask-image: radial-gradient(
+    circle,
+    black 0%,
+    black 22%,
+    rgba(0, 0, 0, 0.75) 38%,
+    rgba(0, 0, 0, 0.35) 55%,
+    transparent 72%
+  );
+  -webkit-mask-image: radial-gradient(
+    circle,
+    black 0%,
+    black 22%,
+    rgba(0, 0, 0, 0.75) 38%,
+    rgba(0, 0, 0, 0.35) 55%,
+    transparent 72%
+  );
 }
 
-.dark .hero-title {
-  text-shadow: 0 0 48px rgba(245, 158, 11, 0.2);
+.hero-halftone {
+  background-image: radial-gradient(
+    circle,
+    rgba(252, 119, 68, 0.85) 1.15px,
+    transparent 1.3px
+  );
+  background-size: 6px 6px;
+  mask-image: radial-gradient(circle at 82% 38%, black 0%, black 18%, transparent 55%);
+  -webkit-mask-image: radial-gradient(circle at 82% 38%, black 0%, black 18%, transparent 55%);
+  opacity: 0.7;
+  mix-blend-mode: screen;
 }
 
 .hero-cta-primary {
-  border-radius: 0.625rem;
-  background: var(--color-fd-primary);
-  padding: 0.625rem 1.25rem;
+  border-radius: 9999px;
+  background: var(--landing-brand);
+  padding: 0.75rem 1.35rem;
   font-size: 0.875rem;
-  font-weight: 500;
-  color: white;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 8px 24px -6px color-mix(in oklab, var(--color-fd-primary) 55%, transparent);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #000;
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease,
-    opacity 0.2s ease;
+    background-color 0.2s ease;
 }
 
 .hero-cta-primary:hover {
+  background: #fff7c8;
   transform: translateY(-1px);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.08),
-    0 12px 32px -8px color-mix(in oklab, var(--color-fd-primary) 60%, transparent);
 }
 
 .hero-cta-secondary {
   display: inline-flex;
   align-items: center;
-  border-radius: 0.625rem;
-  border: 1px solid var(--color-fd-border);
-  background: color-mix(in oklab, var(--color-fd-card) 80%, transparent);
-  padding: 0.625rem 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.75rem 1.35rem;
   font-size: 0.875rem;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #fff;
   backdrop-filter: blur(8px);
   transition:
     border-color 0.2s ease,
@@ -144,8 +171,8 @@
 }
 
 .hero-cta-secondary:hover {
-  border-color: color-mix(in oklab, var(--color-fd-primary) 30%, var(--color-fd-border));
-  background: var(--color-fd-muted);
+  border-color: color-mix(in oklab, var(--landing-brand) 40%, rgba(255, 255, 255, 0.2));
+  background: rgba(255, 255, 255, 0.06);
   transform: translateY(-1px);
 }
 
@@ -157,15 +184,7 @@
 }
 
 .feature-card:hover {
-  border-color: color-mix(in oklab, var(--color-fd-primary) 35%, var(--color-fd-border));
-  box-shadow:
-    0 4px 24px -4px rgba(0, 0, 0, 0.08),
-    0 0 0 1px color-mix(in oklab, var(--color-fd-primary) 12%, transparent);
+  border-color: color-mix(in oklab, var(--landing-brand) 28%, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 12px 40px -16px rgba(252, 119, 68, 0.25);
   transform: translateY(-2px);
-}
-
-.dark .feature-card:hover {
-  box-shadow:
-    0 8px 32px -8px rgba(0, 0, 0, 0.45),
-    0 0 0 1px color-mix(in oklab, var(--color-fd-primary) 20%, transparent);
 }
