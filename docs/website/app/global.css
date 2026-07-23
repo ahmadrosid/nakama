@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@theme {
+  --color-fd-primary: #d97706;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+.dark {
+  --color-fd-primary: #f59e0b;
+  --color-fd-background: #0a0a0b;
+  --color-fd-card: #111113;
+  --color-fd-muted: #18181b;
+  --color-fd-border: #27272a;
+}
+
+.prose img {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 8px;
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+.hero-gradient {
+  background: linear-gradient(120deg, #d97706 30%, #fbbf24);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark .hero-gradient {
+  background: linear-gradient(120deg, #f59e0b 30%, #fbbf24);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero-section {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(217, 119, 6, 0.14), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 0% 50%, rgba(251, 191, 36, 0.08), transparent),
+    radial-gradient(ellipse 40% 35% at 100% 20%, rgba(217, 119, 6, 0.06), transparent);
+}
+
+.dark .hero-section {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(245, 158, 11, 0.16), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 0% 50%, rgba(251, 191, 36, 0.08), transparent),
+    radial-gradient(ellipse 40% 35% at 100% 20%, rgba(245, 158, 11, 0.08), transparent);
+}
+
+.hero-glow::before,
+.hero-glow::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.45;
+}
+
+.hero-glow::before {
+  top: -6rem;
+  left: 50%;
+  width: min(42rem, 90vw);
+  height: 16rem;
+  transform: translateX(-50%);
+  background: rgba(217, 119, 6, 0.22);
+}
+
+.hero-glow::after {
+  right: -8rem;
+  bottom: 2rem;
+  width: 20rem;
+  height: 20rem;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.dark .hero-glow::before {
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.dark .hero-glow::after {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.hero-grid {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in oklab, var(--color-fd-border) 70%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 85%);
+  opacity: 0.35;
+}
+
+.hero-title {
+  text-shadow: 0 0 40px rgba(217, 119, 6, 0.15);
+}
+
+.dark .hero-title {
+  text-shadow: 0 0 48px rgba(245, 158, 11, 0.2);
+}
+
+.hero-cta-primary {
+  border-radius: 0.625rem;
+  background: var(--color-fd-primary);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: white;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 8px 24px -6px color-mix(in oklab, var(--color-fd-primary) 55%, transparent);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.hero-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.08),
+    0 12px 32px -8px color-mix(in oklab, var(--color-fd-primary) 60%, transparent);
+}
+
+.hero-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-card) 80%, transparent);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.hero-cta-secondary:hover {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 30%, var(--color-fd-border));
+  background: var(--color-fd-muted);
+  transform: translateY(-1px);
+}
+
+.feature-card {
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.feature-card:hover {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 35%, var(--color-fd-border));
+  box-shadow:
+    0 4px 24px -4px rgba(0, 0, 0, 0.08),
+    0 0 0 1px color-mix(in oklab, var(--color-fd-primary) 12%, transparent);
+  transform: translateY(-2px);
+}
+
+.dark .feature-card:hover {
+  box-shadow:
+    0 8px 32px -8px rgba(0, 0, 0, 0.45),
+    0 0 0 1px color-mix(in oklab, var(--color-fd-primary) 20%, transparent);
+}

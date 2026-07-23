@@ -1,0 +1,30 @@
+{
+  "pages": [
+    "---Start here---",
+    "docs",
+    "quickstart",
+    "overview",
+    "first-time-setup",
+    "providers",
+    "---Deploy---",
+    "docker",
+    "backup-restore",
+    "---Channels---",
+    "cli",
+    "telegram",
+    "whatsapp",
+    "discord",
+    "---Concepts---",
+    "multi-tenancy",
+    "profiles",
+    "agent-prompt",
+    "---Extend---",
+    "builtin-tools",
+    "skills",
+    "integrations",
+    "coding-agent",
+    "agent-browser",
+    "mcp",
+    "composio"
+  ]
+}
