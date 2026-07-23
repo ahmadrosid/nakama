@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "name": "ask-user-question-tool-call",
+  "recordedAt": "2026-07-23T14:32:26.609Z",
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "chatcmpl-E4olFDxkusv4VN1Mb7t1Gfzc2hUqj",
+      "object": "chat.completion",
+      "created": 1784817145,
+      "model": "gpt-4o-mini-2024-07-18",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_SqUd6XHTXdIpFAokPwbuzpXi",
+                "type": "function",
+                "function": {
+                  "name": "ask_user_question",
+                  "arguments": "{\"title\":\"Timezone Selection\",\"questions\":[{\"prompt\":\"Please select your timezone:\",\"choices\":[\"UTC-5:00 (Eastern Time)\",\"UTC-6:00 (Central Time)\",\"UTC-7:00 (Mountain Time)\",\"UTC-8:00 (Pacific Time)\"]}]}"
+                }
+              }
+            ],
+            "refusal": null,
+            "annotations": []
+          },
+          "logprobs": null,
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 137,
+        "completion_tokens": 71,
+        "total_tokens": 208,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "audio_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "audio_tokens": 0,
+          "accepted_prediction_tokens": 0,
+          "rejected_prediction_tokens": 0
+        }
+      },
+      "service_tier": "default",
+      "system_fingerprint": "fp_db286bd4bf"
+    }
+  }
+}
