@@ -77,4 +77,4 @@ So the split is:
 
 - [Profiles](/profiles) — how to model bots inside an organization
 - [Builtin tools](/builtin-tools) — how profile capabilities are controlled
-- [Getting Started](/getting-started) — setup flow from zero
+- [Quickstart](/quickstart) — setup flow from zero

@@ -26,6 +26,6 @@ Common examples:
 
 ## Related docs
 
-- [Getting Started](/getting-started)
+- [Quickstart](/quickstart)
 - [Overview](/overview)
 - [Profiles](/profiles)

@@ -1,0 +1,54 @@
+# Providers
+
+This page covers LLM provider setup in Nakama — API keys, supported backends, and where settings are stored.
+
+## Configure a provider
+
+1. Open **Settings** in the Nakama dashboard
+2. Go to **LLM providers**
+3. Add a provider and paste your API key
+4. Browse or enter models for that provider
+5. Assign a model to each profile that should use it
+
+On first run, Nakama can also prompt for a provider during the setup wizard. See [First-time setup](/first-time-setup).
+
+Settings are saved in `~/.nakama/config.ini` (or under `NAKAMA_CONFIG_DIR` when set).
+
+## Supported providers
+
+Nakama supports these built-in provider types:
+
+| Provider | Notes |
+|---|---|
+| OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes) |
+| Anthropic | Claude models |
+| OpenRouter | Route to many models through one API key |
+| Gemini | Google Gemini models |
+| DeepSeek | DeepSeek models |
+| Cerebras | Cerebras models |
+| Fireworks | Fireworks AI models |
+| Ollama | Local or Ollama Cloud; multiple instances allowed |
+| OpenCode Go | OpenCode Go endpoint |
+| Custom (OpenAI-compatible) | Any OpenAI-compatible API; multiple instances allowed |
+
+Most built-in types allow one configured instance each. **Ollama** and **Custom (OpenAI-compatible)** can be added multiple times (for example local Ollama plus a remote compatible endpoint).
+
+## Provider-specific features
+
+Some capabilities depend on the active provider:
+
+- **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter
+- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model**
+- **Coding agent gateway** — routes Claude Code or Codex through your Nakama server; see [Coding agent](/coding-agent)
+
+## Per-profile models
+
+Each profile selects its own model from the configured providers. Two profiles in the same org can use different providers or models.
+
+Platform admins manage provider credentials globally. Org members use the models assigned to their profiles.
+
+## Next steps
+
+- [First-time setup](/first-time-setup) — complete the setup wizard
+- [Profiles](/profiles) — assign models and tools per bot
+- [Builtin tools](/builtin-tools) — provider-dependent tool availability

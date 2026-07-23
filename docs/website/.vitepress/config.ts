@@ -12,7 +12,13 @@ const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
 
 const pageDescriptions: Record<string, string> = {
   'index.md': 'Nakama is AI agents that work with your team — with profiles, tools, channels, multi-tenant workspaces, and managed hosting at getnakama.cloud.',
-  'getting-started.md': 'Install Nakama with Bun or Docker, use managed hosting at getnakama.cloud, and complete first-time setup.',
+  'docs/index.md': 'Documentation hub for Nakama — quickstart, deployment, concepts, channels, and reference.',
+  'quickstart.md': 'Install Nakama with Bun, Docker, or managed hosting and send your first chat message.',
+  'getting-started.md': 'Redirects to Quickstart — install Nakama and complete first-time setup.',
+  'first-time-setup.md': 'Complete Nakama setup wizard: admin account, organization, provider, and profiles.',
+  'providers.md': 'Configure LLM providers, API keys, and models in Nakama Settings.',
+  'docker.md': 'Run Nakama in a single Docker container with persistent data volumes.',
+  'backup-restore.md': 'Export and restore your Nakama data root with dashboard ZIP backup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, channels, and deployment options including managed hosting.',
   'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
   'profiles.md': 'See how Nakama profiles define bot behavior, soul files, memory, tools, and model selection.',
@@ -31,7 +37,13 @@ const pageDescriptions: Record<string, string> = {
 
 const pageTitles: Record<string, string> = {
   'index.md': 'Nakama',
+  'docs/index.md': 'Documentation',
+  'quickstart.md': 'Quickstart',
   'getting-started.md': 'Getting Started',
+  'first-time-setup.md': 'First-time setup',
+  'providers.md': 'Providers',
+  'docker.md': 'Docker',
+  'backup-restore.md': 'Backup and restore',
   'overview.md': 'Overview',
   'multi-tenancy.md': 'Multi-tenancy',
   'profiles.md': 'Profiles',
@@ -94,8 +106,35 @@ function buildLlmsTxt(pages: string[]) {
   const topicRoutes = [
     {
       topics:
-        "install, run locally, Docker, managed hosting, Nakama Cloud, getnakama.cloud, first-time setup, backup, restore, dev server",
-      page: "getting-started.md",
+        "install, run locally, dev server, first chat, quickstart, bun install, dev:web",
+      page: "quickstart.md",
+    },
+    {
+      topics:
+        "Docker, docker run, container, production deploy, docker-build, NAKAMA_CONFIG_DIR volume",
+      page: "docker.md",
+    },
+    {
+      topics: "backup, restore, export zip, import zip, data root, NAKAMA_CONFIG_DIR",
+      page: "backup-restore.md",
+    },
+    {
+      topics:
+        "first-time setup, setup wizard, admin account, first organization, onboarding",
+      page: "first-time-setup.md",
+    },
+    {
+      topics:
+        "LLM provider, API key, OpenAI, Anthropic, OpenRouter, Gemini, Ollama, Fireworks, model setup, config.ini",
+      page: "providers.md",
+    },
+    {
+      topics: "documentation hub, docs index, all pages",
+      page: "docs/index.md",
+    },
+    {
+      topics: "getting started (legacy URL)",
+      page: "quickstart.md",
     },
     {
       topics: "connect Telegram, Telegram bot, pairing, BotFather, dev:telegram, group chat",
@@ -161,16 +200,38 @@ function buildLlmsTxt(pages: string[]) {
 
   const docSections = [
     {
-      heading: 'Install and channels',
-      pages: ['getting-started.md', 'telegram.md', 'whatsapp.md', 'discord.md'] as const,
+      heading: 'Start here',
+      pages: [
+        'docs/index.md',
+        'quickstart.md',
+        'overview.md',
+        'first-time-setup.md',
+        'providers.md',
+      ] as const,
+    },
+    {
+      heading: 'Deploy',
+      pages: ['docker.md', 'backup-restore.md'] as const,
+    },
+    {
+      heading: 'Channels',
+      pages: ['telegram.md', 'whatsapp.md', 'discord.md'] as const,
     },
     {
       heading: 'Concepts',
-      pages: ['index.md', 'overview.md', 'multi-tenancy.md', 'profiles.md', 'agent-prompt.md'] as const,
+      pages: ['index.md', 'multi-tenancy.md', 'profiles.md', 'agent-prompt.md'] as const,
     },
     {
-      heading: 'Operations',
-      pages: ['builtin-tools.md', 'skills.md', 'integrations.md', 'coding-agent.md', 'agent-browser.md', 'mcp.md', 'composio.md'] as const,
+      heading: 'Extend',
+      pages: [
+        'builtin-tools.md',
+        'skills.md',
+        'integrations.md',
+        'coding-agent.md',
+        'agent-browser.md',
+        'mcp.md',
+        'composio.md',
+      ] as const,
     },
   ] as const
 
@@ -242,8 +303,7 @@ export default defineConfig({
     const description = getPageDescription(pageData.relativePath)
     const canonicalUrl = getCanonicalUrl(pageData.relativePath)
     const markdownUrl = getMarkdownUrl(pageData.relativePath)
-
-    return [
+    const head: Array<[string, Record<string, string>] | [string, Record<string, string>, string]> = [
       ['link', { rel: 'canonical', href: canonicalUrl }],
       ['link', { rel: 'alternate', type: 'text/markdown', href: markdownUrl }],
       ['meta', { property: 'og:type', content: pageData.relativePath === 'index.md' ? 'website' : 'article' }],
@@ -259,6 +319,13 @@ export default defineConfig({
       ['meta', { name: 'author', content: `${AUTHOR_NAME}, ${AUTHOR_ROLE}` }],
       ['script', { type: 'application/ld+json' }, buildJsonLd(pageData.relativePath, title, description)],
     ]
+
+    if (pageData.relativePath === 'getting-started.md') {
+      head.push(['meta', { 'http-equiv': 'refresh', content: `0;url=${SITE_URL}/quickstart` }])
+      head[0] = ['link', { rel: 'canonical', href: `${SITE_URL}/quickstart` }]
+    }
+
+    return head
   },
   async buildEnd(siteConfig) {
     const pages = [...siteConfig.pages].sort()
@@ -282,14 +349,30 @@ export default defineConfig({
       alt: 'Nakama logo',
     },
     nav: [
-      { text: 'Docs', link: '/getting-started' },
+      { text: 'Docs', link: '/docs/' },
       { text: 'Managed hosting', link: 'https://getnakama.cloud/' },
     ],
     sidebar: [
       {
-        text: 'Guides',
+        text: 'Start here',
         items: [
-          { text: 'Getting Started', link: '/getting-started' },
+          { text: 'Documentation', link: '/docs/' },
+          { text: 'Quickstart', link: '/quickstart' },
+          { text: 'Overview', link: '/overview' },
+          { text: 'First-time setup', link: '/first-time-setup' },
+          { text: 'Providers', link: '/providers' },
+        ],
+      },
+      {
+        text: 'Deploy',
+        items: [
+          { text: 'Docker', link: '/docker' },
+          { text: 'Backup and restore', link: '/backup-restore' },
+        ],
+      },
+      {
+        text: 'Channels',
+        items: [
           { text: 'Telegram', link: '/telegram' },
           { text: 'WhatsApp', link: '/whatsapp' },
           { text: 'Discord', link: '/discord' },
@@ -298,14 +381,13 @@ export default defineConfig({
       {
         text: 'Concepts',
         items: [
-          { text: 'Overview', link: '/overview' },
           { text: 'Multi-tenancy', link: '/multi-tenancy' },
           { text: 'Profiles', link: '/profiles' },
           { text: 'Agent Prompts', link: '/agent-prompt' },
         ],
       },
       {
-        text: 'Operations',
+        text: 'Extend',
         items: [
           { text: 'Builtin Tools', link: '/builtin-tools' },
           { text: 'Skills', link: '/skills' },

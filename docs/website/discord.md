@@ -244,7 +244,7 @@ Generate a new pairing code from **Integrations → Discord** and send it to the
 
 ## Next steps
 
-- [Getting Started](/getting-started)
+- [Quickstart](/quickstart)
 - [Profiles](/profiles)
 - [Telegram](/telegram)
 - [WhatsApp](/whatsapp)

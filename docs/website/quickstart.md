@@ -1,0 +1,88 @@
+# Quickstart
+
+This page gets you from zero to a running Nakama instance and your first chat message.
+
+## Before you start
+
+You need:
+
+- An LLM provider API key (see [Providers](/providers))
+- [Bun](https://bun.sh) if you run from source — not needed for [managed hosting](https://getnakama.cloud/) or [Docker](/docker)
+
+## Choose a deployment path
+
+### Option 1: Managed hosting
+
+If you do not want to run your own server, use [Nakama Cloud](https://getnakama.cloud/). Sign up, create an instance, and open your dedicated URL (for example `acme.getnakama.cloud`). The first 24 hours are free with no credit card required.
+
+Complete the setup wizard in the browser and you are live. Skip to [First-time setup](/first-time-setup).
+
+### Option 2: Docker
+
+For a single-container deployment:
+
+```bash
+docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
+Open `http://localhost:4310`. See [Docker](/docker) for build-from-source, volumes, and production notes.
+
+### Option 3: Local development
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/ahmadrosid/nakama.git
+cd nakama
+bun install
+bun run dev:web
+```
+
+Open:
+
+- Dashboard: `http://localhost:3003`
+- API server: `http://127.0.0.1:4310`
+- API docs: `http://127.0.0.1:4310/docs`
+
+If you only want the API server:
+
+```bash
+bun run dev:server
+```
+
+On first run, Nakama asks for your provider and API key if they are not configured yet. Settings are saved in `~/.nakama/config.ini`.
+
+## First-time setup
+
+After Nakama is running:
+
+1. Open the dashboard
+2. Create the first admin account and first organization
+3. Configure your model provider
+4. Create or review profiles
+5. Send a test message to the default profile
+
+See [First-time setup](/first-time-setup) for the wizard walkthrough and [Providers](/providers) for supported LLM backends.
+
+## Common next steps
+
+### Connect a channel
+
+Enable Telegram, WhatsApp, or Discord from **Integrations** in the web app when you are ready:
+
+- [Telegram](/telegram)
+- [WhatsApp](/whatsapp)
+- [Discord](/discord)
+
+### Understand the mental model
+
+Most of Nakama fits four ideas: organization, profile, tool access, and channel. See [Overview](/overview).
+
+## Next steps
+
+- [Overview](/overview) — what Nakama is and how to think about it
+- [Providers](/providers) — LLM API keys and model setup
+- [Profiles](/profiles) — how to define each bot
+- [Multi-tenancy](/multi-tenancy) — orgs, members, and roles
+- [Documentation hub](/docs/) — full docs map

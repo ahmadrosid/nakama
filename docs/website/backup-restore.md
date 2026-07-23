@@ -1,0 +1,37 @@
+# Backup and restore
+
+This page covers exporting and restoring your local Nakama data root.
+
+## Export
+
+Platform admins can export local Nakama data from **Agent → System → Data → Export ZIP**.
+
+The export is a `.zip` backup of the configured Nakama data root, which defaults to `~/.nakama` and follows `NAKAMA_CONFIG_DIR` when set.
+
+Treat export ZIPs as sensitive. They can include:
+
+- Provider settings and API keys
+- Auth data
+- Org and profile workspaces (soul files, memory, artifacts)
+- Custom tools and skills
+- The local SQLite database when it lives under the Nakama root
+
+## Import
+
+Importing is a whole-install restore:
+
+1. Preview the ZIP first
+2. Confirm restore to replace the current local data root
+
+Plan for downtime during restore. This replaces the active data root rather than merging individual records.
+
+## Docker volumes
+
+When Nakama runs in Docker, persist `/nakama/data` with a named volume or bind mount. Back up that volume (or use Export ZIP from the dashboard) before upgrades or migrations.
+
+See [Docker](/docker) for volume setup.
+
+## Next steps
+
+- [Quickstart](/quickstart) — install and first-run setup
+- [Docker](/docker) — container deployment and volumes

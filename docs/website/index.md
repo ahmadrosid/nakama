@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Get Started
-      link: /getting-started
+      link: /quickstart
     - theme: alt
       text: Managed hosting
       link: https://getnakama.cloud/
