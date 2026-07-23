@@ -194,4 +194,31 @@ describe("applyProviderInstanceUpdate", () => {
     expect(modelExistsOnInstance(withoutShortlist, "gemma-4-31b")).toBe(true);
     expect(modelExistsOnInstance(withoutShortlist, "unknown-model")).toBe(false);
   });
+
+  test("validates fireworks models against shortlist and static catalog", () => {
+    const withShortlist = createProviderInstance({
+      id: "fw-1",
+      type: "fireworks",
+      label: "Fireworks",
+      customModels: [
+        {
+          id: "accounts/fireworks/models/kimi-k2p6",
+          name: "Kimi K2.6",
+          default: true,
+        },
+      ],
+    });
+
+    expect(modelExistsOnInstance(withShortlist, "accounts/fireworks/models/kimi-k2p6")).toBe(true);
+    expect(modelExistsOnInstance(withShortlist, "accounts/fireworks/models/glm-5p2")).toBe(false);
+
+    const withoutShortlist = createProviderInstance({
+      id: "fw-2",
+      type: "fireworks",
+      label: "Fireworks",
+    });
+
+    expect(modelExistsOnInstance(withoutShortlist, "accounts/fireworks/models/glm-5p2")).toBe(true);
+    expect(modelExistsOnInstance(withoutShortlist, "accounts/unknown/models/foo")).toBe(false);
+  });
 });

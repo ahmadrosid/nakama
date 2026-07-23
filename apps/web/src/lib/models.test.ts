@@ -11,7 +11,7 @@ import {
 
 function group(
   providerId: string,
-  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek" | "cerebras",
+  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek" | "cerebras" | "fireworks",
   flags?: { supportsThinking?: boolean; supportsVision?: boolean },
 ) {
   return [
@@ -115,6 +115,22 @@ describe("resolveModelThinkingSupport", () => {
       ),
     ).toBe(true);
   });
+
+  test("treats fireworks models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks", { supportsThinking: true }),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("resolveModelVisionSupport", () => {
@@ -172,6 +188,22 @@ describe("resolveModelVisionSupport", () => {
       ),
     ).toBe(true);
   });
+
+  test("treats fireworks models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks", { supportsVision: true }),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("isProviderTypeAlreadyConfigured", () => {
@@ -211,6 +243,7 @@ describe("firstAvailableProviderOption", () => {
           "gemini",
           "deepseek",
           "cerebras",
+          "fireworks",
           "opencode_go",
         ]),
         "openai",

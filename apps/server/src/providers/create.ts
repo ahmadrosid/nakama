@@ -13,6 +13,7 @@ import {
 } from "@nakama/core";
 import { resolveModel } from "./models";
 import { createCerebrasProvider } from "./cerebras";
+import { createFireworksProvider } from "./fireworks";
 import { createOllamaProvider } from "./ollama";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
@@ -78,6 +79,12 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     case "cerebras":
       return createCerebrasProvider({
+        apiKey: options.apiKey,
+        model,
+        customModels: options.instance?.customModels,
+      });
+    case "fireworks":
+      return createFireworksProvider({
         apiKey: options.apiKey,
         model,
         customModels: options.instance?.customModels,

@@ -54,6 +54,7 @@ export function formatProviderLabel(
     provider === "gemini" ||
     provider === "deepseek" ||
     provider === "cerebras" ||
+    provider === "fireworks" ||
     provider === "ollama" ||
     provider === "openai_compatible" ||
     provider === "opencode_go"
@@ -71,6 +72,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = 
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
   { id: "cerebras", label: "Cerebras" },
+  { id: "fireworks", label: "Fireworks" },
   { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -157,6 +159,10 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
 
   if (provider === "cerebras") {
     return "csk-…";
+  }
+
+  if (provider === "fireworks") {
+    return "fw_…";
   }
 
   if (provider === "ollama") {
@@ -267,7 +273,7 @@ export function validateOpenRouterModelsInput(
   return null;
 }
 
-export function validateCerebrasModelsInput(
+export function validateShortlistCapabilityModelsInput(
   models: Array<{
     id: string;
     inputPerMillionUsd?: number;
@@ -328,16 +334,27 @@ export function validateOpenCodeGoModelsInput(
   return null;
 }
 
-export function modelsFromCerebrasRows(
-  rows: Array<{
-    id: string;
-    name?: string;
-    default?: boolean;
-    supportsThinking?: boolean;
-    supportsVision?: boolean;
-    inputPerMillionUsd?: number;
-    outputPerMillionUsd?: number;
-  }>,
+export type ShortlistCapabilityProvider = Extract<SelectedProvider, "cerebras" | "fireworks">;
+
+export function isShortlistCapabilityProvider(
+  provider: SelectedProvider,
+): provider is ShortlistCapabilityProvider {
+  return provider === "cerebras" || provider === "fireworks";
+}
+
+type ShortlistModelRow = {
+  id: string;
+  name?: string;
+  default?: boolean;
+  supportsThinking?: boolean;
+  supportsVision?: boolean;
+  inputPerMillionUsd?: number;
+  outputPerMillionUsd?: number;
+};
+
+export function modelsFromShortlistRows(
+  provider: ShortlistCapabilityProvider,
+  rows: ShortlistModelRow[],
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 
@@ -350,7 +367,7 @@ export function modelsFromCerebrasRows(
     models.push({
       id,
       name: row.name?.trim() || id,
-      provider: "cerebras" as const,
+      provider,
       ...(row.default ? { default: true } : {}),
       ...(row.supportsThinking !== undefined
         ? { supportsThinking: row.supportsThinking }
@@ -485,13 +502,6 @@ export function appendOpenRouterModelRow(
   ];
 }
 
-export function resolveCerebrasSetupModel(
-  rows: Array<{ id: string; default?: boolean }>,
-  selectedModel: string,
-): string {
-  return resolveOpenRouterSetupModel(rows, selectedModel);
-}
-
 export function resolveOpenRouterSetupModel(
   rows: Array<{ id: string; default?: boolean }>,
   selectedModel: string,
@@ -585,6 +595,13 @@ export function buildConfigureProviderRequest(options: {
   }
 
   if (options.provider === "cerebras" && options.customModels?.length) {
+    return {
+      ...request,
+      customModels: options.customModels,
+    };
+  }
+
+  if (options.provider === "fireworks" && options.customModels?.length) {
     return {
       ...request,
       customModels: options.customModels,
@@ -796,6 +813,7 @@ export function resolveModelThinkingSupport(
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
     model.provider === "cerebras" ||
+    model.provider === "fireworks" ||
     model.provider === "ollama"
   ) {
     return model.supportsThinking === true;
@@ -839,7 +857,7 @@ export function resolveModelVisionSupport(
     return undefined;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras" || model.provider === "ollama") {
+  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras" || model.provider === "fireworks" || model.provider === "ollama") {
     return model.supportsVision === true;
   }
 

@@ -1148,7 +1148,7 @@ export interface DiscoverModelsRequest {
   apiKey?: string;
   providerId?: string;
   /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
-  provider?: "ollama" | "openai_compatible";
+  provider?: "ollama" | "openai_compatible" | "fireworks";
   hostMode?: OllamaHostMode;
 }
 
@@ -1539,6 +1539,7 @@ export type ProviderName =
   | "gemini"
   | "deepseek"
   | "cerebras"
+  | "fireworks"
   | "ollama"
   | "openai_compatible"
   | "opencode_go";

@@ -21,7 +21,8 @@ import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
-import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
+import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
@@ -217,18 +218,20 @@ export function ProviderSetupForm({
             </>
           ) : null}
 
-          {form.selectedProvider === "cerebras" ? (
-            <CerebrasProviderModelFields
-              customModels={form.cerebrasModels}
+          {isShortlistBrowseProvider(form.selectedProvider) ? (
+            <ShortlistBrowseProviderModelFields
+              provider={form.selectedProvider}
+              customModels={form.shortlistModels}
               disabled={form.busy}
               density={density}
-              modelsError={form.cerebrasModelsError}
-              onCustomModelsChange={form.handleCerebrasModelsChange}
+              modelsError={form.shortlistModelsError}
+              apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
+              onCustomModelsChange={form.handleShortlistModelsChange}
             />
           ) : null}
 
           {form.selectedProvider !== "openrouter" &&
-          form.selectedProvider !== "cerebras" &&
+          !isShortlistBrowseProvider(form.selectedProvider) &&
           form.selectedProvider !== "ollama" &&
           form.selectedProvider !== "openai_compatible" ? (
             <FormField id="model" label="Model" density={density}>

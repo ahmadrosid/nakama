@@ -1,11 +1,5 @@
-import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BrowseModelRowButton,
-  ModelBrowseShell,
-  VirtualModelBrowseList,
-} from "@/components/ModelBrowseShell";
-import { Input } from "@/components/ui/input";
+import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -21,9 +15,7 @@ const EMPTY_ROWS: RemoteModelRow[] = [];
 interface RemoteModelsBrowseListProps {
   onSelect: RemoteBrowseSelectHandler;
   className?: string;
-  /** Existing provider instance — preferred when editing/managing. */
   providerId?: string;
-  /** Used when creating a provider (no instance yet). */
   baseUrl?: string;
   apiKey?: string;
   provider?: "ollama" | "openai_compatible";
@@ -41,8 +33,6 @@ export function RemoteModelsBrowseList({
   hostMode,
   browseLabel = "endpoint",
 }: RemoteModelsBrowseListProps) {
-  const [search, setSearch] = useState("");
-  const deferredSearch = useDeferredValue(search);
   const trimmedBaseUrl = baseUrl?.trim() ?? "";
   const canFetch = Boolean(providerId?.trim() || trimmedBaseUrl);
 
@@ -66,81 +56,35 @@ export function RemoteModelsBrowseList({
             },
       );
 
-      const rows: RemoteModelRow[] = (response.customModels ?? response.models ?? []).map(
-        (entry) => ({
-          id: entry.id,
-          name: entry.name?.trim() || entry.id,
-        }),
-      );
-
-      return rows;
+      return (response.customModels ?? response.models ?? []).map((entry) => ({
+        id: entry.id,
+        name: entry.name?.trim() || entry.id,
+      }));
     },
     enabled: canFetch,
     staleTime: 1000 * 30,
   });
 
-  const rows = data ?? EMPTY_ROWS;
-  const filtered = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    if (!query) {
-      return rows;
-    }
-
-    return rows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(query) || row.id.toLowerCase().includes(query),
-    );
-  }, [rows, deferredSearch]);
-
   return (
-    <ModelBrowseShell
+    <CatalogModelsBrowseList<RemoteModelRow>
+      rows={data ?? EMPTY_ROWS}
+      onSelect={onSelect}
       className={className}
-      isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
-      error={canFetch ? error : null}
-      isEmpty={!canFetch || filtered.length === 0}
-      emptyMessage={
-        !canFetch
-          ? "Enter a base URL before browsing models."
-          : `No models found on this ${browseLabel}.`
+      query={{
+        isLoading,
+        isFetching,
+        error,
+        canFetch,
+        onRefresh: () => void refetch(),
+        refreshDisabled: isFetching,
+      }}
+      idleMessage="Enter a base URL before browsing models."
+      emptyMessage={`No models found on this ${browseLabel}.`}
+      status={({ filteredCount }) =>
+        canFetch
+          ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`
+          : `Browse models from your ${browseLabel}`
       }
-      status={
-        <div className="flex items-center justify-between gap-2">
-          <span>
-            {canFetch
-              ? `${filtered.length} model${filtered.length === 1 ? "" : "s"} from ${browseLabel}`
-              : `Browse models from your ${browseLabel}`}
-          </span>
-          <button
-            type="button"
-            className="text-foreground underline-offset-2 hover:underline disabled:opacity-50"
-            disabled={!canFetch || isFetching}
-            onClick={() => void refetch()}
-          >
-            Refresh
-          </button>
-        </div>
-      }
-      toolbar={
-        <Input
-          placeholder="Search model name or ID..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="min-w-35 flex-1"
-          disabled={!canFetch}
-        />
-      }
-    >
-      <VirtualModelBrowseList
-        rows={filtered}
-        getKey={(row) => row.id}
-        renderRow={(row, style) => (
-          <BrowseModelRowButton
-            row={{ id: row.id, name: row.name }}
-            onSelect={() => onSelect(row)}
-            style={style}
-          />
-        )}
-      />
-    </ModelBrowseShell>
+    />
   );
 }

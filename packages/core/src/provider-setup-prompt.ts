@@ -34,6 +34,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
   { id: "cerebras", label: "Cerebras" },
+  { id: "fireworks", label: "Fireworks" },
   { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
@@ -92,12 +93,36 @@ export async function promptForProviderConfig(
       getModelsForProvider,
     });
 
+    const catalogModel = getModelById(selectedModel);
+    const customModels =
+      (provider === "fireworks" || provider === "cerebras") && catalogModel
+        ? [
+            {
+              id: selectedModel,
+              default: true,
+              ...(catalogModel.supportsThinking !== undefined
+                ? { supportsThinking: catalogModel.supportsThinking }
+                : {}),
+              ...(catalogModel.supportsVision !== undefined
+                ? { supportsVision: catalogModel.supportsVision }
+                : {}),
+              ...(catalogModel.inputPerMillionUsd !== undefined
+                ? { inputPerMillionUsd: catalogModel.inputPerMillionUsd }
+                : {}),
+              ...(catalogModel.outputPerMillionUsd !== undefined
+                ? { outputPerMillionUsd: catalogModel.outputPerMillionUsd }
+                : {}),
+            },
+          ]
+        : undefined;
+
     const instance: ProviderInstance = {
       id: createProviderInstanceId(),
       type: getModelById(selectedModel)?.provider ?? provider,
       label: defaultProviderLabel(provider, []),
       apiKey,
       createdAt: new Date().toISOString(),
+      ...(customModels ? { customModels } : {}),
     };
 
     return buildUserConfigFromInstance(instance);
@@ -121,6 +146,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "gemini" ||
     normalized === "deepseek" ||
     normalized === "cerebras" ||
+    normalized === "fireworks" ||
     normalized === "ollama" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go"
