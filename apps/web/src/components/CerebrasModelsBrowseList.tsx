@@ -2,7 +2,6 @@ import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import {
   capabilityBrowseRowToDisplayRow,
   filterCapabilityBrowseRows,
-  type CapabilityBrowseRow,
 } from "@/components/model-browse-utils";
 import { useCerebrasModels } from "@/hooks/use-cerebras-models";
 import type { CerebrasModelRow } from "@/lib/cerebras-models";
@@ -31,9 +30,9 @@ export function CerebrasModelsBrowseList({
       isDeprecated={(row) => row.deprecated}
       toDisplayRow={capabilityBrowseRowToDisplayRow}
       filterRows={(rows, search, hideDeprecated) =>
-        filterCapabilityBrowseRows(rows as CapabilityBrowseRow[], { search, hideDeprecated })
+        filterCapabilityBrowseRows(rows, { search, hideDeprecated }) as CerebrasModelRow[]
       }
-      status={({ filteredCount, filteredRows }) =>
+      status={({ filteredCount }) =>
         `${filteredCount} models${data?.usedFallback ? " · using curated fallback catalog" : ""}`
       }
     />

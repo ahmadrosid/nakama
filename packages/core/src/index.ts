@@ -42,8 +42,39 @@ export * from "./email-config";
 export { createSmtpSender } from "./mail/smtp-sender";
 export { createImapReader } from "./mail/imap-reader";
 export * from "./telegram-worker";
-export * from "./discord-config";
-export * from "./discord-worker";
+// Explicit Discord exports — omit helpers that collide with telegram-* names
+// (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
+// isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config
+// or @nakama/core/discord-worker when the Discord-specific variant is required.
+export {
+  DEFAULT_DISCORD_PROFILE_ID,
+  type DiscordConfigFile,
+  type DiscordSettingsPublic,
+  type UpdateDiscordSettingsInput,
+  getDiscordConfigDir,
+  getDiscordConfigPath,
+  buildDiscordInviteUrl,
+  resolveDiscordApplicationId,
+  isDiscordUserAuthorized,
+  loadDiscordConfigFile,
+  toDiscordSettingsPublic,
+  loadDiscordSettingsPublic,
+  saveDiscordConfig,
+  regenerateDiscordHandshake,
+  verifyAndPairDiscordUser,
+  resolveDiscordConfigFromSources,
+} from "./discord-config";
+export {
+  type DiscordWorkerHeartbeat,
+  getDiscordWorkerHeartbeatPath,
+  resolveDiscordWorkerStatus,
+  parseDiscordWorkerHeartbeat,
+  writeDiscordWorkerHeartbeat,
+  clearDiscordWorkerHeartbeat,
+  readDiscordWorkerHeartbeat,
+  isDiscordWorkerRunning,
+  getDiscordWorkerStatus,
+} from "./discord-worker";
 export * from "./whatsapp-config";
 export * from "./whatsapp-worker";
 export * from "./worker-desired-state";

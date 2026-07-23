@@ -4,7 +4,6 @@ import type {
   MailReader,
   MailSendInput,
   MailSender,
-  MailSendResult,
 } from "./types";
 
 export function createFakeMailReader(messages: MailMessage[] = []): MailReader & {

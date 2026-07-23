@@ -1,5 +1,5 @@
 import type { EmailConfigFile } from "../email-config";
-import { resolveFromAddress, toMailboxConfig } from "../email-config";
+import { toMailboxConfig } from "../email-config";
 
 export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
 

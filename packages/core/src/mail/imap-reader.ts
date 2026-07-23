@@ -10,6 +10,22 @@ import {
 } from "./types";
 import { sanitizeMailError } from "./sanitize";
 
+function toIsoDate(value: Date | string | undefined): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+
+  return new Date().toISOString();
+}
+
+function asUidList(uids: number[] | false): number[] {
+  return uids === false ? [] : uids;
+}
+
 export function createImapReader(config: MailboxConfig): MailReader {
   const client = new ImapFlow({
     host: config.imap.host,
@@ -56,7 +72,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
         uid: message.uid,
         subject: message.envelope?.subject?.trim() || "(no subject)",
         from: formatMailAddress(message.envelope?.from?.[0]),
-        date: (message.internalDate ?? new Date()).toISOString(),
+        date: toIsoDate(message.internalDate),
         folder,
       });
     }
@@ -79,7 +95,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
       const lock = await client.getMailboxLock(folder);
 
       try {
-        const uids = await client.search({ all: true }, { uid: true });
+        const uids = asUidList(await client.search({ all: true }, { uid: true }));
         return summariesFromUids(folder, uids, limit);
       } finally {
         lock.release();
@@ -103,7 +119,8 @@ export function createImapReader(config: MailboxConfig): MailReader {
 
           const parsed = await simpleParser(source);
           const textBody = parsed.text?.trim() ?? "";
-          const htmlBody = parsed.html?.trim() ?? "";
+          const htmlBody =
+            typeof parsed.html === "string" ? parsed.html.trim() : "";
           const preferred = textBody || htmlBody;
           const truncated = preferred
             ? truncateMailBody(preferred)
@@ -113,7 +130,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
             uid: message.uid,
             subject: message.envelope?.subject?.trim() || "(no subject)",
             from: formatMailAddress(message.envelope?.from?.[0]),
-            date: (message.internalDate ?? new Date()).toISOString(),
+            date: toIsoDate(message.internalDate),
             folder,
             ...(textBody ? { text: truncated.text } : {}),
             ...(!textBody && htmlBody ? { html: truncated.text } : {}),
@@ -137,11 +154,13 @@ export function createImapReader(config: MailboxConfig): MailReader {
       const lock = await client.getMailboxLock(folder);
 
       try {
-        const uids = await client.search(
-          {
-            or: [{ subject: trimmed }, { from: trimmed }, { body: trimmed }],
-          },
-          { uid: true },
+        const uids = asUidList(
+          await client.search(
+            {
+              or: [{ subject: trimmed }, { from: trimmed }, { body: trimmed }],
+            },
+            { uid: true },
+          ),
         );
         return summariesFromUids(folder, uids, limit);
       } finally {
