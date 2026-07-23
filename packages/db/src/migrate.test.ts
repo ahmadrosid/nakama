@@ -236,6 +236,70 @@ describe("coding-delegation skill rename migration", () => {
       db.close();
     }
   });
+
+  test("merges legacy coding-delegation records when coding-agent already exists", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+        VALUES ('super_bot', 'Super Bot', '', NULL, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO skills (
+          id,
+          name,
+          description,
+          source_path,
+          has_tool,
+          disable_model_invocation,
+          enabled,
+          created_at,
+          updated_at
+        ) VALUES
+          (
+            'skill_legacy',
+            'coding-delegation',
+            'Legacy coding delegation',
+            '/tmp/.nakama/agent/skills/coding-delegation/SKILL.md',
+            0,
+            0,
+            1,
+            '2026-06-19T00:00:00.000Z',
+            '2026-06-19T00:00:00.000Z'
+          ),
+          (
+            'skill_canonical',
+            'coding-agent',
+            'Coding agent',
+            '/tmp/.nakama/agent/skills/coding-agent/SKILL.md',
+            0,
+            0,
+            1,
+            '2026-06-19T00:00:00.000Z',
+            '2026-06-19T00:00:00.000Z'
+          );
+
+        INSERT INTO profile_skills (profile_id, skill_id)
+        VALUES ('super_bot', 'skill_legacy');
+      `);
+
+      migrateCodingDelegationSkillName(db);
+
+      const skills = db
+        .prepare("SELECT id, name FROM skills WHERE name LIKE 'coding%' ORDER BY name")
+        .all() as Array<{ id: string; name: string }>;
+      const assignment = db
+        .prepare("SELECT skill_id FROM profile_skills WHERE profile_id = ?")
+        .get("super_bot") as { skill_id: string };
+
+      expect(skills).toEqual([{ id: "skill_canonical", name: "coding-agent" }]);
+      expect(assignment.skill_id).toBe("skill_canonical");
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("schema path resolution", () => {
