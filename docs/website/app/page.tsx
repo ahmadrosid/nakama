@@ -96,7 +96,7 @@ export default function HomePage() {
 
       <main className="flex-1">
         <section className="hero-section px-4 pt-4 md:px-6 md:pt-6">
-          <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-white/10">
+          <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-zinc-500/30">
             <div className="hero-glow pointer-events-none absolute inset-0" aria-hidden />
             <div className="hero-noise pointer-events-none absolute inset-0" aria-hidden />
             <div className="hero-orb pointer-events-none absolute" aria-hidden />
