@@ -14,7 +14,8 @@ function BasePathImage(props: ComponentProps<'img'>) {
 
 function createBasePathAnchor(DocLink?: MDXComponents['a']) {
   return function BasePathLink(props: ComponentProps<'a'>) {
-    const href = hrefWithBasePath(props.href)
+    // Fumadocs/Next Link already applies `basePath` from next.config.mjs.
+    const href = DocLink ? props.href : hrefWithBasePath(props.href)
     if (DocLink) {
       const Link = DocLink as ElementType
       return <Link {...props} href={href} />
