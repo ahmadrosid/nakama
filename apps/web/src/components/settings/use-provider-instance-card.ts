@@ -13,7 +13,6 @@ import {
 } from "@/components/settings/provider-settings-seed";
 import { formatError } from "@/lib/client";
 import {
-  formatProviderLabel,
   type SelectedProvider,
   defaultOllamaSetupBaseUrl,
   validateApiKeyForProvider,
@@ -66,28 +65,6 @@ export function useProviderInstanceCard({
     () => catalog.filter((model) => model.providerId === instance.id),
     [catalog, instance.id],
   );
-
-  const description = useMemo(() => {
-    const parts: string[] = [];
-    const typeLabel = formatProviderLabel(providerType, instance.label);
-
-    if (isOllama) {
-      parts.push((instance.hostMode ?? "local") === "cloud" ? "Cloud" : "Local");
-    }
-
-    if (typeLabel !== instance.label.trim()) {
-      parts.push(typeLabel);
-    }
-
-    if (instance.hasApiKey) {
-      parts.push("API key saved");
-    } else if (isOllama && instance.hostMode !== "cloud") {
-      parts.push("No API key");
-    }
-
-    parts.push(`${instance.modelCount} models`);
-    return parts.join(" · ");
-  }, [instance.hasApiKey, instance.hostMode, instance.label, instance.modelCount, isOllama, providerType]);
 
   const openManage = () => {
     setDialogError(null);
@@ -241,7 +218,6 @@ export function useProviderInstanceCard({
     isCerebras,
     isCatalogShortlist,
     catalogModelsForType,
-    description,
     busy,
     dialogError,
     replaceKeyOpen,

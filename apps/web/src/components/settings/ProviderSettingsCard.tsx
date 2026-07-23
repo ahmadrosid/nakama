@@ -94,24 +94,40 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
               </div>
             </>
           ) : (
-            providers.map((instance) => (
-              <ProviderInstanceCard
-                key={instance.id}
-                instance={instance}
-                catalog={catalog}
-                onUpdate={async (providerId, request) => {
-                  await updateProviderMutation.mutateAsync({ providerId, request });
-                  toast("Provider updated.");
-                  onFormError(null);
-                }}
-                onDelete={async (providerId) => {
-                  await deleteProviderMutation.mutateAsync(providerId);
-                  toast("Provider removed.");
-                  onFormError(null);
-                }}
-                onError={onFormError}
-              />
-            ))
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-left text-sm">
+                <thead className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Provider</th>
+                    <th className="px-3 py-2 font-medium">Endpoint</th>
+                    <th className="px-3 py-2 font-medium">Models</th>
+                    <th className="px-3 py-2 font-medium">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {providers.map((instance) => (
+                    <ProviderInstanceCard
+                      key={instance.id}
+                      instance={instance}
+                      catalog={catalog}
+                      onUpdate={async (providerId, request) => {
+                        await updateProviderMutation.mutateAsync({ providerId, request });
+                        toast("Provider updated.");
+                        onFormError(null);
+                      }}
+                      onDelete={async (providerId) => {
+                        await deleteProviderMutation.mutateAsync(providerId);
+                        toast("Provider removed.");
+                        onFormError(null);
+                      }}
+                      onError={onFormError}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -44,10 +44,14 @@ function ProviderActionButton({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="ghost"
             disabled={disabled}
             aria-label={label}
-            className={destructive ? "text-muted-foreground hover:text-destructive" : undefined}
+            className={
+              destructive
+                ? "text-muted-foreground hover:text-destructive"
+                : "text-muted-foreground"
+            }
             onClick={onClick}
           >
             {children}
@@ -86,42 +90,57 @@ export function ProviderInstanceCard({
     card.isCerebras ||
     card.isCatalogShortlist;
 
-  return (
-    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0">
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium text-foreground">{instance.label}</p>
-        <p className="text-xs text-muted-foreground">{card.description}</p>
-        {card.isCompatibleLike && instance.baseUrl ? (
-          <p className="font-mono text-[11px] text-foreground/80">{instance.baseUrl}</p>
-        ) : null}
-      </div>
+  const endpoint = instance.baseUrl?.trim() || null;
+  const modelLabel =
+    instance.modelCount === 1 ? "1 model" : `${instance.modelCount} models`;
 
-      <div className="flex shrink-0 items-center gap-1">
-        {card.isCompatibleLike ? (
-          <ProviderActionButton label="Edit" onClick={card.openEdit}>
-            <PencilIcon className="size-3.5" />
-          </ProviderActionButton>
-        ) : null}
-        {canManage ? (
-          <ProviderActionButton label="Manage models" onClick={card.openManage}>
-            <ListIcon className="size-3.5" />
-          </ProviderActionButton>
-        ) : null}
-        <ProviderActionButton
-          label={instance.hasApiKey ? "Update key" : "Add key"}
-          onClick={() => card.setReplaceKeyOpen(true)}
-        >
-          <KeyRoundIcon className="size-3.5" />
-        </ProviderActionButton>
-        <ProviderActionButton
-          label="Remove"
-          destructive
-          disabled={card.busy}
-          onClick={() => void card.handleDelete()}
-        >
-          <Trash2Icon className="size-3.5" />
-        </ProviderActionButton>
-      </div>
+  return (
+    <>
+      <tr>
+        <td className="px-3 py-2.5 align-middle">
+          <p className="truncate text-sm font-medium text-foreground">{instance.label}</p>
+        </td>
+        <td className="px-3 py-2.5 align-middle">
+          {endpoint ? (
+            <p className="max-w-[18rem] truncate font-mono text-[11px] text-foreground/80" title={endpoint}>
+              {endpoint}
+            </p>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+          <span className="text-sm text-muted-foreground">{modelLabel}</span>
+        </td>
+        <td className="px-3 py-2.5 align-middle">
+          <div className="flex items-center justify-end gap-0.5">
+            {card.isCompatibleLike ? (
+              <ProviderActionButton label="Edit" onClick={card.openEdit}>
+                <PencilIcon className="size-3.5" />
+              </ProviderActionButton>
+            ) : null}
+            {canManage ? (
+              <ProviderActionButton label="Manage models" onClick={card.openManage}>
+                <ListIcon className="size-3.5" />
+              </ProviderActionButton>
+            ) : null}
+            <ProviderActionButton
+              label={instance.hasApiKey ? "Update key" : "Add key"}
+              onClick={() => card.setReplaceKeyOpen(true)}
+            >
+              <KeyRoundIcon className="size-3.5" />
+            </ProviderActionButton>
+            <ProviderActionButton
+              label="Remove"
+              destructive
+              disabled={card.busy}
+              onClick={() => void card.handleDelete()}
+            >
+              <Trash2Icon className="size-3.5" />
+            </ProviderActionButton>
+          </div>
+        </td>
+      </tr>
 
       <ProviderReplaceKeyDialog
         open={card.replaceKeyOpen}
@@ -216,6 +235,6 @@ export function ProviderInstanceCard({
           ) : null}
         </ProviderManageModelsDialog>
       ) : null}
-    </div>
+    </>
   );
 }
