@@ -83,7 +83,7 @@ export default function HomePage() {
             </a>
             <a
               href={GITHUB_REPO_URL}
-              className="text-white/55 transition-colors hover:text-white"
+              className="inline-flex items-center justify-center transition-colors hover:text-white"
               target="_blank"
               rel="noreferrer"
               aria-label="GitHub repository"
@@ -102,7 +102,7 @@ export default function HomePage() {
             <div className="hero-orb pointer-events-none absolute" aria-hidden />
             <div className="hero-halftone pointer-events-none absolute inset-0" aria-hidden />
 
-            <div className="relative z-20 flex min-h-[30rem] flex-col px-6 pt-16 pb-28 md:min-h-[34rem] md:px-10 md:pt-20 md:pb-32 lg:min-h-[38rem] lg:px-12 lg:pt-24 lg:pb-36">
+            <div className="relative z-20 flex min-h-[28rem] flex-col px-6 pt-12 pb-36 md:min-h-[32rem] md:px-10 md:pt-14 md:pb-40 lg:min-h-[36rem] lg:px-12 lg:pt-16 lg:pb-44">
               <div className="max-w-xl text-center md:text-left">
                 <h1 className="text-4xl leading-[1.05] font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
                   AI agents that work with{' '}
@@ -137,7 +137,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="hero-preview pointer-events-none absolute right-0 bottom-0 left-[12%] z-10 translate-y-[38%] sm:left-[18%] sm:translate-y-[40%] md:left-[22%] md:translate-y-[42%] lg:left-[26%]">
+            <div className="hero-preview pointer-events-none absolute right-0 bottom-0 left-[12%] z-10 translate-y-[48%] sm:left-[18%] sm:translate-y-[50%] md:left-[22%] md:translate-y-[52%] lg:left-[26%]">
               <div className="overflow-hidden rounded-t-xl border border-b-0 border-white/12 bg-[#0d0d0f] shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.75)]">
                 <div className="flex items-center gap-1.5 border-b border-white/8 px-3 py-2.5">
                   <span className="size-2.5 rounded-full bg-white/15" />
@@ -157,7 +157,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="px-6 py-16 md:py-20">
+        <section className="px-6 py-24 md:py-32">
           <p className="landing-lede mx-auto max-w-4xl text-center text-2xl leading-snug font-light tracking-tight text-white/70 md:text-4xl md:leading-snug">
             <span className="landing-accent font-medium">Nakama</span> gives each agent a role,
             tools, and memory — then runs your whole{' '}
