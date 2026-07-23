@@ -19,6 +19,7 @@
     "./attachments/content": "./src/attachments/content.ts",
     "./image-content": "./src/image-content.ts",
     "./normalize-task-prompt": "./src/normalize-task-prompt.ts",
+    "./ollama-provider-config": "./src/ollama-provider-config.ts",
     "./provider-inference": "./src/provider-inference.ts",
     "./provider-label": "./src/provider-label.ts",
     "./provider-resolution": "./src/provider-resolution.ts",

@@ -21,6 +21,8 @@ import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
+import { ModelListEditor } from "@/components/ModelListEditor";
+import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
@@ -29,6 +31,7 @@ import {
   type SelectedProvider,
   PROVIDER_OPTIONS,
 } from "@/lib/models";
+import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 
 interface ProviderSetupFormProps {
   submitLabel?: string;
@@ -45,6 +48,10 @@ export function ProviderSetupForm({
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
+  const apiKeyOptional =
+    form.selectedProvider === "openai_compatible" ||
+    (form.selectedProvider === "ollama" && !ollamaKeyRequired);
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
@@ -93,7 +100,7 @@ export function ProviderSetupForm({
         <>
           <FormField
             id="api-key"
-            label={form.selectedProvider === "openai_compatible" ? "API key (optional)" : "API key"}
+            label={apiKeyOptional ? "API key (optional)" : "API key"}
             density={density}
             footer={
               form.apiKeyError ? (
@@ -163,6 +170,43 @@ export function ProviderSetupForm({
             />
           ) : null}
 
+          {form.selectedProvider === "ollama" ? (
+            <>
+              <OllamaProviderSetupFields
+                hostMode={form.ollamaHostMode}
+                baseUrl={form.baseUrl}
+                disabled={form.busy}
+                density={density}
+                baseUrlError={form.baseUrlError}
+                onHostModeChange={form.handleOllamaHostModeChange}
+                onBaseUrlChange={form.setBaseUrl}
+              />
+              <FormField
+                id="ollama-models"
+                label="Models"
+                density={density}
+                footer={
+                  form.modelsError ? (
+                    <p className="text-sm text-destructive" role="alert">
+                      {form.modelsError}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Enter model ids from your Ollama host (for example{" "}
+                      <span className="font-mono">llama3.2</span>).
+                    </p>
+                  )
+                }
+              >
+                <ModelListEditor
+                  models={form.customModels}
+                  disabled={form.busy}
+                  onChange={form.setCustomModels}
+                />
+              </FormField>
+            </>
+          ) : null}
+
           {form.selectedProvider === "cerebras" ? (
             <CerebrasProviderModelFields
               customModels={form.cerebrasModels}
@@ -175,6 +219,7 @@ export function ProviderSetupForm({
 
           {form.selectedProvider !== "openrouter" &&
           form.selectedProvider !== "cerebras" &&
+          form.selectedProvider !== "ollama" &&
           form.selectedProvider !== "openai_compatible" ? (
             <FormField id="model" label="Model" density={density}>
               <Select
@@ -208,7 +253,7 @@ export function ProviderSetupForm({
               type="submit"
               disabled={
                 form.busy ||
-                (form.selectedProvider !== "openai_compatible" && !form.apiKey.trim())
+                (!apiKeyOptional && !form.apiKey.trim())
               }
             >
               {form.busy ? (

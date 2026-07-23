@@ -137,7 +137,10 @@ export async function ensureProviderConfiguredViaCli(
     });
 
     const instance = config.providers[0]!;
-    const model = modelHelpers.getDefaultModel(instance.type);
+    const model =
+      instance.customModels?.find((entry) => entry.default)?.id ??
+      instance.customModels?.[0]?.id ??
+      modelHelpers.getDefaultModel(instance.type);
 
     const result = await client.configureProvider({
       apiKey: instance.apiKey,
@@ -145,6 +148,7 @@ export async function ensureProviderConfiguredViaCli(
       provider: instance.type,
       displayName: instance.type === "openai_compatible" ? instance.label : undefined,
       baseUrl: instance.baseUrl,
+      hostMode: instance.hostMode,
       customModels: instance.customModels,
     });
 

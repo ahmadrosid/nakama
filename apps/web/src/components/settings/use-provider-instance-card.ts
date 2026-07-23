@@ -8,14 +8,14 @@ import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-
 import { type ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import {
-  seedCerebrasManageModelRows,
   seedManageModelRows,
-  seedOpenRouterManageModelRows,
+  seedShortlistManageModelRows,
 } from "@/components/settings/provider-settings-seed";
 import { formatError } from "@/lib/client";
 import {
   formatProviderLabel,
   type SelectedProvider,
+  defaultOllamaSetupBaseUrl,
   validateApiKeyForProvider,
   validateBaseUrlInput,
   validateCerebrasModelsInput,
@@ -51,6 +51,8 @@ export function useProviderInstanceCard({
 
   const providerType = instance.type as SelectedProvider;
   const isCompatible = providerType === "openai_compatible";
+  const isOllama = providerType === "ollama";
+  const isCompatibleLike = isCompatible || isOllama;
   const isOpenRouter = providerType === "openrouter";
   const isCerebras = providerType === "cerebras";
   const isCatalogShortlist = isCatalogShortlistProvider(providerType);
@@ -69,34 +71,32 @@ export function useProviderInstanceCard({
     const parts: string[] = [];
     const typeLabel = formatProviderLabel(providerType, instance.label);
 
+    if (isOllama) {
+      parts.push((instance.hostMode ?? "local") === "cloud" ? "Cloud" : "Local");
+    }
+
     if (typeLabel !== instance.label.trim()) {
       parts.push(typeLabel);
     }
 
     if (instance.hasApiKey) {
       parts.push("API key saved");
+    } else if (isOllama && instance.hostMode !== "cloud") {
+      parts.push("No API key");
     }
 
     parts.push(`${instance.modelCount} models`);
     return parts.join(" · ");
-  }, [instance.hasApiKey, instance.label, instance.modelCount, providerType]);
+  }, [instance.hasApiKey, instance.hostMode, instance.label, instance.modelCount, isOllama, providerType]);
 
   const openManage = () => {
     setDialogError(null);
 
-    if (isCompatible) {
+    if (isCompatibleLike) {
       setManageModels(seedManageModelRows(instance.customModels, instanceModels));
-    } else if (isOpenRouter) {
+    } else if (isOpenRouter || isCerebras) {
       setManageModels(
-        seedOpenRouterManageModelRows(
-          instance.customModels,
-          null,
-          instanceModels[0]?.name,
-        ),
-      );
-    } else if (isCerebras) {
-      setManageModels(
-        seedCerebrasManageModelRows(
+        seedShortlistManageModelRows(
           instance.customModels,
           null,
           instanceModels[0]?.name,
@@ -115,10 +115,13 @@ export function useProviderInstanceCard({
   };
 
   const openEdit = () => {
-    setEditLabel(instance.label);
-    setEditBaseUrl(instance.baseUrl ?? "");
-    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
     setDialogError(null);
+    setEditLabel(instance.label);
+    setEditBaseUrl(
+      instance.baseUrl ??
+        (isOllama ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local") : ""),
+    );
+    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
     setEditOpen(true);
   };
 
@@ -143,7 +146,9 @@ export function useProviderInstanceCard({
   };
 
   const handleReplaceKey = async () => {
-    const nextError = validateApiKeyForProvider(apiKey, providerType);
+    const nextError = validateApiKeyForProvider(apiKey, providerType, {
+      ollamaHostMode: instance.hostMode ?? undefined,
+    });
 
     if (nextError) {
       setDialogError(nextError);
@@ -184,59 +189,27 @@ export function useProviderInstanceCard({
       {
         label: editLabel,
         baseUrl: editBaseUrl,
+        ...(isOllama
+          ? {
+              hostMode: editBaseUrl.toLowerCase().includes("ollama.com")
+                ? ("cloud" as const)
+                : ("local" as const),
+            }
+          : {}),
         customModels: normalizeModelListRows(manageModels),
       },
       () => setEditOpen(false),
     );
   };
 
-  const saveCompatibleManage = async () => {
-    const modelsError = validateCustomModelsInput(manageModels);
-
-    if (modelsError) {
-      setDialogError(modelsError);
-      return;
-    }
-
-    await runUpdate(
-      { customModels: normalizeModelListRows(manageModels) },
-      () => setManageOpen(false),
-    );
-  };
-
-  const saveOpenRouter = async () => {
-    const modelsError = validateOpenRouterModelsInput(manageModels);
-
-    if (modelsError) {
-      setDialogError(modelsError);
-      return;
-    }
-
-    await runUpdate(
-      { customModels: normalizeModelListRows(manageModels) },
-      () => setManageOpen(false),
-    );
-  };
-
-  const saveCerebras = async () => {
-    const modelsError = validateCerebrasModelsInput(manageModels);
-
-    if (modelsError) {
-      setDialogError(modelsError);
-      return;
-    }
-
-    await runUpdate(
-      { customModels: normalizeModelListRows(manageModels) },
-      () => setManageOpen(false),
-    );
-  };
-
-  const saveCatalogShortlist = async () => {
-    const modelsError =
-      providerType === "opencode_go"
-        ? validateOpenCodeGoModelsInput(manageModels)
-        : validateCustomModelsInput(manageModels);
+  const saveManageModels = async () => {
+    const modelsError = isOpenRouter
+      ? validateOpenRouterModelsInput(manageModels)
+      : isCerebras
+        ? validateCerebrasModelsInput(manageModels)
+        : providerType === "opencode_go"
+          ? validateOpenCodeGoModelsInput(manageModels)
+          : validateCustomModelsInput(manageModels);
 
     if (modelsError) {
       setDialogError(modelsError);
@@ -262,7 +235,7 @@ export function useProviderInstanceCard({
 
   return {
     providerType,
-    isCompatible,
+    isCompatibleLike,
     isOpenRouter,
     isCerebras,
     isCatalogShortlist,
@@ -292,10 +265,7 @@ export function useProviderInstanceCard({
     handleReplaceKey,
     handleDelete,
     saveCompatible,
-    saveCompatibleManage,
-    saveOpenRouter,
-    saveCerebras,
-    saveCatalogShortlist,
+    saveManageModels,
     handleManageModelsChange,
   };
 }

@@ -8,6 +8,7 @@ import type { ProviderModelOption as ContractProviderModelOption } from "@nakama
 import {
   resolveCompatibleDefaultModel,
   resolveCerebrasDefaultModel,
+  resolveOllamaDefaultModel,
   resolveOpenRouterDefaultModel,
 } from "./compatible-models";
 
@@ -324,6 +325,16 @@ export function validateCerebrasCustomModels(entries: unknown): CustomModelEntry
   return validateCustomModels(entries);
 }
 
+export function validateOllamaCustomModels(entries: unknown): CustomModelEntry[] {
+  const models = validateCustomModels(entries);
+
+  if (!models.length) {
+    throw new Error("At least one Ollama model is required.");
+  }
+
+  return models;
+}
+
 export function isOpenCodeGoModelId(model: string): boolean {
   return model.trim().startsWith("opencode-go/");
 }
@@ -370,6 +381,10 @@ export function getDefaultModel(
 
   if (provider === "cerebras" && customModels?.length) {
     return resolveCerebrasDefaultModel(customModels);
+  }
+
+  if (provider === "ollama" && customModels?.length) {
+    return resolveOllamaDefaultModel(customModels);
   }
 
   if (
@@ -422,6 +437,14 @@ export function resolveModel(
     }
 
     return resolveCerebrasDefaultModel(customModels, trimmed);
+  }
+
+  if (trimmed && provider === "ollama" && customModels?.length) {
+    if (findCustomModel(customModels, trimmed)) {
+      return trimmed;
+    }
+
+    return resolveOllamaDefaultModel(customModels, trimmed);
   }
 
   if (trimmed && provider === "openai_compatible") {
@@ -485,7 +508,7 @@ export function modelSupportsVision(
     return false;
   }
 
-  if (provider === "cerebras") {
+  if (provider === "cerebras" || provider === "ollama") {
     if (custom?.supportsVision !== undefined) {
       return custom.supportsVision;
     }

@@ -4,12 +4,13 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
+import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
+import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
+import { CustomProviderFields } from "@/components/CustomProviderFields";
+import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import {
-  ProviderCatalogManageDialog,
-  ProviderCerebrasManageDialog,
   ProviderCompatibleEditDialog,
-  ProviderCompatibleManageDialog,
-  ProviderOpenRouterManageDialog,
+  ProviderManageModelsDialog,
   ProviderReplaceKeyDialog,
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
@@ -36,23 +37,29 @@ export function ProviderInstanceCard({
     onError,
   });
 
+  const canManage =
+    card.isCompatibleLike ||
+    card.isOpenRouter ||
+    card.isCerebras ||
+    card.isCatalogShortlist;
+
   return (
     <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0">
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-foreground">{instance.label}</p>
         <p className="text-xs text-muted-foreground">{card.description}</p>
-        {card.isCompatible && instance.baseUrl ? (
+        {card.isCompatibleLike && instance.baseUrl ? (
           <p className="font-mono text-[11px] text-foreground/80">{instance.baseUrl}</p>
         ) : null}
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {card.isCompatible ? (
+        {card.isCompatibleLike ? (
           <Button type="button" size="sm" variant="outline" onClick={card.openEdit}>
             Edit
           </Button>
         ) : null}
-        {card.isCompatible || card.isOpenRouter || card.isCerebras || card.isCatalogShortlist ? (
+        {canManage ? (
           <Button type="button" size="sm" variant="outline" onClick={card.openManage}>
             Manage
           </Button>
@@ -90,7 +97,7 @@ export function ProviderInstanceCard({
         onSave={() => void card.handleReplaceKey()}
       />
 
-      {card.isCompatible ? (
+      {card.isCompatibleLike ? (
         <ProviderCompatibleEditDialog
           open={card.editOpen}
           busy={card.busy}
@@ -106,56 +113,59 @@ export function ProviderInstanceCard({
         />
       ) : null}
 
-      {card.isCompatible ? (
-        <ProviderCompatibleManageDialog
+      {canManage ? (
+        <ProviderManageModelsDialog
           open={card.manageOpen}
           busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          manageModels={card.manageModels}
+          dialogError={card.isCompatibleLike ? card.dialogError : null}
           onOpenChange={card.setManageOpen}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onSave={() => void card.saveCompatibleManage()}
-        />
-      ) : null}
-
-      {card.isOpenRouter ? (
-        <ProviderOpenRouterManageDialog
-          open={card.manageOpen}
-          busy={card.busy}
-          dialogError={card.dialogError}
-          manageModels={card.manageModels}
-          onOpenChange={card.setManageOpen}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onSave={() => void card.saveOpenRouter()}
-        />
-      ) : null}
-
-      {card.isCerebras ? (
-        <ProviderCerebrasManageDialog
-          open={card.manageOpen}
-          busy={card.busy}
-          dialogError={card.dialogError}
-          manageModels={card.manageModels}
-          onOpenChange={card.setManageOpen}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onSave={() => void card.saveCerebras()}
-        />
-      ) : null}
-
-      {card.isCatalogShortlist ? (
-        <ProviderCatalogManageDialog
-          open={card.manageOpen}
-          busy={card.busy}
-          dialogError={card.dialogError}
-          providerType={card.providerType as CatalogShortlistProvider}
-          instanceId={instance.id}
-          manageModels={card.manageModels}
-          catalogModelsForType={card.catalogModelsForType}
-          onOpenChange={card.setManageOpen}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onSave={() => void card.saveCatalogShortlist()}
-        />
+          onSave={() => void card.saveManageModels()}
+        >
+          {card.isCompatibleLike ? (
+            <CustomProviderFields
+              displayName={instance.label}
+              baseUrl={instance.baseUrl ?? ""}
+              apiKey=""
+              customModels={card.manageModels}
+              disabled={card.busy}
+              identityReadOnly
+              showThinkingToggle
+              displayNameError={null}
+              baseUrlError={null}
+              modelsError={null}
+              onDisplayNameChange={() => {}}
+              onBaseUrlChange={() => {}}
+              onCustomModelsChange={card.handleManageModelsChange}
+            />
+          ) : null}
+          {card.isOpenRouter ? (
+            <OpenRouterProviderModelFields
+              customModels={card.manageModels}
+              disabled={card.busy}
+              modelsError={card.dialogError}
+              onCustomModelsChange={card.handleManageModelsChange}
+            />
+          ) : null}
+          {card.isCerebras ? (
+            <CerebrasProviderModelFields
+              customModels={card.manageModels}
+              disabled={card.busy}
+              modelsError={card.dialogError}
+              onCustomModelsChange={card.handleManageModelsChange}
+            />
+          ) : null}
+          {card.isCatalogShortlist ? (
+            <CatalogProviderModelFields
+              provider={card.providerType as CatalogShortlistProvider}
+              providerInstanceId={instance.id}
+              customModels={card.manageModels}
+              catalogModels={card.catalogModelsForType}
+              disabled={card.busy}
+              modelsError={card.dialogError}
+              onCustomModelsChange={card.handleManageModelsChange}
+            />
+          ) : null}
+        </ProviderManageModelsDialog>
       ) : null}
     </div>
   );

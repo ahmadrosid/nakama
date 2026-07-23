@@ -33,6 +33,7 @@ export interface OpenAICompatibleProviderOptions {
   model: string;
   displayName: string;
   supportsThinking: boolean;
+  providerName?: ProviderClient["name"];
 }
 
 interface PendingToolCall {
@@ -56,7 +57,7 @@ export function createOpenAICompatibleProvider(
   });
 
   return {
-    name: "openai_compatible",
+    name: options.providerName ?? "openai_compatible",
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson

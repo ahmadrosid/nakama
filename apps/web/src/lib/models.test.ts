@@ -187,6 +187,12 @@ describe("isProviderTypeAlreadyConfigured", () => {
 
     expect(isProviderTypeAlreadyConfigured("openai_compatible", configured)).toBe(false);
   });
+
+  test("always allows another ollama instance", () => {
+    const configured = new Set(["ollama", "openai"]);
+
+    expect(isProviderTypeAlreadyConfigured("ollama", configured)).toBe(false);
+  });
 });
 
 describe("firstAvailableProviderOption", () => {
@@ -209,7 +215,7 @@ describe("firstAvailableProviderOption", () => {
         ]),
         "openai",
       ),
-    ).toBe("openai_compatible");
+    ).toBe("ollama");
   });
 });
 

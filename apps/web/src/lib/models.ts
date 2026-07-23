@@ -1,8 +1,14 @@
 import type {
   ConfigureProviderRequest,
   CreateProviderRequest,
+  OllamaHostMode,
   ProviderModelOption,
 } from "@nakama/core/contract";
+import {
+  OLLAMA_CLOUD_DEFAULT_BASE_URL,
+  OLLAMA_LOCAL_DEFAULT_BASE_URL,
+  ollamaRequiresApiKey,
+} from "@nakama/core/ollama-provider-config";
 import { formatConfiguredProviderLabel } from "@nakama/core/provider-label";
 import type { UserProviderName } from "@nakama/core/provider-resolution";
 
@@ -48,6 +54,7 @@ export function formatProviderLabel(
     provider === "gemini" ||
     provider === "deepseek" ||
     provider === "cerebras" ||
+    provider === "ollama" ||
     provider === "openai_compatible" ||
     provider === "opencode_go"
   ) {
@@ -64,13 +71,14 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = 
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
   { id: "cerebras", label: "Cerebras" },
+  { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
 
 /** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
 export function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
-  return provider === "openai_compatible";
+  return provider === "openai_compatible" || provider === "ollama";
 }
 
 export function isProviderTypeAlreadyConfigured(
@@ -151,6 +159,10 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
     return "csk-…";
   }
 
+  if (provider === "ollama") {
+    return "Optional for local Ollama";
+  }
+
   if (provider === "gemini") {
     return "AIza…";
   }
@@ -169,8 +181,13 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
 export function validateApiKeyForProvider(
   apiKey: string,
   provider: SelectedProvider,
+  options?: { ollamaHostMode?: OllamaHostMode },
 ): string | null {
   if (provider === "openai_compatible") {
+    return null;
+  }
+
+  if (provider === "ollama" && !ollamaRequiresApiKey(options?.ollamaHostMode ?? "local")) {
     return null;
   }
 
@@ -271,6 +288,10 @@ export function validateCerebrasModelsInput(
   }
 
   return null;
+}
+
+export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
+  return hostMode === "cloud" ? OLLAMA_CLOUD_DEFAULT_BASE_URL : OLLAMA_LOCAL_DEFAULT_BASE_URL;
 }
 
 const OPENCODE_GO_MODEL_ID_PATTERN = /^opencode-go\/[\w.-]+$/;
@@ -516,6 +537,7 @@ export function buildCreateProviderRequest(options: {
   model?: string;
   displayName?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
 }): CreateProviderRequest {
   const request = buildConfigureProviderRequest(options);
@@ -525,7 +547,8 @@ export function buildCreateProviderRequest(options: {
     apiKey: request.apiKey,
     ...(request.model ? { model: request.model } : {}),
     ...(options.displayName?.trim() ? { label: options.displayName.trim() } : {}),
-    ...(request.baseUrl ? { baseUrl: request.baseUrl } : {}),
+    ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
+    ...(options.hostMode ? { hostMode: options.hostMode } : {}),
     ...(request.customModels ? { customModels: request.customModels } : {}),
   };
 }
@@ -536,6 +559,7 @@ export function buildConfigureProviderRequest(options: {
   model?: string;
   displayName?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
 }): ConfigureProviderRequest {
   const request: ConfigureProviderRequest = {
@@ -563,6 +587,14 @@ export function buildConfigureProviderRequest(options: {
   if (options.provider === "cerebras" && options.customModels?.length) {
     return {
       ...request,
+      customModels: options.customModels,
+    };
+  }
+
+  if (options.provider === "ollama" && options.customModels?.length) {
+    return {
+      ...request,
+      baseUrl: options.baseUrl?.trim(),
       customModels: options.customModels,
     };
   }
@@ -763,7 +795,8 @@ export function resolveModelThinkingSupport(
     model.provider === "openai_compatible" ||
     model.provider === "openrouter" ||
     model.provider === "deepseek" ||
-    model.provider === "cerebras"
+    model.provider === "cerebras" ||
+    model.provider === "ollama"
   ) {
     return model.supportsThinking === true;
   }
@@ -806,7 +839,7 @@ export function resolveModelVisionSupport(
     return undefined;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras") {
+  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras" || model.provider === "ollama") {
     return model.supportsVision === true;
   }
 
