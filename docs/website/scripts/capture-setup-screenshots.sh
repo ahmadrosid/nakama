@@ -9,8 +9,8 @@ BASE_URL="http://127.0.0.1:${PORT}"
 SESSION=nakama-docs-screenshots
 SERVER_PID=""
 # Tall enough for the 5-field account step + Continue; avoids excess empty space below.
-VIEWPORT_WIDTH=1204
-VIEWPORT_HEIGHT=720
+VIEWPORT_WIDTH=1280
+VIEWPORT_HEIGHT=680
 
 cleanup() {
   agent-browser --session "$SESSION" close --all 2>/dev/null || true
