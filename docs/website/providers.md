@@ -14,6 +14,10 @@ On first run, Nakama can also prompt for a provider during the setup wizard. See
 
 Settings are saved in `~/.nakama/config.ini` (or under `NAKAMA_CONFIG_DIR` when set).
 
+During [First-time setup](/first-time-setup), the wizard uses the same provider form:
+
+![Configure your LLM provider in the setup wizard](/screenshots/setup-step-provider.png)
+
 ## Supported providers
 
 Nakama supports these built-in provider types:

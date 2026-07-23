@@ -1,6 +1,6 @@
 import type { KnowledgeBaseSource } from "../contract";
 
-export const NAKAMA_DOCS_SITE_URL = "https://ahmadrosid.github.io/nakama";
+export const NAKAMA_DOCS_SITE_URL = "https://docs.getnakama.com";
 export const NAKAMA_DOCS_LLMS_URL = `${NAKAMA_DOCS_SITE_URL}/llms.txt`;
 
 export const DEFAULT_KNOWLEDGE_SOURCES: KnowledgeBaseSource[] = [

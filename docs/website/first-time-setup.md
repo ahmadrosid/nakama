@@ -12,23 +12,41 @@ Where you open the dashboard depends on how you deployed:
 | [Docker](/docker) | `http://localhost:4310` |
 | Local development | `http://localhost:3003` (web dev server proxies to the API) |
 
-## Setup wizard
+On a fresh install, Nakama redirects you to the setup wizard automatically.
 
-On a fresh install, Nakama guides you through:
+## Step 1: Admin account
 
-1. **Create the first admin account** — this user becomes the platform admin
-2. **Create the first organization** — the tenant boundary for profiles, members, and data
-3. **Configure your model provider** — add an API key and pick models (see [Providers](/providers))
-4. **Review default profiles** — Nakama seeds starter profiles; adjust tools and instructions as needed
-5. **Invite members** (optional) — add teammates from org settings when you are ready
+Create the first platform admin. This account can manage organizations, profiles, providers, and system settings.
 
-Settings are saved under the Nakama data root (`~/.nakama` by default, or `NAKAMA_CONFIG_DIR` when set).
+![Create your admin account](/screenshots/setup-step-account.png)
+
+Fill in your name, email, and password, then click **Continue**.
+
+## Step 2: Organization
+
+Every workspace lives inside an organization. Name yours and choose a slug for URLs and API context.
+
+![Create your organization](/screenshots/setup-step-organization.png)
+
+The slug must use lowercase letters, numbers, and hyphens only. Click **Create Organization** to save the admin account and org together.
+
+## Step 3: Provider
+
+Add your first LLM provider and pick a default model. You can add more providers later from **Settings**.
+
+![Configure your LLM provider](/screenshots/setup-step-provider.png)
+
+See [Providers](/providers) for supported backends and feature notes (web search, audio transcription, etc.).
+
+## Step 4: About you (optional)
+
+The wizard can ask for optional context about you and how you prefer agents to respond. Skip this step if you want to start chatting immediately.
 
 ## Send your first message
 
-Open chat with the default profile and send a test message. If the provider is configured correctly, you should get a reply within a few seconds.
+After the provider step, Nakama opens chat with the default profile. Send a test message — you should get a reply within a few seconds.
 
-If chat fails, check **Settings → LLM providers** for a valid API key and confirm the profile has a model selected.
+If chat fails, reopen **Settings → LLM providers** and confirm the API key and profile model selection.
 
 ## What to configure next
 
@@ -45,5 +63,16 @@ See [Overview](/overview) for the mental model and [Profiles](/profiles) for sou
 
 - [Providers](/providers) — supported LLM backends and API keys
 - [Profiles](/profiles) — define each bot's behavior
+- [CLI](/cli) — chat from the terminal
 - [Multi-tenancy](/multi-tenancy) — orgs, members, and roles
 - [Telegram](/telegram) — connect your first channel
+
+## Refreshing screenshots
+
+Docs screenshots are captured with [agent-browser](https://github.com/vercel-labs/agent-browser) against a fresh local install:
+
+```bash
+./docs/website/scripts/capture-setup-screenshots.sh
+```
+
+Requires `agent-browser` on your PATH and a free port (`4312` by default).

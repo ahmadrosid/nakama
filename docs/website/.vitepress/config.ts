@@ -5,7 +5,7 @@ import { defineConfig } from 'vitepress'
 const SITE_NAME = 'Nakama'
 const SITE_TAGLINE = 'AI agents that work with your team.'
 const SITE_DESCRIPTION = 'Nakama is AI agents that work with your team — self-hosted or on managed hosting at getnakama.cloud, multi-tenant, and open source.'
-const SITE_URL = 'https://ahmadrosid.github.io/nakama'
+const SITE_URL = process.env.NAKAMA_DOCS_SITE_URL ?? 'https://docs.getnakama.com'
 const AUTHOR_NAME = 'Ahmad Rosid'
 const AUTHOR_ROLE = 'Creator and maintainer of Nakama'
 const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
@@ -17,6 +17,7 @@ const pageDescriptions: Record<string, string> = {
   'getting-started.md': 'Redirects to Quickstart — install Nakama and complete first-time setup.',
   'first-time-setup.md': 'Complete Nakama setup wizard: admin account, organization, provider, and profiles.',
   'providers.md': 'Configure LLM providers, API keys, and models in Nakama Settings.',
+  'cli.md': 'Use Nakama from the terminal — interactive chat, slash commands, and coding-agent launch.',
   'docker.md': 'Run Nakama in a single Docker container with persistent data volumes.',
   'backup-restore.md': 'Export and restore your Nakama data root with dashboard ZIP backup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, channels, and deployment options including managed hosting.',
@@ -42,6 +43,7 @@ const pageTitles: Record<string, string> = {
   'getting-started.md': 'Getting Started',
   'first-time-setup.md': 'First-time setup',
   'providers.md': 'Providers',
+  'cli.md': 'CLI',
   'docker.md': 'Docker',
   'backup-restore.md': 'Backup and restore',
   'overview.md': 'Overview',
@@ -127,6 +129,11 @@ function buildLlmsTxt(pages: string[]) {
       topics:
         "LLM provider, API key, OpenAI, Anthropic, OpenRouter, Gemini, Ollama, Fireworks, model setup, config.ini",
       page: "providers.md",
+    },
+    {
+      topics:
+        "CLI, terminal, dev:cli, slash commands, bun run dev:cli, launch codex claude opencode",
+      page: "cli.md",
     },
     {
       topics: "documentation hub, docs index, all pages",
@@ -215,7 +222,7 @@ function buildLlmsTxt(pages: string[]) {
     },
     {
       heading: 'Channels',
-      pages: ['telegram.md', 'whatsapp.md', 'discord.md'] as const,
+      pages: ['cli.md', 'telegram.md', 'whatsapp.md', 'discord.md'] as const,
     },
     {
       heading: 'Concepts',
@@ -289,7 +296,7 @@ function buildLlmsTxt(pages: string[]) {
 export default defineConfig({
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
-  base: '/nakama/',
+  base: '/',
   sitemap: {
     hostname: SITE_URL,
   },
@@ -373,6 +380,7 @@ export default defineConfig({
       {
         text: 'Channels',
         items: [
+          { text: 'CLI', link: '/cli' },
           { text: 'Telegram', link: '/telegram' },
           { text: 'WhatsApp', link: '/whatsapp' },
           { text: 'Discord', link: '/discord' },

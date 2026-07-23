@@ -69,8 +69,9 @@ See [First-time setup](/first-time-setup) for the wizard walkthrough and [Provid
 
 ### Connect a channel
 
-Enable Telegram, WhatsApp, or Discord from **Integrations** in the web app when you are ready:
+Use the web dashboard, [CLI](/cli), Telegram, WhatsApp, or Discord:
 
+- [CLI](/cli)
 - [Telegram](/telegram)
 - [WhatsApp](/whatsapp)
 - [Discord](/discord)

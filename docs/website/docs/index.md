@@ -43,6 +43,7 @@ Then open the dashboard, complete the setup wizard, and send your first message.
 
 ## Channels
 
+- [CLI](/cli) — terminal chat and slash commands
 - [Telegram](/telegram) — bot setup, pairing, groups, and troubleshooting
 - [WhatsApp](/whatsapp) — direct chat linking, commands, and troubleshooting
 - [Discord](/discord) — bot setup, pairing, slash commands, and servers
