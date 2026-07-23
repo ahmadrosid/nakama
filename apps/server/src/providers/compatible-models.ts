@@ -68,6 +68,30 @@ export function cerebrasCustomModelsToCatalog(
   }));
 }
 
+function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
+  if (entry.supportsThinking !== undefined) {
+    return entry.supportsThinking;
+  }
+
+  return false;
+}
+
+export function fireworksCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+): ProviderModelOption[] {
+  const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+
+  return catalogCustomModelsToCatalog(entries, staticModels, "fireworks").map((model) => ({
+    ...model,
+    supportsThinking:
+      model.supportsThinking !== undefined
+        ? model.supportsThinking
+        : resolveFireworksCatalogThinking(
+            entries.find((entry) => entry.id === model.id) ?? { id: model.id },
+          ),
+  }));
+}
+
 export function catalogCustomModelsToCatalog(
   entries: CustomModelEntry[],
   staticModels: ProviderModelOption[],
@@ -232,6 +256,17 @@ export function getModelsForProviderInstance(
     );
   }
 
+  if (instance.type === "fireworks") {
+    const entries = instance.customModels ?? [];
+    const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+    const catalog = entries.length
+      ? fireworksCustomModelsToCatalog(entries)
+      : staticModels;
+    return annotate(
+      ensureCurrentModelInCatalog(catalog, currentModel, "fireworks"),
+    );
+  }
+
   if (instance.type === "ollama") {
     const entries = instance.customModels ?? [];
     return annotate(
@@ -311,6 +346,24 @@ export function resolveCerebrasDefaultModel(
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??
     "gpt-oss-120b"
+  );
+}
+
+export function resolveFireworksDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = fireworksCustomModelsToCatalog(customModels ?? []);
+  return (
+    catalog.find((entry) => entry.default)?.id ??
+    catalog[0]?.id ??
+    "accounts/fireworks/models/kimi-k2p6"
   );
 }
 

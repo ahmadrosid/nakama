@@ -43,7 +43,7 @@ export function getModelPricing(
 ): ModelPricing | null {
   const provider = context.provider ?? context.providerInstance?.type ?? null;
 
-  if (provider === "openai_compatible" || provider === "openrouter" || provider === "cerebras" || provider === "ollama") {
+  if (provider === "openai_compatible" || provider === "openrouter" || provider === "cerebras" || provider === "fireworks" || provider === "ollama") {
     return getCustomModelPricing(modelId, context);
   }
 

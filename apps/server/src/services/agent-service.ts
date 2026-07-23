@@ -167,6 +167,7 @@ import {
   createProviderFromActiveConfig,
   createProviderFromSources,
   fetchRemoteOpenAIModels,
+  fetchFireworksGatewayModels,
   fetchOllamaModels,
   AVAILABLE_MODELS,
   catalogCustomModelsToCatalog,
@@ -1517,6 +1518,36 @@ export class AgentService {
       return this.discoverModelsForProvider(providerId);
     }
 
+    if (request.provider === "fireworks") {
+      const apiKey = request.apiKey?.trim() ?? "";
+
+      if (!apiKey) {
+        throw new Error("API key is required to discover Fireworks models.");
+      }
+
+      const entries = await fetchFireworksGatewayModels(apiKey);
+      const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+      const models = catalogCustomModelsToCatalog(entries, staticModels, "fireworks");
+      const probeInstance = {
+        id: "discover",
+        type: "fireworks" as const,
+        label: "Fireworks",
+        apiKey,
+        customModels: entries,
+        createdAt: new Date(0).toISOString(),
+      };
+
+      return {
+        currentProviderId: null,
+        providers: [],
+        models: models.length ? models : getModelsForProviderInstance(probeInstance),
+        catalog: AVAILABLE_MODELS,
+        provider: "fireworks",
+        displayName: null,
+        customModels: entries,
+      };
+    }
+
     const baseUrl = request.baseUrl?.trim();
     if (!baseUrl) {
       throw new Error("baseUrl or providerId is required.");
@@ -1597,6 +1628,31 @@ export class AgentService {
         provider: instance.type,
         displayName: instance.label,
         baseUrl,
+        customModels: entries,
+      };
+    }
+
+    if (instance.type === "fireworks") {
+      const apiKey =
+        instance.apiKey.trim() ||
+        readEnvValue(process.env, apiKeyEnvVarForProvider("fireworks") ?? "") ||
+        "";
+
+      if (!apiKey.trim()) {
+        throw new Error("Add an API key before discovering Fireworks models.");
+      }
+
+      const entries = await fetchFireworksGatewayModels(apiKey);
+      const remoteInstance = { ...instance, customModels: entries };
+      const models = getModelsForProviderInstance(remoteInstance);
+
+      return {
+        currentProviderId: providerId,
+        providers: [],
+        models,
+        catalog: AVAILABLE_MODELS,
+        provider: "fireworks",
+        displayName: instance.label,
         customModels: entries,
       };
     }

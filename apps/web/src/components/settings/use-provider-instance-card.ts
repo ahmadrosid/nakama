@@ -5,6 +5,7 @@ import type {
 } from "@nakama/core/contract";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { type ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import {
@@ -17,7 +18,7 @@ import {
   defaultOllamaSetupBaseUrl,
   validateApiKeyForProvider,
   validateBaseUrlInput,
-  validateCerebrasModelsInput,
+  validateShortlistCapabilityModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenCodeGoModelsInput,
@@ -53,7 +54,7 @@ export function useProviderInstanceCard({
   const isOllama = providerType === "ollama";
   const isCompatibleLike = isCompatible || isOllama;
   const isOpenRouter = providerType === "openrouter";
-  const isCerebras = providerType === "cerebras";
+  const isShortlistBrowse = isShortlistBrowseProvider(providerType);
   const isCatalogShortlist = isCatalogShortlistProvider(providerType);
 
   const catalogModelsForType = useMemo(
@@ -71,7 +72,7 @@ export function useProviderInstanceCard({
 
     if (isCompatibleLike) {
       setManageModels(seedManageModelRows(instance.customModels, instanceModels));
-    } else if (isOpenRouter || isCerebras) {
+    } else if (isOpenRouter || isShortlistBrowse) {
       setManageModels(
         seedShortlistManageModelRows(
           instance.customModels,
@@ -182,8 +183,8 @@ export function useProviderInstanceCard({
   const saveManageModels = async () => {
     const modelsError = isOpenRouter
       ? validateOpenRouterModelsInput(manageModels)
-      : isCerebras
-        ? validateCerebrasModelsInput(manageModels)
+      : isShortlistBrowse
+        ? validateShortlistCapabilityModelsInput(manageModels)
         : providerType === "opencode_go"
           ? validateOpenCodeGoModelsInput(manageModels)
           : validateCustomModelsInput(manageModels);
@@ -215,7 +216,7 @@ export function useProviderInstanceCard({
     isCompatibleLike,
     isOllama,
     isOpenRouter,
-    isCerebras,
+    isShortlistBrowse,
     isCatalogShortlist,
     catalogModelsForType,
     busy,

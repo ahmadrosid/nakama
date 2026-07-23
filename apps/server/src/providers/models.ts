@@ -8,6 +8,7 @@ import type { ProviderModelOption as ContractProviderModelOption } from "@nakama
 import {
   resolveCompatibleDefaultModel,
   resolveCerebrasDefaultModel,
+  resolveFireworksDefaultModel,
   resolveOllamaDefaultModel,
   resolveOpenRouterDefaultModel,
 } from "./compatible-models";
@@ -162,6 +163,51 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
     supportsVision: false,
     inputPerMillionUsd: 2.25,
     outputPerMillionUsd: 2.75,
+  },
+  {
+    id: "accounts/fireworks/models/kimi-k2p6",
+    name: "Kimi K2.6",
+    provider: "fireworks",
+    contextWindow: 262_144,
+    maxOutputTokens: 65_536,
+    default: true,
+    supportsThinking: true,
+    supportsVision: false,
+    inputPerMillionUsd: 0.6,
+    outputPerMillionUsd: 2.5,
+  },
+  {
+    id: "accounts/fireworks/models/glm-5p2",
+    name: "GLM 5.2",
+    provider: "fireworks",
+    contextWindow: 131_072,
+    maxOutputTokens: 40_960,
+    supportsThinking: true,
+    supportsVision: false,
+    inputPerMillionUsd: 0.55,
+    outputPerMillionUsd: 2.19,
+  },
+  {
+    id: "accounts/fireworks/models/gpt-oss-120b",
+    name: "GPT OSS 120B",
+    provider: "fireworks",
+    contextWindow: 131_072,
+    maxOutputTokens: 40_960,
+    supportsThinking: true,
+    supportsVision: false,
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.6,
+  },
+  {
+    id: "accounts/fireworks/models/kimi-k2p5",
+    name: "Kimi K2.5",
+    provider: "fireworks",
+    contextWindow: 262_144,
+    maxOutputTokens: 65_536,
+    supportsThinking: true,
+    supportsVision: true,
+    inputPerMillionUsd: 0.6,
+    outputPerMillionUsd: 2.5,
   },
   {
     id: "opencode-go/glm-5.1",
@@ -325,6 +371,16 @@ export function validateCerebrasCustomModels(entries: unknown): CustomModelEntry
   return validateCustomModels(entries);
 }
 
+export function validateFireworksCustomModels(entries: unknown): CustomModelEntry[] {
+  const models = validateCustomModels(entries);
+
+  if (!models.length) {
+    throw new Error("At least one Fireworks model is required.");
+  }
+
+  return models;
+}
+
 export function validateOllamaCustomModels(entries: unknown): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -383,6 +439,10 @@ export function getDefaultModel(
     return resolveCerebrasDefaultModel(customModels);
   }
 
+  if (provider === "fireworks" && customModels?.length) {
+    return resolveFireworksDefaultModel(customModels);
+  }
+
   if (provider === "ollama" && customModels?.length) {
     return resolveOllamaDefaultModel(customModels);
   }
@@ -410,6 +470,8 @@ export function getDefaultModel(
             ? "deepseek-v4-flash"
           : provider === "cerebras"
             ? "gpt-oss-120b"
+          : provider === "fireworks"
+            ? "accounts/fireworks/models/kimi-k2p6"
           : provider === "opencode_go"
             ? "opencode-go/kimi-k2.7-code"
             : "gpt-5.4";
@@ -439,6 +501,14 @@ export function resolveModel(
     return resolveCerebrasDefaultModel(customModels, trimmed);
   }
 
+  if (trimmed && provider === "fireworks" && customModels?.length) {
+    if (findCustomModel(customModels, trimmed)) {
+      return trimmed;
+    }
+
+    return resolveFireworksDefaultModel(customModels, trimmed);
+  }
+
   if (trimmed && provider === "ollama" && customModels?.length) {
     if (findCustomModel(customModels, trimmed)) {
       return trimmed;
@@ -462,6 +532,7 @@ export function resolveModel(
       provider === "gemini" ||
       provider === "deepseek" ||
       provider === "cerebras" ||
+      provider === "fireworks" ||
       provider === "opencode_go") &&
     customModels?.length
   ) {
@@ -508,7 +579,7 @@ export function modelSupportsVision(
     return false;
   }
 
-  if (provider === "cerebras" || provider === "ollama") {
+  if (provider === "cerebras" || provider === "fireworks" || provider === "ollama") {
     if (custom?.supportsVision !== undefined) {
       return custom.supportsVision;
     }

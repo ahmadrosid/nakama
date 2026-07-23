@@ -1,5 +1,7 @@
 export * from "./anthropic";
 export * from "./cerebras";
+export * from "./fireworks";
+export { fetchFireworksGatewayModels } from "./fireworks/catalog";
 export * from "./create";
 export * from "./gemini";
 export * from "./models";

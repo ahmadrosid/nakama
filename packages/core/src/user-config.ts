@@ -73,6 +73,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   gemini: "Gemini",
   deepseek: "DeepSeek",
   cerebras: "Cerebras",
+  fireworks: "Fireworks",
   ollama: "Ollama",
   openai_compatible: "Custom",
   opencode_go: "OpenCode Go",
@@ -579,6 +580,7 @@ function loadProvidersFromSections(
       type === "openai_compatible" ||
       type === "openrouter" ||
       type === "cerebras" ||
+      type === "fireworks" ||
       type === "ollama" ||
       type === "opencode_go"
         ? parseCustomModelsJson(values.models_json)

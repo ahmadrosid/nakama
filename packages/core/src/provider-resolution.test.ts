@@ -13,6 +13,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("cerebras")).toBe("cerebras");
+    expect(parseProviderName("fireworks")).toBe("fireworks");
   });
 
   test("rejects unknown values", () => {
@@ -90,5 +91,17 @@ describe("resolveProvider cerebras", () => {
     });
 
     expect(provider).toBe("cerebras");
+  });
+});
+
+describe("resolveProvider fireworks", () => {
+  test("auto-resolves Fireworks when it is the only env API key", () => {
+    const provider = resolveProvider({
+      env: {
+        FIREWORKS_API_KEY: "fw-test",
+      },
+    });
+
+    expect(provider).toBe("fireworks");
   });
 });

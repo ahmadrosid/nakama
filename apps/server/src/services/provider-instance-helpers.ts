@@ -34,6 +34,7 @@ import {
   resolveModel,
   validateOpenCodeGoCustomModels,
   validateCerebrasCustomModels,
+  validateFireworksCustomModels,
   validateOllamaCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
@@ -100,6 +101,14 @@ export function modelExistsOnInstance(
     }
 
     return Boolean(getModelById(trimmed)?.provider === "cerebras");
+  }
+
+  if (instance.type === "fireworks") {
+    if (instance.customModels?.length) {
+      return findCustomModel(instance.customModels, trimmed) !== undefined;
+    }
+
+    return Boolean(getModelById(trimmed)?.provider === "fireworks");
   }
 
   if (instance.type === "ollama") {
@@ -218,6 +227,8 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateOpenRouterCustomModels(request.customModels);
     } else if (instance.type === "cerebras") {
       next.customModels = validateCerebrasCustomModels(request.customModels);
+    } else if (instance.type === "fireworks") {
+      next.customModels = validateFireworksCustomModels(request.customModels);
     } else if (instance.type === "ollama") {
       next.customModels = validateOllamaCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
@@ -326,6 +337,40 @@ function buildProviderFieldsFromRequest(
       ? validateCerebrasCustomModels(request.customModels)
       : undefined;
     return { ...(customModels ? { customModels } : {}) };
+  }
+
+  if (type === "fireworks") {
+    let customModels = request.customModels?.length
+      ? validateFireworksCustomModels(request.customModels)
+      : undefined;
+
+    if (!customModels?.length && request.model?.trim()) {
+      const catalogModel = getModelById(request.model.trim());
+      customModels = validateFireworksCustomModels([
+        {
+          id: request.model.trim(),
+          default: true,
+          ...(catalogModel?.supportsThinking !== undefined
+            ? { supportsThinking: catalogModel.supportsThinking }
+            : {}),
+          ...(catalogModel?.supportsVision !== undefined
+            ? { supportsVision: catalogModel.supportsVision }
+            : {}),
+          ...(catalogModel?.inputPerMillionUsd !== undefined
+            ? { inputPerMillionUsd: catalogModel.inputPerMillionUsd }
+            : {}),
+          ...(catalogModel?.outputPerMillionUsd !== undefined
+            ? { outputPerMillionUsd: catalogModel.outputPerMillionUsd }
+            : {}),
+        },
+      ]);
+    }
+
+    if (!customModels?.length) {
+      throw new Error("At least one Fireworks model is required.");
+    }
+
+    return { customModels };
   }
 
   const rawBaseUrl = request.baseUrl?.trim();

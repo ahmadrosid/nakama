@@ -17,15 +17,15 @@ import {
   getModelDisplayName,
   hasOpenCodeZenProvider,
   isProviderTypeAlreadyConfigured,
-  modelsFromCerebrasRows,
+  isShortlistCapabilityProvider,
+  modelsFromShortlistRows,
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
   type SelectedProvider,
-  resolveCerebrasSetupModel,
   resolveOpenRouterSetupModel,
   validateApiKeyForProvider,
   validateBaseUrlInput,
-  validateCerebrasModelsInput,
+  validateShortlistCapabilityModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenRouterModelsInput,
@@ -69,8 +69,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const [selectedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
   const [openRouterModelsError, setOpenRouterModelsError] = useState<string | null>(null);
-  const [cerebrasModels, setCerebrasModels] = useState<ModelListRow[]>([]);
-  const [cerebrasModelsError, setCerebrasModelsError] = useState<string | null>(null);
+  const [shortlistModels, setShortlistModels] = useState<ModelListRow[]>([]);
+  const [shortlistModelsError, setShortlistModelsError] = useState<string | null>(null);
   const [ollamaHostMode, setOllamaHostMode] = useState<OllamaHostMode>("local");
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -109,8 +109,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       return modelsFromOpenRouterRows(openRouterModels);
     }
 
-    if (selectedProvider === "cerebras") {
-      return modelsFromCerebrasRows(cerebrasModels);
+    if (isShortlistCapabilityProvider(selectedProvider)) {
+      return modelsFromShortlistRows(selectedProvider, shortlistModels);
     }
 
     const catalogModels = filterModelsByProvider(catalog, selectedProvider);
@@ -119,7 +119,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       (model) => model.provider === selectedProvider && !catalogIds.has(model.id),
     );
     return [...catalogModels, ...extras];
-  }, [catalog, selectedProvider, customModels, openRouterModels, cerebrasModels, extraModels]);
+  }, [catalog, selectedProvider, customModels, openRouterModels, shortlistModels, extraModels]);
 
   const ollamaApiKeyOptions = useMemo(
     () => ({ ollamaHostMode }),
@@ -174,8 +174,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setOpenRouterModels([{ id: "", name: "" }]);
       }
 
-      if (provider === "cerebras" && cerebrasModels.length === 0) {
-        setCerebrasModels([{ id: "", name: "" }]);
+      if (isShortlistCapabilityProvider(provider) && shortlistModels.length === 0) {
+        setShortlistModels([{ id: "", name: "" }]);
       }
 
       if (provider === "ollama") {
@@ -189,9 +189,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setOpenRouterModelsError(null);
       }
 
-      if (provider !== "cerebras") {
-        setCerebrasModels([]);
-        setCerebrasModelsError(null);
+      if (!isShortlistCapabilityProvider(provider)) {
+        setShortlistModels([]);
+        setShortlistModelsError(null);
       }
 
       if (provider !== "openai_compatible" && provider !== "ollama") {
@@ -206,7 +206,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setCustomModels([{ id: "", name: "" }]);
       }
     },
-    [configuredTypes, openRouterModels.length, cerebrasModels.length],
+    [configuredTypes, openRouterModels.length, shortlistModels.length],
   );
 
   const selectOpenRouterModel = useCallback(
@@ -293,9 +293,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const { onSuccess } = options;
 
-  const handleCerebrasModelsChange = useCallback((rows: ModelListRow[]) => {
-    setCerebrasModels(rows);
-    setCerebrasModelsError(null);
+  const handleShortlistModelsChange = useCallback((rows: ModelListRow[]) => {
+    setShortlistModels(rows);
+    setShortlistModelsError(null);
   }, []);
 
   const handleOllamaHostModeChange = useCallback(
@@ -331,10 +331,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         selectedProvider === "openrouter"
           ? validateOpenRouterModelsInput(openRouterModels)
           : null;
-      const nextCerebrasModelsError =
-        selectedProvider === "cerebras"
-          ? validateCerebrasModelsInput(cerebrasModels)
-          : null;
+      const nextShortlistModelsError = isShortlistCapabilityProvider(selectedProvider)
+        ? validateShortlistCapabilityModelsInput(shortlistModels)
+        : null;
       const nextDisplayNameError =
         selectedProvider === "openai_compatible"
           ? validateDisplayNameInput(displayName)
@@ -351,7 +350,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
       setOpenRouterModelsError(nextOpenRouterModelsError);
-      setCerebrasModelsError(nextCerebrasModelsError);
+      setShortlistModelsError(nextShortlistModelsError);
       setDisplayNameError(nextDisplayNameError);
       setBaseUrlError(nextBaseUrlError);
       setModelsError(nextModelsError);
@@ -365,7 +364,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         return;
       }
 
-      if (nextCerebrasModelsError) {
+      if (nextShortlistModelsError) {
         return;
       }
 
@@ -393,8 +392,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       const modelToSave =
         selectedProvider === "openrouter"
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
-          : selectedProvider === "cerebras"
-            ? resolveCerebrasSetupModel(cerebrasModels, selectedModel)
+          : isShortlistCapabilityProvider(selectedProvider)
+            ? resolveOpenRouterSetupModel(shortlistModels, selectedModel)
             : selectedProvider === "ollama"
               ? resolveOpenRouterSetupModel(customModels, selectedModel)
               : selectedModel;
@@ -416,8 +415,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
                 ? normalizeModelListRows(customModels)
                 : selectedProvider === "openrouter"
                   ? normalizeModelListRows(openRouterModels)
-                  : selectedProvider === "cerebras"
-                    ? normalizeModelListRows(cerebrasModels)
+                  : isShortlistCapabilityProvider(selectedProvider)
+                    ? normalizeModelListRows(shortlistModels)
                     : selectedProvider === "opencode_go" && modelToSave
                       ? normalizeModelListRows([
                           {
@@ -433,7 +432,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setApiKeyTouched(false);
         setShowApiKey(false);
         setOpenRouterModels([]);
-        setCerebrasModels([]);
+        setShortlistModels([]);
         setCustomModels([{ id: "", name: "" }]);
         onSuccess?.(result);
       } catch (err) {
@@ -447,7 +446,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       apiKey,
       baseUrl,
       openRouterModels,
-      cerebrasModels,
+      shortlistModels,
       ollamaHostMode,
       ollamaApiKeyOptions,
       customModels,
@@ -472,8 +471,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     selectedModel,
     openRouterModels,
     openRouterModelsError,
-    cerebrasModels,
-    cerebrasModelsError,
+    shortlistModels,
+    shortlistModelsError,
     ollamaHostMode,
     displayName,
     baseUrl,
@@ -490,7 +489,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     setBaseUrl,
     setCustomModels,
     handleOpenRouterModelsChange,
-    handleCerebrasModelsChange,
+    handleShortlistModelsChange,
     handleOllamaHostModeChange,
     handleApiKeyBlur,
     handleApiKeyChange,

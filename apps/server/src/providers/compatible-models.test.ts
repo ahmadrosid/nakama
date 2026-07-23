@@ -200,6 +200,43 @@ describe("getModelsForProviderInstance cerebras", () => {
   });
 });
 
+describe("getModelsForProviderInstance fireworks", () => {
+  test("uses shortlist only when custom models are saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "fw-1",
+      type: "fireworks",
+      label: "Fireworks",
+      apiKey: "fw-test",
+      createdAt: "2026-07-24T10:00:00.000Z",
+      customModels: [
+        {
+          id: "accounts/fireworks/models/kimi-k2p6",
+          name: "Kimi K2.6",
+          supportsThinking: true,
+        },
+      ],
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]?.id).toBe("accounts/fireworks/models/kimi-k2p6");
+    expect(models[0]?.supportsThinking).toBe(true);
+    expect(models.some((model) => model.id === "accounts/fireworks/models/glm-5p2")).toBe(false);
+  });
+
+  test("falls back to static catalog when no shortlist is saved", () => {
+    const models = getModelsForProviderInstance({
+      id: "fw-1",
+      type: "fireworks",
+      label: "Fireworks",
+      apiKey: "fw-test",
+      createdAt: "2026-07-24T10:00:00.000Z",
+    });
+
+    expect(models.some((model) => model.id === "accounts/fireworks/models/kimi-k2p6")).toBe(true);
+    expect(models.some((model) => model.id === "accounts/fireworks/models/glm-5p2")).toBe(true);
+  });
+});
+
 describe("getModelsForProviderInstance openai_compatible", () => {
   test("maps supportsThinking from custom models into the catalog", () => {
     const models = getModelsForProviderInstance({

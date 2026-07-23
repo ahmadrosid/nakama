@@ -291,10 +291,11 @@ function LlmUsageSection({
                   ? `Based on tracked usage across ${trackedModelCount} models. Actual billing may differ.`
                   : usage.provider === "openai_compatible" ||
                       usage.provider === "openrouter" ||
-                      usage.provider === "cerebras"
+                      usage.provider === "cerebras" ||
+                      usage.provider === "fireworks"
                     ? `Based on pricing saved in Settings for ${modelLabel}. Actual billing may differ.`
                     : `Based on catalog pricing for ${modelLabel}. Actual billing may differ.`
-                : usage.provider === "openrouter" || usage.provider === "cerebras"
+                : usage.provider === "openrouter" || usage.provider === "cerebras" || usage.provider === "fireworks"
                   ? "Browse or add models in Settings → Manage model to save pricing for cost estimates."
                   : "Add input/output $/1M per model in Settings → Manage models to estimate cost."}
             </p>

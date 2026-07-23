@@ -35,6 +35,7 @@ describe("providerSupportsNativeDocument", () => {
   test("cerebras does not advertise native document support", () => {
     expect(providerSupportsNativeDocument("cerebras", "application/pdf")).toBe(false);
     expect(providerSupportsNativeDocument("cerebras", "text/plain")).toBe(false);
+    expect(providerSupportsNativeDocument("fireworks", "application/pdf")).toBe(false);
   });
 
   test("gemini supports pdf and text documents", () => {

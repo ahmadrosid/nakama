@@ -12,7 +12,8 @@ import {
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
-import { CerebrasProviderModelFields } from "@/components/CerebrasProviderModelFields";
+import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import {
@@ -87,7 +88,7 @@ export function ProviderInstanceCard({
   const canManage =
     card.isCompatibleLike ||
     card.isOpenRouter ||
-    card.isCerebras ||
+    card.isShortlistBrowse ||
     card.isCatalogShortlist;
 
   const endpoint = instance.baseUrl?.trim() || null;
@@ -214,11 +215,13 @@ export function ProviderInstanceCard({
               onCustomModelsChange={card.handleManageModelsChange}
             />
           ) : null}
-          {card.isCerebras ? (
-            <CerebrasProviderModelFields
+          {isShortlistBrowseProvider(card.providerType) ? (
+            <ShortlistBrowseProviderModelFields
+              provider={card.providerType}
               customModels={card.manageModels}
               disabled={card.busy}
               modelsError={card.dialogError}
+              providerId={card.providerType === "fireworks" ? instance.id : undefined}
               onCustomModelsChange={card.handleManageModelsChange}
             />
           ) : null}
