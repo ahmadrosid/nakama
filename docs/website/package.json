@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3004",
-    "build": "next build && bun run generate-mirrors",
+    "dev": "bun run generate-mirrors && next dev -p 3004",
+    "build": "bun run generate-mirrors && next build",
     "generate-mirrors": "bun run scripts/postbuild.ts",
     "preview": "bunx serve out -p 3004 -c serve.json",
     "screenshots": "./scripts/capture-setup-screenshots.sh"

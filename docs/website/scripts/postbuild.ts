@@ -1,11 +1,13 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { buildLlmsTxt } from '../lib/site-meta'
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname)
 const CONTENT_DIR = path.join(ROOT, '..', 'content', 'docs')
-const OUT_DIR = path.join(ROOT, '..', 'out')
+const PUBLIC_DIR = path.join(ROOT, '..', 'public')
 const WEBSITE_DIR = path.join(ROOT, '..')
+const MIRRORS_DIR = path.join(WEBSITE_DIR, 'generated', 'mirrors')
+const MIRROR_ROUTES_DIR = path.join(WEBSITE_DIR, 'app', '(mirrors)')
 
 const EXTRA_MIRRORS = ['getting-started.md']
 
@@ -43,14 +45,76 @@ async function walkMdxFiles(dir: string, base = ''): Promise<string[]> {
   return files.sort()
 }
 
+function mirrorContentType(relativePath: string): string {
+  return relativePath.endsWith('.md')
+    ? 'text/markdown; charset=utf-8'
+    : 'text/plain; charset=utf-8'
+}
+
+async function writeMirrorRoute(relativePath: string) {
+  const routePath = path.join(MIRROR_ROUTES_DIR, relativePath, 'route.ts')
+  const contentType = mirrorContentType(relativePath)
+  const routeSource = `import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+
+export const dynamic = 'force-static'
+export const runtime = 'nodejs'
+
+const RELATIVE_PATH = ${JSON.stringify(relativePath)}
+
+export async function GET() {
+  const content = await readFile(
+    path.join(process.cwd(), 'generated', 'mirrors', RELATIVE_PATH),
+    'utf8',
+  )
+  return new Response(content, {
+    headers: {
+      'Content-Type': ${JSON.stringify(contentType)},
+    },
+  })
+}
+`
+
+  await mkdir(path.dirname(routePath), { recursive: true })
+  await writeFile(routePath, routeSource)
+}
+
+async function writeMirrorRoutes(relativePaths: string[]) {
+  for (const relativePath of relativePaths) {
+    await writeMirrorRoute(relativePath)
+  }
+}
+
+async function cleanGeneratedMirrors() {
+  await rm(MIRROR_ROUTES_DIR, { recursive: true, force: true })
+  await rm(MIRRORS_DIR, { recursive: true, force: true })
+
+  const entries = await readdir(PUBLIC_DIR, { withFileTypes: true }).catch(() => [])
+  for (const entry of entries) {
+    const full = path.join(PUBLIC_DIR, entry.name)
+    if (entry.isDirectory() && entry.name === 'docs') {
+      await rm(full, { recursive: true, force: true })
+      continue
+    }
+    if (
+      entry.isFile() &&
+      (entry.name.endsWith('.md') || entry.name === 'llms.txt')
+    ) {
+      await rm(full, { force: true })
+    }
+  }
+}
+
 async function main() {
+  await cleanGeneratedMirrors()
+
   const mdxFiles = await walkMdxFiles(CONTENT_DIR)
   const pages = mdxFiles.map(mdxPathToRelativePath)
 
   for (const mdxFile of mdxFiles) {
     const sourcePath = path.join(CONTENT_DIR, mdxFile)
     const relativePath = mdxPathToRelativePath(mdxFile)
-    const outputPath = path.join(OUT_DIR, relativePath)
+    const outputPath = path.join(MIRRORS_DIR, relativePath)
     const raw = await readFile(sourcePath, 'utf8')
     const markdown = stripFrontmatter(raw)
 
@@ -60,14 +124,14 @@ async function main() {
 
   for (const extra of EXTRA_MIRRORS) {
     const sourcePath = path.join(WEBSITE_DIR, extra)
-    const outputPath = path.join(OUT_DIR, extra)
+    const outputPath = path.join(MIRRORS_DIR, extra)
     const raw = await readFile(sourcePath, 'utf8')
     const markdown = stripFrontmatter(raw.replace(/^---[\s\S]*?---\n/, ''))
     await writeFile(outputPath, markdown)
     if (!pages.includes(extra)) pages.push(extra)
   }
 
-  await writeFile(path.join(OUT_DIR, 'llms.txt'), buildLlmsTxt(pages))
+  await writeFile(path.join(MIRRORS_DIR, 'llms.txt'), buildLlmsTxt(pages))
 
   const sitemapUrls = [
     '',
@@ -89,10 +153,13 @@ ${sitemapUrls
   .join('\n')}
 </urlset>
 `
-  await writeFile(path.join(OUT_DIR, 'sitemap.xml'), sitemap)
+  await writeFile(path.join(PUBLIC_DIR, 'sitemap.xml'), sitemap)
 
-  await writeFile(path.join(OUT_DIR, '.nojekyll'), '')
-  console.log(`Postbuild: ${pages.length} markdown mirrors, llms.txt, sitemap.xml`)
+  await writeMirrorRoutes([...pages, 'llms.txt'])
+
+  console.log(
+    `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, and mirror routes`,
+  )
 }
 
 main().catch((error) => {
