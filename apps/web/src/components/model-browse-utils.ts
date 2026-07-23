@@ -45,3 +45,54 @@ export function capabilityBrowseRowToModelListRow(row: CapabilityBrowseRow): {
       : {}),
   };
 }
+
+export function filterRowsBySearch<T extends { id: string; name: string; description?: string }>(
+  rows: T[],
+  search: string,
+): T[] {
+  const query = search.trim().toLowerCase();
+  if (!query) {
+    return rows;
+  }
+
+  return rows.filter(
+    (row) =>
+      row.name.toLowerCase().includes(query) ||
+      row.id.toLowerCase().includes(query) ||
+      (row.description?.toLowerCase().includes(query) ?? false),
+  );
+}
+
+export function filterCapabilityBrowseRows(
+  rows: CapabilityBrowseRow[],
+  options: { search: string; hideDeprecated: boolean },
+): CapabilityBrowseRow[] {
+  let result = rows;
+
+  if (options.hideDeprecated) {
+    result = result.filter((row) => !row.deprecated);
+  }
+
+  return filterRowsBySearch(result, options.search);
+}
+
+export function capabilityBrowseRowToDisplayRow(row: CapabilityBrowseRow): {
+  id: string;
+  name: string;
+  description?: string;
+  contextLength?: number;
+  badges: Array<{ label: string; tone: "amber" }>;
+  capabilities: ReturnType<typeof formatBrowseCapabilities>;
+} {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || undefined,
+    contextLength: row.contextLength,
+    badges: [
+      ...(row.preview ? [{ label: "preview", tone: "amber" as const }] : []),
+      ...(row.deprecated ? [{ label: "deprecated", tone: "amber" as const }] : []),
+    ],
+    capabilities: formatBrowseCapabilities(row),
+  };
+}

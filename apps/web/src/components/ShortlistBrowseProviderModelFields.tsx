@@ -1,7 +1,7 @@
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CerebrasModelsBrowseList } from "@/components/CerebrasModelsBrowseList";
+import { FireworksModelsBrowseList } from "@/components/FireworksModelsBrowseList";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { capabilityBrowseRowToModelListRow } from "@/components/model-browse-utils";
 import {
   SHORTLIST_BROWSE_COPY,
@@ -49,13 +49,11 @@ export function ShortlistBrowseProviderModelFields({
             className="h-72 rounded-md border border-border"
           />
         ) : (
-          <RemoteModelsBrowseList
+          <FireworksModelsBrowseList
             onSelect={onSelect}
             className="h-72 rounded-md border border-border"
-            provider="fireworks"
             apiKey={apiKey}
             providerId={providerId}
-            browseLabel="Fireworks"
           />
         )
       }

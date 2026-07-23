@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FIREWORKS_FALLBACK_ROWS } from "@/components/RemoteModelsBrowseList";
+import { FIREWORKS_FALLBACK_ROWS } from "@/hooks/use-fireworks-discover-models";
 import { capabilityBrowseRowToModelListRow } from "@/components/model-browse-utils";
 
 describe("capabilityBrowseRowToModelListRow", () => {
