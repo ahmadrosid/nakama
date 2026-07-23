@@ -5,7 +5,7 @@ import { defineConfig } from 'vitepress'
 const SITE_NAME = 'Nakama'
 const SITE_TAGLINE = 'AI agents that work with your team.'
 const SITE_DESCRIPTION = 'Nakama is AI agents that work with your team — self-hosted or on managed hosting at getnakama.cloud, multi-tenant, and open source.'
-const SITE_URL = process.env.NAKAMA_DOCS_SITE_URL ?? 'https://docs.getnakama.com'
+const SITE_URL = process.env.NAKAMA_DOCS_SITE_URL ?? 'https://ahmadrosid.github.io/nakama'
 const AUTHOR_NAME = 'Ahmad Rosid'
 const AUTHOR_ROLE = 'Creator and maintainer of Nakama'
 const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`
@@ -296,7 +296,7 @@ function buildLlmsTxt(pages: string[]) {
 export default defineConfig({
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
-  base: '/',
+  base: '/nakama/',
   sitemap: {
     hostname: SITE_URL,
   },
