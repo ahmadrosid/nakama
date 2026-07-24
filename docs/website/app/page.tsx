@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { withBasePath } from '@/lib/base-path'
 import { SITE_DESCRIPTION, SITE_NAME } from '@/lib/site-meta'
+import { HeroPaperBackground } from '@/components/hero-paper-background'
 
 export const metadata: Metadata = {
   title: SITE_NAME,
@@ -100,10 +101,7 @@ export default function HomePage() {
       <main className="flex-1">
         <section className="hero-section px-4 pt-4 md:px-6 md:pt-6">
           <div className="hero-frame relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-stone-300/70 dark:border-zinc-500/30">
-            <div className="hero-glow pointer-events-none absolute inset-0" aria-hidden />
-            <div className="hero-noise pointer-events-none absolute inset-0" aria-hidden />
-            <div className="hero-orb pointer-events-none absolute" aria-hidden />
-            <div className="hero-halftone pointer-events-none absolute inset-0" aria-hidden />
+            <HeroPaperBackground />
 
             <div className="relative z-20 flex min-h-[28rem] flex-col px-6 pt-12 pb-36 md:min-h-[32rem] md:px-10 md:pt-14 md:pb-40 lg:min-h-[36rem] lg:px-12 lg:pt-16 lg:pb-44">
               <div className="max-w-xl text-center md:text-left">

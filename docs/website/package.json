@@ -11,6 +11,7 @@
     "screenshots:chat": "./scripts/capture-chat-screenshots.sh"
   },
   "dependencies": {
+    "@paper-design/shaders-react": "0.0.77",
     "fumadocs-core": "^16.0.0",
     "fumadocs-mdx": "^14.0.0",
     "fumadocs-ui": "^16.0.0",

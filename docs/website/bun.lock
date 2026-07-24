@@ -5,6 +5,7 @@
     "": {
       "name": "nakama-docs",
       "dependencies": {
+        "@paper-design/shaders-react": "0.0.77",
         "fumadocs-core": "^16.0.0",
         "fumadocs-mdx": "^14.0.0",
         "fumadocs-ui": "^16.0.0",
@@ -172,6 +173,10 @@
     "@next/swc-win32-x64-msvc": ["@next/swc-win32-x64-msvc@16.2.11", "", { "os": "win32", "cpu": "x64" }, "sha512-md8CLNggS1Dx9pUgApzps5uAf+N8GN9xywzmNx9vHAWo94HtBwCCqkSnhIrdfQe83Dhz8Lfo/20Nb1Zxal092w=="],
 
     "@orama/orama": ["@orama/orama@3.1.18", "", {}, "sha512-a61ljmRVVyG5MC/698C8/FfFDw5a8LOIvyOLW5fztgUXqUpc1jOfQzOitSCbge657OgXXThmY3Tk8fpiDb4UcA=="],
+
+    "@paper-design/shaders": ["@paper-design/shaders@0.0.77", "", {}, "sha512-y0mR3brBu6qvVgbnvBdXX3zL/hajdamkECLt8NbexaEc1L46W3a+ZIEwxu1NJ2/bqwxAgjJC0o2+4CAii5wp/w=="],
+
+    "@paper-design/shaders-react": ["@paper-design/shaders-react@0.0.77", "", { "dependencies": { "@paper-design/shaders": "0.0.77" }, "peerDependencies": { "@types/react": "^18 || ^19", "react": "^18 || ^19" }, "optionalPeers": ["@types/react"] }, "sha512-VCjhK7k6GT1BMjq7kLsDHMnMy1ryjCTALdhOVIf2Z5b1jh5eEHXqHdQCvMAJ7v6evjiN1twzjM1KUNOg2RoXBw=="],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.3", "", {}, "sha512-Road2bidD0uu/1BGDOWNdPI06g0lIRy6IF9GZcIrDK2KGItfor8IQwQa+yM2ERgHM1MmHxaxpTzk0/Jp42lNfA=="],
 
