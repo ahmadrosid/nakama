@@ -133,20 +133,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [orgs, user?.isPlatformAdmin],
   );
 
-  const value: AuthContextValue = {
-    user,
-    orgs,
-    activeOrg,
-    isAuthenticated: user !== null,
-    isLoading,
-    setup,
-    login,
-    logout,
-    switchOrg,
-    createOrg,
-    updateOrg,
-    refreshSession,
-  };
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      orgs,
+      activeOrg,
+      isAuthenticated: user !== null,
+      isLoading,
+      setup,
+      login,
+      logout,
+      switchOrg,
+      createOrg,
+      updateOrg,
+      refreshSession,
+    }),
+    [
+      user,
+      orgs,
+      activeOrg,
+      isLoading,
+      setup,
+      login,
+      logout,
+      switchOrg,
+      createOrg,
+      updateOrg,
+      refreshSession,
+    ],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

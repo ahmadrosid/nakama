@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
+import { usePublicArtifactShare } from "@/hooks/use-public-artifact-share";
 import {
   artifactCodeLanguage,
   isDocxFile,
@@ -9,29 +10,25 @@ import {
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
-  looksLikeUtf8Text,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
-import {
-  ARTIFACT_HTML_IFRAME_SANDBOX,
-  htmlForArtifactPreview,
-} from "@/lib/artifact-html-preview";
+import { ARTIFACT_HTML_IFRAME_SANDBOX } from "@/lib/artifact-html-preview";
 import { cn } from "@/lib/utils";
-
-interface PublicShareMetadata {
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  inlineAllowed: boolean;
-}
 
 export function PublicArtifactSharePage() {
   const { token = "" } = useParams();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [metadata, setMetadata] = useState<PublicShareMetadata | null>(null);
-  const [content, setContent] = useState<string | null>(null);
+  const { data, isLoading, error: loadError } = usePublicArtifactShare(token);
+  const metadata = data?.metadata ?? null;
+  const content = data?.content ?? null;
+  const error = !token
+    ? "Share link not found."
+    : loadError instanceof Error
+      ? loadError.message
+      : loadError
+        ? "Unable to load share."
+        : null;
+  const loading = token.length > 0 && isLoading;
 
   const mimeType = metadata ? resolveArtifactMimeType(metadata.mimeType, metadata.filename) : "";
   const isHtml = isHtmlArtifactMimeType(mimeType);
@@ -70,85 +67,6 @@ export function PublicArtifactSharePage() {
       meta.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!token) {
-      setError("Share link not found.");
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadShare() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const metaResponse = await fetch(
-          `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}?meta=1`,
-        );
-
-        if (!metaResponse.ok) {
-          throw new Error("This share link is unavailable.");
-        }
-
-        const meta = (await metaResponse.json()) as PublicShareMetadata;
-        if (cancelled) {
-          return;
-        }
-
-        setMetadata(meta);
-
-        const resolvedMime = resolveArtifactMimeType(meta.mimeType, meta.filename);
-        const previewAsHtml = isHtmlArtifactMimeType(resolvedMime);
-
-        // HTML is blocked from inline API serving (same-origin XSS) but still previewed
-        // here via a sandboxed iframe srcDoc on the web app origin.
-        if (!meta.inlineAllowed && !previewAsHtml) {
-          setContent(null);
-          setLoading(false);
-          return;
-        }
-
-        const contentResponse = await fetch(
-          `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`,
-        );
-
-        if (!contentResponse.ok) {
-          throw new Error("This share link is unavailable.");
-        }
-
-        const bytes = new Uint8Array(await contentResponse.arrayBuffer());
-        const contentType = resolveArtifactMimeType(
-          contentResponse.headers.get("Content-Type") ?? meta.mimeType,
-          meta.filename,
-        );
-
-        if (isHtmlArtifactMimeType(contentType)) {
-          setContent(htmlForArtifactPreview(new TextDecoder().decode(bytes)));
-        } else if (looksLikeUtf8Text(bytes)) {
-          setContent(new TextDecoder().decode(bytes));
-        } else {
-          setContent(null);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Unable to load share.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadShare();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   const downloadUrl = `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`;
 

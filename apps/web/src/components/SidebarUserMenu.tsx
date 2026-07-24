@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LogOutIcon, UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -127,19 +127,18 @@ function UserProfileDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      return;
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen) {
+      setFormName(name);
+      setFormEmail(email);
+      setFormPhone(phone);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError(null);
     }
-
-    setFormName(name);
-    setFormEmail(email);
-    setFormPhone(phone);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setError(null);
-  }, [open, email, name, phone]);
+    onOpenChange(nextOpen);
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -190,7 +189,7 @@ function UserProfileDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Profile</DialogTitle>

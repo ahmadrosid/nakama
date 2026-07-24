@@ -1,6 +1,5 @@
 import {
   useDeferredValue,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -159,6 +158,12 @@ function VirtualModelList({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [prevRows, setPrevRows] = useState(rows);
+
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setScrollTop(0);
+  }
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -172,12 +177,10 @@ function VirtualModelList({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-
     element.scrollTop = 0;
-    setScrollTop(0);
   }, [rows]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -40,18 +40,18 @@ export function CodingHarnessSettingsPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [installProgress, setInstallProgress] = useState<string | null>(null);
+  const [syncedSettings, setSyncedSettings] = useState(settings);
 
-  useEffect(() => {
-    if (!settings) {
-      return;
+  if (settings !== syncedSettings) {
+    setSyncedSettings(settings);
+    if (settings) {
+      const nextSelected = settings.selectedHarnessId ?? settings.activeHarnessId;
+      setSelectedHarnessId(nextSelected);
+      setExpandedHarnessId(nextSelected);
+      setHint(null);
+      setFormError(null);
     }
-
-    const nextSelected = settings.selectedHarnessId ?? settings.activeHarnessId;
-    setSelectedHarnessId(nextSelected);
-    setExpandedHarnessId(nextSelected);
-    setHint(null);
-    setFormError(null);
-  }, [settings]);
+  }
 
   function selectHarness(harnessId: string) {
     setSelectedHarnessId(harnessId);

@@ -486,22 +486,27 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
   const hasDetails = Boolean(isRunning || command || output);
-  const [open, setOpen] = useState(false);
+  const [collapsedWhileRunning, setCollapsedWhileRunning] = useState(false);
+  const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
 
-  useEffect(() => {
+  if (isRunning !== prevIsRunning) {
+    setPrevIsRunning(isRunning);
     if (isRunning) {
-      setOpen(true);
-      return;
+      setCollapsedWhileRunning(false);
     }
+  }
 
-    setOpen(false);
-  }, [isRunning, message.toolStatus]);
+  const open = isRunning ? !collapsedWhileRunning : false;
 
   return (
     <div>
       <CollapsibleTrigger
         open={open}
-        onToggle={() => hasDetails && setOpen((current) => !current)}
+        onToggle={() => {
+          if (hasDetails && isRunning) {
+            setCollapsedWhileRunning((current) => !current);
+          }
+        }}
         label={label}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
         disabled={!hasDetails}

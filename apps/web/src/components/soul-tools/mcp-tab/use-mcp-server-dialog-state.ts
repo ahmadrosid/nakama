@@ -6,7 +6,7 @@ import type {
   McpStdioConfig,
   McpTransport,
 } from "@nakama/core/contract";
-import { useEffect, useState, type ClipboardEvent } from "react";
+import { useState, type ClipboardEvent } from "react";
 import {
   argsToArray,
   emptyHeaderRow,
@@ -66,15 +66,23 @@ export function useMcpServerDialogState({
       ? url.trim().length > 0
       : command.trim().length > 0);
 
-  useEffect(() => {
+  const formResetKey = !open
+    ? "closed"
+    : !server
+      ? "create"
+      : detail
+        ? `edit-${server.id}-${detail.name}-${detail.transport}`
+        : `edit-${server.id}-loading`;
+  const [prevFormResetKey, setPrevFormResetKey] = useState(formResetKey);
+
+  if (formResetKey !== prevFormResetKey) {
+    setPrevFormResetKey(formResetKey);
+
     if (!open) {
       setImportOpen(false);
       setImportDraft("");
       setImportError(null);
-      return;
-    }
-
-    if (!server) {
+    } else if (!server) {
       setName("");
       setTransport("http");
       setUrl("");
@@ -85,36 +93,30 @@ export function useMcpServerDialogState({
       setSubmitError(null);
       setTestResult(null);
       setTesting(false);
-      return;
+    } else if (detail) {
+      setName(detail.name);
+      setTransport(detail.transport);
+      setSubmitError(null);
+      setTestResult(null);
+      setTesting(false);
+
+      if (detail.transport === "stdio") {
+        const stdioConfig = detail.config as McpStdioConfig;
+        setCommand(stdioConfig.command);
+        setArgs(stdioConfig.args ?? []);
+        setEnv(recordToHeaderRows(stdioConfig.env));
+        setUrl("");
+        setHeaders([emptyHeaderRow()]);
+      } else {
+        const httpConfig = detail.config as McpHttpConfig;
+        setUrl(httpConfig.url);
+        setHeaders(recordToHeaderRows(httpConfig.headers));
+        setCommand("");
+        setArgs([]);
+        setEnv([emptyHeaderRow()]);
+      }
     }
-
-    if (!detail) {
-      return;
-    }
-
-    setName(detail.name);
-    setTransport(detail.transport);
-    setSubmitError(null);
-    setTestResult(null);
-    setTesting(false);
-
-    if (detail.transport === "stdio") {
-      const stdioConfig = detail.config as McpStdioConfig;
-      setCommand(stdioConfig.command);
-      setArgs(stdioConfig.args ?? []);
-      setEnv(recordToHeaderRows(stdioConfig.env));
-      setUrl("");
-      setHeaders([emptyHeaderRow()]);
-      return;
-    }
-
-    const httpConfig = detail.config as McpHttpConfig;
-    setUrl(httpConfig.url);
-    setHeaders(recordToHeaderRows(httpConfig.headers));
-    setCommand("");
-    setArgs([]);
-    setEnv([emptyHeaderRow()]);
-  }, [open, server, detail]);
+  }
 
   function buildRequest(): CreateMcpServerRequest {
     const activeTransport = resolveFormTransport(transport, command, url);

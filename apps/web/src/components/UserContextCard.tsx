@@ -73,6 +73,7 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
     }
 
     autoInitAttemptedRef.current = true;
+    let cancelled = false;
 
     async function autoCreate() {
       setFormError(null);
@@ -80,17 +81,31 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
 
       try {
         const result = await initMutation.mutateAsync();
+        if (cancelled) {
+          return;
+        }
+
         await refetch();
+        if (cancelled) {
+          return;
+        }
+
         if (result.created) {
           setEditorOpen(true);
         }
         setHint(result.created ? "Template created." : "USER.md already exists.");
       } catch (error) {
-        setFormError(formatUserContextError(error));
+        if (!cancelled) {
+          setFormError(formatUserContextError(error));
+        }
       }
     }
 
     void autoCreate();
+
+    return () => {
+      cancelled = true;
+    };
   }, [autoInit, isActive, isLoading, status, initMutation, refetch]);
 
   function handleEditorOpenChange(open: boolean) {

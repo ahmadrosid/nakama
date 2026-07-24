@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
+import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
 const MAX_DIMENSION = 2048;
 const QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4] as const;
@@ -47,23 +48,22 @@ function renameForMediaType(filename: string, mediaType: string): string {
 
 async function loadImageBitmap(file: File): Promise<ImageBitmap> {
   if (typeof createImageBitmap === "function") {
-    return createImageBitmap(file);
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      // Fall back to decoding through an HTMLImageElement below.
+    }
   }
 
-  const url = URL.createObjectURL(file);
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("Failed to load image."));
+    element.src = dataUrl;
+  });
 
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error("Failed to load image."));
-      element.src = url;
-    });
-
-    return await createImageBitmap(image);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  return createImageBitmap(image);
 }
 
 async function canvasToBlob(

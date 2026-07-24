@@ -85,7 +85,7 @@ function ExternalLinkSafetyModalContent({
               rel="noreferrer"
               target="_blank"
             >
-              Learn more
+              Learn more about external links
             </a>
           </DialogDescription>
 

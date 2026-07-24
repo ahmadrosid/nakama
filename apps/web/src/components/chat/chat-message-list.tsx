@@ -424,9 +424,9 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
     <div className="space-y-2">
       {message.imageAttachments?.length ? (
         <div className="flex flex-wrap gap-2">
-          {message.imageAttachments.map((image, index) => (
+          {message.imageAttachments.map((image) => (
             <ImageAttachmentPreview
-              key={image.url ?? `image-attachment-${index}`}
+              key={image.url ?? `image-attachment-${message.id}-${image.description ?? "unnamed"}`}
               url={image.url}
               description={image.description}
               caption={message.content || null}

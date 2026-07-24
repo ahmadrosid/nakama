@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ChatListItem } from "@/lib/chat-history";
 import { WebSourceCard } from "@/components/chat/WebSearch";
 import { useWebSourceSiteStates } from "@/components/chat/use-web-source-site-states";
@@ -10,17 +10,18 @@ import {
 export function WebFetchToolRow({ message }: { message: ChatListItem }) {
   const state = buildWebFetchToolState(message);
   const isRunning = state.status === "running";
-  const [open, setOpen] = useState(false);
-  const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
+  const [collapsedWhileRunning, setCollapsedWhileRunning] = useState(false);
+  const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
 
-  useEffect(() => {
+  if (isRunning !== prevIsRunning) {
+    setPrevIsRunning(isRunning);
     if (isRunning) {
-      setOpen(true);
-      return;
+      setCollapsedWhileRunning(false);
     }
+  }
 
-    setOpen(false);
-  }, [isRunning]);
+  const open = isRunning ? !collapsedWhileRunning : false;
+  const siteStates = useWebSourceSiteStates(state.sources.length, state.status);
 
   if (!shouldRenderWebFetchToolRow(message)) {
     return null;
@@ -35,7 +36,11 @@ export function WebFetchToolRow({ message }: { message: ChatListItem }) {
         siteStates={siteStates}
         isComplete={!isRunning}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(nextOpen) => {
+          if (isRunning) {
+            setCollapsedWhileRunning(!nextOpen);
+          }
+        }}
       />
     </div>
   );
