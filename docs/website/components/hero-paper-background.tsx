@@ -59,7 +59,7 @@ export function HeroPaperBackground() {
           size={3}
           speed={0}
           frame={5000 * 120}
-          className="absolute animate-fd-fade-in duration-[400ms] max-lg:bottom-[-50%] max-lg:left-[-200px] lg:top-[-5%] lg:right-0"
+          className="absolute animate-fd-fade-in duration-[400ms] bottom-[-55%] left-[-220px] sm:bottom-[-50%] lg:bottom-[-58%] lg:left-[-260px]"
           minPixelRatio={1}
         />
       )}
