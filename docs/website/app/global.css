@@ -16,18 +16,32 @@
   --color-fd-border: #27272a;
 }
 
-/* Landing page — Fumadocs-inspired dark / gold */
+/* Landing page — light default, dark / gold when .dark is set */
 .landing {
+  --landing-brand: #a16207;
+  --landing-brand-strong: #ca8a04;
+  --landing-orange: #ea580c;
+  --landing-fg: #1c1917;
+  color: var(--landing-fg);
+  background: #fafaf9;
+}
+
+.dark .landing {
   --landing-brand: #fff383;
   --landing-brand-strong: #fbbf24;
   --landing-orange: #fc7744;
   --landing-fg: #e4e2d0;
-  color: var(--landing-fg);
   background: #000;
 }
 
 .landing-header {
+  background: color-mix(in oklab, #fafaf9 82%, transparent);
+  border-color: rgba(28, 25, 23, 0.08);
+}
+
+.dark .landing-header {
   background: color-mix(in oklab, #000 72%, transparent);
+  border-color: rgba(255, 255, 255, 0.05);
 }
 
 .landing-accent {
@@ -50,10 +64,22 @@
 }
 
 .hero-section {
+  background: #fafaf9;
+}
+
+.dark .hero-section {
   background: #000;
 }
 
 .hero-frame {
+  background:
+    radial-gradient(ellipse 70% 60% at 78% 42%, rgba(234, 88, 12, 0.12), transparent 58%),
+    radial-gradient(ellipse 55% 50% at 18% 8%, rgba(120, 113, 40, 0.1), transparent 52%),
+    radial-gradient(ellipse 40% 35% at 55% 0%, rgba(251, 191, 36, 0.12), transparent 50%),
+    #f5f5f4;
+}
+
+.dark .hero-frame {
   background:
     radial-gradient(ellipse 70% 60% at 78% 42%, rgba(252, 119, 68, 0.28), transparent 58%),
     radial-gradient(ellipse 55% 50% at 18% 8%, rgba(90, 100, 40, 0.22), transparent 52%),
@@ -75,6 +101,10 @@
   right: 5%;
   width: min(26rem, 55vw);
   height: min(26rem, 55vw);
+  background: rgba(234, 88, 12, 0.22);
+}
+
+.dark .hero-glow::before {
   background: rgba(252, 119, 68, 0.4);
 }
 
@@ -83,14 +113,23 @@
   left: -5%;
   width: 18rem;
   height: 18rem;
+  background: rgba(120, 130, 50, 0.1);
+}
+
+.dark .hero-glow::after {
   background: rgba(120, 130, 50, 0.18);
 }
 
 .hero-noise {
-  opacity: 0.35;
-  mix-blend-mode: overlay;
+  opacity: 0.2;
+  mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   background-size: 180px 180px;
+}
+
+.dark .hero-noise {
+  opacity: 0.35;
+  mix-blend-mode: overlay;
 }
 
 .hero-orb {
@@ -100,9 +139,9 @@
   height: min(28rem, 70vw);
   border-radius: 9999px;
   background:
-    radial-gradient(circle at 42% 38%, rgba(255, 210, 120, 0.95) 0%, transparent 28%),
-    radial-gradient(circle at 55% 55%, rgba(252, 119, 68, 0.95) 0%, transparent 48%),
-    radial-gradient(circle at 50% 50%, rgba(160, 40, 10, 0.7) 0%, transparent 62%);
+    radial-gradient(circle at 42% 38%, rgba(251, 191, 36, 0.75) 0%, transparent 28%),
+    radial-gradient(circle at 55% 55%, rgba(234, 88, 12, 0.65) 0%, transparent 48%),
+    radial-gradient(circle at 50% 50%, rgba(180, 83, 9, 0.45) 0%, transparent 62%);
   mask-image: radial-gradient(
     circle,
     black 0%,
@@ -121,15 +160,32 @@
   );
 }
 
+.dark .hero-orb {
+  background:
+    radial-gradient(circle at 42% 38%, rgba(255, 210, 120, 0.95) 0%, transparent 28%),
+    radial-gradient(circle at 55% 55%, rgba(252, 119, 68, 0.95) 0%, transparent 48%),
+    radial-gradient(circle at 50% 50%, rgba(160, 40, 10, 0.7) 0%, transparent 62%);
+}
+
 .hero-halftone {
   background-image: radial-gradient(
     circle,
-    rgba(252, 119, 68, 0.85) 1.15px,
+    rgba(234, 88, 12, 0.55) 1.15px,
     transparent 1.3px
   );
   background-size: 6px 6px;
   mask-image: radial-gradient(circle at 82% 38%, black 0%, black 18%, transparent 55%);
   -webkit-mask-image: radial-gradient(circle at 82% 38%, black 0%, black 18%, transparent 55%);
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+}
+
+.dark .hero-halftone {
+  background-image: radial-gradient(
+    circle,
+    rgba(252, 119, 68, 0.85) 1.15px,
+    transparent 1.3px
+  );
   opacity: 0.7;
   mix-blend-mode: screen;
 }
@@ -141,28 +197,36 @@
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #000;
+  color: #fff;
   transition:
     transform 0.2s ease,
     background-color 0.2s ease;
 }
 
+.dark .hero-cta-primary {
+  color: #000;
+}
+
 .hero-cta-primary:hover {
-  background: #fff7c8;
+  background: var(--landing-brand-strong);
   transform: translateY(-1px);
+}
+
+.dark .hero-cta-primary:hover {
+  background: #fff7c8;
 }
 
 .hero-cta-secondary {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.72);
   padding: 0.75rem 1.35rem;
   font-size: 0.875rem;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: #1c1917;
   backdrop-filter: blur(8px);
   transition:
     border-color 0.2s ease,
@@ -170,10 +234,21 @@
     transform 0.2s ease;
 }
 
+.dark .hero-cta-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+}
+
 .hero-cta-secondary:hover {
+  border-color: color-mix(in oklab, var(--landing-brand) 40%, rgba(28, 25, 23, 0.12));
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+}
+
+.dark .hero-cta-secondary:hover {
   border-color: color-mix(in oklab, var(--landing-brand) 40%, rgba(255, 255, 255, 0.2));
   background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
 }
 
 .feature-card {
@@ -184,7 +259,12 @@
 }
 
 .feature-card:hover {
+  border-color: color-mix(in oklab, var(--landing-brand) 28%, rgba(28, 25, 23, 0.1));
+  box-shadow: 0 12px 40px -16px rgba(234, 88, 12, 0.18);
+  transform: translateY(-2px);
+}
+
+.dark .feature-card:hover {
   border-color: color-mix(in oklab, var(--landing-brand) 28%, rgba(255, 255, 255, 0.1));
   box-shadow: 0 12px 40px -16px rgba(252, 119, 68, 0.25);
-  transform: translateY(-2px);
 }

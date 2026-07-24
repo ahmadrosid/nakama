@@ -21,6 +21,10 @@ LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provide
 
 Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Do not use the API, browser, or scraping.
 
+## Browser automation
+
+Use `agent-browser` cli to do browser automation, screenshot etc. Run the docker first when you need to debug with first installation, for just quick test or screenshot use local dev server that already running.
+
 ## Docker
 
 One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310

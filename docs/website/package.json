@@ -7,7 +7,8 @@
     "build": "bun run generate-mirrors && next build",
     "generate-mirrors": "bun run scripts/postbuild.ts",
     "preview": "bunx serve out -p 3004 -c serve.json",
-    "screenshots": "./scripts/capture-setup-screenshots.sh"
+    "screenshots": "./scripts/capture-setup-screenshots.sh",
+    "screenshots:chat": "./scripts/capture-chat-screenshots.sh"
   },
   "dependencies": {
     "fumadocs-core": "^16.0.0",
