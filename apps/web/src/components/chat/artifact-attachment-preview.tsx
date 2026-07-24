@@ -9,7 +9,12 @@ import { useArtifactShareControls } from "@/components/chat/use-artifact-share-c
 import {
   ArtifactAttachmentPanelBody,
 } from "@/components/chat/artifact-attachment-panel-body";
-import { downloadActionLabel, artifactPanelDefaultWidth, artifactPanelSubtitle } from "@/components/chat/artifact-attachment-panel-body.shared";
+import {
+  downloadActionLabel,
+  artifactPanelDefaultWidth,
+  artifactPanelSubtitle,
+} from "@/components/chat/artifact-attachment-panel-body.shared";
+import { useArtifactPreviewContent } from "@/components/chat/use-artifact-preview-content";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
@@ -21,11 +26,10 @@ import {
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
-  looksLikeUtf8Text,
   resolveArtifactMimeType,
   type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
-import { client, formatError } from "@/lib/client";
+import { client } from "@/lib/client";
 import { formatBytes } from "@/lib/knowledge-base-files";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +38,67 @@ interface ArtifactAttachmentPreviewProps {
   id: string;
   artifact: ChatArtifactRef;
   className?: string;
+}
+
+function ArtifactAttachmentPreviewPanelBody({
+  kind,
+  textFormat,
+  language,
+  loading,
+  error,
+  content,
+  imagePreviewUrl,
+  canPreview,
+  artifact,
+}: {
+  kind: "image" | "html" | "text";
+  textFormat: "markdown" | "plain";
+  language: string | null;
+  loading: boolean;
+  error: string | null;
+  content: string | null;
+  imagePreviewUrl: string | null;
+  canPreview: boolean;
+  artifact: ChatArtifactRef;
+}) {
+  if (kind === "image") {
+    return (
+      <ArtifactAttachmentPanelBody
+        kind="image"
+        loading={loading}
+        error={error}
+        imagePreviewUrl={imagePreviewUrl}
+        canPreview={canPreview}
+        artifact={artifact}
+      />
+    );
+  }
+
+  if (kind === "html") {
+    return (
+      <ArtifactAttachmentPanelBody
+        kind="html"
+        loading={loading}
+        error={error}
+        content={content}
+        canPreview={canPreview}
+        artifact={artifact}
+      />
+    );
+  }
+
+  return (
+    <ArtifactAttachmentPanelBody
+      kind="text"
+      format={textFormat}
+      language={language}
+      loading={loading}
+      error={error}
+      content={content}
+      canPreview={canPreview}
+      artifact={artifact}
+    />
+  );
 }
 
 export function ArtifactAttachmentPreview({
@@ -47,10 +112,6 @@ export function ArtifactAttachmentPreview({
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [content, setContent] = useState<string | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
   const mimeType = resolveArtifactMimeType(artifact.mimeType, artifact.filename);
   const isHtml = isHtmlArtifactMimeType(mimeType);
@@ -66,98 +127,15 @@ export function ArtifactAttachmentPreview({
     isTextArtifactMimeType(mimeType) ||
     isUnknownArtifactMimeType(mimeType);
   const downloadLabel = downloadActionLabel(mimeType);
-
-  useEffect(() => {
-    return () => {
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
-    };
-  }, [imagePreviewUrl]);
-
-  useEffect(() => {
-    if (!open || !canPreview) {
-      return;
-    }
-
-    if (isImage) {
-      if (imagePreviewUrl !== null) {
-        return;
-      }
-    } else if (content !== null) {
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    void client
-      .readProfileArtifactContent(profileId, artifact.path, {
-        inline: true,
-        render: isWordDocument ? "markdown" : undefined,
-      })
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-
-        const contentType = resolveArtifactMimeType(result.contentType, artifact.filename);
-        const servedAsHtml = isHtmlArtifactMimeType(contentType);
-        const servedAsImage = isImageArtifactMimeType(contentType);
-
-        if (isImage) {
-          if (!servedAsImage) {
-            setError("Preview is not available for this file type. Download instead.");
-            return;
-          }
-
-          setImagePreviewUrl(URL.createObjectURL(new Blob([result.data], { type: contentType })));
-          return;
-        }
-
-        if (isHtml ? !servedAsHtml : servedAsHtml) {
-          setError("Preview is not available for this file type. Download instead.");
-          return;
-        }
-
-        if (
-          !isHtml &&
-          !isTextArtifactMimeType(contentType) &&
-          !looksLikeUtf8Text(new Uint8Array(result.data))
-        ) {
-          setError("Preview is not available for this file type. Download instead.");
-          return;
-        }
-
-        setContent(new TextDecoder().decode(result.data));
-      })
-      .catch((fetchError) => {
-        if (!cancelled) {
-          setError(formatError(fetchError));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  const { loading, error, content, imagePreviewUrl, setContent } = useArtifactPreviewContent({
     open,
     canPreview,
-    content,
-    imagePreviewUrl,
     isHtml,
     isImage,
     isWordDocument,
     profileId,
-    artifact.path,
-    artifact.filename,
-  ]);
+    artifact,
+  });
 
   useEffect(() => {
     if (!copied) {
@@ -175,39 +153,16 @@ export function ArtifactAttachmentPreview({
   }, [hide, id]);
 
   function buildPanelBody(loadingOverride?: boolean) {
-    const loadingState = loadingOverride ?? loading;
-    if (isImage) {
-      return (
-        <ArtifactAttachmentPanelBody
-          kind="image"
-          loading={loadingState}
-          error={error}
-          imagePreviewUrl={imagePreviewUrl}
-          canPreview={canPreview}
-          artifact={artifact}
-        />
-      );
-    }
-    if (isHtml) {
-      return (
-        <ArtifactAttachmentPanelBody
-          kind="html"
-          loading={loadingState}
-          error={error}
-          content={content}
-          canPreview={canPreview}
-          artifact={artifact}
-        />
-      );
-    }
+    const panelKind = isImage ? "image" : isHtml ? "html" : "text";
     return (
-      <ArtifactAttachmentPanelBody
-        kind="text"
-        format={isMarkdown ? "markdown" : "plain"}
+      <ArtifactAttachmentPreviewPanelBody
+        kind={panelKind}
+        textFormat={isMarkdown ? "markdown" : "plain"}
         language={language}
-        loading={loadingState}
+        loading={loadingOverride ?? loading}
         error={error}
         content={content}
+        imagePreviewUrl={imagePreviewUrl}
         canPreview={canPreview}
         artifact={artifact}
       />

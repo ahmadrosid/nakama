@@ -1,6 +1,5 @@
 import {
   Fragment,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -86,6 +85,12 @@ export function VirtualModelBrowseList<T>({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [prevRows, setPrevRows] = useState(rows);
+
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setScrollTop(0);
+  }
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -99,12 +104,10 @@ export function VirtualModelBrowseList<T>({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-
     element.scrollTop = 0;
-    setScrollTop(0);
   }, [rows]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;

@@ -1,6 +1,9 @@
 export const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
   try {
     const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
     const blob = await response.blob();
     // FileReader uses callback-based API, wrapping in Promise is necessary
     // oxlint-disable-next-line eslint-plugin-promise(avoid-new)
