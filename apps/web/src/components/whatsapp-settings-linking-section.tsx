@@ -21,6 +21,8 @@ export function WhatsAppSettingsLinkingSection({
   showReconnect,
   reconnectPending,
   onReconnect,
+  rowClassName,
+  compact = false,
 }: {
   paired: boolean;
   pairingCode: string | null;
@@ -37,11 +39,14 @@ export function WhatsAppSettingsLinkingSection({
   showReconnect: boolean;
   reconnectPending: boolean;
   onReconnect: () => void;
+  rowClassName?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className={cn("divide-y divide-border", !paired && "bg-muted/20")}>
+    <div className={cn("space-y-4", !paired && "bg-muted/20")}>
       <SettingsRow
         label="Pairing code"
+        className={rowClassName}
         description={
           pairingCode
             ? "Open Linked Devices in WhatsApp and enter this code."
@@ -110,7 +115,7 @@ export function WhatsAppSettingsLinkingSection({
           >
             {regeneratePending ? (
               <>
-                <Spinner className="mr-2" />
+                <Spinner className="size-3" />
                 Generating…
               </>
             ) : (
@@ -121,7 +126,12 @@ export function WhatsAppSettingsLinkingSection({
       </SettingsRow>
 
       {pairingCode ? (
-        <ol className="list-decimal space-y-1 px-4 py-3 pl-8 text-xs text-muted-foreground">
+        <ol
+          className={cn(
+            "list-decimal space-y-1 pl-5 text-xs text-muted-foreground",
+            !compact && "px-4 py-3 pl-8",
+          )}
+        >
           <li>Open WhatsApp on your phone</li>
           <li>Go to Settings, then Linked Devices</li>
           <li>Choose Link with phone number and enter this code</li>
@@ -129,7 +139,7 @@ export function WhatsAppSettingsLinkingSection({
       ) : null}
 
       {showQr ? (
-        <div className="space-y-3 px-4 py-4">
+        <div className={cn("space-y-3", !compact && "px-4 py-4")}>
           <div className="flex items-center gap-2">
             <ScanQrCodeIcon className="size-4 text-primary" aria-hidden />
             <p className="text-sm font-medium text-foreground">Scan QR code</p>
@@ -148,17 +158,32 @@ export function WhatsAppSettingsLinkingSection({
           </ol>
         </div>
       ) : linkingAfterScan ? (
-        <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-sm text-muted-foreground",
+            !compact && "px-4 py-4",
+          )}
+        >
           <Spinner className="size-4" />
           Linking your WhatsApp account…
         </div>
       ) : bridgeStarting ? (
-        <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-sm text-muted-foreground",
+            !compact && "px-4 py-4",
+          )}
+        >
           <Spinner className="size-4" />
           Bridge starting — enter the pairing code in WhatsApp
         </div>
       ) : awaitingQr ? (
-        <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-sm text-muted-foreground",
+            !compact && "px-4 py-4",
+          )}
+        >
           <Spinner className="size-4" />
           Preparing QR code…
         </div>
@@ -167,6 +192,7 @@ export function WhatsAppSettingsLinkingSection({
       {showReconnect ? (
         <SettingsRow
           label="Reconnect"
+          className={rowClassName}
           description={
             paired
               ? "Unlinks the current session so you can scan a new QR code"
@@ -182,7 +208,7 @@ export function WhatsAppSettingsLinkingSection({
           >
             {reconnectPending ? (
               <>
-                <Spinner className="mr-2" />
+                <Spinner className="size-3" />
                 Resetting…
               </>
             ) : (

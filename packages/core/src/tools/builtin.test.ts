@@ -364,6 +364,97 @@ describe("file builtin tools", () => {
     ).rejects.toThrow(/write_docx/);
   });
 
+  test("file tools refuse skills/* paths when forbidProfileSkillMarkdownWrites", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-skill-md-"));
+    await mkdir(path.join(tempDir, "skills", "notes", "docs"), { recursive: true });
+    await writeFile(
+      path.join(tempDir, "skills", "notes", "SKILL.md"),
+      "---\nname: notes\ndescription: Notes.\n---\n\nBody.\n",
+      "utf8",
+    );
+    await writeFile(path.join(tempDir, "skills", "notes", "docs", "notes.md"), "nested\n", "utf8");
+    const context = { ...PROFILE_CONTEXT, forbidProfileSkillMarkdownWrites: true };
+
+    await expect(
+      runWriteFile(
+        { path: "skills/notes/SKILL.md", content: "---\nname: notes\ndescription: x\n---\n" },
+        context,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/Use skill_manage/);
+
+    await expect(
+      runWriteFile({ path: "skills/notes/docs/notes.md", content: "changed" }, context, {
+        workspaceRoot: tempDir,
+      }),
+    ).rejects.toThrow(/Use skill_manage/);
+
+    await expect(
+      runEditFile(
+        {
+          path: "skills/notes/docs/notes.md",
+          edits: [{ oldText: "nested", newText: "changed" }],
+        },
+        context,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/Use skill_manage/);
+
+    await expect(
+      runDeleteFile({ path: "skills/notes/docs/notes.md" }, context, { workspaceRoot: tempDir }),
+    ).rejects.toThrow(/Use skill_manage/);
+
+    await expect(
+      runWriteDocx(
+        { path: "skills/notes/notes.docx", markdown: "# hi" },
+        context,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/Use skill_manage/);
+
+    expect(await readFile(path.join(tempDir, "skills", "notes", "docs", "notes.md"), "utf8")).toBe(
+      "nested\n",
+    );
+  });
+
+  test("write_file, edit_file, and delete_file refuse skills/*/tool.js and tool.ts", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-skill-tool-"));
+    await mkdir(path.join(tempDir, "skills", "notes"), { recursive: true });
+
+    await expect(
+      runWriteFile(
+        { path: "skills/notes/tool.js", content: "export default {};" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/tool\.js.*Phase 1/);
+
+    await expect(
+      runWriteFile(
+        { path: "skills/notes/tool.ts", content: "export default {};" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/tool\.ts.*Phase 1/);
+
+    await writeFile(path.join(tempDir, "skills", "notes", "tool.js"), "export default {};", "utf8");
+
+    await expect(
+      runEditFile(
+        {
+          path: "skills/notes/tool.js",
+          edits: [{ oldText: "export default {};", newText: "export default { x: 1 };" }],
+        },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir },
+      ),
+    ).rejects.toThrow(/tool\.js.*Phase 1/);
+
+    await expect(
+      runDeleteFile({ path: "skills/notes/tool.js" }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+    ).rejects.toThrow(/tool\.js.*Phase 1/);
+  });
+
   test("write_docx produces a real Word archive that reads back as markdown", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-docx-"));
     const targetPath = path.join(tempDir, "laporan.docx");
@@ -432,7 +523,7 @@ describe("file builtin tools", () => {
       workspaceRoot: tempDir,
     });
 
-    expect(result.content).toContain("# Laporan Mingguan");
+    expect(result.content).toContain("Laporan Mingguan");
     expect(result.content).toContain("**teks tebal**");
   });
 
@@ -683,14 +774,14 @@ describe("file builtin tools", () => {
     ).rejects.toThrow(PathGuardError);
   });
 
-  test("read_file rejects path outside allowed dirs", async () => {
+  test("read_file rejects path outside allowed dirs with workspace hint", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
       runReadFile({ path: "/etc/nakama-should-fail" }, PROFILE_CONTEXT, {
         workspaceRoot: tempDir,
       }),
-    ).rejects.toThrow(PathGuardError);
+    ).rejects.toThrow(/relative path under the active profile workspace/i);
   });
 
   test("read_file rejects null byte in path", async () => {

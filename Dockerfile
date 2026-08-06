@@ -1,6 +1,5 @@
 # Nakama — one container: API, web dashboard, automation + task workers
-# Build: ./scripts/docker-build.sh
-# Run:   docker run -d -p 4310:4310 -v nakama-data:/nakama/data nakama
+# Build & run: ./scripts/docker-build-run.sh
 
 ARG BUILDPLATFORM
 

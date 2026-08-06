@@ -2,7 +2,6 @@ import {
   BlocksIcon,
   Building2Icon,
   CircleGaugeIcon,
-  DatabaseBackupIcon,
   PlugIcon,
 } from "lucide-react";
 
@@ -11,7 +10,6 @@ export const SYSTEM_TABS = [
   { id: "organization" as const, label: "Organization", icon: Building2Icon },
   { id: "tools" as const, label: "Tools", icon: BlocksIcon },
   { id: "mcp" as const, label: "MCP", icon: PlugIcon },
-  { id: "data" as const, label: "Data", icon: DatabaseBackupIcon },
 ] as const;
 
 export type SystemTabId = (typeof SYSTEM_TABS)[number]["id"];
@@ -29,7 +27,7 @@ export function resolveSystemTab(value: string | null, isPlatformAdmin: boolean)
     return "tools";
   }
 
-  if (value === "mcp" || value === "data") {
+  if (value === "mcp") {
     return value;
   }
 

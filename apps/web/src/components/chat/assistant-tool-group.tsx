@@ -27,6 +27,9 @@ import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { isArtifactMetaSidecarTool } from "@/lib/chat-artifacts";
 import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
+import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
+import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
 import { cn } from "@/lib/utils";
 
 import {
@@ -63,11 +66,38 @@ export function AssistantTurnSegmentView({
   );
 }
 
-function AssistantTextContent({ message }: { message: ChatListItem }) {
+function StreamingPlainTail({ text }: { text: string }) {
   return (
-    <MessageResponse isAnimating={Boolean(message.streaming && !message.thinkingStreaming)}>
-      {message.content || "…"}
-    </MessageResponse>
+    <div
+      className={cn(
+        "chat-markdown size-full whitespace-pre-wrap break-words text-foreground",
+        "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+      )}
+    >
+      {text || "…"}
+    </div>
+  );
+}
+
+function AssistantTextContent({ message }: { message: ChatListItem }) {
+  const streaming = Boolean(message.streaming && !message.thinkingStreaming);
+  const content = useRafCoalescedValue(message.content, streaming);
+
+  if (!streaming) {
+    return <MessageResponse>{content || "…"}</MessageResponse>;
+  }
+
+  const { sealed, tail } = splitStreamingMarkdown(content);
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-0">
+      {sealed ? (
+        <MessageResponse isAnimating={false} mode="streaming">
+          {sealed}
+        </MessageResponse>
+      ) : null}
+      {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
+    </div>
   );
 }
 
@@ -110,7 +140,10 @@ function AssistantWorkGroup({
           {isDedicatedTool(tool) ? (
             <DedicatedToolRow message={tool} modelLabel={modelLabel} />
           ) : (
-            <ToolTimelineItem message={tool} />
+            <ToolTimelineItem
+              message={tool}
+              defaultDetailsOpen={visibleTools.length === 1}
+            />
           )}
         </TimelineStep>
       ))}
@@ -136,11 +169,15 @@ function ToolOnlyWorkGroup({
       return;
     }
 
+    if (tools.length === 1) {
+      return;
+    }
+
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const delay = reducedMotion ? 0 : 360;
     const timerId = window.setTimeout(() => setOpen(false), delay);
     return () => window.clearTimeout(timerId);
-  }, [isWorkActive]);
+  }, [isWorkActive, tools.length]);
 
   const done = !isWorkActive;
   const expanded = done ? open : true;
@@ -165,7 +202,9 @@ function ToolOnlyWorkGroup({
             {formatElapsedSeconds(elapsedSeconds)}
           </span>
         ) : (
-          <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>Working…</span>
+          <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
+            Working… · {formatElapsedSeconds(elapsedSeconds)}
+          </span>
         )}
         {done ? (
           <svg
@@ -201,7 +240,10 @@ function ToolOnlyWorkGroup({
                   {isDedicatedTool(tool) ? (
                     <DedicatedToolRow message={tool} modelLabel={modelLabel} />
                   ) : (
-                    <ToolTimelineItem message={tool} />
+                    <ToolTimelineItem
+                      message={tool}
+                      defaultDetailsOpen={tools.length === 1}
+                    />
                   )}
                 </TimelineStep>
               ))}
@@ -226,24 +268,6 @@ function ThinkingBlock({ message }: { message: ChatListItem }) {
       className="w-full max-w-full"
     />
   );
-}
-
-function formatElapsedSeconds(totalSeconds: number): string {
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainderMinutes = minutes % 60;
-
-  return remainderMinutes > 0 ? `${hours}h ${remainderMinutes}m` : `${hours}h`;
 }
 
 function useWorkDuration(active: boolean, startedAt?: string): number {
@@ -272,34 +296,6 @@ function useWorkDuration(active: boolean, startedAt?: string): number {
 
     const update = () => {
       setElapsed(Math.max(1, Math.floor((Date.now() - anchorRef.current!) / 1000)));
-    };
-
-    update();
-    const intervalId = window.setInterval(update, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [active, startedAt]);
-
-  return elapsed;
-}
-
-function useElapsedSeconds(active: boolean, startedAt?: string): number {
-  const anchorRef = useRef<number | null>(null);
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      anchorRef.current = null;
-      setElapsed(0);
-      return;
-    }
-
-    if (anchorRef.current === null) {
-      const parsed = startedAt ? new Date(startedAt).getTime() : Number.NaN;
-      anchorRef.current = Number.isNaN(parsed) ? Date.now() : parsed;
-    }
-
-    const update = () => {
-      setElapsed(Math.max(0, Math.floor((Date.now() - anchorRef.current!) / 1000)));
     };
 
     update();
@@ -482,7 +478,13 @@ function SubAgentMark({ className, active }: { className?: string; active?: bool
   );
 }
 
-function ToolTimelineItem({ message }: { message: ChatListItem }) {
+function ToolTimelineItem({
+  message,
+  defaultDetailsOpen = false,
+}: {
+  message: ChatListItem;
+  defaultDetailsOpen?: boolean;
+}) {
   const isRunning = message.toolStatus === "running";
   const label = formatToolActionLabel(message.tool, message.toolInput);
   const command =
@@ -497,25 +499,23 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
   const hasDetails = Boolean(isRunning || command || output);
-  const [collapsedWhileRunning, setCollapsedWhileRunning] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(defaultDetailsOpen);
   const [prevIsRunning, setPrevIsRunning] = useState(isRunning);
 
   if (isRunning !== prevIsRunning) {
     setPrevIsRunning(isRunning);
     if (isRunning) {
-      setCollapsedWhileRunning(false);
+      setDetailsOpen(true);
     }
   }
-
-  const open = isRunning ? !collapsedWhileRunning : false;
 
   return (
     <div>
       <CollapsibleTrigger
-        open={open}
+        open={detailsOpen}
         onToggle={() => {
-          if (hasDetails && isRunning) {
-            setCollapsedWhileRunning((current) => !current);
+          if (hasDetails) {
+            setDetailsOpen((current) => !current);
           }
         }}
         label={label}
@@ -523,7 +523,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
         disabled={!hasDetails}
         className="pl-0"
       />
-      {open && hasDetails ? (
+      {detailsOpen && hasDetails ? (
         <div className="mt-2 space-y-2">
           {command ? <DetailBlock label="Command" content={command} tone="command" /> : null}
           {isRunning ? (

@@ -14,11 +14,13 @@ import type {
   AssignSkillRequest,
   AssignToolRequest,
   BranchSessionResponse,
+  ChatContextUsage,
   ChatMessage,
   CompactionResponse,
   CreateProfileRequest,
   DeleteArtifactResponse,
   CreateSkillRequest,
+  PatchSkillRequest,
   CreateToolRequest,
   InitSoulResponse,
   InitUserContextResponse,
@@ -149,6 +151,7 @@ import {
   saveWhatsAppConfig,
   createSmtpSender,
   loadUserThinkingSettings,
+  loadUserConfig,
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
@@ -191,6 +194,7 @@ import {
 } from "./provider-instance-helpers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
 import { createOrgMemoryTools } from "../tools/org-memory-tools";
+import { createSkillManageTools } from "../tools/skill-manage-tool";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createTodoTools } from "../tools/todo-tools";
 import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
@@ -241,7 +245,10 @@ import type { McpService } from "./mcp-service";
 import { OrgMemoryService } from "./org-memory-service";
 import { ProfileService } from "./profile-service";
 import type { SkillsService } from "./skills-service";
+import type { SkillProposalService } from "./skill-proposal-service";
+import type { SkillSuggestionService } from "./skill-suggestion-service";
 import { SessionTitleService } from "./session-title-service";
+import { SkillPostTurnReviewService } from "./skill-post-turn-review-service";
 import { SuperBotSessionState } from "./super-bot-session-state";
 import { resolveProfileStoredTools } from "./tool-resolver";
 import {
@@ -302,9 +309,12 @@ export class AgentService {
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
   private skillsService: SkillsService | null = null;
+  private skillProposalService: SkillProposalService | null = null;
+  private skillSuggestionService: SkillSuggestionService | null = null;
   private orgMemoryService: OrgMemoryService | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
+  private skillPostTurnReviewService: SkillPostTurnReviewService;
   private _providerConfigured: boolean;
   private visionSettingsPromise: Promise<void> | null = null;
   private transcriptionSettingsPromise: Promise<void> | null = null;
@@ -319,6 +329,7 @@ export class AgentService {
     this.db = db;
     this.profileService = new ProfileService(db);
     this.sessionTitleService = new SessionTitleService(db, () => this.userConfig);
+    this.skillPostTurnReviewService = new SkillPostTurnReviewService(db, () => this.userConfig);
     this.agentTodoState = new AgentTodoState(db);
     this.agentQuestionnaireState = new AgentQuestionnaireState(db);
     this.questionTools = createAskUserQuestionTools(this.agentQuestionnaireState);
@@ -390,6 +401,69 @@ export class AgentService {
   setSkillsService(service: SkillsService): void {
     this.skillsService = service;
     this.sessions.clear();
+  }
+
+  setSkillProposalService(service: SkillProposalService): void {
+    this.skillProposalService = service;
+    this.wireSkillPostTurnReviewOutcomeHandling();
+  }
+
+  setSkillSuggestionService(service: SkillSuggestionService): void {
+    this.skillSuggestionService = service;
+    this.wireSkillPostTurnReviewOutcomeHandling();
+  }
+
+  /**
+   * U4: once both services are injected, review outcomes from the LLM runner
+   * are turned into a staged proposal (write-approval gate on) or a pending
+   * suggestion (gate off) instead of being discarded.
+   */
+  private wireSkillPostTurnReviewOutcomeHandling(): void {
+    const proposals = this.skillProposalService;
+    const suggestions = this.skillSuggestionService;
+    if (!proposals || !suggestions) {
+      return;
+    }
+
+    this.skillPostTurnReviewService.setRunner(async (context) => {
+      const outcome = await this.skillPostTurnReviewService.reviewTurnWithLlm(context);
+      if (outcome.action === "noop") {
+        return outcome;
+      }
+
+      try {
+        const writeApprovalRequired = await proposals.isWriteApprovalRequired(
+          context.orgId,
+          context.profileId,
+        );
+
+        if (writeApprovalRequired) {
+          await proposals.stageProposal({
+            orgId: context.orgId,
+            profileId: context.profileId,
+            action: outcome.action,
+            skillName: outcome.name,
+            content: outcome.action === "create" ? outcome.content : undefined,
+            oldString: outcome.action === "patch" ? outcome.oldString : undefined,
+            newString: outcome.action === "patch" ? outcome.newString : undefined,
+            sessionId: context.sessionId,
+            proposedByUserId: context.userId,
+          });
+        } else {
+          await suggestions.createSuggestion({
+            orgId: context.orgId,
+            profileId: context.profileId,
+            sessionId: context.sessionId,
+            proposedByUserId: context.userId,
+            outcome,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to record post-turn skill review outcome:", error);
+      }
+
+      return outcome;
+    });
   }
 
   getMcpService(): McpService {
@@ -1308,6 +1382,7 @@ export class AgentService {
     channel: AgentChannel;
     messages: ChatMessage[];
     messageMeta: Array<{ id: string; seq: number; createdAt: string }>;
+    contextUsage: ChatContextUsage | null;
   } | null> {
     const record = await this.db.getSession(sessionId);
 
@@ -1337,11 +1412,16 @@ export class AgentService {
             seq: index,
             createdAt: startedAt,
           })),
+          contextUsage: liveSession.getContextUsage(),
         };
       }
     }
 
     const storedMessages = await this.db.listMessagesForSession(sessionId);
+    const cached = this.sessions.get(sessionId)?.session;
+    const contextUsage = cached
+      ? cached.getContextUsage()
+      : (await this.resolveSession(sessionId))?.getContextUsage() ?? null;
 
     return {
       channel,
@@ -1351,6 +1431,7 @@ export class AgentService {
         seq: message.seq,
         createdAt: message.createdAt,
       })),
+      contextUsage,
     };
   }
 
@@ -1447,6 +1528,14 @@ export class AgentService {
 
   scheduleSessionTitleGeneration(sessionId: string): void {
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
+  }
+
+  schedulePostTurnSkillReview(sessionId: string): void {
+    this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
+  }
+
+  getSkillPostTurnReviewService(): SkillPostTurnReviewService {
+    return this.skillPostTurnReviewService;
   }
 
   async purgeSession(sessionId: string): Promise<boolean> {
@@ -1962,6 +2051,18 @@ export class AgentService {
     this.sessions.clear();
   }
 
+  /** After a data-root restore, reload provider config and clear in-memory session state. */
+  async reloadAfterDataRestore(): Promise<void> {
+    this.userConfig = await loadUserConfig();
+    this.refreshHarness();
+    this.composioService?.reloadConfiguration();
+    await this.llmUsageTracker?.reloadFromDatabase();
+    this.visionSettingsPromise = null;
+    this.transcriptionSettingsPromise = null;
+    await this.ensureVisionSettingsLoaded();
+    await this.ensureTranscriptionSettingsLoaded();
+  }
+
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
     return this.profileService.listProfiles(orgId);
   }
@@ -2158,6 +2259,15 @@ export class AgentService {
 
   async createSkill(orgId: string, request: CreateSkillRequest): Promise<SkillResponse> {
     return this.requireSkillsService().createSkill(orgId, request);
+  }
+
+  async patchSkill(
+    orgId: string,
+    skillId: string,
+    request: PatchSkillRequest,
+    options?: { profileId?: string },
+  ): Promise<SkillResponse> {
+    return this.requireSkillsService().patchSkill(orgId, skillId, request, options);
   }
 
   async deleteSkill(skillId: string): Promise<void> {
@@ -2455,6 +2565,7 @@ export class AgentService {
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
       includeSubAgentTool?: boolean;
+      includeSkillManageTools?: boolean;
       userId?: string | null;
     } = {},
   ): Promise<ToolDefinition[]> {
@@ -2466,6 +2577,9 @@ export class AgentService {
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
     const includeSubAgentTool = options.includeSubAgentTool ?? true;
+    // Default follows interactive automation-tool gate; messaging channels pass false.
+    const includeSkillManageTools =
+      options.includeSkillManageTools ?? includeAutomationTools;
 
     let resolved = [...tools];
 
@@ -2529,6 +2643,20 @@ export class AgentService {
 
       const skillTools = await this.skillsService.loadToolsForProfile(orgId, profile.id);
       resolved = [...resolved, ...skillTools];
+
+      // Interactive web/cli only: messaging, automation, task, and subagent omit this.
+      if (includeSkillManageTools) {
+        const assignedSkills = await this.skillsService.listSkillsForProfile(profile.id);
+        if (assignedSkills.some((skill) => skill.name === "manage-skills")) {
+          resolved = [
+            ...resolved,
+            ...createSkillManageTools({
+              skillsService: this.skillsService,
+              skillProposalService: this.skillProposalService,
+            }),
+          ];
+        }
+      }
     }
 
     if (profile.isSuper) {
@@ -2554,12 +2682,21 @@ export class AgentService {
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const tools = await this.resolveProfileTools(profile, { userId });
+    const includeSkillManageTools = channel === "web" || channel === "cli";
+    const tools = await this.resolveProfileTools(profile, {
+      userId,
+      includeSkillManageTools,
+    });
+    const skillUsageContext =
+      channel === "web" || channel === "cli"
+        ? { sessionId, seenCatalogSkillIds: new Set<string>() }
+        : undefined;
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
       profileId,
       profile.systemPrompt,
       orgRole,
+      skillUsageContext,
     );
     const resolvedSystemPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
@@ -2576,6 +2713,7 @@ export class AgentService {
       channel,
     });
     const loadAttachment = createAttachmentLoader(this.db, { orgId, profileId });
+    const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const session = harness.createChatSession({
       channel,
@@ -2591,9 +2729,11 @@ export class AgentService {
         orgId,
         profileId,
         sessionId,
+        channel,
         userId: userId ?? undefined,
         orgRole: orgRole ?? undefined,
         loadAttachment,
+        forbidProfileSkillMarkdownWrites: hasSkillManage,
       }),
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
@@ -2621,6 +2761,7 @@ export class AgentService {
             profileId,
             context.userMessage,
             {
+              usageContext: skillUsageContext,
               appendContext: async (matched) => {
                 const parts: string[] = [];
 
@@ -2760,6 +2901,7 @@ export class AgentService {
     profileId: string,
     profilePrompt: string,
     orgRole?: OrgRole | null,
+    usageContext?: import("./skills-service").SkillUsageRecordingContext,
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await resolveSoulStackForProfile(orgId, profileId);
     let systemPrompt = stack
@@ -2767,7 +2909,11 @@ export class AgentService {
       : profilePrompt;
 
     if (this.skillsService) {
-      const skillsCatalog = await this.skillsService.composeCatalogForProfile(orgId, profileId);
+      const skillsCatalog = await this.skillsService.composeCatalogForProfile(
+        orgId,
+        profileId,
+        usageContext,
+      );
 
       if (skillsCatalog.trim()) {
         systemPrompt = `${systemPrompt.trim()}\n\n${skillsCatalog.trim()}`;
@@ -2877,13 +3023,9 @@ export class AgentService {
 
     const model = getModelById(resolved.model);
 
-    if (!model) {
-      return undefined;
-    }
-
     return {
-      contextWindow: model.contextWindow,
-      maxOutputTokens: model.maxOutputTokens,
+      contextWindow: model?.contextWindow ?? 128_000,
+      maxOutputTokens: model?.maxOutputTokens ?? 8_192,
     };
   }
 

@@ -13,6 +13,7 @@ import {
 import { DiscordSettingsConfiguredRows, DiscordSettingsPairingSection } from "@/components/discord-settings-pairing-section";
 import { SettingsRow } from "@/components/discord-settings-card.shared";
 import { DISCORD_DEVELOPER_PORTAL_URL, DISCORD_SETUP_GUIDE_URL } from "@/lib/integration-docs";
+import { cn } from "@/lib/utils";
 
 export type DiscordSettingsCardView = {
   embedded: boolean;
@@ -88,8 +89,10 @@ export function DiscordSettingsCardContent({
     canSave,
   } = view;
 
+  const paneItemClass = embedded ? undefined : "px-0 py-0";
+
   return (
-    <div className="divide-y divide-border">
+    <div className={cn(!embedded && "space-y-4 py-4")}>
       {!embedded ? (
         <IntegrationStatusHeader
           title="Discord"
@@ -97,12 +100,14 @@ export function DiscordSettingsCardContent({
           statusBadge={statusBadge}
           configured={configured}
           connected={hasLinkedUsers && running}
+          className={paneItemClass}
         />
       ) : null}
 
       <SettingsRow
         layout="stacked"
         label="Bot token"
+        className={paneItemClass}
         description={
           <>
             Create a bot in the{" "}
@@ -164,6 +169,8 @@ export function DiscordSettingsCardContent({
           inviteUrl={settings?.inviteUrl ?? null}
           onCopyHandshakeCode={onCopyHandshakeCode}
           onRegenerateHandshake={onRegenerateHandshake}
+          rowClassName={paneItemClass}
+          compact={!embedded}
         />
       ) : null}
 
@@ -177,6 +184,7 @@ export function DiscordSettingsCardContent({
           onProfileChange={onProfileChange}
           running={running}
           worker={worker}
+          rowClassName={paneItemClass}
         />
       ) : null}
 
@@ -188,6 +196,7 @@ export function DiscordSettingsCardContent({
         canSave={canSave}
         submitLabel={submitLabel}
         onSave={onSave}
+        className={paneItemClass}
       />
     </div>
   );

@@ -8,7 +8,9 @@
     "generate-mirrors": "bun run scripts/postbuild.ts",
     "preview": "bunx serve out -p 3004 -c serve.json",
     "screenshots": "./scripts/capture-setup-screenshots.sh",
-    "screenshots:chat": "./scripts/capture-chat-screenshots.sh"
+    "screenshots:chat": "./scripts/capture-chat-screenshots.sh",
+    "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh",
+    "screenshots:self-improving-skills": "./scripts/capture-self-improving-skills-screenshots.sh"
   },
   "dependencies": {
     "@paper-design/shaders-react": "0.0.77",

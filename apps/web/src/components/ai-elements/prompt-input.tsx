@@ -206,6 +206,8 @@ export type PromptInputProps = Omit<
   maxFileSize?: number;
   prepareFiles?: (files: File[]) => File[] | Promise<File[]>;
   inputGroupClassName?: string;
+  /** Rainbow rim glow while the agent is streaming. */
+  rimActive?: boolean;
   onError?: (err: {
     code: "max_files" | "max_file_size" | "accept";
     message: string;
@@ -226,6 +228,7 @@ export const PromptInput = ({
   maxFileSize,
   prepareFiles,
   inputGroupClassName,
+  rimActive,
   onError,
   onSubmit,
   children,
@@ -345,6 +348,7 @@ export const PromptInput = ({
           accept={accept}
           multiple={multiple}
           inputGroupClassName={inputGroupClassName}
+          rimActive={rimActive}
           inputRef={inputRef}
           formRef={formRef}
           onFileChange={handleChange}
@@ -531,19 +535,7 @@ export const PromptInputFooter = ({
 }: PromptInputFooterProps) => (
   <InputGroupAddon
     align="block-end"
-    className={cn("justify-between gap-1", className)}
-    {...props}
-  />
-);
-
-export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
-
-export const PromptInputTools = ({
-  className,
-  ...props
-}: PromptInputToolsProps) => (
-  <div
-    className={cn("flex min-w-0 items-center gap-1", className)}
+    className={cn("min-w-0 justify-between gap-1", className)}
     {...props}
   />
 );

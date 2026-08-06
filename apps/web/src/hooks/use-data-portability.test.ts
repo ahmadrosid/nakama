@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   canRestoreDataImport,
   formatDataPortabilityBytes,
+  shouldStartInitialFilePreview,
 } from "./use-data-portability";
 
 describe("formatDataPortabilityBytes", () => {
@@ -28,5 +29,18 @@ describe("canRestoreDataImport", () => {
     expect(
       canRestoreDataImport({ selectedFile: file, previewReady: true, pending: true }),
     ).toBe(false);
+  });
+});
+
+describe("shouldStartInitialFilePreview", () => {
+  const file = new File(["zip"], "nakama.zip", { type: "application/zip" });
+  const other = new File(["zip"], "other.zip", { type: "application/zip" });
+
+  test("starts once per File identity and resets when cleared", () => {
+    expect(shouldStartInitialFilePreview(null, null)).toBe(false);
+    expect(shouldStartInitialFilePreview(file, null)).toBe(true);
+    expect(shouldStartInitialFilePreview(file, file)).toBe(false);
+    expect(shouldStartInitialFilePreview(other, file)).toBe(true);
+    expect(shouldStartInitialFilePreview(null, file)).toBe(false);
   });
 });

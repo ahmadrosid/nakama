@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import {
   createNakamaDataExport,
+  decodeArchiveRequestData,
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
@@ -15,7 +16,7 @@ import { requirePlatformAdminFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";
 import type { HonoApp } from "../types";
 
-export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOptions): void {
+export function registerDataPortabilityRoutes(app: HonoApp, options: ServerOptions): void {
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
   const importRequestSchema = z
     .object({
@@ -119,7 +120,7 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
 
     try {
-      const preview = await previewNakamaDataImport(readArchiveRequestData(body.data));
+      const preview = await previewNakamaDataImport(decodeArchiveRequestData(body.data));
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
@@ -130,24 +131,25 @@ export function registerDataPortabilityRoutes(app: HonoApp, _options: ServerOpti
     requirePlatformAdminFromContext(c);
     const body = await readJson<RestoreDataImportRequest>(c.req.raw);
 
+    let restore;
     try {
-      const restore = await restoreNakamaDataImport(readArchiveRequestData(body.data), {
+      restore = await restoreNakamaDataImport(decodeArchiveRequestData(body.data), {
         confirm: body.confirm,
       });
-      return json<RestoreDataImportResponse>(restore);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }
+
+    if (options.onDataRestored) {
+      try {
+        await options.onDataRestored();
+      } catch {
+        // Disk restore already committed; caller must restart to finish reload.
+      }
+    }
+
+    return json<RestoreDataImportResponse>(restore);
   });
-}
-
-function readArchiveRequestData(data: string): Buffer {
-  const trimmed = data.trim();
-  if (!trimmed) {
-    throw new Error("Import archive data is required.");
-  }
-
-  return Buffer.from(trimmed, "base64");
 }
 
 function formatImportError(error: unknown): string {

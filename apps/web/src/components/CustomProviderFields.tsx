@@ -16,7 +16,6 @@ interface CustomProviderFieldsProps {
   identityReadOnly?: boolean;
   density?: "default" | "compact";
   showModelsEditor?: boolean;
-  showThinkingToggle?: boolean;
   displayNameError?: string | null;
   baseUrlError?: string | null;
   modelsError?: string | null;
@@ -43,7 +42,6 @@ export function CustomProviderFields({
   identityReadOnly = false,
   density = "default",
   showModelsEditor = true,
-  showThinkingToggle = false,
   displayNameError,
   baseUrlError,
   modelsError,
@@ -94,11 +92,7 @@ export function CustomProviderFields({
             <p className="text-sm text-destructive" role="alert">
               {displayNameError}
             </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              How this endpoint appears in Settings and Status.
-            </p>
-          )
+          ) : null
         }
       >
         <InputGroup>
@@ -123,11 +117,7 @@ export function CustomProviderFields({
             <p className="text-sm text-destructive" role="alert">
               {baseUrlError}
             </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              OpenAI-compatible root, e.g. http://localhost:11434/v1
-            </p>
-          )
+          ) : null
         }
       >
         <InputGroup>
@@ -153,13 +143,7 @@ export function CustomProviderFields({
               <p className="text-sm text-destructive" role="alert">
                 {modelsError}
               </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {browseSource === "remote"
-                  ? `Add models by ID or browse live models from ${resolvedBrowseLabel}.`
-                  : "Add models by ID or browse models.dev."}
-              </p>
-            )
+            ) : null
           }
         >
           {isBrowsing ? (
@@ -191,7 +175,8 @@ export function CustomProviderFields({
             <ModelListEditor
               models={customModels}
               disabled={disabled}
-              showThinkingToggle={showThinkingToggle}
+              showPricing={false}
+              showThinking
               browseLabel={
                 browseSource === "remote"
                   ? `Browse ${resolvedBrowseLabel}`

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   clearDocumentTextParsers,
   getDocumentTextParser,
@@ -6,6 +8,16 @@ import {
   registerDocumentTextParser,
   resolveDocumentPartForProvider,
 } from "./document-content";
+
+const FIXTURES = join(import.meta.dir, "__fixtures__");
+const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString("base64");
+const SAMPLE_DOCX_B64 = readFileSync(join(FIXTURES, "sample.docx")).toString("base64");
+const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString("base64");
+
+const DOCX_MEDIA_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MEDIA_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 describe("providerSupportsNativeDocument", () => {
   test("anthropic supports pdf and text documents", () => {
@@ -115,22 +127,51 @@ describe("resolveDocumentPartForProvider", () => {
   });
 
   test("parses pdf to text for providers without native document support", async () => {
-    const pdfBase64 =
-      "JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCA2MTIgNzkyXS9QYXJlbnQgMiAwIFIvUmVzb3VyY2VzPDwvRm9udDw8L0YxIDQgMCBSPj4+Pi9Db250ZW50cyA1IDAgUj4+ZW5kb2JqCjQgMCBvYmo8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PmVuZG9iago1IDAgb2JqPDwvTGVuZ3RoIDQ0Pj5zdHJlYW0KQlQgL0YxIDI0IFRmIDEwMCA3MDAgVGQgKEhlbGxvKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDUyIDAwMDAwIG4gCjAwMDAwMDAxMDEgMDAwMDAgbiAKMDAwMDAwMDI0NCAwMDAwMCBuIAowMDAwMDAwMzAxIDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDYvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozOTUKJSVFT0YK";
-
     const result = await resolveDocumentPartForProvider(
       {
         type: "document",
         filename: "report.pdf",
         mediaType: "application/pdf",
-        data: pdfBase64,
+        data: SAMPLE_PDF_B64,
       },
       "openai_compatible",
     );
 
     expect(result.type).toBe("text");
     expect(result.text).toStartWith("[File: report.pdf]\n");
-    expect(result.text).toContain("Hello");
+    expect(result.text.toLowerCase()).toContain("dummy");
+  });
+
+  test("parses docx to text for providers without native document support", async () => {
+    const result = await resolveDocumentPartForProvider(
+      {
+        type: "document",
+        filename: "notes.docx",
+        mediaType: DOCX_MEDIA_TYPE,
+        data: SAMPLE_DOCX_B64,
+      },
+      "cerebras",
+    );
+
+    expect(result.type).toBe("text");
+    expect(result.text).toStartWith("[File: notes.docx]\n");
+    expect(result.text).toContain("Laporan");
+  });
+
+  test("always converts excel to text even for native-capable providers", async () => {
+    const result = await resolveDocumentPartForProvider(
+      {
+        type: "document",
+        filename: "budget.xlsx",
+        mediaType: XLSX_MEDIA_TYPE,
+        data: SAMPLE_XLSX_B64,
+      },
+      "anthropic",
+    );
+
+    expect(result.type).toBe("text");
+    expect(result.text).toStartWith("[File: budget.xlsx]\n");
+    expect(result.text).toContain("Widget");
   });
 
   test("decodes text/plain for providers without native document support", async () => {

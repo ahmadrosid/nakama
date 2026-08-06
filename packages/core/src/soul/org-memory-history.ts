@@ -17,8 +17,11 @@ function historyContentPath(orgId: string, id: string, configDir?: string): stri
   return join(getOrgMemoryHistoryDir(orgId, configDir), `${id}.md`);
 }
 
+let orgMemoryChangeSequence = 0;
+
 export function createOrgMemoryChangeId(): string {
-  return `omh_${crypto.randomUUID().replace(/-/g, "")}`;
+  orgMemoryChangeSequence += 1;
+  return `omh_${String(orgMemoryChangeSequence).padStart(8, "0")}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 export async function appendOrgMemoryHistory(
@@ -66,7 +69,13 @@ export async function listOrgMemoryHistory(
     records.push(JSON.parse(raw) as OrgMemoryChangeLogEntry);
   }
 
-  records.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  records.sort((left, right) => {
+    const byCreatedAt = right.createdAt.localeCompare(left.createdAt);
+    if (byCreatedAt !== 0) {
+      return byCreatedAt;
+    }
+    return right.id.localeCompare(left.id);
+  });
   return records.slice(0, limit);
 }
 

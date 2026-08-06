@@ -14,6 +14,7 @@ import {
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
+import { cn } from "@/lib/utils";
 
 export function WhatsAppSettingsCardContent({
   embedded,
@@ -80,8 +81,10 @@ export function WhatsAppSettingsCardContent({
   actionLabel: string;
   onSave: () => void;
 }) {
+  const paneItemClass = embedded ? undefined : "px-0 py-0";
+
   return (
-    <div className="divide-y divide-border">
+    <div className={cn(!embedded && "space-y-4 py-4")}>
       {!embedded ? (
         <IntegrationStatusHeader
           title="WhatsApp"
@@ -89,16 +92,25 @@ export function WhatsAppSettingsCardContent({
           statusBadge={statusBadge}
           configured={configured}
           connected={paired && running && !showQr}
+          className={paneItemClass}
         />
       ) : null}
 
       {linkedNumber ? (
-        <SettingsRow label="Linked account" description="From your WhatsApp session">
+        <SettingsRow
+          label="Linked account"
+          description="From your WhatsApp session"
+          className={paneItemClass}
+        >
           <span className="text-sm text-foreground">{linkedNumber}</span>
         </SettingsRow>
       ) : null}
 
-      <SettingsRow label="Reply as" description="Which agent answers on WhatsApp">
+      <SettingsRow
+        label="Reply as"
+        description="Which agent answers on WhatsApp"
+        className={paneItemClass}
+      >
         <Select
           value={profileId}
           disabled={savePending || profiles.length === 0}
@@ -143,11 +155,17 @@ export function WhatsAppSettingsCardContent({
           showReconnect={showReconnect}
           reconnectPending={reconnectPending}
           onReconnect={onReconnect}
+          rowClassName={paneItemClass}
+          compact={!embedded}
         />
       ) : null}
 
       {configured ? (
-        <SettingsRow label="Bridge worker" description={running ? "Running" : "Stopped"}>
+        <SettingsRow
+          label="Bridge worker"
+          description={running ? "Running" : "Stopped"}
+          className={paneItemClass}
+        >
           <WorkerActionBar
             workerName="whatsapp"
             running={running}
@@ -164,6 +182,7 @@ export function WhatsAppSettingsCardContent({
         canSave={canSave}
         submitLabel={actionLabel}
         onSave={onSave}
+        className={paneItemClass}
       />
     </div>
   );

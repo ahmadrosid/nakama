@@ -41,6 +41,7 @@ function skill(overrides: Partial<SkillSummary>): SkillSummary {
     hasTool: overrides.hasTool ?? false,
     disableModelInvocation: overrides.disableModelInvocation ?? false,
     enabled: overrides.enabled ?? true,
+    createdBy: overrides.createdBy ?? "bundled",
     createdAt: overrides.createdAt ?? "2026-07-04T00:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-07-04T00:00:00.000Z",
   };

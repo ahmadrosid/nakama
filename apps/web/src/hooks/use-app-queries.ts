@@ -10,6 +10,7 @@ import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";
+import { thinkingSettingsQueryOptions } from "@/hooks/use-thinking-settings";
 import { telegramSettingsQueryOptions } from "@/hooks/use-telegram-settings";
 import { whatsappSettingsQueryOptions } from "@/hooks/use-whatsapp-settings";
 
@@ -72,6 +73,7 @@ export function prefetchAppData(
   options?: { isPlatformAdmin?: boolean },
 ): void {
   prefetchTimezoneData(queryClient);
+  void queryClient.prefetchQuery(thinkingSettingsQueryOptions);
   void queryClient.prefetchQuery(telegramSettingsQueryOptions);
   void queryClient.prefetchQuery(whatsappSettingsQueryOptions);
   void queryClient.prefetchQuery(healthQueryOptions);

@@ -18,8 +18,6 @@ import {
   type CatalogShortlistProvider,
 } from "@/components/catalog-provider-model-fields.shared";
 
-const CATALOG_THINKING_TOGGLE_PROVIDERS = new Set<CatalogShortlistProvider>(["deepseek"]);
-
 function mergeBrowseModels(
   staticCatalog: ProviderModelOption[],
   remoteModels: ProviderModelOption[],
@@ -216,7 +214,6 @@ export function CatalogProviderModelFields({
           models={customModels}
           disabled={disabled}
           showPricing
-          showThinkingToggle={CATALOG_THINKING_TOGGLE_PROVIDERS.has(provider)}
           browseLabel={`Browse ${providerLabel}`}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}

@@ -10,7 +10,7 @@ import type {
 import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
 import type { UserConfig } from "@nakama/core";
 import { ensureProcessPath, ensureBunGlobalInstallDirs, getToolExecutionEnv } from "../lib/ensure-process-path";
-import { mergeCodingAgentSpawnEnv, resolveCodingAgentSpawnBundle } from "./coding-agent-spawn-env";
+import { mergeCodingAgentSpawnEnv, resolveCodingAgentSpawnBundle, mapNakamaProviderToPi, formatModelForHarness } from "./coding-agent-spawn-env";
 import { buildHarnessNonInteractiveArgs } from "./coding-agent-command";
 
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
@@ -32,6 +32,7 @@ const HARNESS_PACKAGES: Record<StoredCodingAgentHarnessKind, string> = {
   codex: "@openai/codex",
   claude_code: "@anthropic-ai/claude-code",
   opencode: "opencode-ai",
+  pi: "@earendil-works/pi-coding-agent",
 };
 
 function detectCodingHarnessPackageManager(): "npm" | "bun" {
@@ -115,6 +116,14 @@ const DEFAULT_HARNESSES: StoredCodingAgentHarnessRecord[] = [
     kind: "opencode",
     name: "OpenCode",
     command: "opencode",
+    args: [],
+    enabled: true,
+  },
+  {
+    id: "coding-harness-pi",
+    kind: "pi",
+    name: "pi.dev",
+    command: "pi",
     args: [],
     enabled: true,
   },
@@ -654,6 +663,10 @@ export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind):
     return "Install Claude Code on this machine, then check again.";
   }
 
+  if (kind === "pi") {
+    return "Install pi CLI (@earendil-works/pi-coding-agent) on this machine, then check again.";
+  }
+
   return "Install OpenCode on this machine, then check again.";
 }
 
@@ -756,8 +769,13 @@ async function probeHarnessExec(
   });
   const tempDir = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-probe-"));
 
+  const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
+  const piModel = routing.model && routing.providerType
+    ? formatModelForHarness("pi", routing.providerType, routing.model)
+    : null;
+
   try {
-    const result = await runProbeCommand(harness, tempDir, spawn.env);
+    const result = await runProbeCommand(harness, tempDir, spawn.env, { provider: piProvider, model: piModel });
     const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
 
     if (result.timedOut) {
@@ -765,7 +783,9 @@ async function probeHarnessExec(
         authenticated: null,
         ready: false,
         nextStep: "retry",
-        statusMessage: "Readiness check timed out.",
+        statusMessage: combinedOutput
+          ? `Readiness check timed out. Last output from ${harness.name}: ${summarizeProbeOutput(combinedOutput)}`
+          : "Readiness check timed out.",
       };
     }
 
@@ -785,7 +805,9 @@ async function probeHarnessExec(
         nextStep: "retry",
         statusMessage:
           routing.error ??
-          `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`,
+          (combinedOutput
+            ? `${harness.name} could not authenticate with the configured Nakama provider. ${summarizeProbeOutput(combinedOutput)} Check Settings → Provider.`
+            : `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`),
       };
     }
 
@@ -793,7 +815,9 @@ async function probeHarnessExec(
       authenticated: null,
       ready: false,
       nextStep: "retry",
-      statusMessage: `${harness.name} is installed but the readiness check failed.`,
+      statusMessage: combinedOutput
+        ? `${harness.name} is installed but the readiness check failed (exit ${result.exitCode}). ${summarizeProbeOutput(combinedOutput)}`
+        : `${harness.name} is installed but the readiness check failed (exit ${result.exitCode}).`,
     };
   } finally {
     await spawn.cleanup?.();
@@ -805,6 +829,7 @@ async function runProbeCommand(
   harness: CodingAgentHarnessStatus,
   cwd: string,
   spawnEnv: Record<string, string> = {},
+  piOptions?: { provider?: string | null; model?: string | null },
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -818,6 +843,8 @@ async function runProbeCommand(
     prompt,
     cwd,
     baseArgs: harness.args,
+    piProvider: piOptions?.provider,
+    piModel: piOptions?.model,
   });
 
   return new Promise((resolve) => {
@@ -985,4 +1012,17 @@ function summarizeInstallOutput(output: string): string {
     lines[0] ??
     output.trim();
   return meaningful.length > 180 ? `${meaningful.slice(0, 177)}...` : meaningful;
+}
+
+function summarizeProbeOutput(output: string): string {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const meaningful =
+    lines.find((line) => /^(?:error|fatal|panic):/i.test(line)) ??
+    lines.find((line) => /(?:error|failed|not found|invalid|unexpected|exception|traceback)/i.test(line)) ??
+    lines[lines.length - 1] ??
+    output.trim();
+  return meaningful.length > 240 ? `${meaningful.slice(0, 237)}...` : meaningful;
 }

@@ -15,13 +15,21 @@ import {
 } from "@/lib/knowledge-base-files";
 import { cn } from "@/lib/utils";
 
+/** Extend icon-sm (28px) to a 40px hit target without overlapping neighbors at gap-3. */
+const iconActionHitArea =
+  "relative after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2";
+
+const uploadedAtFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatUploadedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  try {
+    return uploadedAtFormatter.format(new Date(value));
+  } catch {
     return value;
   }
-
-  return date.toLocaleString();
 }
 
 function formatDocumentCount(count: number): string {
@@ -60,15 +68,12 @@ export function KnowledgeTabPanel({
   onDeleteDocument: (document: KnowledgeBaseDocument) => void;
 }) {
   return (
-    <div className={embedded ? undefined : "min-w-0 p-4 sm:p-5"}>
-      <div className="mb-4 min-w-0">
-        {!embedded ? (
-          <h2 className="type-section-title">{selectedProfileName ?? "Profile"}</h2>
-        ) : null}
-        <p className={cn("type-body text-xs", !embedded && "mt-1")}>
-          Knowledge base · one library per profile
-        </p>
-        {knowledgeBaseDirectory ? (
+    <div className={cn("space-y-4", !embedded && "min-w-0 p-4 sm:p-5")}>
+      <div className="min-w-0">
+        <h2 className="type-section-title text-balance">
+          {embedded ? "Knowledge" : (selectedProfileName ?? "Profile")}
+        </h2>
+        {!embedded && knowledgeBaseDirectory ? (
           <p
             className="type-code mt-2 truncate text-muted-foreground"
             title={knowledgeBaseDirectory}
@@ -79,7 +84,7 @@ export function KnowledgeTabPanel({
       </div>
 
       {sources.length > 0 ? (
-        <div className="mb-4 rounded-md border border-border">
+        <div className="rounded-md border border-border">
           <div className="border-b border-border px-4 py-3">
             <p className="text-xs text-muted-foreground tabular-nums">
               {sources.length === 1 ? "1 inherited source" : `${sources.length} inherited sources`}
@@ -89,7 +94,7 @@ export function KnowledgeTabPanel({
             {sources.map((source) => (
               <li
                 key={source.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <LinkIcon
@@ -97,8 +102,8 @@ export function KnowledgeTabPanel({
                     aria-hidden
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{source.title}</p>
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                    <p className="truncate text-sm font-medium text-foreground">{source.title}</p>
+                    <p className="line-clamp-2 text-xs text-pretty text-muted-foreground">
                       {source.description}
                     </p>
                     <a
@@ -145,7 +150,7 @@ export function KnowledgeTabPanel({
               onClick={() => fileInputRef.current?.click()}
               disabled={!profileId || busy}
             >
-              {uploadPending ? <Spinner className="size-4" /> : <UploadIcon className="size-4" />}
+              {uploadPending ? <Spinner className="size-3.5" /> : <UploadIcon className="size-3.5" aria-hidden />}
               Upload
             </Button>
           </div>
@@ -160,7 +165,7 @@ export function KnowledgeTabPanel({
             {documents.map((document) => (
               <li
                 key={document.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <FileTextIcon
@@ -168,17 +173,19 @@ export function KnowledgeTabPanel({
                     aria-hidden
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{document.filename}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatBytes(document.sizeBytes)} · {formatUploadedAt(document.uploadedAt)}
+                    <p className="truncate text-sm font-medium text-foreground">{document.filename}</p>
+                    <p className="text-xs text-pretty text-muted-foreground">
+                      <span className="tabular-nums">{formatBytes(document.sizeBytes)}</span>
+                      {" · "}
+                      {formatUploadedAt(document.uploadedAt)}
                     </p>
                     {document.status === "failed" && document.error ? (
-                      <p className="mt-1 text-xs text-destructive">{document.error}</p>
+                      <p className="mt-1 text-xs text-pretty text-destructive">{document.error}</p>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span
                     className={cn(
                       "rounded-full px-2 py-0.5 text-xs font-medium",
@@ -194,10 +201,11 @@ export function KnowledgeTabPanel({
                     variant="ghost"
                     size="icon-sm"
                     aria-label={`Delete ${document.filename}`}
+                    className={iconActionHitArea}
                     onClick={() => onDeleteDocument(document)}
                     disabled={busy}
                   >
-                    <Trash2Icon className="size-4" />
+                    <Trash2Icon className="size-4" aria-hidden />
                   </Button>
                 </div>
               </li>

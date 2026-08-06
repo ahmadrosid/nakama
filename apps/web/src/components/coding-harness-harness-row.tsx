@@ -31,11 +31,14 @@ export function CodingHarnessHarnessRow({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border transition-colors",
+        "overflow-hidden rounded-lg border transition-[color,background-color,border-color]",
         expanded && "divide-y",
         selected
           ? cn("border-primary/35 bg-primary/[0.06]", expanded && "divide-primary/25")
-          : cn("border-border bg-background", expanded && "divide-border"),
+          : cn(
+              "border-border bg-background hover:border-border/80 hover:bg-muted/20",
+              expanded && "divide-border",
+            ),
       )}
     >
       <div className="flex items-start gap-3 px-4 py-3.5">
@@ -44,7 +47,7 @@ export function CodingHarnessHarnessRow({
             <span className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-foreground">{harness.name}</span>
               {harness.version ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {harness.version}
                 </span>
               ) : null}
@@ -71,16 +74,27 @@ export function CodingHarnessHarnessRow({
           ) : null}
           <button
             type="button"
-            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            className="relative inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-[color,background-color,transform] before:absolute before:-inset-1.5 before:content-[''] hover:bg-muted/60 hover:text-foreground active:scale-[0.96] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             aria-expanded={expanded}
             aria-label={expanded ? `Collapse ${harness.name}` : `Expand ${harness.name}`}
             onClick={onToggleExpanded}
           >
-            {expanded ? (
-              <ChevronUpIcon className="size-4" aria-hidden />
-            ) : (
-              <ChevronDownIcon className="size-4" aria-hidden />
-            )}
+            <span className="relative inline-flex size-4 items-center justify-center">
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 transition-[opacity,transform,filter] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+                  expanded ? "scale-25 opacity-0 blur-[4px]" : "scale-100 opacity-100 blur-0",
+                )}
+                aria-hidden
+              />
+              <ChevronUpIcon
+                className={cn(
+                  "absolute size-4 transition-[opacity,transform,filter] duration-300 ease-[cubic-bezier(0.2,0,0,1)]",
+                  expanded ? "scale-100 opacity-100 blur-0" : "scale-25 opacity-0 blur-[4px]",
+                )}
+                aria-hidden
+              />
+            </span>
           </button>
         </div>
       </div>

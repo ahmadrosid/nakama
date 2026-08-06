@@ -1,8 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
+  ContentBlock,
+  ContentBlockParam,
   MessageCreateParams,
   MessageParam,
   RawMessageStreamEvent,
+  ToolResultBlockParam,
   ToolUnion,
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import type {
@@ -25,8 +28,6 @@ import {
 
 const MAX_PAUSE_CONTINUATIONS = 5;
 const WEB_SEARCH_MAX_USES = 5;
-
-type AnthropicContentBlock = Record<string, unknown>;
 
 export function buildAnthropicTools(
   tools: LlmToolDefinition[] | undefined,
@@ -67,12 +68,12 @@ export async function toAnthropicMessages(
       if (message.providerContent?.length) {
         result.push({
           role: "assistant",
-          content: message.providerContent as MessageParam["content"],
+          content: message.providerContent as ContentBlockParam[],
         });
         continue;
       }
 
-      const blocks: AnthropicContentBlock[] = [];
+      const blocks: ContentBlockParam[] = [];
 
       if (message.content.trim()) {
         blocks.push({ type: "text", text: message.content });
@@ -89,26 +90,26 @@ export async function toAnthropicMessages(
 
       result.push({
         role: "assistant",
-        content: (blocks.length > 0 ? blocks : message.content) as MessageParam["content"],
+        content: blocks.length > 0 ? blocks : message.content,
       });
       continue;
     }
 
     const last = result[result.length - 1];
-    const toolResult: AnthropicContentBlock = {
+    const toolResult: ToolResultBlockParam = {
       type: "tool_result",
       tool_use_id: message.toolCallId,
       content: message.content,
     };
 
     if (last?.role === "user" && Array.isArray(last.content)) {
-      (last.content as unknown as AnthropicContentBlock[]).push(toolResult);
+      last.content.push(toolResult);
       continue;
     }
 
     result.push({
       role: "user",
-      content: [toolResult] as unknown as MessageParam["content"],
+      content: [toolResult],
     });
   }
 
@@ -116,27 +117,27 @@ export async function toAnthropicMessages(
 }
 
 export function parseAnthropicContent(
-  content: AnthropicContentBlock[] | undefined,
+  content: ContentBlock[] | undefined,
 ): ChatCompletionResult {
   const textParts: string[] = [];
   const thinkingParts: string[] = [];
   const toolCalls: ToolCall[] = [];
 
   for (const block of content ?? []) {
-    if (block.type === "thinking" && typeof block.thinking === "string") {
+    if (block.type === "thinking") {
       thinkingParts.push(block.thinking);
       continue;
     }
 
-    if (block.type === "text" && typeof block.text === "string") {
+    if (block.type === "text") {
       textParts.push(block.text);
       continue;
     }
 
     if (block.type === "tool_use") {
       toolCalls.push({
-        id: String(block.id ?? ""),
-        name: String(block.name ?? ""),
+        id: block.id,
+        name: block.name,
         arguments: readRecord(block.input),
       });
     }
@@ -176,7 +177,7 @@ export async function continueAnthropicUntilDone(
   options: ContinueAnthropicUntilDoneOptions,
 ): Promise<ChatCompletionResult> {
   let apiMessages = await toAnthropicMessages(options.messages, options.provider);
-  let combinedContent: AnthropicContentBlock[] = [];
+  let combinedContent: ContentBlock[] = [];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const tools = buildAnthropicTools(options.tools, options.webSearch);
@@ -201,9 +202,7 @@ export async function continueAnthropicUntilDone(
       const streamed = await readAnthropicStream(stream, options.handlers);
       totalInputTokens += streamed.usage?.inputTokens ?? 0;
       totalOutputTokens += streamed.usage?.outputTokens ?? 0;
-      combinedContent.push(
-        ...((streamed.assistantMessage.providerContent ?? []) as AnthropicContentBlock[]),
-      );
+      combinedContent.push(...streamed.contentBlocks);
 
       if (streamed.stopReason !== "pause_turn") {
         return finalizeAnthropicResult({
@@ -228,7 +227,7 @@ export async function continueAnthropicUntilDone(
     totalInputTokens += payload.usage?.input_tokens ?? 0;
     totalOutputTokens += payload.usage?.output_tokens ?? 0;
 
-    const content = payload.content as unknown as AnthropicContentBlock[];
+    const content = payload.content;
     emitHostedToolEvents(content, options.handlers);
     combinedContent.push(...content);
 
@@ -256,6 +255,7 @@ export async function continueAnthropicUntilDone(
 
 interface StreamedAnthropicResult extends ChatCompletionResult {
   stopReason?: string;
+  contentBlocks: ContentBlock[];
 }
 
 async function readAnthropicStream(
@@ -267,56 +267,46 @@ async function readAnthropicStream(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   const pending = new Map<number, { id: string; name: string; inputJson: string }>();
-  const providerContent: AnthropicContentBlock[] = [];
-  const contentBlocks = new Map<number, AnthropicContentBlock>();
+  const providerContent: ContentBlock[] = [];
+  const contentBlocks = new Map<number, ContentBlock>();
 
   for await (const event of stream) {
     if (event.type === "message_start") {
-      const messageUsage = readRecord(
-        (event as unknown as { message?: { usage?: Record<string, unknown> } }).message?.usage,
-      );
-      if (typeof messageUsage.input_tokens === "number") {
-        inputTokens = messageUsage.input_tokens;
-      }
-
-      if (typeof messageUsage.output_tokens === "number") {
-        outputTokens = messageUsage.output_tokens;
-      }
+      inputTokens = event.message.usage.input_tokens;
+      outputTokens = event.message.usage.output_tokens;
     }
 
     if (event.type === "message_delta") {
       stopReason = event.delta.stop_reason ?? stopReason;
-      const deltaUsage = readRecord(
-        (event as unknown as { delta?: { usage?: Record<string, unknown> } }).delta?.usage,
-      );
-      if (typeof deltaUsage.input_tokens === "number") {
-        inputTokens = deltaUsage.input_tokens;
+
+      if (event.usage.input_tokens != null) {
+        inputTokens = event.usage.input_tokens;
       }
 
-      if (typeof deltaUsage.output_tokens === "number") {
-        outputTokens = deltaUsage.output_tokens;
+      if (typeof event.usage.output_tokens === "number") {
+        outputTokens = event.usage.output_tokens;
       }
     }
 
     if (event.type === "content_block_start") {
       const index = event.index;
-      const block = event.content_block as unknown as AnthropicContentBlock;
+      const block = event.content_block;
 
-      contentBlocks.set(index, { ...block });
-      providerContent[index] = { ...block };
+      contentBlocks.set(index, block);
+      providerContent[index] = block;
 
       if (block.type === "tool_use") {
         pending.set(index, {
-          id: String(block.id ?? ""),
-          name: String(block.name ?? ""),
+          id: block.id,
+          name: block.name,
           inputJson: "",
         });
       }
 
       if (block.type === "server_tool_use") {
         handlers?.onToolStart?.({
-          toolCallId: String(block.id ?? ""),
-          tool: String(block.name ?? WEB_SEARCH_TOOL_NAME),
+          toolCallId: block.id,
+          tool: block.name,
           input: readRecord(block.input),
         });
       }
@@ -329,18 +319,34 @@ async function readAnthropicStream(
       if (delta.type === "thinking_delta") {
         handlers?.onThinking?.(delta.thinking);
 
-        const block = contentBlocks.get(index) ?? { type: "thinking", thinking: "" };
-        block.thinking = `${String(block.thinking ?? "")}${delta.thinking}`;
+        const prev = contentBlocks.get(index);
+        const block: ContentBlock =
+          prev?.type === "thinking"
+            ? { ...prev, thinking: `${prev.thinking}${delta.thinking}` }
+            : { type: "thinking", thinking: delta.thinking, signature: "" };
         contentBlocks.set(index, block);
         providerContent[index] = block;
+      }
+
+      if (delta.type === "signature_delta") {
+        const prev = contentBlocks.get(index);
+
+        if (prev?.type === "thinking") {
+          const block: ContentBlock = { ...prev, signature: delta.signature };
+          contentBlocks.set(index, block);
+          providerContent[index] = block;
+        }
       }
 
       if (delta.type === "text_delta") {
         content += delta.text;
         handlers?.onChunk(delta.text);
 
-        const block = contentBlocks.get(index) ?? { type: "text", text: "" };
-        block.text = `${String(block.text ?? "")}${delta.text}`;
+        const prev = contentBlocks.get(index);
+        const block: ContentBlock =
+          prev?.type === "text"
+            ? { ...prev, text: `${prev.text}${delta.text}` }
+            : { type: "text", text: delta.text, citations: null };
         contentBlocks.set(index, block);
         providerContent[index] = block;
       }
@@ -364,7 +370,7 @@ async function readAnthropicStream(
 
       if (block?.type === "web_search_tool_result") {
         handlers?.onToolEnd?.({
-          toolCallId: String(block.tool_use_id ?? ""),
+          toolCallId: block.tool_use_id,
           tool: WEB_SEARCH_TOOL_NAME,
           result: block.content ?? block,
         });
@@ -384,6 +390,7 @@ async function readAnthropicStream(
       usage: buildTokenUsage({ inputTokens, outputTokens }),
     }),
     stopReason,
+    contentBlocks: normalizedContent,
   };
 }
 
@@ -403,7 +410,7 @@ function buildAnthropicThinkingRequest(
 }
 
 function emitHostedToolEvents(
-  content: AnthropicContentBlock[] | undefined,
+  content: ContentBlock[] | undefined,
   handlers?: StreamChatHandlers,
 ): void {
   if (!content?.length || !handlers) {
@@ -413,15 +420,15 @@ function emitHostedToolEvents(
   for (const block of content) {
     if (block.type === "server_tool_use") {
       handlers.onToolStart?.({
-        toolCallId: String(block.id ?? ""),
-        tool: String(block.name ?? WEB_SEARCH_TOOL_NAME),
+        toolCallId: block.id,
+        tool: block.name,
         input: readRecord(block.input),
       });
     }
 
     if (block.type === "web_search_tool_result") {
       handlers.onToolEnd?.({
-        toolCallId: String(block.tool_use_id ?? ""),
+        toolCallId: block.tool_use_id,
         tool: WEB_SEARCH_TOOL_NAME,
         result: block.content ?? block,
       });
@@ -439,11 +446,12 @@ function toAnthropicCustomTool(tool: LlmToolDefinition): ToolUnion {
 
 function appendAnthropicAssistantMessage(
   messages: MessageParam[],
-  content: AnthropicContentBlock[],
+  content: ContentBlock[],
 ): MessageParam[] {
+  // Response ContentBlock values are echoed back on pause_turn continuations.
   return [
     ...messages,
-    { role: "assistant", content: content as unknown as MessageParam["content"] },
+    { role: "assistant", content: content as ContentBlockParam[] },
   ];
 }
 

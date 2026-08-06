@@ -5,7 +5,6 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ProviderModelOption,
-  ProfileSummary,
   SkillSummary,
 } from "@nakama/core/contract";
 import type { ChatStatus } from "ai";
@@ -24,7 +23,6 @@ import {
   PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
-  PromptInputTools,
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
@@ -50,6 +48,7 @@ import {
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import {
   composerIconButtonClass,
+  composerSelectTriggerClass,
   composerShellClass,
   composerShellCompactClass,
   composerInputGroupClass,
@@ -63,9 +62,12 @@ import {
 } from "@/components/chat/ChatMessageQueuePanel";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
-import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
+import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
+import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
+import type { ChatContextUsage } from "@/lib/chat-context-usage";
+import type { ThinkingEffort } from "@nakama/core/contract";
 import { cn } from "@/lib/utils";
 import {
   isPastedTextDocument,
@@ -105,11 +107,7 @@ interface ChatComposerMinimalProps extends ChatComposerBaseProps {
 
 interface ChatComposerFullProps extends ChatComposerBaseProps {
   variant?: "full";
-  profileId: string;
-  profiles: ProfileSummary[];
-  activeProfile?: ProfileSummary;
-  onProfileSwitch: (profileId: string) => void;
-  showProfileSwitch?: boolean;
+  contextUsage?: ChatContextUsage | null;
   showOfflineHint?: boolean;
   providerConfigured?: boolean;
   onNavigateSetup?: () => void;
@@ -124,6 +122,10 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   availableSkills?: SkillSummary[];
   onModelChange: (selection: string) => void;
   renderModelLabel: (selection: string | null) => string | null;
+  thinkingEffortVisible?: boolean;
+  thinkingEffort?: ThinkingEffort;
+  thinkingEffortDisabled?: boolean;
+  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
   showTips?: boolean;
 }
 
@@ -153,14 +155,14 @@ export function ChatComposer(props: ChatComposerProps) {
 
   const isMinimal = props.variant === "minimal";
   const showTips = !isMinimal && props.showTips === true;
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const displayError = error ?? attachmentError;
   const hasTodos = hasActiveAgentTodos(todos);
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
-  const showTodos = hasTodos && !hasQuestionnaire;
+  const showTodos = hasTodos && !hasQuestionnaire && !displayError;
   const hasQueuedMessages = queuedMessages.length > 0;
   const availableSkills = isMinimal ? EMPTY_SKILLS : (props.availableSkills ?? EMPTY_SKILLS);
   const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const displayError = error ?? attachmentError;
   const composerNotice = displayError ? (
     <ChatComposerError message={displayError} />
   ) : showTips ? (
@@ -210,6 +212,7 @@ export function ChatComposer(props: ChatComposerProps) {
               onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
               className={shellClass}
               inputGroupClassName={composerInputGroupClass}
+              rimActive={busy}
               onSubmit={({ text, files }) => {
                 setAttachmentError(null);
                 onSubmit(text.trim(), files);
@@ -228,8 +231,8 @@ export function ChatComposer(props: ChatComposerProps) {
               </PromptInputBody>
               <PromptInputFooter
                 className={cn(
-                  "w-full border-0 px-0 pb-0",
-                  "flex-wrap items-center gap-2 pt-2.5",
+                  "w-full border-0 px-0 py-0",
+                  "flex-nowrap items-center gap-1.5 pt-1.5",
                   footerClassName,
                 )}
               >
@@ -261,6 +264,7 @@ export function ChatComposer(props: ChatComposerProps) {
             }
             className={shellClass}
             inputGroupClassName={composerInputGroupClass}
+            rimActive={busy}
             onSubmit={({ text, files }) => {
               setAttachmentError(null);
               onSubmit(text.trim(), files);
@@ -285,21 +289,23 @@ export function ChatComposer(props: ChatComposerProps) {
             </PromptInputBody>
             <PromptInputFooter
               className={cn(
-                "w-full border-0 px-0 pb-0",
+                "w-full border-0 px-0 py-0",
                 isMinimal
-                  ? "justify-end pt-2"
-                  : "flex-wrap items-center gap-2 pt-2.5",
+                  ? "justify-end pt-1.5"
+                  : "flex-nowrap items-center gap-1.5 pt-1.5",
                 footerClassName,
               )}
             >
               {isMinimal ? (
-                <ChatComposerSubmitButton
-                  chatStatus={chatStatus}
-                  busy={busy}
-                  canStop={canStop}
-                  disabled={disabled}
-                  onStop={onStop}
-                />
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <ChatComposerSubmitButton
+                    chatStatus={chatStatus}
+                    busy={busy}
+                    canStop={canStop}
+                    disabled={disabled}
+                    onStop={onStop}
+                  />
+                </div>
               ) : (
                 <ChatComposerFullFooter
                   props={props}
@@ -467,97 +473,102 @@ function ChatComposerFullFooter({
         aria-label="Composer options"
         className={composerToolbarClass}
       >
-        {props.showProfileSwitch !== false ? (
-          <>
-            <PromptInputTools className="gap-1.5">
-              <ChatProfileSwitcher
-                profileId={props.profileId}
-                profiles={props.profiles}
-                activeProfile={props.activeProfile}
-                onProfileSwitch={props.onProfileSwitch}
-                disabled={busy || disabled}
-              />
-            </PromptInputTools>
-            <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
-          </>
+        {props.contextUsage ? (
+          <ChatContextUsageRing usage={props.contextUsage} />
         ) : null}
 
         {props.providerConfigured ? (
-          <PromptInputSelect
-            value={props.currentModelSelection ?? ""}
-            disabled={
-              !props.providerModelGroups.some((group) => group.models.length > 0)
-            }
-            onValueChange={(value) =>
-              void props.onModelChange(value != null ? String(value) : "")
-            }
-          >
-            <PromptInputSelectTrigger
-              className="h-8 w-auto max-w-[min(16rem,52vw)] rounded-full bg-muted px-2.5 text-[11px] font-medium leading-none text-foreground hover:bg-muted/80 sm:max-w-[min(20rem,60vw)] sm:text-xs"
-              title={
-                props.currentModelSelection
-                  ? (props.renderModelLabel(props.currentModelSelection) ?? undefined)
-                  : undefined
+          <div className="min-w-[4.5rem] shrink overflow-hidden">
+            <PromptInputSelect
+              value={props.currentModelSelection ?? ""}
+              disabled={
+                !props.providerModelGroups.some((group) => group.models.length > 0)
+              }
+              onValueChange={(value) =>
+                void props.onModelChange(value != null ? String(value) : "")
               }
             >
-              <PromptInputSelectValue placeholder="Model">
-                {props.renderModelLabel}
-              </PromptInputSelectValue>
-            </PromptInputSelectTrigger>
-            <PromptInputSelectContent
-              align="start"
-              alignItemWithTrigger={false}
-              className="w-max max-w-[min(24rem,92vw)] text-xs"
-            >
-              {props.profileModelId &&
-                !props.providerModelGroups.some((group) =>
-                  group.models.some((model) => model.id === props.profileModelId),
-                ) ? (
-                <PromptInputSelectItem
-                  value={encodeModelSelection("__unknown__", props.profileModelId)}
-                  label={props.profileModelId}
-                >
-                  {props.profileModelId}
-                </PromptInputSelectItem>
-              ) : null}
-              {props.providerModelGroups.map((group) => (
-                <div key={group.providerId}>
-                  <div className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-                    {group.providerLabel}
-                  </div>
-                  {group.models.map((model) => {
-                    const providerId = model.providerId ?? group.providerId;
+              <PromptInputSelectTrigger
+                size="sm"
+                className={cn(
+                  composerSelectTriggerClass,
+                  "max-w-full justify-start overflow-hidden",
+                  props.contextUsage && "pl-1",
+                )}
+                title={
+                  props.currentModelSelection
+                    ? (props.renderModelLabel(props.currentModelSelection) ?? undefined)
+                    : undefined
+                }
+              >
+                <PromptInputSelectValue placeholder="Model">
+                  {props.renderModelLabel}
+                </PromptInputSelectValue>
+              </PromptInputSelectTrigger>
+              <PromptInputSelectContent
+                align="start"
+                alignItemWithTrigger={false}
+                className="w-max max-w-[min(24rem,92vw)] text-xs"
+              >
+                {props.profileModelId &&
+                  !props.providerModelGroups.some((group) =>
+                    group.models.some((model) => model.id === props.profileModelId),
+                  ) ? (
+                  <PromptInputSelectItem
+                    value={encodeModelSelection("__unknown__", props.profileModelId)}
+                    label={props.profileModelId}
+                  >
+                    {props.profileModelId}
+                  </PromptInputSelectItem>
+                ) : null}
+                {props.providerModelGroups.map((group) => (
+                  <div key={group.providerId}>
+                    <div className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                      {group.providerLabel}
+                    </div>
+                    {group.models.map((model) => {
+                      const providerId = model.providerId ?? group.providerId;
 
-                    return (
-                      <PromptInputSelectItem
-                        key={`${providerId}:${model.id}`}
-                        value={`${providerId}::${model.id}`}
-                        label={model.name}
-                      >
-                        {model.name}
-                      </PromptInputSelectItem>
-                    );
-                  })}
-                </div>
-              ))}
-            </PromptInputSelectContent>
-          </PromptInputSelect>
+                      return (
+                        <PromptInputSelectItem
+                          key={`${providerId}:${model.id}`}
+                          value={`${providerId}::${model.id}`}
+                          label={model.name}
+                        >
+                          {model.name}
+                        </PromptInputSelectItem>
+                      );
+                    })}
+                  </div>
+                ))}
+              </PromptInputSelectContent>
+            </PromptInputSelect>
+          </div>
         ) : (
-          <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 text-xs font-medium text-amber-800 dark:text-amber-200">
+          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-800 dark:text-amber-200">
             <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
             Offline
           </span>
         )}
+
+        {props.thinkingEffortVisible && props.thinkingEffort && props.onThinkingEffortChange ? (
+          <ChatThinkingEffortControl
+            visible
+            effort={props.thinkingEffort}
+            disabled={props.thinkingEffortDisabled}
+            onEffortChange={props.onThinkingEffortChange}
+          />
+        ) : null}
       </div>
 
       <div
         role="toolbar"
         aria-label="Composer actions"
-        className="ml-auto flex shrink-0 items-center gap-1.5"
+        className="ml-auto flex shrink-0 items-center gap-1"
       >
         <ChatAttachmentButton disabled={disabled} />
 
-        <span className="h-5 w-px bg-border" aria-hidden />
+        <span className="h-4 w-px bg-border" aria-hidden />
 
         <ChatComposerSubmitButton
           chatStatus={chatStatus}
@@ -572,7 +583,7 @@ function ChatComposerFullFooter({
 }
 
 const composerSubmitButtonClassName =
-  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
+  "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
 
 function ChatComposerSubmitButton({
   chatStatus,

@@ -23,6 +23,8 @@ export function DiscordSettingsPairingSection({
   inviteUrl,
   onCopyHandshakeCode,
   onRegenerateHandshake,
+  rowClassName,
+  compact = false,
 }: {
   isPaired: boolean;
   pairingCode: string | null;
@@ -32,11 +34,14 @@ export function DiscordSettingsPairingSection({
   inviteUrl: string | null;
   onCopyHandshakeCode: () => void;
   onRegenerateHandshake: () => void;
+  rowClassName?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className={cn("divide-y divide-border", !isPaired && "bg-muted/20")}>
+    <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
       <SettingsRow
         label="Pairing code"
+        className={rowClassName}
         description={
           pairingCode
             ? isPaired
@@ -112,7 +117,7 @@ export function DiscordSettingsPairingSection({
           >
             {regeneratePending ? (
               <>
-                <Spinner className="mr-2" />
+                <Spinner className="size-3" />
                 Generating…
               </>
             ) : (
@@ -122,7 +127,7 @@ export function DiscordSettingsPairingSection({
         )}
       </SettingsRow>
 
-      {pairingCode ? <DiscordPairingGuide inviteUrl={inviteUrl} /> : null}
+      {pairingCode ? <DiscordPairingGuide inviteUrl={inviteUrl} compact={compact} /> : null}
     </div>
   );
 }
@@ -136,6 +141,7 @@ export function DiscordSettingsConfiguredRows({
   onProfileChange,
   running,
   worker,
+  rowClassName,
 }: {
   allowedUserSummary: string;
   savePending: boolean;
@@ -145,10 +151,15 @@ export function DiscordSettingsConfiguredRows({
   onProfileChange: (profileId: string) => void;
   running: boolean;
   worker: { process?: { managed?: boolean } } | null | undefined;
+  rowClassName?: string;
 }) {
   return (
-    <>
-      <SettingsRow label="Allowed users" description="Discord user IDs that can use this bot">
+    <div className="space-y-4">
+      <SettingsRow
+        label="Allowed users"
+        description="Discord user IDs that can use this bot"
+        className={rowClassName}
+      >
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-xs text-muted-foreground">{allowedUserSummary}</span>
           <Button
@@ -163,7 +174,11 @@ export function DiscordSettingsConfiguredRows({
         </div>
       </SettingsRow>
 
-      <SettingsRow label="Reply as" description="Which agent answers on Discord">
+      <SettingsRow
+        label="Reply as"
+        description="Which agent answers on Discord"
+        className={rowClassName}
+      >
         <Select
           value={profileId}
           disabled={savePending || profiles.length === 0}
@@ -191,13 +206,17 @@ export function DiscordSettingsConfiguredRows({
         </Select>
       </SettingsRow>
 
-      <SettingsRow label="Bridge worker" description={running ? "Running" : "Stopped"}>
+      <SettingsRow
+        label="Bridge worker"
+        description={running ? "Running" : "Stopped"}
+        className={rowClassName}
+      >
         <WorkerActionBar
           workerName="discord"
           running={running}
           pm2Managed={worker?.process?.managed ?? false}
         />
       </SettingsRow>
-    </>
+    </div>
   );
 }

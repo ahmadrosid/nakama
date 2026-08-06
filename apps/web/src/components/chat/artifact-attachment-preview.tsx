@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileTextIcon, ImageIcon } from "lucide-react";
+import { EyeIcon, FileTextIcon, FilmIcon, ImageIcon } from "lucide-react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import {
   ArtifactShareMenuItem,
@@ -16,6 +16,12 @@ import {
   artifactPanelSubtitle,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
 import { useArtifactPreviewContent } from "@/components/chat/use-artifact-preview-content";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
@@ -27,6 +33,7 @@ import {
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
+  isVideoArtifactMimeType,
   resolveArtifactMimeType,
   type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
@@ -39,6 +46,8 @@ interface ArtifactAttachmentPreviewProps {
   id: string;
   artifact: ChatArtifactRef;
   className?: string;
+  /** `chip` is the chat attachment chip; `icon` is an icon-only view button. */
+  variant?: "chip" | "icon";
 }
 
 function ArtifactAttachmentPreviewPanelBody({
@@ -49,16 +58,18 @@ function ArtifactAttachmentPreviewPanelBody({
   error,
   content,
   imagePreviewUrl,
+  videoPreviewUrl,
   canPreview,
   artifact,
 }: {
-  kind: "image" | "html" | "text";
+  kind: "image" | "video" | "html" | "text";
   textFormat: "markdown" | "plain";
   language: string | null;
   loading: boolean;
   error: string | null;
   content: string | null;
   imagePreviewUrl: string | null;
+  videoPreviewUrl: string | null;
   canPreview: boolean;
   artifact: ChatArtifactRef;
 }) {
@@ -69,6 +80,19 @@ function ArtifactAttachmentPreviewPanelBody({
         loading={loading}
         error={error}
         imagePreviewUrl={imagePreviewUrl}
+        canPreview={canPreview}
+        artifact={artifact}
+      />
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <ArtifactAttachmentPanelBody
+        kind="video"
+        loading={loading}
+        error={error}
+        videoPreviewUrl={videoPreviewUrl}
         canPreview={canPreview}
         artifact={artifact}
       />
@@ -107,8 +131,9 @@ export function ArtifactAttachmentPreview({
   id,
   artifact,
   className,
+  variant = "chip",
 }: ArtifactAttachmentPreviewProps) {
-  const { show, update, hide, activeId } = useChatAttachmentPanel();
+  const { show, update, activeId } = useChatAttachmentPanel();
   const share = useArtifactShareControls({ profileId, artifactPath: artifact.path });
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
@@ -117,6 +142,7 @@ export function ArtifactAttachmentPreview({
   const mimeType = resolveArtifactMimeType(artifact.mimeType, artifact.filename);
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isImage = isImageArtifactMimeType(mimeType);
+  const isVideo = isVideoArtifactMimeType(mimeType);
   const isWordDocument =
     isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
@@ -124,19 +150,22 @@ export function ArtifactAttachmentPreview({
   const canPreview =
     isHtml ||
     isImage ||
+    isVideo ||
     isWordDocument ||
     isTextArtifactMimeType(mimeType) ||
     isUnknownArtifactMimeType(mimeType);
   const downloadLabel = downloadActionLabel(mimeType);
-  const { loading, error, content, imagePreviewUrl, setContent } = useArtifactPreviewContent({
-    open,
-    canPreview,
-    isHtml,
-    isImage,
-    isWordDocument,
-    profileId,
-    artifact,
-  });
+  const { loading, error, content, imagePreviewUrl, videoPreviewUrl, setContent } =
+    useArtifactPreviewContent({
+      open,
+      canPreview,
+      isHtml,
+      isImage,
+      isVideo,
+      isWordDocument,
+      profileId,
+      artifact,
+    });
 
   useEffect(() => {
     if (!copied) {
@@ -147,14 +176,8 @@ export function ArtifactAttachmentPreview({
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
-  useEffect(() => {
-    return () => {
-      hide(id);
-    };
-  }, [hide, id]);
-
   function buildPanelBody(loadingOverride?: boolean) {
-    const panelKind = isImage ? "image" : isHtml ? "html" : "text";
+    const panelKind = isImage ? "image" : isVideo ? "video" : isHtml ? "html" : "text";
     return (
       <ArtifactAttachmentPreviewPanelBody
         kind={panelKind}
@@ -164,6 +187,7 @@ export function ArtifactAttachmentPreview({
         error={error}
         content={content}
         imagePreviewUrl={imagePreviewUrl}
+        videoPreviewUrl={videoPreviewUrl}
         canPreview={canPreview}
         artifact={artifact}
       />
@@ -183,7 +207,7 @@ export function ArtifactAttachmentPreview({
             copied={copied}
             loading={loading}
             content={content}
-            copyDisabled={isImage}
+            copyDisabled={isImage || isVideo}
             fullscreen={fullscreen}
             downloadLabel={downloadLabel}
             downloadUrl={downloadUrl}
@@ -203,6 +227,7 @@ export function ArtifactAttachmentPreview({
       bodyClassName: artifactPanelBodyClassName({
         isHtml,
         isImage,
+        isVideo,
         isMarkdown,
       }),
       content: buildPanelBody(),
@@ -224,6 +249,7 @@ export function ArtifactAttachmentPreview({
     fullscreen,
     isHtml,
     isImage,
+    isVideo,
     isMarkdown,
     language,
     mimeType,
@@ -231,6 +257,7 @@ export function ArtifactAttachmentPreview({
     error,
     content,
     imagePreviewUrl,
+    videoPreviewUrl,
     canPreview,
     copied,
     downloadLabel,
@@ -240,7 +267,7 @@ export function ArtifactAttachmentPreview({
   ]);
 
   async function copyArtifact() {
-    if (isImage) {
+    if (isImage || isVideo) {
       return;
     }
 
@@ -273,7 +300,9 @@ export function ArtifactAttachmentPreview({
       fullscreen: false,
       content: buildPanelBody(
         canPreview &&
-          (isImage ? imagePreviewUrl === null : content === null) &&
+          (isImage || isVideo
+            ? (isImage ? imagePreviewUrl : videoPreviewUrl) === null
+            : content === null) &&
           error === null,
       ),
       onClose: () => {
@@ -281,6 +310,31 @@ export function ArtifactAttachmentPreview({
         setCopied(false);
       },
     });
+  }
+
+  if (variant === "icon") {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="View"
+              title="View"
+              className={className}
+              onClick={openPanel}
+            >
+              <EyeIcon className="size-3.5" aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent side="top" sideOffset={8}>
+          View
+        </TooltipContent>
+      </Tooltip>
+    );
   }
 
   return (
@@ -295,6 +349,8 @@ export function ArtifactAttachmentPreview({
       <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
         {isImage ? (
           <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
+        ) : isVideo ? (
+          <FilmIcon className="size-4 text-muted-foreground" aria-hidden />
         ) : (
           <FileTextIcon className="size-4 text-muted-foreground" aria-hidden />
         )}

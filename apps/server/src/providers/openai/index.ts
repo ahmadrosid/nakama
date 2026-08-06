@@ -20,7 +20,7 @@ import {
   parseJsonRecord,
   readSseEvents,
 } from "../shared";
-import { openAIModelSupportsThinking, openAIModelRequiresResponsesApi } from "./thinking";
+import { openAIModelSupportsThinking, openAIModelRequiresResponsesApi, openAIModelRejectsChatToolsWithReasoning } from "./thinking";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
@@ -155,6 +155,15 @@ function usesResponsesApi(
   }
 
   if (messagesIncludeUserDocuments(input.messages)) {
+    return true;
+  }
+
+  // gpt-5.4+ reject tools + reasoning_effort on chat/completions; Responses supports both.
+  if (
+    (input.tools?.length ?? 0) > 0 &&
+    (openAIModelRejectsChatToolsWithReasoning(model) ||
+      openAIModelSupportsThinking(model, customModels))
+  ) {
     return true;
   }
 
@@ -300,6 +309,8 @@ async function buildChatCompletionRequestBody(options: {
   streamOptions?: { includeUsage: boolean };
   provider?: ProviderName;
 }) {
+  const hasTools = Boolean(options.tools?.length);
+
   return {
     model: options.model,
     ...(options.stream ? { stream: true } : {}),
@@ -309,8 +320,15 @@ async function buildChatCompletionRequestBody(options: {
       options.messages,
       options.provider ?? "openai",
     ),
-    ...(options.tools?.length
-      ? { tools: toOpenAITools(options.tools), tool_choice: "auto" }
+    ...(hasTools
+      ? {
+          tools: toOpenAITools(options.tools),
+          tool_choice: "auto",
+          // Safety net if a caller still hits chat/completions for gpt-5.4+.
+          ...(openAIModelRejectsChatToolsWithReasoning(options.model)
+            ? { reasoning_effort: "none" }
+            : {}),
+        }
       : {}),
   };
 }

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useExportData() {
   return useMutation({
@@ -19,7 +20,29 @@ export function useRestoreDataImport() {
   return useMutation({
     mutationFn: ({ file, confirm }: { file: File; confirm: boolean }) =>
       client.restoreDataImport(file, { confirm }),
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.health });
+      await queryClient.invalidateQueries();
+    },
+  });
+}
+
+export function usePreviewSetupDataImport() {
+  return useMutation({
+    mutationFn: (file: File) => client.previewSetupDataImport(file),
+  });
+}
+
+export function useRestoreSetupDataImport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ file, confirm }: { file: File; confirm: boolean }) =>
+      client.restoreSetupDataImport(file, { confirm }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.health });
+      await queryClient.invalidateQueries();
+    },
   });
 }
 
@@ -46,4 +69,12 @@ export function canRestoreDataImport(options: {
   pending: boolean;
 }): boolean {
   return Boolean(options.selectedFile) && options.previewReady && !options.pending;
+}
+
+/** Gate auto-preview so mutation status churn cannot re-fire the same File. */
+export function shouldStartInitialFilePreview(
+  initialFile: File | null,
+  alreadyStartedFor: File | null,
+): boolean {
+  return initialFile != null && initialFile !== alreadyStartedFor;
 }

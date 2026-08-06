@@ -26,6 +26,8 @@ import { SkillsService } from "./services/skills-service";
 import { AuthService } from "./services/auth-service";
 import { OrgService } from "./services/org-service";
 import { OrgMemoryService } from "./services/org-memory-service";
+import { SkillProposalService } from "./services/skill-proposal-service";
+import { SkillSuggestionService } from "./services/skill-suggestion-service";
 import {
   mergeOrgMemoryWithApprovedBullet,
 } from "@nakama/agent";
@@ -129,6 +131,14 @@ const orgMemoryService = new OrgMemoryService(database.adapter, {
     },
   },
 });
+const skillProposalService = new SkillProposalService(database.adapter, skillsService);
+agent.setSkillProposalService(skillProposalService);
+const skillSuggestionService = new SkillSuggestionService(
+  database.adapter,
+  skillsService,
+  skillProposalService,
+);
+agent.setSkillSuggestionService(skillSuggestionService);
 
 const systemStatus = new SystemStatusService(
   agent,
@@ -152,8 +162,14 @@ const app = createHonoApp({
   authService,
   orgService,
   orgMemoryService,
+  skillProposalService,
+  skillSuggestionService,
   databaseAdapter: database.adapter,
   webDistDir,
+  onDataRestored: async () => {
+    await database.reopen();
+    await agent.reloadAfterDataRestore();
+  },
 });
 
 const server = startServer({

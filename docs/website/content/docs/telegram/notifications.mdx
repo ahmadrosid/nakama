@@ -1,0 +1,92 @@
+---
+title: "Outbound notifications"
+description: "Send simple webhook-driven notifications from external apps into a Telegram group or topic."
+---
+
+Nakama can also send simple text notifications into Telegram.
+
+This is separate from the normal chat bridge. Instead of waiting for a Telegram user to message the bot first, another app can call a Nakama webhook and Nakama will post the message into a configured Telegram chat.
+
+This is useful for things like:
+
+- new payment notifications
+- failed job alerts
+- deploy finished messages
+- support or sales event notifications
+
+## How it works
+
+1. Open **Integrations**
+2. In **Notification destinations**, create a new destination
+3. Choose a name
+4. Paste the Telegram topic link, such as `https://t.me/c/3734526664/147`
+5. Save and copy the generated webhook URL and API key
+
+![Create a Telegram notification destination from Integrations → Notifications](/screenshots/telegram-notifications.png)
+
+Each destination belongs to one org and points to one Telegram target.
+Nakama extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
+
+## Webhook payload
+
+Nakama keeps the webhook contract intentionally small.
+
+Send a `POST` request with JSON like this:
+
+```json
+{
+  "title": "Payment received",
+  "body": "Order #INV-1042 paid by Acme Co.",
+  "level": "success"
+}
+```
+
+`body` is required.
+`title` is optional.
+`level` is optional and can be `info`, `success`, `warning`, or `error`.
+
+Nakama formats that into a short Telegram text message and sends it to the configured chat or topic.
+
+## Design note
+
+In v1, Nakama does not accept arbitrary templating or custom Telegram payloads from external apps.
+
+That is intentional:
+
+- the webhook stays stable and easy to validate
+- external apps only need to send simple notification text
+- the destination model can later support Slack or Discord with the same webhook shape
+
+## Notification destinations for groups and topics
+
+From **Integrations → Notifications**, Nakama can create Telegram webhook destinations for a group or a forum topic.
+
+If you already have a topic share link such as:
+
+```text
+https://t.me/c/3734526664/147
+```
+
+you can derive the form values directly:
+
+- `Telegram chat ID`: prefix the number after `/c/` with `-100` → `-1003734526664`
+- `Telegram topic ID`: use the last path segment → `147`
+
+This matches what Telegram Bot API returns in:
+
+- `message.chat.id`
+- `message.message_thread_id`
+
+If you prefer the API method, send a fresh message in the target topic and call:
+
+```text
+https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
+```
+
+Then copy `message.chat.id` and `message.message_thread_id` from the matching update.
+
+## Next steps
+
+- [Chat behavior & commands](/telegram/chat)
+- [Troubleshooting](/telegram/troubleshooting)
+- [Telegram setup](/telegram)

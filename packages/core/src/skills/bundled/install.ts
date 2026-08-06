@@ -4,6 +4,9 @@ import { writePrivateTextFile, writePrivateTextFileIfMissing } from "../../fs";
 import { getGlobalSkillsDir, SKILL_FILE_NAME } from "../paths";
 import { BUNDLED_SKILL_NAMES, readBundledSkillMarkdown } from "./index";
 
+/** Bundled skills whose installed SKILL.md must be overwritten on startup (content drift). */
+const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>(["manage-skills"]);
+
 const RENAMED_BUNDLED_SKILL_DIRS = [["coding-delegation", "coding-agent"]] as const;
 
 async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
@@ -52,7 +55,7 @@ export async function ensureBundledSkillFiles(): Promise<string[]> {
     const skillFilePath = `${directory}/${SKILL_FILE_NAME}`;
     const content = await readBundledSkillMarkdown(name);
 
-    if (refreshed.includes(name)) {
+    if (refreshed.includes(name) || FORCE_REFRESH_BUNDLED_SKILL_NAMES.has(name)) {
       await writePrivateTextFile(skillFilePath, content);
       created.push(name);
       continue;

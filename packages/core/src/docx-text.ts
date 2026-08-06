@@ -1,4 +1,5 @@
 import { LEGACY_DOC_UNSUPPORTED_MESSAGE, looksLikeUtf8Text } from "./artifact-mime";
+import { convertDocumentBytes } from "./anydoc-text";
 import { convertHtmlToMarkdown } from "./tools/web-fetch";
 
 /**
@@ -65,9 +66,8 @@ export function convertWordprocessingXmlToMarkdown(xml: string): string {
  */
 export async function convertDocxToMarkdown(bytes: Buffer): Promise<string> {
   if (looksLikeZipArchive(bytes)) {
-    const { convertToHtml } = await import("mammoth");
-    const result = await convertToHtml({ buffer: bytes });
-    return convertHtmlToMarkdown(result.value);
+    const { text } = await convertDocumentBytes(bytes, { format: "docx" });
+    return text;
   }
 
   // Only a real OLE payload is a true legacy .doc. A `.doc` file that actually holds
@@ -97,11 +97,5 @@ export async function convertDocxToMarkdown(bytes: Buffer): Promise<string> {
 
 /** Plain text of a `.docx`, for callers that index or embed rather than render. */
 export async function extractDocxText(bytes: Buffer): Promise<string> {
-  if (!looksLikeZipArchive(bytes)) {
-    return convertDocxToMarkdown(bytes);
-  }
-
-  const { extractRawText } = await import("mammoth");
-  const result = await extractRawText({ buffer: bytes });
-  return result.value.trim();
+  return convertDocxToMarkdown(bytes);
 }

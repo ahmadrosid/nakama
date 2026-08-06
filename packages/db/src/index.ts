@@ -20,6 +20,8 @@ export { createSqliteDatabase } from "./adapters/sqlite";
 export interface Database {
   adapter: DatabaseAdapter;
   close(): void;
+  /** Re-open the on-disk database after files under the data root were replaced. */
+  reopen(): Promise<void>;
 }
 
 export async function createDatabase(
@@ -32,6 +34,7 @@ export async function createDatabase(
     return {
       adapter: createInMemoryDatabaseAdapter(),
       close() {},
+      async reopen() {},
     };
   }
 

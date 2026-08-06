@@ -23,6 +23,7 @@ import {
   useAssignToolMutation,
   useCreateMcpServerMutation,
   useCreateSkillMutation,
+  useDeleteProfileAvatarMutation,
   useDeleteProfileMutation,
   useDeleteSkillMutation,
   useUnassignMcpServerMutation,
@@ -79,6 +80,7 @@ export function useProfilesPage() {
   const updateMutation = useUpdateProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
+  const deleteAvatarMutation = useDeleteProfileAvatarMutation();
   const assignMutation = useAssignToolMutation();
   const unassignMutation = useUnassignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
@@ -97,7 +99,6 @@ export function useProfilesPage() {
   const [removeConfirm, setRemoveConfirm] = useState<RemoveAssignmentTarget | null>(null);
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
-  const [detailSkillId, setDetailSkillId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -813,6 +814,20 @@ export function useProfilesPage() {
     }
   }
 
+  async function handleAvatarRemove() {
+    if (!selectedId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteAvatarMutation.mutateAsync(selectedId);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   function handleCreateOpenChange(open: boolean) {
     setCreateOpen(open);
   }
@@ -851,8 +866,6 @@ export function useProfilesPage() {
     setMcpCreateOpen,
     skillCreateOpen,
     setSkillCreateOpen,
-    detailSkillId,
-    setDetailSkillId,
     editName,
     editPrompt,
     editModel,
@@ -870,6 +883,7 @@ export function useProfilesPage() {
     assignedSkillIds,
     avatarInputRef,
     uploadAvatarMutation,
+    deleteAvatarMutation,
     createSkillMutation,
     assignSkillMutation,
     createMcpMutation,
@@ -891,6 +905,7 @@ export function useProfilesPage() {
     handleAssignComposioToolkit,
     handleRemoveAssignmentConfirm,
     handleAvatarSelected,
+    handleAvatarRemove,
     handleCreateOpenChange,
     handleEditNameChange,
     handleEditPromptChange,

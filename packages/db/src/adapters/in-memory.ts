@@ -11,10 +11,14 @@ import type {
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
   StoredSkillRecord,
+  StoredSkillUsageRecord,
   StoredOrgMemberRecord,
   StoredOrgInviteRecord,
   StoredOrgMemoryProposal,
   OrgMemoryProposalStatus,
+  StoredSkillProposal,
+  SkillProposalStatus,
+  StoredSkillSuggestion,
   StoredArtifactShareRecord,
   StoredOrganizationRecord,
   StoredUserOrganizationRecord,
@@ -54,6 +58,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const skillsByName = new Map<string, StoredSkillRecord>();
   const skillsBySourcePath = new Map<string, StoredSkillRecord>();
   const profileSkills = new Map<string, Set<string>>();
+  const skillUsage = new Map<string, StoredSkillUsageRecord>();
   const sessions = new Map<string, StoredSessionRecord>();
   const sessionMessages = new Map<string, StoredSessionMessageRecord[]>();
   const attachments = new Map<string, StoredAttachmentRecord>();
@@ -66,6 +71,8 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const orgInvites = new Map<string, StoredOrgInviteRecord>();
   const orgInvitesByTokenHash = new Map<string, StoredOrgInviteRecord>();
   const orgMemoryProposals = new Map<string, StoredOrgMemoryProposal>();
+  const skillProposals = new Map<string, StoredSkillProposal>();
+  const skillSuggestions = new Map<string, StoredSkillSuggestion>();
   const artifactShares = new Map<string, StoredArtifactShareRecord>();
   const artifactSharesByTokenHash = new Map<string, StoredArtifactShareRecord>();
   let llmUsageStats: StoredLlmUsageStatsRecord | null = null;
@@ -331,6 +338,163 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         }
       }
       return count;
+    },
+
+    async createSkillProposal(record) {
+      skillProposals.set(record.id, record);
+    },
+
+    async listSkillProposals(orgId, options = {}) {
+      const { status, profileId, sessionId } = options;
+      const proposals = [...skillProposals.values()].filter((proposal) => {
+        if (proposal.orgId !== orgId) {
+          return false;
+        }
+        if (status && proposal.status !== status) {
+          return false;
+        }
+        if (profileId && proposal.profileId !== profileId) {
+          return false;
+        }
+        if (sessionId && proposal.sessionId !== sessionId) {
+          return false;
+        }
+        return true;
+      });
+      return proposals.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async getSkillProposal(orgId, id) {
+      const proposal = skillProposals.get(id);
+      if (!proposal || proposal.orgId !== orgId) {
+        return null;
+      }
+      return proposal;
+    },
+
+    async getPendingSkillProposalForCreate(orgId, profileId, skillName) {
+      for (const proposal of skillProposals.values()) {
+        if (
+          proposal.orgId === orgId &&
+          proposal.profileId === profileId &&
+          proposal.skillName === skillName &&
+          proposal.action === "create" &&
+          proposal.status === "pending"
+        ) {
+          return proposal;
+        }
+      }
+      return null;
+    },
+
+    async getPendingSkillProposalForSkill(orgId, profileId, skillName) {
+      for (const proposal of skillProposals.values()) {
+        if (
+          proposal.orgId === orgId &&
+          proposal.profileId === profileId &&
+          proposal.skillName === skillName &&
+          proposal.status === "pending"
+        ) {
+          return proposal;
+        }
+      }
+      return null;
+    },
+
+    async getPendingSkillProposalForPatch(
+      orgId,
+      profileId,
+      skillName,
+      patchOldString,
+      patchNewString,
+    ) {
+      for (const proposal of skillProposals.values()) {
+        if (
+          proposal.orgId === orgId &&
+          proposal.profileId === profileId &&
+          proposal.skillName === skillName &&
+          proposal.action === "patch" &&
+          proposal.patchOldString === patchOldString &&
+          proposal.patchNewString === patchNewString &&
+          proposal.status === "pending"
+        ) {
+          return proposal;
+        }
+      }
+      return null;
+    },
+
+    async updateSkillProposalStatus(orgId, id, update) {
+      const proposal = skillProposals.get(id);
+      if (!proposal || proposal.orgId !== orgId) {
+        return false;
+      }
+      skillProposals.set(id, {
+        ...proposal,
+        status: update.status,
+        reviewerUserId: update.reviewerUserId,
+        reviewedAt: update.reviewedAt,
+      });
+      return true;
+    },
+
+    async countPendingSkillProposals(orgId, profileId) {
+      let count = 0;
+      for (const proposal of skillProposals.values()) {
+        if (proposal.orgId !== orgId || proposal.status !== "pending") {
+          continue;
+        }
+        if (profileId && proposal.profileId !== profileId) {
+          continue;
+        }
+        count += 1;
+      }
+      return count;
+    },
+
+    async createSkillSuggestion(record) {
+      skillSuggestions.set(record.id, record);
+    },
+
+    async listSkillSuggestions(orgId, options = {}) {
+      const { sessionId, status, profileId } = options;
+      const suggestions = [...skillSuggestions.values()].filter((suggestion) => {
+        if (suggestion.orgId !== orgId) {
+          return false;
+        }
+        if (sessionId && suggestion.sessionId !== sessionId) {
+          return false;
+        }
+        if (status && suggestion.status !== status) {
+          return false;
+        }
+        if (profileId && suggestion.profileId !== profileId) {
+          return false;
+        }
+        return true;
+      });
+      return suggestions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async getSkillSuggestion(orgId, id) {
+      const suggestion = skillSuggestions.get(id);
+      if (!suggestion || suggestion.orgId !== orgId) {
+        return null;
+      }
+      return suggestion;
+    },
+
+    async markSkillSuggestionApplied(orgId, id, appliedAt) {
+      const suggestion = skillSuggestions.get(id);
+      if (!suggestion || suggestion.orgId !== orgId) {
+        return false;
+      }
+      skillSuggestions.set(id, {
+        ...suggestion,
+        status: "applied",
+        appliedAt,
+      });
+      return true;
     },
 
     async createArtifactShare(record) {
@@ -1125,6 +1289,50 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       }
 
       return true;
+    },
+
+    async listSkillUsageForProfile(profileId) {
+      return Array.from(skillUsage.values())
+        .filter((usage) => usage.profileId === profileId)
+        .sort((left, right) => left.skillId.localeCompare(right.skillId));
+    },
+
+    async getSkillUsage(profileId, skillId) {
+      return skillUsage.get(`${profileId}:${skillId}`) ?? null;
+    },
+
+    async incrementSkillUsage(input) {
+      const key = `${input.profileId}:${input.skillId}`;
+      const now = new Date().toISOString();
+      const existing = skillUsage.get(key);
+
+      if (!existing) {
+        skillUsage.set(key, {
+          orgId: input.orgId,
+          profileId: input.profileId,
+          skillId: input.skillId,
+          viewCount: input.viewDelta ?? 0,
+          useCount: input.useDelta ?? 0,
+          patchCount: input.patchDelta ?? 0,
+          lastViewedAt: input.viewedAt ?? null,
+          lastUsedAt: input.usedAt ?? null,
+          lastPatchedAt: input.patchedAt ?? null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return;
+      }
+
+      skillUsage.set(key, {
+        ...existing,
+        viewCount: existing.viewCount + (input.viewDelta ?? 0),
+        useCount: existing.useCount + (input.useDelta ?? 0),
+        patchCount: existing.patchCount + (input.patchDelta ?? 0),
+        lastViewedAt: input.viewedAt ?? existing.lastViewedAt,
+        lastUsedAt: input.usedAt ?? existing.lastUsedAt,
+        lastPatchedAt: input.patchedAt ?? existing.lastPatchedAt,
+        updatedAt: now,
+      });
     },
   };
 }

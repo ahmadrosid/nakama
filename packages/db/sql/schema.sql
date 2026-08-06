@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   is_super INTEGER DEFAULT 0 NOT NULL,
   org_id TEXT,
   is_default INTEGER DEFAULT 0 NOT NULL,
+  skills_write_approval INTEGER,
+  skills_post_turn_review INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
@@ -200,6 +202,7 @@ CREATE TABLE IF NOT EXISTS skills (
   has_tool INTEGER DEFAULT 0 NOT NULL,
   disable_model_invocation INTEGER DEFAULT 0 NOT NULL,
   enabled INTEGER DEFAULT 1 NOT NULL,
+  created_by TEXT NOT NULL DEFAULT 'bundled',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -252,6 +255,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
+  skills_write_approval INTEGER NOT NULL DEFAULT 0,
+  skills_post_turn_review INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -302,6 +307,70 @@ CREATE TABLE IF NOT EXISTS org_memory_proposals (
 );
 
 CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
+
+CREATE TABLE IF NOT EXISTS skill_proposals (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  session_id TEXT,
+  proposed_by_user_id TEXT,
+  action TEXT NOT NULL,
+  skill_name TEXT NOT NULL,
+  content TEXT,
+  patch_old_string TEXT,
+  patch_new_string TEXT,
+  relative_path TEXT,
+  status TEXT NOT NULL,
+  reviewer_user_id TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_proposals_org_status ON skill_proposals (org_id, status);
+CREATE INDEX IF NOT EXISTS skill_proposals_org_profile_status ON skill_proposals (org_id, profile_id, status);
+
+CREATE TABLE IF NOT EXISTS skill_suggestions (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  session_id TEXT,
+  proposed_by_user_id TEXT,
+  action TEXT NOT NULL,
+  skill_name TEXT NOT NULL,
+  content TEXT,
+  patch_old_string TEXT,
+  patch_new_string TEXT,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'post_turn_review',
+  warnings TEXT,
+  created_at TEXT NOT NULL,
+  applied_at TEXT,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_suggestions_org_status ON skill_suggestions (org_id, status);
+CREATE INDEX IF NOT EXISTS skill_suggestions_org_session ON skill_suggestions (org_id, session_id);
+CREATE INDEX IF NOT EXISTS skill_suggestions_org_profile_status ON skill_suggestions (org_id, profile_id, status);
+
+CREATE TABLE IF NOT EXISTS profile_skill_usage (
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  view_count INTEGER NOT NULL DEFAULT 0,
+  use_count INTEGER NOT NULL DEFAULT 0,
+  patch_count INTEGER NOT NULL DEFAULT 0,
+  last_viewed_at TEXT,
+  last_used_at TEXT,
+  last_patched_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (profile_id, skill_id),
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+  FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS profile_skill_usage_org_profile ON profile_skill_usage (org_id, profile_id);
 
 CREATE TABLE IF NOT EXISTS channel_org_mappings (
   channel TEXT NOT NULL,

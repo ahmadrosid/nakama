@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { useAuth } from "@/context/use-auth";
 import { useAutomationsQuery } from "@/hooks/use-automations";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
-import { PAGE_PATHS } from "@/lib/navigation";
+import { useSkillProposals } from "@/hooks/use-skill-proposals";
+import { PAGE_PATHS, orgSkillProposalsPath } from "@/lib/navigation";
 
-export type NotificationKind = "automation-run" | "org-memory-proposal";
+export type NotificationKind = "automation-run" | "org-memory-proposal" | "skill-proposal";
 
 export interface NotificationItem {
   id: string;
@@ -21,6 +22,7 @@ export function useNotifications(): {
   items: NotificationItem[];
   automationItems: NotificationItem[];
   orgMemoryItems: NotificationItem[];
+  skillProposalItems: NotificationItem[];
   totalCount: number;
   isLoading: boolean;
 } {
@@ -34,10 +36,15 @@ export function useNotifications(): {
     "pending",
     { refetchInterval: 30_000 },
   );
+  const { data: skillProposalsData, isLoading: skillProposalsLoading } = useSkillProposals(
+    isOrgAdmin ? orgId : null,
+    { status: "pending", refetchInterval: 30_000 },
+  );
 
-  const { items, automationItems, orgMemoryItems } = useMemo(() => {
+  const { items, automationItems, orgMemoryItems, skillProposalItems } = useMemo(() => {
     const automationItems: NotificationItem[] = [];
     const orgMemoryItems: NotificationItem[] = [];
+    const skillProposalItems: NotificationItem[] = [];
 
     const automations = automationsData?.automations ?? [];
     const unreadByAutomationId = automationsData?.unread?.byAutomationId ?? {};
@@ -74,28 +81,33 @@ export function useNotifications(): {
       });
     }
 
+    for (const proposal of skillProposalsData?.proposals ?? []) {
+      skillProposalItems.push({
+        id: `skill-proposal-${proposal.id}`,
+        kind: "skill-proposal",
+        kindLabel: "Skill proposal",
+        title: `${proposal.action} · ${proposal.skillName}`,
+        description: "Skill change awaiting admin approval",
+        href: orgSkillProposalsPath(proposal.profileId),
+        count: 1,
+        createdAt: proposal.createdAt,
+      });
+    }
+
     return {
-      items: [...automationItems, ...orgMemoryItems],
+      items: [...automationItems, ...orgMemoryItems, ...skillProposalItems],
       automationItems,
       orgMemoryItems,
+      skillProposalItems,
     };
-  }, [automationsData, proposalsData?.proposals]);
+  }, [automationsData, proposalsData?.proposals, skillProposalsData?.proposals]);
 
   const totalCount = items.reduce((sum, item) => sum + item.count, 0);
   const isLoading =
     authLoading ||
     !isAuthenticated ||
     automationsLoading ||
-    (isOrgAdmin && proposalsLoading);
+    (isOrgAdmin && (proposalsLoading || skillProposalsLoading));
 
-  return { items, automationItems, orgMemoryItems, totalCount, isLoading };
+  return { items, automationItems, orgMemoryItems, skillProposalItems, totalCount, isLoading };
 }
-
-/** @deprecated Use useNotifications */
-export const useSidebarNotifications = useNotifications;
-
-/** @deprecated Use NotificationItem */
-export type SidebarNotificationItem = NotificationItem;
-
-/** @deprecated Use NotificationKind */
-export type SidebarNotificationKind = NotificationKind;

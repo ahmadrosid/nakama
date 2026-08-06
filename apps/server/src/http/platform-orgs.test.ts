@@ -53,6 +53,8 @@ describe("platform org routes", () => {
         id: expect.stringMatching(/^org_/),
         name: "Acme Corp",
         slug: "acme-corp",
+        skillsWriteApproval: false,
+        skillsPostTurnReview: false,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       },

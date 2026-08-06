@@ -1,4 +1,13 @@
-<p align="center"> <img alt="Nakama logo" src="nakama.png" width="188"> </p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="nakama-logo-dither-dark.png" />
+    <img alt="Nakama logo" src="nakama-logo-dither-light.png" width="188" />
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/qhKbMFEUc"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+</p>
 
 # Nakama
 
@@ -55,16 +64,14 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 **Build from source:**
 
 ```bash
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+./scripts/docker-build-run.sh
 ```
 
 **Fresh start:**
 
 ```bash
-./scripts/docker-reset.sh
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+./scripts/docker-destroy.sh
+./scripts/docker-build-run.sh
 ```
 
 The dashboard will be available at http://localhost:4310.

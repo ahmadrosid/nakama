@@ -102,11 +102,48 @@ describe("validateDocumentAttachments", () => {
     ).toThrow(NakamaApiError);
   });
 
+  test("accepts excel attachments under the size limit", () => {
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          filename: "budget.xlsx",
+          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          data: "YWJj",
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  test("normalizes excel extension when media type is generic", () => {
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          filename: "budget.xlsx",
+          mediaType: "application/octet-stream",
+          data: "YWJj",
+        },
+      ]),
+    ).not.toThrow();
+  });
+
   test("rejects oversized document", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
       validateDocumentAttachments([
         { filename: "big.pdf", mediaType: "application/pdf", data: huge },
+      ]),
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects oversized excel the same way as other documents", () => {
+    const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          filename: "big.xlsx",
+          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          data: huge,
+        },
       ]),
     ).toThrow(NakamaApiError);
   });

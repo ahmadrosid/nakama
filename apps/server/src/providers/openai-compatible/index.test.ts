@@ -27,8 +27,10 @@ describe("OpenAI-compatible provider", () => {
       expect(String(input)).toBe("https://api.example.com/v1/chat/completions");
       const body = JSON.parse(String(init?.body ?? "{}")) as {
         reasoning?: { effort?: string };
+        reasoning_effort?: string;
       };
       expect(body.reasoning).toEqual({ effort: "high" });
+      expect(body.reasoning_effort).toBe("high");
       return Response.json({
         choices: [{ message: { content: "Answer", reasoning: "Plan" } }],
       });
@@ -58,8 +60,10 @@ describe("OpenAI-compatible provider", () => {
     const fetchMock = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
         reasoning?: unknown;
+        reasoning_effort?: unknown;
       };
       expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
       return Response.json({
         choices: [{ message: { content: "Answer" } }],
       });
@@ -78,6 +82,126 @@ describe("OpenAI-compatible provider", () => {
     const result = await provider.generateChat({
       system: "You are helpful.",
       messages: [{ role: "user", content: "Think then answer" }],
+      providerOptions: { thinking: { enabled: true, effort: "high" } },
+    });
+
+    expect(result.content).toBe("Answer");
+  });
+
+  test("sets reasoning_effort to none for gpt-5.6 tools on chat completions", async () => {
+    const fetchMock = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        reasoning?: unknown;
+        reasoning_effort?: string;
+        tools?: unknown[];
+      };
+      expect(body.tools).toHaveLength(1);
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBe("none");
+      return Response.json({
+        choices: [{ message: { content: "Answer" } }],
+      });
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-5.6-luna",
+      displayName: "OpenAI",
+      supportsThinking: true,
+    });
+
+    const result = await provider.generateChat({
+      system: "You are helpful.",
+      messages: [{ role: "user", content: "Search" }],
+      tools: [
+        {
+          name: "search_files",
+          description: "Search files",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+      providerOptions: { thinking: { enabled: true, effort: "high" } },
+    });
+
+    expect(result.content).toBe("Answer");
+  });
+
+  test("forces reasoning_effort none for gpt-5.6 tools even when thinking is off", async () => {
+    const fetchMock = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        reasoning?: unknown;
+        reasoning_effort?: string;
+        tools?: unknown[];
+      };
+      expect(body.tools).toHaveLength(1);
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBe("none");
+      return Response.json({
+        choices: [{ message: { content: "Answer" } }],
+      });
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-5.6-luna",
+      displayName: "OpenAI",
+      supportsThinking: true,
+    });
+
+    const result = await provider.generateChat({
+      system: "You are helpful.",
+      messages: [{ role: "user", content: "Search" }],
+      tools: [
+        {
+          name: "search_files",
+          description: "Search files",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+    });
+
+    expect(result.content).toBe("Answer");
+  });
+
+  test("keeps reasoning_effort for non-OpenAI models with tools", async () => {
+    const fetchMock = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        reasoning_effort?: string;
+        tools?: unknown[];
+      };
+      expect(body.tools).toHaveLength(1);
+      expect(body.reasoning_effort).toBe("high");
+      return Response.json({
+        choices: [{ message: { content: "Answer" } }],
+      });
+    });
+
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "",
+      baseUrl: "https://api.example.com/v1",
+      model: "qwen3.6-35b",
+      displayName: "NetraRuntime",
+      supportsThinking: true,
+    });
+
+    const result = await provider.generateChat({
+      system: "You are helpful.",
+      messages: [{ role: "user", content: "Search" }],
+      tools: [
+        {
+          name: "search_files",
+          description: "Search files",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
       providerOptions: { thinking: { enabled: true, effort: "high" } },
     });
 

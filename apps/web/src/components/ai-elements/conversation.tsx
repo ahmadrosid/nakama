@@ -3,36 +3,67 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
-import { useCallback } from "react";
-import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  type ComponentProps,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 
-export type ConversationProps = ComponentProps<typeof StickToBottom>;
+export interface ConversationStickinessValue {
+  isAtBottom: boolean;
+  scrollToLatest: () => void;
+}
+
+const ConversationStickinessContext = createContext<ConversationStickinessValue | null>(
+  null,
+);
+
+export function ConversationStickinessProvider({
+  value,
+  children,
+}: {
+  value: ConversationStickinessValue;
+  children: ReactNode;
+}) {
+  return (
+    <ConversationStickinessContext.Provider value={value}>
+      {children}
+    </ConversationStickinessContext.Provider>
+  );
+}
+
+function useConversationStickiness(): ConversationStickinessValue {
+  const value = useContext(ConversationStickinessContext);
+  if (!value) {
+    throw new Error("ConversationScrollButton requires ConversationStickinessProvider");
+  }
+  return value;
+}
+
+export type ConversationProps = HTMLAttributes<HTMLDivElement>;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
-  <StickToBottom
-    className={cn("relative flex-1 overflow-y-hidden", className)}
-    initial="smooth"
-    resize="smooth"
+  <div
+    className={cn("relative flex min-h-0 flex-1 flex-col overflow-hidden", className)}
     role="log"
     {...props}
   />
 );
 
-export type ConversationContentProps = ComponentProps<
-  typeof StickToBottom.Content
->;
+export type ConversationContentProps = HTMLAttributes<HTMLDivElement> & {
+  scrollClassName?: string;
+};
 
+/** Layout wrapper for non-virtualized content (empty state). */
 export const ConversationContent = ({
   className,
-  scrollClassName,
+  scrollClassName: _scrollClassName,
   ...props
 }: ConversationContentProps) => (
-  <StickToBottom.Content
-    className={cn("flex flex-col gap-8 p-4", className)}
-    scrollClassName={cn("no-scrollbar", scrollClassName)}
-    {...props}
-  />
+  <div className={cn("flex min-h-0 flex-1 flex-col", className)} {...props} />
 );
 
 export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
@@ -41,27 +72,29 @@ export const ConversationScrollButton = ({
   className,
   ...props
 }: ConversationScrollButtonProps) => {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const { isAtBottom, scrollToLatest } = useConversationStickiness();
 
-  const handleScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+  const handleScrollToLatest = useCallback(() => {
+    scrollToLatest();
+  }, [scrollToLatest]);
+
+  if (isAtBottom) {
+    return null;
+  }
 
   return (
-    !isAtBottom && (
-      <Button
-        className={cn(
-          "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
-          className
-        )}
-        onClick={handleScrollToBottom}
-        size="icon"
-        type="button"
-        variant="outline"
-        {...props}
-      >
-        <ArrowDownIcon className="size-4" />
-      </Button>
-    )
+    <Button
+      className={cn(
+        "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
+        className,
+      )}
+      onClick={handleScrollToLatest}
+      size="icon"
+      type="button"
+      variant="outline"
+      {...props}
+    >
+      <ArrowDownIcon className="size-4" />
+    </Button>
   );
 };

@@ -69,7 +69,7 @@ export function ChatProfileSwitcher({
         {variant === "prominent" ? (
           <>
             {activeProfile ? (
-              <ProfileAvatar profile={activeProfile} size="xs" className="size-4" />
+              <ProfileAvatar profile={activeProfile} size="xs" active className="size-4" />
             ) : (
               <span className="inline-flex size-4 items-center justify-center rounded-full bg-background text-[9px] font-medium">
                 ?
@@ -81,7 +81,7 @@ export function ChatProfileSwitcher({
             <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
           </>
         ) : activeProfile ? (
-          <ProfileAvatar profile={activeProfile} size="sm" className="size-7" />
+          <ProfileAvatar profile={activeProfile} size="sm" active className="size-7" />
         ) : (
           <span className="text-xs font-medium">?</span>
         )}
@@ -94,7 +94,11 @@ export function ChatProfileSwitcher({
             onClick={() => onProfileSwitch(profile.id)}
           >
             <span className="flex min-w-0 items-center gap-2.5">
-              <ProfileAvatar profile={profile} size="sm" />
+              <ProfileAvatar
+                profile={profile}
+                size="sm"
+                active={profile.id === profileId}
+              />
               <span className="whitespace-nowrap">{profileLabel(profile)}</span>
             </span>
           </DropdownMenuItem>

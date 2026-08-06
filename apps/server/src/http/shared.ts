@@ -3,6 +3,7 @@ import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  resolveChatStreamTimeoutMs,
   type AgentChannel,
   type AgentQuestionnaire,
   type AgentTodo,
@@ -388,7 +389,7 @@ export function parseChannel(value: string | undefined): AgentChannel {
   );
 }
 
-const STREAM_TIMEOUT_MS = 600_000;
+const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
 
 function createStreamSenders(
   sessionId: string,
@@ -532,7 +533,7 @@ export function streamMessage(
   sessionId: string,
   session: AgentChatSession,
   input: SendMessageInput,
-  onComplete?: () => void,
+  onComplete?: (terminal: StreamEvent) => void,
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4_000;
@@ -565,7 +566,8 @@ export function streamMessage(
           }),
         ]);
 
-        send({ type: "done", reply });
+        const contextUsage = session.getContextUsage() ?? undefined;
+        send({ type: "done", reply, ...(contextUsage ? { contextUsage } : {}) });
       } catch (error) {
         send({ type: "error", error: formatServerError(error) });
       } finally {
@@ -580,7 +582,7 @@ export function streamMessage(
 
         sessionTurnRegistry.endTurn(sessionId, terminal);
         controller.close();
-        onComplete?.();
+        onComplete?.(terminal);
       }
     },
   });

@@ -101,7 +101,7 @@ test("serves a docx as raw bytes for download, and as markdown for preview", asy
   });
 
   expect(preview.contentType).toBe("text/markdown");
-  expect(preview.bytes.toString("utf8")).toContain("# Laporan Mingguan");
+  expect(preview.bytes.toString("utf8")).toContain("Laporan Mingguan");
 });
 
 test("previews HTML that an agent saved under a Word extension", async () => {

@@ -19,6 +19,7 @@ import { ProfilesPage } from "@/pages/ProfilesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SetupWizardPage } from "@/pages/SetupWizardPage";
 import { SystemPage } from "@/pages/SystemPage";
+import { SkillDetailPage } from "@/pages/SkillDetailPage";
 import { ToolPlaygroundPage } from "@/pages/ToolPlaygroundPage";
 import { PublicArtifactSharePage } from "@/pages/PublicArtifactSharePage";
 import { TasksPage } from "@/pages/TasksPage";
@@ -55,6 +56,7 @@ function AppShell() {
                   <Route path="/system" element={<SystemPage />} />
                   <Route element={<PlatformAdminGuard />}>
                     <Route path="/profiles" element={<ProfilesPage />} />
+                    <Route path="/profiles/skills/:skillId" element={<SkillDetailPage />} />
                   </Route>
                   <Route path="/automations" element={<AutomationsPage />} />
                   <Route path="/tasks" element={<TasksPage />} />

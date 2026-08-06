@@ -6,7 +6,7 @@ import {
   MAX_URL_CHAT_DRAFT_LENGTH,
   storeChatDraft,
 } from "@/lib/chat-history";
-import { pathForPage, toolPlaygroundPath, type PageId } from "@/lib/navigation";
+import { pathForPage, skillDetailPath, toolPlaygroundPath, type PageId } from "@/lib/navigation";
 
 export function useAppNavigation() {
   const navigate = useNavigate();
@@ -20,6 +20,9 @@ export function useAppNavigation() {
     },
     navigateToToolPlayground(toolId: string) {
       navigate(toolPlaygroundPath(toolId));
+    },
+    navigateToSkillDetail(skillId: string, options?: { profileId?: string }) {
+      navigate(skillDetailPath(skillId, options));
     },
     navigateToNewChat(profileId?: string | null, options?: { draft?: string }) {
       const draft = options?.draft?.trim();

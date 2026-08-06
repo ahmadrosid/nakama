@@ -44,6 +44,10 @@ export interface StoredProfileRecord {
   isSuper: boolean;
   orgId?: string | null;
   isDefault?: boolean;
+  /** null = inherit org default; true/false = force gate on/off for this profile */
+  skillsWriteApproval?: boolean | null;
+  /** null = inherit org default; true/false = force post-turn review on/off for this profile */
+  skillsPostTurnReview?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -165,7 +169,7 @@ export interface StoredWorkspaceSettingsRecord {
   orgId?: string | null;
 }
 
-export type StoredCodingAgentHarnessKind = "codex" | "claude_code" | "opencode";
+export type StoredCodingAgentHarnessKind = "codex" | "claude_code" | "opencode" | "pi";
 
 export interface StoredCodingAgentHarnessProbeCache {
   checkedAt: string;
@@ -271,7 +275,24 @@ export interface StoredSkillRecord {
   hasTool: boolean;
   disableModelInvocation: boolean;
   enabled: boolean;
+  createdBy: SkillCreatedBy;
   orgId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SkillCreatedBy = "agent" | "human" | "bundled";
+
+export interface StoredSkillUsageRecord {
+  orgId: string;
+  profileId: string;
+  skillId: string;
+  viewCount: number;
+  useCount: number;
+  patchCount: number;
+  lastViewedAt: string | null;
+  lastUsedAt: string | null;
+  lastPatchedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -305,6 +326,8 @@ export interface StoredOrganizationRecord {
   id: string;
   name: string;
   slug: string;
+  skillsWriteApproval?: boolean;
+  skillsPostTurnReview?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -350,6 +373,55 @@ export interface StoredOrgMemoryProposal {
   reviewerUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
+}
+
+export type SkillProposalStatus = "pending" | "approved" | "rejected";
+export type SkillProposalAction =
+  | "create"
+  | "patch"
+  | "delete"
+  | "edit"
+  | "write_file"
+  | "remove_file";
+
+export interface StoredSkillProposal {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  action: SkillProposalAction;
+  skillName: string;
+  content: string | null;
+  patchOldString: string | null;
+  patchNewString: string | null;
+  relativePath: string | null;
+  status: SkillProposalStatus;
+  reviewerUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export type SkillSuggestionStatus = "pending" | "applied";
+export type SkillSuggestionAction = "create" | "patch";
+export type SkillSuggestionSource = "post_turn_review";
+
+export interface StoredSkillSuggestion {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  action: SkillSuggestionAction;
+  skillName: string;
+  content: string | null;
+  patchOldString: string | null;
+  patchNewString: string | null;
+  status: SkillSuggestionStatus;
+  source: SkillSuggestionSource;
+  warnings: string[] | null;
+  createdAt: string;
+  appliedAt: string | null;
 }
 
 export interface StoredArtifactShareRecord {
@@ -447,6 +519,48 @@ export interface DatabaseAdapter {
     },
   ): Promise<boolean>;
   countOrgMemoryProposals(orgId: string, status: OrgMemoryProposalStatus): Promise<number>;
+
+  createSkillProposal(record: StoredSkillProposal): Promise<void>;
+  listSkillProposals(
+    orgId: string,
+    options?: { status?: SkillProposalStatus; profileId?: string; sessionId?: string },
+  ): Promise<StoredSkillProposal[]>;
+  getSkillProposal(orgId: string, id: string): Promise<StoredSkillProposal | null>;
+  getPendingSkillProposalForCreate(
+    orgId: string,
+    profileId: string,
+    skillName: string,
+  ): Promise<StoredSkillProposal | null>;
+  getPendingSkillProposalForSkill(
+    orgId: string,
+    profileId: string,
+    skillName: string,
+  ): Promise<StoredSkillProposal | null>;
+  getPendingSkillProposalForPatch(
+    orgId: string,
+    profileId: string,
+    skillName: string,
+    patchOldString: string,
+    patchNewString: string,
+  ): Promise<StoredSkillProposal | null>;
+  updateSkillProposalStatus(
+    orgId: string,
+    id: string,
+    update: {
+      status: SkillProposalStatus;
+      reviewerUserId: string;
+      reviewedAt: string;
+    },
+  ): Promise<boolean>;
+  countPendingSkillProposals(orgId: string, profileId?: string): Promise<number>;
+
+  createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
+  listSkillSuggestions(
+    orgId: string,
+    options?: { sessionId?: string; status?: SkillSuggestionStatus; profileId?: string },
+  ): Promise<StoredSkillSuggestion[]>;
+  getSkillSuggestion(orgId: string, id: string): Promise<StoredSkillSuggestion | null>;
+  markSkillSuggestionApplied(orgId: string, id: string, appliedAt: string): Promise<boolean>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   updateArtifactShareSnapshot(
@@ -631,4 +745,18 @@ export interface DatabaseAdapter {
   listSkillsForProfile(profileId: string): Promise<StoredSkillRecord[]>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   unassignSkillFromProfile(profileId: string, skillId: string): Promise<boolean>;
+
+  listSkillUsageForProfile(profileId: string): Promise<StoredSkillUsageRecord[]>;
+  getSkillUsage(profileId: string, skillId: string): Promise<StoredSkillUsageRecord | null>;
+  incrementSkillUsage(input: {
+    orgId: string;
+    profileId: string;
+    skillId: string;
+    viewDelta?: number;
+    useDelta?: number;
+    patchDelta?: number;
+    viewedAt?: string;
+    usedAt?: string;
+    patchedAt?: string;
+  }): Promise<void>;
 }

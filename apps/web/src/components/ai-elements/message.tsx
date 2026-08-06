@@ -36,7 +36,9 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm leading-[1.55] tracking-[0.01em]",
+      // Avoid overflow-hidden here: it can let flex shrink message rows below
+      // content height and clip bubbles.
+      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 break-words text-sm leading-[1.55] tracking-[0.01em]",
       "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
       "group-[.is-assistant]:text-foreground",
       className

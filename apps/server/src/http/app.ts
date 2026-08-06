@@ -7,6 +7,7 @@ import { NakamaApiError, formatServerError } from "@nakama/core";
 import { errorResponse } from "./shared";
 import { registerSystemRoutes } from "./routes/system";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerSetupImportRoutes } from "./routes/setup-import";
 import { registerWorkerRoutes } from "./routes/workers";
 import { registerModelRoutes } from "./routes/models";
 import { registerUserContextRoutes } from "./routes/user-context";
@@ -21,6 +22,8 @@ import { registerTaskRoutes } from "./routes/tasks";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
 import { registerOrgMemberRoutes } from "./routes/org-members";
 import { registerOrgMemoryRoutes } from "./routes/org-memory";
+import { registerSkillProposalRoutes } from "./routes/skill-proposals";
+import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
 import { registerCodingAgentRoutes } from "./routes/coding-agents";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -59,7 +62,7 @@ export function createHonoApp(options: ServerOptions) {
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
-      headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';");
+      headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';");
       // Only enable HSTS if the request is secure (HTTPS)
       if (new URL(c.req.url).protocol === "https:") {
         headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -92,6 +95,7 @@ export function createHonoApp(options: ServerOptions) {
   app.use("*", createOrgContextMiddleware(options));
   registerSystemRoutes(app, options);
   registerAuthRoutes(app, options);
+  registerSetupImportRoutes(app, options);
   registerWorkerRoutes(app, options);
   registerModelRoutes(app, options);
   registerUserContextRoutes(app, options);
@@ -109,6 +113,8 @@ export function createHonoApp(options: ServerOptions) {
   registerDataPortabilityRoutes(app, options);
   registerOrgMemberRoutes(app, options);
   registerOrgMemoryRoutes(app, options);
+  registerSkillProposalRoutes(app, options);
+  registerSkillSuggestionRoutes(app, options);
   registerCodingAgentRoutes(app, options);
 
   app.get("/openapi.json", (c) => {

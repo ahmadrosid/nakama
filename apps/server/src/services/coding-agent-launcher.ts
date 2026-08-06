@@ -24,6 +24,9 @@ export const CODING_AGENT_KIND_ALIASES: Record<string, StoredCodingAgentHarnessK
   claude_code: "claude_code",
   codex: "codex",
   opencode: "opencode",
+  pi: "pi",
+  "pi.dev": "pi",
+  pidev: "pi",
 };
 
 export interface CodingAgentLaunchPlan {

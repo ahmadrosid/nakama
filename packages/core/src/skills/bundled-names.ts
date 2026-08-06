@@ -13,6 +13,7 @@ export const RUNTIME_ONLY_BUNDLED_SKILL_NAMES = [
   "coding-backend-codex",
   "coding-backend-claude-code",
   "coding-backend-opencode",
+  "coding-backend-pi",
 ] as const;
 
 /** Bundled skills that install/sync but are never auto-assigned (manual opt-in). */

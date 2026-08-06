@@ -8,6 +8,7 @@ import {
   createHarnessConfigDir,
   writeCodexConfigToml,
   writeOpenCodeConfig,
+  writePiModelsJson,
 } from "./coding-agent-harness-config-files";
 
 export function normalizeCodingAgentModel(model: string | null | undefined): string | null {
@@ -39,6 +40,22 @@ export function formatModelForHarness(
   model: string,
 ): string {
   if (providerType === "openrouter" || providerType === "opencode_go") {
+    return model.trim();
+  }
+
+  // pi sends the model ID directly to the provider's API. For openai_compatible
+  // providers, the model ID may contain slashes (e.g. "cx/gpt-5.4") that are
+  // part of the actual model name — stripping them would break routing.
+  if (harnessKind === "pi") {
+    if (providerType === "openai_compatible") {
+      return model.trim();
+    }
+    // For known providers, only strip the "provider:" prefix (e.g. "anthropic:claude-sonnet-4-6"),
+    // not slashes (e.g. "openrouter/anthropic/claude-sonnet-4-6").
+    const colonIndex = model.indexOf(":");
+    if (colonIndex >= 0) {
+      return model.slice(colonIndex + 1).trim() || model.trim();
+    }
     return model.trim();
   }
 
@@ -95,7 +112,57 @@ export const CODING_AGENT_CREDENTIAL_ENV_KEYS = [
   "OPENAI_MODEL",
   "CODEX_HOME",
   "XDG_CONFIG_HOME",
+  "PI_CODING_AGENT_DIR",
 ] as const;
+
+/**
+ * Maps a Nakama provider type to the pi CLI provider name.
+ * pi has its own provider system with named providers (see `pi --list-models`).
+ *
+ * When the base URL is the default for the provider type, we use the built-in
+ * pi provider name (e.g. "anthropic", "openai"). When the base URL is custom
+ * (proxy/gateway), we use "nakama" — matching the custom provider entry in
+ * models.json that uses the OpenAI Chat Completions API.
+ */
+const PI_PROVIDER_NAME: Partial<Record<ProviderName, string>> = {
+  anthropic: "anthropic",
+  openai: "openai",
+  openrouter: "openrouter",
+  openai_compatible: "nakama",
+  opencode_go: "opencode",
+  deepseek: "deepseek",
+  cerebras: "cerebras",
+  fireworks: "fireworks",
+  ollama: "ollama",
+};
+
+const PI_DEFAULT_BASE_URLS: Partial<Record<ProviderName, string>> = {
+  anthropic: "https://api.anthropic.com",
+  openai: "https://api.openai.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  deepseek: "https://api.deepseek.com",
+  cerebras: "https://api.cerebras.ai/v1",
+  fireworks: "https://api.fireworks.ai/inference",
+};
+
+export function mapNakamaProviderToPi(
+  providerType: ProviderName,
+  baseUrl?: string | null,
+): string | null {
+  const builtinName = PI_PROVIDER_NAME[providerType];
+  if (!builtinName) return null;
+
+  // For providers with a non-default base URL (proxy/gateway), use the custom
+  // "nakama" provider entry from models.json instead of the built-in provider.
+  if (baseUrl) {
+    const defaultUrl = PI_DEFAULT_BASE_URLS[providerType];
+    if (defaultUrl && baseUrl.replace(/\/+$/, "") !== defaultUrl.replace(/\/+$/, "")) {
+      return "nakama";
+    }
+  }
+
+  return builtinName;
+}
 
 export function buildClaudeCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
@@ -163,6 +230,30 @@ export async function buildOpenCodeSpawnEnv(
   };
 }
 
+export async function buildPiSpawnEnv(
+  routing: CodingAgentProviderRouting,
+  providerType: ProviderName = "openai",
+): Promise<CodingAgentSpawnEnvResult> {
+  if (!routing.active || !routing.baseUrl || !routing.apiKey) {
+    return { env: {} };
+  }
+
+  // pi does not read OPENAI_BASE_URL / ANTHROPIC_BASE_URL env vars.
+  // The base URL is hardcoded per built-in provider and can only be overridden
+  // via models.json in the pi config directory (PI_CODING_AGENT_DIR).
+  // We create a temp config dir with a models.json that overrides the
+  // provider's baseUrl + apiKey, then point pi to it.
+  const configDir = await createHarnessConfigDir("nakama-pi-config-");
+  await writePiModelsJson(configDir.dir, routing, providerType);
+
+  return {
+    env: {
+      PI_CODING_AGENT_DIR: configDir.dir,
+    },
+    cleanup: configDir.cleanup,
+  };
+}
+
 export async function buildSpawnEnvForHarness(
   kind: StoredCodingAgentHarnessKind,
   routing: CodingAgentProviderRouting,
@@ -174,6 +265,10 @@ export async function buildSpawnEnvForHarness(
 
   if (kind === "claude_code") {
     return { env: buildClaudeCodeSpawnEnv(routing, providerType) };
+  }
+
+  if (kind === "pi") {
+    return buildPiSpawnEnv(routing, providerType);
   }
 
   if (kind === "codex") {

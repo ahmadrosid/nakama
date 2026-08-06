@@ -3,6 +3,8 @@ import type { AgentBrowserInstallEvent, CodingHarnessInstallEvent } from "@nakam
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 
+type InstallStreamErrorEvent = { type: "error"; error: string };
+
 export function streamInstallEvents<TEvent extends { type: string }>(
   executor: (send: (event: TEvent) => void) => Promise<void>,
   options: {
@@ -33,7 +35,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         send({
           type: "error",
           error: timeoutMessage,
-        } as TEvent);
+        } as Extract<TEvent, InstallStreamErrorEvent>);
         clearInterval(keepalive);
         controller.close();
       }, INSTALL_STREAM_TIMEOUT_MS);
@@ -44,7 +46,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         send({
           type: "error",
           error: formatServerError(error),
-        } as TEvent);
+        } as Extract<TEvent, InstallStreamErrorEvent>);
       } finally {
         clearTimeout(timeoutId);
         clearInterval(keepalive);

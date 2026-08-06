@@ -69,9 +69,7 @@ function parseGenerateContentResponse(
     content,
     toolCalls,
     thinking,
-    usage: extractGeminiTokenUsage(
-      (response as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata,
-    ),
+    usage: extractGeminiTokenUsage(response.usageMetadata),
   });
 }
 
@@ -171,10 +169,7 @@ async function readGeminiStream(
   let usage: ChatCompletionResult["usage"];
 
   for await (const chunk of stream) {
-    usage =
-      extractGeminiTokenUsage(
-        (chunk as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata,
-      ) ?? usage;
+    usage = extractGeminiTokenUsage(chunk.usageMetadata) ?? usage;
     const parts = chunk.candidates?.[0]?.content?.parts;
     accumulateStreamParts(parts, state, handlers);
 
@@ -224,9 +219,7 @@ export function createGeminiProvider(
         });
 
         const content = response.text?.trim();
-        const usage = extractGeminiTokenUsage(
-          (response as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata,
-        );
+        const usage = extractGeminiTokenUsage(response.usageMetadata);
 
         if (!content) {
           throw new Error(`${PROVIDER_LABEL} returned an empty response.`);

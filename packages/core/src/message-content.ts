@@ -26,9 +26,19 @@ const ALLOWED_IMAGE_MEDIA_TYPES = new Set([
   "image/webp",
 ]);
 
+const XLSX_MEDIA_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLS_MEDIA_TYPE = "application/vnd.ms-excel";
+const XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroEnabled.12";
+const XLSB_MEDIA_TYPE = "application/vnd.ms-excel.sheet.binary.macroEnabled.12";
+
 const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  XLSX_MEDIA_TYPE,
+  XLS_MEDIA_TYPE,
+  XLSM_MEDIA_TYPE,
+  XLSB_MEDIA_TYPE,
   "text/plain",
   "text/csv",
 ]);
@@ -36,6 +46,10 @@ const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
 const DOCUMENT_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": XLSX_MEDIA_TYPE,
+  ".xls": XLS_MEDIA_TYPE,
+  ".xlsm": XLSM_MEDIA_TYPE,
+  ".xlsb": XLSB_MEDIA_TYPE,
   ".csv": "text/csv",
   ".txt": "text/plain",
 };
@@ -154,7 +168,7 @@ export function validateDocumentAttachments(documents: DocumentAttachment[]): vo
 
     if (!ALLOWED_DOCUMENT_MEDIA_TYPES.has(mediaType)) {
       throw new NakamaApiError(
-        `Unsupported document type: ${document.mediaType}. Allowed: pdf, docx, csv, txt.`,
+        `Unsupported document type: ${document.mediaType}. Allowed: pdf, docx, xls, xlsx, xlsm, xlsb, csv, txt.`,
         400,
       );
     }

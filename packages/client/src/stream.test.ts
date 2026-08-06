@@ -86,6 +86,24 @@ describe("readStreamEvents", () => {
     expect(events).toEqual([{ parentToolCallId: "call_sa", label: "Reading SOUL.md" }]);
   });
 
+  test("dispatches contextUsage from done events", async () => {
+    const usages: Array<{ usedTokens: number; source: string }> = [];
+
+    await readStreamEvents(
+      streamFromChunks([
+        'data: {"type":"done","reply":"ok","contextUsage":{"usedTokens":1200,"usableContextTokens":180000,"contextWindow":200000,"source":"provider"}}\n\n',
+      ]),
+      {
+        onChunk: () => {},
+        onContextUsage: (usage) => {
+          usages.push({ usedTokens: usage.usedTokens, source: usage.source });
+        },
+      },
+    );
+
+    expect(usages).toEqual([{ usedTokens: 1200, source: "provider" }]);
+  });
+
   test("surfaces server error events", async () => {
     await expect(
       readStreamEvents(

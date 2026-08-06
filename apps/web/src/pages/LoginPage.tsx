@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { useAppContext } from "@/context/use-app-context";
+import { useTheme } from "@/context/use-theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ditherLogoSrc } from "@/lib/theme";
 import { SETUP_PATH } from "@/lib/navigation";
 
 function resolvePostAuthPath(
@@ -24,6 +26,7 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const { health } = useAppContext();
+  const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from;
@@ -55,7 +58,11 @@ export function LoginPage() {
     <div className="flex h-svh items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center text-center">
-          <img src="/nakama.png" alt="Nakama" className="mb-4 size-14 rounded-xl" />
+          <img
+            src={ditherLogoSrc(resolvedTheme)}
+            alt="Nakama"
+            className="mb-4 size-14 rounded-xl"
+          />
           <h1 className="text-xl font-semibold tracking-tight">Sign in to Nakama</h1>
           <p className="text-sm text-muted-foreground">Enter your credentials to access your account.</p>
         </div>

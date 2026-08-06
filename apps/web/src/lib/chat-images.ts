@@ -15,9 +15,20 @@ export const IMAGE_ACCEPT =
   "image/jpeg,image/png,image/gif,image/webp";
 
 export const DOCUMENT_ACCEPT =
-  ".pdf,.docx,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv";
+  ".pdf,.docx,.xls,.xlsx,.xlsm,.xlsb,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12,text/plain,text/csv";
 
 export const ALL_ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
+
+const DOCUMENT_MEDIA_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-excel.sheet.macroEnabled.12",
+  "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+  "text/plain",
+  "text/csv",
+]);
 
 export function isImageFilePart(file: FileUIPart): boolean {
   return Boolean(file.mediaType?.startsWith("image/"));
@@ -30,12 +41,7 @@ export function isDocumentFilePart(file: FileUIPart): boolean {
 
   const filename = file.filename ?? "";
   const mediaType = normalizeDocumentMediaType(file.mediaType ?? "", filename);
-  return (
-    mediaType === "application/pdf" ||
-    mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    mediaType === "text/plain" ||
-    mediaType === "text/csv"
-  );
+  return DOCUMENT_MEDIA_TYPES.has(mediaType);
 }
 
 export function filePartsToImageAttachments(files: FileUIPart[]): ImageAttachment[] {

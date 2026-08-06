@@ -5,17 +5,10 @@ import {
   type OpenRouterModelsApiResponse,
 } from "@/lib/openrouter-models";
 import { queryKeys } from "@/lib/query-keys";
-
-const OPENROUTER_MODELS_URL =
-  "https://openrouter.ai/api/v1/models?output_modalities=text";
+import { client } from "@/lib/client";
 
 async function fetchOpenRouterModels(): Promise<OpenRouterModelRow[]> {
-  const res = await fetch(OPENROUTER_MODELS_URL);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as OpenRouterModelsApiResponse;
+  const data = (await client.getExternalModelCatalog("openrouter")) as OpenRouterModelsApiResponse;
   return normalizeOpenRouterModels(data);
 }
 

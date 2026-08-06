@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nakama</title>
-    <link rel="icon" type="image/png" href="/nakama.png" />
+    <link rel="icon" type="image/png" href="/nakama-logo-dither.png" />
     <script>
       (function () {
         var stored = localStorage.getItem("nakama-theme");
@@ -20,6 +20,15 @@
         }
         document.documentElement.classList.toggle("dark", resolved === "dark");
         document.documentElement.style.colorScheme = resolved;
+        var favicon = document.querySelector('link[rel="icon"]');
+        if (favicon) {
+          favicon.setAttribute(
+            "href",
+            resolved === "light"
+              ? "/nakama-logo-dither-light.png"
+              : "/nakama-logo-dither.png",
+          );
+        }
       })();
     </script>
   </head>

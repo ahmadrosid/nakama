@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { EmailConfigFile } from "../email-config";
-import { createFakeMailReader, createFakeMailSender, runEmailTool } from "./email";
+import {
+  createFakeMailReader,
+  createFakeMailSender,
+  emailParameters,
+  emailTool,
+  runEmailTool,
+} from "./email";
+import { builtinTools } from "./builtin";
 
 process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??= "test-email-attachment-secret-32-chars";
 
@@ -18,6 +25,54 @@ const completeConfig: EmailConfigFile = {
 };
 
 describe("email tool", () => {
+  test("exposes an OpenAI-compatible object parameters schema", () => {
+    const parameters = emailParameters();
+    const schema = parameters as Record<string, unknown>;
+
+    expect(parameters.type).toBe("object");
+    expect(schema.oneOf).toBeUndefined();
+    expect(schema.anyOf).toBeUndefined();
+    expect(parameters.properties?.action).toEqual({
+      type: "string",
+      enum: ["list", "read", "search", "send"],
+    });
+    expect(parameters.required).toContain("action");
+    expect(emailTool.parameters).toEqual(parameters);
+  });
+
+  test("builtin tool schemas all declare type object for LLM providers", () => {
+    for (const tool of builtinTools) {
+      expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe("object");
+      const schema = tool.parameters as Record<string, unknown> | undefined;
+      expect(schema?.oneOf, `${tool.name} oneOf`).toBeUndefined();
+      expect(schema?.anyOf, `${tool.name} anyOf`).toBeUndefined();
+    }
+  });
+
+  test("strips cross-action fields advertised by the flat LLM schema", async () => {
+    const sender = createFakeMailSender();
+
+    const result = await runEmailTool(
+      {
+        action: "send",
+        to: "recipient@example.com",
+        subject: "Hello",
+        text: "Body",
+        folder: "INBOX",
+        limit: 20,
+        uid: 99,
+        query: "noise",
+      },
+      {
+        loadConfig: async () => completeConfig,
+        createSender: () => sender,
+      },
+    );
+
+    expect("sent" in result && result.sent?.messageId).toBe("fake-message-id");
+    expect(sender.sent).toHaveLength(1);
+  });
+
   test("returns configuration error when mailbox is incomplete", async () => {
     const reader = createFakeMailReader();
     const sender = createFakeMailSender();

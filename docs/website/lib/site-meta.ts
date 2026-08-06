@@ -20,6 +20,9 @@ export const pageDescriptions: Record<string, string> = {
   'backup-restore.md': 'Export and restore your Nakama data root with dashboard ZIP backup.',
   'overview.md': 'Understand the Nakama mental model: organizations, profiles, tools, channels, and deployment options including managed hosting.',
   'multi-tenancy.md': 'Learn how organizations, roles, and tenant isolation work in Nakama.',
+  'org-memory.md': 'Shared, admin-curated facts for an organization — injected into every profile prompt and distinct from per-profile MEMORY.md.',
+  'self-improving-skills.md':
+    'Let agents save successful workflows as reusable skills, with optional org-admin approval before changes go live.',
   'profiles.md': 'See how Nakama profiles define bot behavior, soul files, memory, tools, and model selection.',
   'agent-prompt.md': 'Understand how Nakama builds the final system prompt from soul files, tools, bundled system skills, and runtime context.',
   'builtin-tools.md': 'Review the builtin tools that Nakama profiles can use, how access is controlled, and how memory, artifact, and document workflows use file tools plus bundled skills.',
@@ -46,6 +49,8 @@ export const pageTitles: Record<string, string> = {
   'backup-restore.md': 'Backup and restore',
   'overview.md': 'Overview',
   'multi-tenancy.md': 'How Multi-tenancy Works',
+  'org-memory.md': 'Org Memory',
+  'self-improving-skills.md': 'Self-improving Skills',
   'profiles.md': 'Profiles',
   'agent-prompt.md': 'How Agent Prompts Work',
   'builtin-tools.md': 'Builtin Tools',
@@ -155,7 +160,7 @@ export function buildLlmsTxt(pages: string[]) {
     },
     {
       topics:
-        'Docker, docker run, container, production deploy, docker-build, NAKAMA_CONFIG_DIR volume',
+        'Docker, docker run, container, production deploy, docker-build-run, NAKAMA_CONFIG_DIR volume',
       page: 'docker.md',
     },
     {
@@ -229,6 +234,11 @@ export function buildLlmsTxt(pages: string[]) {
       page: 'composio.md',
     },
     {
+      topics:
+        'self-improving skills, write approval, skill proposals, agent workflows, manage-skills',
+      page: 'self-improving-skills.md',
+    },
+    {
       topics: 'skills, automations, memory skills, save-artifact, manage-skills',
       page: 'skills.md',
     },
@@ -272,13 +282,21 @@ export function buildLlmsTxt(pages: string[]) {
     },
     {
       heading: 'Concepts',
-      pages: ['index.md', 'multi-tenancy.md', 'profiles.md', 'agent-prompt.md'] as const,
+      pages: [
+        'index.md',
+        'multi-tenancy.md',
+        'org-memory.md',
+        'self-improving-skills.md',
+        'profiles.md',
+        'agent-prompt.md',
+      ] as const,
     },
     {
       heading: 'Extend',
       pages: [
         'builtin-tools.md',
         'skills.md',
+        'self-improving-skills.md',
         'integrations.md',
         'coding-agent.md',
         'agent-browser.md',

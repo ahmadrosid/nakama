@@ -233,6 +233,10 @@ export interface RestoreDataImportResponse {
   restoredFileCount: number;
 }
 
+export interface SetupRestoreDataImportResponse extends RestoreDataImportResponse {
+  requiresRestart: boolean;
+}
+
 export interface AuthCredentialsRequest {
   email: string;
   password: string;
@@ -285,6 +289,8 @@ export interface OrganizationSummary {
   id: string;
   name: string;
   slug: string;
+  skillsWriteApproval?: boolean;
+  skillsPostTurnReview?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -300,7 +306,9 @@ export interface CreateOrganizationRequest {
 }
 
 export interface UpdateOrganizationRequest {
-  name: string;
+  name?: string;
+  skillsWriteApproval?: boolean;
+  skillsPostTurnReview?: boolean;
 }
 
 export interface ListOrganizationsResponse {
@@ -478,6 +486,77 @@ export interface OrgMemoryProposalResponse {
   content?: string;
 }
 
+export type SkillProposalStatus = "pending" | "approved" | "rejected";
+export type SkillProposalAction =
+  | "create"
+  | "patch"
+  | "delete"
+  | "edit"
+  | "write_file"
+  | "remove_file";
+
+export interface SkillProposal {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  action: SkillProposalAction;
+  skillName: string;
+  content: string | null;
+  patchOldString: string | null;
+  patchNewString: string | null;
+  relativePath: string | null;
+  status: SkillProposalStatus;
+  reviewerUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  warnings?: string[];
+}
+
+export interface ListSkillProposalsResponse {
+  proposals: SkillProposal[];
+  pendingCount: number;
+}
+
+export interface SkillProposalResponse {
+  proposal: SkillProposal;
+}
+
+export type SkillSuggestionStatus = "pending" | "applied";
+export type SkillSuggestionAction = "create" | "patch";
+export type SkillSuggestionSource = "post_turn_review";
+
+export interface SkillSuggestion {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  action: SkillSuggestionAction;
+  skillName: string;
+  content: string | null;
+  patchOldString: string | null;
+  patchNewString: string | null;
+  status: SkillSuggestionStatus;
+  source: SkillSuggestionSource;
+  warnings?: string[];
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export interface ListSkillSuggestionsResponse {
+  suggestions: SkillSuggestion[];
+}
+
+export type ApplySkillSuggestionOutcome = "applied" | "already_applied" | "staged_as_proposal";
+
+export interface ApplySkillSuggestionResponse {
+  outcome: ApplySkillSuggestionOutcome;
+  suggestion: SkillSuggestion;
+  proposalId?: string;
+}
+
 export interface InviteOrgMemberRequest {
   email: string;
   role: OrgRole;
@@ -582,12 +661,24 @@ export interface SessionMessageMeta {
   createdAt: string;
 }
 
+/** How full the model context window is for the current chat session. */
+export type ChatContextUsageSource = "provider" | "estimate";
+
+export interface ChatContextUsage {
+  usedTokens: number;
+  /** Denominator matching compaction usable context (window minus reserved output). */
+  usableContextTokens: number;
+  contextWindow: number;
+  source: ChatContextUsageSource;
+}
+
 export interface SessionMessagesResponse {
   channel: AgentChannel;
   messages: ChatMessage[];
   messageMeta: SessionMessageMeta[];
   todos: AgentTodo[];
   questionnaire: AgentQuestionnaire | null;
+  contextUsage?: ChatContextUsage | null;
 }
 
 export interface SessionStatusResponse {
@@ -663,6 +754,7 @@ export interface SendMessageRequest {
 
 export interface SendMessageResponse {
   reply: string;
+  contextUsage?: ChatContextUsage;
 }
 
 export type StreamEvent =
@@ -694,7 +786,7 @@ export type StreamEvent =
       parentToolCallId: string;
       label: string;
     }
-  | { type: "done"; reply: string }
+  | { type: "done"; reply: string; contextUsage?: ChatContextUsage }
   | { type: "error"; error: string };
 
 export interface DraftAutomationRequest {
@@ -1018,7 +1110,7 @@ export interface SendEmailTestResponse {
   messageId: string;
 }
 
-export type CodingHarnessKind = "codex" | "claude_code" | "opencode";
+export type CodingHarnessKind = "codex" | "claude_code" | "opencode" | "pi";
 
 export interface CodingAgentProviderPassthroughSummary {
   active: boolean;
@@ -1312,6 +1404,10 @@ export interface ProfileSummary {
   model: string | null;
   isSuper: boolean;
   isDefault?: boolean;
+  /** null = inherit org default; true/false = force gate on/off for this profile */
+  skillsWriteApproval?: boolean | null;
+  /** null = inherit org default; true/false = force post-turn review on/off for this profile */
+  skillsPostTurnReview?: boolean | null;
   toolCount: number;
   mcpServerCount: number;
   soulActive: boolean;
@@ -1327,6 +1423,17 @@ export interface ProfileDetail extends ProfileSummary {
   skills: SkillSummary[];
 }
 
+export interface SkillUsageSummary {
+  viewCount: number;
+  useCount: number;
+  patchCount: number;
+  lastViewedAt: string | null;
+  lastUsedAt: string | null;
+  lastPatchedAt: string | null;
+}
+
+export type SkillCreatedBy = "agent" | "human" | "bundled";
+
 export interface SkillSummary {
   id: string;
   name: string;
@@ -1335,6 +1442,8 @@ export interface SkillSummary {
   hasTool: boolean;
   disableModelInvocation: boolean;
   enabled: boolean;
+  createdBy: SkillCreatedBy;
+  usage?: SkillUsageSummary;
   createdAt: string;
   updatedAt: string;
 }
@@ -1361,6 +1470,12 @@ export interface CreateSkillRequest {
   body?: string;
   disableModelInvocation?: boolean;
   profileId?: string;
+}
+
+export interface PatchSkillRequest {
+  description?: string;
+  body?: string;
+  disableModelInvocation?: boolean;
 }
 
 export interface SyncSkillsResponse {
@@ -1496,6 +1611,8 @@ export interface UpdateProfileRequest {
   name?: string;
   systemPrompt?: string;
   model?: string | null;
+  skillsWriteApproval?: boolean | null;
+  skillsPostTurnReview?: boolean | null;
 }
 
 export interface CreateToolRequest {
@@ -1737,6 +1854,8 @@ export interface ChatCompletionResult {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    /** True when input/output tokens were estimated rather than reported by the provider. */
+    estimated?: boolean;
   };
 }
 
@@ -1803,6 +1922,8 @@ export interface ToolContext {
   orgId?: string;
   profileId?: string;
   sessionId?: string;
+  /** Session channel when known (used for interactive-only tool gates). */
+  channel?: AgentChannel;
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
   /** Browser origin for OAuth callbacks during this tool run. */
@@ -1811,6 +1932,11 @@ export interface ToolContext {
   workspaceRoot?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
+  /**
+   * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
+   * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
+   */
+  forbidProfileSkillMarkdownWrites?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */

@@ -1,83 +1,87 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 import { getProfileAvatarUrl } from "@nakama/client";
+import { hashToSeeds, oklchToCss } from "hashvatar";
+import { Hashvatar } from "hashvatar/react";
 import { cn } from "@/lib/utils";
 
 type ProfileAvatarProfile = Pick<ProfileSummary, "id" | "name" | "hasAvatar" | "updatedAt">;
 
 const sizeClasses = {
-  xs: "size-5 text-[10px]",
-  sm: "size-7 text-xs",
-  md: "size-9 text-sm",
-  ml: "size-11 text-base",
-  lg: "size-16 text-xl",
+  xs: "size-5",
+  sm: "size-7",
+  md: "size-9",
+  ml: "size-11",
+  lg: "size-16",
 } as const;
 
-/** Stable soft fills keyed by profile id so missing images still look distinct. */
-const AVATAR_FALLBACK_COLORS = [
-  "bg-rose-500/20 text-rose-800 dark:text-rose-200",
-  "bg-orange-500/20 text-orange-800 dark:text-orange-200",
-  "bg-amber-500/20 text-amber-900 dark:text-amber-200",
-  "bg-lime-500/20 text-lime-900 dark:text-lime-200",
-  "bg-emerald-500/20 text-emerald-900 dark:text-emerald-200",
-  "bg-teal-500/20 text-teal-900 dark:text-teal-200",
-  "bg-sky-500/20 text-sky-900 dark:text-sky-200",
-  "bg-blue-500/20 text-blue-900 dark:text-blue-200",
-  "bg-indigo-500/20 text-indigo-900 dark:text-indigo-200",
-  "bg-fuchsia-500/20 text-fuchsia-900 dark:text-fuchsia-200",
-] as const;
+const sizePixels = {
+  xs: 20,
+  sm: 28,
+  md: 36,
+  ml: 44,
+  lg: 64,
+} as const;
 
-function profileInitial(profile: ProfileAvatarProfile): string {
-  return (
-    profile.name?.charAt(0)?.toUpperCase() ??
-    profile.id?.charAt(0)?.toUpperCase() ??
-    "?"
-  );
-}
-
-function avatarFallbackColorClass(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  }
-  return AVATAR_FALLBACK_COLORS[Math.abs(hash) % AVATAR_FALLBACK_COLORS.length];
+/** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */
+function tonesFromHash(hash: string): [string, string] {
+  const [h1, h2, l1, l2, c1, c2] = hashToSeeds(hash, 6);
+  return [
+    oklchToCss({
+      l: 0.55 + l1 * 0.22,
+      c: 0.16 + c1 * 0.14,
+      h: h1 * 360,
+    }),
+    oklchToCss({
+      // Offset hue so the pair stays distinct, still seeded by the hash.
+      l: 0.28 + l2 * 0.2,
+      c: 0.1 + c2 * 0.12,
+      h: (h1 * 360 + 40 + h2 * 80) % 360,
+    }),
+  ];
 }
 
 export function ProfileAvatar({
   profile,
   size = "md",
+  active = false,
   className,
 }: {
   profile: ProfileAvatarProfile;
   size?: keyof typeof sizeClasses;
+  /** Animate the hashvatar dither when this profile is selected. */
+  active?: boolean;
   className?: string;
 }) {
   const avatarUrl = getProfileAvatarUrl(profile);
+
+  const surfaceClass = cn(
+    "shrink-0 rounded-full outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10",
+    sizeClasses[size],
+    className,
+  );
 
   if (avatarUrl) {
     return (
       <img
         src={avatarUrl}
         alt=""
-        className={cn(
-          "shrink-0 rounded-full object-cover",
-          sizeClasses[size],
-          className,
-        )}
+        className={cn(surfaceClass, "object-cover")}
       />
     );
   }
 
+  const hash = profile.id || profile.name || "?";
+
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-medium",
-        sizeClasses[size],
-        avatarFallbackColorClass(profile.id || profile.name || "?"),
-        className,
-      )}
-    >
-      {profileInitial(profile)}
-    </span>
+    <Hashvatar
+      hash={hash}
+      mode="dither"
+      size={sizePixels[size]}
+      tones={tonesFromHash(hash)}
+      animated={active}
+      className={surfaceClass}
+      // Let Tailwind className control radius (Hashvatar defaults to 50%).
+      style={{ borderRadius: undefined }}
+    />
   );
 }

@@ -41,4 +41,22 @@ export function applyTheme(theme: Theme): void {
   const resolved = resolveTheme(theme);
   document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.style.colorScheme = resolved;
+  applyFavicon(resolved);
+}
+
+export function ditherLogoSrc(resolvedTheme: ResolvedTheme): string {
+  return resolvedTheme === "light"
+    ? "/nakama-logo-dither-light.png"
+    : "/nakama-logo-dither.png";
+}
+
+function applyFavicon(resolved: ResolvedTheme): void {
+  const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!favicon) {
+    return;
+  }
+  const href = ditherLogoSrc(resolved);
+  if (favicon.getAttribute("href") !== href) {
+    favicon.setAttribute("href", href);
+  }
 }

@@ -12,7 +12,7 @@ interface ModelListEditorProps {
   models: ModelListRow[];
   disabled?: boolean;
   showPricing?: boolean;
-  showThinkingToggle?: boolean;
+  showThinking?: boolean;
   onBrowse?: () => void;
   browseLabel?: string;
   onChange: (models: ModelListRow[]) => void;
@@ -26,7 +26,7 @@ export function ModelListEditor({
   models,
   disabled,
   showPricing = true,
-  showThinkingToggle = false,
+  showThinking = false,
   onBrowse,
   browseLabel = "Browse models.dev",
   onChange,
@@ -51,19 +51,21 @@ export function ModelListEditor({
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[32rem] text-left text-xs">
+        <table
+          className={`w-full text-left text-xs ${showThinking ? "min-w-[40rem]" : "min-w-[32rem]"}`}
+        >
           <thead className="border-b border-border bg-muted/30 text-muted-foreground">
             <tr>
               <th className="px-2 py-2 font-medium">Model ID</th>
               <th className="px-2 py-2 font-medium">Display name</th>
+              {showThinking ? (
+                <th className="px-2 py-2 font-medium">Reasoning</th>
+              ) : null}
               {showPricing ? (
                 <>
                   <th className="px-2 py-2 font-medium">$/1M in</th>
                   <th className="px-2 py-2 font-medium">$/1M out</th>
                 </>
-              ) : null}
-              {showThinkingToggle ? (
-                <th className="px-2 py-2 font-medium">Thinking</th>
               ) : null}
               <th className="px-2 py-2 w-10" aria-label="Actions" />
             </tr>
@@ -98,6 +100,19 @@ export function ModelListEditor({
                     />
                   </InputGroup>
                 </td>
+                {showThinking ? (
+                  <td className="px-2 py-1.5">
+                    <Switch
+                      size="sm"
+                      checked={row.supportsThinking === true}
+                      disabled={disabled}
+                      aria-label={`Reasoning for ${row.id.trim() || "model"}`}
+                      onCheckedChange={(checked) =>
+                        updateRow(index, { supportsThinking: checked })
+                      }
+                    />
+                  </td>
+                ) : null}
                 {showPricing ? (
                   <>
                     <td className="px-2 py-1.5">
@@ -139,20 +154,6 @@ export function ModelListEditor({
                       </InputGroup>
                     </td>
                   </>
-                ) : null}
-                {showThinkingToggle ? (
-                  <td className="px-2 py-1.5">
-                    <div className="flex justify-center">
-                      <Switch
-                        checked={row.supportsThinking === true}
-                        disabled={disabled}
-                        aria-label={`Enable thinking for ${row.id || row.name || `model ${index + 1}`}`}
-                        onCheckedChange={(checked) =>
-                          updateRow(index, { supportsThinking: checked })
-                        }
-                      />
-                    </div>
-                  </td>
                 ) : null}
                 <td className="px-2 py-1.5 text-right">
                   <Button
@@ -199,12 +200,6 @@ export function ModelListEditor({
           </Button>
         ) : null}
       </div>
-
-      {showPricing ? (
-        <p className="text-xs text-muted-foreground">
-          Leave pricing blank to track tokens without estimating cost.
-        </p>
-      ) : null}
     </div>
   );
 }

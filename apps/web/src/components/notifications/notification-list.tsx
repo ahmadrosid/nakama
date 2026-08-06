@@ -24,7 +24,7 @@ function NotificationIcon({
   );
 }
 
-export function NotificationListItem({
+function NotificationListItem({
   item,
   compact = false,
   onNavigate,

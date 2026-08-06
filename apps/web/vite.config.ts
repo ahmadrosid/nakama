@@ -18,6 +18,12 @@ export default defineConfig({
         root,
         "../../packages/core/src/thinking-content.ts",
       ),
+      // Native N-API converter — server-only; keep the browser bundle free of .node binaries.
+      [path.resolve(root, "../../packages/core/src/anydoc-text.ts")]: path.resolve(
+        root,
+        "src/shims/anydoc-text.ts",
+      ),
+      "@firecrawl/anydoc": path.resolve(root, "src/shims/firecrawl-anydoc.ts"),
     },
   },
   server: {

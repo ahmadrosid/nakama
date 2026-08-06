@@ -6,7 +6,6 @@ import {
 } from "@/components/TelegramAllowedUsersDialog";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
-import { Card, CardContent } from "@/components/ui/card";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
@@ -159,9 +158,7 @@ export function TelegramSettingsCard({
     }
 
     return (
-      <Card className="w-full shadow-none">
-        <CardContent className="py-3">{SETTINGS_CARD_LOADING_SKELETON}</CardContent>
-      </Card>
+      <div className="py-3">{SETTINGS_CARD_LOADING_SKELETON}</div>
     );
   }
 
@@ -239,9 +236,7 @@ export function TelegramSettingsCard({
 
   return (
     <>
-      <Card className="w-full shadow-none">
-        <CardContent className="p-0">{content}</CardContent>
-      </Card>
+      {content}
       {allowedUsersDialog}
     </>
   );

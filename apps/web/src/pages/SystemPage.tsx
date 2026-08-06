@@ -3,7 +3,6 @@ import { useCallback } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
 import { ToolsTab } from "@/components/soul-tools/ToolsTab";
-import { DataPortabilityPanel } from "@/components/system/DataPortabilityPanel";
 import { OrganizationPanel } from "@/components/system/OrganizationPanel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
@@ -81,10 +80,8 @@ export function SystemPage() {
           <OrganizationPanel />
         ) : tab === "tools" ? (
           <ToolsTab embedded />
-        ) : tab === "mcp" ? (
-          <McpTab embedded />
         ) : (
-          <DataPortabilityPanel />
+          <McpTab embedded />
         )}
       </div>
     </section>

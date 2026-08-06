@@ -193,7 +193,6 @@ export function ProviderInstanceCard({
               customModels={card.manageModels}
               disabled={card.busy}
               identityReadOnly
-              showThinkingToggle
               displayNameError={null}
               baseUrlError={null}
               modelsError={null}

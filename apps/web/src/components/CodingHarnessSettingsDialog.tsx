@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -172,11 +173,19 @@ export function CodingHarnessSettingsPanel({
   }
 
   if (error) {
+    const message = (
+      <p className="text-sm text-destructive" role="alert">
+        {formatError(error)}
+      </p>
+    );
+
+    if (embedded) {
+      return <IntegrationCardShell embedded>{message}</IntegrationCardShell>;
+    }
+
     return (
-      <Card className="shadow-none">
-        <CardContent className="p-6 text-sm text-destructive" role="alert">
-          {formatError(error)}
-        </CardContent>
+      <Card className="border-0 shadow-none">
+        <CardContent className="p-6">{message}</CardContent>
       </Card>
     );
   }
@@ -185,17 +194,16 @@ export function CodingHarnessSettingsPanel({
     return null;
   }
 
-  return (
-    <Card className={cn("shadow-none", embedded ? "border-border" : "border-0 shadow-none")}>
-      <CardContent className="space-y-5 p-6">
+  const content = (
+    <div className={cn("space-y-5", !embedded && "p-6")}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h2 className="type-section-title text-base">Coding agents</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="type-section-title text-base [text-wrap:balance]">Coding agents</h2>
+            <p className="text-sm text-muted-foreground [text-wrap:pretty]">
               Nakama can hand off coding tasks to a CLI agent on this server.
             </p>
             {settings.providerPassthrough ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground [text-wrap:pretty]">
                 {settings.providerPassthrough.active ? (
                   <>
                     Provider passthrough active
@@ -282,19 +290,23 @@ export function CodingHarnessSettingsPanel({
           onVerify={handleVerify}
           onSave={handleSave}
         />
-      </CardContent>
+    </div>
+  );
+
+  if (embedded) {
+    return <IntegrationCardShell embedded>{content}</IntegrationCardShell>;
+  }
+
+  return (
+    <Card className="border-0 shadow-none">
+      <CardContent className="p-0">{content}</CardContent>
     </Card>
   );
 }
 
 function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolean }) {
-  return (
-    <Card className={cn("shadow-none", embedded ? "border-border" : "border-0 shadow-none")}>
-      <CardContent
-        className="space-y-5 p-6"
-        aria-busy="true"
-        aria-label="Loading coding agents"
-      >
+  const skeleton = (
+    <div className={cn("space-y-5", !embedded && "p-6")}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-2">
             <div className="skeleton-shimmer h-5 w-28 rounded" />
@@ -330,6 +342,21 @@ function CodingHarnessSettingsSkeleton({ embedded = false }: { embedded?: boolea
             <div className="skeleton-shimmer h-9 w-36 rounded-md" />
           </div>
         </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <IntegrationCardShell embedded busyLabel="Loading coding agents">
+        {skeleton}
+      </IntegrationCardShell>
+    );
+  }
+
+  return (
+    <Card className="border-0 shadow-none">
+      <CardContent className="p-0" aria-busy="true" aria-label="Loading coding agents">
+        {skeleton}
       </CardContent>
     </Card>
   );

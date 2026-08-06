@@ -7,6 +7,7 @@ import {
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
+  isVideoArtifactMimeType,
   looksLikeUtf8Text,
   resolveArtifactMimeType,
 } from "./artifact-mime";
@@ -17,6 +18,13 @@ describe("inferArtifactMimeType", () => {
     expect(inferArtifactMimeType("weekly/report.MARKDOWN")).toBe("text/markdown");
     expect(inferArtifactMimeType("slides.html")).toBe("text/html");
     expect(inferArtifactMimeType("data.json")).toBe("application/json");
+  });
+
+  test("maps common video extensions", () => {
+    expect(inferArtifactMimeType("clip.mp4")).toBe("video/mp4");
+    expect(inferArtifactMimeType("demo.M4V")).toBe("video/mp4");
+    expect(inferArtifactMimeType("reel.webm")).toBe("video/webm");
+    expect(inferArtifactMimeType("take.mov")).toBe("video/quicktime");
   });
 
   test("falls back to binary for unknown or extensionless names", () => {
@@ -35,12 +43,13 @@ describe("resolveArtifactMimeType", () => {
 
   test("falls back to the extension when the type is generic or missing", () => {
     expect(resolveArtifactMimeType("application/octet-stream", "report.md")).toBe("text/markdown");
+    expect(resolveArtifactMimeType("application/octet-stream", "reel.mp4")).toBe("video/mp4");
     expect(resolveArtifactMimeType("", "page.html")).toBe("text/html");
   });
 });
 
 describe("mime predicates", () => {
-  test("classifies markdown, html, and text", () => {
+  test("classifies markdown, html, text, image, and video", () => {
     expect(isMarkdownArtifactMimeType("text/markdown; charset=utf-8")).toBe(true);
     expect(isHtmlArtifactMimeType("text/html")).toBe(true);
     expect(isTextArtifactMimeType("text/markdown")).toBe(true);
@@ -50,6 +59,10 @@ describe("mime predicates", () => {
     expect(isImageArtifactMimeType("image/jpeg")).toBe(true);
     expect(isImageArtifactMimeType("image/svg+xml")).toBe(false);
     expect(isImageArtifactMimeType("application/pdf")).toBe(false);
+    expect(isVideoArtifactMimeType("video/mp4")).toBe(true);
+    expect(isVideoArtifactMimeType("video/webm; codecs=vp9")).toBe(true);
+    expect(isVideoArtifactMimeType("application/octet-stream")).toBe(false);
+    expect(isVideoArtifactMimeType("image/png")).toBe(false);
     expect(isUnknownArtifactMimeType("application/octet-stream")).toBe(true);
     expect(isUnknownArtifactMimeType("text/plain")).toBe(false);
   });

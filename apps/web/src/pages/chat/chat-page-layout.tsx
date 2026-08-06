@@ -15,8 +15,10 @@ export function ChatPageColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col px-6",
-        attachmentPanel.isFullscreen && "hidden",
+        "flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
+        attachmentPanel.isFullscreen
+          ? "pointer-events-none w-0 flex-none overflow-hidden px-0 opacity-0"
+          : "flex-1 px-6",
         centered && "justify-center",
       )}
     >

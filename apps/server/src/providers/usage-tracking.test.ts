@@ -84,6 +84,69 @@ describe("usage tracking", () => {
     });
   });
 
+  test("stamps estimated usage onto chat results when the provider omits it", async () => {
+    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const provider: ProviderClient = {
+      name: "openai",
+      async generateText() {
+        return { content: "unused" };
+      },
+      async generateChat() {
+        return {
+          content: "Hello",
+          toolCalls: [],
+          assistantMessage: { role: "assistant", content: "Hello" },
+        };
+      },
+      async streamChat() {
+        throw new Error("unused");
+      },
+    };
+
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const result = await wrapped.generateChat({
+      system: "system",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.usage?.estimated).toBe(true);
+    expect(result.usage?.inputTokens).toBeGreaterThan(0);
+    expect(tracker.getStats().requestCount).toBe(1);
+  });
+
+  test("leaves provider usage unmarked as estimated", async () => {
+    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const provider: ProviderClient = {
+      name: "openai",
+      async generateText() {
+        return { content: "unused" };
+      },
+      async generateChat() {
+        return {
+          content: "Hello",
+          toolCalls: [],
+          assistantMessage: { role: "assistant", content: "Hello" },
+          usage: { inputTokens: 123, outputTokens: 45, totalTokens: 168 },
+        };
+      },
+      async streamChat() {
+        throw new Error("unused");
+      },
+    };
+
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const result = await wrapped.generateChat({
+      system: "system",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(result.usage).toEqual({
+      inputTokens: 123,
+      outputTokens: 45,
+      totalTokens: 168,
+    });
+  });
+
   test("estimateChatInputBreakdown splits system, tools, and messages", () => {
     const system = ["You are helpful.", "", "# Identity", "a".repeat(40)].join("\n");
     const tools = [

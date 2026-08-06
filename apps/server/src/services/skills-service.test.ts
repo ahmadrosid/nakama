@@ -334,4 +334,91 @@ Use this skill when the user asks to save a note.
       join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes"),
     );
   });
+
+  test("patchSkill updates skill body on disk", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    const profileDir = join(
+      configDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      PROFILE_ID,
+      "skills",
+      "notes",
+    );
+
+    await mkdir(profileDir, { recursive: true });
+    await writeFile(
+      join(profileDir, "SKILL.md"),
+      `---
+name: notes
+description: Capture notes for the user.
+---
+
+Original body.
+`,
+    );
+
+    await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+    const notes = (await service.listSkills()).skills.find((skill) => skill.name === "notes");
+    expect(notes).toBeDefined();
+
+    const patched = await service.patchSkill(ORG_ID, notes!.id, {
+      body: "Updated body.",
+    });
+
+    expect(patched.skill.body).toBe("Updated body.");
+
+    const detail = await service.getSkill(notes!.id);
+    expect(detail.skill.body).toBe("Updated body.");
+  });
+
+  test("editAssignedProfileSkill replaces SKILL.md and refuses rename", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+
+    await service.createAndAssignRawSkillToProfile(
+      ORG_ID,
+      PROFILE_ID,
+      `---
+name: deploy
+description: Deploy the service.
+---
+
+Use staging first.
+`,
+    );
+
+    const edited = await service.editAssignedProfileSkill(
+      ORG_ID,
+      PROFILE_ID,
+      "deploy",
+      `---
+name: deploy
+description: Deploy with canary.
+---
+
+Use canary then prod.
+`,
+    );
+
+    expect(edited.skill.description).toBe("Deploy with canary.");
+    expect(edited.skill.body).toContain("Use canary then prod.");
+
+    await expect(
+      service.editAssignedProfileSkill(
+        ORG_ID,
+        PROFILE_ID,
+        "deploy",
+        `---
+name: other
+description: Renamed.
+---
+
+Nope.
+`,
+      ),
+    ).rejects.toThrow(/must match skill name/i);
+  });
 });

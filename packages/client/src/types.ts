@@ -2,6 +2,7 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   AutomationDefinition,
+  ChatContextUsage,
   ChatMessage,
   CompactionResponse,
   SendMessageInput,
@@ -47,6 +48,7 @@ export interface StreamHandlers {
   onSubAgentActivity?: (event: { parentToolCallId: string; label: string }) => void;
   onTodosUpdated?: (todos: AgentTodo[]) => void;
   onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
+  onContextUsage?: (usage: ChatContextUsage) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;

@@ -56,8 +56,8 @@ Nakama includes these builtins:
 | `web_search` | Yes | No | |
 | `web_fetch` | Yes | Yes | |
 | `email` | Yes | No | Omitted at runtime when mailbox is unconfigured |
-| `extract_document_text` | Yes | No | Extracts text from a text-based PDF attachment returned by `email` |
-| `bash` | Super Bot only | No | Run shell commands in the profile workspace |
+| `extract_document_text` | Yes | No | Extracts text from PDF, Word, or Excel attachments returned by `email` |
+| `bash` | When assigned | No | Run shell commands in the profile workspace |
 | `sub_agent` | No | No | Opt-in: delegate to a same-profile sub-agent (see below) |
 
 **New custom profiles** receive `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, and `web_fetch` until a platform admin assigns additional tools. Memory writes, archives, and artifact saves use bundled skills with those file tools — see [Skills](/skills#bundled-system-skills). Word documents use `write_docx` (system profiles only by default). Coding-agent workflows use `bash` with the `coding-agent` skill — see [Coding agent](/coding-agent). Interactive browser automation (login walls, forms, clicks) uses `bash` with the opt-in `agent-browser` skill — see [Agent browser](/agent-browser). The `sub_agent` tool is seeded but **not** auto-assigned — platform admins opt in per profile. System profiles (`default`, `super_bot`) get the full seeded builtin set; Super Bot also receives `bash`.
@@ -86,11 +86,13 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 ## Artifact saves
 
-Persistent outputs (reports, summaries, generated text, Word documents) are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the dashboard Artifacts tab shows MIME types and timestamps.
+Artifacts are files your agent creates and saves for you — reports, summaries, generated text, Word documents, and other outputs you can preview or download later from the dashboard Artifacts tab or from web chat.
+
+They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the Artifacts tab shows MIME types and timestamps.
 
 On web chat, `write_file` and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
 
-On **Telegram** and **Discord**, the same paired saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram#saved-artifacts-and-share-links) and [Discord](/discord#saved-artifacts-and-share-links).
+On **Telegram** and **Discord**, the same paired saves post a Publish share link after the agent reply; ask to “send the file” when you want a native attachment. See [Telegram](/telegram/chat#saved-artifacts-and-share-links) and [Discord](/discord#saved-artifacts-and-share-links).
 
 | Content type | Preview behavior |
 |--------------|------------------|
@@ -276,13 +278,13 @@ List, read, search, and send email through the deployment mailbox configured in 
 
 ### `extract_document_text`
 
-Extract text from a text-based PDF document returned by a document-capable integration.
+Extract text from a PDF, Word (`.docx`), or Excel (`.xls` / `.xlsx` / `.xlsm` / `.xlsb`) document returned by a document-capable integration.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
 | `documentRef` | string | Yes | Opaque reference returned by a document-capable integration |
 
-**Returns:** Bounded extracted text with filename, media type, truncation state, and warnings. PDF content is untrusted document content.
+**Returns:** Bounded extracted text with filename, media type, truncation state, and warnings. Document content is untrusted.
 
 **Limits:** Attachments larger than 5 MB are rejected. Extracted text is limited to 256 KB. OCR for scanned/image-only PDFs is not supported.
 
@@ -379,7 +381,7 @@ Upload documents via the profile dashboard or API. Search only indexes extracted
 
 ### Data portability
 
-Platform admins can export and import the whole local Nakama data root from **Agent → System → Data** in the dashboard.
+Platform admins can export and import the whole local Nakama data root from **Settings** in the dashboard.
 Use **Export ZIP** to download a backup.
 Exports are `.zip` backups and should be handled as sensitive files because they can include local auth, provider configuration, custom tools, skills, profile workspaces, and a local SQLite database.
 
@@ -393,7 +395,7 @@ File tools (`read_file`, `write_file`, `edit_file`, `delete_file`) are scoped to
 - **Profile workspace:** `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (soul files, knowledge base, `artifacts/`, etc.)
 - **Custom tools directory:** `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set)
 
-Agents save persistent outputs under `artifacts/` via the `save-artifact` bundled skill and `write_file`, not a dedicated builtin.
+Agents save artifact files under `artifacts/` via the `save-artifact` bundled skill and `write_file`, not a dedicated builtin.
 
 Path guards enforce:
 

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   emailConfigToMailboxConfig,
   type EmailConfigFile,
@@ -11,6 +13,11 @@ import {
 import { runExtractDocumentText } from "./extract-document-text";
 
 process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??= "test-email-attachment-secret-32-chars";
+
+const FIXTURES = join(import.meta.dir, "..", "__fixtures__");
+const SAMPLE_PDF = readFileSync(join(FIXTURES, "sample.pdf"));
+const SAMPLE_DOCX = readFileSync(join(FIXTURES, "sample.docx"));
+const SAMPLE_XLSX = readFileSync(join(FIXTURES, "sample.xlsx"));
 
 const completeConfig: EmailConfigFile = {
   imapHost: "imap.example.com",
@@ -32,7 +39,10 @@ const context = {
 };
 const mailboxId = getMailboxIdentity(emailConfigToMailboxConfig(completeConfig));
 
-function readerWith(data: Buffer): MailReader {
+function readerWith(
+  data: Buffer,
+  options?: { filename?: string; mediaType?: string },
+): MailReader {
   return {
     async connect() {},
     async disconnect() {},
@@ -46,8 +56,8 @@ function readerWith(data: Buffer): MailReader {
       return {
         metadata: {
           id: "0",
-          filename: "report.pdf",
-          mediaType: "application/pdf",
+          filename: options?.filename ?? "report.pdf",
+          mediaType: options?.mediaType ?? "application/pdf",
           size: data.length,
           disposition: "attachment",
         },
@@ -58,30 +68,6 @@ function readerWith(data: Buffer): MailReader {
       return [];
     },
   };
-}
-
-function textPdf(text: string): Buffer {
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${text.length + 35} >>\nstream\nBT /F1 12 Tf 72 720 Td (${text}) Tj ET\nendstream`,
-  ];
-  let output = "%PDF-1.4\n";
-  const offsets = [0];
-  for (let index = 0; index < objects.length; index += 1) {
-    offsets.push(Buffer.byteLength(output, "binary"));
-    output += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
-  }
-  const xrefOffset = Buffer.byteLength(output, "binary");
-  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  output += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("");
-  output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-  return Buffer.from(output, "binary");
 }
 
 describe("extract_document_text tool", () => {
@@ -98,7 +84,7 @@ describe("extract_document_text tool", () => {
       context,
       {
         loadConfig: async () => completeConfig,
-        createReader: () => readerWith(textPdf("Hello PDF")),
+        createReader: () => readerWith(SAMPLE_PDF),
       },
     );
 
@@ -108,7 +94,65 @@ describe("extract_document_text tool", () => {
       truncated: false,
       untrustedContent: true,
     });
-    expect("text" in result && result.text).toContain("Hello PDF");
+    expect("text" in result && result.text.toLowerCase()).toContain("dummy");
+  });
+
+  test("extracts text from a DOCX attachment", async () => {
+    const documentRef = createAttachmentReference(context, {
+      folder: "INBOX",
+      uid: 42,
+      attachmentId: "0",
+      mailboxId,
+    });
+
+    const result = await runExtractDocumentText(
+      { documentRef },
+      context,
+      {
+        loadConfig: async () => completeConfig,
+        createReader: () =>
+          readerWith(SAMPLE_DOCX, {
+            filename: "notes.docx",
+            mediaType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      filename: "notes.docx",
+      untrustedContent: true,
+    });
+    expect("text" in result && result.text).toContain("Laporan");
+  });
+
+  test("extracts text from an Excel attachment", async () => {
+    const documentRef = createAttachmentReference(context, {
+      folder: "INBOX",
+      uid: 42,
+      attachmentId: "0",
+      mailboxId,
+    });
+
+    const result = await runExtractDocumentText(
+      { documentRef },
+      context,
+      {
+        loadConfig: async () => completeConfig,
+        createReader: () =>
+          readerWith(SAMPLE_XLSX, {
+            filename: "budget.xlsx",
+            mediaType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          }),
+      },
+    );
+
+    expect(result).toMatchObject({
+      filename: "budget.xlsx",
+      untrustedContent: true,
+    });
+    expect("text" in result && result.text).toContain("Widget");
   });
 
   test("extracts from a provider-neutral stored document reference", async () => {
@@ -119,7 +163,7 @@ describe("extract_document_text tool", () => {
         loadAttachment: async (attachmentId) =>
           attachmentId === "att_provider_document"
             ? {
-                bytes: textPdf("Provider document"),
+                bytes: SAMPLE_PDF,
                 mediaType: "application/pdf",
                 filename: "provider.pdf",
               }
@@ -133,10 +177,10 @@ describe("extract_document_text tool", () => {
       mediaType: "application/pdf",
       untrustedContent: true,
     });
-    expect("text" in result && result.text).toContain("Provider document");
+    expect("text" in result && result.text.toLowerCase()).toContain("dummy");
   });
 
-  test("rejects invalid PDF bytes", async () => {
+  test("rejects unsupported document bytes", async () => {
     const documentRef = createAttachmentReference(context, {
       folder: "INBOX",
       uid: 42,
@@ -149,11 +193,17 @@ describe("extract_document_text tool", () => {
       context,
       {
         loadConfig: async () => completeConfig,
-        createReader: () => readerWith(Buffer.from("not a pdf")),
+        createReader: () =>
+          readerWith(Buffer.from("not a document"), {
+            filename: "notes.bin",
+            mediaType: "application/octet-stream",
+          }),
       },
     );
 
-    expect(result).toEqual({ error: "The selected document is not a valid PDF." });
+    expect(result).toEqual({
+      error: "The selected document is not a supported PDF, Word, or Excel file.",
+    });
   });
 
   test("rejects a reference from another session", async () => {

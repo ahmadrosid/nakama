@@ -24,6 +24,10 @@ export type ArtifactAttachmentPanelBodyProps =
       imagePreviewUrl?: string | null;
     })
   | (ArtifactPanelSharedProps & {
+      kind: "video";
+      videoPreviewUrl?: string | null;
+    })
+  | (ArtifactPanelSharedProps & {
       kind: "html";
       content: string | null;
       htmlSandbox?: string;
@@ -134,6 +138,36 @@ function ArtifactAttachmentImageBody({
   );
 }
 
+function ArtifactAttachmentVideoBody({
+  loading,
+  error,
+  videoPreviewUrl = null,
+  canPreview,
+  artifact,
+}: Extract<ArtifactAttachmentPanelBodyProps, { kind: "video" }>) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {loading ? <LoadingState /> : null}
+      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
+      {!loading && !error && videoPreviewUrl ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+          <video
+            src={videoPreviewUrl}
+            controls
+            playsInline
+            preload="metadata"
+            className="max-h-[min(70vh,48rem)] w-full max-w-[min(100%,24rem)] rounded-lg border border-border bg-black object-contain"
+            aria-label={artifact.filename}
+          />
+        </div>
+      ) : null}
+      {!loading && !error && !videoPreviewUrl && !canPreview ? (
+        <UnavailablePreview padded />
+      ) : null}
+    </div>
+  );
+}
+
 function ArtifactAttachmentHtmlBody({
   loading,
   error,
@@ -198,6 +232,8 @@ export function ArtifactAttachmentPanelBody(props: ArtifactAttachmentPanelBodyPr
   switch (props.kind) {
     case "image":
       return <ArtifactAttachmentImageBody {...props} />;
+    case "video":
+      return <ArtifactAttachmentVideoBody {...props} />;
     case "html":
       return <ArtifactAttachmentHtmlBody {...props} />;
     case "text":

@@ -7,6 +7,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 - Bun 1.3+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `dev:cli`
 - Layout: `apps/{server,web,cli}`, channel workers in `apps/platform/{telegram,whatsapp,discord,automation}`
+- Writing Tests: assert behavior, not prompt/description/error copy.
 
 ## LLM cassette tests (MSW)
 
@@ -19,13 +20,26 @@ LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provide
 
 ## GitHub
 
-Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Do not use the API, browser, or scraping.
+Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Run the gh cli command outside the sandbox so that the auth can works.
 
 ## Browser automation
 
 Use `agent-browser` cli to do browser automation, screenshot etc. Run the docker first when you need to debug with first installation, for just quick test or screenshot use local dev server that already running.
 
-## Docker
+## Documentation (`docs/website`)
+
+User-facing docs live in `docs/website/content/docs/` (MDX). **Audience is people who use Nakama** — org admins, operators, and chat users — not contributors implementing the product.
+
+When writing or updating docs, prioritize:
+
+1. **Why** — what problem the feature solves and when someone should care
+2. **Value** — what gets better (safety, consistency, less repeat work, team control)
+3. **How to use it** — UI paths, steps, roles, and screenshots for flows; plain language over jargon
+
+Keep contributor detail out of user docs unless it directly helps usage (e.g. env vars for self-hosting). Prefer dashboard navigation names (**System → Organization**) over route paths; put schema, service names, file paths, and HTTP API tables in `AGENTS.md` or code comments, not in product docs unless the page is explicitly for integrators.
+
+Match existing pages: task-oriented headings, tables for roles/options, screenshots under `docs/website/public/screenshots/` (`![alt](/screenshots/foo.png)`), capture scripts in `docs/website/scripts/capture-*.sh`. Cross-link related concepts (e.g. skills ↔ org memory) instead of duplicating internals.
+
 
 One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`). Dashboard: http://localhost:4310
 
@@ -34,14 +48,12 @@ One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CON
 docker pull ghcr.io/ahmadrosid/nakama:latest
 docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
 
-# Build from source (uses buildx; default linux/amd64 -t nakama)
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+# Build from source and run (uses buildx; default linux/amd64 -t nakama)
+./scripts/docker-build-run.sh
 
 # Fresh start (removes container, volume, image)
-./scripts/docker-reset.sh
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+./scripts/docker-destroy.sh
+./scripts/docker-build-run.sh
 ```
 
 ## Multi-tenancy
@@ -100,11 +112,12 @@ Path: `~/.nakama/orgs/{orgId}/profiles/{profileId}/` (`getProfileSoulDir`). Load
 | `save-artifact` | Persist under `artifacts/` |
 | `knowledge_base_search` / `web_search` / `email` | KB, web, mailbox |
 | `search_files` / `ripgrep` | File/content search |
-| `bash` | Super Bot — profile workspace shell |
+| `bash` | Profile workspace shell — assign per profile; Super Bot by default |
 | `sub_agent` | Opt-in same-profile delegate (not repo coding) |
 | `coding-agent` | Codex / Claude Code / OpenCode via `bash` |
 | `agent-browser` | Opt-in browser CLI; needs host install — `docs/website/agent-browser.md` |
 | `create-profile` | Super Bot only, confirm-first — `apps/server/src/tools/super-bot-tools.ts` |
+| `skill_manage` | Interactive web/cli with `manage-skills` — create/patch/edit/delete profile skills + supporting-file write/remove + auto-assign (`apps/server/src/tools/skill-manage-tool.ts`). When org/profile **write approval** is enabled, mutations stage as proposals for org-admin review instead of writing immediately. When present, file tools refuse any path under `skills/*/` (`forbidProfileSkillMarkdownWrites`). Not injected for automations or Telegram/WhatsApp/Discord. Opt-in **post-turn skill review** (`skills_post_turn_review`) may suggest or stage create/patch after complex turns without writing into model history. |
 | Composio | Org toolkits + per-user OAuth — `docs/website/composio.md` |
 
 **Channel artifacts (Telegram/Discord):** `packages/core/src/channel-artifacts.ts`, `channel-artifact-delivery.ts`; handlers in `apps/platform/{telegram,discord}/src/channel-artifact-flow.ts`.
@@ -132,6 +145,9 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 | Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call in the turn is `parallelSafe` |
 
 **Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; export `parallelSafe: true` from the module to opt in. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
+
+| Flow | Entry |
+|---|---|
 | Playground | `POST /v1/tools/:toolId/run` → `runToolPlayground()` (`resolvePlaygroundProfileId`) |
 | Param suggest | `POST /v1/tools/:toolId/params/suggest` |
 
@@ -147,3 +163,9 @@ Always build context with `buildToolExecutionContext()` (`packages/core/src/tool
 - `packages/client` — API client
 
 Server: Hono in `apps/server/src/http/app.ts`. Middleware: auth → org → routes (`routes/*`). OpenAPI from `openapi.ts` (`/openapi.json`). Platform-admin-only: profile/tool/MCP/skill mutations (org admins use provisioned profiles or Super Bot `create-profile`). Org-admin: `/v1/orgs/{orgId}/…` members. Viewers blocked by `requireNotViewer` on worker control and agent invoke.
+
+## Developing 
+
+Remember this when working on react code:
+
+- UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.

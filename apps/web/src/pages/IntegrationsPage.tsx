@@ -125,10 +125,10 @@ export function IntegrationsPage() {
   return (
     <section className={cn(sectionClass, "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden")}>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="shrink-0 border-b border-border p-4 md:w-56 md:border-r md:border-b-0">
+        <aside className="shrink-0 border-b border-border px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
           <nav
             aria-label="Integration settings"
-            className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
+            className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
           >
             {visibleSections.map((item) => (
               <SidebarButton
@@ -149,9 +149,9 @@ export function IntegrationsPage() {
           {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
 
           {section === "composio" ? (
-            <div className="space-y-4">
-              {isOrgAdmin ? <ComposioSettingsCard /> : null}
-              <ComposioConnectionsCard />
+            <div className={cn(isOrgAdmin && "space-y-4")}>
+              {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
+              <ComposioConnectionsCard embedded bordered />
             </div>
           ) : null}
 
@@ -186,7 +186,7 @@ function SidebarButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-[11rem] shrink-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors md:w-full md:shrink",
+        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] active:scale-[0.96] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
         active
           ? "bg-primary/10 text-foreground"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
@@ -197,9 +197,13 @@ function SidebarButton({
         strokeWidth={1.75}
         aria-hidden
       />
-      <span className="min-w-0 space-y-0.5">
-        <span className="block text-sm font-medium leading-tight">{label}</span>
-        <span className="block text-xs leading-snug text-muted-foreground">{description}</span>
+      <span className="min-w-0 md:space-y-0.5">
+        <span className="block text-sm font-medium leading-tight whitespace-nowrap [text-wrap:balance] md:whitespace-normal">
+          {label}
+        </span>
+        <span className="hidden text-xs leading-snug text-muted-foreground [text-wrap:pretty] md:block">
+          {description}
+        </span>
       </span>
     </button>
   );

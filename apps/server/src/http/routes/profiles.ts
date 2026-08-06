@@ -17,11 +17,28 @@ import type {
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
 } from "@nakama/core";
+import { NakamaApiError } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import { json, readJson, getRequestAuth } from "../shared";
-import { requirePlatformAdminFromContext, requireActiveOrgIdFromContext } from "../org-guards";
+import {
+  requirePlatformAdminFromContext,
+  requireActiveOrgIdFromContext,
+  requireOrgAdmin,
+} from "../org-guards";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
+
+const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
+  "skillsWriteApproval",
+  "skillsPostTurnReview",
+]);
+
+function isOrgAdminAllowedProfileSettingsUpdate(body: UpdateProfileRequest): boolean {
+  const keys = Object.keys(body).filter(
+    (key) => body[key as keyof UpdateProfileRequest] !== undefined,
+  );
+  return keys.length > 0 && keys.every((key) => ORG_ADMIN_PROFILE_SETTING_KEYS.has(key));
+}
 
 export function registerProfileRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent } = options;
@@ -444,10 +461,18 @@ export function registerProfileRoutes(app: HonoApp, options: ServerOptions): voi
   });
 
   app.put("/v1/profiles/:profileId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const body = await readJson<UpdateProfileRequest>(c.req.raw);
+
+    if (!auth.isPlatformAdmin) {
+      requireOrgAdmin(auth);
+      if (!isOrgAdminAllowedProfileSettingsUpdate(body)) {
+        throw new NakamaApiError("Forbidden", 403);
+      }
+    }
+
     return json<ProfileResponse>(await agent.updateProfile(orgId, profileId, body));
   });
 

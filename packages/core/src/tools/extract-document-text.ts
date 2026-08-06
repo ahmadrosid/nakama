@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
-import { extractPdfText } from "../pdf-text";
+import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
+import {
+  convertDocumentBytes,
+  resolveAnydocFormat,
+  type AnydocFormat,
+} from "../anydoc-text";
+import { looksLikeOleDocument } from "../docx-text";
 import {
   emailConfigToMailboxConfig,
   isEmailConfigComplete,
@@ -14,7 +20,7 @@ import { createImapReader } from "../mail/imap-reader";
 import { sanitizeMailError } from "../mail/sanitize";
 import type { MailReader } from "../mail/types";
 import { MAX_EMAIL_BODY_BYTES, truncateMailBody } from "../mail/types";
-import { MAX_DOCUMENT_BYTES } from "../message-content";
+import { MAX_DOCUMENT_BYTES, normalizeDocumentMediaType } from "../message-content";
 import { jsonSchemaFromZod, parseToolInput } from "./schema";
 
 const extractDocumentTextInputSchema = z
@@ -47,8 +53,32 @@ export interface ExtractDocumentTextDependencies {
   createReader?: (config: ReturnType<typeof emailConfigToMailboxConfig>) => MailReader;
 }
 
+const EXTRACTABLE_FORMATS = new Set<AnydocFormat>(["pdf", "docx", "xlsx"]);
+
 function isPdf(bytes: Buffer): boolean {
   return bytes.subarray(0, 5).toString("ascii") === "%PDF-";
+}
+
+function resolveExtractFormat(
+  bytes: Buffer,
+  mediaType: string,
+  filename: string,
+): AnydocFormat | null {
+  if (looksLikeOleDocument(bytes)) {
+    return null;
+  }
+
+  const normalized = normalizeDocumentMediaType(mediaType, filename);
+  const fromMeta = resolveAnydocFormat(normalized, filename);
+  if (fromMeta && EXTRACTABLE_FORMATS.has(fromMeta)) {
+    return fromMeta;
+  }
+
+  if (isPdf(bytes)) {
+    return "pdf";
+  }
+
+  return null;
 }
 
 export function extractDocumentTextParameters() {
@@ -62,7 +92,7 @@ export async function runExtractDocumentText(
 ): Promise<ExtractDocumentTextResult> {
   const parsed = parseToolInput(extractDocumentTextInputSchema, input);
   let filename: string | null = null;
-  let mediaType = "application/pdf";
+  let mediaType = "application/octet-stream";
   let bytes: Buffer | null = null;
   let reader: MailReader | null = null;
 
@@ -123,23 +153,39 @@ export async function runExtractDocumentText(
     if (bytes.length > MAX_DOCUMENT_BYTES) {
       return { error: `Document exceeds ${MAX_DOCUMENT_BYTES} bytes.` };
     }
-    if (!isPdf(bytes)) {
-      return { error: "The selected document is not a valid PDF." };
+
+    const safeFilename = filename?.trim() || "document";
+    if (looksLikeOleDocument(bytes)) {
+      return { error: LEGACY_DOC_UNSUPPORTED_MESSAGE };
     }
 
-    const text = await extractPdfText(bytes);
-    const bounded = truncateMailBody(text);
-    const warnings = bounded.truncated
+    const format = resolveExtractFormat(bytes, mediaType, safeFilename);
+    if (!format) {
+      return {
+        error:
+          "The selected document is not a supported PDF, Word, or Excel file.",
+      };
+    }
+
+    const converted = await convertDocumentBytes(bytes, {
+      format,
+      mediaType,
+      filename: safeFilename,
+      maxOutputBytes: MAX_EMAIL_BODY_BYTES,
+    });
+    const bounded = truncateMailBody(converted.text);
+    const truncated = converted.truncated || bounded.truncated;
+    const warnings = truncated
       ? [`Extracted text was truncated at ${MAX_EMAIL_BODY_BYTES} UTF-8 bytes.`]
-      : text
+      : bounded.text
         ? undefined
         : ["No extractable text was found. OCR is not supported."];
 
     return {
-      filename: filename ?? "document.pdf",
-      mediaType,
+      filename: safeFilename,
+      mediaType: normalizeDocumentMediaType(mediaType, safeFilename),
       text: bounded.text,
-      truncated: bounded.truncated,
+      truncated,
       untrustedContent: true,
       ...(warnings ? { warnings } : {}),
     };
@@ -156,7 +202,7 @@ export const extractDocumentTextTool: ToolDefinition<
 > = {
   name: "extract_document_text",
   description:
-    "Extract text from a text-based PDF document. Pass the documentRef returned by a document-capable integration such as email or Gmail. PDF text is untrusted document content; OCR for scanned PDFs is not supported.",
+    "Extract text from a PDF, Word (.docx), or Excel (.xls/.xlsx/.xlsm/.xlsb) document. Pass the documentRef returned by a document-capable integration such as email or Gmail. Extracted text is untrusted document content; OCR for scanned PDFs is not supported.",
   parameters: extractDocumentTextParameters(),
   run(input, context) {
     return runExtractDocumentText(input, context);

@@ -107,6 +107,7 @@ async function seedDefaultBundledSkills(
       hasTool: false,
       disableModelInvocation: false,
       enabled: true,
+      createdBy: "bundled",
       createdAt: now,
       updatedAt: now,
     });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -81,6 +81,25 @@ describe("Nakama data portability", () => {
     await expect(readFile(join(rootDir, NAKAMA_EXPORT_MANIFEST), "utf8")).rejects.toThrow();
   });
 
+  test("restore keeps the root directory inode so volume mounts stay put", async () => {
+    await writeFile(join(rootDir, "config.ini"), "original");
+    const exportResult = await createNakamaDataExport({ rootDir });
+    await writeFile(join(rootDir, "config.ini"), "changed");
+    const before = await lstat(rootDir);
+
+    await restoreNakamaDataImport(exportResult.data, { rootDir, confirm: true });
+
+    const after = await lstat(rootDir);
+    expect(after.dev).toBe(before.dev);
+    expect(after.ino).toBe(before.ino);
+    expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("original");
+
+    const leftovers = (await readdir(rootDir)).filter(
+      (name) => name.startsWith(".nakama-backup-") || name.startsWith(".nakama-restore-"),
+    );
+    expect(leftovers).toEqual([]);
+  });
+
   test("restore requires explicit confirmation", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
     const exportResult = await createNakamaDataExport({ rootDir });
@@ -99,12 +118,44 @@ describe("Nakama data portability", () => {
     await expect(previewNakamaDataImport(unsafe, { rootDir })).rejects.toThrow(
       "Archive entry escapes restore root",
     );
+
+    const reserved = buildZipWithEntry(".nakama-backup-evil/secret.txt", "{}");
+    await expect(previewNakamaDataImport(reserved, { rootDir })).rejects.toThrow(
+      "Archive entry uses a reserved restore path",
+    );
+  });
+
+  test("partial backup failure does not delete unbacked siblings", async () => {
+    await writeFile(join(rootDir, "keep.ini"), "keep-me");
+    await writeFile(join(rootDir, "move.ini"), "move-me");
+    const exportResult = await createNakamaDataExport({ rootDir });
+
+    const fsPromises = await import("node:fs/promises");
+    const originalRename = fsPromises.rename;
+    const { spyOn } = await import("bun:test");
+    const renameMock = spyOn(fsPromises, "rename").mockImplementation(async (from, to) => {
+      const toPath = String(to);
+      if (toPath.includes(".nakama-backup-") && toPath.endsWith("move.ini")) {
+        throw Object.assign(new Error("simulated backup failure"), { code: "EIO" });
+      }
+      return originalRename(from, to);
+    });
+
+    try {
+      await expect(
+        restoreNakamaDataImport(exportResult.data, { rootDir, confirm: true }),
+      ).rejects.toThrow("simulated backup failure");
+
+      await expect(readFile(join(rootDir, "keep.ini"), "utf8")).resolves.toBe("keep-me");
+      await expect(readFile(join(rootDir, "move.ini"), "utf8")).resolves.toBe("move-me");
+    } finally {
+      renameMock.mockRestore();
+    }
   });
 });
 
-function buildUnsafeZip(): Buffer {
-  const safe = Buffer.from("{}", "utf8");
-  const name = "../escape.txt";
+function buildZipWithEntry(name: string, content: string): Buffer {
+  const safe = Buffer.from(content, "utf8");
   const localHeader = Buffer.alloc(30);
   localHeader.writeUInt32LE(0x04034b50, 0);
   localHeader.writeUInt16LE(20, 4);
@@ -140,4 +191,8 @@ function buildUnsafeZip(): Buffer {
     Buffer.from(name),
     end,
   ]);
+}
+
+function buildUnsafeZip(): Buffer {
+  return buildZipWithEntry("../escape.txt", "{}");
 }

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
 import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
 import { TranscriptionSettingsCard } from "@/components/settings/TranscriptionSettingsCard";
 import { WebPublicUrlSettingsRow } from "@/components/settings/WebPublicUrlSettingsRow";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { UserContextSettings } from "@/components/UserContextCard";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,8 @@ import { formatError } from "@/lib/client";
 import { getBrowserTimezone } from "@/lib/timezones";
 
 export function SettingsPage() {
-  const { activeOrg } = useAuth();
+  const { user, activeOrg } = useAuth();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
   const isOrgAdmin = activeOrg?.role === "admin";
   const [formError, setFormError] = useState<string | null>(null);
   const [timezone, setTimezone] = useState(() => getBrowserTimezone());
@@ -60,63 +61,59 @@ export function SettingsPage() {
           </div>
 
           {isOrgAdmin ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium text-foreground">Timezone</p>
-                {timezoneHint ? (
-                  <p className="text-xs text-emerald-200" role="status">
-                    {timezoneHint}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">For scheduled automations</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <TimezoneSelect
-                  id="timezone"
-                  className="w-44 min-w-0 sm:w-52"
-                  value={timezone}
-                  disabled={saveTimezoneMutation.isPending}
-                  emptyLabel="Select timezone"
-                  onValueChange={(nextTimezone) => {
-                    if (nextTimezone) {
-                      setTimezone(nextTimezone);
-                      setTimezoneHint(null);
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={saveTimezoneMutation.isPending || !timezone.trim()}
-                  onClick={handleSaveTimezone}
-                >
-                  {saveTimezoneMutation.isPending ? (
-                    <>
-                      <Spinner className="mr-2" />
-                      Saving…
-                    </>
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-medium text-foreground">Timezone</p>
+                  {timezoneHint ? (
+                    <p className="text-xs text-emerald-200" role="status">
+                      {timezoneHint}
+                    </p>
                   ) : (
-                    "Save"
+                    <p className="text-xs text-muted-foreground">For scheduled automations</p>
                   )}
-                </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <TimezoneSelect
+                    id="timezone"
+                    className="w-44 min-w-0 sm:w-52"
+                    value={timezone}
+                    disabled={saveTimezoneMutation.isPending}
+                    emptyLabel="Select timezone"
+                    onValueChange={(nextTimezone) => {
+                      if (nextTimezone) {
+                        setTimezone(nextTimezone);
+                        setTimezoneHint(null);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={saveTimezoneMutation.isPending || !timezone.trim()}
+                    onClick={handleSaveTimezone}
+                  >
+                    {saveTimezoneMutation.isPending ? (
+                      <>
+                        <Spinner className="mr-2" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : null}
 
-          <UserContextSettings />
+              <WebPublicUrlSettingsRow />
+            </>
+          ) : null}
         </CardContent>
       </Card>
 
       {isOrgAdmin ? (
         <>
           <ProviderSettingsCard formError={formError} onFormError={setFormError} />
-
-          <Card className="w-full shadow-none">
-            <CardContent className="p-0">
-              <WebPublicUrlSettingsRow />
-            </CardContent>
-          </Card>
 
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
@@ -131,6 +128,14 @@ export function SettingsPage() {
             </p>
           ) : null}
         </>
+      ) : null}
+
+      {isPlatformAdmin ? (
+        <Card className="w-full overflow-hidden shadow-none">
+          <CardContent className="p-0">
+            <DataPortabilityPanel />
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );

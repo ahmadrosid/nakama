@@ -47,6 +47,29 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Refactor auth module'");
   });
 
+  test("builds pi.dev command and spawn env", async () => {
+    const template = await buildCodingAgentCommandTemplate(
+      {
+        kind: "pi",
+        name: "pi.dev",
+        command: "pi",
+        args: [],
+      },
+      "Fix bugs",
+      "/workspace",
+      {
+        userConfig: anthropicUserConfig,
+        profileModel: "claude-sonnet-4-6",
+      },
+    );
+    expect(template.backend).toBe("pi");
+    expect(template.command).toContain("pi");
+    expect(template.command).toContain("--provider");
+    expect(template.command).toContain("anthropic");
+    expect(template.command).toContain("--model");
+    expect(template.command).toContain("-p");
+  });
+
   test("builds OpenCode run command with workspace dir", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {

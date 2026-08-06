@@ -1,6 +1,5 @@
 import type { DocumentAttachment, MessageContentPart, ProviderName } from "./contract";
 import { NakamaApiError } from "./api-error";
-import { extractPdfText } from "./pdf-text";
 
 export type DocumentTextParser = (
   document: DocumentAttachment,
@@ -8,15 +7,48 @@ export type DocumentTextParser = (
 
 const textParsers = new Map<string, DocumentTextParser>();
 
+const DOCX_MEDIA_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MEDIA_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLS_MEDIA_TYPE = "application/vnd.ms-excel";
+const XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroEnabled.12";
+const XLSB_MEDIA_TYPE = "application/vnd.ms-excel.sheet.binary.macroEnabled.12";
+
 function decodeDocumentText(data: string): string {
   return Buffer.from(data, "base64").toString("utf8");
+}
+
+async function parseWithAnydoc(document: DocumentAttachment): Promise<string> {
+  const { convertDocumentBytes } = await import("./anydoc-text");
+  const { text, truncated } = await convertDocumentBytes(
+    Buffer.from(document.data, "base64"),
+    {
+      mediaType: document.mediaType,
+      filename: document.filename,
+    },
+  );
+
+  if (!text) {
+    return "No extractable text was found. OCR is not supported.";
+  }
+
+  if (truncated) {
+    return `${text}\n\n[Extracted text was truncated.]`;
+  }
+
+  return text;
 }
 
 const BUILTIN_DOCUMENT_TEXT_PARSERS: Record<string, DocumentTextParser> = {
   "text/plain": (document) => decodeDocumentText(document.data),
   "text/csv": (document) => decodeDocumentText(document.data),
-  "application/pdf": async (document) =>
-    extractPdfText(Buffer.from(document.data, "base64")),
+  "application/pdf": parseWithAnydoc,
+  [DOCX_MEDIA_TYPE]: parseWithAnydoc,
+  [XLSX_MEDIA_TYPE]: parseWithAnydoc,
+  [XLS_MEDIA_TYPE]: parseWithAnydoc,
+  [XLSM_MEDIA_TYPE]: parseWithAnydoc,
+  [XLSB_MEDIA_TYPE]: parseWithAnydoc,
 };
 
 const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
@@ -24,25 +56,25 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
     "application/pdf",
     "text/plain",
     "text/csv",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    DOCX_MEDIA_TYPE,
   ]),
   openai: new Set([
     "application/pdf",
     "text/plain",
     "text/csv",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    DOCX_MEDIA_TYPE,
   ]),
   openrouter: new Set([
     "application/pdf",
     "text/plain",
     "text/csv",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    DOCX_MEDIA_TYPE,
   ]),
   gemini: new Set([
     "application/pdf",
     "text/plain",
     "text/csv",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    DOCX_MEDIA_TYPE,
   ]),
   openai_compatible: new Set<string>(),
   deepseek: new Set<string>(),

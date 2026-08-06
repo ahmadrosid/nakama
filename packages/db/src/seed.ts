@@ -2,7 +2,7 @@ import { builtinTools } from "@nakama/core";
 import { preinstalledMcpServers } from "@nakama/core/mcp/preinstalled";
 import { BUILTIN_TOOL_IDS, SUB_AGENT_TOOL_ID } from "@nakama/core/tools/protected";
 import { ensureLocalClientAccess } from "./local-client";
-import { ensureOrgSuperBotProfiles } from "./org-profiles";
+import { ensureBashToolDefinition, ensureOrgSuperBotProfiles } from "./org-profiles";
 import type { DatabaseAdapter } from "./types";
 
 const LEGACY_BUILTIN_TOOL_NAMES = new Set(["echo", "log", "delay", "search_workspace"]);
@@ -22,6 +22,7 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await removeUnsupportedTools(db);
   await ensureBuiltinToolDefinitions(db);
   await ensureSubAgentToolDefinition(db);
+  await ensureBashToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
   await ensureOrgSuperBotProfiles(db);

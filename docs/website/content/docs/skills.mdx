@@ -157,14 +157,20 @@ The dashboard also supports a shared skill library through the skills API and sy
 Profiles receive bundled skills for common workflows:
 
 - `create-automation` — scheduling, reminders, and saved automations
-- `manage-skills` — create and update profile-scoped skills with `write_file`, `read_file`, `search_files`, and `edit_file`
+- `manage-skills` — create, patch, edit, and delete profile-scoped skills (and supporting files under a skill directory) with the `skill_manage` tool (file tools still inspect skills; they cannot write under `skills/*/` when `skill_manage` is present)
 - `update-profile-memory` — record facts in active `MEMORY.md` via file tools
 - `archive-profile-memory` — move facts from active `MEMORY.md` into `memory-archive/` without deleting them
-- `save-artifact` — save persistent text outputs under `artifacts/` via `write_file`
+- `save-artifact` — save files the agent produces (reports, documents, generated text) under `artifacts/` via `write_file`
 - `coding-agent` — invoke a coding agent for repo work via `bash` (Super Bot by default; see [Coding agent](/coding-agent))
 - `agent-browser` — interactive browser automation via `bash` (opt-in; see [Agent browser](/agent-browser))
 
 New custom profiles receive the file tools and `knowledge_base_search` by default when those builtins are available. Default and super-bot profiles also receive the bundled skills above when they are installed and synced on the server (except opt-in skills such as `agent-browser`). Super Bot also receives `bash` for one-off host commands and coding-agent workflows.
+
+When `manage-skills` is assigned, interactive chat gets a `skill_manage` tool (`create` / `patch` / `edit` / `delete` / `write_file` / `remove_file`). Creates auto-assign to the profile. Automations and messaging channels do not receive `skill_manage`. For crystallization, optional write approval, admin review UI, and the Phase 3–4 roadmap, see [Self-improving skills](/self-improving-skills).
+
+### Write approval (optional)
+
+Org admins can enable **skill write approval** under **System → Organization → Skill write approval**. When the gate is on, skill changes wait for admin review before they go live; see [Self-improving skills](/self-improving-skills).
 
 ### Bundled system skills
 
@@ -172,7 +178,7 @@ New custom profiles receive the file tools and `knowledge_base_search` by defaul
 
 - **Memory write path:** read or create `MEMORY.md`, append a dated `- bullet` under the user's timezone date, keep the `# Memory Log` preamble, stay under 4096 bytes
 - **Archive path:** copy exact bullets to `memory-archive/YYYY-MM.md`, then remove them from `MEMORY.md`
-- **Artifact path:** `write_file` or `write_docx` under `artifacts/{filename}`, then write `{filename}.nakama-meta.json` with MIME metadata for the dashboard. Use `write_file` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
+- **Artifact path:** save the file the agent produced with `write_file` or `write_docx` under `artifacts/{filename}`, then write `{filename}.nakama-meta.json` with MIME metadata for the dashboard. Use `write_file` for text, Markdown, HTML, JSON, and code; use `write_docx` when the user wants a real Word document.
 
 These skills use `include-body-on-match: true`, so the full procedure loads when the user's message matches the skill description. The chat wrapper also mentions memory skills when `read_file` and `edit_file` are available, and `save-artifact` when `write_file` is available.
 
@@ -217,7 +223,7 @@ Viewers cannot invoke agents, so they cannot trigger skills either.
 - Use **`archive-profile-memory`** when the user wants to forget, tidy, or free space in active memory without deleting history
 - Use the **main profile prompt** for always-on behavior and identity
 - Use a **builtin tool** for a native capability like web search or file access
-- Use **`save-artifact`** with **`write_file`** or **`write_docx`** for persistent reports, summaries, generated text, and Word documents under `artifacts/`
+- Use **`save-artifact`** with **`write_file`** or **`write_docx`** when the agent should save a file for you (reports, summaries, generated text, Word documents) under `artifacts/`
 - Use **`coding-agent`** with **`bash`** when repo work is better handled by a dedicated coding agent ([setup](/coding-agent))
 - Use **`agent-browser`** with **`bash`** for login walls, forms, and interactive browsing ([setup](/agent-browser))
 - Use an **MCP server** for external tool integrations
@@ -225,6 +231,7 @@ Viewers cannot invoke agents, so they cannot trigger skills either.
 ## Next steps
 
 - [Profiles](/profiles) — how skills attach to a bot
+- [Self-improving skills](/self-improving-skills) — agents save workflows as skills; optional admin approval
 - [Coding agent](/coding-agent) — harness setup and the `coding-agent` skill
 - [Agent browser](/agent-browser) — interactive browsing via `bash` and the `agent-browser` skill
 - [Builtin tools](/builtin-tools) — the actions a profile can take

@@ -152,7 +152,6 @@ export function ProviderSetupForm({
               customModels={form.customModels}
               disabled={form.busy}
               density={density}
-              showThinkingToggle
               displayNameError={form.displayNameError}
               baseUrlError={form.baseUrlError}
               modelsError={form.modelsError}
@@ -191,7 +190,6 @@ export function ProviderSetupForm({
                 modelsError={form.modelsError}
                 browseLabel="Browse Ollama"
                 showPricing={false}
-                showThinkingToggle={false}
                 footerHint={
                   <>
                     Add models by ID or browse live models from your Ollama host (for example{" "}

@@ -53,8 +53,12 @@ function createServerOptions() {
       }),
       getSessionTodos: async (_sessionId: string) => [],
       branchSession: async (_sessionId: string, messageIndex: number) => ({ sessionId: `branched-${messageIndex}` }),
-      resolveSession: async (_sessionId: string) => ({ send: async (input: { message: string }) => `reply:${input.message}` }),
+      resolveSession: async (_sessionId: string) => ({
+        send: async (input: { message: string }) => `reply:${input.message}`,
+        getContextUsage: () => null,
+      }),
       scheduleSessionTitleGeneration: (_sessionId: string) => {},
+      schedulePostTurnSkillReview: (_sessionId: string) => {},
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       createProfile: async (_body: unknown) => ({ id: "profile_1" }),
       getProfileSoulStatus: async (_profileId: string, includeContents: boolean) => ({ hasSoul: true, content: includeContents ? "soul" : null }),

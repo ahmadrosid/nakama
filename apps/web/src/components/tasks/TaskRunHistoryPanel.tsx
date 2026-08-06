@@ -173,7 +173,7 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
                 : undefined
             }
             className="absolute inset-0 bg-background"
-            contentClassName="px-4 py-4 sm:px-5"
+            contentClassName="px-4 sm:px-5"
           />
         )}
       </div>

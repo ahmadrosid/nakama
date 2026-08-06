@@ -44,7 +44,7 @@ export function ToolAssignDialog({
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        <PlusIcon className="size-4" aria-hidden />
+        <PlusIcon className="size-4" data-icon="inline-start" aria-hidden />
         Add tool
       </Button>
 

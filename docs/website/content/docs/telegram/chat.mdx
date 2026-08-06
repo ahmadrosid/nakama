@@ -1,0 +1,102 @@
+---
+title: "Chat behavior & commands"
+description: "How the Nakama Telegram bot behaves in private chats, groups, and topics — plus the commands and message types it supports."
+---
+
+Once the bridge is running and your account is paired, here is how the bot behaves and what you can send it.
+
+## Private chat behavior
+
+Private chat is the simplest mode.
+
+Once paired or allowlisted:
+
+- normal messages go to the Nakama agent
+- the bot keeps a Telegram chat session
+- Telegram commands work immediately
+
+If an unlinked user opens the bot, Nakama asks for the pairing code instead of sending the message to the agent.
+
+## Group chat behavior
+
+Nakama supports Telegram groups, but it is intentionally conservative about when it replies.
+
+In a group, the bot responds only when the message is:
+
+- a slash command like `/status`
+- a reply to one of the bot's messages
+- a direct mention like `@your_bot_name hello`
+
+This keeps group chats usable without making the bot noisy.
+
+### Group topics and profiles
+
+In Telegram supergroup topics, each topic can use its own Nakama profile.
+
+- `/profile` inside a topic changes only that topic
+- new topics use the default Telegram profile until you switch them
+- `/profile` in the main group chat changes the group-level profile
+- `/org` stays group-level, so switch org first if a topic needs a profile from another org
+
+## Telegram commands
+
+These commands are available in Telegram:
+
+| Command | What it does |
+| --- | --- |
+| `/start` | Welcome and help |
+| `/help` | Show command help |
+| `/stop` | Stop the current in-progress reply |
+| `/clear` | Clear chat history |
+| `/compact` | Compact conversation history |
+| `/new` | Start a new conversation |
+| `/org` | Choose or switch organization |
+| `/profile` | Choose or switch profile |
+| `/status` | Show server and model status |
+
+## Supported message types
+
+Telegram can send more than plain text into Nakama.
+
+Supported inputs include:
+
+- text messages
+- photos
+- voice notes and audio messages
+- supported documents such as `pdf`, `docx`, `txt`, and `csv`
+
+Small supported documents are downloaded and forwarded into the Nakama chat flow. Voice notes and audio messages are first transcribed with the configured OpenAI audio transcription model. Unsupported media gets a friendly rejection message instead of silently failing.
+
+## Rich Markdown replies
+
+Agents can reply in normal Markdown-style text. Nakama converts a safe subset into Telegram rich formatting.
+
+Supported formatting includes:
+
+- `**bold**`
+- `*italic*`
+- `__underline__`
+- inline code
+- fenced code blocks
+- headings
+- simple links
+
+If Telegram rejects the rich rendering, Nakama falls back to plain text.
+
+## Saved artifacts and share links
+
+When your agent saves a file for you with the `save-artifact` skill (content file plus `.nakama-meta.json` sidecar in the same turn), Nakama posts a **Publish-style share link** after the reply in Telegram chat.
+
+- The link uses the same unguessable `/s/{token}` URLs as dashboard Publish — no Nakama login required to open it.
+- Anyone who can read the Telegram message can open the link until the share is revoked from the web app.
+- Set **Web Public URL** in Nakama settings (or `NAKAMA_WEB_PUBLIC_URL`) so channel footers include absolute links.
+
+To receive the file itself in Telegram, ask in plain language — for example, “send the file” or “attach it”. Nakama sends a native Telegram document when the file is within Telegram’s size limit. If the file is too large, use the share link instead.
+
+Unpaired saves (content without a sidecar in the same turn) do not produce share links or attachments.
+
+## Next steps
+
+- [Outbound notifications](/telegram/notifications)
+- [Troubleshooting](/telegram/troubleshooting)
+- [Telegram setup](/telegram)

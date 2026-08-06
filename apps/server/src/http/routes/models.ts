@@ -50,6 +50,10 @@ import { requireOrgAdminFromContext } from "../org-guards";
 import { installCodingAgentHarness } from "../../services/coding-agent-harness-service";
 import { installAgentBrowser } from "../../services/agent-browser-service";
 import { streamAgentBrowserInstall, streamCodingHarnessInstall } from "../coding-harness-install-stream";
+import {
+  getExternalModelCatalog,
+  isExternalModelCatalogId,
+} from "../../services/external-model-catalog-service";
 
 export function registerModelRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, workerManager, databaseAdapter } = options;
@@ -136,7 +140,30 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   const updateComposioRequestSchema = z.object({}).passthrough().openapi("UpdateComposioSettingsRequest");
   const updateWhatsappRequestSchema = z.object({}).passthrough().openapi("UpdateWhatsAppSettingsRequest");
   const modelQuerySchema = z.object({ source: z.enum(["catalog", "remote"]).optional() });
+  const externalModelCatalogParam = z.object({
+    catalogId: z.string().openapi({ param: { name: "catalogId", in: "path" } }),
+  });
+  const externalModelCatalogResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ExternalModelCatalogResponse");
 
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "get",
+    path: "/v1/model-catalogs/{catalogId}",
+    tags: ["Models"],
+    summary: "Fetch a public upstream model catalog",
+    operationId: "getExternalModelCatalog",
+    request: { params: externalModelCatalogParam },
+    responses: {
+      200: {
+        description: "Upstream model catalog payload",
+        content: { "application/json": { schema: externalModelCatalogResponseSchema } },
+      },
+      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      502: { description: "Upstream error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
   app.openAPIRegistry.registerPath(createRoute({
     method: "get",
     path: "/v1/models",
@@ -495,6 +522,22 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
     operationId: "reconnectWhatsApp",
     responses: { 200: { description: "WhatsApp settings", content: { "application/json": { schema: whatsappSettingsSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } } },
   }));
+
+  app.get("/v1/model-catalogs/:catalogId", async (c) => {
+    getRequestAuth(c);
+    const catalogId = decodeURIComponent(c.req.param("catalogId"));
+
+    if (!isExternalModelCatalogId(catalogId)) {
+      return errorResponse("Unknown model catalog.", 400);
+    }
+
+    try {
+      return json(await getExternalModelCatalog(catalogId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 502);
+    }
+  });
 
   app.get("/v1/models", async (c) => {
     getRequestAuth(c);

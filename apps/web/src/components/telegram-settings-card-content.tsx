@@ -27,9 +27,9 @@ import { cn } from "@/lib/utils";
 
 function TelegramPairingGuide() {
   return (
-    <div className="space-y-3 px-4 py-3">
+    <div className="space-y-3">
       <p className="text-xs font-medium text-foreground">Link in Telegram</p>
-      <div className="overflow-hidden border border-border">
+      <div className="overflow-hidden rounded-md border border-border">
         <div className="grid grid-cols-1 sm:grid-cols-2">
           <PairingStepTile
             step={1}
@@ -49,7 +49,7 @@ function TelegramPairingGuide() {
         <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
           Using the bot in a group?
         </summary>
-        <div className="mt-3 overflow-hidden border border-border">
+        <div className="mt-3 overflow-hidden rounded-md border border-border">
           <PairingStepTile
             step={1}
             title="Pair privately first"
@@ -163,8 +163,10 @@ export function TelegramSettingsCardContent({
     canSave,
   } = view;
 
+  const paneItemClass = embedded ? undefined : "px-0 py-0";
+
   return (
-    <div className="divide-y divide-border">
+    <div className={cn(!embedded && "space-y-4 py-4")}>
       {!embedded ? (
         <IntegrationStatusHeader
           title="Telegram"
@@ -172,10 +174,15 @@ export function TelegramSettingsCardContent({
           statusBadge={statusBadge}
           configured={configured}
           connected={hasLinkedUsers && running}
+          className={paneItemClass}
         />
       ) : null}
 
-      <SettingsRow label="Bot token" description="From @BotFather">
+      <SettingsRow
+        label="Bot token"
+        description="From @BotFather"
+        className={paneItemClass}
+      >
         <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
           <InputGroupInput
             id="telegram-bot-token"
@@ -204,9 +211,10 @@ export function TelegramSettingsCardContent({
       </SettingsRow>
 
       {configured ? (
-        <div className={cn("divide-y divide-border", !isPaired && "bg-muted/20")}>
+        <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
           <SettingsRow
             label="Pairing code"
+            className={paneItemClass}
             description={
               pairingCode
                 ? isPaired
@@ -269,7 +277,7 @@ export function TelegramSettingsCardContent({
               >
                 {regeneratePending ? (
                   <>
-                    <Spinner className="mr-2" />
+                    <Spinner className="size-3" />
                     Generating…
                   </>
                 ) : (
@@ -284,7 +292,11 @@ export function TelegramSettingsCardContent({
       ) : null}
 
       {configured ? (
-        <SettingsRow label="Allowed users" description="Telegram user IDs that can use this bot">
+        <SettingsRow
+          label="Allowed users"
+          description="Telegram user IDs that can use this bot"
+          className={paneItemClass}
+        >
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="text-xs text-muted-foreground">{allowedUserSummary}</span>
             <Button
@@ -301,7 +313,11 @@ export function TelegramSettingsCardContent({
       ) : null}
 
       {configured ? (
-        <SettingsRow label="Reply as" description="Which agent answers on Telegram">
+        <SettingsRow
+          label="Reply as"
+          description="Which agent answers on Telegram"
+          className={paneItemClass}
+        >
           <Select
             value={profileId}
             disabled={savePending || profiles.length === 0}
@@ -331,7 +347,11 @@ export function TelegramSettingsCardContent({
       ) : null}
 
       {configured ? (
-        <SettingsRow label="Bridge worker" description={running ? "Running" : "Stopped"}>
+        <SettingsRow
+          label="Bridge worker"
+          description={running ? "Running" : "Stopped"}
+          className={paneItemClass}
+        >
           <WorkerActionBar
             workerName="telegram"
             running={running}
@@ -348,6 +368,7 @@ export function TelegramSettingsCardContent({
         canSave={canSave}
         submitLabel={submitLabel}
         onSave={onSave}
+        className={paneItemClass}
       />
     </div>
   );

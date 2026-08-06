@@ -6,10 +6,11 @@ import type {
   SendMessageInput,
   StreamEvent,
 } from "@nakama/core/contract";
+import { DEFAULT_CHAT_STREAM_TIMEOUT_MS } from "@nakama/core/chat-stream-timeout";
 import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 import { readBrowserOrigin } from "./browser";
 
-const DEFAULT_STREAM_IDLE_MS = 600_000;
+const DEFAULT_STREAM_IDLE_MS = DEFAULT_CHAT_STREAM_TIMEOUT_MS;
 
 export async function readStreamEvents(
   body: ReadableStream<Uint8Array>,
@@ -73,6 +74,9 @@ export async function readStreamEvents(
       }
 
       if (payload.type === "done") {
+        if (payload.contextUsage) {
+          handlers.onContextUsage?.(payload.contextUsage);
+        }
         return payload.reply;
       }
 

@@ -21,11 +21,10 @@ Data is stored at `/nakama/data` inside the container. The `-v nakama-data:/naka
 From the repository root:
 
 ```bash
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+./scripts/docker-build-run.sh
 ```
 
-The build script uses `docker buildx` and defaults to `linux/amd64`.
+The script uses `docker buildx` (default `linux/amd64`), then starts the container.
 
 ## Configuration
 
@@ -38,9 +37,8 @@ On first run, complete the setup wizard in the browser and add your LLM provider
 To remove the container, volume, and image and start fresh:
 
 ```bash
-./scripts/docker-reset.sh
-./scripts/docker-build.sh
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama nakama
+./scripts/docker-destroy.sh
+./scripts/docker-build-run.sh
 ```
 
 ## Next steps

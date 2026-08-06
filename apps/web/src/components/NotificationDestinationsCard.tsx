@@ -2,7 +2,6 @@ import { useState } from "react";
 import type { NotificationDestinationWithSecret } from "@nakama/core/contract";
 import { CheckIcon, CopyIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -18,6 +17,30 @@ import {
   formatTelegramDestinationLabel,
   parseTelegramTopicLink,
 } from "@/lib/notification-destinations";
+import { cn } from "@/lib/utils";
+
+function CopyButtonIcon({ copied }: { copied: boolean }) {
+  const iconTransition =
+    "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-150 ease-[cubic-bezier(0.2,0,0,1)]";
+
+  return (
+    <span className="relative size-3.5 shrink-0" aria-hidden>
+      <CopyIcon
+        className={cn(
+          iconTransition,
+          copied ? "scale-[0.25] opacity-0 blur-[4px]" : "scale-100 opacity-100 blur-0",
+        )}
+      />
+      <CheckIcon
+        className={cn(
+          iconTransition,
+          "text-emerald-600 dark:text-emerald-400",
+          copied ? "scale-100 opacity-100 blur-0" : "scale-[0.25] opacity-0 blur-[4px]",
+        )}
+      />
+    </span>
+  );
+}
 
 function LatestSecret({
   latestSecret,
@@ -70,24 +93,36 @@ function LatestSecret({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Latest webhook credentials ready</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground [text-wrap:pretty]">
             Copy the curl command, or expand details if you need the raw URL and API key.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => void copyCurlExample()}>
-            {copiedCurl ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-w-[6.75rem] justify-center"
+            onClick={() => void copyCurlExample()}
+          >
+            <CopyButtonIcon copied={copiedCurl} />
             {copiedCurl ? "Copied" : "Copy curl"}
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => void copyApiKey()}>
-            {copiedApiKey ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-w-[7.5rem] justify-center"
+            onClick={() => void copyApiKey()}
+          >
+            <CopyButtonIcon copied={copiedApiKey} />
             {copiedApiKey ? "Copied key" : "Copy API key"}
           </Button>
         </div>
       </div>
 
       <details className="mt-3 group">
-        <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
+        <summary className="cursor-pointer rounded-md px-1 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
           Show webhook details
         </summary>
         <div className="mt-3 space-y-3">
@@ -241,157 +276,156 @@ export function NotificationDestinationsCard() {
   }
 
   return (
-    <Card className="w-full shadow-none">
-      <CardContent className="space-y-4 py-4">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">Notification Destinations</p>
-          <p className="text-xs text-muted-foreground">
-            Create a Telegram destination, then use the webhook URL and API key from Nakama
-            to send simple notifications.
-          </p>
-        </div>
+    <div className="space-y-4 py-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground [text-wrap:balance]">
+          Notification Destinations
+        </p>
+      </div>
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-          <label className="flex flex-col gap-3">
-            <span className="text-xs text-muted-foreground">Name</span>
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <label className="flex flex-col gap-3">
-            <span className="text-xs text-muted-foreground">Telegram topic link</span>
-            <Input
-              value={topicLink}
-              onChange={(event) => setTopicLink(event.target.value)}
-              placeholder="https://t.me/c/3734526664/167"
-            />
-          </label>
-        </div>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted-foreground">Name</span>
+          <Input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted-foreground">Telegram topic link</span>
+          <Input
+            value={topicLink}
+            onChange={(event) => setTopicLink(event.target.value)}
+            placeholder="https://t.me/c/3734526664/167"
+          />
+        </label>
+      </div>
 
-        <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-          Open the Telegram topic, copy its link, and paste it here. Nakama will extract the
-          Chat ID and Topic ID for you automatically.
-        </div>
+      <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        Open the Telegram topic, copy its link, and paste it here. Nakama will extract the
+        Chat ID and Topic ID for you automatically.
+      </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={handleCreate} disabled={createMutation.isPending}>
-            {createMutation.isPending ? <Spinner className="size-4" /> : null}
-            Create destination
-          </Button>
-          <span className="text-xs text-muted-foreground">Channel: Telegram</span>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          className="min-w-[10.5rem] justify-center"
+          onClick={handleCreate}
+          disabled={createMutation.isPending}
+        >
+          {createMutation.isPending ? <Spinner className="size-4" /> : null}
+          Create destination
+        </Button>
+        <span className="text-xs text-muted-foreground">Channel: Telegram</span>
+      </div>
 
-        {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-        {error ? <p className="text-sm text-destructive">{formatError(error)}</p> : null}
+      {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+      {error ? <p className="text-sm text-destructive">{formatError(error)}</p> : null}
 
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-              <Spinner className="size-5" />
-            </div>
-          ) : destinations.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-              No notification destinations yet.
-            </div>
-          ) : (
-            destinations.map((destination) => (
-              <div
-                key={destination.id}
-                className="space-y-3 rounded-lg border border-border p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-foreground">{destination.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatTelegramDestinationLabel(destination.telegram)}
-                    </p>
-                    <code className="block break-all text-xs text-muted-foreground">
-                      {destination.webhookPath}
-                    </code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        editingId === destination.id
-                          ? stopEditing()
-                          : startEditing(destination)
-                      }
-                      disabled={updateMutation.isPending}
-                    >
-                      {editingId === destination.id ? "Cancel" : "Edit topic"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRotate(destination.id)}
-                      disabled={rotateMutation.isPending}
-                    >
-                      <RefreshCwIcon className="size-4" />
-                      Rotate key
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(destination.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2Icon className="size-4" />
-                      Delete
-                    </Button>
-                  </div>
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+            <Spinner className="size-5" />
+          </div>
+        ) : destinations.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No notification destinations yet.
+          </div>
+        ) : (
+          destinations.map((destination) => (
+            <div
+              key={destination.id}
+              className="space-y-3 rounded-3xl border border-border p-4"
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium text-foreground">{destination.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatTelegramDestinationLabel(destination.telegram)}
+                  </p>
+                  <code className="block break-all text-xs text-muted-foreground">
+                    {destination.webhookPath}
+                  </code>
                 </div>
-
-                {editingId === destination.id ? (
-                  <div className="rounded-lg border border-border bg-muted/20 p-3">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                      <label className="flex flex-1 flex-col gap-3">
-                        <span className="text-xs text-muted-foreground">
-                          Telegram topic ID
-                        </span>
-                        <Input
-                          value={editingTopicId}
-                          onChange={(event) => setEditingTopicId(event.target.value)}
-                          placeholder="Leave blank to remove topic"
-                        />
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleUpdateTopic(destination)}
-                          disabled={updateMutation.isPending}
-                        >
-                          {updateMutation.isPending ? <Spinner className="size-4" /> : null}
-                          Save
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={stopEditing}
-                          disabled={updateMutation.isPending}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                    {editingError ? (
-                      <p className="mt-2 text-sm text-destructive">{editingError}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {latestSecret?.destination.id === destination.id ? (
-                  <LatestSecret latestSecret={latestSecret} />
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() =>
+                      editingId === destination.id ? stopEditing() : startEditing(destination)
+                    }
+                    disabled={updateMutation.isPending}
+                  >
+                    {editingId === destination.id ? "Cancel" : "Edit topic"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() => handleRotate(destination.id)}
+                    disabled={rotateMutation.isPending}
+                  >
+                    <RefreshCwIcon className="size-3.5" aria-hidden />
+                    Rotate key
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() => handleDelete(destination.id)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2Icon className="size-3.5" aria-hidden />
+                    Delete
+                  </Button>
+                </div>
               </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
+
+              {editingId === destination.id ? (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <label className="flex flex-1 flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">Telegram topic ID</span>
+                      <Input
+                        value={editingTopicId}
+                        onChange={(event) => setEditingTopicId(event.target.value)}
+                        placeholder="Leave blank to remove topic"
+                      />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleUpdateTopic(destination)}
+                        disabled={updateMutation.isPending}
+                      >
+                        {updateMutation.isPending ? <Spinner className="size-3.5" /> : null}
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={stopEditing}
+                        disabled={updateMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                  {editingError ? (
+                    <p className="mt-2 text-sm text-destructive">{editingError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {latestSecret?.destination.id === destination.id ? (
+                <LatestSecret latestSecret={latestSecret} />
+              ) : null}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

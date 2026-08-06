@@ -55,6 +55,18 @@ const OPENCODE_PROVIDER_TYPES = new Set<ProviderName>([
   "ollama",
 ]);
 
+const PI_PROVIDER_TYPES = new Set<ProviderName>([
+  "anthropic",
+  "openai",
+  "openrouter",
+  "openai_compatible",
+  "opencode_go",
+  "deepseek",
+  "cerebras",
+  "fireworks",
+  "ollama",
+]);
+
 export function isProviderCompatibleWithHarness(
   providerType: ProviderName,
   harnessKind: StoredCodingAgentHarnessKind,
@@ -65,6 +77,10 @@ export function isProviderCompatibleWithHarness(
 
   if (harnessKind === "codex") {
     return CODEX_PROVIDER_TYPES.has(providerType);
+  }
+
+  if (harnessKind === "pi") {
+    return PI_PROVIDER_TYPES.has(providerType);
   }
 
   return OPENCODE_PROVIDER_TYPES.has(providerType);
@@ -132,6 +148,10 @@ function incompatibilityMessage(
 
   if (harnessKind === "codex") {
     return `Codex does not support the ${providerType} provider. Choose a compatible provider in Settings → Provider.`;
+  }
+
+  if (harnessKind === "pi") {
+    return `pi does not support the ${providerType} provider. Choose a compatible provider in Settings → Provider.`;
   }
 
   return `OpenCode does not support the ${providerType} provider. Choose a compatible provider in Settings → Provider.`;

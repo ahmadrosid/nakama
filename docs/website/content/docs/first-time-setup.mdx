@@ -23,6 +23,20 @@ Create the first platform admin. This account can manage organizations, profiles
 
 Fill in your name, email, and password, then click **Continue**.
 
+### Restore from backup instead
+
+If you are moving to a new machine or reinstalling, you can skip creating a new admin account and restore a previous Nakama export ZIP on this step.
+
+1. Click **Upload backup ZIP**
+2. Choose your `.zip` backup and review the preview
+3. Click **Restore ZIP** to replace the local data root
+4. Restart Nakama so it picks up the restored database
+5. Sign in with the account from your backup
+
+If provider setup was already complete in the backup, Nakama opens chat after sign-in. Otherwise the setup wizard continues from the provider step.
+
+See [Backup and restore](/backup-restore) for what is included in export ZIPs and when to use dashboard import after setup is complete.
+
 ## Step 2: Organization
 
 Every workspace lives inside an organization. Name yours and choose a slug for URLs and API context.
@@ -64,6 +78,7 @@ See [Overview](/overview) for the mental model and [Profiles](/profiles) for sou
 
 - [Providers](/providers) — supported LLM backends and API keys
 - [Profiles](/profiles) — define each bot's behavior
+- [Backup and restore](/backup-restore) — export and import your data root
 - [CLI](/cli) — chat from the terminal
 - [Multi-tenancy](/multi-tenancy) — orgs, members, and roles
 - [Telegram](/telegram) — connect your first channel

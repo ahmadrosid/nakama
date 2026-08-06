@@ -115,4 +115,77 @@ describe("artifact share routes", () => {
     expect(afterRevoke.status).toBe(404);
     void authService;
   });
+
+  test("public video share resolves octet-stream to video/mp4 for inline playback", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_video";
+    const now = new Date().toISOString();
+
+    await databaseAdapter.upsertProfile({
+      id: profileId,
+      orgId,
+      name: "Share Video",
+      systemPrompt: "test",
+      model: "openrouter/auto",
+      isSuper: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const artifactsDir = getProfileArtifactsDir(orgId, profileId);
+    await mkdir(artifactsDir, { recursive: true });
+    // Minimal bytes; MIME comes from filename when sidecar is missing/generic.
+    await writeFile(join(artifactsDir, "clip.mp4"), "fake-mp4-bytes");
+    await writeFile(
+      join(artifactsDir, "clip.mp4.nakama-meta.json"),
+      JSON.stringify({
+        mimeType: "application/octet-stream",
+        savedAt: now,
+        sizeBytes: 13,
+      }),
+    );
+
+    const publishResponse = await app.fetch(
+      new Request(`http://localhost:4310/v1/profiles/${profileId}/artifacts/shares`, {
+        method: "POST",
+        headers: session.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          },
+          orgId,
+        ),
+        body: JSON.stringify({ path: "clip.mp4" }),
+      }),
+    );
+
+    expect(publishResponse.status).toBe(201);
+    const published = (await publishResponse.json()) as { token: string };
+
+    const metaResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}?meta=1`,
+      ),
+    );
+    expect(metaResponse.status).toBe(200);
+    const meta = (await metaResponse.json()) as {
+      mimeType: string;
+      inlineAllowed: boolean;
+      filename: string;
+    };
+    expect(meta.filename).toBe("clip.mp4");
+    expect(meta.mimeType).toBe("video/mp4");
+    expect(meta.inlineAllowed).toBe(true);
+
+    const publicResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`,
+      ),
+    );
+    expect(publicResponse.status).toBe(200);
+    expect(publicResponse.headers.get("Content-Type")).toBe("video/mp4");
+    expect(publicResponse.headers.get("Content-Disposition")).toContain("inline");
+  });
 });

@@ -4,9 +4,15 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { DISCORD_DEVELOPER_PORTAL_URL, DISCORD_SETUP_GUIDE_URL } from "@/lib/integration-docs";
 import { cn } from "@/lib/utils";
 
-export function DiscordPairingGuide({ inviteUrl }: { inviteUrl: string | null }) {
+export function DiscordPairingGuide({
+  inviteUrl,
+  compact = false,
+}: {
+  inviteUrl: string | null;
+  compact?: boolean;
+}) {
   return (
-    <div className="space-y-3 px-4 py-3">
+    <div className={cn("space-y-3", !compact && "px-4 py-3")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-foreground">Link in Discord</p>
         {inviteUrl ? (
@@ -20,7 +26,7 @@ export function DiscordPairingGuide({ inviteUrl }: { inviteUrl: string | null })
           </a>
         ) : null}
       </div>
-      <div className="overflow-hidden border border-border">
+      <div className="overflow-hidden rounded-md border border-border">
         <PairingStepTile
           step={1}
           title="Invite the bot"
@@ -88,7 +94,7 @@ export function DiscordPairingGuide({ inviteUrl }: { inviteUrl: string | null })
         <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
           Using the bot in a server?
         </summary>
-        <div className="mt-3 overflow-hidden border border-border">
+        <div className="mt-3 overflow-hidden rounded-md border border-border">
           <PairingStepTile
             step={1}
             title="Finish DM pairing first"
@@ -125,11 +131,13 @@ export function SettingsRow({
   description,
   layout = "inline",
   children,
+  className,
 }: {
   label: string;
   description?: ReactNode;
   layout?: "inline" | "stacked";
   children: ReactNode;
+  className?: string;
 }) {
   return (
     <div
@@ -138,11 +146,14 @@ export function SettingsRow({
         layout === "stacked"
           ? "flex flex-col gap-3"
           : "flex flex-wrap items-center justify-between gap-3",
+        className,
       )}
     >
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+        {description ? (
+          <p className="text-xs text-muted-foreground [text-wrap:pretty]">{description}</p>
+        ) : null}
       </div>
       {layout === "stacked" ? <div className="w-full min-w-0">{children}</div> : children}
     </div>

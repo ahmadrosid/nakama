@@ -6,10 +6,12 @@ import {
   artifactCodeLanguage,
   isDocxFile,
   isHtmlArtifactMimeType,
+  isImageArtifactMimeType,
   isLegacyDocFile,
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
+  isVideoArtifactMimeType,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
@@ -33,6 +35,8 @@ export function PublicArtifactSharePage() {
 
   const mimeType = metadata ? resolveArtifactMimeType(metadata.mimeType, metadata.filename) : "";
   const isHtml = isHtmlArtifactMimeType(mimeType);
+  const isImage = isImageArtifactMimeType(mimeType);
+  const isVideo = isVideoArtifactMimeType(mimeType);
   const isWordDocument =
     metadata != null &&
     (isDocxFile(metadata.filename, mimeType) || isLegacyDocFile(metadata.filename, mimeType));
@@ -41,6 +45,8 @@ export function PublicArtifactSharePage() {
   const canPreview =
     metadata != null &&
     (isHtml ||
+      isImage ||
+      isVideo ||
       isWordDocument ||
       isTextArtifactMimeType(mimeType) ||
       isUnknownArtifactMimeType(mimeType));
@@ -107,7 +113,25 @@ export function PublicArtifactSharePage() {
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : artifact && canPreview ? (
-          isHtml ? (
+          isImage ? (
+            <ArtifactAttachmentPanelBody
+              kind="image"
+              loading={false}
+              error={null}
+              imagePreviewUrl={downloadUrl}
+              canPreview={canPreview}
+              artifact={artifact}
+            />
+          ) : isVideo ? (
+            <ArtifactAttachmentPanelBody
+              kind="video"
+              loading={false}
+              error={null}
+              videoPreviewUrl={downloadUrl}
+              canPreview={canPreview}
+              artifact={artifact}
+            />
+          ) : isHtml ? (
             <ArtifactAttachmentPanelBody
               kind="html"
               loading={false}

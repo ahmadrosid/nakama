@@ -58,6 +58,7 @@ export type {
   ResolvePromptContextInput,
 } from "./chat";
 export type { CompactionConfig } from "./history-compaction";
+export { usableContextTokens } from "./history-compaction";
 export type { DraftTaskPromptInput } from "./task-prompt";
 export { draftTaskPromptFromFields } from "./task-prompt";
 export { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
@@ -71,6 +72,15 @@ export {
   generateSessionTitleFromMessages,
   normalizeSessionTitle,
 } from "./session-title";
+export {
+  buildSkillPostTurnReviewPrompt,
+  generateSkillPostTurnReview,
+  parseSkillPostTurnReviewResponse,
+} from "./skill-post-turn-review";
+export type {
+  SkillCatalogEntry,
+  SkillPostTurnReviewOutcome,
+} from "./skill-post-turn-review";
 export {
   mergeOrgMemoryWithApprovedBullet,
   mergeOrgMemoryWithApprovedBulletFallback,

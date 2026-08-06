@@ -101,7 +101,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const subtitle =
     currentStep === 1
-      ? "Set up your admin account to secure the dashboard."
+      ? "Set up your admin account to secure the dashboard, or restore a backup ZIP from a previous install."
       : currentStep === 2
         ? "Every workspace lives inside an organization. Name yours to finish setup."
         : currentStep === 3

@@ -1,7 +1,42 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+export function IntegrationCardShell({
+  embedded,
+  bordered,
+  children,
+  className,
+  busyLabel,
+}: {
+  embedded?: boolean;
+  bordered?: boolean;
+  children: ReactNode;
+  className?: string;
+  busyLabel?: string;
+}) {
+  if (embedded && !bordered) {
+    return (
+      <div className={className} aria-busy={busyLabel ? true : undefined} aria-label={busyLabel}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <Card className={cn("w-full shadow-none", className)}>
+      <CardContent
+        className="overflow-hidden p-0"
+        aria-busy={busyLabel ? true : undefined}
+        aria-label={busyLabel}
+      >
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
 
 export const SETTINGS_CARD_LOADING_SKELETON = (
   <div className="h-16 animate-pulse rounded-lg bg-muted px-4" aria-hidden="true" />
@@ -37,16 +72,20 @@ export function SettingsRow({
   label,
   description,
   children,
+  className,
 }: {
   label: string;
   description?: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-3", className)}>
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+        {description ? (
+          <p className="text-xs text-muted-foreground [text-wrap:pretty]">{description}</p>
+        ) : null}
       </div>
       {children}
     </div>
@@ -59,18 +98,20 @@ export function IntegrationStatusHeader({
   statusBadge,
   configured,
   connected,
+  className,
 }: {
   title: string;
   subtitle: string;
   statusBadge: string;
   configured: boolean;
   connected: boolean;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-3", className)}>
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        <p className="text-xs text-muted-foreground [text-wrap:pretty]">{subtitle}</p>
       </div>
       <span
         className={cn(
@@ -96,6 +137,7 @@ export function IntegrationSettingsFooter({
   canSave,
   submitLabel,
   onSave,
+  className,
 }: {
   statusLine: string | null;
   formError: string | null;
@@ -104,9 +146,10 @@ export function IntegrationSettingsFooter({
   canSave: boolean;
   submitLabel: string;
   onSave: () => void;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-3", className)}>
       {statusLine ? (
         <p
           className={cn(
@@ -125,7 +168,7 @@ export function IntegrationSettingsFooter({
       <Button type="button" size="sm" disabled={savePending || !canSave} onClick={onSave}>
         {savePending ? (
           <>
-            <Spinner className="mr-2" />
+            <Spinner className="size-3" />
             Saving…
           </>
         ) : (

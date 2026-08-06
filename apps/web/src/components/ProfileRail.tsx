@@ -11,21 +11,26 @@ import {
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useAuth } from "@/context/use-auth";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { useTheme } from "@/context/use-theme";
 import {
   buildChatBasePath,
   isChatSessionPath,
   resolveActiveProfileIdFromLocation,
 } from "@/lib/chat-history";
 import { PAGE_PATHS, pathForPage } from "@/lib/navigation";
+import { ditherLogoSrc } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 export function ProfileRail() {
   const { data: profiles = [] } = useProfilesQuery();
   const { user } = useAuth();
+  const { resolvedTheme } = useTheme();
   const { profileId: liveChatProfileId, setProfileId: setLiveChatProfileId, switchChatProfile } =
     useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const logoSrc = ditherLogoSrc(resolvedTheme);
 
   const activeProfileId = resolveActiveProfileIdFromLocation({
     pathname: location.pathname,
@@ -72,7 +77,7 @@ export function ProfileRail() {
         className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity hover:opacity-80"
       >
         <img
-          src="/nakama.png"
+          src={logoSrc}
           alt=""
           className="size-8 rounded-lg object-contain"
         />
@@ -98,6 +103,7 @@ export function ProfileRail() {
               <ProfileAvatar
                 profile={profile}
                 size="sm"
+                active={active}
                 className={cn(
                   "size-7 rounded-md transition-all duration-150",
                   active

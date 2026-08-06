@@ -122,6 +122,17 @@ export function useUploadProfileAvatarMutation() {
   });
 }
 
+export function useDeleteProfileAvatarMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (profileId: string) => client.deleteProfileAvatar(profileId),
+    onSuccess: async (_data, profileId) => {
+      await invalidateProfileQueries(queryClient, profileId);
+    },
+  });
+}
+
 export function useAssignToolMutation() {
   const queryClient = useQueryClient();
 
@@ -267,6 +278,39 @@ export function useCreateSkillMutation() {
     mutationFn: (input: Parameters<typeof client.createSkill>[0]) => client.createSkill(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
+    },
+  });
+}
+
+export function usePatchSkillMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      skillId,
+      input,
+      profileId,
+    }: {
+      skillId: string;
+      input: Parameters<typeof client.patchSkill>[1];
+      profileId?: string;
+    }) => client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
+    onSuccess: async (data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.skills.detail(variables.skillId),
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        ...(variables.profileId
+          ? [
+              queryClient.invalidateQueries({
+                queryKey: queryKeys.profiles.detail(variables.profileId),
+              }),
+            ]
+          : []),
+      ]);
+      queryClient.setQueryData(queryKeys.skills.detail(data.skill.id), data.skill);
     },
   });
 }

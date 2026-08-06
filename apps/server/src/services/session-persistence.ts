@@ -46,6 +46,7 @@ export function wrapPersistedSession(
     },
     getHistory: () => session.getHistory(),
     getHistoryRevision: () => session.getHistoryRevision(),
+    getContextUsage: () => session.getContextUsage(),
     createAutomation: (prompt) => session.createAutomation(prompt),
   };
 }

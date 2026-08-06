@@ -11,10 +11,15 @@ export const profileModelSaveDelayMs = 400;
 
 export type ProfileSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
-export type ProfileDetailTab = "profile" | "prompt" | "knowledge" | "artifacts";
+export type ProfileDetailTab = "profile" | "prompt" | "knowledge" | "artifacts" | "proposals";
 
 export function resolveProfileDetailTab(value: string | null): ProfileDetailTab {
-  if (value === "prompt" || value === "knowledge" || value === "artifacts") {
+  if (
+    value === "prompt" ||
+    value === "knowledge" ||
+    value === "artifacts" ||
+    value === "proposals"
+  ) {
     return value;
   }
 

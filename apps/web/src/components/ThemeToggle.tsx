@@ -1,22 +1,12 @@
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { THEME_OPTIONS } from "@/components/theme-options";
 import { useTheme } from "@/context/use-theme";
-import { isTheme, type Theme } from "@/lib/theme";
-
-const THEME_OPTIONS: {
-  id: Theme;
-  label: string;
-  icon: typeof SunIcon;
-}[] = [
-  { id: "light", label: "Light", icon: SunIcon },
-  { id: "dark", label: "Dark", icon: MoonIcon },
-  { id: "system", label: "System", icon: MonitorIcon },
-];
+import { isTheme } from "@/lib/theme";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();

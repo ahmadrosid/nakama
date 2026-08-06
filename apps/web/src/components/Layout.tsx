@@ -142,14 +142,22 @@ export function Layout() {
           ) : null}
 
           <main
-            className={
+            className={cn(
+              "min-h-0 flex-1",
               page === "chat" ||
-              page === "tasks" ||
-              page === "automations" ||
-              location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
-                ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-                : "min-h-0 flex-1 overflow-y-auto p-6"
-            }
+                page === "tasks" ||
+                page === "automations" ||
+                location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
+                ? "flex flex-col overflow-hidden"
+                : "overflow-y-auto",
+              !location.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) &&
+                page !== "chat" &&
+                page !== "tasks" &&
+                page !== "automations" &&
+                !location.pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
+                ? "p-6"
+                : null,
+            )}
           >
             <Outlet />
           </main>

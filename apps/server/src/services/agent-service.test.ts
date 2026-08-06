@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ensureBundledSkillFiles } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -9,6 +10,7 @@ import {
 } from "@nakama/db";
 import type { StoredProfileRecord } from "@nakama/db";
 import { AgentService } from "./agent-service";
+import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
 
@@ -347,6 +349,61 @@ describe("AgentService coding delegation context", () => {
 
     expect(context).toContain("bash");
     expect(context).not.toContain("delegate_coding_task");
+  });
+});
+
+describe("AgentService skill_manage injection", () => {
+  let configDir = "";
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-skill-manage-inject-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+  });
+
+  afterEach(async () => {
+    delete process.env.NAKAMA_CONFIG_DIR;
+    if (configDir) {
+      await rm(configDir, { recursive: true, force: true });
+      configDir = "";
+    }
+  });
+
+  test("injects skill_manage for web/cli only when manage-skills is assigned", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const skills = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await skills.syncDiscoveredSkills();
+    const manage = (await skills.listSkills()).skills.find((skill) => skill.name === "manage-skills");
+    expect(manage).toBeDefined();
+    await db.assignSkillToProfile("profile_default", manage!.id);
+
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+
+    type ResolveTools = {
+      resolveProfileTools(
+        profile: StoredProfileRecord,
+        options?: {
+          includeAutomationTools?: boolean;
+          includeSkillManageTools?: boolean;
+        },
+      ): Promise<Array<{ name: string }>>;
+    };
+
+    const resolve = (service as unknown as ResolveTools).resolveProfileTools.bind(service);
+    const profile = createDefaultProfile();
+
+    const webTools = await resolve(profile, { includeSkillManageTools: true });
+    expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
+
+    const telegramTools = await resolve(profile, { includeSkillManageTools: false });
+    expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(false);
+
+    const automationTools = await resolve(profile, {
+      includeAutomationTools: false,
+    });
+    expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(false);
   });
 });
 

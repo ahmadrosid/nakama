@@ -32,7 +32,7 @@ describe("Anthropic provider streaming", () => {
           'event: content_block_start\r\ndata:{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\r\n\r\n',
           'event: content_block_delta\r\ndata:{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}\r\n\r\n',
           'event: content_block_delta\r\ndata:{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}\r\n\r\n',
-          'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn","usage":{"output_tokens":11}}}\r\n\r\n',
+          'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":11}}\r\n\r\n',
         ]),
         { status: 200, headers: { "Content-Type": "text/event-stream" } },
       );

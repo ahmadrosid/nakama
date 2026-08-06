@@ -23,6 +23,7 @@ async function upsertSkill(db: ReturnType<typeof createInMemoryDatabaseAdapter>,
     hasTool: false,
     disableModelInvocation: false,
     enabled: true,
+    createdBy: "bundled",
     createdAt: now,
     updatedAt: now,
   });

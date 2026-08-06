@@ -5,7 +5,7 @@ description: "Export and restore your Nakama data root with dashboard ZIP backup
 
 ## Export
 
-Platform admins can export local Nakama data from **Agent → System → Data → Export ZIP**.
+Platform admins can export local Nakama data from **Settings → Export ZIP**.
 
 The export is a `.zip` backup of the configured Nakama data root, which defaults to `~/.nakama` and follows `NAKAMA_CONFIG_DIR` when set.
 
@@ -27,6 +27,8 @@ Importing is a whole-install restore:
 
 Plan for downtime during restore. This replaces the active data root rather than merging individual records.
 
+On a fresh install, you can also restore during [first-time setup](/first-time-setup) before creating a new admin account.
+
 ## Docker volumes
 
 When Nakama runs in Docker, persist `/nakama/data` with a named volume or bind mount. Back up that volume (or use Export ZIP from the dashboard) before upgrades or migrations.
@@ -36,4 +38,5 @@ See [Docker](/docker) for volume setup.
 ## Next steps
 
 - [Quickstart](/quickstart) — install and first-run setup
+- [First-time setup](/first-time-setup) — restore a backup during the setup wizard
 - [Docker](/docker) — container deployment and volumes

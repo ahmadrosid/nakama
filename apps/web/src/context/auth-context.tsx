@@ -7,7 +7,7 @@ import {
 } from "react";
 import { client } from "@/lib/client";
 import { queryClient } from "@/lib/query-client";
-import type { SetupAuthRequest, UserOrgSummary, AuthUserResponse } from "@nakama/core/contract";
+import type { SetupAuthRequest, UpdateOrganizationRequest, UserOrgSummary, AuthUserResponse } from "@nakama/core/contract";
 import { AuthContext, type AuthContextValue } from "@/context/auth-context-shared";
 
 function refreshAuthenticatedQueries(): void {
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updateOrg = useCallback(
-    async (orgId: string, input: { name: string }) => {
+    async (orgId: string, input: UpdateOrganizationRequest) => {
       const org = orgs.find((entry) => entry.id === orgId);
       if (!org) {
         throw new Error("Organization not found.");

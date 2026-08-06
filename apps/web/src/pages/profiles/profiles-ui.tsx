@@ -1,8 +1,14 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { PlusIcon, UsersRoundIcon, CameraIcon } from "lucide-react";
+import { PlusIcon, UsersRoundIcon, CameraIcon, Trash2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
@@ -34,7 +40,7 @@ export function ProfileDetailTabButton({
       aria-controls={controls}
       data-active={active || undefined}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+        "relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm font-medium transition-colors sm:gap-2 sm:px-4",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
@@ -92,20 +98,77 @@ export function ProfileSaveIndicator({
   return <p className="mt-2 text-xs text-muted-foreground">{content}</p>;
 }
 
+function ProfileAvatarOverlay({
+  size,
+  uploading,
+}: {
+  size: "xs" | "sm" | "md" | "ml" | "lg";
+  uploading: boolean;
+}) {
+  const overlayIconClass = size === "lg" ? "size-5" : "size-4";
+
+  return (
+    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/50 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100">
+      {uploading ? (
+        <Spinner className={cn(overlayIconClass, "text-primary-foreground")} />
+      ) : (
+        <CameraIcon className={cn(overlayIconClass, "text-primary-foreground")} aria-hidden />
+      )}
+    </span>
+  );
+}
+
 export function EditableProfileAvatar({
   profile,
   disabled,
   uploading,
   onPick,
+  onRemove,
   size = "md",
 }: {
   profile: ProfileSummary;
   disabled: boolean;
   uploading: boolean;
   onPick: () => void;
+  onRemove?: () => void;
   size?: "xs" | "sm" | "md" | "ml" | "lg";
 }) {
-  const overlayIconClass = size === "lg" ? "size-5" : "size-4";
+  const triggerClassName =
+    "group relative shrink-0 rounded-full transition-transform duration-150 ease-out active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
+  if (profile.hasAvatar && onRemove) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label="Change or remove profile image"
+              className={triggerClassName}
+            />
+          }
+        >
+          <ProfileAvatar profile={profile} size={size} />
+          <ProfileAvatarOverlay size={size} uploading={uploading} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-40">
+          <DropdownMenuItem className="cursor-pointer" onClick={onPick}>
+            <CameraIcon className="size-4" aria-hidden />
+            Change image
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            className="cursor-pointer"
+            onClick={onRemove}
+          >
+            <Trash2Icon className="size-4" aria-hidden />
+            Remove image
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   return (
     <button
@@ -113,16 +176,10 @@ export function EditableProfileAvatar({
       disabled={disabled}
       onClick={onPick}
       aria-label="Change profile image"
-      className="group relative shrink-0 rounded-full disabled:cursor-not-allowed disabled:opacity-50"
+      className={triggerClassName}
     >
       <ProfileAvatar profile={profile} size={size} />
-      <span className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-        {uploading ? (
-          <Spinner className={cn(overlayIconClass, "text-primary-foreground")} />
-        ) : (
-          <CameraIcon className={cn(overlayIconClass, "text-primary-foreground")} aria-hidden />
-        )}
-      </span>
+      <ProfileAvatarOverlay size={size} uploading={uploading} />
     </button>
   );
 }
@@ -151,7 +208,7 @@ export function ProfileScopeButton({
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
       )}
     >
-      <ProfileAvatar profile={profile} size="sm" />
+      <ProfileAvatar profile={profile} size="sm" active={active} />
       <span className="min-w-0 space-y-0.5">
         <span className="block truncate text-sm font-medium leading-tight">{profile.name}</span>
         <span className="block truncate text-xs leading-snug text-muted-foreground">

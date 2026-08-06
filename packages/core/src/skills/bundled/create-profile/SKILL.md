@@ -14,7 +14,7 @@ Ask follow-ups only when purpose, audience, or permissions are materially unclea
 
 Post a reviewable draft before any tool call:
 
-- Proposed **name** and optional **id**
+- Proposed **name** (the server generates the profile id from the name)
 - Full proposed `SOUL.md` (who it is, values, help scope, boundaries)
 - Full proposed `STYLE.md` (voice, tone, formatting)
 - Full proposed `INSTRUCTIONS.md` (operating rules, tool posture, when to ask the user)
@@ -37,7 +37,7 @@ If the user edits the draft, revise the draft in chat and wait for confirmation 
 
 ## 4. Create only after OK
 
-After confirmation, call `create_profile` with `name`, optional `id`, and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`.
+After confirmation, call `create_profile` with `name` and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`. Do not pass `id` — the server assigns one from the name.
 
 Then summarize:
 

@@ -1,7 +1,7 @@
 import { DOCX_MEDIA_TYPE, LEGACY_DOC_MEDIA_TYPE } from "../artifact-mime";
+import { convertDocumentBytes } from "../anydoc-text";
 import { convertDocxToMarkdown } from "../docx-text";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
-import { extractPdfText } from "../pdf-text";
 
 const KB_ALLOWED_MEDIA_TYPES = new Set([
   "application/pdf",
@@ -60,7 +60,12 @@ export async function extractText(
   }
 
   if (normalized === "application/pdf") {
-    return extractPdfText(bytes);
+    const { text } = await convertDocumentBytes(bytes, {
+      format: "pdf",
+      filename,
+      mediaType: normalized,
+    });
+    return text;
   }
 
   // Word-named uploads are decided by their bytes: a real .docx, a legacy OLE .doc

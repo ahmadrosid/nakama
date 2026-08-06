@@ -18,6 +18,15 @@ export function WebPublicUrlSettingsRow() {
     }
   }, [data?.webPublicUrl]);
 
+  useEffect(() => {
+    if (!savedHint) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [savedHint]);
+
   const handleSave = () => {
     setFormError(null);
     setSavedHint(null);
@@ -32,7 +41,7 @@ export function WebPublicUrlSettingsRow() {
     saveMutation.mutate(trimmed, {
       onSuccess: (saved) => {
         setValue(saved.webPublicUrl);
-        setSavedHint(`Saved · ${saved.webPublicUrl}`);
+        setSavedHint("Saved");
       },
       onError: (error) => {
         setFormError(formatError(error));
@@ -64,23 +73,23 @@ export function WebPublicUrlSettingsRow() {
   return (
     <div className="space-y-2 px-4 py-3">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium text-foreground">Public web URL</p>
-        <p className="text-xs text-muted-foreground">
-          Base URL for OAuth callbacks. Saved to ~/.nakama/config.ini.
-        </p>
-        {data?.envOverride ? (
-          <p className="text-xs text-amber-800 dark:text-amber-200">
-            Server env overrides this with {data.envOverride}.
-          </p>
-        ) : null}
+        <label htmlFor="web-public-url" className="text-sm font-medium text-foreground">
+          Public web URL
+        </label>
         {savedHint ? (
           <p className="text-xs text-emerald-200" role="status">
             {savedHint}
           </p>
-        ) : null}
-        {formError ? (
+        ) : formError ? (
           <p className="text-xs text-destructive" role="alert">
             {formError}
+          </p>
+        ) : (
+          <p className="text-pretty text-xs text-muted-foreground">For OAuth callbacks</p>
+        )}
+        {data?.envOverride ? (
+          <p className="text-pretty text-xs text-amber-800 dark:text-amber-200">
+            Server env overrides this with {data.envOverride}.
           </p>
         ) : null}
       </div>
@@ -95,11 +104,24 @@ export function WebPublicUrlSettingsRow() {
             setFormError(null);
             saveMutation.reset();
           }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              handleSave();
+            }
+          }}
           placeholder="https://nakama.example.com"
           className="min-w-0 flex-1"
           disabled={saveMutation.isPending}
+          aria-invalid={formError ? true : undefined}
         />
-        <Button type="button" variant="outline" size="sm" onClick={handleUseCurrent}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleUseCurrent}
+          disabled={saveMutation.isPending}
+        >
           Use current
         </Button>
         <Button

@@ -315,6 +315,54 @@ describe("super bot create_profile", () => {
     });
   });
 
+  test("ignores a client-supplied id so profile ids are server-generated", async () => {
+    const capturedRequests: CreateProfileRequest[] = [];
+
+    const createProfile = getCreateProfileTool({
+      async createProfile(_orgId: string, request: CreateProfileRequest): Promise<ProfileResponse> {
+        capturedRequests.push(request);
+
+        return {
+          profile: {
+            id: "support-bot",
+            name: request.name,
+            model: request.model ?? null,
+            isSuper: request.isSuper ?? false,
+            toolCount: 0,
+            mcpServerCount: 0,
+            soulActive: true,
+            hasAvatar: false,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            systemPrompt: request.systemPrompt ?? "",
+            tools: [],
+            mcpServers: [],
+            skills: [],
+          },
+        };
+      },
+    });
+
+    expect(createProfile.parameters).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+    });
+    expect(
+      (createProfile.parameters as { properties?: Record<string, unknown> }).properties,
+    ).not.toHaveProperty("id");
+
+    await createProfile.run(
+      {
+        id: "8dp3bHu3biH538Z9twIj7",
+        name: "Newsletter Manager",
+      },
+      { sessionId: SESSION_ID, orgId: ORG_ID },
+    );
+
+    expect(capturedRequests[0]?.id).toBeUndefined();
+    expect(capturedRequests[0]?.name).toBe("Newsletter Manager");
+  });
+
   test("rejects unsupported soul file keys", async () => {
     let createProfileCalled = false;
     const createProfile = getCreateProfileTool({

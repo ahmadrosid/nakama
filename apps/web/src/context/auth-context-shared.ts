@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { AuthUserResponse, SetupAuthRequest, UserOrgSummary } from "@nakama/core/contract";
+import type { AuthUserResponse, SetupAuthRequest, UpdateOrganizationRequest, UserOrgSummary } from "@nakama/core/contract";
 
 export interface AuthContextValue {
   user: AuthUserResponse | null;
@@ -12,7 +12,7 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   switchOrg: (orgId: string) => Promise<void>;
   createOrg: (input: { name: string; slug: string }) => Promise<void>;
-  updateOrg: (orgId: string, input: { name: string }) => Promise<void>;
+  updateOrg: (orgId: string, input: UpdateOrganizationRequest) => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 

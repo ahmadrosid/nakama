@@ -19,7 +19,7 @@ import {
   type CodingAgentProviderRouting,
 } from "./coding-agent-provider-routing";
 
-const HARNESS_KINDS = ["codex", "claude_code", "opencode"] as const;
+const HARNESS_KINDS = ["codex", "claude_code", "opencode", "pi"] as const;
 
 export function toPassthroughSummary(
   routing: CodingAgentProviderRouting | null | undefined,

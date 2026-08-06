@@ -31,6 +31,9 @@ export class PathGuardError extends Error {
   }
 }
 
+const WORKSPACE_TRAVERSAL_MESSAGE =
+  "Path outside allowed directories. Use a relative path under the active profile workspace (e.g. SOUL.md or skills/<name>/SKILL.md). Bundled skills are listed in the system prompt and are not readable as arbitrary files.";
+
 export async function guardFilePath(
   rawPath: string,
   rawCwd: string | undefined | null,
@@ -71,7 +74,7 @@ export async function guardFilePath(
   }
 
   if (!isWithinDirs(realPath, allowedDirs)) {
-    throw new PathGuardError(`Path outside allowed directories`, "TRAVERSAL");
+    throw new PathGuardError(WORKSPACE_TRAVERSAL_MESSAGE, "TRAVERSAL");
   }
 
   return { resolved: realPath, allowed: true };

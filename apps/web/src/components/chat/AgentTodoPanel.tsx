@@ -55,6 +55,12 @@ export function AgentTodoPanel({
   }
 
   const completedCount = todos.filter((todo) => todo.status === "completed").length;
+  const runningTodo =
+    todos.find((todo) => todo.status === "in_progress") ??
+    todos.find((todo) => todo.status === "pending");
+  const headerLabel = expanded
+    ? `Tasks ${completedCount}/${todos.length}`
+    : (runningTodo?.content ?? `Tasks ${completedCount}/${todos.length}`);
 
   const list = (
     <ul className={cn("space-y-1.5", stack ? "pb-2.5 pl-7 pr-3" : "mt-1")}>
@@ -81,9 +87,18 @@ export function AgentTodoPanel({
         )}
         aria-hidden="true"
       />
-      <ListIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="tabular-nums transition-opacity duration-200">
-        Tasks {completedCount}/{todos.length}
+      {!expanded && runningTodo?.status === "in_progress" ? (
+        <TodoStatusIcon status="in_progress" />
+      ) : (
+        <ListIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      )}
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate transition-opacity duration-200",
+          expanded && "tabular-nums",
+        )}
+      >
+        {headerLabel}
       </span>
     </button>
   );

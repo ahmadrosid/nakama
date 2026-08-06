@@ -1,0 +1,67 @@
+/* Composer streaming rim — under the face, never over content. */
+
+@property --ai-from {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.composer-rim {
+  --ai-c1: #5b8ef0;
+  --ai-c2: #c5d4eb;
+  --ai-c3: #f0d66a;
+  --ai-c4: #f07a72;
+  --ai-c5: #e888e0;
+  --ai-c6: #f0c4e8aa;
+  --ai-tail: #a8c8f088;
+  --ai-from: 0deg;
+}
+
+.composer-rim-layer {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
+  border-radius: inherit;
+  opacity: 0;
+  background: conic-gradient(
+    from var(--ai-from),
+    var(--ai-c1) 0deg,
+    var(--ai-c2) 16deg,
+    var(--ai-c3) 30deg,
+    var(--ai-c4) 43deg,
+    var(--ai-c5) 59deg,
+    var(--ai-c6) 72deg,
+    transparent 84deg,
+    transparent 324deg,
+    var(--ai-tail) 349deg,
+    var(--ai-c1) 360deg
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.composer-rim[data-playing="true"] .composer-rim-layer {
+  opacity: 0.55;
+  animation: composer-rim-orbit 2.4s linear infinite;
+}
+
+@keyframes composer-rim-orbit {
+  from {
+    --ai-from: 0deg;
+  }
+  to {
+    --ai-from: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-rim[data-playing="true"] .composer-rim-layer {
+    animation: none;
+    opacity: 0;
+  }
+}

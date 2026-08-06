@@ -1,7 +1,10 @@
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
+import type { ProviderName } from "@nakama/core";
 import {
   resolveCodingAgentSpawnBundle,
   redactSpawnEnvForPrompt,
+  mapNakamaProviderToPi,
+  formatModelForHarness,
 } from "./coding-agent-spawn-env";
 
 export interface CodingAgentCommandHarness {
@@ -21,7 +24,13 @@ export interface CodingAgentCommandTemplate {
 
 export function buildHarnessNonInteractiveArgs(
   kind: StoredCodingAgentHarnessKind,
-  options: { prompt: string; cwd: string; baseArgs?: string[] },
+  options: {
+    prompt: string;
+    cwd: string;
+    baseArgs?: string[];
+    piProvider?: string | null;
+    piModel?: string | null;
+  },
 ): string[] {
   const baseArgs = [...(options.baseArgs ?? [])];
   const prompt = options.prompt.trim() || "Reply with OK and nothing else.";
@@ -53,6 +62,21 @@ export function buildHarnessNonInteractiveArgs(
     ];
   }
 
+  if (kind === "pi") {
+    const piArgs = [...baseArgs];
+
+    if (options.piProvider) {
+      piArgs.push("--provider", options.piProvider);
+    }
+
+    if (options.piModel) {
+      piArgs.push("--model", options.piModel);
+    }
+
+    piArgs.push("-p", prompt);
+    return piArgs;
+  }
+
   return [
     ...baseArgs,
     "run",
@@ -76,7 +100,7 @@ export async function buildCodingAgentCommandTemplate(
 ): Promise<CodingAgentCommandTemplate> {
   const escapedTask = shellEscape(taskPrompt.trim());
   const baseCommand = [harness.command, ...harness.args].join(" ");
-  const { spawn } = await resolveCodingAgentSpawnBundle({
+  const { spawn, routing } = await resolveCodingAgentSpawnBundle({
     userConfig: options.userConfig,
     profileModel: options.profileModel,
     harnessKind: harness.kind,
@@ -124,6 +148,34 @@ export async function buildCodingAgentCommandTemplate(
       ].join(" "),
       notes: [
         "Print mode is non-interactive and preferred for one-shot coding agent runs.",
+        "Run from the profile workspace cwd unless the user specifies another path inside it.",
+      ],
+    };
+  }
+
+  if (harness.kind === "pi") {
+    const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
+    const piModel = routing.model
+      ? formatModelForHarness("pi", routing.providerType ?? "openai", routing.model)
+      : null;
+    const commandParts = [baseCommand];
+
+    if (piProvider) {
+      commandParts.push("--provider", piProvider);
+    }
+
+    if (piModel) {
+      commandParts.push("--model", shellEscape(piModel));
+    }
+
+    commandParts.push("-p", escapedTask);
+
+    return {
+      ...shared,
+      command: commandParts.join(" "),
+      notes: [
+        "pi runs in non-interactive print mode with -p <prompt>.",
+        "Provider and model are passed via --provider and --model flags from Nakama provider routing.",
         "Run from the profile workspace cwd unless the user specifies another path inside it.",
       ],
     };
@@ -184,13 +236,17 @@ export function formatCodingAgentCommandContext(
 
 function getBackendSkillName(
   backend: StoredCodingAgentHarnessKind,
-): "coding-backend-codex" | "coding-backend-claude-code" | "coding-backend-opencode" {
+): "coding-backend-codex" | "coding-backend-claude-code" | "coding-backend-opencode" | "coding-backend-pi" {
   if (backend === "codex") {
     return "coding-backend-codex";
   }
 
   if (backend === "claude_code") {
     return "coding-backend-claude-code";
+  }
+
+  if (backend === "pi") {
+    return "coding-backend-pi";
   }
 
   return "coding-backend-opencode";

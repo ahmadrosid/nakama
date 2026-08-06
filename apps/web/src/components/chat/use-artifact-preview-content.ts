@@ -3,6 +3,7 @@ import {
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
   isTextArtifactMimeType,
+  isVideoArtifactMimeType,
   looksLikeUtf8Text,
   resolveArtifactMimeType,
   type ChatArtifactRef,
@@ -31,6 +32,7 @@ export function useArtifactPreviewContent({
   canPreview,
   isHtml,
   isImage,
+  isVideo,
   isWordDocument,
   profileId,
   artifact,
@@ -39,6 +41,7 @@ export function useArtifactPreviewContent({
   canPreview: boolean;
   isHtml: boolean;
   isImage: boolean;
+  isVideo: boolean;
   isWordDocument: boolean;
   profileId: string;
   artifact: ChatArtifactRef;
@@ -46,16 +49,17 @@ export function useArtifactPreviewContent({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
-  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
-  const imagePreviewUrl = useBlobObjectUrl(imageBlob);
+  const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
+  const mediaPreviewUrl = useBlobObjectUrl(mediaBlob);
+  const isBinaryMedia = isImage || isVideo;
 
   useEffect(() => {
     if (!open || !canPreview) {
       return;
     }
 
-    if (isImage) {
-      if (imageBlob !== null) {
+    if (isBinaryMedia) {
+      if (mediaBlob !== null) {
         return;
       }
     } else if (content !== null) {
@@ -79,6 +83,7 @@ export function useArtifactPreviewContent({
         const contentType = resolveArtifactMimeType(result.contentType, artifact.filename);
         const servedAsHtml = isHtmlArtifactMimeType(contentType);
         const servedAsImage = isImageArtifactMimeType(contentType);
+        const servedAsVideo = isVideoArtifactMimeType(contentType);
 
         if (isImage) {
           if (!servedAsImage) {
@@ -86,7 +91,17 @@ export function useArtifactPreviewContent({
             return;
           }
 
-          setImageBlob(new Blob([result.data], { type: contentType }));
+          setMediaBlob(new Blob([result.data], { type: contentType }));
+          return;
+        }
+
+        if (isVideo) {
+          if (!servedAsVideo) {
+            setError("Preview is not available for this file type. Download instead.");
+            return;
+          }
+
+          setMediaBlob(new Blob([result.data], { type: contentType }));
           return;
         }
 
@@ -124,9 +139,11 @@ export function useArtifactPreviewContent({
     open,
     canPreview,
     content,
-    imageBlob,
+    mediaBlob,
+    isBinaryMedia,
     isHtml,
     isImage,
+    isVideo,
     isWordDocument,
     profileId,
     artifact.path,
@@ -137,7 +154,8 @@ export function useArtifactPreviewContent({
     loading,
     error,
     content,
-    imagePreviewUrl,
+    imagePreviewUrl: isImage ? mediaPreviewUrl : null,
+    videoPreviewUrl: isVideo ? mediaPreviewUrl : null,
     setContent,
   };
 }

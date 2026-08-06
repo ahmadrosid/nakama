@@ -269,6 +269,7 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
       messageMeta: result.messageMeta,
       todos,
       questionnaire,
+      contextUsage: result.contextUsage,
     });
   });
 
@@ -350,16 +351,28 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     }
 
     if (wantsStream) {
-      return streamMessage(sessionId, session, input, () => {
+      return streamMessage(sessionId, session, input, (terminal) => {
         agent.scheduleSessionTitleGeneration(sessionId);
+        if (terminal.type === "done") {
+          agent.schedulePostTurnSkillReview(sessionId);
+        }
       });
     }
 
     try {
       const reply = await session.send(input);
-      sessionTurnRegistry.endTurn(sessionId, { type: "done", reply });
+      const contextUsage = session.getContextUsage() ?? undefined;
+      sessionTurnRegistry.endTurn(sessionId, {
+        type: "done",
+        reply,
+        ...(contextUsage ? { contextUsage } : {}),
+      });
       agent.scheduleSessionTitleGeneration(sessionId);
-      return json<SendMessageResponse>({ reply });
+      agent.schedulePostTurnSkillReview(sessionId);
+      return json<SendMessageResponse>({
+        reply,
+        ...(contextUsage ? { contextUsage } : {}),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sessionTurnRegistry.endTurn(sessionId, { type: "error", error: message });

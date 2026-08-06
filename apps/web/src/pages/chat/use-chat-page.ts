@@ -4,6 +4,7 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ProfileSummary,
+  ThinkingEffort,
 } from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
 import { nanoid } from "nanoid";
@@ -15,6 +16,11 @@ import { useAppContext } from "@/context/use-app-context";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import { useBranchSessionMutation, useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
+import {
+  buildThinkingSettingsPayload,
+  useSaveThinkingSettings,
+  useThinkingSettings,
+} from "@/hooks/use-thinking-settings";
 import {
   filePartsToDisplayDocuments,
   filePartsToDocumentAttachments,
@@ -51,6 +57,14 @@ import {
 } from "@/lib/chat-stream-resume";
 import { client, formatError } from "@/lib/client";
 import {
+  buildAutoEnableThinkingPayload,
+  DEFAULT_THINKING_EFFORT,
+  shouldAutoEnableThinking,
+  shouldBlockThinkingEffortChange,
+  shouldShowThinkingBlocks,
+  shouldShowThinkingEffort,
+} from "@/lib/thinking-settings";
+import {
   decodeModelSelection,
   effectiveProfileModelSelection,
   groupModelsByProvider,
@@ -59,6 +73,7 @@ import {
 } from "@/lib/models";
 import { SETUP_PATH } from "@/lib/navigation";
 import { findRetryCheckpoint, findRetryPrompt } from "@/pages/chat/chat-page.shared";
+import type { ChatContextUsage } from "@nakama/core/contract";
 
 interface SendMessageOptions {
   sessionOverride?: RemoteChatSession;
@@ -94,7 +109,10 @@ export function useChatPage() {
   const [messages, setMessages] = useState<ChatListItem[]>([]);
   const [agentTodos, setAgentTodos] = useState<AgentTodo[]>([]);
   const [agentQuestionnaire, setAgentQuestionnaire] = useState<AgentQuestionnaire | null>(null);
+  const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lastSuccessfulTurnAt, setLastSuccessfulTurnAt] = useState<number | null>(null);
+  const [turnStartedAt, setTurnStartedAt] = useState<string | null>(null);
   const [branchingMessageId, setBranchingMessageId] = useState<string | null>(null);
   const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +162,9 @@ export function useChatPage() {
   const showOfflineHint = health != null && !health.providerConfigured;
   const branchSessionMutation = useBranchSessionMutation();
   const updateProfileMutation = useUpdateProfileMutation();
+  const { data: thinkingSettings, isLoading: thinkingSettingsLoading } = useThinkingSettings();
+  const saveThinkingSettingsMutation = useSaveThinkingSettings();
+  const thinkingAutoEnableRef = useRef(false);
   const activeProfileQuery = useProfileQuery(profileId || null);
 
   const activeProfile = useMemo(
@@ -195,8 +216,15 @@ export function useChatPage() {
     [currentModelSelection, providerModelGroups],
   );
 
-  const showThinking = activeModelSupportsThinking !== false;
   const readOnlySession = isReadOnlySessionChannel(sessionChannel);
+  const showThinking = shouldShowThinkingBlocks(activeModelSupportsThinking);
+  const thinkingEffortVisible = shouldShowThinkingEffort(activeModelSupportsThinking);
+  const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
+  const thinkingEffortDisabled =
+    busy ||
+    thinkingSettingsLoading ||
+    saveThinkingSettingsMutation.isPending ||
+    readOnlySession;
 
   const handleModelChange = useCallback(
     (selection: string) => {
@@ -247,6 +275,8 @@ export function useChatPage() {
 
   const enterDraftChat = useCallback(
     (nextProfileId: string) => {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
       localStorage.removeItem(sessionStorageKey(nextProfileId));
       skipNextProfileSessionRef.current = true;
       loadedRouteRef.current = null;
@@ -259,6 +289,7 @@ export function useChatPage() {
       setError(null);
       setAgentTodos([]);
       setAgentQuestionnaire(null);
+      setContextUsage(null);
       // Session routes remount ChatPage on /chat — pass profile in the query so it survives.
       // The ?new=1 handler then replaces the URL with bare /chat.
       if (location.pathname !== buildChatBasePath()) {
@@ -267,6 +298,93 @@ export function useChatPage() {
     },
     [location.pathname, navigate],
   );
+
+  const handleThinkingEffortChange = useCallback(
+    (effort: ThinkingEffort) => {
+      if (!profileId || effort === thinkingEffort) {
+        return;
+      }
+
+      if (
+        shouldBlockThinkingEffortChange(busy) ||
+        saveThinkingSettingsMutation.isPending
+      ) {
+        if (busy) {
+          setError("Wait for the current response to finish.");
+        }
+        return;
+      }
+
+      void saveThinkingSettingsMutation
+        .mutateAsync(buildThinkingSettingsPayload(effort))
+        .catch((err) => {
+          setError(formatError(err));
+        });
+    },
+    [profileId, thinkingEffort, busy, saveThinkingSettingsMutation],
+  );
+
+  useEffect(() => {
+    if (
+      !shouldAutoEnableThinking(
+        thinkingSettings,
+        activeModelSupportsThinking,
+        busy,
+        thinkingAutoEnableRef.current,
+        {
+          hasProfileId: Boolean(profileId),
+          hasRouteSession: Boolean(routeSession),
+          hasSession: Boolean(session),
+          hasMessages: messages.length > 0,
+        },
+      )
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    thinkingAutoEnableRef.current = true;
+    const startedProfileId = profileId;
+
+    void saveThinkingSettingsMutation
+      .mutateAsync(buildAutoEnableThinkingPayload(thinkingSettings!))
+      .then(() => {
+        if (cancelled) {
+          return;
+        }
+        if (profileIdRef.current !== startedProfileId) {
+          return;
+        }
+        if (busyRef.current || Boolean(routeSession)) {
+          return;
+        }
+        if (activeModelSupportsThinking !== true) {
+          return;
+        }
+        enterDraftChat(startedProfileId);
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        thinkingAutoEnableRef.current = false;
+        setError(formatError(err));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    thinkingSettings,
+    activeModelSupportsThinking,
+    busy,
+    profileId,
+    routeSession,
+    session,
+    messages.length,
+    saveThinkingSettingsMutation,
+    enterDraftChat,
+  ]);
 
   const resumeSession = useCallback(
     async (nextProfileId: string, sessionId: string) => {
@@ -281,6 +399,7 @@ export function useChatPage() {
           messageMeta,
           todos,
           questionnaire,
+          contextUsage: nextContextUsage,
         } = await client.getSessionMessages(sessionId);
         const nextSession = client.createChatSession(sessionId, channel);
         let listItems = chatMessagesToListItems(storedMessages, messageMeta);
@@ -290,12 +409,14 @@ export function useChatPage() {
         setMessages(listItems);
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
+        setContextUsage(nextContextUsage ?? null);
         syncChatUrl(nextProfileId, sessionId);
 
         if (channel === "web") {
           const status = await client.getSessionStatus(sessionId);
 
           if (status.active) {
+            setTurnStartedAt(status.startedAt ?? new Date().toISOString());
             listItems = seedStreamingStateForActiveTurn(listItems);
             setMessages(listItems);
 
@@ -308,6 +429,7 @@ export function useChatPage() {
               handlers: buildStreamHandlers(setMessages, {
                 onTodosUpdated: setAgentTodos,
                 onQuestionnaireUpdated: setAgentQuestionnaire,
+                onContextUsage: setContextUsage,
               }),
               signal: abortController.signal,
             });
@@ -316,6 +438,11 @@ export function useChatPage() {
             setMessages(chatMessagesToListItems(refreshed.messages, refreshed.messageMeta));
             setAgentTodos(refreshed.todos);
             setAgentQuestionnaire(refreshed.questionnaire);
+            setContextUsage(refreshed.contextUsage ?? null);
+
+            if (reconnected) {
+              setLastSuccessfulTurnAt(Date.now());
+            }
 
             if (!reconnected && !status.active) {
               setError(null);
@@ -332,6 +459,7 @@ export function useChatPage() {
       } finally {
         streamAbortRef.current = null;
         setBusy(false);
+        setTurnStartedAt(null);
       }
     },
     [profileId, syncChatUrl],
@@ -413,6 +541,7 @@ export function useChatPage() {
     setError(null);
     setAgentTodos([]);
     setAgentQuestionnaire(null);
+    setContextUsage(null);
 
     if (requestedProfile && requestedProfile !== profileIdRef.current) {
       setProfileId(requestedProfile);
@@ -478,6 +607,7 @@ export function useChatPage() {
     ) => {
       isSendingRef.current = true;
       setBusy(true);
+      setTurnStartedAt(new Date().toISOString());
       setError(null);
 
       const images = filePartsToImageAttachments(files);
@@ -555,6 +685,7 @@ export function useChatPage() {
           buildStreamHandlers(setMessages, {
             onTodosUpdated: setAgentTodos,
             onQuestionnaireUpdated: setAgentQuestionnaire,
+            onContextUsage: setContextUsage,
           }),
           { signal: abortController.signal },
         );
@@ -564,10 +695,13 @@ export function useChatPage() {
           messageMeta,
           todos,
           questionnaire,
+          contextUsage: nextContextUsage,
         } = await client.getSessionMessages(activeSession.id);
         setMessages(chatMessagesToListItems(storedMessages, messageMeta));
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
+        setContextUsage(nextContextUsage ?? null);
+        setLastSuccessfulTurnAt(Date.now());
       } catch (err) {
         if (isAbortError(err)) {
           setMessages((current) => finalizeStreamingMessages(current));
@@ -604,6 +738,7 @@ export function useChatPage() {
         streamAbortRef.current = null;
         setCanStop(false);
         setBusy(false);
+        setTurnStartedAt(null);
 
         const next = shouldDrainQueue ? messageQueueRef.current.shift() : null;
         if (next) {
@@ -740,6 +875,8 @@ export function useChatPage() {
     availableSkills,
     chatStatus,
     busy,
+    lastSuccessfulTurnAt,
+    turnStartedAt,
     canStop,
     error,
     composerDraft,
@@ -752,12 +889,17 @@ export function useChatPage() {
     currentModelSelection,
     activeModelSupportsVision,
     showThinking,
+    thinkingEffortVisible,
+    thinkingEffort,
+    thinkingEffortDisabled,
     readOnlySession,
     isEmptyState,
     composerDisabled,
     sessionChannel,
+    contextUsage: isEmptyState ? null : contextUsage,
     handleProfileSwitch,
     handleModelChange,
+    handleThinkingEffortChange,
     renderModelLabel,
     handleBranchMessage,
     handleTryAgainMessage,

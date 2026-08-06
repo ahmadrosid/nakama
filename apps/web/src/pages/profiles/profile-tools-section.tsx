@@ -38,20 +38,20 @@ export function ProfileToolsSection({
     <div className="pt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="type-section-title">Tools</h3>
-          <p className="type-body mt-1 text-xs">
-            {detail.tools.length === 0
-              ? "No tools assigned to this profile."
-              : `${detail.tools.length} assigned`}
-          </p>
+          <h3 className="type-section-title text-balance">Tools</h3>
+          {detail.tools.length > 0 ? (
+            <p className="type-body mt-1 text-xs tabular-nums">
+              {detail.tools.length} assigned
+            </p>
+          ) : null}
         </div>
         <ToolAssignDialog tools={availableTools} disabled={busy} onAssign={onAssign} />
       </div>
 
       {detail.tools.length === 0 ? (
-        <p className="type-body text-xs">No tools assigned.</p>
+        <p className="type-body text-xs text-pretty">No tools assigned.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
           {detail.tools.map((tool) => {
             const name = (
               <p className="truncate text-sm font-medium leading-tight text-foreground">
@@ -68,14 +68,16 @@ export function ProfileToolsSection({
             return (
               <li
                 key={tool.id}
-                className="group flex items-center justify-between gap-2 px-3 py-2 first:rounded-t-md last:rounded-b-md hover:bg-muted/40"
+                className="flex items-center justify-between gap-2 px-3 py-2 transition-colors duration-150 ease-out hover:bg-muted/40"
               >
                 {canOpenPlayground ? (
                   <Link
                     to={toolPlaygroundPath(tool.id, { fromProfileId: detail.id })}
                     aria-label={`Open playground for ${tool.name}`}
                     className={cn(
-                      "min-w-0 flex-1 text-left",
+                      "min-w-0 flex-1 rounded-sm text-left outline-none transition-[text-decoration-color] duration-150 ease-out",
+                      "underline decoration-transparent underline-offset-2 hover:decoration-foreground/40",
+                      "focus-visible:ring-2 focus-visible:ring-ring/50",
                       busy && "pointer-events-none opacity-50",
                     )}
                   >
@@ -100,7 +102,7 @@ export function ProfileToolsSection({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="text-muted-foreground/60 hover:text-destructive"
+                    className="relative text-muted-foreground/60 transition-colors duration-150 ease-out hover:text-destructive after:absolute after:-inset-x-1.5 after:-inset-y-1"
                     disabled={busy}
                     aria-label={`Delete ${tool.name}`}
                     onClick={() => onRemove({ kind: "tool", id: tool.id, name: tool.name })}

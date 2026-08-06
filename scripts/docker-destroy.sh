@@ -10,4 +10,4 @@ done < <(docker ps -aq --filter publish=4310 2>/dev/null || true)
 docker volume rm nakama-data nakama-config 2>/dev/null || true
 docker image rm nakama 2>/dev/null || true
 
-echo "Reset complete."
+echo "Destroy complete."

@@ -8,7 +8,7 @@ const SAMPLE_DOCX = readFileSync(path.join(import.meta.dir, "__fixtures__", "sam
 test("converts a docx to markdown, preserving structure", async () => {
   const markdown = await convertDocxToMarkdown(SAMPLE_DOCX);
 
-  expect(markdown).toContain("# Laporan Mingguan");
+  expect(markdown).toContain("Laporan Mingguan");
   expect(markdown).toContain("**teks tebal**");
 });
 

@@ -1,6 +1,7 @@
 import type {
   AgentChannel,
   AutomationDefinition,
+  ChatContextUsage,
   ChatMessage,
   CompactionResponse,
   MessageContentPart,
@@ -32,9 +33,14 @@ import {
   partitionTools,
   toLlmToolDefinitions,
 } from "@nakama/core";
-import { buildChatSystemPrompt } from "./chat-prompt";
+import {
+  buildChatSystemPrompt,
+  UNTRUSTED_DOCUMENT_GUIDANCE,
+} from "./chat-prompt";
 import {
   compactHistory,
+  estimateHistoryTokens,
+  usableContextTokens,
   type CompactionConfig,
 } from "./history-compaction";
 import { executeToolCall, canRunToolCallsInParallel, serializeToolResult } from "./tool-loop";
@@ -72,6 +78,7 @@ export interface AgentChatSession {
   compact(options?: { force?: boolean }): Promise<CompactionResponse>;
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
+  getContextUsage(): ChatContextUsage | null;
   createAutomation(prompt: string): Promise<AutomationDefinition>;
 }
 
@@ -121,15 +128,64 @@ export function createAgentChatSession(
     soul: options.soul,
     userTimezone: options.userTimezone,
     channel,
+    hasDocumentAttachments: messagesIncludeUserDocuments(
+      options.initialHistory ?? [],
+    ),
   });
   const toolContext = options.toolContext ?? {};
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
   let historyRevision = 0;
+  let lastContextUsage: ChatContextUsage | null = null;
 
   function bumpHistoryRevision(): void {
     historyRevision += 1;
+  }
+
+  function llmToolsForEstimate() {
+    const { localTools } = partitionTools(tools);
+    return enableToolLoop && localTools.length > 0
+      ? toLlmToolDefinitions(localTools)
+      : undefined;
+  }
+
+  function buildContextUsage(
+    usedTokens: number,
+    source: ChatContextUsage["source"],
+  ): ChatContextUsage | null {
+    if (!options.compaction) {
+      return null;
+    }
+
+    return {
+      usedTokens,
+      usableContextTokens: usableContextTokens(options.compaction),
+      contextWindow: options.compaction.contextWindow,
+      source,
+    };
+  }
+
+  function rememberContextUsage(
+    usedTokens: number,
+    source: ChatContextUsage["source"],
+  ): void {
+    lastContextUsage = buildContextUsage(usedTokens, source);
+  }
+
+  function estimateCurrentContextUsage(): ChatContextUsage | null {
+    if (!options.compaction) {
+      return null;
+    }
+
+    const dateLine = `Today is ${formatCurrentDate()}.`;
+    const usedTokens = estimateHistoryTokens(
+      history,
+      `${systemPrompt}\n\n${dateLine}`,
+      llmToolsForEstimate(),
+    );
+
+    return buildContextUsage(usedTokens, "estimate");
   }
 
   async function runCompaction(force: boolean): Promise<CompactionResponse> {
@@ -168,6 +224,7 @@ export function createAgentChatSession(
         enableToolLoop,
         toolContext,
         runCompaction,
+        onContextUsage: rememberContextUsage,
         resolvePromptContext: options.resolvePromptContext,
         preprocessUserContent: options.preprocessUserContent,
         rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
@@ -186,6 +243,7 @@ export function createAgentChatSession(
           handlers,
           toolContext,
           runCompaction,
+          onContextUsage: rememberContextUsage,
           resolvePromptContext: options.resolvePromptContext,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
@@ -194,6 +252,7 @@ export function createAgentChatSession(
     },
     clear() {
       history.length = 0;
+      lastContextUsage = null;
       bumpHistoryRevision();
     },
     compact(options) {
@@ -204,6 +263,9 @@ export function createAgentChatSession(
     },
     getHistoryRevision() {
       return historyRevision;
+    },
+    getContextUsage() {
+      return lastContextUsage ?? estimateCurrentContextUsage();
     },
     createAutomation(prompt) {
       return harness.createAutomationFromPrompt({ prompt, channel }, { tools });
@@ -227,6 +289,10 @@ async function sendMessage(
     handlers?: StreamHandlers;
     toolContext?: ToolContext;
     runCompaction?: (force: boolean) => Promise<CompactionResponse>;
+    onContextUsage?: (
+      usedTokens: number,
+      source: ChatContextUsage["source"],
+    ) => void;
     resolvePromptContext?: (
       context?: ResolvePromptContextInput,
     ) => string | Promise<string>;
@@ -293,9 +359,18 @@ async function sendMessage(
   const promptContext = options.resolvePromptContext
     ? await options.resolvePromptContext({ userMessage })
     : "";
-  const effectiveSystemPrompt = promptContext.trim()
+  let effectiveSystemPrompt = promptContext.trim()
     ? `${systemPrompt}\n\n${promptContext.trim()}`
     : systemPrompt;
+  const hasDocumentAttachments =
+    messageContentHasDocuments(userContent) ||
+    messagesIncludeUserDocuments(history);
+  if (
+    hasDocumentAttachments &&
+    !effectiveSystemPrompt.includes("untrusted document data")
+  ) {
+    effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
+  }
   const effectiveToolContext =
     input.clientOrigin?.trim() && options.toolContext
       ? { ...options.toolContext, clientOrigin: input.clientOrigin.trim() }
@@ -316,6 +391,7 @@ async function sendMessage(
       options.handlers,
       effectiveToolContext,
       options.rehydrateMessagesForProvider,
+      options.onContextUsage,
     );
 
     return reply;
@@ -361,6 +437,10 @@ async function runConversation(
   rehydrateMessagesForProvider?: (
     messages: readonly ChatMessage[],
   ) => Promise<ChatMessage[]>,
+  onContextUsage?: (
+    usedTokens: number,
+    source: ChatContextUsage["source"],
+  ) => void,
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     const result = await generateReply(
@@ -372,6 +452,18 @@ async function runConversation(
       mode,
       handlers,
       rehydrateMessagesForProvider,
+    );
+
+    const usedTokens =
+      result.usage?.inputTokens ??
+      estimateHistoryTokens(
+        history,
+        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        llmTools,
+      );
+    onContextUsage?.(
+      usedTokens,
+      result.usage && !result.usage.estimated ? "provider" : "estimate",
     );
 
     history.push(result.assistantMessage);

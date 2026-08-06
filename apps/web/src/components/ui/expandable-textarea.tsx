@@ -81,7 +81,7 @@ function ExpandableTextarea({
             variant="ghost"
             size="sm"
             disabled={disabled}
-            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+            className="relative h-7 gap-1.5 py-0 pr-2 pl-1.5 text-xs text-muted-foreground after:absolute after:-inset-x-2 after:-inset-y-1"
             aria-controls={htmlFor}
             aria-expanded={open}
             onClick={() => setOpen(true)}
@@ -97,14 +97,14 @@ function ExpandableTextarea({
           aria-label={`Edit ${label.toLowerCase()}`}
           onClick={() => setOpen(true)}
           className={cn(
-            "w-full rounded-lg border border-input px-2.5 py-2 text-left text-xs leading-relaxed transition-colors outline-none",
+            "w-full rounded-lg border border-input px-2.5 py-2 text-left text-xs leading-relaxed outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-out",
             "hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:ring-inset",
             "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30",
             trimmed ? "font-mono text-foreground" : "text-muted-foreground",
             previewClassName,
           )}
         >
-          <span className="line-clamp-2 whitespace-pre-wrap break-words">{preview}</span>
+          <span className="line-clamp-2 whitespace-pre-wrap break-words text-pretty">{preview}</span>
         </button>
       </div>
 

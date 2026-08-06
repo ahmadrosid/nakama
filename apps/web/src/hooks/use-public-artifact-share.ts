@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   isHtmlArtifactMimeType,
+  isImageArtifactMimeType,
+  isVideoArtifactMimeType,
   looksLikeUtf8Text,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
@@ -31,6 +33,13 @@ async function loadPublicArtifactShare(token: string): Promise<PublicArtifactSha
   const metadata = (await metaResponse.json()) as PublicShareMetadata;
   const resolvedMime = resolveArtifactMimeType(metadata.mimeType, metadata.filename);
   const previewAsHtml = isHtmlArtifactMimeType(resolvedMime);
+  // Binary media uses the public share URL as <img>/<video> src — no need to buffer bytes here.
+  const previewAsBinaryMedia =
+    isImageArtifactMimeType(resolvedMime) || isVideoArtifactMimeType(resolvedMime);
+
+  if (previewAsBinaryMedia) {
+    return { metadata, content: null };
+  }
 
   if (!metadata.inlineAllowed && !previewAsHtml) {
     return { metadata, content: null };

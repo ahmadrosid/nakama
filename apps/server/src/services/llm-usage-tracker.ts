@@ -52,6 +52,16 @@ export class LlmUsageTracker {
     }
   }
 
+  async reloadFromDatabase(): Promise<void> {
+    this.requestCount = 0;
+    this.inputTokens = 0;
+    this.outputTokens = 0;
+    this.estimatedCostUsd = 0;
+    this.trackedSince = new Date().toISOString();
+    this.usageByModel.clear();
+    await this.load();
+  }
+
   setPricingContext(context: PricingContext): void {
     this.pricingContext = context;
   }

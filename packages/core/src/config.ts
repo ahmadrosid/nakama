@@ -1,5 +1,6 @@
 export * from "./user-config";
 export * from "./runtime";
+export * from "./chat-stream-timeout";
 
 export function readEnvValue(
   env: Record<string, string | undefined>,

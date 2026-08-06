@@ -21,6 +21,7 @@ type IdentityState = Pick<
   | "busy"
   | "avatarInputRef"
   | "uploadAvatarMutation"
+  | "deleteAvatarMutation"
   | "editName"
   | "handleEditNameChange"
   | "flushSave"
@@ -34,6 +35,7 @@ type IdentityState = Pick<
   | "editPrompt"
   | "handleEditPromptChange"
   | "handleAvatarSelected"
+  | "handleAvatarRemove"
 >;
 
 export function ProfileConfigIdentitySection({ state }: { state: IdentityState }) {
@@ -42,6 +44,7 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
     busy,
     avatarInputRef,
     uploadAvatarMutation,
+    deleteAvatarMutation,
     editName,
     handleEditNameChange,
     flushSave,
@@ -55,6 +58,7 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
     editPrompt,
     handleEditPromptChange,
     handleAvatarSelected,
+    handleAvatarRemove,
   } = state;
 
   if (!detail) {
@@ -62,7 +66,7 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
   }
 
   return (
-    <div className="mb-3 rounded-md border border-border p-3 sm:p-4">
+    <div className="mb-3 rounded-2xl border border-border p-3 sm:p-4">
       <input
         ref={avatarInputRef}
         type="file"
@@ -77,18 +81,17 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
           <EditableProfileAvatar
             profile={detail}
             size="ml"
-            disabled={busy || uploadAvatarMutation.isPending}
-            uploading={uploadAvatarMutation.isPending}
+            disabled={
+              busy || uploadAvatarMutation.isPending || deleteAvatarMutation.isPending
+            }
+            uploading={
+              uploadAvatarMutation.isPending || deleteAvatarMutation.isPending
+            }
             onPick={() => avatarInputRef.current?.click()}
+            onRemove={() => void handleAvatarRemove()}
           />
 
-          <div className="min-w-0 flex-1">
-            <label
-              htmlFor="profile-name"
-              className="mb-1 block text-xs font-medium text-muted-foreground"
-            >
-              Name
-            </label>
+          <Field label="Name" htmlFor="profile-name" className="min-w-0 flex-1">
             <Input
               id="profile-name"
               value={editName}
@@ -97,48 +100,53 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
               onChange={(event) => handleEditNameChange(event.target.value)}
               onBlur={() => void flushSave()}
             />
-          </div>
+          </Field>
 
-          <div className="w-full min-w-0 sm:w-auto sm:min-w-[12rem] sm:max-w-[14rem]">
-            <Field label="Model" htmlFor="profile-model">
-              <Select
-                value={modelSelectionValue}
-                disabled={busy || providerModelGroups.length === 0}
-                onValueChange={(value) => {
-                  if (!value) {
-                    return;
-                  }
+          <Field
+            label="Model"
+            htmlFor="profile-model"
+            className="w-full min-w-0 sm:w-auto sm:min-w-[12rem] sm:max-w-[14rem]"
+          >
+            <Select
+              value={modelSelectionValue}
+              disabled={busy || providerModelGroups.length === 0}
+              onValueChange={(value) => {
+                if (!value) {
+                  return;
+                }
 
-                  handleEditModelChange(String(value));
-                }}
+                handleEditModelChange(String(value));
+              }}
+            >
+              <SelectTrigger id="profile-model" className="w-full">
+                <SelectValue placeholder="Select model">
+                  {profileModelLabel(editModel, providerModelGroups)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                className="w-max min-w-72 max-w-[min(24rem,92vw)]"
               >
-                <SelectTrigger id="profile-model" className="w-full">
-                  <SelectValue placeholder="Select model">
-                    {profileModelLabel(editModel, providerModelGroups)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  {extractModelId(editModel) && !modelInCatalog ? (
+                {extractModelId(editModel) && !modelInCatalog ? (
+                  <SelectItem
+                    value={encodeModelSelection("__unknown__", extractModelId(editModel)!)}
+                  >
+                    {extractModelId(editModel)}
+                  </SelectItem>
+                ) : null}
+                {providerModelGroups.flatMap((group) =>
+                  group.models.map((model) => (
                     <SelectItem
-                      value={encodeModelSelection("__unknown__", extractModelId(editModel)!)}
+                      key={`${group.providerId}:${model.id}`}
+                      value={encodeModelSelection(group.providerId, model.id)}
                     >
-                      {extractModelId(editModel)}
+                      {group.providerLabel}: {model.name}
                     </SelectItem>
-                  ) : null}
-                  {providerModelGroups.flatMap((group) =>
-                    group.models.map((model) => (
-                      <SelectItem
-                        key={`${group.providerId}:${model.id}`}
-                        value={encodeModelSelection(group.providerId, model.id)}
-                      >
-                        {group.providerLabel}: {model.name}
-                      </SelectItem>
-                    )),
-                  )}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
+                  )),
+                )}
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
 
         {(detail.isSuper || saveStatus !== "idle" || (isDirty && !editName.trim())) && (

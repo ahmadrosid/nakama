@@ -196,26 +196,38 @@ export function wrapProviderWithUsageTracking(
   tracker: LlmUsageTracker,
   modelId: string,
 ): ProviderClient {
-  function recordChat(input: GenerateChatInput, result: ChatCompletionResult): void {
+  function withRecordedUsage(
+    input: GenerateChatInput,
+    result: ChatCompletionResult,
+  ): ChatCompletionResult {
+    const estimated = result.usage?.inputTokens == null;
     const inputTokens = result.usage?.inputTokens ?? estimateChatInputTokens(input);
     const outputTokens = result.usage?.outputTokens ?? estimateChatOutputTokens(result);
     tracker.record(modelId, inputTokens, outputTokens);
+
+    return {
+      ...result,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        ...(estimated ? { estimated: true } : {}),
+      },
+    };
   }
 
   return {
     ...provider,
     async generateChat(input: GenerateChatInput): Promise<ChatCompletionResult> {
       const result = await provider.generateChat(input);
-      recordChat(input, result);
-      return result;
+      return withRecordedUsage(input, result);
     },
     async streamChat(
       input: GenerateChatInput,
       handlers: StreamChatHandlers,
     ): Promise<ChatCompletionResult> {
       const result = await provider.streamChat(input, handlers);
-      recordChat(input, result);
-      return result;
+      return withRecordedUsage(input, result);
     },
     async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const result = await provider.generateText(input);

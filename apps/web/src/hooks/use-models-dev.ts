@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { client } from "@/lib/client";
 import type { SelectedProvider } from "@/lib/models";
 
 export interface ModelsDevRow {
@@ -66,10 +67,7 @@ function resolvenakamaProvider(
 }
 
 async function fetchModelsDev(): Promise<ModelsDevRow[]> {
-  const res = await fetch("https://models.dev/api.json");
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  const data = (await res.json()) as Record<string, unknown>;
+  const data = (await client.getExternalModelCatalog("models-dev")) as Record<string, unknown>;
   const rows: ModelsDevRow[] = [];
 
   for (const [providerId, p] of Object.entries(data)) {

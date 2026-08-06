@@ -8,8 +8,8 @@ import type {
 import { MoreHorizontalIcon, SearchIcon } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
+import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -306,12 +306,21 @@ function ComposioToolkitList({
           />
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {isSearching
-            ? `${filteredRows.length} match${filteredRows.length === 1 ? "" : "es"}`
-            : isOrgAdmin
-              ? `${enabledCount} enabled · ${connectedCount} connected by you · ${data.catalog.length} available`
-              : `${enabledCount} enabled · ${connectedCount} connected by you`}
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {isSearching ? (
+            <>
+              {filteredRows.length} match{filteredRows.length === 1 ? "" : "es"}
+            </>
+          ) : isOrgAdmin ? (
+            <>
+              {enabledCount} enabled · {connectedCount} connected by you · {data.catalog.length}{" "}
+              available
+            </>
+          ) : (
+            <>
+              {enabledCount} enabled · {connectedCount} connected by you
+            </>
+          )}
         </p>
       </div>
 
@@ -358,7 +367,7 @@ function ComposioToolkitList({
                 size="sm"
                 onClick={() => setVisibleCount((current) => current + CATALOG_PAGE_SIZE)}
               >
-                Show more ({remainingCount} remaining)
+                Show more (<span className="tabular-nums">{remainingCount}</span> remaining)
               </Button>
             </div>
           ) : null}
@@ -368,10 +377,9 @@ function ComposioToolkitList({
   );
 }
 
-function ComposioConnectionsSkeleton() {
+function ComposioConnectionsSkeleton({ bordered = false }: { bordered?: boolean }) {
   return (
-    <Card className="w-full shadow-none">
-      <CardContent className="p-0" aria-busy="true" aria-label="Loading Composio toolkits">
+    <IntegrationCardShell bordered={bordered} busyLabel="Loading Composio toolkits">
         <div className="space-y-3 border-b border-border px-4 py-3">
           <div className="space-y-2">
             <div className="skeleton-shimmer h-4 w-28 rounded" />
@@ -398,12 +406,17 @@ function ComposioConnectionsSkeleton() {
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+    </IntegrationCardShell>
   );
 }
 
-export function ComposioConnectionsCard() {
+export function ComposioConnectionsCard({
+  embedded = false,
+  bordered = false,
+}: {
+  embedded?: boolean;
+  bordered?: boolean;
+}) {
   const { activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const { data: settings } = useComposioSettings();
@@ -419,17 +432,17 @@ export function ComposioConnectionsCard() {
     disconnectMutation.isPending ||
     syncMutation.isPending;
 
+  const shellProps = { embedded, bordered };
+
   if (toolkitsQuery.isLoading) {
-    return <ComposioConnectionsSkeleton />;
+    return <ComposioConnectionsSkeleton bordered={bordered} />;
   }
 
   if (toolkitsQuery.error) {
     return (
-      <Card className="w-full shadow-none">
-        <CardContent className="p-4 text-sm text-destructive">
-          {formatError(toolkitsQuery.error)}
-        </CardContent>
-      </Card>
+      <IntegrationCardShell {...shellProps}>
+        <div className="p-4 text-sm text-destructive">{formatError(toolkitsQuery.error)}</div>
+      </IntegrationCardShell>
     );
   }
 
@@ -438,8 +451,8 @@ export function ComposioConnectionsCard() {
 
   if (!configured) {
     return (
-      <Card className="w-full shadow-none">
-        <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+      <IntegrationCardShell {...shellProps}>
+        <div className="space-y-2 p-4 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">
             {isOrgAdmin
               ? "Save your Composio API key first"
@@ -450,8 +463,8 @@ export function ComposioConnectionsCard() {
               ? "Once the key is saved above, you can enable toolkits here. Members connect from chat."
               : "Ask an org admin to save the Composio project API key on Integrations."}
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </IntegrationCardShell>
     );
   }
 
@@ -461,8 +474,8 @@ export function ComposioConnectionsCard() {
 
   if (data.catalogError) {
     return (
-      <Card className="w-full shadow-none">
-        <CardContent className="space-y-2 p-4 text-sm">
+      <IntegrationCardShell {...shellProps}>
+        <div className="space-y-2 p-4 text-sm">
           <p className="font-medium text-foreground">Could not load Composio toolkits</p>
           <p className="text-destructive">{data.catalogError}</p>
           {isOrgAdmin ? (
@@ -471,15 +484,14 @@ export function ComposioConnectionsCard() {
               save it again above.
             </p>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </IntegrationCardShell>
     );
   }
 
   return (
-    <Card className="w-full shadow-none">
-      <CardContent className="p-0">
-        <ComposioToolkitList
+    <IntegrationCardShell {...shellProps}>
+      <ComposioToolkitList
           data={data}
           isOrgAdmin={isOrgAdmin}
           busy={busy}
@@ -487,8 +499,7 @@ export function ComposioConnectionsCard() {
           onDisable={(slug) => disableMutation.mutate(slug)}
           onSync={(slug) => syncMutation.mutate(slug)}
           onDisconnect={(slug) => disconnectMutation.mutate(slug)}
-        />
-      </CardContent>
-    </Card>
+      />
+    </IntegrationCardShell>
   );
 }

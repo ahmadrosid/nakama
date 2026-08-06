@@ -154,50 +154,6 @@ export function OrgMemberInvitePopover({
   );
 }
 
-export function OrgMemberInviteDialog({
-  open,
-  inviteEmail,
-  inviteRole,
-  formError,
-  pending,
-  onOpenChange,
-  onInviteEmailChange,
-  onInviteRoleChange,
-  onSubmit,
-}: {
-  open: boolean;
-  inviteEmail: string;
-  inviteRole: OrgRole;
-  formError: string | null;
-  pending: boolean;
-  onOpenChange: (open: boolean) => void;
-  onInviteEmailChange: (value: string) => void;
-  onInviteRoleChange: (role: OrgRole) => void;
-  onSubmit: (event: React.FormEvent) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite member</DialogTitle>
-          <DialogDescription>
-            Send an invite by email. The recipient gets a link to join this organization.
-          </DialogDescription>
-        </DialogHeader>
-        <OrgMemberInviteForm
-          inviteEmail={inviteEmail}
-          inviteRole={inviteRole}
-          formError={formError}
-          pending={pending}
-          onInviteEmailChange={onInviteEmailChange}
-          onInviteRoleChange={onInviteRoleChange}
-          onSubmit={onSubmit}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function CredentialRow({
   label,
   value,

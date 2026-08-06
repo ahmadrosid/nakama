@@ -174,6 +174,7 @@ describe("profile service createProfile", () => {
       hasTool: false,
       disableModelInvocation: false,
       enabled: true,
+      createdBy: "bundled",
       createdAt: now,
       updatedAt: now,
     });
@@ -343,6 +344,7 @@ describe("profile service assignSkill", () => {
       hasTool: false,
       disableModelInvocation: false,
       enabled: true,
+      createdBy: "bundled",
       createdAt: now,
       updatedAt: now,
     });

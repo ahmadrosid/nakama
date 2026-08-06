@@ -13,6 +13,7 @@ import type {
   UpdateMcpServerRequest,
   CreateProfileRequest,
   CreateSkillRequest,
+  PatchSkillRequest,
   CreateSessionResponse,
   CreateToolRequest,
   DeleteArtifactResponse,
@@ -143,6 +144,7 @@ import type {
   RegenerateNotificationDestinationKeyResponse,
   RestoreDataImportRequest,
   RestoreDataImportResponse,
+  SetupRestoreDataImportResponse,
   SetActiveOrgRequest,
   AddOrgMemberRequest,
   AddOrgMemberResponse,
@@ -166,6 +168,10 @@ import type {
   ListOrgMemoryProposalsResponse,
   ApproveOrgMemoryProposalRequest,
   OrgMemoryProposalResponse,
+  ListSkillProposalsResponse,
+  SkillProposalResponse,
+  ListSkillSuggestionsResponse,
+  ApplySkillSuggestionResponse,
   ListOrgMemoryHistoryResponse,
   RestoreOrgMemoryHistoryResponse,
   OrgMemoryHistoryRevisionResponse,
@@ -281,6 +287,32 @@ export class NakamaClient {
     });
   }
 
+  async previewSetupDataImport(
+    data: Blob | BinaryBufferSource | string,
+  ): Promise<DataImportPreviewResponse> {
+    const request: PreviewDataImportRequest = {
+      data: await encodeArchiveData(data),
+    };
+    return this.request<DataImportPreviewResponse>("/v1/auth/setup/import/preview", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async restoreSetupDataImport(
+    data: Blob | BinaryBufferSource | string,
+    options: { confirm: boolean },
+  ): Promise<SetupRestoreDataImportResponse> {
+    const request: RestoreDataImportRequest = {
+      confirm: options.confirm,
+      data: await encodeArchiveData(data),
+    };
+    return this.request<SetupRestoreDataImportResponse>("/v1/auth/setup/import/restore", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
   async startWorker(name: string): Promise<{ ok: boolean }> {
     return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/start`, {
       method: "POST",
@@ -314,6 +346,12 @@ export class NakamaClient {
     const query =
       options.source === "remote" ? "?source=remote" : "";
     return this.request<ModelsResponse>(`/v1/models${query}`);
+  }
+
+  async getExternalModelCatalog(
+    catalogId: "models-dev" | "openrouter" | "cerebras",
+  ): Promise<unknown> {
+    return this.request(`/v1/model-catalogs/${encodeURIComponent(catalogId)}`);
   }
 
   async discoverModels(request: {
@@ -661,6 +699,25 @@ export class NakamaClient {
 
   async getSkill(skillId: string): Promise<SkillResponse> {
     return this.request<SkillResponse>(`/v1/skills/${encodeURIComponent(skillId)}`);
+  }
+
+  async patchSkill(
+    skillId: string,
+    request: PatchSkillRequest,
+    options?: { profileId?: string },
+  ): Promise<SkillResponse> {
+    const params = new URLSearchParams();
+    if (options?.profileId) {
+      params.set("profileId", options.profileId);
+    }
+
+    const query = params.toString();
+    const path = `/v1/skills/${encodeURIComponent(skillId)}${query ? `?${query}` : ""}`;
+
+    return this.request<SkillResponse>(path, {
+      method: "PATCH",
+      body: JSON.stringify(request),
+    });
   }
 
   async deleteSkill(skillId: string): Promise<void> {
@@ -1777,6 +1834,91 @@ export class NakamaClient {
   ): Promise<OrgMemoryProposalResponse> {
     return this.request<OrgMemoryProposalResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals/${encodeURIComponent(proposalId)}/reject`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async listSkillProposals(
+    orgId: string,
+    options: {
+      status?: "pending" | "approved" | "rejected";
+      profileId?: string;
+      sessionId?: string;
+    } = {},
+  ): Promise<ListSkillProposalsResponse> {
+    const params = new URLSearchParams();
+    if (options.status) {
+      params.set("status", options.status);
+    }
+    if (options.profileId) {
+      params.set("profileId", options.profileId);
+    }
+    if (options.sessionId) {
+      params.set("sessionId", options.sessionId);
+    }
+    const query = params.toString();
+    return this.request<ListSkillProposalsResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals${query ? `?${query}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  }
+
+  async approveSkillProposal(
+    orgId: string,
+    proposalId: string,
+  ): Promise<SkillProposalResponse> {
+    return this.request<SkillProposalResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals/${encodeURIComponent(proposalId)}/approve`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async rejectSkillProposal(
+    orgId: string,
+    proposalId: string,
+  ): Promise<SkillProposalResponse> {
+    return this.request<SkillProposalResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals/${encodeURIComponent(proposalId)}/reject`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async listSkillSuggestions(
+    orgId: string,
+    options: { sessionId?: string; status?: "pending" | "applied"; profileId?: string } = {},
+  ): Promise<ListSkillSuggestionsResponse> {
+    const params = new URLSearchParams();
+    if (options.sessionId) {
+      params.set("sessionId", options.sessionId);
+    }
+    if (options.status) {
+      params.set("status", options.status);
+    }
+    if (options.profileId) {
+      params.set("profileId", options.profileId);
+    }
+    const query = params.toString();
+    return this.request<ListSkillSuggestionsResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/skill-suggestions${query ? `?${query}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  }
+
+  async applySkillSuggestion(
+    orgId: string,
+    suggestionId: string,
+  ): Promise<ApplySkillSuggestionResponse> {
+    return this.request<ApplySkillSuggestionResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/skill-suggestions/${encodeURIComponent(suggestionId)}/apply`,
       {
         method: "POST",
         headers: { "X-Org-Id": orgId },

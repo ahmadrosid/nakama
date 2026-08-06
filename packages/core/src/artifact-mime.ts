@@ -62,6 +62,11 @@ const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  ogv: "video/ogg",
 };
 
 function fileExtension(filename: string): string {
@@ -129,6 +134,11 @@ export function isImageArtifactMimeType(mimeType: string): boolean {
   }
 
   return true;
+}
+
+/** Videos previewable with `<video controls>` in the attachment panel. */
+export function isVideoArtifactMimeType(mimeType: string): boolean {
+  return normalizeMimeType(mimeType).startsWith("video/");
 }
 
 /** True when the type carries no information about how to render the bytes. */

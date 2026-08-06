@@ -7,6 +7,7 @@ import {
   isBrowserExecutableArtifactMimeType,
   readArtifactFile,
   readArtifactShareSnapshot,
+  resolveArtifactMimeType,
   writeArtifactShareSnapshot,
 } from "@nakama/core";
 import type {
@@ -51,6 +52,7 @@ export class ArtifactShareService {
     });
 
     const filename = sourcePath.split("/").pop() ?? "artifact";
+    const mimeType = resolveArtifactMimeType(artifact.contentType, filename);
     const existing = await this.db.getActiveArtifactShareByPath(
       input.orgId,
       input.profileId,
@@ -75,7 +77,7 @@ export class ArtifactShareService {
 
       await this.db.updateArtifactShareSnapshot(existing.id, {
         filename,
-        mimeType: artifact.contentType,
+        mimeType,
         sizeBytes: artifact.bytes.byteLength,
         storagePath,
       });
@@ -83,7 +85,7 @@ export class ArtifactShareService {
       record = {
         ...existing,
         filename,
-        mimeType: artifact.contentType,
+        mimeType,
         sizeBytes: artifact.bytes.byteLength,
         storagePath,
       };
@@ -103,7 +105,7 @@ export class ArtifactShareService {
         profileId: input.profileId,
         sourcePath,
         filename,
-        mimeType: artifact.contentType,
+        mimeType,
         sizeBytes: artifact.bytes.byteLength,
         tokenHash: this.authService.hashToken(token),
         storagePath,
@@ -203,13 +205,16 @@ export class ArtifactShareService {
     }
 
     const bytes = await readArtifactShareSnapshot(share.storagePath);
-    const inlineAllowed = !isBrowserExecutableArtifactMimeType(share.mimeType);
+    // Sidecars sometimes store application/octet-stream; resolve from the filename
+    // so <video>/<img> can play with X-Content-Type-Options: nosniff.
+    const mimeType = resolveArtifactMimeType(share.mimeType, share.filename);
+    const inlineAllowed = !isBrowserExecutableArtifactMimeType(mimeType);
 
     return {
       bytes,
       metadata: {
         filename: share.filename,
-        mimeType: share.mimeType,
+        mimeType,
         sizeBytes: share.sizeBytes,
         inlineAllowed,
       },

@@ -4,6 +4,7 @@ import { ProfileComposioSection } from "@/pages/profiles/profile-composio-sectio
 import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
 import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import { ProfileToolsSection } from "@/pages/profiles/profile-tools-section";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
 
 export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPageState }) {
   const {
@@ -25,8 +26,9 @@ export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPage
     setSkillCreateOpen,
     handleAssignSkill,
     handleDeleteSkill,
-    setDetailSkillId,
+    selectedId,
   } = state;
+  const { navigateToSkillDetail } = useAppNavigation();
 
   if (!detail) {
     return null;
@@ -66,7 +68,9 @@ export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPage
         onCreateOpen={() => setSkillCreateOpen(true)}
         onAssign={handleAssignSkill}
         onDelete={handleDeleteSkill}
-        onViewDetail={setDetailSkillId}
+        onViewDetail={(skillId) => {
+          navigateToSkillDetail(skillId, { profileId: selectedId ?? undefined });
+        }}
         onRemove={setRemoveConfirm}
         onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
       />

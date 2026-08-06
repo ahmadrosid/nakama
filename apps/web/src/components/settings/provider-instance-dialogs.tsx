@@ -191,7 +191,6 @@ export function ProviderCompatibleEditDialog({
         apiKey={apiKey}
         customModels={manageModels}
         disabled={busy}
-        showThinkingToggle
         displayNameError={null}
         baseUrlError={null}
         modelsError={null}

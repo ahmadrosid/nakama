@@ -139,7 +139,7 @@ export async function ensureOrgSuperBotProfiles(db: DatabaseAdapter): Promise<vo
   }
 }
 
-export async function ensureSuperBotBashTool(db: DatabaseAdapter, profileId: string): Promise<void> {
+export async function ensureBashToolDefinition(db: DatabaseAdapter): Promise<void> {
   const now = new Date().toISOString();
   const existing = await db.getTool(BASH_TOOL_ID);
 
@@ -147,12 +147,15 @@ export async function ensureSuperBotBashTool(db: DatabaseAdapter, profileId: str
     id: BASH_TOOL_ID,
     name: "bash",
     description:
-      "Run a shell command and return stdout, stderr, and exit code. Super Bot only.",
+      "Run a shell command in the profile workspace and return stdout, stderr, and exit code.",
     handlerType: "bash",
     handlerConfig: {},
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   });
+}
 
+export async function ensureSuperBotBashTool(db: DatabaseAdapter, profileId: string): Promise<void> {
+  await ensureBashToolDefinition(db);
   await db.assignToolToProfile(profileId, BASH_TOOL_ID);
 }

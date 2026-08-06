@@ -12,11 +12,14 @@ import {
 } from "@/components/ui/select";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
+import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { sectionClass, profilePanelHeaderClass, profilePanelHeaderLabelClass } from "@/pages/profiles/profiles-page.shared";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 import {
@@ -43,10 +46,16 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     setCreateOpen,
     openDeleteDialog,
   } = state;
-  const { user } = useAuth();
+  const { user, activeOrg } = useAuth();
+  const isOrgAdmin = activeOrg?.role === "admin";
   const canCreateProfile = user?.isPlatformAdmin === true;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const { data: skillProposalsData } = useSkillProposals(
+    isOrgAdmin && selectedId ? (activeOrg?.id ?? null) : null,
+    { status: "pending", profileId: selectedId ?? undefined },
+  );
+  const pendingSkillProposals = skillProposalsData?.pendingCount ?? 0;
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
@@ -75,7 +84,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
           </p>
         ) : null}
 
-        <section className={cn(sectionClass, "overflow-hidden")}>
+        <section className={cn(sectionClass, "flex min-h-[calc(100svh-7rem)] flex-col overflow-hidden")}>
           <div className="flex flex-col gap-3 border-b border-border p-4 lg:hidden">
             <div className="flex flex-wrap items-center gap-3">
               <Select
@@ -173,11 +182,11 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 </div>
               ) : (
                 <>
-                  <div className={profilePanelHeaderClass}>
+                  <div className="flex min-w-0 shrink-0 items-stretch border-b border-border">
                     <div
                       role="tablist"
                       aria-label="Profile settings"
-                      className="flex min-w-0 flex-1"
+                      className="no-scrollbar flex min-w-0 flex-1 overflow-x-auto px-2 sm:px-3"
                     >
                       <ProfileDetailTabButton
                         id="profile-detail-tab-profile"
@@ -211,50 +220,82 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                       >
                         Artifacts
                       </ProfileDetailTabButton>
+                      {isOrgAdmin ? (
+                        <ProfileDetailTabButton
+                          id="profile-detail-tab-proposals"
+                          active={detailTab === "proposals"}
+                          controls="profile-detail-panel-proposals"
+                          onSelect={() => setDetailTab("proposals")}
+                        >
+                          Proposals
+                          {pendingSkillProposals > 0 ? (
+                            <span className="tabular-nums text-xs text-amber-600 dark:text-amber-400">
+                              ({pendingSkillProposals > 99 ? "99+" : pendingSkillProposals})
+                            </span>
+                          ) : null}
+                        </ProfileDetailTabButton>
+                      ) : null}
                     </div>
                     {!detail.isSuper ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        className="shrink-0 text-destructive hover:text-destructive"
-                        onClick={() => openDeleteDialog(selectedId)}
-                      >
-                        <Trash2Icon className="size-4" aria-hidden />
-                        Delete
-                      </Button>
+                      <div className="flex shrink-0 items-center border-l border-border px-2 sm:px-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          aria-label="Delete profile"
+                          className="text-destructive hover:text-destructive max-sm:size-7 max-sm:px-0"
+                          onClick={() => openDeleteDialog(selectedId)}
+                        >
+                          <Trash2Icon className="size-3.5" aria-hidden />
+                          <span className="hidden sm:inline">Delete</span>
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
-                  <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                    {detailTab === "profile" ? (
+                  {detailTab === "profile" ? (
+                    <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
                       <ProfileConfigTab state={state} />
-                    ) : detailTab === "prompt" ? (
-                      <div
-                        id="profile-detail-panel-prompt"
-                        role="tabpanel"
-                        aria-labelledby="profile-detail-tab-prompt"
-                      >
-                        <SoulTab profileId={selectedId} />
-                      </div>
-                    ) : detailTab === "knowledge" ? (
-                      <div
-                        id="profile-detail-panel-knowledge"
-                        role="tabpanel"
-                        aria-labelledby="profile-detail-tab-knowledge"
-                      >
-                        <KnowledgeTab profileId={selectedId} />
-                      </div>
-                    ) : (
+                    </div>
+                  ) : detailTab === "proposals" && isOrgAdmin && activeOrg && selectedId ? (
+                    <div
+                      id="profile-detail-panel-proposals"
+                      role="tabpanel"
+                      aria-labelledby="profile-detail-tab-proposals"
+                      className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                    >
+                      <SkillProposalsPanel orgId={activeOrg.id} profileId={selectedId} />
+                    </div>
+                  ) : detailTab === "prompt" ? (
+                    <div
+                      id="profile-detail-panel-prompt"
+                      role="tabpanel"
+                      aria-labelledby="profile-detail-tab-prompt"
+                      className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                    >
+                      <SoulTab profileId={selectedId} />
+                    </div>
+                  ) : detailTab === "knowledge" ? (
+                    <div
+                      id="profile-detail-panel-knowledge"
+                      role="tabpanel"
+                      aria-labelledby="profile-detail-tab-knowledge"
+                      className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                    >
+                      <KnowledgeTab profileId={selectedId} />
+                    </div>
+                  ) : (
+                    <ChatAttachmentPanelProvider presentation="overlay">
                       <div
                         id="profile-detail-panel-artifacts"
                         role="tabpanel"
                         aria-labelledby="profile-detail-tab-artifacts"
+                        className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5"
                       >
                         <ArtifactsTab profileId={selectedId} />
                       </div>
-                    )}
-                  </div>
+                    </ChatAttachmentPanelProvider>
+                  )}
                 </>
               )}
             </div>

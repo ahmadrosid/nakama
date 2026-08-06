@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import {
   CheckIcon,
   CopyIcon,
@@ -8,6 +8,11 @@ import {
   RotateCcwIcon,
 } from "lucide-react";
 import {
+  Virtuoso,
+  type Components,
+  type VirtuosoHandle,
+} from "react-virtuoso";
+import {
   AssistantTurnSegmentView,
 } from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
@@ -15,6 +20,7 @@ import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
+  ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import {
   Message,
@@ -26,18 +32,67 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ThinkingState } from "@/components/chat/ThinkingState";
 import { formatSessionTimestamp, type ChatListItem } from "@/lib/chat-history";
 import {
   awaitingModelLabel,
   isAwaitingModelResponse,
 } from "@/lib/chat-stream";
+import {
+  followOutputBehavior,
+  listOverflowsViewport,
+  shouldAutoscrollOnHeightGrowth,
+} from "@/lib/chat-list-stickiness";
+import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
+import {
+  groupMessagesIntoTurns,
+  turnKey,
+  type IndexedMessage,
+  type MessageTurn,
+} from "@/lib/chat-message-turns";
 import { cn } from "@/lib/utils";
+
+/** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
+function VirtuosoEdgePad() {
+  return <div className="h-4 shrink-0" aria-hidden />;
+}
+
+/**
+ * Keep Virtuoso rows from shrinking if the list uses a flex viewport.
+ * overflow-visible so bubbles aren't clipped by the item wrapper.
+ */
+const VirtuosoItem = forwardRef<
+  HTMLDivElement,
+  {
+    children?: React.ReactNode;
+    style?: React.CSSProperties;
+    "data-index": number;
+    "data-item-index": number;
+    "data-known-size": number;
+    item: MessageTurn;
+  }
+>(function VirtuosoItem({ children, style, ...props }, ref) {
+  return (
+    <div
+      {...props}
+      ref={ref}
+      style={style}
+      className="shrink-0 overflow-visible"
+    >
+      {children}
+    </div>
+  );
+});
+
+const virtuosoComponents: Components<MessageTurn> = {
+  Header: VirtuosoEdgePad,
+  Footer: VirtuosoEdgePad,
+  Item: VirtuosoItem,
+};
 
 interface ChatMessageListProps {
   messages: ChatListItem[];
@@ -48,6 +103,7 @@ interface ChatMessageListProps {
   actionsDisabled?: boolean;
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
+  turnStartedAt?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   emptyMessage?: string;
@@ -55,13 +111,12 @@ interface ChatMessageListProps {
   contentClassName?: string;
 }
 
-type IndexedMessage = { message: ChatListItem; index: number };
+export function ChatMessageList(props: ChatMessageListProps) {
+  const sessionAnchor = props.messages[0]?.id ?? "empty";
+  return <ChatMessageListSession key={sessionAnchor} {...props} />;
+}
 
-type MessageTurn =
-  | { kind: "user"; message: ChatListItem; index: number }
-  | { kind: "assistant"; messages: IndexedMessage[] };
-
-export function ChatMessageList({
+function ChatMessageListSession({
   messages,
   profileId,
   showThinking = true,
@@ -69,76 +124,208 @@ export function ChatMessageList({
   branchingMessageId,
   actionsDisabled = false,
   streamActive = false,
+  turnStartedAt = null,
   onBranchMessage,
   onRetryMessage,
   emptyMessage,
   className,
   contentClassName,
 }: ChatMessageListProps) {
-  const turns = groupMessagesIntoTurns(messages);
+  const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages]);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const isAtBottomRef = useRef(true);
+  const stickIntentRef = useRef(true);
+  const lastListHeightRef = useRef(0);
+  const didInitialPinRef = useRef(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
   const showAwaitingPlaceholder =
     streamActive && isAwaitingModelResponse(messages);
   const awaitingLabel = showAwaitingPlaceholder
     ? awaitingModelLabel(messages)
     : null;
 
-  return (
-    <Conversation className={cn("min-h-0 flex-1", className)}>
-      <ConversationContent className={cn("gap-6 py-4", contentClassName)}>
-        {messages.length === 0 && emptyMessage ? (
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        ) : null}
-        {turns.map((turn, turnIndex) =>
-          turn.kind === "user" ? (
-            <ChatMessageRow key={turn.message.id} message={turn.message} />
-          ) : (
-            <AssistantTurn
-              key={turn.messages.map(({ message }) => message.id).join(":")}
-              messages={turn.messages}
-              profileId={profileId}
-              showThinking={showThinking}
-              modelLabel={modelLabel}
-              branchingMessageId={branchingMessageId}
-              actionsDisabled={actionsDisabled}
-              streamActive={streamActive}
-              awaitingLabel={
-                turnIndex === turns.length - 1 ? awaitingLabel : null
-              }
-              onBranchMessage={onBranchMessage}
-              onRetryMessage={onRetryMessage}
-            />
-          ),
-        )}
-      </ConversationContent>
-      <ConversationScrollButton />
-    </Conversation>
+  const pinLatest = useCallback((behavior: "auto" | "smooth") => {
+    const scroller = scrollerRef.current;
+    const listHeight = lastListHeightRef.current;
+    // Per Virtuoso docs: omit alignToBottom for top packing. Never use
+    // scrollToIndex({ align: "end" }) when content still fits the viewport —
+    // that is what packs short threads to the bottom.
+    if (
+      !scroller ||
+      !listOverflowsViewport(listHeight, scroller.clientHeight)
+    ) {
+      if (scroller) scroller.scrollTop = 0;
+      return;
+    }
+    virtuosoRef.current?.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior,
+    });
+  }, []);
+
+  const scrollToLatest = useCallback(() => {
+    stickIntentRef.current = true;
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    pinLatest("smooth");
+  }, [pinLatest]);
+
+  const stickiness = useMemo(
+    () => ({
+      isAtBottom,
+      scrollToLatest,
+    }),
+    [isAtBottom, scrollToLatest],
   );
-}
 
-function groupMessagesIntoTurns(messages: ChatListItem[]): MessageTurn[] {
-  const turns: MessageTurn[] = [];
-  let currentAssistantTurn: IndexedMessage[] | null = null;
+  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
+    isAtBottomRef.current = atBottom;
+    setIsAtBottom(atBottom);
+    stickIntentRef.current = atBottom;
+  }, []);
 
-  for (const [index, message] of messages.entries()) {
-    if (message.role === "user") {
-      if (currentAssistantTurn) {
-        turns.push({ kind: "assistant", messages: currentAssistantTurn });
-        currentAssistantTurn = null;
+  // followOutput is Virtuoso's documented append follower. It scrolls with
+  // align-end semantics, so skip it while the list still fits the viewport.
+  const handleFollowOutput = useCallback((_atBottom: boolean) => {
+    const scroller = scrollerRef.current;
+    if (
+      !scroller ||
+      !listOverflowsViewport(lastListHeightRef.current, scroller.clientHeight)
+    ) {
+      return false;
+    }
+    return followOutputBehavior(stickIntentRef.current);
+  }, []);
+
+  // followOutput does not watch existing-item resize (streaming tokens).
+  // Re-pin manually only when overflowing — see Virtuoso issue #195.
+  const handleTotalListHeightChanged = useCallback(
+    (height: number) => {
+      const previous = lastListHeightRef.current;
+      lastListHeightRef.current = height;
+
+      if (!didInitialPinRef.current) {
+        didInitialPinRef.current = true;
+        pinLatest("auto");
+        return;
       }
 
-      turns.push({ kind: "user", message, index });
-      continue;
-    }
+      if (
+        height > previous &&
+        shouldAutoscrollOnHeightGrowth(stickIntentRef.current)
+      ) {
+        pinLatest("auto");
+      }
+    },
+    [pinLatest],
+  );
 
-    currentAssistantTurn ??= [];
-    currentAssistantTurn.push({ message, index });
+  const renderTurn = useCallback(
+    (turnIndex: number, turn: MessageTurn) => {
+      // Horizontal inset lives on items — padding on the Virtuoso scroller can
+      // clip absolutely positioned rows.
+      const itemClassName = cn(
+        "shrink-0 overflow-visible",
+        contentClassName ?? "px-4",
+        turnIndex === turns.length - 1 ? "pb-4" : "pb-6",
+      );
+
+      if (turn.kind === "user") {
+        return (
+          <div className={itemClassName}>
+            <ChatMessageRow message={turn.message} />
+          </div>
+        );
+      }
+
+      return (
+        <div className={itemClassName}>
+          <AssistantTurn
+            messages={turn.messages}
+            profileId={profileId}
+            showThinking={showThinking}
+            modelLabel={modelLabel}
+            branchingMessageId={branchingMessageId}
+            actionsDisabled={actionsDisabled}
+            streamActive={streamActive}
+            showAwaiting={
+              turnIndex === turns.length - 1 && awaitingLabel === "Working…"
+            }
+            turnStartedAt={turnStartedAt}
+            onBranchMessage={onBranchMessage}
+            onRetryMessage={onRetryMessage}
+          />
+        </div>
+      );
+    },
+    [
+      actionsDisabled,
+      awaitingLabel,
+      branchingMessageId,
+      contentClassName,
+      modelLabel,
+      onBranchMessage,
+      onRetryMessage,
+      profileId,
+      showThinking,
+      streamActive,
+      turnStartedAt,
+      turns.length,
+    ],
+  );
+
+  if (turns.length === 0) {
+    return (
+      <ConversationStickinessProvider
+        value={{ isAtBottom: true, scrollToLatest: () => undefined }}
+      >
+        <Conversation className={cn("min-h-0 flex-1", className)}>
+          <ConversationContent
+            className={cn(
+              "justify-start gap-6 px-4 py-4",
+              contentClassName,
+            )}
+          >
+            {emptyMessage ? (
+              <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+            ) : null}
+          </ConversationContent>
+        </Conversation>
+      </ConversationStickinessProvider>
+    );
   }
 
-  if (currentAssistantTurn) {
-    turns.push({ kind: "assistant", messages: currentAssistantTurn });
-  }
-
-  return turns;
+  return (
+    <ConversationStickinessProvider value={stickiness}>
+      <Conversation className={cn("min-h-0 flex-1", className)}>
+        <Virtuoso
+          ref={virtuosoRef}
+          className="h-full no-scrollbar"
+          data={turns}
+          components={virtuosoComponents}
+          computeItemKey={(_, turn) => turnKey(turn)}
+          itemContent={renderTurn}
+          // Default is top-aligned for short lists. Do not set alignToBottom —
+          // that uses marginTop:auto and packs messages to the bottom.
+          // https://virtuoso.dev/react-virtuoso/api-reference/virtuoso/
+          initialTopMostItemIndex={0}
+          scrollerRef={(ref) => {
+            scrollerRef.current =
+              ref instanceof HTMLElement ? ref : null;
+          }}
+          followOutput={handleFollowOutput}
+          atBottomStateChange={handleAtBottomStateChange}
+          atBottomThreshold={80}
+          increaseViewportBy={{ top: 200, bottom: 200 }}
+          totalListHeightChanged={handleTotalListHeightChanged}
+        />
+        <ConversationScrollButton />
+      </Conversation>
+    </ConversationStickinessProvider>
+  );
 }
 
 function AssistantTurn({
@@ -149,7 +336,8 @@ function AssistantTurn({
   branchingMessageId,
   actionsDisabled,
   streamActive,
-  awaitingLabel,
+  showAwaiting,
+  turnStartedAt,
   onBranchMessage,
   onRetryMessage,
 }: {
@@ -160,18 +348,19 @@ function AssistantTurn({
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
   streamActive: boolean;
-  awaitingLabel?: "Thinking…" | "Working…" | null;
+  showAwaiting?: boolean;
+  turnStartedAt?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
   const turnMessages = messages.map(({ message }) => message);
   const segments = segmentAssistantTurn(turnMessages);
   const artifacts = extractTurnArtifacts(turnMessages);
-  const turnKey = messages.map(({ message }) => message.id).join(":");
+  const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
-  const showArtifacts = !streamActive && turnComplete && artifacts.length > 0;
+  const showArtifacts = turnComplete && artifacts.length > 0;
   const showActions = !streamActive && turnComplete && anchorMessage != null;
 
   return (
@@ -188,11 +377,13 @@ function AssistantTurn({
           modelLabel={modelLabel}
         />
       ))}
-      {awaitingLabel ? <ThinkingState label={awaitingLabel} /> : null}
+      {showAwaiting ? (
+        <TurnAwaitingElapsed startedAt={turnStartedAt} />
+      ) : null}
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {
-            const chipId = `${turnKey}:${artifact.path}`;
+            const chipId = `${artifactTurnKey}:${artifact.path}`;
 
             return (
               <ArtifactAttachmentPreview
@@ -219,13 +410,27 @@ function AssistantTurn({
   );
 }
 
+function TurnAwaitingElapsed({ startedAt }: { startedAt?: string | null }) {
+  const elapsedSeconds = useElapsedSeconds(true, startedAt ?? undefined);
+
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className="text-xs tabular-nums text-muted-foreground"
+    >
+      {formatElapsedSeconds(elapsedSeconds)}
+    </span>
+  );
+}
+
 function ChatMessageRow({ message }: { message: ChatListItem }) {
   return (
     <Message
       from="user"
-      className="max-w-full ml-auto mr-0 items-end justify-end"
+      className="max-w-full ml-auto mr-0 min-w-0 items-end justify-end overflow-visible"
     >
-      <MessageContent className="max-w-full ml-auto group-[.is-user]:ml-auto">
+      <MessageContent className="max-w-full min-w-0 ml-auto overflow-visible group-[.is-user]:ml-auto">
         <UserMessageContent message={message} />
       </MessageContent>
     </Message>
@@ -469,7 +674,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         </div>
       ) : null}
       {message.content ? (
-        <p className="whitespace-pre-wrap text-foreground">{message.content}</p>
+        <p className="whitespace-pre-wrap break-words text-foreground">{message.content}</p>
       ) : null}
     </div>
   );

@@ -26,7 +26,17 @@ export const metadata: Metadata = {
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
   icons: {
-    icon: withBasePath('/favicon.png'),
+    icon: [
+      {
+        url: withBasePath('/favicon-light.png'),
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        url: withBasePath('/favicon.png'),
+        media: '(prefers-color-scheme: dark)',
+      },
+      { url: withBasePath('/favicon.png') },
+    ],
   },
   openGraph: {
     title: SITE_NAME,

@@ -3,6 +3,7 @@ import type {
   AssignSkillRequest,
   CreateSkillRequest,
   ListSkillsResponse,
+  PatchSkillRequest,
   ProfileResponse,
   SkillResponse,
   SyncSkillsResponse,
@@ -29,6 +30,7 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
   const syncSkillsSchema = z.object({}).passthrough().openapi("SyncSkillsResponse");
   const createSkillSchema = z.object({}).passthrough().openapi("CreateSkillRequest");
+  const patchSkillSchema = z.object({}).passthrough().openapi("PatchSkillRequest");
   const assignSkillSchema = z.object({}).passthrough().openapi("AssignSkillRequest");
   const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
 
@@ -64,6 +66,22 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
     summary: "Get a skill",
     operationId: "getSkill",
     request: { params: skillIdParam },
+    responses: {
+      200: { description: "Skill detail", content: { "application/json": { schema: skillSchema } } },
+      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+    },
+  }));
+  app.openAPIRegistry.registerPath(createRoute({
+    method: "patch",
+    path: "/v1/skills/{skillId}",
+    tags: ["Skills"],
+    summary: "Update a skill",
+    operationId: "patchSkill",
+    request: {
+      params: skillIdParam,
+      body: { required: true, content: { "application/json": { schema: patchSkillSchema } } },
+    },
     responses: {
       200: { description: "Skill detail", content: { "application/json": { schema: skillSchema } } },
       404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
@@ -124,6 +142,21 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
   app.get("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
     return json<SkillResponse>(await agent.getSkill(decodeURIComponent(c.req.param("skillId"))));
+  });
+
+  app.patch("/v1/skills/:skillId", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const body = await readJson<PatchSkillRequest>(c.req.raw);
+    const profileId = c.req.query("profileId")?.trim() || undefined;
+    return json<SkillResponse>(
+      await agent.patchSkill(
+        orgId,
+        decodeURIComponent(c.req.param("skillId")),
+        body,
+        profileId ? { profileId } : undefined,
+      ),
+    );
   });
 
   app.delete("/v1/skills/:skillId", async (c) => {

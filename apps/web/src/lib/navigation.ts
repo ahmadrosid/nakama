@@ -151,6 +151,32 @@ export function profilePath(profileId: string): string {
   return `${PAGE_PATHS.profiles}?profile=${encodeURIComponent(profileId)}`;
 }
 
+export function skillDetailPath(
+  skillId: string,
+  options?: { profileId?: string },
+): string {
+  const path = `${PAGE_PATHS.profiles}/skills/${encodeURIComponent(skillId)}`;
+  if (!options?.profileId) {
+    return path;
+  }
+
+  const params = new URLSearchParams({ profile: options.profileId });
+  return `${path}?${params.toString()}`;
+}
+
+/** Resolve skill detail back-navigation from search params set by skillDetailPath. */
+export function skillDetailBackTarget(searchParams: URLSearchParams): {
+  href: string;
+  label: string;
+} {
+  const profileId = searchParams.get("profile");
+  if (profileId) {
+    return { href: profilePath(profileId), label: "Profile" };
+  }
+
+  return { href: PAGE_PATHS.profiles, label: "Profiles" };
+}
+
 export function toolPlaygroundPath(
   toolId: string,
   options?: { fromProfileId?: string },
@@ -178,6 +204,17 @@ export function toolPlaygroundBackTarget(searchParams: URLSearchParams): {
     return { href: profilePath(fromProfileId), label: "Profile" };
   }
   return { href: toolsTabPath(), label: "Tools" };
+}
+
+export function orgSkillProposalsPath(profileId?: string): string {
+  const params = new URLSearchParams({
+    tab: "organization",
+    skillProposals: "proposals",
+  });
+  if (profileId) {
+    params.set("profileId", profileId);
+  }
+  return `${PAGE_PATHS.soul}?${params.toString()}`;
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
@@ -224,8 +261,12 @@ export function pageIdFromPath(pathname: string): PageId | null {
     return "soul";
   }
 
+  if (pathname === PAGE_PATHS.profiles || pathname.startsWith(`${PAGE_PATHS.profiles}/`)) {
+    return "profiles";
+  }
+
   for (const [pageId, path] of Object.entries(PAGE_PATHS) as [PageId, string][]) {
-    if (pageId === "chat") {
+    if (pageId === "chat" || pageId === "profiles") {
       continue;
     }
 

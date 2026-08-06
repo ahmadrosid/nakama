@@ -4,6 +4,8 @@ export const PUBLIC_ROUTES = new Set([
   "/docs/",
   "/openapi.json",
   "/v1/auth/setup",
+  "/v1/auth/setup/import/preview",
+  "/v1/auth/setup/import/restore",
   "/v1/auth/login",
   "/v1/auth/me",
   "/v1/auth/accept-invite",

@@ -15,7 +15,6 @@ interface BrowsableModelFieldsProps<T> {
   footerHint: ReactNode;
   browseLabel: string;
   showPricing?: boolean;
-  showThinkingToggle?: boolean;
   onCustomModelsChange: (models: ModelListRow[]) => void;
   toModelRow: (row: T) => ModelListRow;
   renderBrowse: (onSelect: (row: T) => void) => ReactNode;
@@ -30,7 +29,6 @@ export function BrowsableModelFields<T>({
   footerHint,
   browseLabel,
   showPricing = true,
-  showThinkingToggle = true,
   onCustomModelsChange,
   toModelRow,
   renderBrowse,
@@ -84,7 +82,6 @@ export function BrowsableModelFields<T>({
           models={customModels}
           disabled={disabled}
           showPricing={showPricing}
-          showThinkingToggle={showThinkingToggle}
           browseLabel={browseLabel}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}

@@ -12,7 +12,7 @@ import {
 function group(
   providerId: string,
   provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek" | "cerebras" | "fireworks",
-  flags?: { supportsThinking?: boolean; supportsVision?: boolean },
+  flags?: { supportsThinking?: boolean; supportsVision?: boolean; contextWindow?: number },
 ) {
   return [
     {
@@ -28,6 +28,9 @@ function group(
             : {}),
           ...(flags?.supportsVision !== undefined
             ? { supportsVision: flags.supportsVision }
+            : {}),
+          ...(flags?.contextWindow !== undefined
+            ? { contextWindow: flags.contextWindow }
             : {}),
         },
       ],

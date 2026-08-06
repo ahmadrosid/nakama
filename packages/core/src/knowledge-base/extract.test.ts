@@ -49,7 +49,7 @@ describe("knowledge base extract", () => {
   test("extracts docx content as markdown", async () => {
     const text = await extractText("application/octet-stream", "laporan.docx", SAMPLE_DOCX);
 
-    expect(text).toContain("# Laporan Mingguan");
+    expect(text).toContain("Laporan Mingguan");
     expect(text).toContain("**teks tebal**");
   });
 

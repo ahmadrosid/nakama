@@ -15,6 +15,7 @@ import type {
   AuthUserResponse,
   ListUserOrgsResponse,
   UpdateOrgMemberRequest,
+  UpdateOrganizationRequest,
   UserOrgSummary,
 } from "@nakama/core/contract";
 import {
@@ -50,15 +51,16 @@ export class OrgService {
 
   async updateOrganization(
     orgId: string,
-    request: { name: string },
+    request: UpdateOrganizationRequest,
   ): Promise<OrganizationSummary> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
     if (!org) {
       throw new NakamaApiError("Not found", 404);
     }
 
-    const name = request.name.trim();
-    if (!name) {
+    const name =
+      request.name !== undefined ? request.name.trim() : org.name;
+    if (request.name !== undefined && !name) {
       throw new NakamaApiError("Organization name is required.", 400);
     }
 
@@ -66,6 +68,14 @@ export class OrgService {
     const updated: StoredOrganizationRecord = {
       ...org,
       name,
+      skillsWriteApproval:
+        request.skillsWriteApproval !== undefined
+          ? request.skillsWriteApproval
+          : org.skillsWriteApproval ?? false,
+      skillsPostTurnReview:
+        request.skillsPostTurnReview !== undefined
+          ? request.skillsPostTurnReview
+          : org.skillsPostTurnReview ?? false,
       updatedAt: now,
     };
 
@@ -740,6 +750,8 @@ function toOrganizationSummary(record: StoredOrganizationRecord): OrganizationSu
     id: record.id,
     name: record.name,
     slug: record.slug,
+    skillsWriteApproval: record.skillsWriteApproval ?? false,
+    skillsPostTurnReview: record.skillsPostTurnReview ?? false,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

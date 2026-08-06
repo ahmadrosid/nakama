@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./ThinkingReasoning.module.css";
 import { ThinkingState } from "@/components/chat/ThinkingState";
+import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
 import { splitThinkingLines } from "@/lib/thinking-text";
+import { formatElapsedSeconds } from "@/lib/elapsed-time";
 import { cn } from "@/lib/utils";
 
 const MAX_H = 100;
@@ -53,6 +55,20 @@ function ThinkingReasoningViewport({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [fade, setFade] = useState({ top: false, bottom: false });
 
+  // Append-only stream: sealed lines keep a content-prefix key; the live tail
+  // keeps a fixed key so growing text does not remount / re-fade.
+  const items = useMemo(() => {
+    let sealedPrefix = "";
+    return sentences.map((text, index) => {
+      const isLiveTail = isWorkActive && index === sentences.length - 1;
+      if (isLiveTail) {
+        return { key: "live-tail", text, fresh: true as const };
+      }
+      sealedPrefix = `${sealedPrefix}\0${text}`;
+      return { key: `sealed:${sealedPrefix}`, text, fresh: false as const };
+    });
+  }, [sentences, isWorkActive]);
+
   const updateFade = () => {
     const element = viewportRef.current;
     if (!element) {
@@ -92,7 +108,7 @@ function ThinkingReasoningViewport({
     updateFade();
   };
 
-  if (sentences.length === 0) {
+  if (items.length === 0) {
     return null;
   }
 
@@ -113,9 +129,13 @@ function ThinkingReasoningViewport({
       onScroll={handleScroll}
     >
       <div className={styles.stream}>
-        {sentences.map((line, index) => (
-          <p key={`${index}:${line}`} className={styles.sentence}>
-            {line}
+        {items.map((item) => (
+          <p
+            key={item.key}
+            className={styles.sentence}
+            data-fresh={item.fresh || undefined}
+          >
+            {item.text}
           </p>
         ))}
       </div>
@@ -131,8 +151,9 @@ export function ThinkingReasoning({
   className,
   children,
 }: ThinkingReasoningProps) {
-  const trimmed = text.trim();
-  const sentences = useMemo(() => splitThinkingLines(text), [text]);
+  const displayText = useRafCoalescedValue(text, isThinkingStreaming);
+  const trimmed = displayText.trim();
+  const sentences = useMemo(() => splitThinkingLines(displayText), [displayText]);
   const hasBody = sentences.length > 0 || Boolean(children);
   const elapsedSeconds = useThinkingElapsed(isWorkActive, startedAt);
   const [done, setDone] = useState(!isWorkActive && hasBody);
@@ -200,7 +221,11 @@ export function ThinkingReasoning({
             <span className={styles.verb}>Thought</span> for {elapsedSeconds}s
           </span>
         ) : (
-          <span className={cn(styles.label, styles.shimmer)}>Thinking…</span>
+          <span className={cn(styles.label, styles.shimmer)}>
+            {children && !isThinkingStreaming
+              ? `Working… · ${formatElapsedSeconds(elapsedSeconds)}`
+              : "Thinking…"}
+          </span>
         )}
         {done ? (
           <svg

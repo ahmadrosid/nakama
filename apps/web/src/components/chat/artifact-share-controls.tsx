@@ -1,6 +1,11 @@
 import { EyeIcon, Loader2Icon, Share2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ArtifactSharePublishDialog } from "@/components/chat/artifact-share-publish-dialog";
 import {
   useArtifactShareControls,
@@ -87,20 +92,30 @@ export function ArtifactShareControls({
   if (compact) {
     return (
       <>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={share.busy || !share.orgId}
-          onClick={share.handleShareClick}
-        >
-          {share.busy ? (
-            <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Share2Icon className="size-3.5" aria-hidden />
-          )}
-          Share
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                disabled={share.busy || !share.orgId}
+                aria-label="Share"
+                title="Share"
+                onClick={share.handleShareClick}
+              >
+                {share.busy ? (
+                  <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Share2Icon className="size-3.5" aria-hidden />
+                )}
+              </Button>
+            }
+          />
+          <TooltipContent side="top" sideOffset={8}>
+            Share
+          </TooltipContent>
+        </Tooltip>
         {publishDialog}
       </>
     );

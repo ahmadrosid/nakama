@@ -107,7 +107,7 @@ Profile-scoped skills are stored at:
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/
 ```
 
-Artifacts saved by the agent (via the `save-artifact` skill and `write_file`) are stored at:
+Artifacts are files your agent creates and saves for you (reports, documents, generated text). They are stored at:
 
 ```text
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
@@ -140,7 +140,7 @@ Profiles keep their own context on disk under the org-scoped profile directory:
 - **Inherited knowledge sources** for shared product references, such as the Nakama documentation
 - **`MEMORY.md`** for active facts and continuity the agent should remember across sessions
 - **`memory-archive/`** for facts moved out of active memory without deleting them
-- **Artifacts** for persistent reports and generated text saved via the `save-artifact` skill
+- **Artifacts** — files your agent creates and saves for you (reports, documents, generated text)
 
 At the **organization** level (not inside a profile directory), [org memory](/org-memory) stores shared facts every profile in the org sees — admin-curated, distinct from per-profile `MEMORY.md`.
 
