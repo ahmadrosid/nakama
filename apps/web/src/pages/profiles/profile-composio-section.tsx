@@ -46,7 +46,7 @@ export function ProfileComposioSection({
         </p>
       ) : assignedComposioToolkits.length === 0 ? null : (
         <ul className="divide-y divide-border rounded-md border border-border">
-          {assignedComposioToolkits.map(({ toolkit, userConnection }) => (
+          {assignedComposioToolkits.map(({ toolkit, userConnection, assignment }) => (
             <li
               key={toolkit.id}
               className="flex items-center justify-between gap-2 px-3 py-2 first:rounded-t-md last:rounded-b-md"
@@ -61,8 +61,13 @@ export function ProfileComposioSection({
                     ? " · You: connected"
                     : " · You: not connected — connect on Integrations"}
                   {toolkit.cachedTools.length > 0
-                    ? ` · ${toolkit.cachedTools.length} tool${toolkit.cachedTools.length === 1 ? "" : "s"}`
+                    ? ` · ${toolkit.cachedTools.length} action${toolkit.cachedTools.length === 1 ? "" : "s"}`
                     : ""}
+                  {assignment.allowedActions && assignment.allowedActions.length > 0
+                    ? ` · ${assignment.allowedActions.length} allowed`
+                    : toolkit.cachedTools.length > 0
+                      ? " · all actions searchable"
+                      : ""}
                 </p>
               </div>
               <Button
