@@ -638,14 +638,24 @@ export class ComposioService {
       return `- ${orgToolkit.displayName} (\`${orgToolkit.toolkitSlug}\`): org ${orgToolkit.status}, your connection ${connectionStatus}${toolsSuffix}${actionsSuffix}`;
     });
 
+    const hasConnected = assigned.some(
+      ({ userConnection }) => userConnection?.status === "connected",
+    );
+
+    const workflowGuidance = hasConnected
+      ? [
+          "For connected toolkits, Composio is exposed as two tools: `composio__search_actions` (search the action catalog) and `composio__invoke_action` (call an action by slug). Workflow: call `composio__search_actions` with a query and optional `toolkit_slug` to find actions, then call `composio__invoke_action` with the returned action slug and its arguments.",
+          "Reach for Composio when the task needs the user's own SaaS data or actions — read/send their Gmail, check their calendar, manage their files. For public facts about a third party (a company's domain, a public email address, public docs), prefer `web_search` instead; Composio only sees the user's connected account, not the public web.",
+        ]
+      : [];
+
     return [
       "## Composio integrations",
       "",
       "Assigned SaaS toolkits for this profile (your personal connections):",
       ...lines,
       "",
-      "Composio is exposed as two tools: `composio__search_actions` (search the action catalog) and `composio__invoke_action` (call an action by slug). Workflow: call `composio__search_actions` with a query and optional `toolkit_slug` to find actions, then call `composio__invoke_action` with the returned action slug and its arguments.",
-      "Reach for Composio when the task needs the user's own SaaS data or actions — read/send their Gmail, check their calendar, manage their files. For public facts about a third party (a company's domain, a public email address, public docs), prefer `web_search` instead; Composio only sees the user's connected account, not the public web.",
+      ...workflowGuidance,
       "Only connected toolkits can be invoked. If a connection is missing, call `composio__connect_account` with the toolkit slug and send the user the OAuth link from the tool result.",
     ].join("\n");
   }
