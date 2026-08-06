@@ -1,4 +1,6 @@
 import type {
+  AgentBrowserInstallEvent,
+  AgentBrowserStatusResponse,
   CodingHarnessInstallEvent,
   CodingHarnessStatus,
   SendMessageInput,
@@ -30,6 +32,15 @@ export async function readStreamEvents(
         handlers.onThinking?.(payload.delta);
       }
 
+      if (payload.type === "tool_input_delta") {
+        handlers.onToolInputDelta?.({
+          toolCallId: payload.toolCallId,
+          tool: payload.tool,
+          delta: payload.delta,
+          accumulatedArguments: payload.accumulatedArguments,
+        });
+      }
+
       if (payload.type === "tool_start") {
         handlers.onToolStart?.({
           toolCallId: payload.toolCallId,
@@ -43,6 +54,13 @@ export async function readStreamEvents(
           toolCallId: payload.toolCallId,
           tool: payload.tool,
           result: payload.result,
+        });
+      }
+
+      if (payload.type === "sub_agent_activity") {
+        handlers.onSubAgentActivity?.({
+          parentToolCallId: payload.parentToolCallId,
+          label: payload.label,
         });
       }
 
@@ -97,6 +115,49 @@ export async function readCodingHarnessInstallStream(
   let status: CodingHarnessStatus | null = null;
 
   const doneStatus = await consumeSseEvents<CodingHarnessInstallEvent, CodingHarnessStatus>(
+    body,
+    (payload) => {
+      if (payload.type === "progress") {
+        handlers.onProgress?.(payload.message);
+      }
+
+      if (payload.type === "done") {
+        status = payload.status;
+        handlers.onDone?.(payload.status);
+        return payload.status;
+      }
+
+      if (payload.type === "error") {
+        throw new Error(payload.error);
+      }
+    },
+    signal,
+  );
+
+  if (doneStatus) {
+    return doneStatus;
+  }
+
+  if (status) {
+    return status;
+  }
+
+  throw new Error("Install stream ended without a completion event.");
+}
+
+export interface AgentBrowserInstallStreamHandlers {
+  onProgress?: (message: string) => void;
+  onDone?: (status: AgentBrowserStatusResponse) => void;
+}
+
+export async function readAgentBrowserInstallStream(
+  body: ReadableStream<Uint8Array>,
+  handlers: AgentBrowserInstallStreamHandlers = {},
+  signal?: AbortSignal,
+): Promise<AgentBrowserStatusResponse> {
+  let status: AgentBrowserStatusResponse | null = null;
+
+  const doneStatus = await consumeSseEvents<AgentBrowserInstallEvent, AgentBrowserStatusResponse>(
     body,
     (payload) => {
       if (payload.type === "progress") {

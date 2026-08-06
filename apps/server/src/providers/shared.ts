@@ -1,6 +1,7 @@
 import type {
   ChatCompletionResult,
   ChatMessage,
+  StreamChatHandlers,
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
@@ -66,6 +67,23 @@ export function extractGeminiTokenUsage(value: unknown): ChatCompletionResult["u
     inputTokens: record.promptTokenCount,
     outputTokens: record.candidatesTokenCount,
     totalTokens: record.totalTokenCount,
+  });
+}
+
+export function notifyToolInputDelta(
+  handlers: StreamChatHandlers | undefined,
+  call: { id: string; name: string; arguments: string },
+  delta: string,
+): void {
+  if (!handlers?.onToolInputDelta || !call.id || !call.name || !delta) {
+    return;
+  }
+
+  handlers.onToolInputDelta({
+    toolCallId: call.id,
+    tool: call.name,
+    delta,
+    accumulatedArguments: call.arguments,
   });
 }
 

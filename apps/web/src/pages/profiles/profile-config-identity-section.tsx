@@ -10,7 +10,6 @@ import { ExpandableTextarea } from "@/components/ui/expandable-textarea";
 import {
   encodeModelSelection,
   extractModelId,
-  modelSelectContentMaxHeightClass,
   profileModelLabel,
 } from "@/lib/models";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
@@ -118,7 +117,7 @@ export function ProfileConfigIdentitySection({ state }: { state: IdentityState }
                     {profileModelLabel(editModel, providerModelGroups)}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className={modelSelectContentMaxHeightClass}>
+                <SelectContent alignItemWithTrigger={false}>
                   {extractModelId(editModel) && !modelInCatalog ? (
                     <SelectItem
                       value={encodeModelSelection("__unknown__", extractModelId(editModel)!)}

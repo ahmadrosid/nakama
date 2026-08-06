@@ -189,15 +189,22 @@ export function DiscordSettingsCard({
 
   const content = (
     <DiscordSettingsCardContent
-      embedded={embedded}
+      view={{
+        embedded,
+        configured,
+        hasLinkedUsers,
+        running,
+        showBotToken,
+        savePending: saveMutation.isPending,
+        isPaired,
+        copied,
+        regeneratePending: regenerateMutation.isPending,
+        canSave,
+      }}
       headerSubtitle={headerSubtitle}
       statusBadge={statusBadge}
-      configured={configured}
       settings={settings}
-      hasLinkedUsers={hasLinkedUsers}
-      running={running}
       botToken={botToken}
-      showBotToken={showBotToken}
       onBotTokenChange={(value) => {
         setBotToken(value);
         setHint(null);
@@ -206,13 +213,9 @@ export function DiscordSettingsCard({
         }
       }}
       onToggleShowBotToken={() => setShowBotToken((current) => !current)}
-      savePending={saveMutation.isPending}
-      isPaired={isPaired}
       pairingCode={pairingCode}
-      copied={copied}
       onCopyHandshakeCode={() => void copyHandshakeCode()}
       onRegenerateHandshake={handleRegenerateHandshake}
-      regeneratePending={regenerateMutation.isPending}
       allowedUserSummary={allowedUserSummary}
       onManageAllowedUsers={() => setAllowedUsersOpen(true)}
       profileId={profileId}
@@ -225,7 +228,6 @@ export function DiscordSettingsCard({
       statusLine={statusLine}
       formError={formError}
       loadError={loadError}
-      canSave={canSave}
       submitLabel={submitLabel}
       onSave={() => handleSave()}
     />

@@ -10,6 +10,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   SessionMessagesResponse,
+  SessionStatusResponse,
 } from "@nakama/core";
 import {
   errorResponse,
@@ -17,9 +18,11 @@ import {
   parseChannel,
   readJson,
   streamMessage,
+  streamTurnSubscribe,
   getRequestAuth,
 } from "../shared";
 import { requireActiveOrgIdFromContext, requireNotViewerFromContext } from "../org-guards";
+import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { HonoApp } from "../types";
 
@@ -269,6 +272,38 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
     });
   });
 
+  app.get("/v1/sessions/:sessionId/status", async (c) => {
+    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const result = await agent.getSessionMessages(sessionId);
+
+    if (!result) {
+      return errorResponse("Session not found", 404);
+    }
+
+    const status = sessionTurnRegistry.getStatus(sessionId);
+    return json<SessionStatusResponse>({
+      active: status.active,
+      ...(status.startedAt ? { startedAt: status.startedAt } : {}),
+    });
+  });
+
+  app.get("/v1/sessions/:sessionId/stream", async (c) => {
+    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const result = await agent.getSessionMessages(sessionId);
+
+    if (!result) {
+      return errorResponse("Session not found", 404);
+    }
+
+    const response = streamTurnSubscribe(sessionId);
+
+    if (!response) {
+      return new Response(null, { status: 204 });
+    }
+
+    return response;
+  });
+
   app.post("/v1/sessions/:sessionId/branch", async (c) => {
     try {
       const sessionId = decodeURIComponent(c.req.param("sessionId"));
@@ -308,14 +343,27 @@ export function registerSessionRoutes(app: HonoApp, options: ServerOptions): voi
       c.req.query("stream") === "true" ||
       c.req.header("Accept")?.includes("text/event-stream");
 
+    const turn = sessionTurnRegistry.beginTurn(sessionId);
+
+    if (!turn.started) {
+      return errorResponse("A response is already in progress for this session.", 409);
+    }
+
     if (wantsStream) {
-      return streamMessage(session, input, () => {
+      return streamMessage(sessionId, session, input, () => {
         agent.scheduleSessionTitleGeneration(sessionId);
       });
     }
 
-    const reply = await session.send(input);
-    agent.scheduleSessionTitleGeneration(sessionId);
-    return json<SendMessageResponse>({ reply });
+    try {
+      const reply = await session.send(input);
+      sessionTurnRegistry.endTurn(sessionId, { type: "done", reply });
+      agent.scheduleSessionTitleGeneration(sessionId);
+      return json<SendMessageResponse>({ reply });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sessionTurnRegistry.endTurn(sessionId, { type: "error", error: message });
+      return errorResponse(message, 500);
+    }
   });
 }

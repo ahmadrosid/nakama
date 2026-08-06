@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathExists, readText, readTextIfExists, writePrivateTextFile } from "../fs";
 import {
   formatMemoryArchiveYearMonth,
-  getMemoryArchiveFilePath,
+  getMemoryArchiveDir,
 } from "./memory-paths";
 import { getProfileSoulDir } from "./resolve";
 
@@ -176,6 +176,23 @@ export async function archiveProfileMemoryBullets(
 ): Promise<ArchiveMemoryResult> {
   const soulDir = getProfileSoulDir(orgId, profileId);
   const memoryPath = join(soulDir, "MEMORY.md");
+  await migrateLegacyMemoryArchiveDir(orgId, profileId);
+  const archiveDir = getMemoryArchiveDir(orgId, profileId);
+  return archiveMemoryBullets(memoryPath, archiveDir, entries, options);
+}
+
+/**
+ * Dir-parameterized archive helper shared by profile and org memory.
+ * Moves the named bullet entries out of the live `MEMORY.md` at `memoryPath`
+ * into a year-month file under `archiveDir`. Throws if the live file is
+ * missing, an entry is not found, or no entries match.
+ */
+export async function archiveMemoryBullets(
+  memoryPath: string,
+  archiveDir: string,
+  entries: string[],
+  options: { reason?: string; archivedAt?: Date } = {},
+): Promise<ArchiveMemoryResult> {
   const existing = await readTextIfExists(memoryPath);
 
   if (!existing) {
@@ -197,12 +214,8 @@ export async function archiveProfileMemoryBullets(
   }
 
   const archivedAt = options.archivedAt ?? new Date();
-  await migrateLegacyMemoryArchiveDir(orgId, profileId);
-  const archivePath = getMemoryArchiveFilePath(
-    orgId,
-    profileId,
-    formatMemoryArchiveYearMonth(archivedAt),
-  );
+  const yearMonth = formatMemoryArchiveYearMonth(archivedAt);
+  const archivePath = join(archiveDir, `${yearMonth}.md`);
   const archiveAppend = formatArchiveAppend(archivedAt, archivedSections, options.reason);
   const archiveExists = await pathExists(archivePath);
   const archiveContent = archiveExists
@@ -212,8 +225,8 @@ export async function archiveProfileMemoryBullets(
   const activeContent = rebuildMemoryContent(active);
   const activeBytes = Buffer.byteLength(activeContent, "utf8");
 
-  await writePrivateTextFile(archivePath, archiveContent);
-  await writePrivateTextFile(memoryPath, activeContent, { ensureDir: soulDir });
+  await writePrivateTextFile(archivePath, archiveContent, { ensureDir: archiveDir });
+  await writePrivateTextFile(memoryPath, activeContent);
 
   return {
     archived: archivedCount,

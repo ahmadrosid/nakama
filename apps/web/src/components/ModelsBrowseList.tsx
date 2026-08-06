@@ -1,6 +1,5 @@
 import {
   useDeferredValue,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -16,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type ModelsDevRow, useModelsDev } from "@/hooks/use-models-dev";
-import type { SelectedProvider } from "@/lib/models";
+import { isProviderTypeAlreadyConfigured, type SelectedProvider } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 export type BrowseSelectHandler = (
@@ -29,12 +28,23 @@ interface ModelsBrowseListProps {
   onSelect: BrowseSelectHandler;
   className?: string;
   provider?: SelectedProvider;
+  configuredTypes?: ReadonlySet<string>;
+  /** When true, hide OpenCode Zen catalog rows (already connected as a custom provider). */
+  openCodeZenConfigured?: boolean;
 }
 
 const MODEL_ROW_HEIGHT = 73;
 const MODEL_ROW_OVERSCAN = 6;
+const EMPTY_CONFIGURED_TYPES: ReadonlySet<string> = new Set();
 
-export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowseListProps) {
+export function ModelsBrowseList({
+  onSelect,
+  className,
+  provider,
+  configuredTypes,
+  openCodeZenConfigured = false,
+}: ModelsBrowseListProps) {
+  const configured = configuredTypes ?? EMPTY_CONFIGURED_TYPES;
   const { data: rows = [], isLoading, error } = useModelsDev();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -47,6 +57,7 @@ export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowse
 
   const filtered = useMemo(() => {
     let result = sortedRows;
+    if (openCodeZenConfigured) result = result.filter((row) => !row.isZen);
     if (costFilter === "free") result = result.filter((row) => row.isFree);
     if (hideDeprecated) result = result.filter((row) => !row.deprecated);
     if (provider) result = result.filter((row) => row.nakamaProvider === provider);
@@ -60,7 +71,7 @@ export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowse
       );
     }
     return result;
-  }, [sortedRows, costFilter, hideDeprecated, deferredSearch, provider]);
+  }, [sortedRows, openCodeZenConfigured, costFilter, hideDeprecated, deferredSearch, provider]);
 
   const freeCount = filtered.filter((row) => row.isFree).length;
 
@@ -114,7 +125,11 @@ export function ModelsBrowseList({ onSelect, className, provider }: ModelsBrowse
             No models found
           </div>
         ) : (
-          <VirtualModelList rows={filtered} onSelect={onSelect} />
+          <VirtualModelList
+            rows={filtered}
+            onSelect={onSelect}
+            configuredTypes={configured}
+          />
         )}
       </div>
     </div>
@@ -134,13 +149,21 @@ function compareModelRows(a: ModelsDevRow, b: ModelsDevRow): number {
 function VirtualModelList({
   rows,
   onSelect,
+  configuredTypes,
 }: {
   rows: ModelsDevRow[];
   onSelect: BrowseSelectHandler;
+  configuredTypes: ReadonlySet<string>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [prevRows, setPrevRows] = useState(rows);
+
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setScrollTop(0);
+  }
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -154,12 +177,10 @@ function VirtualModelList({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-
     element.scrollTop = 0;
-    setScrollTop(0);
   }, [rows]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;
@@ -186,6 +207,10 @@ function VirtualModelList({
             key={`${row.providerId}-${row.modelId}`}
             row={row}
             onSelect={onSelect}
+            alreadyConfigured={isProviderTypeAlreadyConfigured(
+              row.nakamaProvider,
+              configuredTypes,
+            )}
             style={{
               height: MODEL_ROW_HEIGHT,
               transform: `translateY(${(startIndex + offset) * MODEL_ROW_HEIGHT}px)`,
@@ -200,24 +225,31 @@ function VirtualModelList({
 function ModelRowButton({
   row,
   onSelect,
+  alreadyConfigured,
   style,
 }: {
   row: ModelsDevRow;
   onSelect: BrowseSelectHandler;
+  alreadyConfigured: boolean;
   style: React.CSSProperties;
 }) {
   const isPublicKey = row.isZen && row.isFree && !row.deprecated;
+  const selectable = row.supported && !alreadyConfigured;
 
   return (
     <button
       type="button"
       onClick={() => onSelect(row.nakamaProvider, row.modelId, row)}
-      disabled={!row.supported}
-      title={row.unsupportedReason}
+      disabled={!selectable}
+      title={
+        alreadyConfigured
+          ? "This provider is already added"
+          : row.unsupportedReason
+      }
       style={style}
       className={cn(
         "absolute left-0 top-0 flex w-full items-start gap-2.5 border-b border-border px-3 py-2 text-left transition-colors",
-        row.supported
+        selectable
           ? "cursor-pointer hover:bg-muted"
           : "cursor-not-allowed opacity-50",
       )}
@@ -225,6 +257,7 @@ function ModelRowButton({
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 text-xs text-muted-foreground">
           {row.providerName}
+          {alreadyConfigured ? " · Already added" : ""}
         </div>
         <div className="truncate text-sm font-medium leading-tight text-foreground">
           {row.modelName}

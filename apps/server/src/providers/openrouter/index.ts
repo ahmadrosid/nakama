@@ -28,6 +28,7 @@ import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
   normalizeThinkingEffort,
+  notifyToolInputDelta,
   parseJsonRecord,
 } from "../shared";
 import { openRouterModelSupportsThinking } from "./thinking";
@@ -319,7 +320,16 @@ async function readOpenRouterStream(
 
     if (delta?.toolCalls) {
       for (const toolDelta of delta.toolCalls) {
+        const argDelta = toolDelta.function?.arguments ?? "";
         mergePendingToolCall(pending, toolDelta);
+
+        if (argDelta) {
+          const current = pending.get(toolDelta.index ?? 0);
+
+          if (current) {
+            notifyToolInputDelta(handlers, current, argDelta);
+          }
+        }
       }
     }
   }

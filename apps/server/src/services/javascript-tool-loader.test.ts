@@ -74,6 +74,36 @@ export async function run(input) {
     expect(result).toEqual({ echoed: "hello" });
   });
 
+  test("loads parallelSafe when the module exports it", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "parallel-echo.js"),
+      `export const parallelSafe = true;
+
+export async function run(input) {
+  return { echoed: input.message };
+}
+`,
+      "utf8",
+    );
+
+    const record: StoredToolRecord = {
+      id: "tool_parallel_echo",
+      name: "parallel_echo",
+      description: "Parallel-safe echo",
+      handlerType: "javascript",
+      handlerConfig: { modulePath: "parallel-echo.js" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const tool = await loadJavascriptTool(record);
+
+    expect(tool?.parallelSafe).toBe(true);
+  });
+
   test("rejects module paths outside the tools directory", async () => {
     const { configDir: dir } = await setupToolsDir();
     configDir = dir;

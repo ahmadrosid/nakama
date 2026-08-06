@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -27,16 +27,17 @@ function slugifyOrganizationName(name: string): string {
 export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrganizationProps) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
+  const slugEditedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { setup } = useAuth();
 
-  useEffect(() => {
-    if (!slugEdited) {
-      setSlug(slugifyOrganizationName(name));
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!slugEditedRef.current) {
+      setSlug(slugifyOrganizationName(value));
     }
-  }, [name, slugEdited]);
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -85,7 +86,7 @@ export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrga
           <Input
             id="setup-org-name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => handleNameChange(event.target.value)}
             placeholder="Acme Corp"
             required
           />
@@ -98,7 +99,7 @@ export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrga
             id="setup-org-slug"
             value={slug}
             onChange={(event) => {
-              setSlugEdited(true);
+              slugEditedRef.current = true;
               setSlug(event.target.value);
             }}
             placeholder="acme-corp"

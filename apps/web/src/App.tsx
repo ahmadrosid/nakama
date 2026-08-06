@@ -14,13 +14,15 @@ import { ChatPage } from "@/pages/ChatPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { NotificationsPage } from "@/pages/NotificationsPage";
 import { ProfilesPage } from "@/pages/ProfilesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SetupWizardPage } from "@/pages/SetupWizardPage";
 import { SystemPage } from "@/pages/SystemPage";
 import { ToolPlaygroundPage } from "@/pages/ToolPlaygroundPage";
-import { StatusPage } from "@/pages/StatusPage";
+import { PublicArtifactSharePage } from "@/pages/PublicArtifactSharePage";
 import { TasksPage } from "@/pages/TasksPage";
+import { statusTabPath } from "@/lib/navigation";
 
 function QueryCacheListener() {
   useEffect(() => {
@@ -40,11 +42,12 @@ function AppShell() {
           <Routes>
             <Route path="/setup" element={<SetupWizardPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/s/:token" element={<PublicArtifactSharePage />} />
             <Route element={<AuthGuard />}>
               <Route element={<SetupGuard />}>
                 <Route element={<Layout />}>
                   <Route index element={<Navigate to="/chat" replace />} />
-                  <Route path="/status" element={<StatusPage />} />
+                  <Route path="/status" element={<Navigate to={statusTabPath()} replace />} />
                   <Route path="/chat" element={<ChatPage />} />
                   <Route path="/chat/:profileId/:sessionId" element={<ChatPage />} />
                   <Route path="/history" element={<HistoryPage />} />
@@ -56,6 +59,7 @@ function AppShell() {
                   <Route path="/automations" element={<AutomationsPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="*" element={<Navigate to="/chat" replace />} />
                 </Route>

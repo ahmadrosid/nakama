@@ -7,11 +7,12 @@ import type {
 } from "@nakama/core/contract";
 import type { FileUIPart } from "ai";
 import { nanoid } from "nanoid";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { RemoteChatSession } from "@nakama/client";
 import type { QueuedComposerMessage } from "@/components/chat/ChatMessageQueuePanel";
 import { useAppContext } from "@/context/use-app-context";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import { useBranchSessionMutation, useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import {
@@ -22,13 +23,17 @@ import {
 import {
   buildChatBasePath,
   buildChatPath,
+  buildNewChatPath,
   chatMessagesToListItems,
+  consumeStoredChatDraft,
   isReadOnlySessionChannel,
   parseChatRouteParams,
+  pickKnownProfileId,
+  readInitialDraftChatProfileId,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
-  consumeStoredChatDraft,
-  readRequestedProfileFromNewChatSearch,
+  readStoredActiveChatProfileId,
+  resolveDefaultProfileId,
   sessionStorageKey,
   type ChatListItem,
 } from "@/lib/chat-history";
@@ -39,6 +44,11 @@ import {
   finalizeStreamingMessages,
   isAbortError,
 } from "@/lib/chat-stream";
+import {
+  isActiveTurnConflictError,
+  reconnectActiveSessionStream,
+  seedStreamingStateForActiveTurn,
+} from "@/lib/chat-stream-resume";
 import { client, formatError } from "@/lib/client";
 import {
   decodeModelSelection,
@@ -67,12 +77,17 @@ export function useChatPage() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
+  const { profileId: liveChatProfileId, setProfileId: setLiveChatProfileId, registerChatProfileSwitchHandler } =
+    useActiveChatProfile();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
-  const [profileId, setProfileId] = useState(
-    () => readRequestedProfileFromNewChatSearch(location.search) ?? "",
+  const [profileId, setProfileId] = useState(() =>
+    readInitialDraftChatProfileId({
+      search: location.search,
+      routeProfileId: parseChatRouteParams(params)?.profileId,
+    }),
   );
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
@@ -90,12 +105,24 @@ export function useChatPage() {
   const isSendingRef = useRef(false);
   const skipNextProfileSessionRef = useRef(false);
   const loadedRouteRef = useRef<string | null>(null);
-  const profileSwitchInFlightRef = useRef(false);
   const profileIdRef = useRef(profileId);
+  const busyRef = useRef(busy);
 
   useEffect(() => {
     profileIdRef.current = profileId;
   }, [profileId]);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  // Composer / in-page switches update profileId first; push to shared context.
+  useEffect(() => {
+    if (!profileId || profileId === liveChatProfileId) {
+      return;
+    }
+    setLiveChatProfileId(profileId);
+  }, [profileId, liveChatProfileId, setLiveChatProfileId]);
 
   const syncChatUrl = useCallback(
     (nextProfileId: string, sessionId: string) => {
@@ -202,13 +229,15 @@ export function useChatPage() {
       setProfiles(response.profiles);
       if (!routeSession && response.profiles.length > 0) {
         setProfileId((current) => {
-          if (current) {
-            return current;
+          const resolved = pickKnownProfileId(
+            response.profiles,
+            current,
+            readStoredActiveChatProfileId(),
+          );
+          if (resolved) {
+            return resolved;
           }
-          const defaultProfile =
-            response.profiles.find((profile) => profile.id === "default") ??
-            response.profiles[0]!;
-          return defaultProfile.id;
+          return resolveDefaultProfileId(response.profiles) ?? "";
         });
       }
     } catch (err) {
@@ -230,8 +259,10 @@ export function useChatPage() {
       setError(null);
       setAgentTodos([]);
       setAgentQuestionnaire(null);
+      // Session routes remount ChatPage on /chat — pass profile in the query so it survives.
+      // The ?new=1 handler then replaces the URL with bare /chat.
       if (location.pathname !== buildChatBasePath()) {
-        navigate(buildChatBasePath(), { replace: true });
+        navigate(buildNewChatPath(nextProfileId), { replace: true });
       }
     },
     [location.pathname, navigate],
@@ -252,16 +283,54 @@ export function useChatPage() {
           questionnaire,
         } = await client.getSessionMessages(sessionId);
         const nextSession = client.createChatSession(sessionId, channel);
+        let listItems = chatMessagesToListItems(storedMessages, messageMeta);
         setProfileId(nextProfileId);
         setSessionChannel(channel);
         setSession(nextSession);
-        setMessages(chatMessagesToListItems(storedMessages, messageMeta));
+        setMessages(listItems);
         setAgentTodos(todos);
         setAgentQuestionnaire(questionnaire);
         syncChatUrl(nextProfileId, sessionId);
+
+        if (channel === "web") {
+          const status = await client.getSessionStatus(sessionId);
+
+          if (status.active) {
+            listItems = seedStreamingStateForActiveTurn(listItems);
+            setMessages(listItems);
+
+            const abortController = new AbortController();
+            streamAbortRef.current = abortController;
+
+            const { reconnected } = await reconnectActiveSessionStream({
+              sessionId,
+              messages: listItems,
+              handlers: buildStreamHandlers(setMessages, {
+                onTodosUpdated: setAgentTodos,
+                onQuestionnaireUpdated: setAgentQuestionnaire,
+              }),
+              signal: abortController.signal,
+            });
+
+            const refreshed = await client.getSessionMessages(sessionId);
+            setMessages(chatMessagesToListItems(refreshed.messages, refreshed.messageMeta));
+            setAgentTodos(refreshed.todos);
+            setAgentQuestionnaire(refreshed.questionnaire);
+
+            if (!reconnected && !status.active) {
+              setError(null);
+            }
+          }
+        }
       } catch (err) {
+        if (isAbortError(err)) {
+          setMessages((current) => finalizeStreamingMessages(current));
+          return;
+        }
+
         setError(formatError(err));
       } finally {
+        streamAbortRef.current = null;
         setBusy(false);
       }
     },
@@ -293,19 +362,33 @@ export function useChatPage() {
   );
 
   const handleProfileSwitch = useCallback(
-    async (nextProfileId: string) => {
+    (nextProfileId: string) => {
       if (!nextProfileId || nextProfileId === profileId || busy) {
         return;
       }
-      profileSwitchInFlightRef.current = true;
       setProfileId(nextProfileId);
       enterDraftChat(nextProfileId);
-      profileSwitchInFlightRef.current = false;
     },
     [profileId, busy, enterDraftChat],
   );
 
   useEffect(() => {
+    return registerChatProfileSwitchHandler((nextProfileId) => {
+      if (
+        !nextProfileId ||
+        nextProfileId === profileIdRef.current ||
+        busyRef.current
+      ) {
+        return;
+      }
+      setProfileId(nextProfileId);
+      enterDraftChat(nextProfileId);
+    });
+  }, [registerChatProfileSwitchHandler, enterDraftChat]);
+
+  // Layout effect so session is cleared before the syncChatUrl effect can
+  // re-push the previous /chat/:profile/:session URL (first-click blink).
+  useLayoutEffect(() => {
     if (searchParams.get("new") !== "1") {
       return;
     }
@@ -314,13 +397,22 @@ export function useChatPage() {
     const draftKey = readRequestedDraftKeyFromNewChatSearch(location.search);
     const storedDraft = draftKey ? consumeStoredChatDraft(draftKey) : null;
     const requestedDraft = inlineDraft ?? storedDraft;
-    setSearchParams({}, { replace: true });
     const targetProfileId = requestedProfile || profileIdRef.current;
-    if (!targetProfileId) {
-      return;
-    }
 
+    if (targetProfileId) {
+      localStorage.removeItem(sessionStorageKey(targetProfileId));
+    }
     skipNextProfileSessionRef.current = true;
+    loadedRouteRef.current = null;
+    messageQueueRef.current = [];
+    isSendingRef.current = false;
+    setQueuedMessages([]);
+    setSession(null);
+    setSessionChannel("web");
+    setMessages([]);
+    setError(null);
+    setAgentTodos([]);
+    setAgentQuestionnaire(null);
 
     if (requestedProfile && requestedProfile !== profileIdRef.current) {
       setProfileId(requestedProfile);
@@ -330,8 +422,8 @@ export function useChatPage() {
       setComposerDraft(requestedDraft);
     }
 
-    enterDraftChat(targetProfileId);
-  }, [searchParams, setSearchParams, enterDraftChat, location.search]);
+    navigate(buildChatBasePath(), { replace: true });
+  }, [searchParams, navigate, location.search]);
 
   useEffect(() => {
     if (!profileId || routeSession) {
@@ -345,7 +437,7 @@ export function useChatPage() {
   }, [profileId, routeSession, enterDraftChat]);
 
   useEffect(() => {
-    if (!routeSession || profileSwitchInFlightRef.current) {
+    if (!routeSession) {
       return;
     }
     const routeKey = `${routeSession.profileId}:${routeSession.sessionId}`;
@@ -358,11 +450,16 @@ export function useChatPage() {
   }, [routeSession, resumeSession]);
 
   useEffect(() => {
-    if (!session || !profileId || profileSwitchInFlightRef.current) {
+    if (!session || !profileId) {
+      return;
+    }
+    // Stale session state must never overwrite an intentional draft /chat URL.
+    // send/resume call syncChatUrl explicitly when a session should be reflected.
+    if (location.pathname === buildChatBasePath()) {
       return;
     }
     syncChatUrl(profileId, session.id);
-  }, [session, profileId, syncChatUrl]);
+  }, [session, profileId, syncChatUrl, location.pathname]);
 
   useEffect(() => {
     void loadProfiles();
@@ -478,6 +575,11 @@ export function useChatPage() {
         }
 
         const message = formatError(err);
+
+        if (isActiveTurnConflictError(message) && activeSession) {
+          setError("The agent is still responding to your last message.");
+          return;
+        }
 
         if (message.includes("Session not found") && profileId) {
           try {

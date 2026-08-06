@@ -121,14 +121,16 @@ describe("seedOrgSuperBotProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "create-profile");
-    await upsertSkill(db, "coding-delegation");
+    await upsertSkill(db, "coding-agent");
+    await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
     const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
 
     expect(skillNames).toContain("create-automation");
     expect(skillNames).toContain("create-profile");
-    expect(skillNames).toContain("coding-delegation");
+    expect(skillNames).toContain("coding-agent");
+    expect(skillNames).not.toContain("agent-browser");
   });
 
   test("is idempotent for the same org", async () => {
@@ -174,6 +176,7 @@ describe("ensureBundledSkillsAssigned", () => {
     const db = createInMemoryDatabaseAdapter();
     await upsertSkill(db, "create-automation");
     await upsertSkill(db, "create-profile");
+    await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
 
@@ -182,6 +185,7 @@ describe("ensureBundledSkillsAssigned", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
     expect(skillNames).toContain("create-automation");
     expect(skillNames).not.toContain("create-profile");
+    expect(skillNames).not.toContain("agent-browser");
   });
 });
 

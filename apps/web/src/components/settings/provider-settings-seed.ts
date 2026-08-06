@@ -26,7 +26,8 @@ export function seedManageModelRows(
   }));
 }
 
-export function seedOpenRouterManageModelRows(
+/** Seeds OpenRouter / Cerebras (and similar) manage dialogs. */
+export function seedShortlistManageModelRows(
   customModels: CustomModelEntry[] | undefined,
   currentModel?: string | null,
   currentModelName?: string | null,
@@ -37,6 +38,7 @@ export function seedOpenRouterManageModelRows(
       name: model.name ?? model.id,
       default: model.default,
       supportsThinking: model.supportsThinking,
+      supportsVision: model.supportsVision,
       inputPerMillionUsd: model.inputPerMillionUsd,
       outputPerMillionUsd: model.outputPerMillionUsd,
     }));

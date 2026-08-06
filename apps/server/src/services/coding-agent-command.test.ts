@@ -3,10 +3,16 @@ import {
   buildCodingAgentCommandTemplate,
   formatCodingAgentCommandContext,
 } from "./coding-agent-command";
+import { makeAnthropicProvider } from "./coding-agent-fixtures";
+
+const anthropicUserConfig = {
+  providers: [makeAnthropicProvider()],
+  defaultProviderId: "prov_anthropic",
+};
 
 describe("buildCodingAgentCommandTemplate", () => {
-  test("builds Claude Code print-mode command", () => {
-    const template = buildCodingAgentCommandTemplate(
+  test("builds Claude Code print-mode command", async () => {
+    const template = await buildCodingAgentCommandTemplate(
       {
         kind: "claude_code",
         name: "Claude Code",
@@ -24,8 +30,8 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Add tests for auth'");
   });
 
-  test("builds Codex exec command", () => {
-    const template = buildCodingAgentCommandTemplate(
+  test("builds Codex exec command", async () => {
+    const template = await buildCodingAgentCommandTemplate(
       {
         kind: "codex",
         name: "Codex",
@@ -41,8 +47,8 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Refactor auth module'");
   });
 
-  test("builds OpenCode run command with workspace dir", () => {
-    const template = buildCodingAgentCommandTemplate(
+  test("builds OpenCode run command with workspace dir", async () => {
+    const template = await buildCodingAgentCommandTemplate(
       {
         kind: "opencode",
         name: "OpenCode",
@@ -60,8 +66,8 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Fix lint errors'");
   });
 
-  test("reflects custom harness command from workspace settings", () => {
-    const template = buildCodingAgentCommandTemplate(
+  test("reflects custom harness command from workspace settings", async () => {
+    const template = await buildCodingAgentCommandTemplate(
       {
         kind: "claude_code",
         name: "Custom Claude",
@@ -77,9 +83,9 @@ describe("buildCodingAgentCommandTemplate", () => {
 });
 
 describe("formatCodingAgentCommandContext", () => {
-  test("formats harness context for bash delegation", () => {
+  test("formats harness context for bash delegation", async () => {
     const context = formatCodingAgentCommandContext(
-      buildCodingAgentCommandTemplate(
+      await buildCodingAgentCommandTemplate(
         {
           kind: "opencode",
           name: "OpenCode",
@@ -93,5 +99,28 @@ describe("formatCodingAgentCommandContext", () => {
 
     expect(context).toContain("bash");
     expect(context).toContain("opencode run");
+  });
+
+  test("redacts API keys from prompt context", async () => {
+    const context = formatCodingAgentCommandContext(
+      await buildCodingAgentCommandTemplate(
+        {
+          kind: "claude_code",
+          name: "Claude Code",
+          command: "claude",
+          args: [],
+        },
+        "Ship feature",
+        "/tmp/workspace",
+        {
+          userConfig: anthropicUserConfig,
+          profileModel: "claude-sonnet-4-6",
+        },
+      ),
+    );
+
+    expect(context).toContain("Nakama provider passthrough");
+    expect(context).not.toContain("sk-ant-test");
+    expect(context).toContain('"***"');
   });
 });

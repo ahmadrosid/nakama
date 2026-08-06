@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { canRunToolCallsInParallel } from "@nakama/agent";
 import type { SubAgentRunResult } from "./sub-agent-shared";
 import {
   createSubAgentTool,
@@ -78,5 +79,24 @@ describe("sub_agent tool", () => {
 
   test("exposes stable tool name", () => {
     expect(SUB_AGENT_TOOL_NAME).toBe("sub_agent");
+  });
+
+  test("is parallelSafe so sibling sub-agents can run concurrently from the parent", () => {
+    const tool = createSubAgentTool(createMockAgentService(async () => ({
+      status: "success",
+      summary: "ok",
+      output: "ok",
+    })));
+
+    expect(tool.parallelSafe).toBe(true);
+    expect(
+      canRunToolCallsInParallel(
+        [tool],
+        [
+          { id: "a", name: "sub_agent", arguments: { task: "first" } },
+          { id: "b", name: "sub_agent", arguments: { task: "second" } },
+        ],
+      ),
+    ).toBe(true);
   });
 });

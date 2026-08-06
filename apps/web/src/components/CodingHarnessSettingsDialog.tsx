@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -40,18 +40,18 @@ export function CodingHarnessSettingsPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [installProgress, setInstallProgress] = useState<string | null>(null);
+  const [syncedSettings, setSyncedSettings] = useState(settings);
 
-  useEffect(() => {
-    if (!settings) {
-      return;
+  if (settings !== syncedSettings) {
+    setSyncedSettings(settings);
+    if (settings) {
+      const nextSelected = settings.selectedHarnessId ?? settings.activeHarnessId;
+      setSelectedHarnessId(nextSelected);
+      setExpandedHarnessId(nextSelected);
+      setHint(null);
+      setFormError(null);
     }
-
-    const nextSelected = settings.selectedHarnessId ?? settings.activeHarnessId;
-    setSelectedHarnessId(nextSelected);
-    setExpandedHarnessId(nextSelected);
-    setHint(null);
-    setFormError(null);
-  }, [settings]);
+  }
 
   function selectHarness(harnessId: string) {
     setSelectedHarnessId(harnessId);
@@ -146,10 +146,10 @@ export function CodingHarnessSettingsPanel({
             return;
           }
 
-          if (status.nextStep === "login") {
+          if (status.nextStep === "retry") {
             setHint(
               status.statusMessage ??
-                `${name} is installed. Finish login on this server, then run readiness check.`,
+                `${name} is installed but provider passthrough is not ready. Check Settings → Provider, then run readiness check.`,
             );
             return;
           }
@@ -194,6 +194,43 @@ export function CodingHarnessSettingsPanel({
             <p className="text-sm text-muted-foreground">
               Nakama can hand off coding tasks to a CLI agent on this server.
             </p>
+            {settings.providerPassthrough ? (
+              <p className="text-sm text-muted-foreground">
+                {settings.providerPassthrough.active ? (
+                  <>
+                    Provider passthrough active
+                    {settings.providerPassthrough.providerLabel
+                      ? ` (${settings.providerPassthrough.providerLabel}`
+                      : ""}
+                    {settings.providerPassthrough.model
+                      ? ` / ${settings.providerPassthrough.model}`
+                      : settings.providerPassthrough.providerLabel
+                        ? ")"
+                        : ""}
+                    {settings.providerPassthrough.providerLabel &&
+                    settings.providerPassthrough.model
+                      ? ")"
+                      : ""}
+                    .
+                  </>
+                ) : (
+                  <>
+                    Provider passthrough is not active.{" "}
+                    {settings.providerPassthrough.message ? (
+                      settings.providerPassthrough.message
+                    ) : (
+                      <>
+                        Configure a compatible provider in{" "}
+                        <Link to="/settings?section=provider" className="underline">
+                          Settings → Provider
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </>
+                )}
+              </p>
+            ) : null}
           </div>
           {!embedded ? (
             <Button
@@ -311,7 +348,7 @@ export function CodingHarnessSettingsDialog({
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle>Coding agents</DialogTitle>
           <DialogDescription className="text-xs">
-            Pick an agent, make sure it is installed and logged in, then Nakama can enable code
+            Pick an agent, make sure it is installed and ready, then Nakama can enable code
             delegation.
           </DialogDescription>
         </DialogHeader>

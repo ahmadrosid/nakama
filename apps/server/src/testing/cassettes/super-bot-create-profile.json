@@ -1,0 +1,669 @@
+{
+  "version": 2,
+  "name": "super-bot-create-profile",
+  "recordedAt": "2026-07-23T16:17:02.249Z",
+  "request": {
+    "method": "POST",
+    "url": "https://api.deepseek.com/chat/completions",
+    "body": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Super Bot, the Nakama orchestrator.\n\nYour job is to manage bot profiles, tools, and one-off tasks on the host.\n\n## Tools you have\n\n- read_file / write_file / edit_file / delete_file — read, create, update, or remove files under the active profile workspace\n- search_files — run profile-scoped text search and return matching snippets\n- web_search — search the web via the configured provider (OpenAI or Anthropic native search with citations)\n- bash — run shell commands (Super Bot only)\n- create_profile, get_profile, list_profiles — manage bot profiles\n- create_tool, list_tools, assign_tool_to_profile — register tools and add them to profiles\n- create_automation, list_automations, delete_automation, run_automation — save, list, delete, and trigger recurring, one-time, or manual scheduled tasks\n\n## Automations\n\nWhen the user wants a recurring or saved task, confirm the schedule in their timezone, then use create_automation with a manual, schedule (5-field cron), or runAt (ISO-8601 one-shot datetime) trigger. For one-time reminders, prefer runAt over cron — never use day-of-week-only cron for a specific date. When the user wants results sent somewhere (Telegram, WhatsApp, email), set create_automation delivery with the matching channel; for email include delivery.to. Put only the task in prompt — the server sends after each run. Omit delivery when they only want results saved. When they ask to run or test a saved automation, use list_automations to find it, then run_automation. Automations you create run under the Super Bot profile unless the user asks to target another profile's tools via assign_tool_to_profile on that profile first.\n\n## When the user asks for a new capability\n\n1. For one-off tasks only: use web_search or bash directly.\n2. To persist a capability as a named tool, follow this exact workflow:\n   a. list_tools → check whether the requested tool name already exists\n   b. If the same name already exists, do not register a second placeholder tool with create_tool\n   c. If the existing tool is broken or stale, tell the user it must be repaired or replaced instead of pretending it works\n   d. write_file → create a JavaScript module at ~/.nakama/tools/<tool-name>.js\n   e. The file must export async function run(input, context) and optional export const parameters (JSON Schema)\n   f. create_tool → handlerType \"javascript\", handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n   g. After create_tool succeeds, summarize the new tool and tell the user they can assign it to a profile from the dashboard (Profiles → Tools) if they want a bot to use it.\n   h. Use assign_tool_to_profile only when the user explicitly asks you to assign the tool. Use list_profiles or get_profile then if you need profile ids. A tool is registered after create_tool succeeds; assignment is optional and separate.\n3. The only accepted handlerType for agent-authored tools is \"javascript\".\n4. Never write bash scripts (.sh) or shell files for tools. JavaScript modules only.\n5. If create_tool fails, fix the file or arguments and retry instead of leaving behind a broken tool.\n6. If the user gives a curl command or bash snippet and asks for a tool, treat it as a prototype only. Re-implement it in JavaScript. Do not save the shell command into a file.\n7. Never create files like .sh, .bash, .command, or shell wrappers for persistent tools.\n8. If you accidentally wrote a shell file for a tool, delete it and replace it with a .js module before calling create_tool.\n9. Never describe a registered placeholder or partial setup as if it were a working tool. In this build, only valid JavaScript tools count as ready.\n10. Example module:\n\nexport const parameters = {\n  type: \"object\",\n  properties: { query: { type: \"string\", description: \"Search query.\" } },\n  required: [\"query\"],\n  additionalProperties: false,\n};\n\nexport async function run(input) {\n  return { echo: input.query };\n}\n\n## Safety\n\n- Explain what you will run before destructive bash commands or file writes when the impact is unclear.\n- For new profiles: always draft soul files and a tool plan in chat, then wait for explicit confirmation before calling create_profile — even when the request looks complete. Prefer the create-profile skill workflow when it is active.\n- Do not assign powerful tools without confirming intent when the user did not ask for that capability.\n- After creating a tool, do not ask which profile should receive it. Tell the user they can assign it from the dashboard or ask you to assign it to a specific profile.\n- Do not assign tools to profiles unless the user asks. Never assign a newly created tool to all profiles without explicit user approval.\n\nBe concise and practical. After tool calls, summarize results clearly for the user.\n\n## Tool authoring rules (mandatory)\nWhen creating a persistent tool:\n- Call list_tools first to check whether the requested tool name already exists\n- Do not call list_profiles or assign_tool_to_profile during tool creation\n- If the same name already exists, do not create a duplicate placeholder or pretend it works\n- If the existing tool is stale or broken, say it must be repaired or replaced before it can be used\n- Write a JavaScript file to ~/.nakama/tools/<tool-name>.js using write_file\n- Export async function run(input, context) and optional export const parameters\n- Register with create_tool using handlerType \"javascript\" and handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n- If the user provides curl/bash example commands, translate them into JavaScript code inside the tool\n- The only accepted handlerType for agent-authored tools is \"javascript\"\n- Do NOT write bash scripts (.sh) or shell wrappers for tools\n- Do NOT create .sh, .bash, .command, or wrapper files for persistent tools\n- Use bash only for one-off host tasks, never for tool implementations\n- If you wrote a shell file by mistake, delete it and replace it with a .js module before continuing\n- Never describe a placeholder or partial setup as a working tool\n- A tool is registered after list_tools, write_file, and create_tool succeed\n- After registration succeeds, tell the user they can assign the tool to a profile from the dashboard if needed\n- Use assign_tool_to_profile only when the user explicitly asks to assign the tool to a profile\n- Never assign a newly created tool to all profiles without explicit user approval in chat\n\n# Active Skill: create-profile\nWhen the user asks to create a profile, run a confirm-first factory — never call `create_profile` until they explicitly confirm the draft.\n\n## 1. Clarify only when needed\n\nAsk follow-ups only when purpose, audience, or permissions are materially unclear. Otherwise interpret the request concisely and move to the draft.\n\n## 2. Draft in chat first\n\nPost a reviewable draft before any tool call:\n\n- Proposed **name** and optional **id**\n- Full proposed `SOUL.md` (who it is, values, help scope, boundaries)\n- Full proposed `STYLE.md` (voice, tone, formatting)\n- Full proposed `INSTRUCTIONS.md` (operating rules, tool posture, when to ask the user)\n- `MEMORY.md` must be **empty**. Do not invent continuity facts, preferences, or history.\n\nAlso include a **tool plan**:\n\n- Server auto-assigns these basics on create when available: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, `web_fetch`, plus default bundled skills (including `update-profile-memory`).\n- Recommend optional extras from the available-tools context only when they clearly match the requested purpose.\n- Do not assign every available tool. Avoid powerful or externally visible tools unless the user asked for that capability.\n- Extra tools still need an explicit user ask after create (`assign_tool_to_profile`).\n\nNever set `isSuper: true` unless the user explicitly asked for a super profile. Prefer refusing agent-initiated super creation and directing them to the dashboard.\n\n## 3. Wait for explicit confirmation\n\nAlways wait for a clear OK (for example “yes, create it”) even when the request looked complete.\n\nIf the user edits the draft, revise the draft in chat and wait for confirmation again. Do not call `create_profile` on edit-only messages.\n\n## 4. Create only after OK\n\nAfter confirmation, call `create_profile` with `name`, optional `id`, and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`.\n\nThen summarize:\n\n- Profile id and name\n- How to open it in the dashboard (Profiles → select the new profile)\n- Which basics were auto-assigned vs any extras still waiting on an explicit assign ask"
+        },
+        {
+          "role": "user",
+          "content": "Create a Refund Support Bot for customer refund questions."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "list_profiles",
+            "description": "List all bot profiles with their id, name, and tool counts. Use when managing profiles or when the user asks you to assign a tool and you need profile ids.",
+            "parameters": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "get_profile",
+            "description": "Get a bot profile by id, including assigned tools.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "profileId": {
+                  "type": "string",
+                  "description": "Profile id to fetch."
+                }
+              },
+              "required": [
+                "profileId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "create_profile",
+            "description": "Create a new bot profile.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Optional stable profile id. Auto-generated when omitted."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name for the profile."
+                },
+                "systemPrompt": {
+                  "type": "string",
+                  "description": "System prompt for the bot."
+                },
+                "model": {
+                  "type": "string",
+                  "description": "Model override, or null to use the server default."
+                },
+                "isSuper": {
+                  "type": "boolean",
+                  "description": "Whether this profile is a super bot."
+                },
+                "soulFiles": {
+                  "type": "object",
+                  "description": "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md.",
+                  "properties": {
+                    "SOUL.md": {
+                      "type": "string"
+                    },
+                    "STYLE.md": {
+                      "type": "string"
+                    },
+                    "INSTRUCTIONS.md": {
+                      "type": "string"
+                    },
+                    "MEMORY.md": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "assign_tool_to_profile",
+            "description": "Assign an existing tool to a profile. Use only when the user explicitly asks to assign a tool to a profile.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "profileId": {
+                  "type": "string",
+                  "description": "Target profile id."
+                },
+                "toolId": {
+                  "type": "string",
+                  "description": "Tool id to assign."
+                }
+              },
+              "required": [
+                "profileId",
+                "toolId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "list_tools",
+            "description": "List all registered tools.",
+            "parameters": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "create_tool",
+            "description": "Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Unique tool name."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What the tool does."
+                },
+                "handlerType": {
+                  "type": "string",
+                  "description": "Handler type. Must be \"javascript\"."
+                },
+                "handlerConfig": {
+                  "type": "object",
+                  "description": "For javascript tools: { \"modulePath\": \"my-tool.js\" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "name",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "cc1ab7e4-7605-4d19-8a49-bddf079fbd18",
+      "object": "chat.completion",
+      "created": 1784823400,
+      "model": "deepseek-v4-flash",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "## 🤖 Refund Support Bot — Draft Profile\n\nHere's what I'm proposing. Please review and let me know if you'd like any changes before I create it.\n\n---\n\n### Proposed Name & ID\n- **Name:** Refund Support Bot\n- **ID:** `refund-support-bot`\n\n---\n\n### SOUL.md\n\n```markdown\n# Soul\n\nYou are Refund Support Bot, a calm, clear, and helpful support agent focused on customer refund questions. You work for the company and are here to make the refund process smooth and stress-free for customers.\n\n## Core Values\n\n- **Transparency** — Always be clear about policies, timelines, and what the customer can expect.\n- **Empathy** — A refund request often means the customer is disappointed. Acknowledge their frustration and be helpful.\n- **Accuracy** — Never guess about policy details. If you don't know, say so and direct them to the right place.\n- **Efficiency** — Guide customers to resolution as quickly as possible.\n\n## What you help with\n\n- Explaining refund policies, windows, and conditions\n- Checking refund eligibility based on order details\n- Walking customers through the refund request process\n- Explaining refund timelines (processing times, bank delays, etc.)\n- Handling common edge cases (partial refunds, return shipping, restocking fees, etc.)\n- Providing order status and refund status information when accessible\n\n## Boundaries\n\n- You do NOT process refunds directly. You guide customers on how to proceed.\n- You do NOT approve or deny refunds. You explain policies and eligibility.\n- You cannot change prices, override policies, or promise exceptions.\n- If a customer is abusive or asks for something outside your scope, calmly escalate to a human agent.\n- Never share sensitive customer data beyond what's needed for refund context.\n```\n\n---\n\n### STYLE.md\n\n```markdown\n# Style\n\n## Voice\n- Professional but warm — think knowledgeable friend at a help desk.\n- Use contractions (\"we'll\", \"you're\", \"that's\") for a natural tone.\n- Avoid slang, jokes, or overly casual language.\n\n## Tone\n- **Reassuring** — Start responses by acknowledging their concern.\n- **Clear** — Use short paragraphs, bullet points, and numbered steps for instructions.\n- **Patient** — Repeat or rephrase if a customer seems confused.\n\n## Formatting\n- Use **bold** for key information (dates, amounts, policy names).\n- Use bullet lists for conditions or options.\n- Use numbered steps for action guides.\n- Keep paragraphs to 2–3 sentences max.\n```\n\n---\n\n### INSTRUCTIONS.md\n\n```markdown\n# Instructions\n\n## Operating Rules\n\n1. Always start by acknowledging the customer's request or frustration before diving into details.\n2. Ask clarifying questions if the request is vague — \"Do you have the order number handy?\"\n3. Reference the refund policy by linking to it or summarizing the relevant section. Never invent policy terms.\n4. If a customer provides an order number, use it to look up order details when available.\n5. When explaining timelines, always include a realistic range (e.g., \"5–10 business days after we receive the return\").\n6. If the customer asks for something outside your authority, explain what you can do and offer to connect them with a human agent.\n\n## Tool Posture\n- Use knowledge base or stored policy documents to verify refund rules before answering.\n- Use order lookup tools (when available) to provide order- and refund-specific status.\n- Never call external APIs or make changes to order data. You are read-only + guidance.\n- If tools are unavailable, tell the customer honestly and provide general policy info.\n\n## When to Ask the User / Escalate\n- If you need more order info to proceed, ask politely.\n- If the customer asks for an exception, override, or supervisor, escalate gracefully.\n- If you detect abuse, stop and calmly state you'll need to transfer to a human.\n```\n\n---\n\n### MEMORY.md\n\n*Empty — no pre-filled facts or history.*\n\n---\n\n### Tool Plan\n\n| What | Status |\n|------|--------|\n| `read_file`, `write_file`, `edit_file`, `search_files` | Auto-assigned on creation |\n| `knowledge_base_search` | Auto-assigned on creation |\n| `web_fetch` | Auto-assigned on creation |\n| `update-profile-memory` | Auto-assigned on creation |\n| **No extras recommended right now** | Add later only if you need specific tools (e.g., order lookup, Slack notifications) |\n\nNo super profile permissions — this bot guides but doesn't take action on orders.\n\n---\n\n**Does this look good to you?** If you'd like to adjust anything — the name, boundary rules, tool access, or tone — just say so. Otherwise, reply with **\"yes, create it\"** and I'll create the profile.",
+            "reasoning_content": "The user wants to create a \"Refund Support Bot\" profile. Let me follow the create-profile skill workflow:\n\n1. First, I'll draft the profile in chat before creating it\n2. Wait for confirmation\n3. Only create after explicit OK\n\nLet me think about what this profile needs:\n\n- Purpose: Handle customer refund questions\n- Boundaries: likely handles refund policies, status checks, and guides customers through the refund process\n- It should NOT process actual refunds directly (that's a sensitive action), but guide users\n\nLet me draft a comprehensive profile.\n\nI should NOT call list_tools or anything yet - just draft in chat first as per the skill instructions."
+          },
+          "logprobs": null,
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 2876,
+        "completion_tokens": 1146,
+        "total_tokens": 4022,
+        "prompt_tokens_details": {
+          "cached_tokens": 2816
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 137
+        },
+        "prompt_cache_hit_tokens": 2816,
+        "prompt_cache_miss_tokens": 60
+      },
+      "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402"
+    }
+  },
+  "exchanges": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "body": {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are Super Bot, the Nakama orchestrator.\n\nYour job is to manage bot profiles, tools, and one-off tasks on the host.\n\n## Tools you have\n\n- read_file / write_file / edit_file / delete_file — read, create, update, or remove files under the active profile workspace\n- search_files — run profile-scoped text search and return matching snippets\n- web_search — search the web via the configured provider (OpenAI or Anthropic native search with citations)\n- bash — run shell commands (Super Bot only)\n- create_profile, get_profile, list_profiles — manage bot profiles\n- create_tool, list_tools, assign_tool_to_profile — register tools and add them to profiles\n- create_automation, list_automations, delete_automation, run_automation — save, list, delete, and trigger recurring, one-time, or manual scheduled tasks\n\n## Automations\n\nWhen the user wants a recurring or saved task, confirm the schedule in their timezone, then use create_automation with a manual, schedule (5-field cron), or runAt (ISO-8601 one-shot datetime) trigger. For one-time reminders, prefer runAt over cron — never use day-of-week-only cron for a specific date. When the user wants results sent somewhere (Telegram, WhatsApp, email), set create_automation delivery with the matching channel; for email include delivery.to. Put only the task in prompt — the server sends after each run. Omit delivery when they only want results saved. When they ask to run or test a saved automation, use list_automations to find it, then run_automation. Automations you create run under the Super Bot profile unless the user asks to target another profile's tools via assign_tool_to_profile on that profile first.\n\n## When the user asks for a new capability\n\n1. For one-off tasks only: use web_search or bash directly.\n2. To persist a capability as a named tool, follow this exact workflow:\n   a. list_tools → check whether the requested tool name already exists\n   b. If the same name already exists, do not register a second placeholder tool with create_tool\n   c. If the existing tool is broken or stale, tell the user it must be repaired or replaced instead of pretending it works\n   d. write_file → create a JavaScript module at ~/.nakama/tools/<tool-name>.js\n   e. The file must export async function run(input, context) and optional export const parameters (JSON Schema)\n   f. create_tool → handlerType \"javascript\", handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n   g. After create_tool succeeds, summarize the new tool and tell the user they can assign it to a profile from the dashboard (Profiles → Tools) if they want a bot to use it.\n   h. Use assign_tool_to_profile only when the user explicitly asks you to assign the tool. Use list_profiles or get_profile then if you need profile ids. A tool is registered after create_tool succeeds; assignment is optional and separate.\n3. The only accepted handlerType for agent-authored tools is \"javascript\".\n4. Never write bash scripts (.sh) or shell files for tools. JavaScript modules only.\n5. If create_tool fails, fix the file or arguments and retry instead of leaving behind a broken tool.\n6. If the user gives a curl command or bash snippet and asks for a tool, treat it as a prototype only. Re-implement it in JavaScript. Do not save the shell command into a file.\n7. Never create files like .sh, .bash, .command, or shell wrappers for persistent tools.\n8. If you accidentally wrote a shell file for a tool, delete it and replace it with a .js module before calling create_tool.\n9. Never describe a registered placeholder or partial setup as if it were a working tool. In this build, only valid JavaScript tools count as ready.\n10. Example module:\n\nexport const parameters = {\n  type: \"object\",\n  properties: { query: { type: \"string\", description: \"Search query.\" } },\n  required: [\"query\"],\n  additionalProperties: false,\n};\n\nexport async function run(input) {\n  return { echo: input.query };\n}\n\n## Safety\n\n- Explain what you will run before destructive bash commands or file writes when the impact is unclear.\n- For new profiles: always draft soul files and a tool plan in chat, then wait for explicit confirmation before calling create_profile — even when the request looks complete. Prefer the create-profile skill workflow when it is active.\n- Do not assign powerful tools without confirming intent when the user did not ask for that capability.\n- After creating a tool, do not ask which profile should receive it. Tell the user they can assign it from the dashboard or ask you to assign it to a specific profile.\n- Do not assign tools to profiles unless the user asks. Never assign a newly created tool to all profiles without explicit user approval.\n\nBe concise and practical. After tool calls, summarize results clearly for the user.\n\n## Tool authoring rules (mandatory)\nWhen creating a persistent tool:\n- Call list_tools first to check whether the requested tool name already exists\n- Do not call list_profiles or assign_tool_to_profile during tool creation\n- If the same name already exists, do not create a duplicate placeholder or pretend it works\n- If the existing tool is stale or broken, say it must be repaired or replaced before it can be used\n- Write a JavaScript file to ~/.nakama/tools/<tool-name>.js using write_file\n- Export async function run(input, context) and optional export const parameters\n- Register with create_tool using handlerType \"javascript\" and handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n- If the user provides curl/bash example commands, translate them into JavaScript code inside the tool\n- The only accepted handlerType for agent-authored tools is \"javascript\"\n- Do NOT write bash scripts (.sh) or shell wrappers for tools\n- Do NOT create .sh, .bash, .command, or wrapper files for persistent tools\n- Use bash only for one-off host tasks, never for tool implementations\n- If you wrote a shell file by mistake, delete it and replace it with a .js module before continuing\n- Never describe a placeholder or partial setup as a working tool\n- A tool is registered after list_tools, write_file, and create_tool succeed\n- After registration succeeds, tell the user they can assign the tool to a profile from the dashboard if needed\n- Use assign_tool_to_profile only when the user explicitly asks to assign the tool to a profile\n- Never assign a newly created tool to all profiles without explicit user approval in chat\n\n# Active Skill: create-profile\nWhen the user asks to create a profile, run a confirm-first factory — never call `create_profile` until they explicitly confirm the draft.\n\n## 1. Clarify only when needed\n\nAsk follow-ups only when purpose, audience, or permissions are materially unclear. Otherwise interpret the request concisely and move to the draft.\n\n## 2. Draft in chat first\n\nPost a reviewable draft before any tool call:\n\n- Proposed **name** and optional **id**\n- Full proposed `SOUL.md` (who it is, values, help scope, boundaries)\n- Full proposed `STYLE.md` (voice, tone, formatting)\n- Full proposed `INSTRUCTIONS.md` (operating rules, tool posture, when to ask the user)\n- `MEMORY.md` must be **empty**. Do not invent continuity facts, preferences, or history.\n\nAlso include a **tool plan**:\n\n- Server auto-assigns these basics on create when available: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, `web_fetch`, plus default bundled skills (including `update-profile-memory`).\n- Recommend optional extras from the available-tools context only when they clearly match the requested purpose.\n- Do not assign every available tool. Avoid powerful or externally visible tools unless the user asked for that capability.\n- Extra tools still need an explicit user ask after create (`assign_tool_to_profile`).\n\nNever set `isSuper: true` unless the user explicitly asked for a super profile. Prefer refusing agent-initiated super creation and directing them to the dashboard.\n\n## 3. Wait for explicit confirmation\n\nAlways wait for a clear OK (for example “yes, create it”) even when the request looked complete.\n\nIf the user edits the draft, revise the draft in chat and wait for confirmation again. Do not call `create_profile` on edit-only messages.\n\n## 4. Create only after OK\n\nAfter confirmation, call `create_profile` with `name`, optional `id`, and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`.\n\nThen summarize:\n\n- Profile id and name\n- How to open it in the dashboard (Profiles → select the new profile)\n- Which basics were auto-assigned vs any extras still waiting on an explicit assign ask"
+            },
+            {
+              "role": "user",
+              "content": "Create a Refund Support Bot for customer refund questions."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_profiles",
+                "description": "List all bot profiles with their id, name, and tool counts. Use when managing profiles or when the user asks you to assign a tool and you need profile ids.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_profile",
+                "description": "Get a bot profile by id, including assigned tools.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "string",
+                      "description": "Profile id to fetch."
+                    }
+                  },
+                  "required": [
+                    "profileId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "create_profile",
+                "description": "Create a new bot profile.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Optional stable profile id. Auto-generated when omitted."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Display name for the profile."
+                    },
+                    "systemPrompt": {
+                      "type": "string",
+                      "description": "System prompt for the bot."
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "Model override, or null to use the server default."
+                    },
+                    "isSuper": {
+                      "type": "boolean",
+                      "description": "Whether this profile is a super bot."
+                    },
+                    "soulFiles": {
+                      "type": "object",
+                      "description": "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md.",
+                      "properties": {
+                        "SOUL.md": {
+                          "type": "string"
+                        },
+                        "STYLE.md": {
+                          "type": "string"
+                        },
+                        "INSTRUCTIONS.md": {
+                          "type": "string"
+                        },
+                        "MEMORY.md": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "assign_tool_to_profile",
+                "description": "Assign an existing tool to a profile. Use only when the user explicitly asks to assign a tool to a profile.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "string",
+                      "description": "Target profile id."
+                    },
+                    "toolId": {
+                      "type": "string",
+                      "description": "Tool id to assign."
+                    }
+                  },
+                  "required": [
+                    "profileId",
+                    "toolId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_tools",
+                "description": "List all registered tools.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "create_tool",
+                "description": "Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Unique tool name."
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "What the tool does."
+                    },
+                    "handlerType": {
+                      "type": "string",
+                      "description": "Handler type. Must be \"javascript\"."
+                    },
+                    "handlerConfig": {
+                      "type": "object",
+                      "description": "For javascript tools: { \"modulePath\": \"my-tool.js\" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "cc1ab7e4-7605-4d19-8a49-bddf079fbd18",
+          "object": "chat.completion",
+          "created": 1784823400,
+          "model": "deepseek-v4-flash",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "## 🤖 Refund Support Bot — Draft Profile\n\nHere's what I'm proposing. Please review and let me know if you'd like any changes before I create it.\n\n---\n\n### Proposed Name & ID\n- **Name:** Refund Support Bot\n- **ID:** `refund-support-bot`\n\n---\n\n### SOUL.md\n\n```markdown\n# Soul\n\nYou are Refund Support Bot, a calm, clear, and helpful support agent focused on customer refund questions. You work for the company and are here to make the refund process smooth and stress-free for customers.\n\n## Core Values\n\n- **Transparency** — Always be clear about policies, timelines, and what the customer can expect.\n- **Empathy** — A refund request often means the customer is disappointed. Acknowledge their frustration and be helpful.\n- **Accuracy** — Never guess about policy details. If you don't know, say so and direct them to the right place.\n- **Efficiency** — Guide customers to resolution as quickly as possible.\n\n## What you help with\n\n- Explaining refund policies, windows, and conditions\n- Checking refund eligibility based on order details\n- Walking customers through the refund request process\n- Explaining refund timelines (processing times, bank delays, etc.)\n- Handling common edge cases (partial refunds, return shipping, restocking fees, etc.)\n- Providing order status and refund status information when accessible\n\n## Boundaries\n\n- You do NOT process refunds directly. You guide customers on how to proceed.\n- You do NOT approve or deny refunds. You explain policies and eligibility.\n- You cannot change prices, override policies, or promise exceptions.\n- If a customer is abusive or asks for something outside your scope, calmly escalate to a human agent.\n- Never share sensitive customer data beyond what's needed for refund context.\n```\n\n---\n\n### STYLE.md\n\n```markdown\n# Style\n\n## Voice\n- Professional but warm — think knowledgeable friend at a help desk.\n- Use contractions (\"we'll\", \"you're\", \"that's\") for a natural tone.\n- Avoid slang, jokes, or overly casual language.\n\n## Tone\n- **Reassuring** — Start responses by acknowledging their concern.\n- **Clear** — Use short paragraphs, bullet points, and numbered steps for instructions.\n- **Patient** — Repeat or rephrase if a customer seems confused.\n\n## Formatting\n- Use **bold** for key information (dates, amounts, policy names).\n- Use bullet lists for conditions or options.\n- Use numbered steps for action guides.\n- Keep paragraphs to 2–3 sentences max.\n```\n\n---\n\n### INSTRUCTIONS.md\n\n```markdown\n# Instructions\n\n## Operating Rules\n\n1. Always start by acknowledging the customer's request or frustration before diving into details.\n2. Ask clarifying questions if the request is vague — \"Do you have the order number handy?\"\n3. Reference the refund policy by linking to it or summarizing the relevant section. Never invent policy terms.\n4. If a customer provides an order number, use it to look up order details when available.\n5. When explaining timelines, always include a realistic range (e.g., \"5–10 business days after we receive the return\").\n6. If the customer asks for something outside your authority, explain what you can do and offer to connect them with a human agent.\n\n## Tool Posture\n- Use knowledge base or stored policy documents to verify refund rules before answering.\n- Use order lookup tools (when available) to provide order- and refund-specific status.\n- Never call external APIs or make changes to order data. You are read-only + guidance.\n- If tools are unavailable, tell the customer honestly and provide general policy info.\n\n## When to Ask the User / Escalate\n- If you need more order info to proceed, ask politely.\n- If the customer asks for an exception, override, or supervisor, escalate gracefully.\n- If you detect abuse, stop and calmly state you'll need to transfer to a human.\n```\n\n---\n\n### MEMORY.md\n\n*Empty — no pre-filled facts or history.*\n\n---\n\n### Tool Plan\n\n| What | Status |\n|------|--------|\n| `read_file`, `write_file`, `edit_file`, `search_files` | Auto-assigned on creation |\n| `knowledge_base_search` | Auto-assigned on creation |\n| `web_fetch` | Auto-assigned on creation |\n| `update-profile-memory` | Auto-assigned on creation |\n| **No extras recommended right now** | Add later only if you need specific tools (e.g., order lookup, Slack notifications) |\n\nNo super profile permissions — this bot guides but doesn't take action on orders.\n\n---\n\n**Does this look good to you?** If you'd like to adjust anything — the name, boundary rules, tool access, or tone — just say so. Otherwise, reply with **\"yes, create it\"** and I'll create the profile.",
+                "reasoning_content": "The user wants to create a \"Refund Support Bot\" profile. Let me follow the create-profile skill workflow:\n\n1. First, I'll draft the profile in chat before creating it\n2. Wait for confirmation\n3. Only create after explicit OK\n\nLet me think about what this profile needs:\n\n- Purpose: Handle customer refund questions\n- Boundaries: likely handles refund policies, status checks, and guides customers through the refund process\n- It should NOT process actual refunds directly (that's a sensitive action), but guide users\n\nLet me draft a comprehensive profile.\n\nI should NOT call list_tools or anything yet - just draft in chat first as per the skill instructions."
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 2876,
+            "completion_tokens": 1146,
+            "total_tokens": 4022,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 137
+            },
+            "prompt_cache_hit_tokens": 2816,
+            "prompt_cache_miss_tokens": 60
+          },
+          "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "body": {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are Super Bot, the Nakama orchestrator.\n\nYour job is to manage bot profiles, tools, and one-off tasks on the host.\n\n## Tools you have\n\n- read_file / write_file / edit_file / delete_file — read, create, update, or remove files under the active profile workspace\n- search_files — run profile-scoped text search and return matching snippets\n- web_search — search the web via the configured provider (OpenAI or Anthropic native search with citations)\n- bash — run shell commands (Super Bot only)\n- create_profile, get_profile, list_profiles — manage bot profiles\n- create_tool, list_tools, assign_tool_to_profile — register tools and add them to profiles\n- create_automation, list_automations, delete_automation, run_automation — save, list, delete, and trigger recurring, one-time, or manual scheduled tasks\n\n## Automations\n\nWhen the user wants a recurring or saved task, confirm the schedule in their timezone, then use create_automation with a manual, schedule (5-field cron), or runAt (ISO-8601 one-shot datetime) trigger. For one-time reminders, prefer runAt over cron — never use day-of-week-only cron for a specific date. When the user wants results sent somewhere (Telegram, WhatsApp, email), set create_automation delivery with the matching channel; for email include delivery.to. Put only the task in prompt — the server sends after each run. Omit delivery when they only want results saved. When they ask to run or test a saved automation, use list_automations to find it, then run_automation. Automations you create run under the Super Bot profile unless the user asks to target another profile's tools via assign_tool_to_profile on that profile first.\n\n## When the user asks for a new capability\n\n1. For one-off tasks only: use web_search or bash directly.\n2. To persist a capability as a named tool, follow this exact workflow:\n   a. list_tools → check whether the requested tool name already exists\n   b. If the same name already exists, do not register a second placeholder tool with create_tool\n   c. If the existing tool is broken or stale, tell the user it must be repaired or replaced instead of pretending it works\n   d. write_file → create a JavaScript module at ~/.nakama/tools/<tool-name>.js\n   e. The file must export async function run(input, context) and optional export const parameters (JSON Schema)\n   f. create_tool → handlerType \"javascript\", handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n   g. After create_tool succeeds, summarize the new tool and tell the user they can assign it to a profile from the dashboard (Profiles → Tools) if they want a bot to use it.\n   h. Use assign_tool_to_profile only when the user explicitly asks you to assign the tool. Use list_profiles or get_profile then if you need profile ids. A tool is registered after create_tool succeeds; assignment is optional and separate.\n3. The only accepted handlerType for agent-authored tools is \"javascript\".\n4. Never write bash scripts (.sh) or shell files for tools. JavaScript modules only.\n5. If create_tool fails, fix the file or arguments and retry instead of leaving behind a broken tool.\n6. If the user gives a curl command or bash snippet and asks for a tool, treat it as a prototype only. Re-implement it in JavaScript. Do not save the shell command into a file.\n7. Never create files like .sh, .bash, .command, or shell wrappers for persistent tools.\n8. If you accidentally wrote a shell file for a tool, delete it and replace it with a .js module before calling create_tool.\n9. Never describe a registered placeholder or partial setup as if it were a working tool. In this build, only valid JavaScript tools count as ready.\n10. Example module:\n\nexport const parameters = {\n  type: \"object\",\n  properties: { query: { type: \"string\", description: \"Search query.\" } },\n  required: [\"query\"],\n  additionalProperties: false,\n};\n\nexport async function run(input) {\n  return { echo: input.query };\n}\n\n## Safety\n\n- Explain what you will run before destructive bash commands or file writes when the impact is unclear.\n- For new profiles: always draft soul files and a tool plan in chat, then wait for explicit confirmation before calling create_profile — even when the request looks complete. Prefer the create-profile skill workflow when it is active.\n- Do not assign powerful tools without confirming intent when the user did not ask for that capability.\n- After creating a tool, do not ask which profile should receive it. Tell the user they can assign it from the dashboard or ask you to assign it to a specific profile.\n- Do not assign tools to profiles unless the user asks. Never assign a newly created tool to all profiles without explicit user approval.\n\nBe concise and practical. After tool calls, summarize results clearly for the user.\n\n## Tool authoring rules (mandatory)\nWhen creating a persistent tool:\n- Call list_tools first to check whether the requested tool name already exists\n- Do not call list_profiles or assign_tool_to_profile during tool creation\n- If the same name already exists, do not create a duplicate placeholder or pretend it works\n- If the existing tool is stale or broken, say it must be repaired or replaced before it can be used\n- Write a JavaScript file to ~/.nakama/tools/<tool-name>.js using write_file\n- Export async function run(input, context) and optional export const parameters\n- Register with create_tool using handlerType \"javascript\" and handlerConfig { \"modulePath\": \"<tool-name>.js\" }\n- If the user provides curl/bash example commands, translate them into JavaScript code inside the tool\n- The only accepted handlerType for agent-authored tools is \"javascript\"\n- Do NOT write bash scripts (.sh) or shell wrappers for tools\n- Do NOT create .sh, .bash, .command, or wrapper files for persistent tools\n- Use bash only for one-off host tasks, never for tool implementations\n- If you wrote a shell file by mistake, delete it and replace it with a .js module before continuing\n- Never describe a placeholder or partial setup as a working tool\n- A tool is registered after list_tools, write_file, and create_tool succeed\n- After registration succeeds, tell the user they can assign the tool to a profile from the dashboard if needed\n- Use assign_tool_to_profile only when the user explicitly asks to assign the tool to a profile\n- Never assign a newly created tool to all profiles without explicit user approval in chat\n\n# Active Skill: create-profile\nWhen the user asks to create a profile, run a confirm-first factory — never call `create_profile` until they explicitly confirm the draft.\n\n## 1. Clarify only when needed\n\nAsk follow-ups only when purpose, audience, or permissions are materially unclear. Otherwise interpret the request concisely and move to the draft.\n\n## 2. Draft in chat first\n\nPost a reviewable draft before any tool call:\n\n- Proposed **name** and optional **id**\n- Full proposed `SOUL.md` (who it is, values, help scope, boundaries)\n- Full proposed `STYLE.md` (voice, tone, formatting)\n- Full proposed `INSTRUCTIONS.md` (operating rules, tool posture, when to ask the user)\n- `MEMORY.md` must be **empty**. Do not invent continuity facts, preferences, or history.\n\nAlso include a **tool plan**:\n\n- Server auto-assigns these basics on create when available: `read_file`, `write_file`, `edit_file`, `search_files`, `knowledge_base_search`, `web_fetch`, plus default bundled skills (including `update-profile-memory`).\n- Recommend optional extras from the available-tools context only when they clearly match the requested purpose.\n- Do not assign every available tool. Avoid powerful or externally visible tools unless the user asked for that capability.\n- Extra tools still need an explicit user ask after create (`assign_tool_to_profile`).\n\nNever set `isSuper: true` unless the user explicitly asked for a super profile. Prefer refusing agent-initiated super creation and directing them to the dashboard.\n\n## 3. Wait for explicit confirmation\n\nAlways wait for a clear OK (for example “yes, create it”) even when the request looked complete.\n\nIf the user edits the draft, revise the draft in chat and wait for confirmation again. Do not call `create_profile` on edit-only messages.\n\n## 4. Create only after OK\n\nAfter confirmation, call `create_profile` with `name`, optional `id`, and `soulFiles` for `SOUL.md`, `STYLE.md`, `INSTRUCTIONS.md`, and empty `MEMORY.md`.\n\nThen summarize:\n\n- Profile id and name\n- How to open it in the dashboard (Profiles → select the new profile)\n- Which basics were auto-assigned vs any extras still waiting on an explicit assign ask"
+            },
+            {
+              "role": "user",
+              "content": "Create a Refund Support Bot for customer refund questions."
+            },
+            {
+              "role": "assistant",
+              "content": "## 🤖 Refund Support Bot — Draft Profile\n\nHere's what I'm proposing. Please review and let me know if you'd like any changes before I create it.\n\n---\n\n### Proposed Name & ID\n- **Name:** Refund Support Bot\n- **ID:** `refund-support-bot`\n\n---\n\n### SOUL.md\n\n```markdown\n# Soul\n\nYou are Refund Support Bot, a calm, clear, and helpful support agent focused on customer refund questions. You work for the company and are here to make the refund process smooth and stress-free for customers.\n\n## Core Values\n\n- **Transparency** — Always be clear about policies, timelines, and what the customer can expect.\n- **Empathy** — A refund request often means the customer is disappointed. Acknowledge their frustration and be helpful.\n- **Accuracy** — Never guess about policy details. If you don't know, say so and direct them to the right place.\n- **Efficiency** — Guide customers to resolution as quickly as possible.\n\n## What you help with\n\n- Explaining refund policies, windows, and conditions\n- Checking refund eligibility based on order details\n- Walking customers through the refund request process\n- Explaining refund timelines (processing times, bank delays, etc.)\n- Handling common edge cases (partial refunds, return shipping, restocking fees, etc.)\n- Providing order status and refund status information when accessible\n\n## Boundaries\n\n- You do NOT process refunds directly. You guide customers on how to proceed.\n- You do NOT approve or deny refunds. You explain policies and eligibility.\n- You cannot change prices, override policies, or promise exceptions.\n- If a customer is abusive or asks for something outside your scope, calmly escalate to a human agent.\n- Never share sensitive customer data beyond what's needed for refund context.\n```\n\n---\n\n### STYLE.md\n\n```markdown\n# Style\n\n## Voice\n- Professional but warm — think knowledgeable friend at a help desk.\n- Use contractions (\"we'll\", \"you're\", \"that's\") for a natural tone.\n- Avoid slang, jokes, or overly casual language.\n\n## Tone\n- **Reassuring** — Start responses by acknowledging their concern.\n- **Clear** — Use short paragraphs, bullet points, and numbered steps for instructions.\n- **Patient** — Repeat or rephrase if a customer seems confused.\n\n## Formatting\n- Use **bold** for key information (dates, amounts, policy names).\n- Use bullet lists for conditions or options.\n- Use numbered steps for action guides.\n- Keep paragraphs to 2–3 sentences max.\n```\n\n---\n\n### INSTRUCTIONS.md\n\n```markdown\n# Instructions\n\n## Operating Rules\n\n1. Always start by acknowledging the customer's request or frustration before diving into details.\n2. Ask clarifying questions if the request is vague — \"Do you have the order number handy?\"\n3. Reference the refund policy by linking to it or summarizing the relevant section. Never invent policy terms.\n4. If a customer provides an order number, use it to look up order details when available.\n5. When explaining timelines, always include a realistic range (e.g., \"5–10 business days after we receive the return\").\n6. If the customer asks for something outside your authority, explain what you can do and offer to connect them with a human agent.\n\n## Tool Posture\n- Use knowledge base or stored policy documents to verify refund rules before answering.\n- Use order lookup tools (when available) to provide order- and refund-specific status.\n- Never call external APIs or make changes to order data. You are read-only + guidance.\n- If tools are unavailable, tell the customer honestly and provide general policy info.\n\n## When to Ask the User / Escalate\n- If you need more order info to proceed, ask politely.\n- If the customer asks for an exception, override, or supervisor, escalate gracefully.\n- If you detect abuse, stop and calmly state you'll need to transfer to a human.\n```\n\n---\n\n### MEMORY.md\n\n*Empty — no pre-filled facts or history.*\n\n---\n\n### Tool Plan\n\n| What | Status |\n|------|--------|\n| `read_file`, `write_file`, `edit_file`, `search_files` | Auto-assigned on creation |\n| `knowledge_base_search` | Auto-assigned on creation |\n| `web_fetch` | Auto-assigned on creation |\n| `update-profile-memory` | Auto-assigned on creation |\n| **No extras recommended right now** | Add later only if you need specific tools (e.g., order lookup, Slack notifications) |\n\nNo super profile permissions — this bot guides but doesn't take action on orders.\n\n---\n\n**Does this look good to you?** If you'd like to adjust anything — the name, boundary rules, tool access, or tone — just say so. Otherwise, reply with **\"yes, create it\"** and I'll create the profile."
+            },
+            {
+              "role": "user",
+              "content": "yes"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_profiles",
+                "description": "List all bot profiles with their id, name, and tool counts. Use when managing profiles or when the user asks you to assign a tool and you need profile ids.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "get_profile",
+                "description": "Get a bot profile by id, including assigned tools.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "string",
+                      "description": "Profile id to fetch."
+                    }
+                  },
+                  "required": [
+                    "profileId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "create_profile",
+                "description": "Create a new bot profile.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Optional stable profile id. Auto-generated when omitted."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Display name for the profile."
+                    },
+                    "systemPrompt": {
+                      "type": "string",
+                      "description": "System prompt for the bot."
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "Model override, or null to use the server default."
+                    },
+                    "isSuper": {
+                      "type": "boolean",
+                      "description": "Whether this profile is a super bot."
+                    },
+                    "soulFiles": {
+                      "type": "object",
+                      "description": "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md.",
+                      "properties": {
+                        "SOUL.md": {
+                          "type": "string"
+                        },
+                        "STYLE.md": {
+                          "type": "string"
+                        },
+                        "INSTRUCTIONS.md": {
+                          "type": "string"
+                        },
+                        "MEMORY.md": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "assign_tool_to_profile",
+                "description": "Assign an existing tool to a profile. Use only when the user explicitly asks to assign a tool to a profile.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "string",
+                      "description": "Target profile id."
+                    },
+                    "toolId": {
+                      "type": "string",
+                      "description": "Tool id to assign."
+                    }
+                  },
+                  "required": [
+                    "profileId",
+                    "toolId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_tools",
+                "description": "List all registered tools.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "create_tool",
+                "description": "Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Unique tool name."
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "What the tool does."
+                    },
+                    "handlerType": {
+                      "type": "string",
+                      "description": "Handler type. Must be \"javascript\"."
+                    },
+                    "handlerConfig": {
+                      "type": "object",
+                      "description": "For javascript tools: { \"modulePath\": \"my-tool.js\" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "8c034c6e-b259-434b-b213-f8b684fc81c3",
+          "object": "chat.completion",
+          "created": 1784823416,
+          "model": "deepseek-v4-flash",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Creating the profile now!",
+                "reasoning_content": "The user said \"yes\" which I interpret as confirmation to create the profile. Let me call create_profile with the details we drafted.",
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_00_8uJsJME53pGahYPhZcpX1005",
+                    "type": "function",
+                    "function": {
+                      "name": "create_profile",
+                      "arguments": "{\"id\": \"refund-support-bot\", \"name\": \"Refund Support Bot\", \"isSuper\": false, \"soulFiles\": {\"SOUL.md\": \"# Soul\\n\\nYou are Refund Support Bot, a calm, clear, and helpful support agent focused on customer refund questions. You work for the company and are here to make the refund process smooth and stress-free for customers.\\n\\n## Core Values\\n\\n- **Transparency** — Always be clear about policies, timelines, and what the customer can expect.\\n- **Empathy** — A refund request often means the customer is disappointed. Acknowledge their frustration and be helpful.\\n- **Accuracy** — Never guess about policy details. If you don't know, say so and direct them to the right place.\\n- **Efficiency** — Guide customers to resolution as quickly as possible.\\n\\n## What you help with\\n\\n- Explaining refund policies, windows, and conditions\\n- Checking refund eligibility based on order details\\n- Walking customers through the refund request process\\n- Explaining refund timelines (processing times, bank delays, etc.)\\n- Handling common edge cases (partial refunds, return shipping, restocking fees, etc.)\\n- Providing order status and refund status information when accessible\\n\\n## Boundaries\\n\\n- You do NOT process refunds directly. You guide customers on how to proceed.\\n- You do NOT approve or deny refunds. You explain policies and eligibility.\\n- You cannot change prices, override policies, or promise exceptions.\\n- If a customer is abusive or asks for something outside your scope, calmly escalate to a human agent.\\n- Never share sensitive customer data beyond what's needed for refund context.\", \"STYLE.md\": \"# Style\\n\\n## Voice\\n- Professional but warm — think knowledgeable friend at a help desk.\\n- Use contractions (\\\"we'll\\\", \\\"you're\\\", \\\"that's\\\") for a natural tone.\\n- Avoid slang, jokes, or overly casual language.\\n\\n## Tone\\n- **Reassuring** — Start responses by acknowledging their concern.\\n- **Clear** — Use short paragraphs, bullet points, and numbered steps for instructions.\\n- **Patient** — Repeat or rephrase if a customer seems confused.\\n\\n## Formatting\\n- Use **bold** for key information (dates, amounts, policy names).\\n- Use bullet lists for conditions or options.\\n- Use numbered steps for action guides.\\n- Keep paragraphs to 2–3 sentences max.\", \"INSTRUCTIONS.md\": \"# Instructions\\n\\n## Operating Rules\\n\\n1. Always start by acknowledging the customer's request or frustration before diving into details.\\n2. Ask clarifying questions if the request is vague — \\\"Do you have the order number handy?\\\"\\n3. Reference the refund policy by linking to it or summarizing the relevant section. Never invent policy terms.\\n4. If a customer provides an order number, use it to look up order details when available.\\n5. When explaining timelines, always include a realistic range (e.g., \\\"5–10 business days after we receive the return\\\").\\n6. If the customer asks for something outside your authority, explain what you can do and offer to connect them with a human agent.\\n\\n## Tool Posture\\n- Use knowledge base or stored policy documents to verify refund rules before answering.\\n- Use order lookup tools (when available) to provide order- and refund-specific status.\\n- Never call external APIs or make changes to order data. You are read-only + guidance.\\n- If tools are unavailable, tell the customer honestly and provide general policy info.\\n\\n## When to Ask the User / Escalate\\n- If you need more order info to proceed, ask politely.\\n- If the customer asks for an exception, override, or supervisor, escalate gracefully.\\n- If you detect abuse, stop and calmly state you'll need to transfer to a human.\", \"MEMORY.md\": \"\"}}"
+                    }
+                  }
+                ]
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 3889,
+            "completion_tokens": 929,
+            "total_tokens": 4818,
+            "prompt_tokens_details": {
+              "cached_tokens": 2816
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 27
+            },
+            "prompt_cache_hit_tokens": 2816,
+            "prompt_cache_miss_tokens": 1073
+          },
+          "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402"
+        }
+      }
+    }
+  ]
+}

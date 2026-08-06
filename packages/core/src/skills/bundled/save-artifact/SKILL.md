@@ -1,6 +1,6 @@
 ---
 name: save-artifact
-description: Save a persistent report, summary, code snippet, or log under artifacts/ for later access in the dashboard. Use when the user wants output kept beyond the chat session.
+description: Save or move durable outputs (reports, slide decks, HTML, summaries, code snippets, logs) under artifacts/ for the dashboard Artifacts tab. Use when the user asks to save, move, or keep something as an artifact beyond the chat session.
 include-body-on-match: true
 ---
 

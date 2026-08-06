@@ -16,6 +16,7 @@ import { generateOpenAIResponsesChat } from "./responses";
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  notifyToolInputDelta,
   parseJsonRecord,
   readSseEvents,
 } from "../shared";
@@ -222,9 +223,12 @@ async function toOpenAIMessage(
 function toOpenAIAssistantMessage(
   message: Extract<ChatMessage, { role: "assistant" }>,
 ): Extract<OpenAIMessage, { role: "assistant" }> {
+  const thinking = message.thinking?.trim();
+
   return {
     role: "assistant",
     content: message.content || null,
+    ...(thinking ? { reasoning_content: thinking } : {}),
     ...(message.toolCalls?.length
       ? { tool_calls: toOpenAIAssistantToolCalls(message.toolCalls) }
       : {}),
@@ -538,7 +542,16 @@ async function readOpenAIStream(
 
     if (delta?.tool_calls) {
       for (const toolDelta of delta.tool_calls) {
+        const argDelta = toolDelta.function?.arguments ?? "";
         mergePendingToolCall(pending, toolDelta);
+
+        if (argDelta) {
+          const current = pending.get(toolDelta.index ?? 0);
+
+          if (current) {
+            notifyToolInputDelta(handlers, current, argDelta);
+          }
+        }
       }
     }
   });

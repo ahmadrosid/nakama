@@ -4,11 +4,14 @@ import type {
   MailReader,
   MailSendInput,
   MailSender,
-  MailSendResult,
 } from "./types";
 
-export function createFakeMailReader(messages: MailMessage[] = []): MailReader & {
-  messages: MailMessage[];
+type FakeMailMessage = MailMessage & {
+  attachmentData?: Record<string, Buffer>;
+};
+
+export function createFakeMailReader(messages: FakeMailMessage[] = []): MailReader & {
+  messages: FakeMailMessage[];
 } {
   const store = [...messages];
 
@@ -25,6 +28,18 @@ export function createFakeMailReader(messages: MailMessage[] = []): MailReader &
     async readMessage(folder, uid) {
       const message = store.find((entry) => entry.folder === folder && entry.uid === uid);
       return message ? { ...message } : null;
+    },
+    async readAttachment(folder, uid, attachmentId) {
+      const message = store.find((entry) => entry.folder === folder && entry.uid === uid);
+      const attachment = message?.attachments?.find((entry) => entry.id === attachmentId);
+      if (!attachment) {
+        return null;
+      }
+
+      return {
+        metadata: attachment,
+        data: message?.attachmentData?.[attachmentId] ?? Buffer.alloc(attachment.size),
+      };
     },
     async searchMessages(folder, query, limit) {
       const needle = query.trim().toLowerCase();

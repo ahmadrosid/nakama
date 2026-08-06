@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addOrgIdColumnIfMissing,
+  migrateCodingDelegationSkillName,
   migrateDatabase,
   moveProfileJoinReferences,
   resolveSchemaPath,
@@ -186,6 +187,115 @@ describe("legacy profile id migration", () => {
       expect(tasks.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
       expect(automations.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
       expect(foreignKeyViolations).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("coding-delegation skill rename migration", () => {
+  test("renames coding-delegation skill records to coding-agent", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO skills (
+          id,
+          name,
+          description,
+          source_path,
+          has_tool,
+          disable_model_invocation,
+          enabled,
+          created_at,
+          updated_at
+        ) VALUES (
+          'skill_coding',
+          'coding-delegation',
+          'Delegate repo work to a coding agent',
+          '/tmp/.nakama/agent/skills/coding-delegation/SKILL.md',
+          0,
+          0,
+          1,
+          '2026-06-19T00:00:00.000Z',
+          '2026-06-19T00:00:00.000Z'
+        );
+      `);
+
+      migrateCodingDelegationSkillName(db);
+
+      const skill = db
+        .prepare("SELECT name, source_path FROM skills WHERE id = ?")
+        .get("skill_coding") as { name: string; source_path: string };
+
+      expect(skill.name).toBe("coding-agent");
+      expect(skill.source_path).toBe("/tmp/.nakama/agent/skills/coding-agent/SKILL.md");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("merges legacy coding-delegation records when coding-agent already exists", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      db.exec(`
+        INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+        VALUES ('super_bot', 'Super Bot', '', NULL, 1, '2026-06-19T00:00:00.000Z', '2026-06-19T00:00:00.000Z');
+
+        INSERT INTO skills (
+          id,
+          name,
+          description,
+          source_path,
+          has_tool,
+          disable_model_invocation,
+          enabled,
+          created_at,
+          updated_at
+        ) VALUES
+          (
+            'skill_legacy',
+            'coding-delegation',
+            'Legacy coding delegation',
+            '/tmp/.nakama/agent/skills/coding-delegation/SKILL.md',
+            0,
+            0,
+            1,
+            '2026-06-19T00:00:00.000Z',
+            '2026-06-19T00:00:00.000Z'
+          ),
+          (
+            'skill_canonical',
+            'coding-agent',
+            'Coding agent',
+            '/tmp/.nakama/agent/skills/coding-agent/SKILL.md',
+            0,
+            0,
+            1,
+            '2026-06-19T00:00:00.000Z',
+            '2026-06-19T00:00:00.000Z'
+          );
+
+        INSERT INTO profile_skills (profile_id, skill_id)
+        VALUES ('super_bot', 'skill_legacy');
+      `);
+
+      migrateCodingDelegationSkillName(db);
+
+      const skills = db
+        .prepare("SELECT id, name FROM skills WHERE name LIKE 'coding%' ORDER BY name")
+        .all() as Array<{ id: string; name: string }>;
+      const assignment = db
+        .prepare("SELECT skill_id FROM profile_skills WHERE profile_id = ?")
+        .get("super_bot") as { skill_id: string };
+
+      expect(skills).toEqual([{ id: "skill_canonical", name: "coding-agent" }]);
+      expect(assignment.skill_id).toBe("skill_canonical");
     } finally {
       db.close();
     }

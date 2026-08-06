@@ -8,6 +8,7 @@ import type {
 } from "@nakama/core/contract";
 import type { StreamHandlers } from "@nakama/client";
 import type { ChatListItem } from "@/lib/chat-history";
+import { upsertStreamingToolMessage } from "@/lib/chat-stream-artifact";
 import { cn } from "@/lib/utils";
 
 export function formatBashToolResult(result: unknown): string | null {
@@ -78,6 +79,30 @@ export function formatToolResult(tool: string | undefined, result: unknown): str
   return formatDefaultToolResult(result);
 }
 
+export function isToolResultError(result: unknown, formattedOutput: string | null): boolean {
+  if (typeof result === "object" && result !== null) {
+    const record = result as { error?: unknown; exitCode?: number | null; timedOut?: boolean };
+    const error = record.error;
+
+    if (typeof error === "string" && error.trim()) {
+      return true;
+    }
+
+    if (record.timedOut || (record.exitCode != null && record.exitCode !== 0)) {
+      return true;
+    }
+  }
+
+  if (
+    formattedOutput &&
+    /^(unknown tool|error:|failed\b|\[stderr\]|\[exit code|\[timed out\])/i.test(formattedOutput)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isSubAgentTool(tool: string | undefined): boolean {
   return tool === "sub_agent";
 }
@@ -138,8 +163,13 @@ export function formatSubAgentSubtitle(
   input: Record<string, unknown> | undefined,
   result: unknown,
   running: boolean,
+  activity?: string,
 ): string {
   if (running) {
+    if (activity?.trim()) {
+      return truncateDisplay(activity.trim().split("\n")[0] ?? activity.trim(), 72);
+    }
+
     const context = typeof input?.context === "string" ? input.context.trim() : "";
 
     if (context) {
@@ -332,6 +362,7 @@ export function finalizeStreamingMessages(messages: ChatListItem[]): ChatListIte
       ? {
           ...message,
           toolStatus: "done" as const,
+          artifactStreaming: false,
           content: `${message.tool} stopped`,
         }
       : message,
@@ -375,6 +406,71 @@ export function deriveChatStatus(
   return "ready";
 }
 
+/** Messages after the latest user message (current assistant turn). */
+export function latestAssistantTurnMessages(messages: ChatListItem[]): ChatListItem[] {
+  let start = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      start = index + 1;
+      break;
+    }
+  }
+
+  return messages.slice(start);
+}
+
+/**
+ * True when the SSE turn is still in flight but the transcript has no live
+ * activity (no thinking stream, no running tool, no text tokens yet). Covers
+ * first-token wait and the gap after tools before the next model turn.
+ */
+export function isAwaitingModelResponse(messages: ChatListItem[]): boolean {
+  const turn = latestAssistantTurnMessages(messages);
+
+  if (turn.length === 0) {
+    return false;
+  }
+
+  if (turn.some((message) => message.role === "tool" && message.toolStatus === "running")) {
+    return false;
+  }
+
+  if (turn.some((message) => message.role === "assistant" && message.thinkingStreaming)) {
+    return false;
+  }
+
+  if (
+    turn.some(
+      (message) =>
+        message.role === "assistant" && message.streaming && message.content.trim().length > 0,
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    turn.some(
+      (message) =>
+        message.role === "assistant" && message.streaming && message.content.trim().length === 0,
+    )
+  ) {
+    return true;
+  }
+
+  return turn.some((message) => message.role === "tool" || message.role === "assistant");
+}
+
+export function awaitingModelLabel(messages: ChatListItem[]): "Thinking…" | "Working…" {
+  const turn = latestAssistantTurnMessages(messages);
+  const hasTools = turn.some((message) => message.role === "tool");
+  const hasThinkingText = turn.some(
+    (message) => message.role === "assistant" && Boolean(message.thinking?.trim()),
+  );
+
+  return hasTools || hasThinkingText ? "Working…" : "Thinking…";
+}
+
 export function buildStreamHandlers(
   setMessages: Dispatch<SetStateAction<ChatListItem[]>>,
   options: {
@@ -397,6 +493,16 @@ export function buildStreamHandlers(
           return next;
         }
 
+        // After tools the prior assistant is finalized; seed a new streaming
+        // message so post-tool thinking is not dropped.
+        next.push({
+          id: nanoid(),
+          role: "assistant",
+          content: "",
+          streaming: true,
+          thinking: delta,
+          thinkingStreaming: true,
+        });
         return next;
       });
     },
@@ -424,6 +530,15 @@ export function buildStreamHandlers(
         return next;
       });
     },
+    onToolInputDelta: (event) => {
+      setMessages((current) =>
+        upsertStreamingToolMessage(current, {
+          toolCallId: event.toolCallId,
+          tool: event.tool,
+          accumulatedArguments: event.accumulatedArguments ?? event.delta,
+        }),
+      );
+    },
     onToolStart: (event) => {
       setMessages((current) => {
         const next = current.map((message) =>
@@ -432,19 +547,33 @@ export function buildStreamHandlers(
             : message,
         );
 
-        return [
-          ...next,
-          {
-            id: event.toolCallId,
-            role: "tool",
-            createdAt: new Date().toISOString(),
-            content: event.tool,
-            toolCallId: event.toolCallId,
-            tool: event.tool,
-            toolStatus: "running",
-            toolInput: event.input,
-          },
-        ];
+        const existingIndex = next.findIndex(
+          (message) => message.toolCallId === event.toolCallId,
+        );
+
+        const toolMessage: ChatListItem = {
+          id: event.toolCallId,
+          role: "tool",
+          createdAt: new Date().toISOString(),
+          content: event.tool,
+          toolCallId: event.toolCallId,
+          tool: event.tool,
+          toolStatus: "running",
+          toolInput: event.input,
+        };
+
+        if (existingIndex >= 0) {
+          const merged = [...next];
+          merged[existingIndex] = {
+            ...merged[existingIndex],
+            ...toolMessage,
+            artifactStreaming: merged[existingIndex]?.artifactStreaming,
+            toolInputAccumulatedJson: merged[existingIndex]?.toolInputAccumulatedJson,
+          };
+          return merged;
+        }
+
+        return [...next, toolMessage];
       });
     },
     onToolEnd: (event) => {
@@ -454,8 +583,23 @@ export function buildStreamHandlers(
             ? {
                 ...message,
                 toolStatus: "done",
+                artifactStreaming: false,
                 content: `${event.tool} completed`,
                 toolResult: event.result,
+                subAgentActivity: undefined,
+              }
+            : message,
+        ),
+      );
+    },
+    onSubAgentActivity: (event) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.toolCallId === event.parentToolCallId &&
+          message.toolStatus === "running"
+            ? {
+                ...message,
+                subAgentActivity: event.label,
               }
             : message,
         ),

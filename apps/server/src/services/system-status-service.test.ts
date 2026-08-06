@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   clearAutomationWorkerHeartbeat,
+  saveComposioConfig,
   writeAutomationWorkerHeartbeat,
   type WorkerProcessInfo,
 } from "@nakama/core";
@@ -27,7 +28,12 @@ async function withConfigDir(): Promise<void> {
   process.env.NAKAMA_CONFIG_DIR = configDir;
 }
 
-function createService(automationProcess: WorkerProcessInfo | null) {
+function createService(
+  automationProcess: WorkerProcessInfo | null,
+  extras?: {
+    composioService?: { isReachable: () => Promise<boolean> } | null;
+  },
+) {
   return new SystemStatusService(
     {
       providerConfigured: true,
@@ -53,6 +59,7 @@ function createService(automationProcess: WorkerProcessInfo | null) {
       }),
     } as any,
     null,
+    extras?.composioService as any,
   );
 }
 
@@ -126,5 +133,28 @@ describe("SystemStatusService", () => {
 
     expect(status.automationWorker.ok).toBe(false);
     expect(status.automationWorker.process?.managed).toBe(false);
+  });
+
+  test("probes Composio reachability on system status when configured", async () => {
+    await withConfigDir();
+    await saveComposioConfig({ apiKey: "test-key" });
+
+    let reachabilityCalls = 0;
+    const service = createService(null, {
+      composioService: {
+        isReachable: async () => {
+          reachabilityCalls += 1;
+          return true;
+        },
+      },
+    });
+
+    const status = await service.getStatus();
+
+    expect(reachabilityCalls).toBe(1);
+    expect(status.server).toMatchObject({
+      composioConfigured: true,
+      composioAvailable: true,
+    });
   });
 });

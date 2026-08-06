@@ -1,6 +1,6 @@
 import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
 import { XIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
@@ -44,31 +44,20 @@ export function TaskRunHistoryPanel({ task, profile, onClose }: TaskRunHistoryPa
   const profileLabel = profile?.name ?? task.profileId;
 
   const waitingForMessages = isLoading || (isFetching && messages.length === 0);
+  const [syncedData, setSyncedData] = useState(data);
 
-  // Reset local state when switching tasks (must run before applying query data).
-  useEffect(() => {
-    setMessages([]);
-    setSessionId(task.sessionId);
-    setError(null);
-    setBusy(false);
-    setCanStop(false);
-    streamAbortRef.current?.abort();
-    streamAbortRef.current = null;
-  }, [task.id]);
+  if (data !== syncedData) {
+    setSyncedData(data);
+    if (data) {
+      setSessionId(data.sessionId || task.sessionId);
+      setMessages(chatMessagesToListItems(data.messages));
+      setError(null);
 
-  useEffect(() => {
-    if (!data) {
-      return;
+      if (!task.sessionId && data.sessionId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      }
     }
-
-    setSessionId(data.sessionId || task.sessionId);
-    setMessages(chatMessagesToListItems(data.messages));
-    setError(null);
-
-    if (!task.sessionId && data.sessionId) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-    }
-  }, [data, queryClient, task.id, task.sessionId]);
+  }
 
   const chatStatus = useMemo(
     () => deriveChatStatus(busy, error, messages),

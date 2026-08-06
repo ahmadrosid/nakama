@@ -50,15 +50,5 @@ export const usePromptInputController = () => {
 export const useOptionalPromptInputController = () =>
   useContext(PromptInputController);
 
-export const useProviderAttachments = () => {
-  const ctx = useContext(ProviderAttachmentsContext);
-  if (!ctx) {
-    throw new Error(
-      "Wrap your component inside <PromptInputProvider> to use useProviderAttachments().",
-    );
-  }
-  return ctx;
-};
-
 export const useOptionalProviderAttachments = () =>
   useContext(ProviderAttachmentsContext);

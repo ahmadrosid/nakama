@@ -167,15 +167,21 @@ export function TelegramSettingsCard({
 
   const content = (
     <TelegramSettingsCardContent
-      embedded={embedded}
+      view={{
+        embedded,
+        configured,
+        hasLinkedUsers,
+        running,
+        showBotToken,
+        savePending: saveMutation.isPending,
+        isPaired,
+        regeneratePending: regenerateMutation.isPending,
+        canSave,
+      }}
       headerSubtitle={headerSubtitle}
       statusBadge={statusBadge}
-      configured={configured}
       settings={settings}
-      hasLinkedUsers={hasLinkedUsers}
-      running={running}
       botToken={botToken}
-      showBotToken={showBotToken}
       onBotTokenChange={(value) => {
         setBotToken(value);
         setHint(null);
@@ -184,12 +190,9 @@ export function TelegramSettingsCard({
         }
       }}
       onToggleShowBotToken={() => setShowBotToken((current) => !current)}
-      savePending={saveMutation.isPending}
-      isPaired={isPaired}
       pairingCode={pairingCode}
       onCopyHandshakeCode={() => void copyHandshakeCode()}
       onRegenerateHandshake={handleRegenerateHandshake}
-      regeneratePending={regenerateMutation.isPending}
       allowedUserSummary={allowedUserSummary}
       onManageAllowedUsers={() => setAllowedUsersOpen(true)}
       profileId={profileId}
@@ -202,7 +205,6 @@ export function TelegramSettingsCard({
       statusLine={statusLine}
       formError={formError}
       loadError={loadError}
-      canSave={canSave}
       submitLabel={submitLabel}
       onSave={() => handleSave()}
     />

@@ -1,13 +1,9 @@
 import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type { AgentTodo } from "@nakama/core/contract";
-import {
-  CheckCircle2Icon,
-  ChevronRightIcon,
-  CircleIcon,
-  LoaderCircleIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon, ListIcon } from "lucide-react";
 import { useState } from "react";
+import { Matrix } from "@/components/ui/matrix";
+import { snake3x2, type Frame } from "@/components/ui/matrix-frames";
 import { cn } from "@/lib/utils";
 
 interface AgentTodoPanelProps {
@@ -15,6 +11,37 @@ interface AgentTodoPanelProps {
   embedded?: boolean;
   stack?: boolean;
 }
+
+const TODO_MATRIX_ROWS = 3;
+const TODO_MATRIX_COLS = 2;
+const TODO_MATRIX_SIZE = 3;
+const TODO_MATRIX_GAP = 1;
+
+const pendingPattern: Frame = [
+  [0, 0],
+  [0, 0],
+  [0, 0],
+];
+
+const completedPattern: Frame = [
+  [1, 1],
+  [1, 1],
+  [1, 1],
+];
+
+const cancelledPattern: Frame = [
+  [0, 0],
+  [0, 0],
+  [0, 0],
+];
+
+const todoMatrixStaticProps = {
+  rows: TODO_MATRIX_ROWS,
+  cols: TODO_MATRIX_COLS,
+  size: TODO_MATRIX_SIZE,
+  gap: TODO_MATRIX_GAP,
+  className: "inline-flex h-4 w-auto shrink-0 items-center justify-center",
+};
 
 export function AgentTodoPanel({
   todos,
@@ -27,6 +54,46 @@ export function AgentTodoPanel({
     return null;
   }
 
+  const completedCount = todos.filter((todo) => todo.status === "completed").length;
+
+  const list = (
+    <ul className={cn("space-y-1.5", stack ? "pb-2.5 pl-7 pr-3" : "mt-1")}>
+      {todos.map((todo, index) => (
+        <TodoRow key={todo.id} todo={todo} index={index} />
+      ))}
+    </ul>
+  );
+
+  const header = (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground",
+        stack ? "px-3 py-1.5" : "mb-0.5",
+      )}
+      onClick={() => setExpanded((current) => !current)}
+      aria-expanded={expanded}
+    >
+      <ChevronDownIcon
+        className={cn(
+          "size-3.5 shrink-0 transition-transform duration-200",
+          !expanded && "-rotate-90",
+        )}
+        aria-hidden="true"
+      />
+      <ListIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="tabular-nums transition-opacity duration-200">
+        Tasks {completedCount}/{todos.length}
+      </span>
+    </button>
+  );
+
+  const expandableList = (
+    <div className="todo-panel-expand" data-expanded={expanded}>
+      <div className="overflow-hidden pb-1.5">{list}</div>
+    </div>
+  );
+
   if (stack) {
     return (
       <div className="px-3">
@@ -34,33 +101,8 @@ export function AgentTodoPanel({
           className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-b-0 border-border bg-card shadow-xs"
           aria-label="Agent task plan"
         >
-          <div className="px-3 py-2">
-            <button
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground",
-                !expanded && "pb-1.5"
-              )}
-              onClick={() => setExpanded((current) => !current)}
-              aria-expanded={expanded}
-            >
-              <ChevronRightIcon
-                className={cn(
-                  "size-4 shrink-0 transition-transform",
-                  expanded && "rotate-90",
-                )}
-                aria-hidden="true"
-              />
-              <span>TODOS</span>
-            </button>
-          </div>
-          {expanded ? (
-            <ul className="space-y-2 border-t border-border/60 px-3 pb-3 pt-2.5">
-              {todos.map((todo) => (
-                <TodoRow key={todo.id} todo={todo} />
-              ))}
-            </ul>
-          ) : null}
+          {header}
+          {expandableList}
         </aside>
       </div>
     );
@@ -75,27 +117,27 @@ export function AgentTodoPanel({
       )}
       aria-label="Agent task plan"
     >
-      <h3 className="type-label mb-1 text-muted-foreground">Task plan</h3>
-      <ul className="space-y-2">
-        {todos.map((todo) => (
-          <TodoRow key={todo.id} todo={todo} />
-        ))}
-      </ul>
+      {header}
+      {expandableList}
     </aside>
   );
 }
 
-function TodoRow({ todo }: { todo: AgentTodo }) {
+function TodoRow({ todo, index }: { todo: AgentTodo; index: number }) {
   return (
-    <li className="flex items-start gap-2.5 text-xs">
-      <TodoStatusIcon status={todo.status} />
+    <li
+      className="todo-item-enter flex min-w-0 items-center gap-2 pl-1 text-xs leading-none"
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      <TodoStatusIcon key={todo.status} status={todo.status} />
       <span
         className={cn(
+          "min-w-0 truncate transition-colors duration-300",
           todo.status === "completed" || todo.status === "cancelled"
-            ? "text-muted-foreground line-through"
+            ? "text-muted-foreground"
             : todo.status === "in_progress"
-              ? "todo-shimmer-text"
-              : "text-foreground",
+              ? "todo-shimmer-text text-foreground"
+              : "text-muted-foreground/50",
         )}
       >
         {todo.content}
@@ -108,30 +150,48 @@ function TodoStatusIcon({ status }: { status: AgentTodo["status"] }) {
   switch (status) {
     case "in_progress":
       return (
-        <LoaderCircleIcon
-          className="mt-0.5 size-4 shrink-0 animate-spin text-primary"
-          aria-label="In progress"
+        <Matrix
+          {...todoMatrixStaticProps}
+          frames={snake3x2}
+          fps={4}
+          ariaLabel="In progress"
         />
       );
     case "completed":
       return (
-        <CheckCircle2Icon
-          className="mt-0.5 size-4 shrink-0 text-emerald-600"
-          aria-label="Completed"
+        <Matrix
+          {...todoMatrixStaticProps}
+          pattern={completedPattern}
+          ariaLabel="Completed"
+          palette={{
+            on: "hsl(142 76% 36%)",
+            off: "hsl(142 76% 10%)",
+          }}
         />
       );
     case "cancelled":
       return (
-        <XCircleIcon
-          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-          aria-label="Cancelled"
+        <Matrix
+          {...todoMatrixStaticProps}
+          pattern={cancelledPattern}
+          ariaLabel="Cancelled"
+          palette={{
+            on: "var(--muted-foreground)",
+            off: "var(--muted-foreground)",
+          }}
         />
       );
     default:
       return (
-        <CircleIcon
-          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-          aria-label="Pending"
+        <Matrix
+          {...todoMatrixStaticProps}
+          pattern={pendingPattern}
+          ariaLabel="Pending"
+          brightness={0.55}
+          palette={{
+            on: "var(--muted-foreground)",
+            off: "var(--muted-foreground)",
+          }}
         />
       );
   }

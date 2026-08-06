@@ -19,6 +19,7 @@
     "./attachments/content": "./src/attachments/content.ts",
     "./image-content": "./src/image-content.ts",
     "./normalize-task-prompt": "./src/normalize-task-prompt.ts",
+    "./ollama-provider-config": "./src/ollama-provider-config.ts",
     "./provider-inference": "./src/provider-inference.ts",
     "./provider-label": "./src/provider-label.ts",
     "./provider-resolution": "./src/provider-resolution.ts",
@@ -35,6 +36,7 @@
     "./whatsapp-config": "./src/whatsapp-config.ts",
     "./whatsapp-worker": "./src/whatsapp-worker.ts",
     "./skills/bundled-names": "./src/skills/bundled-names.ts",
+    "./soul/org-memory": "./src/soul/org-memory.ts",
     "./tools/protected": "./src/tools/protected.ts",
     "./tools/email": "./src/tools/email.ts",
     "./mcp/preinstalled": "./src/mcp/preinstalled.ts"
@@ -62,6 +64,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/mailparser": "3.4.6",
     "@types/nodemailer": "^8.0.1",
     "@types/pdf-parse": "^1.1.5"
   }

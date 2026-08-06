@@ -46,6 +46,17 @@ describe("sub_agent chat formatting", () => {
     ).toBe("Working…");
   });
 
+  test("formatSubAgentSubtitle prefers live activity while running", () => {
+    expect(
+      formatSubAgentSubtitle(
+        { task: "Research Microsandbox" },
+        undefined,
+        true,
+        "Reading SOUL.md",
+      ),
+    ).toBe("Reading SOUL.md");
+  });
+
   test("formatSubAgentSubtitle uses summary on success", () => {
     expect(
       formatSubAgentSubtitle(

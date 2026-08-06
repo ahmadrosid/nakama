@@ -18,6 +18,7 @@ import { toAnthropicUserContent, WEB_SEARCH_TOOL_NAME } from "@nakama/core";
 import {
   buildTokenUsage,
   normalizeThinkingEffort,
+  notifyToolInputDelta,
   parseJsonRecord,
   readRecord,
 } from "../shared";
@@ -346,8 +347,14 @@ async function readAnthropicStream(
 
       if (delta.type === "input_json_delta") {
         const current = pending.get(index) ?? { id: "", name: "", inputJson: "" };
-        current.inputJson += delta.partial_json;
+        const partial = delta.partial_json;
+        current.inputJson += partial;
         pending.set(index, current);
+        notifyToolInputDelta(handlers, {
+          id: current.id,
+          name: current.name,
+          arguments: current.inputJson,
+        }, partial);
       }
     }
 

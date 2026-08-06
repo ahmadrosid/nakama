@@ -4,6 +4,13 @@ export const queryKeys = {
   providers: ["providers"] as const,
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,
+  remoteModelDiscovery: (options: {
+    providerId?: string;
+    baseUrl?: string;
+    provider?: string;
+    hostMode?: string;
+    apiKey?: string;
+  }) => ["remoteModelDiscovery", options] as const,
   systemStatus: ["systemStatus"] as const,
   webPublicUrl: ["system", "webPublicUrl"] as const,
   profiles: {
@@ -40,6 +47,8 @@ export const queryKeys = {
   },
   artifacts: {
     profile: (profileId: string) => ["artifacts", profileId] as const,
+    shareStatus: (profileId: string, path: string) =>
+      ["artifacts", profileId, "share", path] as const,
   },
   timezones: {
     catalog: ["timezones", "catalog"] as const,
@@ -65,6 +74,9 @@ export const queryKeys = {
   codingHarnesses: {
     settings: ["codingHarnesses", "settings"] as const,
   },
+  agentBrowser: {
+    settings: ["agentBrowser", "settings"] as const,
+  },
   whatsapp: {
     settings: ["whatsapp", "settings"] as const,
   },
@@ -74,6 +86,13 @@ export const queryKeys = {
   userContext: ["userContext"] as const,
   modelsDev: ["modelsDev"] as const,
   openRouterModels: ["openRouterModels"] as const,
+  cerebrasModels: ["cerebrasModels"] as const,
   workerLogs: ["workerLogs"] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
+  orgMemory: (orgId: string) => ["orgMemory", orgId] as const,
+  orgMemoryHistory: (orgId: string) => ["orgMemoryHistory", orgId] as const,
+  orgMemoryHistoryRevision: (orgId: string, revisionId: string) =>
+    ["orgMemoryHistoryRevision", orgId, revisionId] as const,
+  orgMemoryProposals: (orgId: string, status?: string) =>
+    ["orgMemoryProposals", orgId, status ?? "all"] as const,
 } as const;

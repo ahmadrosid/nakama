@@ -85,3 +85,19 @@ export function resolveComposioCallbackBaseUrl(options: {
   const webPort = process.env.NAKAMA_WEB_PORT?.trim() || "3003";
   return `http://127.0.0.1:${webPort}`;
 }
+
+/** True when the OAuth callback host is unreachable from a phone (Telegram / WhatsApp). */
+export function isLoopbackComposioCallbackBaseUrl(baseUrl: string): boolean {
+  try {
+    const { hostname } = new URL(baseUrl);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]" ||
+      hostname.endsWith(".localhost")
+    );
+  } catch {
+    return false;
+  }
+}

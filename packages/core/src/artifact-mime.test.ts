@@ -3,6 +3,7 @@ import {
   artifactCodeLanguage,
   inferArtifactMimeType,
   isHtmlArtifactMimeType,
+  isImageArtifactMimeType,
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
@@ -45,6 +46,10 @@ describe("mime predicates", () => {
     expect(isTextArtifactMimeType("text/markdown")).toBe(true);
     expect(isTextArtifactMimeType("application/octet-stream")).toBe(false);
     expect(isTextArtifactMimeType("image/png")).toBe(false);
+    expect(isImageArtifactMimeType("image/png")).toBe(true);
+    expect(isImageArtifactMimeType("image/jpeg")).toBe(true);
+    expect(isImageArtifactMimeType("image/svg+xml")).toBe(false);
+    expect(isImageArtifactMimeType("application/pdf")).toBe(false);
     expect(isUnknownArtifactMimeType("application/octet-stream")).toBe(true);
     expect(isUnknownArtifactMimeType("text/plain")).toBe(false);
   });

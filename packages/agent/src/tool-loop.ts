@@ -7,6 +7,17 @@ export function findTool(
   return tools.find((tool) => tool.name === name);
 }
 
+export function canRunToolCallsInParallel(
+  tools: ToolDefinition[],
+  toolCalls: ToolCall[],
+): boolean {
+  if (toolCalls.length <= 1) {
+    return false;
+  }
+
+  return toolCalls.every((call) => findTool(tools, call.name)?.parallelSafe === true);
+}
+
 export async function executeToolCall(
   tools: ToolDefinition[],
   call: ToolCall,

@@ -18,12 +18,16 @@ export function groupSessionsByDate(sessions: SessionSummary[]): Array<{
     buckets.set(label, existing);
   }
 
-  return order
-    .filter((label) => buckets.has(label))
-    .map((label) => ({
-      label,
-      sessions: buckets.get(label)!,
-    }));
+  const result: Array<{ label: string; sessions: SessionSummary[] }> = [];
+
+  for (const label of order) {
+    const sessions = buckets.get(label);
+    if (sessions) {
+      result.push({ label, sessions });
+    }
+  }
+
+  return result;
 }
 
 function getDateGroupLabel(value: string): string {

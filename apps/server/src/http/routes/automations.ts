@@ -11,7 +11,10 @@ import type {
   UpdateAutomationRequest,
 } from "@nakama/core";
 import { errorResponse, getRequestAuth, json, parseChannel, readJson } from "../shared";
-import { requireActiveOrgIdFromContext } from "../org-guards";
+import {
+  requireActiveOrgIdFromContext,
+  requireNotViewerFromContext,
+} from "../org-guards";
 import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 
@@ -169,6 +172,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   }));
 
   app.post("/v1/automations/draft", async (c) => {
+    requireNotViewerFromContext(c);
     const body = await readJson<DraftAutomationRequest>(c.req.raw);
     const automation = await agent.draftAutomation(body.prompt, parseChannel(body.channel));
     return json<DraftAutomationResponse>({ automation });
@@ -182,9 +186,13 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.post("/v1/automations", async (c) => {
+    const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateAutomationRequest>(c.req.raw);
-    const automation = await automationService.create(orgId, body, body.profileId);
+    const automation = await automationService.create(orgId, body, body.profileId, {
+      orgRole: auth.orgRole,
+      isPlatformAdmin: auth.isPlatformAdmin,
+    });
     return json<AutomationResponse>({ automation }, 201);
   });
 
@@ -201,6 +209,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.put("/v1/automations/:automationId", async (c) => {
+    requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const body = await readJson<UpdateAutomationRequest>(c.req.raw);
@@ -217,6 +226,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.delete("/v1/automations/:automationId", async (c) => {
+    requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const deleted = await automationService.delete(
       decodeURIComponent(c.req.param("automationId")),
@@ -229,6 +239,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.post("/v1/automations/:automationId/run", async (c) => {
+    requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
@@ -270,6 +281,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
   });
 
   app.delete("/v1/automations/:automationId/runs/:runId", async (c) => {
+    requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const runId = decodeURIComponent(c.req.param("runId"));

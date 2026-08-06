@@ -13,13 +13,18 @@ import {
   DEFAULT_TIMEZONE,
   isAutomationRunUnread,
   isWorkerSchedulable,
+  NakamaApiError,
   normalizeAutomationDelivery,
   resolveScheduleTimezone,
   summarizeAutomationUnreadCounts,
   validateAutomationDelivery,
   validateAutomationInput,
 } from "@nakama/core";
+import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import { DatabaseAutomationStore, type DatabaseAdapter } from "@nakama/db";
+
+/** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
+export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
 
 export interface AutomationServiceOptions {
   getUserTimezone: () => Promise<string>;
@@ -78,6 +83,7 @@ export class AutomationService {
     orgId: string,
     input: CreateAutomationRequest,
     profileIdOverride?: string,
+    access?: ProfileAccess,
   ): Promise<StoredAutomation> {
     const userTimezone = await this.getUserTimezone();
     const trigger = resolveScheduleTimezone(input.trigger, userTimezone);
@@ -91,6 +97,7 @@ export class AutomationService {
     const profileId = await this.resolveProfileId(
       orgId,
       profileIdOverride ?? input.profileId,
+      access,
     );
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
@@ -319,12 +326,19 @@ export class AutomationService {
     return computeAutomationNextRunAt(trigger, userTimezone);
   }
 
-  private async resolveProfileId(orgId: string, profileId?: string): Promise<string> {
+  private async resolveProfileId(
+    orgId: string,
+    profileId?: string,
+    access?: ProfileAccess,
+  ): Promise<string> {
     const trimmed = profileId?.trim();
 
     if (trimmed) {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
       if (profile) {
+        if (profile.isSuper && access && !canAccessSuperBotProfile(access)) {
+          throw new NakamaApiError("Super Bot is only available to org admins.", 403);
+        }
         return profile.id;
       }
 

@@ -8,6 +8,8 @@ interface TelegramReplyMessage {
 export interface TelegramRichMessenger {
   send(text: string): Promise<TelegramReplyMessage | undefined>;
   sendPlain(text: string): Promise<TelegramReplyMessage | undefined>;
+  /** Send trimmed text with no markdown stripping (safe for share URLs / tokens). */
+  sendRaw(text: string): Promise<TelegramReplyMessage | undefined>;
   edit(messageId: number, text: string): Promise<void>;
 }
 
@@ -20,6 +22,9 @@ export function createTelegramRichMessenger(ctx: Context): TelegramRichMessenger
     },
     async sendPlain(text: string): Promise<TelegramReplyMessage | undefined> {
       return sendPlainMessage(ctx, text);
+    },
+    async sendRaw(text: string): Promise<TelegramReplyMessage | undefined> {
+      return sendRawMessage(ctx, text);
     },
     async edit(messageId: number, text: string): Promise<void> {
       await editRichMessage(ctx, messageId, text).catch(async () => {
@@ -53,6 +58,13 @@ async function sendPlainMessage(
   text: string,
 ): Promise<TelegramReplyMessage> {
   return (await ctx.reply(prepareTelegramFallbackReply(text))) as TelegramReplyMessage;
+}
+
+async function sendRawMessage(
+  ctx: Context,
+  text: string,
+): Promise<TelegramReplyMessage> {
+  return (await ctx.reply(text.trim())) as TelegramReplyMessage;
 }
 
 async function editPlainMessage(

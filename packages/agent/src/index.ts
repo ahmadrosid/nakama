@@ -60,7 +60,7 @@ export type {
 export type { CompactionConfig } from "./history-compaction";
 export type { DraftTaskPromptInput } from "./task-prompt";
 export { draftTaskPromptFromFields } from "./task-prompt";
-export { executeToolCall } from "./tool-loop";
+export { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
 export {
   suggestToolParamsFromPrompt,
   parseSuggestedParams,
@@ -71,3 +71,8 @@ export {
   generateSessionTitleFromMessages,
   normalizeSessionTitle,
 } from "./session-title";
+export {
+  mergeOrgMemoryWithApprovedBullet,
+  mergeOrgMemoryWithApprovedBulletFallback,
+} from "./org-memory-merge";
+export type { MergeOrgMemoryWithApprovedBulletOptions } from "./org-memory-merge";

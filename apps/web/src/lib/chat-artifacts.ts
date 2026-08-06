@@ -6,6 +6,7 @@ export {
   inferArtifactMimeType,
   isDocxFile,
   isHtmlArtifactMimeType,
+  isImageArtifactMimeType,
   isLegacyDocFile,
   isMarkdownArtifactMimeType,
   isTextArtifactMimeType,
@@ -89,11 +90,38 @@ function isUnderArtifactsDir(resolvedPath: string): boolean {
 }
 
 function isArtifactMetaRelativePath(relativePath: string): boolean {
-  return relativePath.endsWith(ARTIFACT_META_SUFFIX);
+  return relativePath.endsWith(ARTIFACT_META_SUFFIX) || relativePath.includes(".nakama-meta");
 }
 
 function isArtifactMetaResolvedPath(resolvedPath: string): boolean {
-  return isUnderArtifactsDir(resolvedPath) && resolvedPath.endsWith(ARTIFACT_META_SUFFIX);
+  return isUnderArtifactsDir(resolvedPath) && (
+    resolvedPath.endsWith(ARTIFACT_META_SUFFIX) || resolvedPath.includes(".nakama-meta")
+  );
+}
+
+/** True when a tool message is writing/reading an artifact metadata sidecar (internal). */
+export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
+  if (message.tool !== "write_file" && message.tool !== "write_docx") {
+    return false;
+  }
+
+  const inputPath =
+    typeof message.toolInput?.path === "string" ? message.toolInput.path : null;
+
+  if (inputPath && (inputPath.includes(".nakama-meta") || inputPath.endsWith(ARTIFACT_META_SUFFIX))) {
+    return true;
+  }
+
+  const result =
+    typeof message.toolResult === "object" && message.toolResult !== null
+      ? (message.toolResult as { path?: string })
+      : null;
+
+  if (typeof result?.path === "string") {
+    return result.path.includes(".nakama-meta") || result.path.endsWith(ARTIFACT_META_SUFFIX);
+  }
+
+  return false;
 }
 
 export function toArtifactsRelativePath(resolvedPath: string): string | null {

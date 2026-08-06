@@ -5,7 +5,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   CodingHarnessStatusChip,
-  type CodingHarnessStatusChipVariant,
 } from "@/components/coding-harness-status-chip";
 
 export function CodingHarnessHarnessRow({
@@ -57,10 +56,6 @@ export function CodingHarnessHarnessRow({
                 label={harness.installed ? "Installed" : "Not installed"}
               />
               <CodingHarnessStatusChip
-                variant={authVariant(harness)}
-                label={authLabel(harness)}
-              />
-              <CodingHarnessStatusChip
                 variant={harness.ready ? "ok" : "muted"}
                 label={harness.ready ? "Ready" : "Not ready yet"}
               />
@@ -95,7 +90,7 @@ export function CodingHarnessHarnessRow({
           <p className="text-sm text-muted-foreground">
             {!harness.installed
               ? harness.installHint
-              : (harness.statusMessage ?? "Run the readiness check to confirm login.")}
+              : (harness.statusMessage ?? "Run the readiness check to confirm provider passthrough.")}
           </p>
 
           {!harness.installed ? (
@@ -138,36 +133,4 @@ export function CodingHarnessHarnessRow({
       ) : null}
     </div>
   );
-}
-
-function authVariant(harness: CodingHarnessStatus): CodingHarnessStatusChipVariant {
-  if (!harness.installed) {
-    return "muted";
-  }
-
-  if (harness.authenticated === true) {
-    return "ok";
-  }
-
-  if (harness.authenticated === false) {
-    return "solid-warn";
-  }
-
-  return "muted";
-}
-
-function authLabel(harness: CodingHarnessStatus): string {
-  if (!harness.installed) {
-    return "Waiting for install";
-  }
-
-  if (harness.authenticated === true) {
-    return "Logged in";
-  }
-
-  if (harness.authenticated === false) {
-    return "Needs login";
-  }
-
-  return "Login not checked";
 }

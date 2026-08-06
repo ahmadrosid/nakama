@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import type { HonoApp } from "../types";
+import type { Context } from "hono";
+import type { HonoApp, AppEnv } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json } from "../shared";
 import {
@@ -7,6 +8,16 @@ import {
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import type { WorkerLogsResponse } from "@nakama/core";
+
+const PLATFORM_ADMIN_WORKERS = new Set(["telegram", "whatsapp", "discord"]);
+
+function requireWorkerAuthorization(c: Context<AppEnv>, name: string): void {
+  if (PLATFORM_ADMIN_WORKERS.has(name)) {
+    requirePlatformAdminFromContext(c);
+  } else {
+    requireNotViewerFromContext(c);
+  }
+}
 
 export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void {
   const { workerManager } = options;
@@ -70,11 +81,7 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
   app.post("/v1/workers/:name/:action{start|stop|restart}", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
     const action = c.req.param("action");
-    if (name === "telegram" || name === "whatsapp" || name === "discord") {
-      requirePlatformAdminFromContext(c);
-    } else {
-      requireNotViewerFromContext(c);
-    }
+    requireWorkerAuthorization(c, name);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);
@@ -98,6 +105,7 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
 
   app.get("/v1/workers/:name/logs", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
+    requireWorkerAuthorization(c, name);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);
@@ -119,8 +127,8 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
   });
 
   app.post("/v1/workers/:name/clear-logs", async (c) => {
-    requireNotViewerFromContext(c);
     const name = decodeURIComponent(c.req.param("name"));
+    requireWorkerAuthorization(c, name);
 
     if (!workerManager.isValidWorker(name)) {
       return errorResponse(`Unknown worker: ${name}`, 400);

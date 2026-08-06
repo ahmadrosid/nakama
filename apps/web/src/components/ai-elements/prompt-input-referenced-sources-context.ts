@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext } from "react";
 import type { SourceDocumentUIPart } from "ai";
 
 export interface ReferencedSourcesContext {
@@ -10,13 +10,3 @@ export interface ReferencedSourcesContext {
 
 export const LocalReferencedSourcesContext =
   createContext<ReferencedSourcesContext | null>(null);
-
-export function usePromptInputReferencedSources() {
-  const ctx = useContext(LocalReferencedSourcesContext);
-  if (!ctx) {
-    throw new Error(
-      "usePromptInputReferencedSources must be used within a LocalReferencedSourcesContext.Provider",
-    );
-  }
-  return ctx;
-}

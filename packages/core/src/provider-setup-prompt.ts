@@ -6,6 +6,12 @@ import {
 } from "./compatible-provider-config";
 import type { ProviderModelOption } from "./contract";
 import {
+  defaultOllamaBaseUrl,
+  defaultOllamaLabel,
+  ollamaRequiresApiKey,
+  type OllamaHostMode,
+} from "./ollama-provider-config";
+import {
   createProviderInstanceId,
   defaultProviderLabel,
   type ProviderInstance,
@@ -27,6 +33,9 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "cerebras", label: "Cerebras" },
+  { id: "fireworks", label: "Fireworks" },
+  { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
 ];
@@ -56,6 +65,11 @@ export async function promptForProviderConfig(
       return buildUserConfigFromInstance(instance);
     }
 
+    if (provider === "ollama") {
+      const instance = await promptForOllamaProviderInstance(question, writeLine);
+      return buildUserConfigFromInstance(instance);
+    }
+
     const apiKey = (await question("API key: ")).trim();
 
     if (!apiKey) {
@@ -79,21 +93,43 @@ export async function promptForProviderConfig(
       getModelsForProvider,
     });
 
+    const catalogModel = getModelById(selectedModel);
+    const customModels =
+      (provider === "fireworks" || provider === "cerebras") && catalogModel
+        ? [
+            {
+              id: selectedModel,
+              default: true,
+              ...(catalogModel.supportsThinking !== undefined
+                ? { supportsThinking: catalogModel.supportsThinking }
+                : {}),
+              ...(catalogModel.supportsVision !== undefined
+                ? { supportsVision: catalogModel.supportsVision }
+                : {}),
+              ...(catalogModel.inputPerMillionUsd !== undefined
+                ? { inputPerMillionUsd: catalogModel.inputPerMillionUsd }
+                : {}),
+              ...(catalogModel.outputPerMillionUsd !== undefined
+                ? { outputPerMillionUsd: catalogModel.outputPerMillionUsd }
+                : {}),
+            },
+          ]
+        : undefined;
+
     const instance: ProviderInstance = {
       id: createProviderInstanceId(),
       type: getModelById(selectedModel)?.provider ?? provider,
       label: defaultProviderLabel(provider, []),
       apiKey,
       createdAt: new Date().toISOString(),
+      ...(customModels ? { customModels } : {}),
     };
 
     return buildUserConfigFromInstance(instance);
   }
 }
 
-function buildUserConfigFromInstance(
-  instance: ProviderInstance,
-): UserConfig {
+function buildUserConfigFromInstance(instance: ProviderInstance): UserConfig {
   return {
     defaultProviderId: instance.id,
     providers: [instance],
@@ -109,6 +145,9 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "cerebras" ||
+    normalized === "fireworks" ||
+    normalized === "ollama" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go"
   ) {
@@ -154,6 +193,62 @@ function resolveModelChoice(
   }
 
   return options.getDefaultModel(provider);
+}
+
+async function promptForOllamaProviderInstance(
+  question: (prompt: string) => Promise<string>,
+  writeLine: (line: string) => void,
+): Promise<ProviderInstance> {
+  while (true) {
+    writeLine("\nOllama host: 1) Local  2) Cloud");
+    const hostInput = (await question("Host [1]: ")).trim().toLowerCase();
+    const hostMode: OllamaHostMode =
+      hostInput === "2" || hostInput === "cloud" ? "cloud" : "local";
+    const defaultBaseUrl = defaultOllamaBaseUrl(hostMode);
+    const baseUrl = normalizeBaseUrl(
+      (await question(`Base URL (${defaultBaseUrl}): `)).trim() || defaultBaseUrl,
+    );
+
+    if (!isValidBaseUrl(baseUrl)) {
+      writeLine("Enter a valid http(s) base URL.\n");
+      continue;
+    }
+
+    const apiKey = (
+      await question(ollamaRequiresApiKey(hostMode) ? "API key: " : "API key (optional): ")
+    ).trim();
+
+    if (ollamaRequiresApiKey(hostMode) && !apiKey) {
+      writeLine("API key is required for Ollama Cloud.\n");
+      continue;
+    }
+
+    const modelIds = (await question("Model IDs (comma-separated): "))
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (modelIds.length === 0) {
+      writeLine("Enter at least one model id.\n");
+      continue;
+    }
+
+    return {
+      id: createProviderInstanceId(),
+      type: "ollama",
+      label: defaultOllamaLabel(hostMode),
+      apiKey,
+      baseUrl,
+      hostMode,
+      customModels: validateCustomModels(
+        modelIds.map((id, index) => ({
+          id,
+          ...(index === 0 ? { default: true } : {}),
+        })),
+      ),
+      createdAt: new Date().toISOString(),
+    };
+  }
 }
 
 async function promptForCompatibleProviderInstance(

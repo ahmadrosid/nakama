@@ -41,10 +41,8 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
   const providers = providersResponse?.providers ?? [];
   const catalog = catalogResponse?.models ?? [];
   const isConfigured = providers.length > 0;
-
-  if (catalogQueryError) {
-    onFormError(formatError(catalogQueryError));
-  }
+  const catalogError = catalogQueryError ? formatError(catalogQueryError) : null;
+  const displayError = formError ?? catalogError;
 
   if (providersLoading || catalogLoading) {
     return <ProviderSettingsSkeleton />;
@@ -55,10 +53,12 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
       <Card className="w-full shadow-none">
         <CardHeader className="border-b border-border px-4 py-3">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>LLM providers</CardTitle>
-              <CardDescription>
-                Add providers and manage models. Pick any configured model in chat.
+            <div className="min-w-0 space-y-0.5">
+              <CardTitle className="text-sm font-medium leading-snug tracking-normal">
+                LLM providers
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Connect providers and choose models for chat.
               </CardDescription>
             </div>
             {isConfigured ? (
@@ -94,31 +94,47 @@ export function ProviderSettingsCard({ formError, onFormError }: ProviderSetting
               </div>
             </>
           ) : (
-            providers.map((instance) => (
-              <ProviderInstanceCard
-                key={instance.id}
-                instance={instance}
-                catalog={catalog}
-                onUpdate={async (providerId, request) => {
-                  await updateProviderMutation.mutateAsync({ providerId, request });
-                  toast("Provider updated.");
-                  onFormError(null);
-                }}
-                onDelete={async (providerId) => {
-                  await deleteProviderMutation.mutateAsync(providerId);
-                  toast("Provider removed.");
-                  onFormError(null);
-                }}
-                onError={onFormError}
-              />
-            ))
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-left text-sm">
+                <thead className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Provider</th>
+                    <th className="px-3 py-2 font-medium">Endpoint</th>
+                    <th className="px-3 py-2 font-medium">Models</th>
+                    <th className="px-3 py-2 font-medium">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {providers.map((instance) => (
+                    <ProviderInstanceCard
+                      key={instance.id}
+                      instance={instance}
+                      catalog={catalog}
+                      onUpdate={async (providerId, request) => {
+                        await updateProviderMutation.mutateAsync({ providerId, request });
+                        toast("Provider updated.");
+                        onFormError(null);
+                      }}
+                      onDelete={async (providerId) => {
+                        await deleteProviderMutation.mutateAsync(providerId);
+                        toast("Provider removed.");
+                        onFormError(null);
+                      }}
+                      onError={onFormError}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {formError ? (
+      {displayError ? (
         <p className="text-sm text-destructive" role="alert">
-          {formError}
+          {displayError}
         </p>
       ) : null}
 

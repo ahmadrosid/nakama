@@ -1,7 +1,6 @@
 import {
   queryOptions,
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import type {
@@ -15,10 +14,6 @@ export const emailSettingsQueryOptions = queryOptions({
   queryKey: queryKeys.email.settings,
   queryFn: () => client.getEmailSettings(),
 });
-
-export function useEmailSettings() {
-  return useQuery(emailSettingsQueryOptions);
-}
 
 export function useSaveEmailSettings() {
   const queryClient = useQueryClient();

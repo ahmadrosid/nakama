@@ -11,14 +11,9 @@ interface ImageAttachmentPreviewProps {
   className?: string;
 }
 
-function previewText(description?: string | null, caption?: string | null): string | null {
+function previewText(description?: string | null): string | null {
   const described = description?.trim();
-  if (described) {
-    return described;
-  }
-
-  const message = caption?.trim();
-  return message || null;
+  return described || null;
 }
 
 export function ImageAttachmentPreview({
@@ -35,8 +30,8 @@ export function ImageAttachmentPreview({
   const interactive =
     !onRemove &&
     Boolean(attachmentPanel) &&
-    Boolean(url || description?.trim() || caption?.trim());
-  const chipPreview = previewText(description, caption);
+    Boolean(url || description?.trim());
+  const chipPreview = previewText(description);
 
   useEffect(() => {
     if (!hide) {
@@ -95,12 +90,11 @@ export function ImageAttachmentPreview({
           <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
         </div>
       )}
-      <div className="min-w-0 max-w-[10rem]">
-        <p className="text-xs font-medium text-foreground">Image</p>
-        {chipPreview ? (
+      {chipPreview ? (
+        <div className="min-w-0 max-w-[10rem]">
           <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground">{chipPreview}</p>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </>
   );
 
@@ -119,25 +113,41 @@ export function ImageAttachmentPreview({
     );
   }
 
+  const removeButton = onRemove ? (
+    <button
+      type="button"
+      className="absolute top-0.5 right-0.5 flex size-6 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+      aria-label="Remove image"
+      onClick={onRemove}
+    >
+      <XIcon className="size-3" />
+    </button>
+  ) : null;
+
+  if (onRemove && url && !chipPreview) {
+    return (
+      <div
+        className={cn(
+          "relative size-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted",
+          className,
+        )}
+      >
+        <img src={url} alt="" className="size-full object-cover" />
+        {removeButton}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2",
-        onRemove ? "pr-8" : undefined,
+        onRemove ? "pr-10" : undefined,
         className,
       )}
     >
       {chip}
-      {onRemove ? (
-        <button
-          type="button"
-          className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Remove image"
-          onClick={onRemove}
-        >
-          <XIcon className="size-3" />
-        </button>
-      ) : null}
+      {removeButton}
     </div>
   );
 }

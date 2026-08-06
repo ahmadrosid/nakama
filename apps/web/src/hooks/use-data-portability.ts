@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
 export function useExportData() {
@@ -14,9 +14,12 @@ export function usePreviewDataImport() {
 }
 
 export function useRestoreDataImport() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ file, confirm }: { file: File; confirm: boolean }) =>
       client.restoreDataImport(file, { confirm }),
+    onSuccess: () => queryClient.invalidateQueries(),
   });
 }
 

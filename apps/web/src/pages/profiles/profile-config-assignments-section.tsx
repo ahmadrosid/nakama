@@ -1,4 +1,5 @@
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { ProfileComposioSection } from "@/pages/profiles/profile-composio-section";
 import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
 import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
@@ -67,6 +68,7 @@ export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPage
         onDelete={handleDeleteSkill}
         onViewDetail={setDetailSkillId}
         onRemove={setRemoveConfirm}
+        onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
       />
     </>
   );

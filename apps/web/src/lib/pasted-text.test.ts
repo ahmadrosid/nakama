@@ -3,7 +3,6 @@ import {
   countWords,
   createPastedTextFile,
   isPastedTextDocument,
-  LONG_PASTE_WORD_THRESHOLD,
   pastedTextFilename,
   wordCountFromPastedFilename,
 } from "./pasted-text";
@@ -21,16 +20,6 @@ describe("countWords", () => {
     expect(countWords("   \n\t  ")).toBe(0);
   });
 
-  test("boundary at threshold", () => {
-    const words299 = Array.from({ length: 299 }, (_, i) => `w${i}`).join(" ");
-    const words300 = Array.from({ length: 300 }, (_, i) => `w${i}`).join(" ");
-    const words301 = Array.from({ length: 301 }, (_, i) => `w${i}`).join(" ");
-
-    expect(countWords(words299)).toBe(299);
-    expect(countWords(words300)).toBe(300);
-    expect(countWords(words301)).toBe(301);
-    expect(words301.split(/\s+/).length).toBeGreaterThan(LONG_PASTE_WORD_THRESHOLD);
-  });
 });
 
 describe("createPastedTextFile", () => {

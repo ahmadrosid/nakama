@@ -25,9 +25,14 @@ import {
   stopActiveStream,
 } from "./active-stream";
 import {
+  deliverTelegramTurnArtifactShares,
+  maybeSendRequestedTelegramArtifactAttachment,
+} from "./channel-artifact-flow";
+import {
   buildTelegramDocumentInput,
   DOWNLOAD_FAILED_REPLY,
   hasTelegramDocument,
+  UNSUPPORTED_DOCUMENT_TYPES_REPLY,
   UNSUPPORTED_MEDIA_REPLY,
 } from "./attachments";
 import { buildTelegramImageInput } from "./images";
@@ -188,6 +193,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           withGroupContext(imageInput, isGroup),
           conversationKey,
           telegram,
+          "",
         );
         return;
       }
@@ -200,6 +206,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           withGroupContext(documentInput, isGroup),
           conversationKey,
           telegram,
+          "",
         );
         return;
       }
@@ -212,6 +219,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           withGroupContext(audioInput, isGroup),
           conversationKey,
           telegram,
+          "",
         );
         return;
       }
@@ -238,6 +246,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         withGroupContext({ message: messageText }, isGroup),
         conversationKey,
         telegram,
+        messageText,
       );
     });
   };
@@ -296,6 +305,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       case "/clear": {
         const session = await resolveSession(conversationKey);
         await session.clear();
+        clearSessionArtifactState(conversationKey);
         await telegram.send("History cleared.");
         return;
       }
@@ -386,8 +396,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     input: SendMessageInput,
     conversationKey: string,
     telegram: TelegramRichMessenger,
+    attachUserText: string,
   ): Promise<void> {
     const session = await resolveSession(conversationKey);
+    const profileId = sessionStore.get(conversationKey)?.profileId;
+
+    if (profileId) {
+      await maybeSendRequestedTelegramArtifactAttachment({
+        ctx,
+        client,
+        conversationKey,
+        profileId,
+        attachUserText,
+        sessionStore,
+        messenger: telegram,
+      });
+    }
+
     const typingLoop = createTypingLoop(ctx);
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     const signal = registerActiveStream(conversationKey);
@@ -450,10 +475,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await replyAsChat(telegram, reply);
-      return;
+    } else {
+      await telegram.send("(empty reply)");
     }
 
-    await telegram.send("(empty reply)");
+    if (profileId) {
+      await deliverTelegramTurnArtifactShares({
+        client,
+        session,
+        conversationKey,
+        profileId,
+        sessionStore,
+        messenger: telegram,
+      });
+    }
   }
 
   async function ensureOrgReady(
@@ -732,6 +767,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     return pickProfileForOrg(profiles, config.profileId).id;
+  }
+
+  function clearSessionArtifactState(conversationKey: string): void {
+    const existing = sessionStore.get(conversationKey);
+    if (!existing) {
+      return;
+    }
+
+    sessionStore.set(conversationKey, {
+      sessionId: existing.sessionId,
+      profileId: existing.profileId,
+      updatedAt: new Date().toISOString(),
+    });
+    void sessionStore.save();
   }
 }
 

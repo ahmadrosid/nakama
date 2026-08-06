@@ -3,6 +3,7 @@ import { createContext, type ReactNode } from "react";
 export interface ChatAttachmentPanelConfig {
   id: string;
   title: string;
+  subtitle?: string | null;
   content: ReactNode;
   headerActions?: ReactNode;
   bodyClassName?: string;

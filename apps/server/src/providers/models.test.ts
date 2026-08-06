@@ -78,4 +78,38 @@ describe("resolveModel", () => {
     expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
     expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
   });
+
+  test("resolves catalog models for Cerebras", () => {
+    expect(resolveModel("cerebras", "gpt-oss-120b")).toBe("gpt-oss-120b");
+    expect(getDefaultModel("cerebras")).toBe("gpt-oss-120b");
+  });
+
+  test("uses cerebras custom model shortlist when provided", () => {
+    const customModels = [{ id: "zai-glm-4.7", name: "GLM 4.7", default: true }];
+    expect(resolveModel("cerebras", "zai-glm-4.7", customModels)).toBe("zai-glm-4.7");
+    expect(resolveModel("cerebras", "unknown-model", customModels)).toBe("zai-glm-4.7");
+  });
+
+  test("resolves catalog models for Fireworks", () => {
+    expect(resolveModel("fireworks", "accounts/fireworks/models/kimi-k2p6")).toBe(
+      "accounts/fireworks/models/kimi-k2p6",
+    );
+    expect(getDefaultModel("fireworks")).toBe("accounts/fireworks/models/kimi-k2p6");
+  });
+
+  test("uses fireworks custom model shortlist when provided", () => {
+    const customModels = [
+      {
+        id: "accounts/fireworks/models/glm-5p2",
+        name: "GLM 5.2",
+        default: true,
+      },
+    ];
+    expect(resolveModel("fireworks", "accounts/fireworks/models/glm-5p2", customModels)).toBe(
+      "accounts/fireworks/models/glm-5p2",
+    );
+    expect(resolveModel("fireworks", "unknown-model", customModels)).toBe(
+      "accounts/fireworks/models/glm-5p2",
+    );
+  });
 });

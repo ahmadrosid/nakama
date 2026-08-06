@@ -1,0 +1,43 @@
+/* Adapted from AIcss Thinking State (https://www.aicss.dev/components/thinking-state) — licensed component. */
+.shimmer {
+  --c-muted: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-muted) 100%, transparent) 0%,
+    color-mix(in srgb, var(--c-muted) 100%, transparent) 30%,
+    color-mix(in srgb, var(--c-muted) 45%, transparent) 45%,
+    color-mix(in srgb, var(--c-muted) 45%, transparent) 55%,
+    color-mix(in srgb, var(--c-muted) 100%, transparent) 70%,
+    color-mix(in srgb, var(--c-muted) 100%, transparent) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: ts-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+}
+
+@keyframes ts-shine {
+  0%,
+  18% {
+    background-position: 100% 0;
+  }
+
+  82%,
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: var(--c-muted);
+    color: var(--c-muted);
+  }
+}

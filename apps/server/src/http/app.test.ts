@@ -365,6 +365,8 @@ describe("createHonoApp", () => {
       ok: true,
       providerConfigured: true,
       userConfigured: false,
+      // /health stays local — never probes Composio reachability
+      composioAvailable: false,
     });
   });
 
@@ -396,6 +398,192 @@ describe("createHonoApp", () => {
     );
 
     expect(response.status).toBe(201);
+  });
+
+  test("setup over HTTP does not set Secure cookies even in production (#112)", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setCookies = extractSetCookies(setupResponse);
+      expect(setCookies.length).toBeGreaterThan(0);
+      expect(setCookies.every((cookie) => !/;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+
+      const meResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
+        }),
+      );
+      expect(meResponse.status).toBe(200);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("setup over HTTPS sets Secure cookies in production", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("https://nakama.example/v1/auth/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setCookies = extractSetCookies(setupResponse);
+      expect(setCookies.length).toBeGreaterThan(0);
+      expect(setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("setup over HTTPS sets Secure cookies even when NODE_ENV is not production", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("https://nakama.example/v1/auth/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setCookies = extractSetCookies(setupResponse);
+      expect(setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("setup behind HTTPS proxy sets Secure cookies via X-Forwarded-Proto", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Forwarded-Proto": "https",
+          },
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setCookies = extractSetCookies(setupResponse);
+      expect(setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("https request URL keeps Secure cookies even if X-Forwarded-Proto is http", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("https://nakama.example/v1/auth/setup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Forwarded-Proto": "http",
+          },
+          body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+        }),
+      );
+
+      expect(setupResponse.status).toBe(201);
+      const setCookies = extractSetCookies(setupResponse);
+      expect(setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  test("logout clears both Secure and non-Secure session cookies", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const setupResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSetupAuthBody("admin@example.com", { admin: { password: "secret123" } })),
+      }),
+    );
+    expect(setupResponse.status).toBe(201);
+    const session = {
+      cookieHeader: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)),
+      csrfToken: cookieValue(extractSetCookies(setupResponse), "nakama_csrf"),
+    };
+
+    const logoutResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/logout", {
+        method: "POST",
+        headers: {
+          Cookie: session.cookieHeader,
+          "X-CSRF-Token": session.csrfToken,
+        },
+      }),
+    );
+
+    expect(logoutResponse.status).toBe(200);
+    const clearCookies = extractSetCookies(logoutResponse);
+    const sessionClears = clearCookies.filter((cookie) => cookie.startsWith("nakama_session="));
+    const csrfClears = clearCookies.filter((cookie) => cookie.startsWith("nakama_csrf="));
+    expect(sessionClears.some((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    expect(sessionClears.some((cookie) => !/;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    expect(csrfClears.some((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
+    expect(csrfClears.some((cookie) => !/;\s*Secure(?:;|$)/i.test(cookie))).toBe(true);
   });
 
   test("serves task chat capability probe without auth", async () => {

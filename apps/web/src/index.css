@@ -148,6 +148,35 @@
     }
   }
 
+  .todo-item-enter {
+    animation: todo-item-enter 0.3s ease-out both;
+  }
+
+  @keyframes todo-item-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .todo-panel-expand {
+    display: grid;
+    transition: grid-template-rows 0.2s ease-out;
+  }
+
+  .todo-panel-expand[data-expanded="true"] {
+    grid-template-rows: 1fr;
+  }
+
+  .todo-panel-expand[data-expanded="false"] {
+    grid-template-rows: 0fr;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .todo-shimmer-text,
     .thinking-shimmer-text {
@@ -158,12 +187,19 @@
       -webkit-text-fill-color: unset;
       color: var(--foreground);
     }
+
+    .todo-item-enter {
+      animation: none;
+    }
+
+    .todo-panel-expand {
+      transition: none;
+    }
   }
 
   .skeleton-shimmer {
     @apply relative overflow-hidden bg-muted;
   }
-
   .skeleton-shimmer::after {
     content: "";
     position: absolute;
@@ -181,6 +217,27 @@
   @keyframes skeleton-shimmer {
     to {
       translate: 100% 0;
+    }
+  }
+
+  @keyframes chat-tip-slide-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .chat-tip-slide-up {
+    animation: chat-tip-slide-up 0.45s ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-tip-slide-up {
+      animation: none;
     }
   }
 
@@ -412,16 +469,67 @@
     @apply text-xs font-semibold uppercase tracking-wide;
   }
 
+  .sidebar-shell {
+    @apply w-60 bg-sidebar motion-reduce:transition-none;
+    transition:
+      width 200ms ease-in-out,
+      background-color 200ms ease-in-out;
+  }
+
+  .sidebar-shell[data-collapsed] {
+    @apply w-14 items-center bg-sidebar/60;
+  }
+
+  .sidebar-shell nav {
+    @apply motion-reduce:transition-none;
+  }
+
+  .sidebar-shell:not([data-collapsed]) nav {
+    @apply p-3;
+  }
+
+  .sidebar-shell[data-collapsed] nav {
+    @apply w-full items-center gap-1.5 px-0 py-3;
+  }
+
+  .sidebar-nav-label {
+    @apply min-w-0 overflow-hidden whitespace-nowrap;
+  }
+
+  .sidebar-shell:not([data-collapsed]) .sidebar-nav-label {
+    @apply max-w-48 opacity-100;
+  }
+
+  .sidebar-shell[data-collapsed] .sidebar-nav-label {
+    @apply pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0;
+    max-width: none;
+  }
+
   .app-shell-header {
     @apply flex h-14 shrink-0 items-center border-b border-border/50;
   }
 
+  .sidebar-shell .app-shell-header {
+    @apply motion-reduce:transition-none;
+    transition: none;
+  }
+
+  .sidebar-shell:not([data-collapsed]) .app-shell-header,
+  .sidebar-shell[data-collapsed] .app-shell-header {
+    @apply h-14 flex-row gap-2.5 px-3;
+  }
+
+  .sidebar-shell[data-collapsed] .app-shell-header {
+    @apply justify-center;
+  }
+
   .sidebar-nav-link {
-    @apply flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors duration-150 text-muted-foreground;
+    @apply flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-muted-foreground motion-reduce:transition-none;
+    transition: background-color 150ms ease-out, color 150ms ease-out;
   }
 
   .sidebar-nav-link--collapsed {
-    @apply size-9 justify-center gap-0 rounded-md px-0 py-0;
+    @apply relative size-9 w-9 shrink-0 justify-center gap-0 self-center rounded-md px-0 py-0;
   }
 
   aside:not([data-collapsed]) .sidebar-nav-link:hover {
@@ -437,7 +545,7 @@
   }
 
   aside[data-collapsed] .sidebar-nav-link {
-    @apply text-muted-foreground/70;
+    @apply relative justify-center text-muted-foreground/70;
   }
 
   aside[data-collapsed] .sidebar-nav-link:hover {
@@ -460,6 +568,25 @@
     @apply size-4;
   }
 
+
+  .sidebar-nav-group-label {
+    @apply mb-1.5 overflow-hidden px-3 text-xs text-muted-foreground/55 motion-reduce:transition-none;
+    transition:
+      opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
+      max-height 320ms cubic-bezier(0.4, 0, 0.2, 1),
+      margin 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-shell:not([data-collapsed]) .sidebar-nav-group-label {
+    @apply max-h-8 opacity-100;
+    transition-delay: 80ms;
+  }
+
+  .sidebar-shell[data-collapsed] .sidebar-nav-group-label {
+    @apply mb-0 max-h-0 opacity-0;
+    transition-delay: 0ms;
+  }
+
   .sidebar-nav-divider {
     @apply my-4 shrink-0 border-t border-border/50;
   }
@@ -469,27 +596,23 @@
   }
 
   aside[data-collapsed] .sidebar-nav-divider {
-    @apply mx-1.5;
+    @apply mx-0 my-1.5;
   }
 
   .sidebar-nav-group {
     @apply flex flex-col;
   }
 
-  .sidebar-nav-group-label {
-    @apply mb-1.5 px-3 text-xs text-muted-foreground/55;
-  }
-
   .sidebar-nav-group-items {
     @apply flex flex-col gap-0.5 overflow-visible;
   }
 
-  aside[data-collapsed] .sidebar-nav-group-items {
-    @apply gap-1;
+  aside[data-collapsed] .sidebar-nav-group {
+    @apply items-center;
   }
 
-  .sidebar-nav-footer {
-    @apply mt-1;
+  aside[data-collapsed] .sidebar-nav-group-items {
+    @apply items-center gap-1.5;
   }
 
   .scope-item {
@@ -774,7 +897,100 @@
     border-top: 1px solid var(--border);
   }
 
-  .chat-markdown table {
+  /* Streamdown tables — AICSS Data Table style (https://www.aicss.dev/components/data-table) */
+  .chat-markdown [data-streamdown="table-wrapper"] {
+    --chat-table-outer-bg: #fafafa;
+    --chat-table-body-bg: var(--background);
+    --chat-table-border: #e6e8ec;
+    --chat-table-head-color: #a1a1a1;
+
+    margin-block: 1rem !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    border: 1px solid var(--chat-table-border) !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+    background: var(--chat-table-outer-bg) !important;
+    font-size: 13px;
+    max-width: 100%;
+  }
+
+  .dark .chat-markdown [data-streamdown="table-wrapper"] {
+    --chat-table-outer-bg: #242424;
+    --chat-table-body-bg: #1a1a1a;
+    --chat-table-border: #303030;
+
+    border-color: transparent !important;
+    box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  }
+
+  .chat-markdown [data-streamdown="table-wrapper"] > div:has([data-streamdown="table"]) {
+    overflow-x: auto;
+    overflow-y: visible;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .chat-markdown [data-streamdown="table-wrapper"] > div:has([data-streamdown="table"])::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chat-markdown [data-streamdown="table"] {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-family: var(--font-sans);
+    font-size: inherit;
+    line-height: 1.4;
+  }
+
+  /* Streamdown adds divide-y / row borders on top of cell borders — reset them. */
+  .chat-markdown [data-streamdown="table"] > :not([hidden]) ~ :not([hidden]),
+  .chat-markdown [data-streamdown="table"] tbody > :not([hidden]) ~ :not([hidden]),
+  .chat-markdown [data-streamdown="table"] tr {
+    border-top-width: 0 !important;
+    border-color: transparent !important;
+  }
+
+  .chat-markdown [data-streamdown="table"] th,
+  .chat-markdown [data-streamdown="table"] td {
+    padding: 9px 12px;
+    border: none;
+    border-right: 1px solid var(--chat-table-border);
+    border-bottom: 1px solid var(--chat-table-border);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  .chat-markdown [data-streamdown="table"] th {
+    padding-block: 7px;
+    font-weight: 500;
+    color: var(--chat-table-head-color);
+    background: transparent;
+    vertical-align: middle;
+  }
+
+  .chat-markdown [data-streamdown="table"] td {
+    color: var(--foreground);
+    background: var(--chat-table-body-bg);
+  }
+
+  .chat-markdown [data-streamdown="table"] th:last-child,
+  .chat-markdown [data-streamdown="table"] td:last-child {
+    border-right: none;
+  }
+
+  .chat-markdown [data-streamdown="table"] tbody tr:last-child td,
+  .chat-markdown [data-streamdown="table"] thead:last-child tr:last-child th {
+    border-bottom: none;
+  }
+
+  /* Bare markdown tables (no Streamdown wrapper) */
+  .chat-markdown table:not([data-streamdown="table"]) {
     width: 100%;
     margin-block: 0.75rem;
     border-collapse: collapse;
@@ -783,14 +999,14 @@
     line-height: 1.5;
   }
 
-  .chat-markdown th,
-  .chat-markdown td {
+  .chat-markdown table:not([data-streamdown="table"]) th,
+  .chat-markdown table:not([data-streamdown="table"]) td {
     border: 1px solid var(--border);
     padding: 0.375rem 0.625rem;
     text-align: start;
   }
 
-  .chat-markdown th {
+  .chat-markdown table:not([data-streamdown="table"]) th {
     font-weight: 600;
     background: var(--muted);
   }

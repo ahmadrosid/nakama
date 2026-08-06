@@ -51,6 +51,7 @@ import type {
   SyncSkillsResponse,
   SoulStatusResponse,
   CodingHarnessSettingsResponse,
+  AgentBrowserStatusResponse,
   CodingAgentLaunchPlanResponse,
   PrepareCodingAgentLaunchRequest,
   TelegramSettingsResponse,
@@ -96,12 +97,19 @@ import {
   listArtifacts,
   buildToolExecutionContext,
   composeKnowledgeBaseCatalog,
+  composeOrgMemorySummary,
+  appendOrgMemorySection,
   composeSoulSystemPrompt,
   createId,
   nanoid,
+  defaultOllamaBaseUrl,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
+  ollamaRequiresApiKey,
+  readEnvValue,
+  apiKeyEnvVarForProvider,
+  resolveOllamaHostMode,
   getProfileSoulDir,
   deleteArtifactFile,
   readArtifactFile,
@@ -161,6 +169,8 @@ import {
   createProviderFromActiveConfig,
   createProviderFromSources,
   fetchRemoteOpenAIModels,
+  fetchFireworksGatewayModels,
+  fetchOllamaModels,
   AVAILABLE_MODELS,
   catalogCustomModelsToCatalog,
   getModelById,
@@ -180,6 +190,7 @@ import {
   toProviderInstanceSummary,
 } from "./provider-instance-helpers";
 import { createSuperBotTools } from "../tools/super-bot-tools";
+import { createOrgMemoryTools } from "../tools/org-memory-tools";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { createTodoTools } from "../tools/todo-tools";
 import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
@@ -192,27 +203,24 @@ import {
   type SubAgentRunInput,
   type SubAgentRunResult,
 } from "../tools/sub-agent-shared";
+import { formatToolActivityLabel } from "../tools/sub-agent-activity";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import {
-  getCodingHarnessInstallCommand,
-  getCodingHarnessInstallHint,
-  listCodingAgentHarnessStatuses,
-  loadCodingAgentWorkspaceSettings,
   resolveCodingAgentHarness,
-  saveCodingAgentWorkspaceSettings,
-  verifyCodingAgentHarness,
 } from "./coding-agent-harness-service";
+import {
+  getCodingHarnessSettings,
+  setCodingHarnessSettings,
+  verifyCodingHarnessSettings,
+} from "./coding-agent-settings";
+import { getAgentBrowserStatus } from "./agent-browser-service";
 import {
   buildCodingAgentCommandTemplate,
   formatCodingAgentCommandContext,
   getBackendSkillName,
 } from "./coding-agent-command";
 import { prepareCodingAgentLaunch as buildCodingAgentLaunchPlan } from "./coding-agent-launcher";
-import {
-  getInferenceGatewayBaseUrl,
-  normalizeCodingAgentModel,
-} from "./coding-agent-spawn-env";
-import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import { normalizeCodingAgentModel } from "./coding-agent-spawn-env";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
 import {
@@ -220,6 +228,7 @@ import {
   replaceSessionHistory,
   wrapPersistedSession,
 } from "./session-persistence";
+import { sessionTurnRegistry } from "./session-turn-registry";
 import type { TaskRunner } from "./task-runner";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import {
@@ -229,6 +238,7 @@ import {
 import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
+import { OrgMemoryService } from "./org-memory-service";
 import { ProfileService } from "./profile-service";
 import type { SkillsService } from "./skills-service";
 import { SessionTitleService } from "./session-title-service";
@@ -281,6 +291,7 @@ export class AgentService {
   private readonly agentTodoState: AgentTodoState;
   private readonly agentQuestionnaireState: AgentQuestionnaireState;
   private readonly superBotTools: ToolDefinition[];
+  private readonly orgMemoryTools: ToolDefinition[];
   private automationTools: ToolDefinition[] = [];
   private automationRunHistoryTools: ToolDefinition[] = [];
   private questionTools: ToolDefinition[] = [];
@@ -291,6 +302,7 @@ export class AgentService {
   private mcpService: McpService | null = null;
   private composioService: ComposioService | null = null;
   private skillsService: SkillsService | null = null;
+  private orgMemoryService: OrgMemoryService | null = null;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly sessionTitleService: SessionTitleService;
   private _providerConfigured: boolean;
@@ -312,6 +324,7 @@ export class AgentService {
     this.questionTools = createAskUserQuestionTools(this.agentQuestionnaireState);
     this.todoTools = createTodoTools(this.agentTodoState);
     this.superBotTools = createSuperBotTools(this.profileService, this.superBotSessionState);
+    this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured = isProviderConfigured(userConfig) && provider !== null;
     const activeInstance = getActiveProviderInstance(userConfig);
     this.harness = this.createHarness({
@@ -324,6 +337,24 @@ export class AgentService {
 
   get profiles(): ProfileService {
     return this.profileService;
+  }
+
+  private getOrgMemoryService(): OrgMemoryService {
+    if (!this.orgMemoryService) {
+      this.orgMemoryService = new OrgMemoryService(this.db);
+    }
+    return this.orgMemoryService;
+  }
+
+  private async resolveOrgRole(
+    orgId: string | null | undefined,
+    userId: string | null | undefined,
+  ): Promise<OrgRole | null> {
+    if (!orgId || !userId) {
+      return null;
+    }
+    const member = await this.db.getOrgMember(orgId, userId);
+    return member?.role ?? null;
   }
 
   setAutomationTools(tools: ToolDefinition[]): void {
@@ -830,51 +861,21 @@ export class AgentService {
   }
 
   async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
-    const settings = await loadCodingAgentWorkspaceSettings(this.db);
-    const statuses = await listCodingAgentHarnessStatuses(this.db);
-    const activeHarness =
-      statuses.find(
-        (harness) =>
-          harness.id === settings.selectedHarnessId &&
-          harness.enabled &&
-          harness.installed &&
-          harness.ready,
-      ) ??
-      statuses.find((harness) => harness.enabled && harness.installed && harness.ready) ??
-      null;
-
-    return {
-      configured: activeHarness !== null,
-      selectedHarnessId: settings.selectedHarnessId,
-      activeHarnessId: activeHarness?.id ?? null,
-      harnesses: statuses.map((harness) => ({
-        id: harness.id,
-        kind: harness.kind,
-        name: harness.name,
-        command: harness.command,
-        enabled: harness.enabled,
-        installed: harness.installed,
-        version: harness.version,
-        authenticated: harness.authenticated,
-        ready: harness.ready,
-        nextStep: harness.nextStep,
-        statusMessage: harness.statusMessage,
-        selected: harness.id === settings.selectedHarnessId,
-        installHint: getCodingHarnessInstallHint(harness.kind),
-        installCommand: getCodingHarnessInstallCommand(harness.kind),
-      })),
-    };
+    return getCodingHarnessSettings(this.db, this.userConfig);
   }
 
   async setCodingHarnessSettings(
     input: UpdateCodingHarnessSettingsRequest,
   ): Promise<CodingHarnessSettingsResponse> {
-    await saveCodingAgentWorkspaceSettings(this.db, input);
-    return this.getCodingHarnessSettings();
+    return setCodingHarnessSettings(this.db, this.userConfig, input);
   }
 
   async verifyCodingHarness(harnessId?: string): Promise<VerifyCodingHarnessResponse> {
-    return verifyCodingAgentHarness(this.db, harnessId);
+    return verifyCodingHarnessSettings(this.db, this.userConfig, harnessId);
+  }
+
+  async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
+    return getAgentBrowserStatus();
   }
 
   async prepareCodingAgentLaunch(
@@ -897,6 +898,7 @@ export class AgentService {
         cwd: input.cwd,
         passthroughArgs: input.passthroughArgs,
         persistSelection: options.persistSelection === true,
+        userConfig: this.userConfig,
       },
       {
         orgRole: options.orgRole,
@@ -946,6 +948,7 @@ export class AgentService {
       orgId,
       profileId,
       profile.systemPrompt,
+      "member",
     );
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
@@ -964,6 +967,7 @@ export class AgentService {
         automationRunId,
         orgId,
         profileId,
+        orgRole: "member",
       }),
     });
 
@@ -996,6 +1000,7 @@ export class AgentService {
       input.orgId,
       input.profileId,
       profile.systemPrompt,
+      "member",
     );
     const childSystemPrompt = [
       systemPrompt.trim(),
@@ -1021,15 +1026,48 @@ export class AgentService {
         orgId: input.orgId,
         profileId: input.profileId,
         userId: input.userId,
+        sessionId: input.sessionId,
         clientOrigin: input.clientOrigin,
         agentDepth: input.agentDepth,
+        orgRole: "member",
       }),
     });
 
-    const sendPromise = session.send(prompt).then((reply) => ({
-      kind: "success" as const,
-      reply: reply.trim(),
-    }));
+    let sawPlanning = false;
+    let sawWriting = false;
+
+    const emitActivity = (label: string) => {
+      input.onActivity?.(label);
+    };
+
+    emitActivity("Starting…");
+
+    const sendPromise = session
+      .sendStream(prompt, {
+        onChunk: () => {
+          if (sawWriting) {
+            return;
+          }
+
+          sawWriting = true;
+          emitActivity("Writing answer…");
+        },
+        onThinking: () => {
+          if (sawPlanning) {
+            return;
+          }
+
+          sawPlanning = true;
+          emitActivity("Planning…");
+        },
+        onToolStart: (event) => {
+          emitActivity(formatToolActivityLabel(event.tool, event.input));
+        },
+      })
+      .then((reply) => ({
+        kind: "success" as const,
+        reply: reply.trim(),
+      }));
 
     const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
       setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
@@ -1098,7 +1136,9 @@ export class AgentService {
       }
     }
 
-    const sessionId = await this.createSession(orgId, "task", profileId);
+    const sessionId = await this.createSession(orgId, "task", profileId, undefined, {
+      orgRole: "member",
+    });
 
     await this.db.upsertTask({
       ...record,
@@ -1236,6 +1276,7 @@ export class AgentService {
       resolvedProfileId,
       sessionId,
       userId ?? null,
+      access?.orgRole,
     );
 
     this.sessions.set(sessionId, { channel, profileId: resolvedProfileId, session });
@@ -1278,6 +1319,26 @@ export class AgentService {
 
     if (!channel) {
       return null;
+    }
+
+    if (sessionTurnRegistry.isActive(sessionId)) {
+      const liveSession = await this.resolveSession(sessionId);
+
+      if (liveSession) {
+        const history = liveSession.getHistory();
+        const startedAt =
+          sessionTurnRegistry.getStatus(sessionId).startedAt ?? new Date().toISOString();
+
+        return {
+          channel,
+          messages: [...history],
+          messageMeta: history.map((_, index) => ({
+            id: `live-${index}`,
+            seq: index,
+            createdAt: startedAt,
+          })),
+        };
+      }
     }
 
     const storedMessages = await this.db.listMessagesForSession(sessionId);
@@ -1343,12 +1404,14 @@ export class AgentService {
 
     const { orgId } = await this.requireProfileRecord(record.profileId);
 
+    const branchOrgRole = await this.resolveOrgRole(orgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       orgId,
       record.profileId,
       nextSessionId,
       record.userId ?? null,
+      branchOrgRole,
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -1422,12 +1485,14 @@ export class AgentService {
 
     const { orgId } = await this.requireProfileRecord(record.profileId);
 
+    const resumeOrgRole = await this.resolveOrgRole(orgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       orgId,
       record.profileId,
       sessionId,
       record.userId ?? null,
+      resumeOrgRole,
     );
 
     this.sessions.set(sessionId, {
@@ -1505,18 +1570,54 @@ export class AgentService {
       return this.discoverModelsForProvider(providerId);
     }
 
+    if (request.provider === "fireworks") {
+      const apiKey = request.apiKey?.trim() ?? "";
+
+      if (!apiKey) {
+        throw new Error("API key is required to discover Fireworks models.");
+      }
+
+      const entries = await fetchFireworksGatewayModels(apiKey);
+      const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+      const models = catalogCustomModelsToCatalog(entries, staticModels, "fireworks");
+      const probeInstance = {
+        id: "discover",
+        type: "fireworks" as const,
+        label: "Fireworks",
+        apiKey,
+        customModels: entries,
+        createdAt: new Date(0).toISOString(),
+      };
+
+      return {
+        currentProviderId: null,
+        providers: [],
+        models: models.length ? models : getModelsForProviderInstance(probeInstance),
+        catalog: AVAILABLE_MODELS,
+        provider: "fireworks",
+        displayName: null,
+        customModels: entries,
+      };
+    }
+
     const baseUrl = request.baseUrl?.trim();
     if (!baseUrl) {
       throw new Error("baseUrl or providerId is required.");
     }
 
-    const entries = await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
+    const entries =
+      request.provider === "ollama"
+        ? await fetchOllamaModels(baseUrl, request.apiKey ?? "")
+        : await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
+
+    const probeType = request.provider === "ollama" ? ("ollama" as const) : ("openai_compatible" as const);
     const probeInstance = {
       id: "discover",
-      type: "openai_compatible" as const,
-      label: "Discover",
+      type: probeType,
+      label: probeType === "ollama" ? "Ollama" : "Discover",
       apiKey: request.apiKey ?? "",
       baseUrl,
+      ...(request.hostMode ? { hostMode: request.hostMode } : {}),
       customModels: entries,
       createdAt: new Date(0).toISOString(),
     };
@@ -1527,7 +1628,7 @@ export class AgentService {
       providers: [],
       models,
       catalog: AVAILABLE_MODELS,
-      provider: "openai_compatible",
+      provider: probeType,
       displayName: null,
       customModels: entries,
     };
@@ -1541,6 +1642,71 @@ export class AgentService {
 
     if (!instance) {
       throw new Error("Provider not found.");
+    }
+
+    if (instance.type === "ollama" || instance.type === "openai_compatible") {
+      const hostMode =
+        instance.type === "ollama" ? resolveOllamaHostMode(instance) : undefined;
+      const apiKey =
+        instance.apiKey.trim() ||
+        (instance.type === "ollama"
+          ? readEnvValue(process.env, apiKeyEnvVarForProvider("ollama") ?? "") || ""
+          : "");
+
+      if (instance.type === "ollama" && ollamaRequiresApiKey(hostMode!) && !apiKey.trim()) {
+        throw new Error("Add an API key before discovering Ollama Cloud models.");
+      }
+
+      const baseUrl =
+        instance.baseUrl?.trim() ||
+        (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
+
+      if (!baseUrl) {
+        throw new Error("A base URL is required to discover models.");
+      }
+
+      const entries =
+        instance.type === "ollama"
+          ? await fetchOllamaModels(baseUrl, apiKey)
+          : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+      const remoteInstance = { ...instance, customModels: entries };
+      const models = getModelsForProviderInstance(remoteInstance);
+
+      return {
+        currentProviderId: providerId,
+        providers: [],
+        models,
+        catalog: AVAILABLE_MODELS,
+        provider: instance.type,
+        displayName: instance.label,
+        baseUrl,
+        customModels: entries,
+      };
+    }
+
+    if (instance.type === "fireworks") {
+      const apiKey =
+        instance.apiKey.trim() ||
+        readEnvValue(process.env, apiKeyEnvVarForProvider("fireworks") ?? "") ||
+        "";
+
+      if (!apiKey.trim()) {
+        throw new Error("Add an API key before discovering Fireworks models.");
+      }
+
+      const entries = await fetchFireworksGatewayModels(apiKey);
+      const remoteInstance = { ...instance, customModels: entries };
+      const models = getModelsForProviderInstance(remoteInstance);
+
+      return {
+        currentProviderId: providerId,
+        providers: [],
+        models,
+        catalog: AVAILABLE_MODELS,
+        provider: "fireworks",
+        displayName: instance.label,
+        customModels: entries,
+      };
     }
 
     if (instance.type !== "openai") {
@@ -1769,6 +1935,7 @@ export class AgentService {
       model: request.model,
       label: request.displayName,
       baseUrl: request.baseUrl,
+      hostMode: request.hostMode,
       customModels: request.customModels,
     });
 
@@ -2292,7 +2459,9 @@ export class AgentService {
     } = {},
   ): Promise<ToolDefinition[]> {
     const storedTools = await this.db.listToolsForProfile(profile.id);
-    const tools = await resolveProfileStoredTools(storedTools, this.db);
+    const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+      userConfig: this.userConfig,
+    });
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
     const includeQuestionTools = options.includeQuestionTools ?? true;
@@ -2366,6 +2535,8 @@ export class AgentService {
       resolved = [...resolved, ...this.superBotTools];
     }
 
+    resolved = [...resolved, ...this.orgMemoryTools];
+
     if (!includeSubAgentTool) {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
@@ -2379,6 +2550,7 @@ export class AgentService {
     profileId: string,
     sessionId: string,
     userId?: string | null,
+    orgRole?: OrgRole | null,
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
@@ -2387,6 +2559,7 @@ export class AgentService {
       orgId,
       profileId,
       profile.systemPrompt,
+      orgRole,
     );
     const resolvedSystemPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
@@ -2419,6 +2592,8 @@ export class AgentService {
         profileId,
         sessionId,
         userId: userId ?? undefined,
+        orgRole: orgRole ?? undefined,
+        loadAttachment,
       }),
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
@@ -2453,7 +2628,7 @@ export class AgentService {
                   parts.push(await this.formatProfileAuthoringToolContext());
                 }
 
-                if (matched.some((skill) => skill.name === "coding-delegation")) {
+                if (matched.some((skill) => skill.name === "coding-agent")) {
                   parts.push(await this.formatCodingDelegationContext(orgId, profileId));
                 }
 
@@ -2548,30 +2723,19 @@ export class AgentService {
     profileId: string,
   ): Promise<string> {
     try {
-      const harness = await resolveCodingAgentHarness(this.db);
-      const workspaceRoot = getProfileSoulDir(orgId, profileId);
       const profile = await this.db.getProfile(profileId);
-      const gatewayBaseUrl = getInferenceGatewayBaseUrl();
-      let authToken: string | null = null;
-
-      if (gatewayBaseUrl) {
-        try {
-          authToken = await loadLocalAuthToken();
-        } catch {
-          authToken = null;
-        }
-      }
-
-      const template = buildCodingAgentCommandTemplate(
+      const harness = await resolveCodingAgentHarness(this.db, null, {
+        userConfig: this.userConfig,
+        profileModel: profile?.model ?? null,
+      });
+      const workspaceRoot = getProfileSoulDir(orgId, profileId);
+      const template = await buildCodingAgentCommandTemplate(
         harness,
         "<task prompt>",
         workspaceRoot,
         {
-          model: normalizeCodingAgentModel(profile?.model),
-          gatewayBaseUrl,
-          authToken,
-          orgId,
-          profileId,
+          userConfig: this.userConfig,
+          profileModel: profile?.model ?? null,
         },
       );
       const backendSkillName = getBackendSkillName(harness.kind);
@@ -2595,6 +2759,7 @@ export class AgentService {
     orgId: string,
     profileId: string,
     profilePrompt: string,
+    orgRole?: OrgRole | null,
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await resolveSoulStackForProfile(orgId, profileId);
     let systemPrompt = stack
@@ -2607,12 +2772,24 @@ export class AgentService {
       if (skillsCatalog.trim()) {
         systemPrompt = `${systemPrompt.trim()}\n\n${skillsCatalog.trim()}`;
       }
+
+      const agentBrowserCapability =
+        await this.skillsService.composeAgentBrowserCapabilityForProfile(orgId, profileId);
+
+      if (agentBrowserCapability.trim()) {
+        systemPrompt = `${systemPrompt.trim()}\n\n${agentBrowserCapability.trim()}`;
+      }
     }
 
     const kbCatalog = await composeKnowledgeBaseCatalog(orgId, profileId);
 
     if (kbCatalog.trim()) {
       systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
+    }
+
+    if (orgRole !== "viewer") {
+      const orgMemorySummary = await this.getOrgMemoryService().getSummary(orgId);
+      systemPrompt = appendOrgMemorySection(systemPrompt, orgMemorySummary, orgRole);
     }
 
     return {

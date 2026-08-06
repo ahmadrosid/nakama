@@ -2,6 +2,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { extractModelId } from "@/lib/models";
@@ -57,7 +58,7 @@ export function ChatPageContent(state: ChatPageState) {
     <PromptInputProvider key={composerDraft || "empty"} initialInput={composerDraft}>
       {readOnlyBanner}
       <ChatComposer
-        className={isEmptyState && !error ? "py-0 [&>p:first-child]:min-h-0" : "py-0"}
+        className={isEmptyState && !error ? "py-0 [&>p:first-child]:min-h-0 z-10" : "py-0 z-10"}
         chatStatus={chatStatus}
         busy={busy}
         canStop={canStop}
@@ -68,6 +69,8 @@ export function ChatPageContent(state: ChatPageState) {
         activeProfile={activeProfile}
         availableSkills={availableSkills}
         onProfileSwitch={handleProfileSwitch}
+        showProfileSwitch={!isEmptyState}
+        showTips={isEmptyState}
         showOfflineHint={showOfflineHint}
         providerConfigured={health?.providerConfigured}
         onNavigateSetup={navigateSetup}
@@ -99,8 +102,14 @@ export function ChatPageContent(state: ChatPageState) {
     return (
       <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
         <ChatPageColumn centered>
-          <div className="mx-auto flex w-full max-w-3xl flex-col mb-12">
-            <ChatWelcome profile={activeProfile} />
+          <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+            <ChatWelcome
+              profile={activeProfile}
+              profileId={profileId}
+              profiles={profiles}
+              onProfileSwitch={handleProfileSwitch}
+              profileSwitchDisabled={busy}
+            />
             {composer}
           </div>
         </ChatPageColumn>
@@ -110,6 +119,7 @@ export function ChatPageContent(state: ChatPageState) {
 
   return (
     <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+      <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <ChatPageColumn>
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -122,6 +132,7 @@ export function ChatPageContent(state: ChatPageState) {
               }
               branchingMessageId={branchingMessageId}
               actionsDisabled={busy || readOnlySession}
+              streamActive={busy}
               onBranchMessage={(message) => void handleBranchMessage(message)}
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
             />

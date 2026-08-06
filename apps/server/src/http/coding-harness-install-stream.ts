@@ -1,9 +1,10 @@
-import { formatServerError, type CodingHarnessInstallEvent } from "@nakama/core";
+import { formatServerError } from "@nakama/core";
+import type { AgentBrowserInstallEvent, CodingHarnessInstallEvent } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 
-export function streamCodingHarnessInstall(
-  executor: (send: (event: CodingHarnessInstallEvent) => void) => Promise<void>,
+export function streamInstallEvents<TEvent extends { type: string }>(
+  executor: (send: (event: TEvent) => void) => Promise<void>,
   options: {
     timeoutMessage?: string;
   } = {},
@@ -16,7 +17,7 @@ export function streamCodingHarnessInstall(
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: CodingHarnessInstallEvent) => {
+      const send = (event: TEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
@@ -32,7 +33,7 @@ export function streamCodingHarnessInstall(
         send({
           type: "error",
           error: timeoutMessage,
-        });
+        } as TEvent);
         clearInterval(keepalive);
         controller.close();
       }, INSTALL_STREAM_TIMEOUT_MS);
@@ -43,7 +44,7 @@ export function streamCodingHarnessInstall(
         send({
           type: "error",
           error: formatServerError(error),
-        });
+        } as TEvent);
       } finally {
         clearTimeout(timeoutId);
         clearInterval(keepalive);
@@ -59,4 +60,22 @@ export function streamCodingHarnessInstall(
       Connection: "keep-alive",
     },
   });
+}
+
+export function streamCodingHarnessInstall(
+  executor: (send: (event: CodingHarnessInstallEvent) => void) => Promise<void>,
+  options: {
+    timeoutMessage?: string;
+  } = {},
+): Response {
+  return streamInstallEvents<CodingHarnessInstallEvent>(executor, options);
+}
+
+export function streamAgentBrowserInstall(
+  executor: (send: (event: AgentBrowserInstallEvent) => void) => Promise<void>,
+  options: {
+    timeoutMessage?: string;
+  } = {},
+): Response {
+  return streamInstallEvents<AgentBrowserInstallEvent>(executor, options);
 }

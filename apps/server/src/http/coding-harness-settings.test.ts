@@ -196,7 +196,7 @@ describe("coding harness settings routes", () => {
     }
   }, 15_000);
 
-  test("verify reports login required when codex is installed but not authenticated", async () => {
+  test("verify reports provider setup required when codex is installed but not authenticated", async () => {
     await installFakeBinary(tempBinDir, "codex", "login-required");
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
@@ -252,8 +252,8 @@ describe("coding harness settings routes", () => {
     expect(verified.ok).toBe(false);
     expect(verified.authenticated).toBe(false);
     expect(verified.ready).toBe(false);
-    expect(verified.nextStep).toBe("login");
-    expect(verified.error).toContain("codex login");
+    expect(verified.nextStep).toBe("retry");
+    expect(verified.error).toContain("Settings → Provider");
   }, 15_000);
 });
 

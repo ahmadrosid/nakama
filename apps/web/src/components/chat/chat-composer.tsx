@@ -1,3 +1,4 @@
+import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
 import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type {
   AgentQuestionAnswer,
@@ -10,8 +11,7 @@ import type {
 import type { ChatStatus } from "ai";
 import type { FileUIPart } from "ai";
 import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputBody,
@@ -63,6 +63,7 @@ import {
 } from "@/components/chat/ChatMessageQueuePanel";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,6 @@ import {
 } from "@/lib/pasted-text";
 import {
   encodeModelSelection,
-  modelSelectContentMaxHeightClass,
 } from "@/lib/models";
 import {
   filterSkillsForSlashQuery,
@@ -80,6 +80,7 @@ import {
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
 } from "@/lib/chat-composer-skills";
+import { ChatComposerError, ChatTips } from "./chat-tips";
 
 interface ChatComposerBaseProps {
   chatStatus: ChatStatus;
@@ -108,6 +109,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   profiles: ProfileSummary[];
   activeProfile?: ProfileSummary;
   onProfileSwitch: (profileId: string) => void;
+  showProfileSwitch?: boolean;
   showOfflineHint?: boolean;
   providerConfigured?: boolean;
   onNavigateSetup?: () => void;
@@ -122,9 +124,14 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   availableSkills?: SkillSummary[];
   onModelChange: (selection: string) => void;
   renderModelLabel: (selection: string | null) => string | null;
+  showTips?: boolean;
 }
 
 export type ChatComposerProps = ChatComposerMinimalProps | ChatComposerFullProps;
+
+const EMPTY_TODOS: AgentTodo[] = [];
+const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
+const EMPTY_SKILLS: SkillSummary[] = [];
 
 export function ChatComposer(props: ChatComposerProps) {
   const {
@@ -138,30 +145,31 @@ export function ChatComposer(props: ChatComposerProps) {
     onStop,
     className,
     footerClassName,
-    todos = [],
+    todos = EMPTY_TODOS,
     questionnaire = null,
-    queuedMessages = [],
+    queuedMessages = EMPTY_QUEUED_MESSAGES,
     onSubmitQuestionnaire,
   } = props;
 
   const isMinimal = props.variant === "minimal";
+  const showTips = !isMinimal && props.showTips === true;
   const hasTodos = hasActiveAgentTodos(todos);
-  const hasQuestionnaire = Boolean(questionnaire && questionnaire.questions.length > 0);
+  const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+  const showTodos = hasTodos && !hasQuestionnaire;
   const hasQueuedMessages = queuedMessages.length > 0;
-  const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
-  const availableSkills = isMinimal ? [] : (props.availableSkills ?? []);
+  const availableSkills = isMinimal ? EMPTY_SKILLS : (props.availableSkills ?? EMPTY_SKILLS);
+  const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = error ?? attachmentError;
+  const composerNotice = displayError ? (
+    <ChatComposerError message={displayError} />
+  ) : showTips ? (
+    <ChatTips />
+  ) : null;
+  const shellClass = isMinimal ? composerShellCompactClass : composerShellClass;
 
   return (
-    <div className={cn("w-full shrink-0 space-y-2", className)}>
-      <p
-        className={`min-h-5 text-sm ${displayError ? "text-destructive" : "invisible"}`}
-        role={displayError ? "alert" : undefined}
-        aria-hidden={!displayError}
-      >
-        {displayError ?? "\u00a0"}
-      </p>
+    <div className={cn("w-full shrink-0", className)}>
       {!isMinimal && props.showOfflineHint ? (
         <p
           className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
@@ -180,7 +188,7 @@ export function ChatComposer(props: ChatComposerProps) {
           </span>
         </p>
       ) : null}
-      {(hasQuestionnaire || hasTodos || hasQueuedMessages) && !isMinimal ? (
+      {(hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal ? (
         <div className="relative flex w-full flex-col">
           {hasQuestionnaire ? (
             <AgentQuestionnairePanel
@@ -189,9 +197,10 @@ export function ChatComposer(props: ChatComposerProps) {
               onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
             />
           ) : null}
-          <AgentTodoPanel todos={todos} stack />
+          {showTodos ? <AgentTodoPanel todos={todos} stack /> : null}
           {hasQueuedMessages ? <ChatMessageQueuePanel messages={queuedMessages} stack /> : null}
           <div className="relative z-10 -mt-2 w-full">
+            {composerNotice}
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
               multiple
@@ -209,6 +218,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
               <PromptInputBody>
                 <ChatComposerTextarea
+                  key={skillPickerKey}
                   className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
                   placeholder={placeholder}
                   disabled={disabled}
@@ -236,69 +246,73 @@ export function ChatComposer(props: ChatComposerProps) {
           </div>
         </div>
       ) : (
-      <PromptInput
-        accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
-        multiple={!isMinimal}
-        maxFiles={isMinimal ? undefined : 5}
-        maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
-        prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
-        onError={
-          isMinimal
-            ? undefined
-            : (attachmentErr) => setAttachmentError(attachmentErr.message)
-        }
-        className={shellClass}
-        inputGroupClassName={composerInputGroupClass}
-        onSubmit={({ text, files }) => {
-          setAttachmentError(null);
-          onSubmit(text.trim(), files);
-        }}
-      >
-        {!isMinimal ? (
-          <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
-        ) : null}
-        <PromptInputBody>
-          <ChatComposerTextarea
-            className={
+        <>
+          {composerNotice}
+          <PromptInput
+            accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
+            multiple={!isMinimal}
+            maxFiles={isMinimal ? undefined : 5}
+            maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
+            prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
+            onError={
               isMinimal
-                ? "min-h-10 max-h-32 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
-                : "min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                ? undefined
+                : (attachmentErr) => setAttachmentError(attachmentErr.message)
             }
-            placeholder={placeholder}
-            disabled={disabled}
-            availableSkills={availableSkills}
-            longPasteWordThreshold={isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD}
-          />
-        </PromptInputBody>
-        <PromptInputFooter
-          className={cn(
-            "w-full border-0 px-0 pb-0",
-            isMinimal
-              ? "justify-end pt-2"
-              : "flex-wrap items-center gap-2 pt-2.5",
-            footerClassName,
-          )}
-        >
-          {isMinimal ? (
-            <ChatComposerSubmitButton
-              chatStatus={chatStatus}
-              busy={busy}
-              canStop={canStop}
-              disabled={disabled}
-              onStop={onStop}
-            />
-          ) : (
-            <ChatComposerFullFooter
-              props={props}
-              chatStatus={chatStatus}
-              busy={busy}
-              canStop={canStop}
-              disabled={disabled}
-              onStop={onStop}
-            />
-          )}
-        </PromptInputFooter>
-      </PromptInput>
+            className={shellClass}
+            inputGroupClassName={composerInputGroupClass}
+            onSubmit={({ text, files }) => {
+              setAttachmentError(null);
+              onSubmit(text.trim(), files);
+            }}
+          >
+            {!isMinimal ? (
+              <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
+            ) : null}
+            <PromptInputBody>
+              <ChatComposerTextarea
+                key={skillPickerKey}
+                className={
+                  isMinimal
+                    ? "min-h-10 max-h-32 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
+                    : "min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                }
+                placeholder={placeholder}
+                disabled={disabled}
+                availableSkills={availableSkills}
+                longPasteWordThreshold={isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD}
+              />
+            </PromptInputBody>
+            <PromptInputFooter
+              className={cn(
+                "w-full border-0 px-0 pb-0",
+                isMinimal
+                  ? "justify-end pt-2"
+                  : "flex-wrap items-center gap-2 pt-2.5",
+                footerClassName,
+              )}
+            >
+              {isMinimal ? (
+                <ChatComposerSubmitButton
+                  chatStatus={chatStatus}
+                  busy={busy}
+                  canStop={canStop}
+                  disabled={disabled}
+                  onStop={onStop}
+                />
+              ) : (
+                <ChatComposerFullFooter
+                  props={props}
+                  chatStatus={chatStatus}
+                  busy={busy}
+                  canStop={canStop}
+                  disabled={disabled}
+                  onStop={onStop}
+                />
+              )}
+            </PromptInputFooter>
+          </PromptInput>
+        </>
       )}
     </div>
   );
@@ -330,17 +344,8 @@ function ChatComposerTextarea({
     [availableSkills, slashRange],
   );
   const pickerOpen = Boolean(slashRange && availableSkills.length > 0 && !disabled);
-
-  useEffect(() => {
-    setSlashRange(null);
-    setActiveIndex(0);
-  }, [availableSkills]);
-
-  useEffect(() => {
-    if (activeIndex >= suggestions.length) {
-      setActiveIndex(Math.max(0, suggestions.length - 1));
-    }
-  }, [activeIndex, suggestions.length]);
+  const safeActiveIndex =
+    suggestions.length === 0 ? 0 : Math.min(activeIndex, suggestions.length - 1);
 
   const updateSlashRange = useCallback((value: string, cursorIndex: number) => {
     setSlashRange(findActiveSkillSlashRange(value, cursorIndex));
@@ -381,7 +386,7 @@ function ChatComposerTextarea({
       {pickerOpen ? (
         <ChatSkillPicker
           skills={suggestions}
-          activeIndex={activeIndex}
+          activeIndex={safeActiveIndex}
           onSelect={selectSkill}
         />
       ) : null}
@@ -429,7 +434,7 @@ function ChatComposerTextarea({
 
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            const skill = suggestions[activeIndex];
+            const skill = suggestions[safeActiveIndex];
             if (skill) {
               selectSkill(skill);
             }
@@ -462,51 +467,20 @@ function ChatComposerFullFooter({
         aria-label="Composer options"
         className={composerToolbarClass}
       >
-        <PromptInputTools className="gap-1.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={
-                    props.activeProfile
-                      ? `Switch profile (${props.activeProfile.name})`
-                      : "Switch profile"
-                  }
-                  title={props.activeProfile?.name ?? "Switch profile"}
-                  className={cn(composerIconButtonClass, "p-0")}
-                />
-              }
-            >
-              {props.activeProfile ? (
-                <ProfileAvatar profile={props.activeProfile} size="sm" className="size-7" />
-              ) : (
-                <span className="text-xs font-medium">?</span>
-              )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-52 w-auto">
-              {props.profiles.map((profile) => (
-                <DropdownMenuItem
-                  key={profile.id}
-                  disabled={profile.id === props.profileId}
-                  onClick={() => void props.onProfileSwitch(profile.id)}
-                >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <ProfileAvatar profile={profile} size="sm" />
-                    <span className="whitespace-nowrap">
-                      {profile.name}
-                      {profile.isSuper ? " (super)" : ""}
-                    </span>
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </PromptInputTools>
-
-        <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+        {props.showProfileSwitch !== false ? (
+          <>
+            <PromptInputTools className="gap-1.5">
+              <ChatProfileSwitcher
+                profileId={props.profileId}
+                profiles={props.profiles}
+                activeProfile={props.activeProfile}
+                onProfileSwitch={props.onProfileSwitch}
+                disabled={busy || disabled}
+              />
+            </PromptInputTools>
+            <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
+          </>
+        ) : null}
 
         {props.providerConfigured ? (
           <PromptInputSelect
@@ -533,15 +507,12 @@ function ChatComposerFullFooter({
             <PromptInputSelectContent
               align="start"
               alignItemWithTrigger={false}
-              className={cn(
-                "w-max max-w-[min(24rem,92vw)] text-xs",
-                modelSelectContentMaxHeightClass,
-              )}
+              className="w-max max-w-[min(24rem,92vw)] text-xs"
             >
               {props.profileModelId &&
-              !props.providerModelGroups.some((group) =>
-                group.models.some((model) => model.id === props.profileModelId),
-              ) ? (
+                !props.providerModelGroups.some((group) =>
+                  group.models.some((model) => model.id === props.profileModelId),
+                ) ? (
                 <PromptInputSelectItem
                   value={encodeModelSelection("__unknown__", props.profileModelId)}
                   label={props.profileModelId}

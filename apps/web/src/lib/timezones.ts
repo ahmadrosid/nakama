@@ -102,10 +102,14 @@ export function getFilteredTimezoneGroups(
 
   const matches = new Set(searchTimezoneEntries(query, response).map((entry) => entry.id));
 
-  return response.groups
-    .map((group) => ({
-      ...group,
-      timezones: group.timezones.filter((entry) => matches.has(entry.id)),
-    }))
-    .filter((group) => group.timezones.length > 0);
+  const groups: typeof response.groups = [];
+
+  for (const group of response.groups) {
+    const timezones = group.timezones.filter((entry) => matches.has(entry.id));
+    if (timezones.length > 0) {
+      groups.push({ ...group, timezones });
+    }
+  }
+
+  return groups;
 }

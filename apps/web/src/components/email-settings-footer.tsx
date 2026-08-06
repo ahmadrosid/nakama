@@ -7,7 +7,6 @@ export function EmailSettingsFooter({
   hint,
   formError,
   testRecipient,
-  userEmail,
   testPending,
   savePending,
   configured,
@@ -18,7 +17,6 @@ export function EmailSettingsFooter({
   hint: string | null;
   formError: string | null;
   testRecipient: string;
-  userEmail?: string;
   testPending: boolean;
   savePending: boolean;
   configured: boolean;
@@ -50,7 +48,7 @@ export function EmailSettingsFooter({
             className="min-w-0 flex-1"
             value={testRecipient}
             onChange={(event) => onTestRecipientChange(event.target.value)}
-            placeholder={userEmail ?? "Test recipient"}
+            placeholder="Test recipient"
           />
           <Button
             type="button"

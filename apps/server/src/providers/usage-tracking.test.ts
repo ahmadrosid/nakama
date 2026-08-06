@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderClient } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "../services/llm-usage-tracker";
-import { wrapProviderWithUsageTracking } from "./usage-tracking";
+import {
+  estimateChatInputBreakdown,
+  wrapProviderWithUsageTracking,
+} from "./usage-tracking";
 
 describe("usage tracking", () => {
   test("prefers provider-reported usage for chat calls", async () => {
@@ -79,5 +82,50 @@ describe("usage tracking", () => {
       outputTokens: 10,
       totalTokens: 50,
     });
+  });
+
+  test("estimateChatInputBreakdown splits system, tools, and messages", () => {
+    const system = ["You are helpful.", "", "# Identity", "a".repeat(40)].join("\n");
+    const tools = [
+      {
+        name: "heavy",
+        description: "b".repeat(80),
+        parameters: { type: "object", properties: { q: { type: "string" } } },
+      },
+      {
+        name: "light",
+        description: "tiny",
+        parameters: { type: "object", properties: {} },
+      },
+    ];
+    const toolsChars = JSON.stringify(tools).length;
+
+    const breakdown = estimateChatInputBreakdown({
+      system,
+      messages: [
+        { role: "user", content: "c".repeat(8) }, // 2 tokens
+        { role: "assistant", content: "ok", toolCalls: [{ id: "1", name: "demo", arguments: "{}" }] },
+        { role: "tool", toolCallId: "1", name: "demo", content: "done" },
+      ],
+      tools,
+    });
+
+    expect(breakdown.systemTokens).toBe(Math.ceil(system.length / 4));
+    expect(breakdown.systemSections[0]?.title).toBe("Identity");
+    expect(breakdown.toolsCount).toBe(2);
+    expect(breakdown.toolsChars).toBe(toolsChars);
+    expect(breakdown.toolsTokens).toBe(Math.ceil(toolsChars / 4));
+    expect(breakdown.toolsBySize.map((tool) => tool.name)).toEqual(["heavy", "light"]);
+    expect(breakdown.toolsBySize[0]?.descriptionChars).toBe(80);
+    expect(breakdown.messageCount).toBe(3);
+    expect(breakdown.messagesByRole).toEqual({
+      user: 1,
+      assistant: 1,
+      tool: 1,
+      other: 0,
+    });
+    expect(breakdown.totalEstimatedInputTokens).toBe(
+      breakdown.systemTokens + breakdown.toolsTokens + breakdown.messagesTokens,
+    );
   });
 });

@@ -3,6 +3,7 @@ import type {
   StoredAutomation,
 } from "@nakama/core/contract";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useAutomationRunsQuery,
   useAutomationsQuery,
@@ -19,6 +20,9 @@ import { findSuperBotProfile } from "@/lib/profiles";
 import { formatFutureRelativeTime, formatSessionRelativeTime } from "@/lib/chat-history";
 import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
+const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
+const EMPTY_UNREAD_BY_AUTOMATION_ID: Record<string, number> = {};
+
 export function useAutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
   const {
@@ -28,10 +32,12 @@ export function useAutomationsPage() {
     error: automationsError,
     refetch: refetchAutomations,
   } = useAutomationsQuery();
-  const automations = automationsData?.automations ?? [];
-  const unreadByAutomationId = automationsData?.unread?.byAutomationId ?? {};
+  const automations = automationsData?.automations ?? EMPTY_AUTOMATIONS;
+  const unreadByAutomationId =
+    automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;
   const { data: profiles = [] } = useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
+  const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
     data: runs = [],
@@ -91,10 +97,19 @@ export function useAutomationsPage() {
       return;
     }
 
+    const automationFromUrl = searchParams.get("automation");
+    if (
+      automationFromUrl &&
+      automations.some((automation) => automation.id === automationFromUrl)
+    ) {
+      setSelectedId(automationFromUrl);
+      return;
+    }
+
     if (!selectedId || !automations.some((automation) => automation.id === selectedId)) {
       setSelectedId(automations[0]!.id);
     }
-  }, [automations, selectedId]);
+  }, [automations, selectedId, searchParams]);
 
   useEffect(() => {
     if (!selectedId || !runsLoaded) {

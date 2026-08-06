@@ -1,4 +1,4 @@
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { Trash2Icon } from "lucide-react";
 import { ArtifactsTab } from "@/components/soul-tools/ArtifactsTab";
 import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -10,17 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useAuth } from "@/context/use-auth";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
-import { sectionClass } from "@/pages/profiles/profiles-page.shared";
+import { sectionClass, profilePanelHeaderClass, profilePanelHeaderLabelClass } from "@/pages/profiles/profiles-page.shared";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 import {
-  EmptyMessage,
   PageState,
   ProfileDetailTabButton,
   ProfileScopeButton,
-  ProfileSearch,
   ProfilesEmptyState,
 } from "@/pages/profiles/profiles-ui";
 
@@ -34,17 +36,20 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     detail,
     detailLoading,
     refetchDetail,
-    searchQuery,
-    setSearchQuery,
-    isSearching,
     refreshing,
-    filteredProfiles,
     detailTab,
     setDetailTab,
     handleSelectProfile,
     setCreateOpen,
     openDeleteDialog,
   } = state;
+  const { user } = useAuth();
+  const canCreateProfile = user?.isPlatformAdmin === true;
+  const { navigateToNewChat } = useAppNavigation();
+  const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+  const onAskSuperBot = superBotProfileId
+    ? () => navigateToNewChat(superBotProfileId)
+    : undefined;
 
   if (profilesLoading && profiles.length === 0) {
     return <PageState message="Loading profiles…" />;
@@ -88,7 +93,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredProfiles.map((profile) => (
+                  {profiles.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
                       <span className="flex items-center gap-2">
                         <ProfileAvatar profile={profile} size="sm" />
@@ -99,80 +104,52 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 </SelectContent>
               </Select>
 
-              <Button
-                type="button"
-                size="sm"
-                disabled={busy}
-                onClick={() => setCreateOpen(true)}
-              >
-                <PlusIcon className="size-4" aria-hidden />
-                New
-              </Button>
+              {canCreateProfile ? (
+                <ProfileAdminPlusButton
+                  label="New profile"
+                  disabled={busy}
+                  onClick={() => setCreateOpen(true)}
+                />
+              ) : null}
             </div>
-            {profiles.length > 0 ? (
-              <ProfileSearch
-                value={searchQuery}
-                disabled={profilesLoading || busy}
-                isSearching={isSearching}
-                onChange={setSearchQuery}
-                onClear={() => setSearchQuery("")}
-              />
-            ) : null}
           </div>
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            <aside className="hidden shrink-0 border-b border-border p-4 lg:block lg:w-56 lg:border-r lg:border-b-0">
-              <div className="mb-4 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="type-section-title">Profiles</h2>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    <PlusIcon className="size-4" aria-hidden />
-                    New
-                  </Button>
-                </div>
-              </div>
-              {profiles.length > 0 ? (
-                <div className="mb-4">
-                  <ProfileSearch
-                    value={searchQuery}
-                    disabled={profilesLoading || busy}
-                    isSearching={isSearching}
-                    onChange={setSearchQuery}
-                    onClear={() => setSearchQuery("")}
-                  />
-                </div>
-              ) : null}
-
-              {profiles.length === 0 ? (
-                <ProfilesEmptyState
-                  variant="compact"
+            <aside className="hidden shrink-0 flex-col border-b border-border lg:flex lg:w-56 lg:border-r lg:border-b-0">
+              <div className={profilePanelHeaderClass}>
+                <span className={profilePanelHeaderLabelClass}>Profiles</span>
+              {canCreateProfile ? (
+                <ProfileAdminPlusButton
+                  label="New profile"
                   disabled={busy}
-                  onCreate={() => setCreateOpen(true)}
+                  tooltipSide="top"
+                  onClick={() => setCreateOpen(true)}
                 />
-              ) : filteredProfiles.length === 0 ? (
-                <EmptyMessage
-                  message="No profiles match your search."
-                  actionLabel="Clear search"
-                  onAction={() => setSearchQuery("")}
-                />
-              ) : (
-                <nav aria-label="Profiles" className="flex flex-col gap-1">
-                  {filteredProfiles.map((profile) => (
-                    <ProfileScopeButton
-                      key={profile.id}
-                      profile={profile}
-                      active={selectedId === profile.id}
-                      disabled={busy}
-                      onClick={() => handleSelectProfile(profile.id)}
-                    />
-                  ))}
-                </nav>
-              )}
+              ) : null}
+            </div>
 
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {profiles.length === 0 ? (
+                  <ProfilesEmptyState
+                    variant="compact"
+                    disabled={busy}
+                    canCreate={canCreateProfile}
+                    onCreate={() => setCreateOpen(true)}
+                    onAskSuperBot={onAskSuperBot}
+                  />
+                ) : (
+                  <nav aria-label="Profiles" className="flex flex-col gap-1">
+                    {profiles.map((profile) => (
+                      <ProfileScopeButton
+                        key={profile.id}
+                        profile={profile}
+                        active={selectedId === profile.id}
+                        disabled={busy}
+                        onClick={() => handleSelectProfile(profile.id)}
+                      />
+                    ))}
+                  </nav>
+                )}
+              </div>
             </aside>
 
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -181,7 +158,9 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                   <ProfilesEmptyState
                     variant="full"
                     disabled={busy}
+                    canCreate={canCreateProfile}
                     onCreate={() => setCreateOpen(true)}
+                    onAskSuperBot={onAskSuperBot}
                   />
                 </div>
               ) : detailLoading && !detail ? (
@@ -194,7 +173,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 </div>
               ) : (
                 <>
-                  <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 sm:px-5">
+                  <div className={profilePanelHeaderClass}>
                     <div
                       role="tablist"
                       aria-label="Profile settings"

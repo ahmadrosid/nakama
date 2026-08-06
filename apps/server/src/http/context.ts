@@ -6,6 +6,7 @@ import { SystemStatusService } from "../services/system-status-service";
 import type { WorkerManagerService } from "../services/worker-manager-service";
 import type { AuthService } from "../services/auth-service";
 import type { OrgService } from "../services/org-service";
+import type { OrgMemoryService } from "../services/org-memory-service";
 import type { ComposioService } from "../services/composio-service";
 import type { DatabaseAdapter } from "@nakama/db";
 
@@ -19,6 +20,7 @@ export interface ServerOptions {
   composioService?: ComposioService | null;
   authService?: AuthService | null;
   orgService?: OrgService | null;
+  orgMemoryService?: OrgMemoryService | null;
   databaseAdapter?: DatabaseAdapter | null;
   webDistDir?: string | null;
 }

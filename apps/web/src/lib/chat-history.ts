@@ -7,6 +7,10 @@ import type {
 import { parseAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import { extractThinkingFromAssistantMessage } from "@nakama/core/thinking-content";
 import { userContentToDisplayDocuments, userContentToDisplayImageAttachments, userContentToDisplayImages, stripImageDescriptionsFromDisplayText } from "@/lib/chat-images";
+import {
+  extractWebSearchBlocksFromProviderContent,
+  WEB_SEARCH_TOOL_NAME,
+} from "@/lib/chat-stream-web-search";
 
 export interface RequestedChatSession {
   profileId: string;
@@ -15,6 +19,20 @@ export interface RequestedChatSession {
 
 export function buildChatBasePath(): string {
   return "/chat";
+}
+
+/**
+ * Draft chat URL used when starting a new chat (or switching profiles while on a
+ * session route). `/chat` and `/chat/:profileId/:sessionId` are separate routes,
+ * so navigating between them remounts ChatPage — the profile must travel in the
+ * query string or the remounted page falls back to the default profile.
+ */
+export function buildNewChatPath(profileId?: string | null): string {
+  const params = new URLSearchParams({ new: "1", _: String(Date.now()) });
+  if (profileId) {
+    params.set("profile", profileId);
+  }
+  return `${buildChatBasePath()}?${params.toString()}`;
 }
 
 /** Profile id from `?new=1&profile=…` when opening a new chat (e.g. Super Bot from Tools). */
@@ -79,6 +97,141 @@ export function chatProfileIdFromPath(pathname: string): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
+export function isChatSessionPath(pathname: string): boolean {
+  return chatProfileIdFromPath(pathname) !== null;
+}
+
+export const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
+
+export function readStoredActiveChatProfileId(): string | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+
+  const profileId = localStorage.getItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY)?.trim();
+  return profileId || null;
+}
+
+export function writeStoredActiveChatProfileId(profileId: string): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY, profileId);
+}
+
+export function pickKnownProfileId(
+  profiles: ReadonlyArray<{ id: string }>,
+  ...candidates: Array<string | null | undefined>
+): string | null {
+  for (const candidate of candidates) {
+    if (candidate && profiles.some((profile) => profile.id === candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+/** Initial profile for draft `/chat` before profiles list loads. */
+export function readInitialDraftChatProfileId(input: {
+  search: string;
+  routeProfileId?: string | null;
+}): string {
+  if (input.routeProfileId) {
+    return input.routeProfileId;
+  }
+
+  return (
+    readRequestedProfileFromNewChatSearch(input.search) ??
+    readStoredActiveChatProfileId() ??
+    ""
+  );
+}
+
+/** Profile id for `/history` — URL when present, else live chat state / storage / default. */
+export function resolveHistoryProfileId(input: {
+  search: string;
+  profiles: ReadonlyArray<{ id: string }>;
+  liveChatProfileId?: string | null;
+}): string | null {
+  const fromUrl = new URLSearchParams(input.search).get("profile");
+  return (
+    pickKnownProfileId(
+      input.profiles,
+      fromUrl,
+      input.liveChatProfileId,
+      readStoredActiveChatProfileId(),
+    ) ?? resolveDefaultProfileId(input.profiles)
+  );
+}
+
+export function resolveDefaultProfileId(
+  profiles: ReadonlyArray<{ id: string }>,
+): string | null {
+  if (profiles.length === 0) {
+    return null;
+  }
+
+  return profiles.find((profile) => profile.id === "default")?.id ?? profiles[0]!.id;
+}
+
+/** Profile id for sidebar rail highlight — URL when present, else live chat state / storage. */
+export function resolveActiveProfileIdFromLocation(input: {
+  pathname: string;
+  search: string;
+  profiles: ReadonlyArray<{ id: string }>;
+  liveChatProfileId?: string | null;
+  historyPath?: string;
+}): string | null {
+  const {
+    pathname,
+    search,
+    profiles,
+    liveChatProfileId,
+    historyPath = "/history",
+  } = input;
+
+  const isKnownProfile = (profileId: string | null | undefined): profileId is string =>
+    Boolean(profileId && profiles.some((profile) => profile.id === profileId));
+
+  if (pathname === historyPath) {
+    return resolveHistoryProfileId({ search, profiles, liveChatProfileId });
+  }
+
+  const fromSessionPath = chatProfileIdFromPath(pathname);
+  if (isKnownProfile(fromSessionPath)) {
+    return fromSessionPath;
+  }
+
+  const fromNewChat = readRequestedProfileFromNewChatSearch(search);
+  if (isKnownProfile(fromNewChat)) {
+    return fromNewChat;
+  }
+
+  if (pathname === buildChatBasePath()) {
+    if (isKnownProfile(liveChatProfileId)) {
+      return liveChatProfileId;
+    }
+    const stored = readStoredActiveChatProfileId();
+    if (isKnownProfile(stored)) {
+      return stored;
+    }
+    return resolveDefaultProfileId(profiles);
+  }
+
+  if (isKnownProfile(liveChatProfileId)) {
+    return liveChatProfileId;
+  }
+
+  const stored = readStoredActiveChatProfileId();
+  if (isKnownProfile(stored)) {
+    return stored;
+  }
+
+  return null;
+}
+
 export function buildChatPath(profileId: string, sessionId: string): string {
   return `/chat/${encodeURIComponent(profileId)}/${encodeURIComponent(sessionId)}`;
 }
@@ -113,7 +266,11 @@ export interface ChatListItem {
   tool?: string;
   toolStatus?: "running" | "done";
   toolInput?: Record<string, unknown>;
+  toolInputAccumulatedJson?: string;
+  artifactStreaming?: boolean;
   toolResult?: unknown;
+  /** Live status from a running sub-agent child loop (e.g. "Reading SOUL.md"). */
+  subAgentActivity?: string;
 }
 
 export function sessionStorageKey(profileId: string): string {
@@ -164,6 +321,14 @@ export function chatMessagesToListItems(
   }
 
   const items: ChatListItem[] = [];
+  const hydratedToolCallIds = new Set<string>();
+  const persistedWebSearchToolIds = new Set<string>();
+
+  for (const message of messages) {
+    if (message.role === "tool" && message.name === WEB_SEARCH_TOOL_NAME) {
+      persistedWebSearchToolIds.add(message.toolCallId);
+    }
+  }
 
   for (const [index, message] of messages.entries()) {
     const meta = messageMeta[index];
@@ -196,6 +361,29 @@ export function chatMessagesToListItems(
         continue;
       }
 
+      for (const block of extractWebSearchBlocksFromProviderContent(message.providerContent)) {
+        if (
+          hydratedToolCallIds.has(block.toolCallId) ||
+          persistedWebSearchToolIds.has(block.toolCallId)
+        ) {
+          continue;
+        }
+
+        hydratedToolCallIds.add(block.toolCallId);
+        items.push({
+          id: block.toolCallId,
+          historyIndex: index,
+          createdAt: meta?.createdAt,
+          role: "tool",
+          content: `${WEB_SEARCH_TOOL_NAME} completed`,
+          toolCallId: block.toolCallId,
+          tool: WEB_SEARCH_TOOL_NAME,
+          toolStatus: "done",
+          toolInput: block.query ? { query: block.query } : undefined,
+          toolResult: block.result,
+        });
+      }
+
       const thinking = extractThinkingFromAssistantMessage(message);
 
       items.push({
@@ -210,6 +398,7 @@ export function chatMessagesToListItems(
     }
 
     if (message.role === "tool") {
+      hydratedToolCallIds.add(message.toolCallId);
       items.push({
         id: message.toolCallId,
         historyIndex: index,

@@ -53,7 +53,15 @@ export function TasksPage() {
   const showHistoryPanel = isHistoryTask(focusedTask);
 
   const runningTaskIds = useMemo(() => {
-    return new Set(tasks.filter((task) => task.status === "in_progress").map((task) => task.id));
+    const ids = new Set<string>();
+
+    for (const task of tasks) {
+      if (task.status === "in_progress") {
+        ids.add(task.id);
+      }
+    }
+
+    return ids;
   }, [tasks]);
 
   const profileById = useMemo(
@@ -261,6 +269,7 @@ export function TasksPage() {
 
       {showHistoryPanel && focusedTask ? (
         <TaskRunHistoryPanel
+          key={focusedTask.id}
           task={focusedTask}
           profile={profileById.get(focusedTask.profileId) ?? null}
           onClose={() => setFocusedTaskId(null)}

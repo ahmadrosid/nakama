@@ -17,6 +17,7 @@ export const webSearchTool: ToolDefinition<WebSearchInput> = {
   description:
     "Search the web for current information. Requires an OpenAI or Anthropic provider; search runs natively on the provider with citations.",
   parameters: jsonSchemaFromZod(webSearchInputSchema),
+  parallelSafe: true,
   async run() {
     throw new Error(
       "web_search runs on the configured OpenAI or Anthropic provider and cannot be executed locally.",

@@ -174,25 +174,9 @@ export function toolQueryOptions(toolId: string) {
   });
 }
 
-export function toolSourceQueryOptions(toolId: string) {
-  return queryOptions({
-    queryKey: queryKeys.tools.source(toolId),
-    queryFn: () => client.getToolSource(toolId),
-    staleTime: defaultStaleTime,
-    enabled: Boolean(toolId),
-  });
-}
-
 export function useToolQuery(toolId: string | null) {
   return useQuery({
     ...toolQueryOptions(toolId ?? ""),
-    enabled: Boolean(toolId),
-  });
-}
-
-export function useToolSourceQuery(toolId: string | null) {
-  return useQuery({
-    ...toolSourceQueryOptions(toolId ?? ""),
     enabled: Boolean(toolId),
   });
 }

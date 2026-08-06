@@ -131,19 +131,20 @@ export function usePromptInputFileState({
           return;
         }
 
+        const remainingCapacity =
+          typeof maxFiles === "number"
+            ? Math.max(0, maxFiles - filesRef.current.length)
+            : undefined;
+        const capped =
+          typeof remainingCapacity === "number" ? sized.slice(0, remainingCapacity) : sized;
+        if (typeof remainingCapacity === "number" && sized.length > remainingCapacity) {
+          onError?.({
+            code: "max_files",
+            message: "Too many files. Some were not added.",
+          });
+        }
+
         setItems((prev) => {
-          const capacity =
-            typeof maxFiles === "number"
-              ? Math.max(0, maxFiles - prev.length)
-              : undefined;
-          const capped =
-            typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-          if (typeof capacity === "number" && sized.length > capacity) {
-            onError?.({
-              code: "max_files",
-              message: "Too many files. Some were not added.",
-            });
-          }
           const next: (FileUIPart & { id: string })[] = [];
           for (const file of capped) {
             next.push({

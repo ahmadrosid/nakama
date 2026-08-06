@@ -2,8 +2,8 @@ import type { SoulStackFiles } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SoulFileEditorDialog } from "@/components/soul-tools/soul-file-editor-dialog";
+import { SOUL_FILES } from "@/components/soul-tools/soul-files";
 import {
-  SOUL_FILES,
   SoulTabPageState,
   SoulTabPanel,
   SoulTabShell,

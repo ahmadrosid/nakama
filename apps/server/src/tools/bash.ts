@@ -51,7 +51,7 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
       codingAgent: {
         type: "boolean",
         description:
-          "When true, Nakama merges coding-agent spawn env (model gateway routing) for this command.",
+          "When true, Nakama merges coding-agent spawn env (provider passthrough) for this command.",
       },
       env: {
         type: "object",

@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BellIcon,
   CircleFadingPlusIcon,
   CircleUserRoundIcon,
-  CircleGaugeIcon,
   BrainIcon,
   KanbanIcon,
   ClockIcon,
@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 export type PageId =
-  | "status"
   | "chat"
   | "history"
   | "profiles"
@@ -20,7 +19,8 @@ export type PageId =
   | "automations"
   | "tasks"
   | "integrations"
-  | "settings";
+  | "settings"
+  | "notifications";
 
 export interface NavItem {
   id: PageId;
@@ -77,11 +77,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "System",
     items: [
       {
-        id: "status",
-        label: "Status",
-        description: "Server and automation worker health",
-      },
-      {
         id: "integrations",
         label: "Integrations",
         description: "Bridges, Composio, and coding agents",
@@ -91,20 +86,26 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "System",
         description: "Identity stack files and registered agent tools",
       },
+      {
+        id: "settings",
+        label: "Settings",
+        description: "Provider API key and model",
+      },
     ],
   },
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
-export const SETTINGS_NAV_ITEM: NavItem = {
-  id: "settings",
-  label: "Settings",
-  description: "Provider API key and model",
+export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
+  notifications: {
+    id: "notifications",
+    label: "Notifications",
+    description: "Automation runs and org memory proposals",
+  },
 };
 
 export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
-  status: CircleGaugeIcon,
   chat: CircleFadingPlusIcon,
   history: ClockIcon,
   profiles: CircleUserRoundIcon,
@@ -113,6 +114,7 @@ export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
   tasks: KanbanIcon,
   integrations: CableIcon,
   settings: CogIcon,
+  notifications: BellIcon,
 };
 
 export const SETUP_PATH = "/setup";
@@ -141,12 +143,44 @@ export function toolsTabPath(): string {
   return `${PAGE_PATHS.soul}?tab=tools`;
 }
 
-export function toolPlaygroundPath(toolId: string): string {
-  return `${PAGE_PATHS.soul}/playground/${encodeURIComponent(toolId)}`;
+export function statusTabPath(): string {
+  return `${PAGE_PATHS.soul}?tab=status`;
+}
+
+export function profilePath(profileId: string): string {
+  return `${PAGE_PATHS.profiles}?profile=${encodeURIComponent(profileId)}`;
+}
+
+export function toolPlaygroundPath(
+  toolId: string,
+  options?: { fromProfileId?: string },
+): string {
+  const path = `${PAGE_PATHS.soul}/playground/${encodeURIComponent(toolId)}`;
+  if (!options?.fromProfileId) {
+    return path;
+  }
+
+  const params = new URLSearchParams({
+    from: "profiles",
+    profile: options.fromProfileId,
+  });
+  return `${path}?${params.toString()}`;
+}
+
+/** Resolve playground back-navigation from search params set by toolPlaygroundPath. */
+export function toolPlaygroundBackTarget(searchParams: URLSearchParams): {
+  href: string;
+  label: string;
+} {
+  const fromProfileId =
+    searchParams.get("from") === "profiles" ? searchParams.get("profile") : null;
+  if (fromProfileId) {
+    return { href: profilePath(fromProfileId), label: "Profile" };
+  }
+  return { href: toolsTabPath(), label: "Tools" };
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
-  status: "/status",
   chat: "/chat",
   history: "/history",
   profiles: "/profiles",
@@ -155,6 +189,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   tasks: "/tasks",
   integrations: "/integrations",
   settings: "/settings",
+  notifications: "/notifications",
 };
 
 export function pathForPage(pageId: PageId): string {
@@ -177,11 +212,7 @@ export function navHrefForPage(
 }
 
 export function findNavItem(pageId: PageId): NavItem | undefined {
-  if (pageId === "settings") {
-    return SETTINGS_NAV_ITEM;
-  }
-
-  return NAV_ITEMS.find((item) => item.id === pageId);
+  return NAV_ITEMS.find((item) => item.id === pageId) ?? STANDALONE_PAGES[pageId];
 }
 
 export function pageIdFromPath(pathname: string): PageId | null {

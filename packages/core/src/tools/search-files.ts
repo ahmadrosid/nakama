@@ -49,6 +49,7 @@ export const searchFilesTool: ToolDefinition<SearchFilesInput, SearchFilesOutput
   description:
     "Search text in files under the active profile workspace and return compact matching snippets.",
   parameters: jsonSchemaFromZod(searchFilesInputSchema),
+  parallelSafe: true,
   run(input, context) {
     return runSearchFiles(input, context);
   },

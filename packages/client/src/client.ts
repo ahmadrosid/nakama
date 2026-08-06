@@ -16,6 +16,10 @@ import type {
   CreateSessionResponse,
   CreateToolRequest,
   DeleteArtifactResponse,
+  ArtifactShareStatusResponse,
+  PublishArtifactShareRequest,
+  PublishArtifactShareResponse,
+  RevokeArtifactShareResponse,
   DeleteKnowledgeBaseResponse,
   DocumentAttachment,
   DraftAutomationResponse,
@@ -47,6 +51,7 @@ import type {
   ProfileResponse,
   SendMessageResponse,
   SessionMessagesResponse,
+  SessionStatusResponse,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CompactionResponse,
@@ -75,6 +80,7 @@ import type {
   CodingHarnessSettingsResponse,
   CodingHarnessInstallRequest,
   CodingHarnessStatus,
+  AgentBrowserStatusResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
@@ -121,6 +127,8 @@ import type {
   TaskMessagesResponse,
   AuthUserResponse,
   SetupAuthRequest,
+  UpdateAuthProfileRequest,
+  ChangePasswordRequest,
   UpdateWebPublicUrlRequest,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
@@ -146,6 +154,21 @@ import type {
   UpdateNotificationDestinationRequest,
   OrganizationResponse,
   OrgMemberResponse,
+  OrgMemoryResponse,
+  UpdateOrgMemoryRequest,
+  AddOrgMemoryFactRequest,
+  OrgMemorySearchRequest,
+  OrgMemorySearchResponse,
+  ArchiveOrgMemoryRequest,
+  ArchiveOrgMemoryResponse,
+  PinOrgMemoryRequest,
+  UnpinOrgMemoryRequest,
+  ListOrgMemoryProposalsResponse,
+  ApproveOrgMemoryProposalRequest,
+  OrgMemoryProposalResponse,
+  ListOrgMemoryHistoryResponse,
+  RestoreOrgMemoryHistoryResponse,
+  OrgMemoryHistoryRevisionResponse,
   StoredTask,
   TaskRunRecord,
   WorkerLogsResponse,
@@ -157,6 +180,7 @@ import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
 import {
   readCodingHarnessInstallStream,
+  readAgentBrowserInstallStream,
   normalizeStreamHandlers,
   readStreamEvents,
   resolveSendMessageBody,
@@ -296,6 +320,8 @@ export class NakamaClient {
     baseUrl?: string;
     apiKey?: string;
     providerId?: string;
+    provider?: "ollama" | "openai_compatible" | "fireworks";
+    hostMode?: "local" | "cloud";
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {
       method: "POST",
@@ -359,6 +385,47 @@ export class NakamaClient {
     return this.request<SessionMessagesResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
     );
+  }
+
+  async getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
+    return this.request<SessionStatusResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/status`,
+    );
+  }
+
+  async subscribeSessionStream(
+    sessionId: string,
+    handler: StreamHandler | StreamHandlers,
+    options?: SendStreamOptions,
+  ): Promise<{ reconnected: boolean; reply?: string }> {
+    const handlers = normalizeStreamHandlers(handler);
+    const headers = this.buildHeaders("GET", {
+      Accept: "text/event-stream",
+    });
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/stream`,
+      {
+        method: "GET",
+        headers,
+        signal: options?.signal,
+        credentials: this.credentials,
+      },
+    );
+
+    if (response.status === 204) {
+      return { reconnected: false };
+    }
+
+    if (!response.ok) {
+      throw await createApiError(response, `/v1/sessions/${sessionId}/stream`);
+    }
+
+    if (!response.body) {
+      throw new Error("Server returned an empty stream.");
+    }
+
+    const reply = await readStreamEvents(response.body, handlers, options?.signal);
+    return { reconnected: true, reply };
   }
 
   async branchSession(
@@ -681,6 +748,39 @@ export class NakamaClient {
     );
   }
 
+  async publishProfileArtifactShare(
+    profileId: string,
+    path: string,
+  ): Promise<PublishArtifactShareResponse> {
+    return this.request<PublishArtifactShareResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares`,
+      {
+        method: "POST",
+        body: JSON.stringify({ path } satisfies PublishArtifactShareRequest),
+      },
+    );
+  }
+
+  async getProfileArtifactShareStatus(
+    profileId: string,
+    path: string,
+  ): Promise<ArtifactShareStatusResponse | null> {
+    const query = new URLSearchParams({ path });
+    return this.request<ArtifactShareStatusResponse | null>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/status?${query.toString()}`,
+    );
+  }
+
+  async revokeProfileArtifactShare(
+    profileId: string,
+    shareId: string,
+  ): Promise<RevokeArtifactShareResponse> {
+    return this.request<RevokeArtifactShareResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/${encodeURIComponent(shareId)}`,
+      { method: "DELETE" },
+    );
+  }
+
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
@@ -822,6 +922,12 @@ export class NakamaClient {
       getMessages: async () => {
         const response = await this.getSessionMessages(sessionId);
         return response.messages;
+      },
+      subscribeStream: async (
+        handler: StreamHandler | StreamHandlers,
+        options?: SendStreamOptions,
+      ) => {
+        return this.subscribeSessionStream(sessionId, handler, options);
       },
       createAutomation: async (prompt: string) => {
         const response = await this.request<DraftAutomationResponse>(
@@ -1303,6 +1409,37 @@ export class NakamaClient {
     return readCodingHarnessInstallStream(response.body, handlers, options?.signal);
   }
 
+  async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
+    return this.request<AgentBrowserStatusResponse>("/v1/settings/agent-browser");
+  }
+
+  async installAgentBrowser(
+    handlers: {
+      onProgress?: (message: string) => void;
+      onDone?: (status: AgentBrowserStatusResponse) => void;
+    } = {},
+    options?: { signal?: AbortSignal },
+  ): Promise<AgentBrowserStatusResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/settings/agent-browser/install`, {
+      method: "POST",
+      headers: this.buildHeaders("POST", {
+        Accept: "text/event-stream",
+      }),
+      signal: options?.signal,
+      credentials: this.credentials,
+    });
+
+    if (!response.ok) {
+      throw await createApiError(response, "/v1/settings/agent-browser/install");
+    }
+
+    if (!response.body) {
+      throw new Error("Server returned an empty stream.");
+    }
+
+    return readAgentBrowserInstallStream(response.body, handlers, options?.signal);
+  }
+
   async prepareCodingAgentLaunch(
     request: PrepareCodingAgentLaunchRequest,
   ): Promise<CodingAgentLaunchPlanResponse> {
@@ -1365,6 +1502,22 @@ export class NakamaClient {
     const response = await this.request<AuthUserResponse>("/v1/auth/me");
     this.applyAuthUserResponse(response);
     return response;
+  }
+
+  async updateAuthProfile(request: UpdateAuthProfileRequest): Promise<AuthUserResponse> {
+    const response = await this.request<AuthUserResponse>("/v1/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(request),
+    });
+    this.applyAuthUserResponse(response);
+    return response;
+  }
+
+  async changePassword(request: ChangePasswordRequest): Promise<void> {
+    await this.request("/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
   }
 
   async listUserOrgs(): Promise<ListUserOrgsResponse> {
@@ -1477,6 +1630,157 @@ export class NakamaClient {
     await this.request(
       `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
       { method: "DELETE" },
+    );
+  }
+
+  async getOrgMemory(orgId: string): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory`, {
+      headers: { "X-Org-Id": orgId },
+    });
+  }
+
+  async updateOrgMemory(orgId: string, request: UpdateOrgMemoryRequest): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory`, {
+      method: "PUT",
+      body: JSON.stringify(request),
+      headers: { "X-Org-Id": orgId },
+    });
+  }
+
+  async addOrgMemoryFact(
+    orgId: string,
+    request: AddOrgMemoryFactRequest,
+  ): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/facts`, {
+      method: "POST",
+      body: JSON.stringify(request),
+      headers: { "X-Org-Id": orgId },
+    });
+  }
+
+  async searchOrgMemory(
+    orgId: string,
+    request: OrgMemorySearchRequest,
+  ): Promise<OrgMemorySearchResponse> {
+    return this.request<OrgMemorySearchResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/search`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async pinOrgMemoryFact(orgId: string, request: PinOrgMemoryRequest): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/pin`, {
+      method: "POST",
+      body: JSON.stringify(request),
+      headers: { "X-Org-Id": orgId },
+    });
+  }
+
+  async unpinOrgMemoryFact(
+    orgId: string,
+    request: UnpinOrgMemoryRequest,
+  ): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/unpin`, {
+      method: "POST",
+      body: JSON.stringify(request),
+      headers: { "X-Org-Id": orgId },
+    });
+  }
+
+  async archiveOrgMemory(
+    orgId: string,
+    request: ArchiveOrgMemoryRequest,
+  ): Promise<ArchiveOrgMemoryResponse> {
+    return this.request<ArchiveOrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/archive`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async listOrgMemoryHistory(orgId: string): Promise<ListOrgMemoryHistoryResponse> {
+    return this.request<ListOrgMemoryHistoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/history`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  }
+
+  async getOrgMemoryHistoryRevision(
+    orgId: string,
+    revisionId: string,
+  ): Promise<OrgMemoryHistoryRevisionResponse> {
+    return this.request<OrgMemoryHistoryRevisionResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/${encodeURIComponent(revisionId)}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  }
+
+  async restoreOrgMemoryHistory(
+    orgId: string,
+    revisionId: string,
+  ): Promise<RestoreOrgMemoryHistoryResponse> {
+    return this.request<RestoreOrgMemoryHistoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/${encodeURIComponent(revisionId)}/restore`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async undoOrgMemoryChange(orgId: string): Promise<RestoreOrgMemoryHistoryResponse> {
+    return this.request<RestoreOrgMemoryHistoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/undo`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async listOrgMemoryProposals(
+    orgId: string,
+    status?: "pending" | "approved" | "rejected",
+  ): Promise<ListOrgMemoryProposalsResponse> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.request<ListOrgMemoryProposalsResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals${query}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  }
+
+  async approveOrgMemoryProposal(
+    orgId: string,
+    proposalId: string,
+    request: ApproveOrgMemoryProposalRequest = {},
+  ): Promise<OrgMemoryProposalResponse> {
+    return this.request<OrgMemoryProposalResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals/${encodeURIComponent(proposalId)}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+      },
+    );
+  }
+
+  async rejectOrgMemoryProposal(
+    orgId: string,
+    proposalId: string,
+  ): Promise<OrgMemoryProposalResponse> {
+    return this.request<OrgMemoryProposalResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals/${encodeURIComponent(proposalId)}/reject`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+      },
     );
   }
 

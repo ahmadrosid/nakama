@@ -25,8 +25,11 @@ export function useTaskMessagesQuery(taskId: string | null) {
 }
 
 export function useDraftTaskPromptMutation() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: { title: string; description?: string }) => client.draftTaskPrompt(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
   });
 }
 

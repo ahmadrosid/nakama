@@ -16,22 +16,26 @@ export function ArtifactAttachmentPanelActions({
   copied,
   loading,
   content,
+  copyDisabled = false,
   fullscreen,
   downloadLabel,
   downloadUrl,
   filename,
   onCopy,
   onToggleFullscreen,
+  additionalMenuItems,
 }: {
   copied: boolean;
   loading: boolean;
   content: string | null;
+  copyDisabled?: boolean;
   fullscreen: boolean;
   downloadLabel: string;
   downloadUrl: string;
   filename: string;
   onCopy: () => void;
   onToggleFullscreen: () => void;
+  additionalMenuItems?: React.ReactNode;
 }) {
   return (
     <>
@@ -39,7 +43,7 @@ export function ArtifactAttachmentPanelActions({
         <button
           type="button"
           className="px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
-          disabled={loading && !content}
+          disabled={copyDisabled || (loading && !content)}
           onClick={onCopy}
         >
           {copied ? (
@@ -82,6 +86,7 @@ export function ArtifactAttachmentPanelActions({
             >
               {downloadLabel}
             </DropdownMenuItem>
+            {additionalMenuItems}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

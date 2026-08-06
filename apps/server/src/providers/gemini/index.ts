@@ -13,7 +13,7 @@ import {
   parseGeminiFunctionCalls,
   toGeminiContents,
 } from "./messages";
-import { buildChatCompletionResult, extractGeminiTokenUsage } from "../shared";
+import { buildChatCompletionResult, extractGeminiTokenUsage, notifyToolInputDelta } from "../shared";
 
 const PROVIDER_LABEL = "Gemini";
 const DEFAULT_MODEL = "gemini-2.5-flash";
@@ -84,6 +84,7 @@ interface PendingFunctionCall {
 function mergePendingFunctionCall(
   pending: Map<string, PendingFunctionCall>,
   call: { id?: string; name?: string; args?: Record<string, unknown> },
+  handlers?: StreamChatHandlers,
 ): void {
   const id = call.id?.trim() || "pending";
   const current = pending.get(id) ?? { id, name: "", argsJson: "{}" };
@@ -93,7 +94,17 @@ function mergePendingFunctionCall(
   }
 
   if (call.args) {
-    current.argsJson = JSON.stringify(call.args);
+    const nextJson = JSON.stringify(call.args);
+    const delta =
+      nextJson.length > current.argsJson.length
+        ? nextJson.slice(current.argsJson.length)
+        : nextJson;
+    current.argsJson = nextJson;
+    notifyToolInputDelta(
+      handlers,
+      { id: current.id, name: current.name, arguments: current.argsJson },
+      delta,
+    );
   }
 
   pending.set(id, current);
@@ -168,7 +179,7 @@ async function readGeminiStream(
     accumulateStreamParts(parts, state, handlers);
 
     for (const call of chunk.functionCalls ?? []) {
-      mergePendingFunctionCall(pending, call);
+      mergePendingFunctionCall(pending, call, handlers);
     }
   }
 

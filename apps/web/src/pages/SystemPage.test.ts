@@ -2,12 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { resolveSystemTab, visibleSystemTabs } from "./system-page.shared";
 
 describe("SystemPage tab access", () => {
-  test("shows data portability only to platform admins", () => {
-    expect(visibleSystemTabs(true).map((tab) => tab.id)).toEqual(["tools", "mcp", "data"]);
-    expect(visibleSystemTabs(false).map((tab) => tab.id)).toEqual(["tools"]);
+  test("shows status to all system users and data portability only to platform admins", () => {
+    expect(visibleSystemTabs(true).map((tab) => tab.id)).toEqual([
+      "status",
+      "organization",
+      "tools",
+      "mcp",
+      "data",
+    ]);
+    expect(visibleSystemTabs(false).map((tab) => tab.id)).toEqual([
+      "status",
+      "organization",
+      "tools",
+    ]);
   });
 
-  test("forces non-platform users back to tools tab", () => {
+  test("resolves status for all system users and forces non-platform users off admin tabs", () => {
+    expect(resolveSystemTab("status", true)).toBe("status");
+    expect(resolveSystemTab("status", false)).toBe("status");
+    expect(resolveSystemTab("organization", true)).toBe("organization");
+    expect(resolveSystemTab("organization", false)).toBe("organization");
     expect(resolveSystemTab("data", true)).toBe("data");
     expect(resolveSystemTab("data", false)).toBe("tools");
     expect(resolveSystemTab("unknown", true)).toBe("tools");

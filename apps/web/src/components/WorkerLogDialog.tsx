@@ -54,12 +54,13 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
     }
   }
 
-  useEffect(() => {
-    if (open) {
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen) {
       setCopied(false);
       void refetch();
     }
-  }, [open, refetch]);
+    onOpenChange(nextOpen);
+  }
 
   useEffect(() => {
     return () => {
@@ -70,7 +71,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
   }, []);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">

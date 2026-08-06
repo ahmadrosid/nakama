@@ -31,8 +31,11 @@ function invalidateOrgMembers(queryClient: ReturnType<typeof useQueryClient>, or
 }
 
 export function useInviteOrgMember(orgId: string) {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (request: InviteOrgMemberRequest) => client.inviteOrgMember(orgId, request),
+    onSuccess: () => invalidateOrgMembers(queryClient, orgId),
   });
 }
 

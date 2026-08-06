@@ -15,10 +15,12 @@ export function migrateDatabase(db: Database): void {
   migrateSkillsTables(db);
   migrateUsersTable(db);
   migrateOrgTables(db);
+  migrateOrgMemoryProposalsTable(db);
   migrateTenantOrgScope(db);
   migrateProfileOrgColumns(db);
   migrateBrowserSessionsTable(db);
   migrateLegacyProfileIds(db);
+  migrateCodingDelegationSkillName(db);
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
   migrateAttachmentsTable(db);
@@ -315,6 +317,26 @@ function migrateOrgTables(db: Database): void {
   }
 }
 
+function migrateOrgMemoryProposalsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS org_memory_proposals (
+      id TEXT PRIMARY KEY NOT NULL,
+      org_id TEXT NOT NULL,
+      profile_id TEXT,
+      session_id TEXT,
+      proposed_by_user_id TEXT,
+      bullet TEXT NOT NULL,
+      status TEXT NOT NULL,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      reviewer_user_id TEXT,
+      reviewed_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
+  `);
+}
+
 const TENANT_ORG_ID_TABLES = [
   "profiles",
   "sessions",
@@ -543,6 +565,62 @@ function migrateLegacyProfileIds(db: Database): void {
   }
 }
 
+export function migrateCodingDelegationSkillName(db: Database): void {
+  const legacyRows = db
+    .prepare("SELECT id, source_path FROM skills WHERE name = ?")
+    .all("coding-delegation") as Array<{ id: string; source_path: string }>;
+
+  if (legacyRows.length === 0) {
+    return;
+  }
+
+  const canonical = db
+    .prepare("SELECT id FROM skills WHERE name = ?")
+    .get("coding-agent") as { id: string } | null;
+
+  if (canonical) {
+    const reassignProfileSkill = db.prepare(`
+      UPDATE profile_skills
+      SET skill_id = ?
+      WHERE skill_id = ?
+        AND NOT EXISTS (
+          SELECT 1
+          FROM profile_skills existing
+          WHERE existing.profile_id = profile_skills.profile_id
+            AND existing.skill_id = ?
+        )
+    `);
+    const deleteProfileSkill = db.prepare(
+      "DELETE FROM profile_skills WHERE skill_id = ?",
+    );
+    const deleteSkill = db.prepare("DELETE FROM skills WHERE id = ?");
+
+    for (const row of legacyRows) {
+      reassignProfileSkill.run(canonical.id, row.id, canonical.id);
+      deleteProfileSkill.run(row.id);
+      deleteSkill.run(row.id);
+    }
+
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const update = db.prepare(`
+    UPDATE skills
+    SET name = ?, source_path = ?, updated_at = ?
+    WHERE id = ?
+  `);
+
+  for (const row of legacyRows) {
+    update.run(
+      "coding-agent",
+      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      now,
+      row.id,
+    );
+  }
+}
+
 function copyProfileRow(db: Database, legacyId: string, canonicalId: string): void {
   db.prepare(`
     INSERT INTO profiles (
@@ -676,6 +754,7 @@ function migrateWorkspaceSettingsTable(db: Database): void {
       ALTER TABLE workspace_settings ADD COLUMN selected_coding_agent_harness TEXT;
     `);
   }
+
 }
 
 function migrateAutomationRunsTable(db: Database): void {

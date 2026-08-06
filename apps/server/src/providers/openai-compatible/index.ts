@@ -17,6 +17,7 @@ import {
   extractOpenAITokenUsage,
   formatHttpErrorBody,
   normalizeThinkingEffort,
+  notifyToolInputDelta,
   parseJsonRecord,
   readSseEvents,
 } from "../shared";
@@ -32,6 +33,7 @@ export interface OpenAICompatibleProviderOptions {
   model: string;
   displayName: string;
   supportsThinking: boolean;
+  providerName?: ProviderClient["name"];
 }
 
 interface PendingToolCall {
@@ -55,7 +57,7 @@ export function createOpenAICompatibleProvider(
   });
 
   return {
-    name: "openai_compatible",
+    name: options.providerName ?? "openai_compatible",
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -298,7 +300,16 @@ async function streamChatCompletion(options: {
 
     if (delta?.tool_calls) {
       for (const toolDelta of delta.tool_calls) {
+        const argDelta = toolDelta.function?.arguments ?? "";
         mergePendingToolCall(pending, toolDelta);
+
+        if (argDelta) {
+          const current = pending.get(toolDelta.index ?? 0);
+
+          if (current) {
+            notifyToolInputDelta(options.handlers, current, argDelta);
+          }
+        }
       }
     }
   });

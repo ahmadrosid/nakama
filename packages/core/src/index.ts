@@ -2,9 +2,13 @@ export * from "./agent-todo";
 export * from "./agent-questionnaire";
 export * from "./api-error";
 export * from "./artifacts";
+export * from "./artifact-shares";
+export * from "./artifact-mime";
 export * from "./automation-validate";
 export * from "./automation-delivery";
 export * from "./automation-run-read";
+export * from "./channel-artifacts";
+export * from "./channel-artifact-delivery";
 export * from "./channels";
 export * from "./automation-scheduler";
 export * from "./automation-worker";
@@ -26,6 +30,7 @@ export * from "./profiles";
 export * from "./bridge-api";
 export * from "./channel-org";
 export * from "./compatible-provider-config";
+export * from "./ollama-provider-config";
 export * from "./composio";
 export * from "./composio-config";
 export * from "./provider-label";
@@ -37,8 +42,39 @@ export * from "./email-config";
 export { createSmtpSender } from "./mail/smtp-sender";
 export { createImapReader } from "./mail/imap-reader";
 export * from "./telegram-worker";
-export * from "./discord-config";
-export * from "./discord-worker";
+// Explicit Discord exports — omit helpers that collide with telegram-* names
+// (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
+// isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config
+// or @nakama/core/discord-worker when the Discord-specific variant is required.
+export {
+  DEFAULT_DISCORD_PROFILE_ID,
+  type DiscordConfigFile,
+  type DiscordSettingsPublic,
+  type UpdateDiscordSettingsInput,
+  getDiscordConfigDir,
+  getDiscordConfigPath,
+  buildDiscordInviteUrl,
+  resolveDiscordApplicationId,
+  isDiscordUserAuthorized,
+  loadDiscordConfigFile,
+  toDiscordSettingsPublic,
+  loadDiscordSettingsPublic,
+  saveDiscordConfig,
+  regenerateDiscordHandshake,
+  verifyAndPairDiscordUser,
+  resolveDiscordConfigFromSources,
+} from "./discord-config";
+export {
+  type DiscordWorkerHeartbeat,
+  getDiscordWorkerHeartbeatPath,
+  resolveDiscordWorkerStatus,
+  parseDiscordWorkerHeartbeat,
+  writeDiscordWorkerHeartbeat,
+  clearDiscordWorkerHeartbeat,
+  readDiscordWorkerHeartbeat,
+  isDiscordWorkerRunning,
+  getDiscordWorkerStatus,
+} from "./discord-worker";
 export * from "./whatsapp-config";
 export * from "./whatsapp-worker";
 export * from "./worker-desired-state";

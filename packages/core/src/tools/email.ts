@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../contract";
+import type { ToolContext, ToolDefinition } from "../contract";
 import {
   emailConfigToMailboxConfig,
   isEmailConfigComplete,
@@ -9,8 +9,12 @@ import { createFakeMailReader, createFakeMailSender } from "../mail/fake";
 import { createImapReader } from "../mail/imap-reader";
 import { createSmtpSender } from "../mail/smtp-sender";
 import { sanitizeMailError } from "../mail/sanitize";
-import type { MailReader, MailSender } from "../mail/types";
+import type { MailMessage, MailReader, MailSender } from "../mail/types";
 import { MAX_EMAIL_BODY_BYTES } from "../mail/types";
+import {
+  createAttachmentReference,
+  getMailboxIdentity,
+} from "../mail/attachment-reference";
 import { jsonSchemaFromZod, parseToolInput } from "./schema";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -103,6 +107,13 @@ export interface EmailToolSuccess {
     text?: string;
     html?: string;
     truncated?: boolean;
+    attachments?: Array<{
+      documentRef: string;
+      filename: string;
+      mediaType: string;
+      size: number;
+      disposition: "attachment" | "inline" | null;
+    }>;
   };
   sent?: {
     to: string;
@@ -130,6 +141,7 @@ function parseEmailToolInput(input: unknown): EmailToolInput {
 export async function runEmailTool(
   input: unknown,
   dependencies: EmailToolDependencies = {},
+  context: ToolContext = {},
 ): Promise<EmailToolResult> {
   const loadConfig = dependencies.loadConfig ?? loadEmailConfig;
   const config = await loadConfig();
@@ -166,7 +178,10 @@ export async function runEmailTool(
         return { error: `No message found with uid ${parsed.uid} in ${parsed.folder}.` };
       }
 
-      return { action: parsed.action, message };
+      return {
+        action: parsed.action,
+        message: toEmailMessage(message, context, getMailboxIdentity(mailboxConfig)),
+      };
     }
 
     const messages = await reader.searchMessages(parsed.folder, parsed.query, parsed.limit);
@@ -222,11 +237,38 @@ async function sendEmail(
 export const emailTool: ToolDefinition<EmailToolInput, EmailToolResult> = {
   name: "email",
   description:
-    "List, read, search, and send email through the deployment mailbox configured in Settings. Use list/search to find messages, read to fetch one message body, and send for outbound mail.",
+    "List, read, search, and send email through the deployment mailbox configured in Settings. Read exposes documentRef values for supported document attachments; pass one to extract_document_text when you need document text.",
   parameters: emailParameters(),
-  run(input) {
-    return runEmailTool(input);
+  run(input, context) {
+    return runEmailTool(input, {}, context);
   },
 };
+
+function toEmailMessage(
+  message: MailMessage,
+  context: ToolContext,
+  mailboxId: string,
+): NonNullable<Extract<EmailToolSuccess, { message?: unknown }>["message"]> {
+  const { attachments, ...messageWithoutAttachments } = message;
+  if (!attachments) {
+    return messageWithoutAttachments;
+  }
+
+  return {
+    ...messageWithoutAttachments,
+    attachments: attachments.map((attachment) => ({
+      filename: attachment.filename,
+      mediaType: attachment.mediaType,
+      size: attachment.size,
+      disposition: attachment.disposition,
+      documentRef: createAttachmentReference(context, {
+        folder: message.folder,
+        uid: message.uid,
+        attachmentId: attachment.id,
+        mailboxId,
+      }),
+    })),
+  };
+}
 
 export { createFakeMailReader, createFakeMailSender };

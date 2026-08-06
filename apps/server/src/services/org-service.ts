@@ -1,4 +1,5 @@
 import { NakamaApiError, generateTemporaryPassword } from "@nakama/core";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   AddOrgMemberResponse,
   CreateOrganizationRequest,
@@ -187,10 +188,67 @@ export class OrgService {
 
     return {
       email: user.email,
+      name: user.name ?? null,
+      phone: user.phone ?? null,
       isPlatformAdmin: Boolean(user.isPlatformAdmin),
       activeOrgId,
       orgId: activeOrgId,
     };
+  }
+
+  async updateOwnProfile(
+    userId: string,
+    input: {
+      name?: string | null;
+      email?: string;
+      phone?: string | null;
+    },
+  ): Promise<AuthUserResponse> {
+    const user = await this.databaseAdapter.getUserById(userId);
+    if (!user) {
+      throw new NakamaApiError("Authentication required", 401);
+    }
+
+    const now = new Date().toISOString();
+    const name =
+      input.name !== undefined ? normalizeOptionalName(input.name) : (user.name ?? null);
+    const phone =
+      input.phone !== undefined ? normalizeOptionalPhone(input.phone) : (user.phone ?? null);
+    let email = user.email;
+
+    if (input.email !== undefined) {
+      email = normalizeEmail(input.email);
+      if (!EMAIL_PATTERN.test(email)) {
+        throw new NakamaApiError("A valid email address is required.", 400);
+      }
+
+      if (email !== user.email) {
+        const existing = await this.databaseAdapter.getUserByEmail(email);
+        if (existing && existing.id !== user.id) {
+          throw new NakamaApiError("An account with that email already exists.", 409);
+        }
+      }
+    }
+
+    if (user.name !== name || user.phone !== phone || user.email !== email) {
+      await this.databaseAdapter.updateUserProfile(
+        userId,
+        {
+          name,
+          phone,
+          ...(email !== user.email ? { email } : {}),
+        },
+        now,
+      );
+    }
+
+    return this.buildAuthUserResponse({
+      ...user,
+      name,
+      phone,
+      email,
+      updatedAt: now,
+    });
   }
 
   async addMember(input: {
@@ -207,7 +265,7 @@ export class OrgService {
 
     const name = input.name.trim();
     const email = normalizeEmail(input.email);
-    const phone = input.phone.trim();
+    const phone = normalizeOptionalPhone(input.phone);
 
     if (!name) {
       throw new NakamaApiError("Member name is required.", 400);
@@ -215,10 +273,6 @@ export class OrgService {
 
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
-    }
-
-    if (!phone || !PHONE_PATTERN.test(phone)) {
-      throw new NakamaApiError("A valid phone number is required.", 400);
     }
 
     if (!ORG_ROLES.includes(input.role)) {
@@ -331,6 +385,10 @@ export class OrgService {
     const members: OrgMemberSummary[] = [];
 
     for (const record of records) {
+      if (record.userId === LOCAL_CLIENT_USER_ID) {
+        continue;
+      }
+
       const user = await this.databaseAdapter.getUserById(record.userId);
       if (!user) {
         continue;
@@ -635,8 +693,8 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function normalizeOptionalPhone(phone: string): string | null {
-  const trimmed = phone.trim();
+function normalizeOptionalPhone(phone: string | null | undefined): string | null {
+  const trimmed = phone?.trim() ?? "";
   if (!trimmed) {
     return null;
   }

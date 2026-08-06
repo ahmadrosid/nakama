@@ -1,3 +1,9 @@
 node_modules
-.vitepress/cache
-.vitepress/dist
+.next
+out
+.source
+
+# Generated markdown mirrors, routes, and sitemap (scripts/postbuild.ts)
+generated/
+app/(mirrors)/
+public/sitemap.xml

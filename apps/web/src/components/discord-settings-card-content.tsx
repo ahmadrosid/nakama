@@ -14,25 +14,30 @@ import { DiscordSettingsConfiguredRows, DiscordSettingsPairingSection } from "@/
 import { SettingsRow } from "@/components/discord-settings-card.shared";
 import { DISCORD_DEVELOPER_PORTAL_URL, DISCORD_SETUP_GUIDE_URL } from "@/lib/integration-docs";
 
+export type DiscordSettingsCardView = {
+  embedded: boolean;
+  configured: boolean;
+  hasLinkedUsers: boolean;
+  running: boolean;
+  showBotToken: boolean;
+  savePending: boolean;
+  isPaired: boolean;
+  copied: boolean;
+  regeneratePending: boolean;
+  canSave: boolean;
+};
+
 export function DiscordSettingsCardContent({
-  embedded,
+  view,
   headerSubtitle,
   statusBadge,
-  configured,
   settings,
-  hasLinkedUsers,
-  running,
   botToken,
-  showBotToken,
   onBotTokenChange,
   onToggleShowBotToken,
-  savePending,
-  isPaired,
   pairingCode,
-  copied,
   onCopyHandshakeCode,
   onRegenerateHandshake,
-  regeneratePending,
   allowedUserSummary,
   onManageAllowedUsers,
   profileId,
@@ -42,31 +47,22 @@ export function DiscordSettingsCardContent({
   statusLine,
   formError,
   loadError,
-  canSave,
   submitLabel,
   onSave,
 }: {
-  embedded: boolean;
+  view: DiscordSettingsCardView;
   headerSubtitle: string;
   statusBadge: string;
-  configured: boolean;
   settings: {
     botTokenMasked?: string | null;
     inviteUrl?: string | null;
   } | null | undefined;
-  hasLinkedUsers: boolean;
-  running: boolean;
   botToken: string;
-  showBotToken: boolean;
   onBotTokenChange: (value: string) => void;
   onToggleShowBotToken: () => void;
-  savePending: boolean;
-  isPaired: boolean;
   pairingCode: string | null;
-  copied: boolean;
   onCopyHandshakeCode: () => void;
   onRegenerateHandshake: () => void;
-  regeneratePending: boolean;
   allowedUserSummary: string;
   onManageAllowedUsers: () => void;
   profileId: string;
@@ -76,10 +72,22 @@ export function DiscordSettingsCardContent({
   statusLine: string | null;
   formError: string | null;
   loadError: unknown;
-  canSave: boolean;
   submitLabel: string;
   onSave: () => void;
 }) {
+  const {
+    embedded,
+    configured,
+    hasLinkedUsers,
+    running,
+    showBotToken,
+    savePending,
+    isPaired,
+    copied,
+    regeneratePending,
+    canSave,
+  } = view;
+
   return (
     <div className="divide-y divide-border">
       {!embedded ? (

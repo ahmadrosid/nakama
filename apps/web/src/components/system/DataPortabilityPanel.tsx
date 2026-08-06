@@ -1,15 +1,12 @@
 import type { DataImportPreviewResponse } from "@nakama/core/contract";
 import {
   AlertTriangleIcon,
-  DatabaseBackupIcon,
   DownloadIcon,
-  FileArchiveIcon,
   RotateCcwIcon,
   UploadIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
   formatDataPortabilityBytes,
@@ -85,77 +82,69 @@ export function DataPortabilityPanel() {
   }
 
   return (
-    <div className="space-y-0">
-      <section className="border-b border-border p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-              <DatabaseBackupIcon className="size-4 text-muted-foreground" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-foreground">Export local data</h2>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+    <div className="min-w-0">
+      <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <section className="flex flex-col gap-4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Export</p>
+              <p className="text-xs text-muted-foreground">
                 Download a ZIP backup of the configured Nakama data root.
               </p>
             </div>
+            <Button type="button" size="sm" onClick={handleExport} disabled={isBusy}>
+              {exportMutation.isPending ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <DownloadIcon className="size-3.5" aria-hidden />
+              )}
+              Export ZIP
+            </Button>
           </div>
-          <Button type="button" onClick={handleExport} disabled={isBusy}>
-            {exportMutation.isPending ? (
-              <Spinner className="size-4" />
-            ) : (
-              <DownloadIcon className="size-4" aria-hidden />
-            )}
-            Export ZIP
-          </Button>
-        </div>
-      </section>
+        </section>
 
-      <section className="p-4 sm:p-5">
-        <div className="flex flex-col gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-              <FileArchiveIcon className="size-4 text-muted-foreground" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-foreground">Import from ZIP</h2>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Preview an export before replacing the current local data root.
+        <section className="flex flex-col gap-4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Import</p>
+              <p className="text-xs text-muted-foreground">
+                Upload a ZIP backup of the configured Nakama data root to review before restoring.
               </p>
             </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <Input
+            <Button
+              type="button"
+              size="sm"
+              disabled={isBusy}
+              onClick={() => inputRef.current?.click()}
+            >
+              {previewMutation.isPending ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <UploadIcon className="size-3.5" aria-hidden />
+              )}
+              Import ZIP
+            </Button>
+            <input
               ref={inputRef}
               type="file"
               accept=".zip,application/zip"
               disabled={isBusy}
+              className="sr-only"
+              aria-label="Import backup ZIP file"
               onChange={(event) => void handlePreview(event.target.files?.[0] ?? null)}
             />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!selectedFile || previewMutation.isPending || isBusy}
-              onClick={() => void handlePreview(selectedFile)}
-            >
-              {previewMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                <UploadIcon className="size-4" aria-hidden />
-              )}
-              Preview
-            </Button>
           </div>
 
-          {error ? (
-            <StatusMessage tone="danger" icon={AlertTriangleIcon}>
-              {error}
-            </StatusMessage>
+          {selectedFile ? (
+            <p className="text-xs text-muted-foreground">
+              {previewMutation.isPending ? "Inspecting " : "Selected: "}
+              <span className="font-medium text-foreground">{selectedFile.name}</span>
+            </p>
           ) : null}
 
           {preview ? (
             <div className="rounded-md border border-border bg-background">
-              <dl className="grid gap-px overflow-hidden rounded-md bg-border text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <dl className="grid gap-px overflow-hidden rounded-md bg-border text-sm sm:grid-cols-2">
                 <PreviewStat label="Created" value={formatDate(preview.manifest.createdAt)} />
                 <PreviewStat label="Files" value={String(preview.archiveFileCount)} />
                 <PreviewStat
@@ -168,27 +157,36 @@ export function DataPortabilityPanel() {
                 />
               </dl>
               <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Top-level paths: {preview.topLevelPaths.join(", ") || "none"}
                 </p>
                 <Button
                   type="button"
+                  size="sm"
                   variant="destructive"
                   disabled={!restoreAvailable}
                   onClick={handleRestore}
                 >
                   {restoreMutation.isPending ? (
-                    <Spinner className="size-4" />
+                    <Spinner className="size-3.5" />
                   ) : (
-                    <RotateCcwIcon className="size-4" aria-hidden />
+                    <RotateCcwIcon className="size-3.5" aria-hidden />
                   )}
                   Restore ZIP
                 </Button>
               </div>
             </div>
           ) : null}
+        </section>
+      </div>
+
+      {error ? (
+        <div className="border-t border-border px-4 py-3 sm:px-5">
+          <StatusMessage tone="danger" icon={AlertTriangleIcon}>
+            {error}
+          </StatusMessage>
         </div>
-      </section>
+      ) : null}
     </div>
   );
 }

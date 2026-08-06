@@ -4,6 +4,7 @@ import { createGeminiProvider } from "./gemini";
 import {
   apiKeyEnvVarForProvider,
   getActiveProviderInstance,
+  isOllamaCloudInstance,
   readEnvValue,
   type ProviderClient,
   type ProviderInstance,
@@ -11,6 +12,9 @@ import {
   type UserConfig,
 } from "@nakama/core";
 import { resolveModel } from "./models";
+import { createCerebrasProvider } from "./cerebras";
+import { createFireworksProvider } from "./fireworks";
+import { createOllamaProvider } from "./ollama";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
 import { createOpenCodeGoProvider } from "./opencode-go";
@@ -73,6 +77,24 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         apiKey: options.apiKey,
         model,
       });
+    case "cerebras":
+      return createCerebrasProvider({
+        apiKey: options.apiKey,
+        model,
+        customModels: options.instance?.customModels,
+      });
+    case "fireworks":
+      return createFireworksProvider({
+        apiKey: options.apiKey,
+        model,
+        customModels: options.instance?.customModels,
+      });
+    case "ollama":
+      return createOllamaProvider({
+        apiKey: options.apiKey,
+        model,
+        instance: options.instance,
+      });
     case "openai_compatible": {
       const displayName = options.instance?.label?.trim();
 
@@ -91,7 +113,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
   }
 }
 
-function readApiKeyForInstance(
+export function readApiKeyForInstance(
   instance: ProviderInstance,
   env: Record<string, string | undefined>,
 ): string | undefined {
@@ -114,7 +136,11 @@ export function createProviderForInstance(
 ): ProviderClient | null {
   const apiKey = readApiKeyForInstance(instance, env);
 
-  if (!apiKey?.trim() && instance.type !== "openai_compatible") {
+  if (!apiKey?.trim() && instance.type !== "openai_compatible" && instance.type !== "ollama") {
+    return null;
+  }
+
+  if (instance.type === "ollama" && isOllamaCloudInstance(instance) && !apiKey?.trim()) {
     return null;
   }
 

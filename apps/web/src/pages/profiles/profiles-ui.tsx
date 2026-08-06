@@ -1,9 +1,8 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { PlusIcon, SearchIcon, UsersRoundIcon, XIcon, CameraIcon } from "lucide-react";
+import { PlusIcon, UsersRoundIcon, CameraIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
@@ -163,47 +162,6 @@ export function ProfileScopeButton({
   );
 }
 
-export function ProfileSearch({
-  value,
-  disabled,
-  isSearching,
-  onChange,
-  onClear,
-}: {
-  value: string;
-  disabled: boolean;
-  isSearching: boolean;
-  onChange: (value: string) => void;
-  onClear: () => void;
-}) {
-  return (
-    <div className="relative">
-      <SearchIcon
-        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        aria-hidden
-      />
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Search…"
-        disabled={disabled}
-        className={cn("pl-9", isSearching && "pr-9")}
-        aria-label="Search profiles"
-      />
-      {isSearching ? (
-        <button
-          type="button"
-          aria-label="Clear search"
-          className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          onClick={onClear}
-        >
-          <XIcon className="size-4" />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 const profileEmptySteps = [
   {
     title: "Create a profile",
@@ -222,11 +180,15 @@ const profileEmptySteps = [
 export function ProfilesEmptyState({
   variant,
   disabled,
+  canCreate = true,
   onCreate,
+  onAskSuperBot,
 }: {
   variant: "compact" | "full";
   disabled?: boolean;
+  canCreate?: boolean;
   onCreate: () => void;
+  onAskSuperBot?: () => void;
 }) {
   const isCompact = variant === "compact";
 
@@ -268,10 +230,25 @@ export function ProfilesEmptyState({
         ) : null}
       </div>
 
-      <Button type="button" size={isCompact ? "sm" : "default"} disabled={disabled} onClick={onCreate}>
-        <PlusIcon className="size-4" aria-hidden />
-        {isCompact ? "Create profile" : "New profile"}
-      </Button>
+      <div className="flex flex-col items-center gap-2">
+        {canCreate ? (
+          <Button type="button" size={isCompact ? "sm" : "default"} disabled={disabled} onClick={onCreate}>
+            <PlusIcon className="size-4" aria-hidden />
+            {isCompact ? "Create profile" : "New profile"}
+          </Button>
+        ) : null}
+        {onAskSuperBot ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            onClick={onAskSuperBot}
+          >
+            Ask Super Bot
+          </Button>
+        ) : null}
+      </div>
 
       {!isCompact ? (
         <ol className="w-full max-w-md space-y-3 border-t border-border pt-6 text-left">
@@ -292,27 +269,6 @@ export function ProfilesEmptyState({
             </li>
           ))}
         </ol>
-      ) : null}
-    </div>
-  );
-}
-
-export function EmptyMessage({
-  message,
-  actionLabel,
-  onAction,
-}: {
-  message: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="rounded-md border border-dashed border-border/60 px-3 py-8 text-center" role="status">
-      <p className="type-body text-xs text-muted-foreground">{message}</p>
-      {actionLabel && onAction ? (
-        <Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={onAction}>
-          {actionLabel}
-        </Button>
       ) : null}
     </div>
   );

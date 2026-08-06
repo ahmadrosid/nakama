@@ -8,7 +8,6 @@ import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS, getDefaultModel } from "./models";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
-
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_OUTPUT = 8_192;
 
@@ -37,6 +36,59 @@ export function openRouterCustomModelsToCatalog(
     ...(entry.outputPerMillionUsd !== undefined
       ? { outputPerMillionUsd: entry.outputPerMillionUsd }
       : {}),
+  }));
+}
+
+function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
+  if (entry.supportsThinking !== undefined) {
+    return entry.supportsThinking;
+  }
+
+  return false;
+}
+
+export function cerebrasCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+): ProviderModelOption[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    name: entry.name?.trim() || entry.id,
+    provider: "cerebras" as const,
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxOutputTokens: DEFAULT_MAX_OUTPUT,
+    supportsThinking: resolveCerebrasCatalogThinking(entry),
+    ...(entry.supportsVision !== undefined ? { supportsVision: entry.supportsVision } : {}),
+    ...(entry.default ? { default: true } : {}),
+    ...(entry.inputPerMillionUsd !== undefined
+      ? { inputPerMillionUsd: entry.inputPerMillionUsd }
+      : {}),
+    ...(entry.outputPerMillionUsd !== undefined
+      ? { outputPerMillionUsd: entry.outputPerMillionUsd }
+      : {}),
+  }));
+}
+
+function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
+  if (entry.supportsThinking !== undefined) {
+    return entry.supportsThinking;
+  }
+
+  return false;
+}
+
+export function fireworksCustomModelsToCatalog(
+  entries: CustomModelEntry[],
+): ProviderModelOption[] {
+  const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+
+  return catalogCustomModelsToCatalog(entries, staticModels, "fireworks").map((model) => ({
+    ...model,
+    supportsThinking:
+      model.supportsThinking !== undefined
+        ? model.supportsThinking
+        : resolveFireworksCatalogThinking(
+            entries.find((entry) => entry.id === model.id) ?? { id: model.id },
+          ),
   }));
 }
 
@@ -116,12 +168,13 @@ export function mergeOpenRouterCatalog(
 
 export function customModelsToCatalog(
   entries: CustomModelEntry[],
+  provider: ProviderName = "openai_compatible",
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
       id: entry.id,
       name: entry.name?.trim() || entry.id,
-      provider: "openai_compatible",
+      provider,
       contextWindow: DEFAULT_CONTEXT_WINDOW,
       maxOutputTokens: DEFAULT_MAX_OUTPUT,
     };
@@ -192,6 +245,39 @@ export function getModelsForProviderInstance(
     );
   }
 
+  if (instance.type === "cerebras") {
+    const entries = instance.customModels ?? [];
+    const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "cerebras");
+    const catalog = entries.length
+      ? cerebrasCustomModelsToCatalog(entries)
+      : staticModels;
+    return annotate(
+      ensureCurrentModelInCatalog(catalog, currentModel, "cerebras"),
+    );
+  }
+
+  if (instance.type === "fireworks") {
+    const entries = instance.customModels ?? [];
+    const staticModels = AVAILABLE_MODELS.filter((model) => model.provider === "fireworks");
+    const catalog = entries.length
+      ? fireworksCustomModelsToCatalog(entries)
+      : staticModels;
+    return annotate(
+      ensureCurrentModelInCatalog(catalog, currentModel, "fireworks"),
+    );
+  }
+
+  if (instance.type === "ollama") {
+    const entries = instance.customModels ?? [];
+    return annotate(
+      ensureCurrentModelInCatalog(
+        customModelsToCatalog(entries, "ollama"),
+        currentModel,
+        "ollama",
+      ),
+    );
+  }
+
   if (
     instance.type === "openai" ||
     instance.type === "anthropic" ||
@@ -243,6 +329,62 @@ export function resolveOpenRouterDefaultModel(
     catalog[0]?.id ??
     "anthropic/claude-sonnet-4-6"
   );
+}
+
+export function resolveCerebrasDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = cerebrasCustomModelsToCatalog(customModels ?? []);
+  return (
+    catalog.find((entry) => entry.default)?.id ??
+    catalog[0]?.id ??
+    "gpt-oss-120b"
+  );
+}
+
+export function resolveFireworksDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = fireworksCustomModelsToCatalog(customModels ?? []);
+  return (
+    catalog.find((entry) => entry.default)?.id ??
+    catalog[0]?.id ??
+    "accounts/fireworks/models/kimi-k2p6"
+  );
+}
+
+export function resolveOllamaDefaultModel(
+  customModels: CustomModelEntry[] | undefined,
+  model?: string,
+): string {
+  const trimmed = model?.trim();
+
+  if (trimmed && findCustomModel(customModels, trimmed)) {
+    return trimmed;
+  }
+
+  const catalog = customModelsToCatalog(customModels ?? [], "ollama");
+  const fallback = catalog.find((entry) => entry.default)?.id ?? catalog[0]?.id;
+
+  if (!fallback) {
+    throw new Error("At least one Ollama model is required.");
+  }
+
+  return fallback;
 }
 
 export async function fetchRemoteOpenAIModels(

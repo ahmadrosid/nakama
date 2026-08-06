@@ -25,6 +25,10 @@ import { ComposioService } from "./services/composio-service";
 import { SkillsService } from "./services/skills-service";
 import { AuthService } from "./services/auth-service";
 import { OrgService } from "./services/org-service";
+import { OrgMemoryService } from "./services/org-memory-service";
+import {
+  mergeOrgMemoryWithApprovedBullet,
+} from "@nakama/agent";
 import {
   createAutomationRunHistoryTools,
   createAutomationTools,
@@ -114,6 +118,17 @@ agent.setTaskRunner(taskRunner);
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
+const orgMemoryService = new OrgMemoryService(database.adapter, {
+  approvedBulletMerger: {
+    merge(content, bullet, options) {
+      return mergeOrgMemoryWithApprovedBullet(content, bullet, {
+        pin: options.pin,
+        dateUtc: options.dateUtc,
+        provider,
+      });
+    },
+  },
+});
 
 const systemStatus = new SystemStatusService(
   agent,
@@ -136,6 +151,7 @@ const app = createHonoApp({
   composioService,
   authService,
   orgService,
+  orgMemoryService,
   databaseAdapter: database.adapter,
   webDistDir,
 });

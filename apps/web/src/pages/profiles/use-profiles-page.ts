@@ -98,7 +98,6 @@ export function useProfilesPage() {
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
   const [detailSkillId, setDetailSkillId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -122,16 +121,6 @@ export function useProfilesPage() {
     selectedId,
     detail,
   });
-  editStateRef.current = {
-    editName,
-    editPrompt,
-    editModel,
-    savedName,
-    savedPrompt,
-    savedModel,
-    selectedId,
-    detail,
-  };
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(modelsResponse?.models ?? []),
@@ -169,8 +158,6 @@ export function useProfilesPage() {
     deleteSkillMutation.isPending ||
     updateComposioMutation.isPending;
 
-  const trimmedSearch = searchQuery.trim();
-  const isSearching = trimmedSearch.length > 0;
   const refreshing = profilesRefreshing || (detailLoading && Boolean(selectedId));
   const detailTab = resolveProfileDetailTab(searchParams.get("tab"));
 
@@ -321,7 +308,31 @@ export function useProfilesPage() {
     }
   }, [scheduleSave, updateMutation]);
 
-  performSaveRef.current = performSave;
+  useEffect(() => {
+    editStateRef.current = {
+      editName,
+      editPrompt,
+      editModel,
+      savedName,
+      savedPrompt,
+      savedModel,
+      selectedId,
+      detail,
+    };
+  }, [
+    detail,
+    editModel,
+    editName,
+    editPrompt,
+    savedModel,
+    savedName,
+    savedPrompt,
+    selectedId,
+  ]);
+
+  useEffect(() => {
+    performSaveRef.current = performSave;
+  }, [performSave]);
 
   const flushSave = useCallback(async (): Promise<boolean> => {
     clearScheduledSave();
@@ -472,17 +483,6 @@ export function useProfilesPage() {
       }
     };
   }, [clearScheduledSave]);
-
-  const filteredProfiles = useMemo(() => {
-    const query = trimmedSearch.toLowerCase();
-    if (!query) {
-      return profiles;
-    }
-
-    return profiles.filter((profile) => {
-      return profile.name.toLowerCase().includes(query) || profile.id.toLowerCase().includes(query);
-    });
-  }, [profiles, trimmedSearch]);
 
   const availableTools = allTools.filter(
     (tool) => !detail?.tools.some((assigned) => assigned.id === tool.id),
@@ -689,16 +689,14 @@ export function useProfilesPage() {
       return;
     }
 
-    if (!window.confirm(`Delete skill "${skill.name}"? This removes it from every profile.`)) {
-      return;
-    }
-
+    // Confirmation lives in SkillAssignPicker — window.confirm cannot run while that Dialog is open.
     setError(null);
 
     try {
       await deleteSkillMutation.mutateAsync(skillId);
     } catch (err) {
       setError(formatError(err));
+      throw err;
     }
   }
 
@@ -855,21 +853,16 @@ export function useProfilesPage() {
     setSkillCreateOpen,
     detailSkillId,
     setDetailSkillId,
-    searchQuery,
-    setSearchQuery,
     editName,
     editPrompt,
     editModel,
     saveStatus,
     isDirty,
-    trimmedSearch,
-    isSearching,
     refreshing,
     detailTab,
     providerModelGroups,
     modelSelectionValue,
     modelInCatalog,
-    filteredProfiles,
     availableTools,
     availableMcpServers,
     assignedComposioToolkits,

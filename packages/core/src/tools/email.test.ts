@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { EmailConfigFile } from "../email-config";
 import { createFakeMailReader, createFakeMailSender, runEmailTool } from "./email";
 
+process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??= "test-email-attachment-secret-32-chars";
+
 const completeConfig: EmailConfigFile = {
   imapHost: "imap.example.com",
   imapPort: 993,
@@ -80,6 +82,44 @@ describe("email tool", () => {
     );
 
     expect("message" in result && result.message?.text).toBe("full body");
+  });
+
+  test("returns scoped references for message attachments", async () => {
+    const reader = createFakeMailReader([
+      {
+        uid: 43,
+        subject: "Report",
+        from: "team@example.com",
+        date: "2026-06-21T00:00:00.000Z",
+        folder: "INBOX",
+        attachments: [
+          {
+            id: "0",
+            filename: "report.pdf",
+            mediaType: "application/pdf",
+            size: 123,
+            disposition: "attachment",
+          },
+        ],
+      },
+    ]);
+
+    const result = await runEmailTool(
+      { action: "read", uid: 43 },
+      {
+        loadConfig: async () => completeConfig,
+        createReader: () => reader,
+      },
+      { orgId: "org_test", profileId: "profile_test", sessionId: "session_test" },
+    );
+
+    expect("message" in result && result.message?.attachments?.[0]).toMatchObject({
+      filename: "report.pdf",
+      mediaType: "application/pdf",
+      size: 123,
+      disposition: "attachment",
+    });
+    expect("message" in result && result.message?.attachments?.[0]?.documentRef).toContain(".");
   });
 
   test("searches messages", async () => {

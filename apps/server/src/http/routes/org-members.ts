@@ -23,7 +23,7 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
     .object({
       name: z.string(),
       email: z.string(),
-      phone: z.string(),
+      phone: z.string().optional(),
       role: z.enum(["admin", "member", "viewer"]),
     })
     .openapi("AddOrgMemberRequest");
@@ -96,7 +96,7 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
       orgId,
       name: body.name,
       email: body.email,
-      phone: body.phone,
+      phone: body.phone ?? "",
       role: body.role,
     });
 

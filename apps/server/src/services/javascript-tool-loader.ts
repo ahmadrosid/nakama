@@ -13,6 +13,7 @@ export interface JavascriptToolHandlerConfig {
 
 interface JavascriptToolModule {
   parameters?: JsonSchema;
+  parallelSafe?: boolean;
   run: (input: unknown, context: ToolContext) => Promise<unknown>;
 }
 
@@ -55,6 +56,7 @@ export async function loadJavascriptTool(
       name: record.name,
       description: record.description,
       parameters,
+      ...(module.parallelSafe ? { parallelSafe: true } : {}),
       async run(input, context) {
         return module.run(input, context);
       },
@@ -155,9 +157,11 @@ function normalizeJavascriptModule(imported: unknown): JavascriptToolModule {
     : isJsonSchema(record.parameters)
       ? record.parameters
       : undefined;
+  const parallelSafe = source.parallelSafe === true || record.parallelSafe === true;
 
   return {
     parameters,
+    ...(parallelSafe ? { parallelSafe: true } : {}),
     run: (input, context) => Promise.resolve(run(input, context)),
   };
 }

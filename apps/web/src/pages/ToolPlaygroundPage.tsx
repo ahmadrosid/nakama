@@ -1,7 +1,7 @@
 import type { ToolDetail } from "@nakama/core/contract";
 import { ChevronLeftIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
 import {
   ToolPlaygroundOutput,
@@ -16,7 +16,7 @@ import { formatError } from "@/lib/client";
 import {
   canAccessSystemPage,
   canUseToolPlayground,
-  toolsTabPath,
+  toolPlaygroundBackTarget,
 } from "@/lib/navigation";
 import { findSuperBotProfile } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
@@ -25,10 +25,12 @@ const sectionClass = "rounded-md border border-border bg-card";
 
 export function ToolPlaygroundPage() {
   const { toolId } = useParams<{ toolId: string }>();
+  const [searchParams] = useSearchParams();
   const { user, activeOrg, isLoading: authLoading } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canAccess = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
   const canUsePlayground = canUseToolPlayground(isPlatformAdmin, activeOrg?.role);
+  const backHref = toolPlaygroundBackTarget(searchParams).href;
 
   const {
     data: tool,
@@ -47,7 +49,7 @@ export function ToolPlaygroundPage() {
   }
 
   if (!toolId) {
-    return <Navigate to={toolsTabPath()} replace />;
+    return <Navigate to={backHref} replace />;
   }
 
   if (toolLoading && !tool) {
@@ -66,7 +68,7 @@ export function ToolPlaygroundPage() {
   }
 
   if (!tool) {
-    return <Navigate to={toolsTabPath()} replace />;
+    return <Navigate to={backHref} replace />;
   }
 
   return (
@@ -84,6 +86,8 @@ function ToolPlaygroundPageContent({
   tool: ToolDetail;
   superBotProfileId: string | null;
 }) {
+  const [searchParams] = useSearchParams();
+  const back = toolPlaygroundBackTarget(searchParams);
   const isJavascriptTool = tool.handlerType === "javascript";
   const run = useToolPlaygroundRun(tool, superBotProfileId);
   const [mainTab, setMainTab] = useState<"output" | "detail">("output");
@@ -157,8 +161,8 @@ function ToolPlaygroundPageContent({
                 >
                   Playground is available for custom JavaScript tools only. Built-in and MCP tools
                   cannot be run here.{" "}
-                  <Link to={toolsTabPath()} className="font-medium underline underline-offset-2">
-                    Back to tools
+                  <Link to={back.href} className="font-medium underline underline-offset-2">
+                    Back to {back.label.toLowerCase()}
                   </Link>
                 </p>
                 <ToolDetailSections tool={tool} showHeader />
@@ -206,10 +210,13 @@ function PlaygroundTab({
 }
 
 function BackLink() {
+  const [searchParams] = useSearchParams();
+  const { href, label } = toolPlaygroundBackTarget(searchParams);
+
   return (
-    <Button type="button" variant="ghost" size="sm" className="-ml-2 w-fit" render={<Link to={toolsTabPath()} />}>
+    <Button type="button" variant="ghost" size="sm" className="-ml-2 w-fit" render={<Link to={href} />}>
       <ChevronLeftIcon className="size-4" aria-hidden />
-      Tools
+      {label}
     </Button>
   );
 }

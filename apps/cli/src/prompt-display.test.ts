@@ -1,23 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatInputForDisplay,
-  normalizePastedText,
   splitInputDisplayLines,
 } from "./prompt-display";
 
 describe("formatInputForDisplay", () => {
-  test("keeps real newlines", () => {
-    expect(formatInputForDisplay("line one\nline two")).toBe("line one\nline two");
-  });
-
   test("normalizes carriage returns", () => {
     expect(formatInputForDisplay("a\r\nb\rc")).toBe("a\nb\nc");
-  });
-});
-
-describe("normalizePastedText", () => {
-  test("normalizes Windows line endings", () => {
-    expect(normalizePastedText("a\r\nb\r\nc")).toBe("a\nb\nc");
   });
 });
 

@@ -1,6 +1,10 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 
 export const sectionClass = "rounded-md border border-border bg-card";
+export const profilePanelHeaderClass =
+  "flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 sm:px-5";
+export const profilePanelHeaderLabelClass =
+  "inline-flex items-center px-3 py-2.5 text-sm font-medium text-foreground sm:px-4";
 export const profilesTagline = "Separate prompt, tools, and knowledge for each bot.";
 export const profileTextSaveDelayMs = 1000;
 export const profileModelSaveDelayMs = 400;

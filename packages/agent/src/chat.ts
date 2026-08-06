@@ -37,13 +37,19 @@ import {
   compactHistory,
   type CompactionConfig,
 } from "./history-compaction";
-import { executeToolCall, serializeToolResult } from "./tool-loop";
+import { executeToolCall, canRunToolCallsInParallel, serializeToolResult } from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
   onThinking?: (delta: string) => void;
+  onToolInputDelta?: (event: {
+    toolCallId: string;
+    tool: string;
+    delta: string;
+    accumulatedArguments?: string;
+  }) => void;
   onToolStart?: (event: {
     toolCallId: string;
     tool: string;
@@ -54,6 +60,7 @@ export interface StreamHandlers {
     tool: string;
     result: unknown;
   }) => void;
+  onSubAgentActivity?: (event: { parentToolCallId: string; label: string }) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;
@@ -392,6 +399,56 @@ async function executeToolCalls(
   handlers?: StreamHandlers,
   toolContext: ToolContext = {},
 ): Promise<void> {
+  const contextForCall = (call: ToolCall): ToolContext => {
+    if (!handlers?.onSubAgentActivity || call.name !== "sub_agent") {
+      return toolContext;
+    }
+
+    return {
+      ...toolContext,
+      emitSubAgentActivity: (label) =>
+        handlers.onSubAgentActivity?.({
+          parentToolCallId: call.id,
+          label,
+        }),
+    };
+  };
+
+  if (canRunToolCallsInParallel(tools, toolCalls)) {
+    const results = await Promise.all(
+      toolCalls.map(async (call) => {
+        handlers?.onToolStart?.({
+          toolCallId: call.id,
+          tool: call.name,
+          input: call.arguments,
+        });
+
+        const result = await executeToolCall(tools, call, contextForCall(call));
+
+        handlers?.onToolEnd?.({
+          toolCallId: call.id,
+          tool: call.name,
+          result,
+        });
+
+        return { call, result };
+      }),
+    );
+
+    const resultsByCallId = new Map(results.map((entry) => [entry.call.id, entry.result]));
+
+    for (const call of toolCalls) {
+      history.push({
+        role: "tool",
+        toolCallId: call.id,
+        name: call.name,
+        content: serializeToolResult(resultsByCallId.get(call.id)),
+      });
+    }
+
+    return;
+  }
+
   for (const call of toolCalls) {
     handlers?.onToolStart?.({
       toolCallId: call.id,
@@ -399,7 +456,7 @@ async function executeToolCalls(
       input: call.arguments,
     });
 
-    const result = await executeToolCall(tools, call, toolContext);
+    const result = await executeToolCall(tools, call, contextForCall(call));
 
     handlers?.onToolEnd?.({
       toolCallId: call.id,
@@ -453,6 +510,7 @@ async function generateReply(
     return provider.streamChat(input, {
       onChunk: handlers.onChunk,
       onThinking: handlers.onThinking,
+      onToolInputDelta: handlers.onToolInputDelta,
       onToolStart: handlers.onToolStart,
       onToolEnd: handlers.onToolEnd,
     });

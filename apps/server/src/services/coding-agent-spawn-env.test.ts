@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   buildClaudeCodeSpawnEnv,
   buildCodexSpawnEnv,
-  getInferenceGatewayBaseUrl,
   mergeCodingAgentSpawnEnv,
   normalizeCodingAgentModel,
+  redactSpawnEnvForPrompt,
 } from "./coding-agent-spawn-env";
+
+import { inactiveRouting, activeAnthropicRouting } from "./coding-agent-fixtures";
 
 describe("coding-agent spawn env", () => {
   test("normalizes profile model ids", () => {
@@ -13,88 +15,74 @@ describe("coding-agent spawn env", () => {
     expect(normalizeCodingAgentModel("anthropic/claude-sonnet-4-6")).toBe("claude-sonnet-4-6");
   });
 
-  test("returns no env overrides when gateway is disabled", () => {
-    expect(buildClaudeCodeSpawnEnv({ model: "claude-opus-4-6" })).toEqual({});
-    expect(buildCodexSpawnEnv({ model: "gpt-4.1" })).toEqual({});
+  test("returns no env overrides when routing is inactive", () => {
+    expect(buildClaudeCodeSpawnEnv(inactiveRouting)).toEqual({});
   });
 
-  test("builds Claude Code gateway env with tier aliases and cleared API key", () => {
-    const env = buildClaudeCodeSpawnEnv({
-      model: "anthropic:claude-opus-4-6",
-      gatewayBaseUrl: "http://127.0.0.1:4310",
-      authToken: "tc_local_test",
-      orgId: "org_test",
-      profileId: "profile_test",
-    });
-
-    expect(env).toEqual({
-      ANTHROPIC_BASE_URL: "http://127.0.0.1:4310",
-      ANTHROPIC_API_KEY: "",
-      ANTHROPIC_AUTH_TOKEN: "tc_local_test",
-      ANTHROPIC_CUSTOM_HEADERS: "X-Org-Id: org_test\nX-Nakama-Profile-Id: profile_test",
-      ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-6",
-      ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-opus-4-6",
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-opus-4-6",
-      CLAUDE_CODE_SUBAGENT_MODEL: "claude-opus-4-6",
-      CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
-      DISABLE_TELEMETRY: "1",
-      DISABLE_ERROR_REPORTING: "1",
-      DISABLE_FEEDBACK_COMMAND: "1",
-      CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: "1",
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-    });
-  });
-
-  test("builds Codex gateway env with cleared OpenAI API key", () => {
-    expect(
-      buildCodexSpawnEnv({
-        model: "openai:gpt-4.1",
-        gatewayBaseUrl: "http://127.0.0.1:4310",
+  test("builds Claude Code provider passthrough env", () => {
+    const env = buildClaudeCodeSpawnEnv(
+      activeAnthropicRouting({
+        model: "anthropic:claude-opus-4-6",
       }),
+      "anthropic",
+    );
+
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://api.anthropic.com");
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
+    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("claude-opus-4-6");
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+  });
+
+  test("builds Codex provider passthrough env", () => {
+    expect(
+      buildCodexSpawnEnv(
+        activeAnthropicRouting({
+          providerType: "openai",
+          providerLabel: "OpenAI",
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "sk-openai-test",
+          model: "openai:gpt-4.1",
+        }),
+        "openai",
+      ),
     ).toEqual({
-      OPENAI_API_KEY: "",
-      OPENAI_BASE_URL: "http://127.0.0.1:4310",
+      OPENAI_API_KEY: "sk-openai-test",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
       OPENAI_MODEL: "gpt-4.1",
     });
   });
 
-  test("unsets conflicting API keys when merging spawn env", () => {
+  test("protects credential env keys from caller overrides", () => {
     const env = mergeCodingAgentSpawnEnv(
+      { HOME: "/tmp" },
       {
-        ANTHROPIC_API_KEY: "sk-live",
-        OPENAI_API_KEY: "sk-openai",
-        HOME: "/tmp",
+        ANTHROPIC_API_KEY: "sk-from-nakama",
+        ANTHROPIC_BASE_URL: "https://api.anthropic.com",
       },
       {
-        ANTHROPIC_API_KEY: "",
-        ANTHROPIC_AUTH_TOKEN: "tc_local_test",
+        protectCredentialKeys: true,
+        callerEnv: {
+          ANTHROPIC_API_KEY: "sk-override",
+          CUSTOM_FLAG: "1",
+        },
       },
     );
 
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("tc_local_test");
-    expect(env.HOME).toBe("/tmp");
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-from-nakama");
+    expect(env.CUSTOM_FLAG).toBe("1");
   });
 
-  test("prefers NAKAMA_INFERENCE_GATEWAY_URL when gateway is enabled", () => {
-    const previousEnabled = process.env.NAKAMA_INFERENCE_GATEWAY_ENABLED;
-    const previousUrl = process.env.NAKAMA_INFERENCE_GATEWAY_URL;
-
-    process.env.NAKAMA_INFERENCE_GATEWAY_ENABLED = "1";
-    process.env.NAKAMA_INFERENCE_GATEWAY_URL = "https://nakama.example";
-
-    expect(getInferenceGatewayBaseUrl()).toBe("https://nakama.example");
-
-    if (previousEnabled === undefined) {
-      delete process.env.NAKAMA_INFERENCE_GATEWAY_ENABLED;
-    } else {
-      process.env.NAKAMA_INFERENCE_GATEWAY_ENABLED = previousEnabled;
-    }
-
-    if (previousUrl === undefined) {
-      delete process.env.NAKAMA_INFERENCE_GATEWAY_URL;
-    } else {
-      process.env.NAKAMA_INFERENCE_GATEWAY_URL = previousUrl;
-    }
+  test("redacts secrets for prompt context", () => {
+    expect(
+      redactSpawnEnvForPrompt({
+        ANTHROPIC_API_KEY: "sk-ant-test",
+        ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+        OPENAI_MODEL: "gpt-4.1",
+      }),
+    ).toEqual({
+      ANTHROPIC_API_KEY: "***",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+      OPENAI_MODEL: "gpt-4.1",
+    });
   });
 });

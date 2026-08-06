@@ -13,9 +13,14 @@ export const PUBLIC_ROUTES = new Set([
 ]);
 
 export function isPublicRouteRequest(method: string, pathname: string): boolean {
+  if (pathname === "/v1/auth/me") {
+    return method === "GET";
+  }
+
   return (
     PUBLIC_ROUTES.has(pathname) ||
     /^\/v1\/notify\/[^/]+$/.test(pathname) ||
-    (method === "GET" && /^\/v1\/profiles\/[^/]+\/avatar$/.test(pathname))
+    (method === "GET" && /^\/v1\/profiles\/[^/]+\/avatar$/.test(pathname)) ||
+    (method === "GET" && /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname))
   );
 }

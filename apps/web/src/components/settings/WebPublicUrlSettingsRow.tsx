@@ -21,6 +21,7 @@ export function WebPublicUrlSettingsRow() {
   const handleSave = () => {
     setFormError(null);
     setSavedHint(null);
+    saveMutation.reset();
 
     const trimmed = value.trim();
     if (!trimmed) {
@@ -44,6 +45,7 @@ export function WebPublicUrlSettingsRow() {
       setValue(window.location.origin);
       setSavedHint(null);
       setFormError(null);
+      saveMutation.reset();
     }
   };
 
@@ -64,8 +66,7 @@ export function WebPublicUrlSettingsRow() {
       <div className="space-y-0.5">
         <p className="text-sm font-medium text-foreground">Public web URL</p>
         <p className="text-xs text-muted-foreground">
-          Used for OAuth callbacks from Telegram, WhatsApp, and Composio connect links. Stored in
-          ~/.nakama/config.ini. Auto-detected during setup.
+          Base URL for OAuth callbacks. Saved to ~/.nakama/config.ini.
         </p>
         {data?.envOverride ? (
           <p className="text-xs text-amber-800 dark:text-amber-200">
@@ -92,6 +93,7 @@ export function WebPublicUrlSettingsRow() {
             setValue(event.target.value);
             setSavedHint(null);
             setFormError(null);
+            saveMutation.reset();
           }}
           placeholder="https://nakama.example.com"
           className="min-w-0 flex-1"

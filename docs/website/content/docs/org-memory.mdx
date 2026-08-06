@@ -1,0 +1,151 @@
+---
+title: "Org Memory"
+description: "Shared, admin-curated facts for an organization — injected into every profile's prompt and distinct from per-profile MEMORY.md."
+---
+
+**Org memory** is shared context for the whole organization.
+
+Every non-viewer agent in the org sees a summary of pinned facts plus recent log entries in its system prompt. Org admins curate facts from **Settings → Org Memory** and review agent proposals on the **Proposals** tab. Members can read and search; viewers are blocked entirely.
+
+Org memory is separate from [profile memory](/profiles#knowledge-base-and-memory). Profile `MEMORY.md` is per-bot continuity that agents update themselves. Org memory is team-wide facts that admins maintain.
+
+## On disk
+
+Org memory lives at the organization level, alongside profile directories:
+
+```text
+~/.nakama/orgs/{orgId}/MEMORY.md
+~/.nakama/orgs/{orgId}/memory-archive/
+~/.nakama/orgs/{orgId}/memory-history/
+```
+
+Archived bullets move into monthly `.md` files under `memory-archive/` without deleting history.
+
+**Change history** snapshots live under `memory-history/` — one JSON metadata file and one markdown snapshot per revision (up to **50** entries, oldest pruned automatically). This is separate from `memory-archive/`, which stores bullets removed from the live pinned list.
+
+Platform-admin [data exports](/backup-restore) include org memory as part of the org workspace in the ZIP.
+
+## Format
+
+Use this structure:
+
+```md
+## Org Memory
+
+## Pinned
+
+- Acme Corp is our primary customer in APAC.
+
+## 2026-07-31
+
+- Support hours are 9am–6pm SGT, Mon–Fri.
+```
+
+| Rule | Detail |
+|------|--------|
+| Pinned bullets | Always-in-prompt facts under `## Pinned` |
+| Recent log | `## YYYY-MM-DD` dated sections below pinned; up to **20** most recent bullets are injected after pinned facts |
+| Empty state | When no pinned or recent bullets exist, nothing is injected |
+
+## Prompt injection
+
+After the profile soul stack and knowledge base catalog, Nakama appends a `## Org Memory` section for every role except **viewer**.
+
+| Limit | Value |
+|-------|-------|
+| Summary injected into prompt | **2048 bytes** max |
+| Live file on save | **8192 bytes** max |
+
+When the summary exceeds the cap, trailing bullets are dropped and the agent sees a hint to call `org_memory_search` for the full history (including archives).
+
+See [Agent prompts](/agent-prompt) for the full assembly order.
+
+## Agent tools
+
+Three org memory tools are **automatically available on every profile**. They are not assigned from the dashboard like other builtins.
+
+| Tool | Purpose |
+|------|---------|
+| `org_memory_search` | Search pinned, recent-log, and archived bullets |
+| `org_memory_list` | Return the current live org memory content |
+| `propose_org_memory` | Propose an org-wide fact for admin approval (member+) |
+
+Viewers cannot call these tools. Automations and sub-agents run with member-level org context.
+
+Agents propose durable org facts via `propose_org_memory`; proposals land in a staging queue until an admin approves or rejects them in **Settings → Org Memory → Proposals**. Admins can still add facts directly from the UI (bypasses the queue). Do not propose secrets, credentials, or PII.
+
+When an admin approves a proposal, Nakama merges the new fact into live memory:
+
+1. **LLM merge** (when a provider is configured) — the server asks the model to update `MEMORY.md`, replace superseded facts, and keep unrelated bullets intact.
+2. **Mechanical fallback** — if the LLM call fails or no provider is available, Nakama appends the fact to pinned or the recent log and removes near-duplicate bullets using token overlap.
+
+Use **Pin on approve** in the review dialog when the fact should always appear in the injected summary.
+
+Proposal rows live in the SQLite database and are **not** included in workspace ZIP exports yet.
+
+## Admin UI
+
+Org admins manage org memory from **Settings → Org Memory** (`/settings`).
+
+The card has three tabs:
+
+| Tab | Purpose |
+|-----|---------|
+| **Live memory** | Preview pinned facts and open the **Edit** dialog for raw markdown |
+| **Proposals** | Review pending agent suggestions — approve, reject, optional **Pin on approve** |
+| **History** | Browse change snapshots, **Undo latest**, or **Restore** any older revision |
+
+A badge on **Proposals** shows the pending count.
+
+Every write logs a snapshot (manual edits, approvals, pin/unpin, archive, and restores). **Undo latest** rolls back to the previous revision. **Restore** on an older row replays that snapshot as the new live memory (and logs the restore as a new history entry).
+
+Use **Archive** when the pinned list grows large — it keeps the live file within limits while preserving history under `memory-archive/`.
+
+For per-bot continuity the agent manages itself, use the profile `update-profile-memory` skill — see [Profiles](/profiles#knowledge-base-and-memory).
+
+## HTTP API (admin)
+
+Org admins can also manage memory via the REST API (`X-Org-Id` required):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/v1/orgs/{orgId}/memory` | Read live memory |
+| `PUT` | `/v1/orgs/{orgId}/memory` | Replace live memory |
+| `GET` | `/v1/orgs/{orgId}/memory/history` | List change snapshots (newest first) |
+| `GET` | `/v1/orgs/{orgId}/memory/history/{revisionId}` | Read a single snapshot |
+| `POST` | `/v1/orgs/{orgId}/memory/history/undo` | Undo the latest change |
+| `POST` | `/v1/orgs/{orgId}/memory/history/{revisionId}/restore` | Restore a specific snapshot |
+| `GET` | `/v1/orgs/{orgId}/memory/proposals` | List proposals |
+| `POST` | `/v1/orgs/{orgId}/memory/proposals/{id}/approve` | Approve a proposal |
+| `POST` | `/v1/orgs/{orgId}/memory/proposals/{id}/reject` | Reject a proposal |
+
+Members can read and search; viewers are blocked on all org memory routes.
+
+## Roles and access
+
+| Role | Read | Search | Write (UI/API) | Prompt injection | Agent tools |
+|------|------|--------|----------------|------------------|-------------|
+| **admin** | yes | yes | yes | yes | yes |
+| **member** | yes | yes | no | yes | yes |
+| **viewer** | no | no | no | no | no |
+
+Cross-org requests return **404** — the path `orgId` must match the active organization.
+
+## Org memory vs profile memory
+
+| | **Org memory** | **Profile `MEMORY.md`** |
+|---|---|---|
+| **Scope** | Entire organization | Single profile |
+| **Path** | `~/.nakama/orgs/{orgId}/MEMORY.md` | `~/.nakama/orgs/{orgId}/profiles/{profileId}/MEMORY.md` |
+| **Structure** | `## Pinned` + dated `## YYYY-MM-DD` sections | Dated `## YYYY-MM-DD` sections |
+| **Who writes** | Org admins (UI/API); agents propose via `propose_org_memory` | Agent via `update-profile-memory` skill |
+| **Prompt injection** | Appended as `## Org Memory` | In soul stack as continuity |
+| **Active file limit** | 8192 bytes (live); 2048 bytes injected | 4096 bytes soft limit |
+| **Viewer access** | Blocked | Follows normal chat access |
+
+## Next steps
+
+- [Multi-tenancy](/multi-tenancy) — org boundaries and roles
+- [Profiles](/profiles) — per-profile soul files and memory
+- [Agent prompts](/agent-prompt) — how org memory joins the system prompt
+- [Builtin tools](/builtin-tools) — `org_memory_search`, `org_memory_list`, and `propose_org_memory`

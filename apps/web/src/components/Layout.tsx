@@ -1,10 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  ChevronsLeftIcon,
-  ChevronsRightIcon,
-  LogOutIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "lucide-react";
-import type { SVGProps } from "react";
 import { useMemo } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -17,6 +15,8 @@ import {
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
+import { ProfileRail } from "@/components/ProfileRail";
+import { ActiveChatProfileProvider } from "@/context/active-chat-profile-context";
 import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
@@ -32,154 +32,100 @@ import {
   PAGE_PATHS,
   PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
-  SETTINGS_NAV_ITEM,
   type NavItem,
 } from "@/lib/navigation";
-
-const GITHUB_REPO_URL = "https://github.com/ahmadrosid/nakama";
 
 export function Layout() {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
   const chatProfileId = chatProfileIdFromPath(location.pathname);
   const { error } = useAppContext();
-  const { logout, user, activeOrg } = useAuth();
+  const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
-  const navGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter((item) => {
-          if (item.id === "soul") {
-            return canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role);
-          }
+  const navGroups = useMemo(() => {
+    const groups: typeof NAV_GROUPS = [];
 
-          if (item.id === "integrations") {
-            return canAccessIntegrationsPage(activeOrg?.role);
-          }
+    for (const group of NAV_GROUPS) {
+      const items = group.items.filter((item) => {
+        if (item.id === "soul") {
+          return canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role);
+        }
 
-          return (
-            !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || user?.isPlatformAdmin === true
-          );
-        }),
-      })).filter((group) => group.items.length > 0),
-    [activeOrg?.role, user?.isPlatformAdmin],
-  );
+        if (item.id === "integrations") {
+          return canAccessIntegrationsPage(activeOrg?.role);
+        }
+
+        return (
+          !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || user?.isPlatformAdmin === true
+        );
+      });
+
+      if (items.length > 0) {
+        groups.push({ ...group, items });
+      }
+    }
+
+    return groups;
+  }, [activeOrg?.role, user?.isPlatformAdmin]);
 
   return (
     <TooltipProvider delay={0}>
-      <div className="flex h-svh overflow-hidden bg-background">
+      <ActiveChatProfileProvider>
+        <div className="flex h-svh overflow-hidden bg-background">
+          <ProfileRail />
+
         <aside
           aria-label="Main navigation"
           data-collapsed={collapsed || undefined}
-          className={cn(
-            "flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-sidebar transition-[width] duration-200 ease-out motion-reduce:transition-none",
-            collapsed ? "w-14" : "w-60",
-          )}
+          className="sidebar-shell flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50"
         >
-          <div
-            className={cn(
-              "app-shell-header",
-              collapsed ? "h-auto min-h-14 flex-col gap-2 px-2 py-3" : "gap-2.5 px-3",
+          <div className="app-shell-header">
+            {collapsed ? (
+              <CollapsedOrgExpandControl onExpand={toggle} />
+            ) : (
+              <>
+                <div className="flex min-w-0 flex-1">
+                  <OrgSwitcher collapsed={false} />
+                </div>
+                <SidebarCollapseButton onToggle={toggle} />
+              </>
             )}
-          >
-            <img
-              src="/nakama.png"
-              alt="Nakama"
-              className="size-8 shrink-0 rounded-lg object-contain"
-            />
-            {!collapsed ? (
-              <p className="type-brand min-w-0 flex-1 truncate">Nakama</p>
-            ) : null}
-            {!collapsed ? <GitHubRepoButton /> : null}
-            <SidebarCollapseButton collapsed={collapsed} onToggle={toggle} />
           </div>
 
-          <div className={cn("shrink-0 pt-4", collapsed ? "px-2 pb-2" : "px-3 pb-3")}>
-            <OrgSwitcher collapsed={collapsed} />
-          </div>
-
-          <nav
-            className={cn(
-              "no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto",
-              collapsed ? "p-2" : "p-3",
-            )}
-          >
-            {navGroups.map((group, groupIndex) => (
-              <div key={group.id}>
-                {groupIndex > 0 ? (
-                  <div className="sidebar-nav-divider" aria-hidden="true" />
-                ) : null}
-                <div
-                  className="sidebar-nav-group"
-                  role="group"
-                  aria-label={group.label}
-                >
-                  {!collapsed ? (
-                    <p className="sidebar-nav-group-label">{group.label}</p>
-                  ) : null}
-                  <div className="sidebar-nav-group-items">
-                    {group.items.map((item) => (
-                      <SidebarNavButton
-                        key={item.id}
-                        item={item}
-                        icon={NAV_ITEM_ICONS[item.id]}
-                        active={item.id === page}
-                        collapsed={collapsed}
-                        badge={item.id === "automations" ? automationUnreadTotal : undefined}
-                        to={
-                          item.id === "soul"
-                            ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
-                            : navHrefForPage(item.id, chatProfileId)
-                        }
-                        onPrefetch={
-                          item.id === "automations" ? prefetchAppData : undefined
-                        }
-                      />
-                    ))}
-                  </div>
+          <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {navGroups.map((group) => (
+              <div
+                key={group.id}
+                className="sidebar-nav-group"
+                role="group"
+                aria-label={group.label}
+              >
+                <div className="sidebar-nav-group-items">
+                  {group.items.map((item) => (
+                    <SidebarNavButton
+                      key={item.id}
+                      item={item}
+                      icon={NAV_ITEM_ICONS[item.id]}
+                      active={item.id === page}
+                      collapsed={collapsed}
+                      badge={item.id === "automations" ? automationUnreadTotal : undefined}
+                      to={
+                        item.id === "soul"
+                          ? `${navHrefForPage(item.id, chatProfileId)}?tab=tools`
+                          : navHrefForPage(item.id, chatProfileId)
+                      }
+                      onPrefetch={
+                        item.id === "automations" ? prefetchAppData : undefined
+                      }
+                    />
+                  ))}
                 </div>
               </div>
             ))}
           </nav>
-
-          <div
-            className={cn(
-              "sidebar-nav-footer flex shrink-0 border-t border-border/50",
-              collapsed ? "flex-col justify-center gap-1 px-2 py-2.5" : "items-center gap-2 px-3 py-3",
-            )}
-          >
-            <SidebarNavButton
-              item={SETTINGS_NAV_ITEM}
-              icon={NAV_ITEM_ICONS.settings}
-              active={page === "settings"}
-              collapsed={collapsed}
-              to={navHrefForPage("settings")}
-              onPrefetch={prefetchAppData}
-            />
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="shrink-0 text-muted-foreground/70 hover:text-foreground"
-                    onClick={() => {
-                      void logout();
-                    }}
-                  >
-                    <LogOutIcon className="sidebar-nav-icon" strokeWidth={1.75} />
-                  </Button>
-                }
-              />
-              <TooltipContent side="right">
-                {user?.email ?? "Log out"}
-              </TooltipContent>
-            </Tooltip>
-          </div>
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -209,58 +155,44 @@ export function Layout() {
           </main>
         </div>
       </div>
+      </ActiveChatProfileProvider>
     </TooltipProvider>
   );
 }
 
-function GitHubRepoButton() {
+function CollapsedOrgExpandControl({ onExpand }: { onExpand: () => void }) {
   return (
-    <a
-      href={GITHUB_REPO_URL}
-      target="_blank"
-      rel="noreferrer"
-      aria-label="Open GitHub repository"
-      title="Open GitHub repository"
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-    >
-      <GitHubMark className="sidebar-nav-icon" aria-hidden="true" />
-    </a>
+    <div className="group relative flex size-9 shrink-0 items-center justify-center self-center">
+      <div className="transition-opacity duration-150 group-hover:pointer-events-none group-hover:opacity-0 group-focus-within:pointer-events-none group-focus-within:opacity-0">
+        <OrgSwitcher collapsed />
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+        onClick={onExpand}
+        className="absolute inset-0 size-9 rounded-md p-0 text-muted-foreground/70 opacity-0 transition-opacity duration-150 hover:bg-sidebar-accent/55 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <ChevronRightIcon className="size-4" strokeWidth={1.75} />
+      </Button>
+    </div>
   );
 }
 
-function GitHubMark(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.38 7.86 10.9.58.11.79-.25.79-.56v-2.02c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.69 1.25 3.34.96.1-.75.4-1.25.72-1.54-2.56-.29-5.24-1.28-5.24-5.71 0-1.26.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.19 1.18a11.1 11.1 0 0 1 5.8 0c2.22-1.49 3.18-1.18 3.18-1.18.64 1.58.24 2.75.12 3.04.74.8 1.19 1.82 1.19 3.08 0 4.44-2.69 5.42-5.25 5.71.41.36.77 1.07.77 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
-    </svg>
-  );
-}
-
-function SidebarCollapseButton({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const CollapseIcon = collapsed ? ChevronsRightIcon : ChevronsLeftIcon;
-
+function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      aria-expanded={!collapsed}
-      title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-label="Collapse sidebar"
+      aria-expanded
+      title="Collapse sidebar"
       onClick={onToggle}
-      className={cn(
-        "shrink-0 text-muted-foreground/70 hover:text-foreground",
-        collapsed && "size-9 rounded-md hover:bg-sidebar-accent/60",
-        !collapsed && "ml-auto",
-      )}
+      className="shrink-0 self-center text-muted-foreground/70 hover:text-foreground"
     >
-      <CollapseIcon className="sidebar-nav-icon" strokeWidth={1.75} />
+      <ChevronLeftIcon className="size-4" strokeWidth={1.75} />
     </Button>
   );
 }
@@ -319,18 +251,14 @@ function SidebarNavButton({
           </span>
         ) : null}
       </span>
-      {!collapsed ? (
-        <>
-          <span className="min-w-0 truncate">{item.label}</span>
-          {showBadge ? (
-            <span
-              className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
-              aria-hidden
-            >
-              {badgeLabel}
-            </span>
-          ) : null}
-        </>
+      <span className="sidebar-nav-label truncate">{item.label}</span>
+      {showBadge && !collapsed ? (
+        <span
+          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-foreground"
+          aria-hidden
+        >
+          {badgeLabel}
+        </span>
       ) : null}
     </Link>
   );

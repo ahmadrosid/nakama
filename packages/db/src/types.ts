@@ -171,7 +171,7 @@ export interface StoredCodingAgentHarnessProbeCache {
   checkedAt: string;
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "install" | "login" | "retry" | null;
+  nextStep: "install" | "retry" | null;
   statusMessage: string | null;
 }
 
@@ -336,6 +336,37 @@ export interface StoredOrgInviteRecord {
   createdAt: string;
 }
 
+export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
+
+export interface StoredOrgMemoryProposal {
+  id: string;
+  orgId: string;
+  profileId: string | null;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  bullet: string;
+  status: OrgMemoryProposalStatus;
+  pinned: boolean;
+  reviewerUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface StoredArtifactShareRecord {
+  id: string;
+  orgId: string;
+  profileId: string;
+  sourcePath: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  tokenHash: string;
+  storagePath: string;
+  createdByUserId: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 export interface StoredChannelOrgMappingRecord {
   channel: ChannelType;
   channelUserId: string;
@@ -362,7 +393,7 @@ export interface DatabaseAdapter {
   createUser(record: StoredUserRecord): Promise<void>;
   updateUserProfile(
     id: string,
-    profile: { name: string | null; phone: string | null },
+    profile: { name: string | null; phone: string | null; email?: string },
     updatedAt: string,
   ): Promise<void>;
   updateUserPassword(id: string, passwordHash: string, updatedAt: string): Promise<void>;
@@ -394,6 +425,46 @@ export interface DatabaseAdapter {
   getOrgInviteByTokenHash(tokenHash: string): Promise<StoredOrgInviteRecord | null>;
   getPendingOrgInvite(orgId: string, email: string): Promise<StoredOrgInviteRecord | null>;
   markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
+
+  createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
+  listOrgMemoryProposals(
+    orgId: string,
+    status?: OrgMemoryProposalStatus,
+  ): Promise<StoredOrgMemoryProposal[]>;
+  getOrgMemoryProposal(orgId: string, id: string): Promise<StoredOrgMemoryProposal | null>;
+  getPendingOrgMemoryProposalByBullet(
+    orgId: string,
+    bullet: string,
+  ): Promise<StoredOrgMemoryProposal | null>;
+  updateOrgMemoryProposalStatus(
+    orgId: string,
+    id: string,
+    update: {
+      status: OrgMemoryProposalStatus;
+      reviewerUserId: string;
+      reviewedAt: string;
+      pinned?: boolean;
+    },
+  ): Promise<boolean>;
+  countOrgMemoryProposals(orgId: string, status: OrgMemoryProposalStatus): Promise<number>;
+
+  createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
+  updateArtifactShareSnapshot(
+    id: string,
+    snapshot: Pick<StoredArtifactShareRecord, "filename" | "mimeType" | "sizeBytes" | "storagePath">,
+  ): Promise<void>;
+  getArtifactShareByTokenHash(tokenHash: string): Promise<StoredArtifactShareRecord | null>;
+  getActiveArtifactShareByPath(
+    orgId: string,
+    profileId: string,
+    sourcePath: string,
+  ): Promise<StoredArtifactShareRecord | null>;
+  getArtifactShareById(
+    orgId: string,
+    profileId: string,
+    shareId: string,
+  ): Promise<StoredArtifactShareRecord | null>;
+  revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;

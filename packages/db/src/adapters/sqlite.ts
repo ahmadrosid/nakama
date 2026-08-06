@@ -16,6 +16,9 @@ import type {
   StoredSkillRecord,
   StoredOrgMemberRecord,
   StoredOrgInviteRecord,
+  StoredOrgMemoryProposal,
+  OrgMemoryProposalStatus,
+  StoredArtifactShareRecord,
   StoredOrganizationRecord,
   StoredUserOrganizationRecord,
   StoredProfileRecord,
@@ -298,6 +301,35 @@ interface OrgInviteRow {
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+}
+
+interface OrgMemoryProposalRow {
+  id: string;
+  org_id: string;
+  profile_id: string | null;
+  session_id: string | null;
+  proposed_by_user_id: string | null;
+  bullet: string;
+  status: string;
+  pinned: number;
+  reviewer_user_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+interface ArtifactShareRow {
+  id: string;
+  org_id: string;
+  profile_id: string;
+  source_path: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  token_hash: string;
+  storage_path: string;
+  created_by_user_id: string;
+  created_at: string;
+  revoked_at: string | null;
 }
 
 export async function createSqliteDatabase(databaseUrl: string): Promise<SqliteDatabase> {
@@ -946,7 +978,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const updateUserProfileStmt = db.prepare(`
     UPDATE users
-    SET name = ?, phone = ?, updated_at = ?
+    SET name = ?, phone = ?, email = COALESCE(?, email), updated_at = ?
     WHERE id = ?
   `);
   const updateUserPasswordStmt = db.prepare(`
@@ -1056,6 +1088,94 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET accepted_at = ?
     WHERE id = ?
   `);
+  const createOrgMemoryProposalStmt = db.prepare(`
+    INSERT INTO org_memory_proposals (
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const listOrgMemoryProposalsStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+    FROM org_memory_proposals
+    WHERE org_id = ? AND status = ?
+    ORDER BY created_at DESC
+  `);
+  const listAllOrgMemoryProposalsStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+    FROM org_memory_proposals
+    WHERE org_id = ?
+    ORDER BY created_at DESC
+  `);
+  const getOrgMemoryProposalStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+    FROM org_memory_proposals
+    WHERE org_id = ? AND id = ?
+    LIMIT 1
+  `);
+  const getPendingOrgMemoryProposalByBulletStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, session_id, proposed_by_user_id,
+      bullet, status, pinned, reviewer_user_id, reviewed_at, created_at
+    FROM org_memory_proposals
+    WHERE org_id = ? AND bullet = ? AND status = 'pending'
+    LIMIT 1
+  `);
+  const updateOrgMemoryProposalStatusStmt = db.prepare(`
+    UPDATE org_memory_proposals
+    SET status = ?, reviewer_user_id = ?, reviewed_at = ?, pinned = ?
+    WHERE org_id = ? AND id = ?
+  `);
+  const countOrgMemoryProposalsStmt = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM org_memory_proposals
+    WHERE org_id = ? AND status = ?
+  `);
+  const createArtifactShareStmt = db.prepare(`
+    INSERT INTO artifact_shares (
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateArtifactShareSnapshotStmt = db.prepare(`
+    UPDATE artifact_shares
+    SET filename = ?, mime_type = ?, size_bytes = ?, storage_path = ?
+    WHERE id = ?
+  `);
+  const getArtifactShareByTokenHashStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    FROM artifact_shares
+    WHERE token_hash = ? AND revoked_at IS NULL
+    LIMIT 1
+  `);
+  const getActiveArtifactShareByPathStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    FROM artifact_shares
+    WHERE org_id = ? AND profile_id = ? AND source_path = ? AND revoked_at IS NULL
+    LIMIT 1
+  `);
+  const getArtifactShareByIdStmt = db.prepare(`
+    SELECT
+      id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+    FROM artifact_shares
+    WHERE org_id = ? AND profile_id = ? AND id = ?
+    LIMIT 1
+  `);
+  const revokeArtifactShareStmt = db.prepare(`
+    UPDATE artifact_shares
+    SET revoked_at = ?
+    WHERE id = ? AND revoked_at IS NULL
+  `);
   const getOrgMemberStmt = db.prepare(`
     SELECT org_id, user_id, role, user_context, created_at
     FROM org_members
@@ -1118,7 +1238,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async updateUserProfile(id, profile, updatedAt) {
-      updateUserProfileStmt.run(profile.name, profile.phone, updatedAt, id);
+      updateUserProfileStmt.run(
+        profile.name,
+        profile.phone,
+        profile.email ?? null,
+        updatedAt,
+        id,
+      );
     },
 
     async updateUserPassword(id, passwordHash, updatedAt) {
@@ -1312,6 +1438,111 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async markOrgInviteAccepted(id, acceptedAt) {
       markOrgInviteAcceptedStmt.run(acceptedAt, id);
+    },
+
+    async createOrgMemoryProposal(record) {
+      createOrgMemoryProposalStmt.run(
+        record.id,
+        record.orgId,
+        record.profileId,
+        record.sessionId,
+        record.proposedByUserId,
+        record.bullet,
+        record.status,
+        record.pinned ? 1 : 0,
+        record.reviewerUserId,
+        record.reviewedAt,
+        record.createdAt,
+      );
+    },
+
+    async listOrgMemoryProposals(orgId, status) {
+      const rows = (
+        status
+          ? listOrgMemoryProposalsStmt.all(orgId, status)
+          : listAllOrgMemoryProposalsStmt.all(orgId)
+      ) as OrgMemoryProposalRow[];
+      return rows.map(toOrgMemoryProposalRecord);
+    },
+
+    async getOrgMemoryProposal(orgId, id) {
+      const row = getOrgMemoryProposalStmt.get(orgId, id) as OrgMemoryProposalRow | null;
+      return row ? toOrgMemoryProposalRecord(row) : null;
+    },
+
+    async getPendingOrgMemoryProposalByBullet(orgId, bullet) {
+      const row = getPendingOrgMemoryProposalByBulletStmt.get(orgId, bullet) as
+        | OrgMemoryProposalRow
+        | null;
+      return row ? toOrgMemoryProposalRecord(row) : null;
+    },
+
+    async updateOrgMemoryProposalStatus(orgId, id, update) {
+      const result = updateOrgMemoryProposalStatusStmt.run(
+        update.status,
+        update.reviewerUserId,
+        update.reviewedAt,
+        update.pinned ? 1 : 0,
+        orgId,
+        id,
+      );
+      return result.changes > 0;
+    },
+
+    async countOrgMemoryProposals(orgId, status) {
+      const row = countOrgMemoryProposalsStmt.get(orgId, status) as { count: number };
+      return row.count;
+    },
+
+    async createArtifactShare(record) {
+      createArtifactShareStmt.run(
+        record.id,
+        record.orgId,
+        record.profileId,
+        record.sourcePath,
+        record.filename,
+        record.mimeType,
+        record.sizeBytes,
+        record.tokenHash,
+        record.storagePath,
+        record.createdByUserId,
+        record.createdAt,
+        record.revokedAt,
+      );
+    },
+
+    async updateArtifactShareSnapshot(id, snapshot) {
+      updateArtifactShareSnapshotStmt.run(
+        snapshot.filename,
+        snapshot.mimeType,
+        snapshot.sizeBytes,
+        snapshot.storagePath,
+        id,
+      );
+    },
+
+    async getArtifactShareByTokenHash(tokenHash) {
+      const row = getArtifactShareByTokenHashStmt.get(tokenHash) as ArtifactShareRow | null;
+      return row ? toArtifactShareRecord(row) : null;
+    },
+
+    async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {
+      const row = getActiveArtifactShareByPathStmt.get(
+        orgId,
+        profileId,
+        sourcePath,
+      ) as ArtifactShareRow | null;
+      return row ? toArtifactShareRecord(row) : null;
+    },
+
+    async getArtifactShareById(orgId, profileId, shareId) {
+      const row = getArtifactShareByIdStmt.get(orgId, profileId, shareId) as ArtifactShareRow | null;
+      return row ? toArtifactShareRecord(row) : null;
+    },
+
+    async revokeArtifactShare(id, revokedAt) {
+      const result = revokeArtifactShareStmt.run(revokedAt, id);
+      return result.changes > 0;
     },
 
     async listAutomations() {
@@ -2332,6 +2563,8 @@ function parseCodingAgentHarnessProbeCache(
     return null;
   }
 
+  const normalizedNextStep = nextStep === "login" ? "retry" : nextStep;
+
   return {
     checkedAt,
     authenticated:
@@ -2341,7 +2574,7 @@ function parseCodingAgentHarnessProbeCache(
           ? null
           : null,
     ready: cache.ready === true,
-    nextStep,
+    nextStep: normalizedNextStep,
     statusMessage:
       typeof cache.statusMessage === "string"
         ? cache.statusMessage
@@ -2504,6 +2737,39 @@ function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {
     acceptedAt: row.accepted_at,
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
+  };
+}
+
+function toOrgMemoryProposalRecord(row: OrgMemoryProposalRow): StoredOrgMemoryProposal {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sessionId: row.session_id,
+    proposedByUserId: row.proposed_by_user_id,
+    bullet: row.bullet,
+    status: row.status as OrgMemoryProposalStatus,
+    pinned: Boolean(row.pinned),
+    reviewerUserId: row.reviewer_user_id,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+  };
+}
+
+function toArtifactShareRecord(row: ArtifactShareRow): StoredArtifactShareRecord {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    profileId: row.profile_id,
+    sourcePath: row.source_path,
+    filename: row.filename,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    tokenHash: row.token_hash,
+    storagePath: row.storage_path,
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at,
   };
 }
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   persistWebPublicUrl,
+  isLoopbackComposioCallbackBaseUrl,
   resolveComposioCallbackBaseUrl,
   resolveRequestClientOrigin,
 } from "./composio-callback-url";
@@ -25,6 +26,12 @@ describe("composio-callback-url", () => {
     });
 
     expect(resolveRequestClientOrigin(request)).toBe("http://localhost:3003");
+  });
+
+  test("isLoopbackComposioCallbackBaseUrl detects localhost hosts", () => {
+    expect(isLoopbackComposioCallbackBaseUrl("http://127.0.0.1:3003")).toBe(true);
+    expect(isLoopbackComposioCallbackBaseUrl("http://localhost:3003")).toBe(true);
+    expect(isLoopbackComposioCallbackBaseUrl("https://nakama.example.com")).toBe(false);
   });
 
   test("resolveComposioCallbackBaseUrl falls back to env when no request", () => {

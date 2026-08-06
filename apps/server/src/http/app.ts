@@ -12,6 +12,7 @@ import { registerModelRoutes } from "./routes/models";
 import { registerUserContextRoutes } from "./routes/user-context";
 import { registerSessionRoutes } from "./routes/sessions";
 import { registerProfileRoutes } from "./routes/profiles";
+import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerMcpRoutes } from "./routes/mcp";
 import { registerSkillRoutes } from "./routes/skills";
 import { registerToolRoutes } from "./routes/tools";
@@ -19,7 +20,7 @@ import { registerAutomationRoutes } from "./routes/automations";
 import { registerTaskRoutes } from "./routes/tasks";
 import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
 import { registerOrgMemberRoutes } from "./routes/org-members";
-import { registerInferenceGatewayRoutes } from "./routes/inference-gateway";
+import { registerOrgMemoryRoutes } from "./routes/org-memory";
 import { registerCodingAgentRoutes } from "./routes/coding-agents";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -49,14 +50,39 @@ export function createHonoApp(options: ServerOptions) {
   });
 
   app.use("*", async (c, next) => {
+    const applySecurityHeaders = (response: Response) => {
+      const headers = new Headers(response.headers);
+      headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("X-Frame-Options", "DENY");
+      headers.set("X-XSS-Protection", "1; mode=block");
+      // Only set Referrer-Policy if it's not already set
+      if (!headers.has("Referrer-Policy")) {
+        headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+      }
+      headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';");
+      // Only enable HSTS if the request is secure (HTTPS)
+      if (new URL(c.req.url).protocol === "https:") {
+        headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      }
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    };
+
     if (options.webDistDir) {
       const staticResponse = tryServeStaticWeb(c.req.raw, options.webDistDir);
       if (staticResponse) {
-        return staticResponse;
+        return applySecurityHeaders(staticResponse);
       }
     }
 
     await next();
+
+    // Apply security headers to the final response
+    const finalResponse = c.res;
+    c.res = applySecurityHeaders(finalResponse);
   });
 
   app.use("*", createAuthMiddleware(options));
@@ -71,6 +97,7 @@ export function createHonoApp(options: ServerOptions) {
   registerUserContextRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
+  registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
@@ -81,7 +108,7 @@ export function createHonoApp(options: ServerOptions) {
   registerPlatformOrgRoutes(app, options);
   registerDataPortabilityRoutes(app, options);
   registerOrgMemberRoutes(app, options);
-  registerInferenceGatewayRoutes(app, options);
+  registerOrgMemoryRoutes(app, options);
   registerCodingAgentRoutes(app, options);
 
   app.get("/openapi.json", (c) => {

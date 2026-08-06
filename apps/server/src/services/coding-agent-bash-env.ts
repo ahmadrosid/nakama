@@ -1,16 +1,12 @@
 import type { DatabaseAdapter } from "@nakama/db";
-import type { ToolContext } from "@nakama/core";
-import {
-  buildSpawnEnvForHarness,
-  getInferenceGatewayBaseUrl,
-  normalizeCodingAgentModel,
-} from "./coding-agent-spawn-env";
+import type { ToolContext, UserConfig } from "@nakama/core";
+import { mergeCodingAgentSpawnEnv } from "./coding-agent-spawn-env";
 import {
   isCodingAgentCommand,
   loadCodingAgentWorkspaceSettings,
   resolveCodingAgentHarness,
 } from "./coding-agent-harness-service";
-import { loadLocalAuthToken } from "@nakama/core";
+import { resolveCodingAgentSpawnBundle } from "./coding-agent-spawn-env";
 
 export async function resolveProfileModelId(
   db: DatabaseAdapter,
@@ -25,6 +21,7 @@ export async function enrichCodingAgentBashInput(
   db: DatabaseAdapter,
   input: unknown,
   context: ToolContext,
+  userConfig: UserConfig | null | undefined,
 ): Promise<unknown> {
   if (typeof input !== "object" || input === null) {
     return input;
@@ -37,40 +34,45 @@ export async function enrichCodingAgentBashInput(
     return input;
   }
 
-  const settings = await loadCodingAgentWorkspaceSettings(db);
+  const workspace = await loadCodingAgentWorkspaceSettings(db);
   const codingAgentRequested = record.codingAgent === true;
-  const matchesHarness = isCodingAgentCommand(command, settings.harnesses);
+  const matchesHarness = isCodingAgentCommand(command, workspace.harnesses);
 
   if (!codingAgentRequested && !matchesHarness) {
     return input;
   }
 
-  const harness = await resolveCodingAgentHarness(db);
-  const profileId = context.profileId?.trim();
   const profileModel =
-    profileId !== undefined && profileId.length > 0
-      ? normalizeCodingAgentModel(await resolveProfileModelId(db, profileId))
+    context.profileId !== undefined && context.profileId.length > 0
+      ? await resolveProfileModelId(db, context.profileId)
       : null;
-  const gatewayBaseUrl = getInferenceGatewayBaseUrl();
-  const authToken = gatewayBaseUrl ? await resolveInferenceAuthToken() : null;
-  const spawnEnv = buildSpawnEnvForHarness(harness.kind, {
-    model: profileModel,
-    gatewayBaseUrl,
-    authToken,
-    orgId: context.orgId,
-    profileId: context.profileId,
+  const harness = await resolveCodingAgentHarness(db, null, {
+    userConfig,
+    profileModel,
+  });
+  const { spawn } = await resolveCodingAgentSpawnBundle({
+    userConfig,
+    profileModel,
+    harnessKind: harness.kind,
   });
   const explicitEnv = readStringRecord(record.env);
-  const mergedEnv = { ...spawnEnv, ...explicitEnv };
+  const mergedEnv = mergeCodingAgentSpawnEnv(process.env, spawn.env, {
+    protectCredentialKeys: spawn.env && Object.keys(spawn.env).length > 0,
+    callerEnv: explicitEnv,
+  });
 
   if (Object.keys(mergedEnv).length === 0 && !codingAgentRequested) {
     return input;
   }
 
+  const envRecord = Object.fromEntries(
+    Object.entries(mergedEnv).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+
   return {
     ...record,
     codingAgent: true,
-    ...(Object.keys(mergedEnv).length > 0 ? { env: mergedEnv } : {}),
+    ...(Object.keys(envRecord).length > 0 ? { env: envRecord } : {}),
   };
 }
 
@@ -88,12 +90,4 @@ function readStringRecord(value: unknown): Record<string, string> {
   });
 
   return Object.fromEntries(entries);
-}
-
-async function resolveInferenceAuthToken(): Promise<string | null> {
-  try {
-    return await loadLocalAuthToken();
-  } catch {
-    return null;
-  }
 }

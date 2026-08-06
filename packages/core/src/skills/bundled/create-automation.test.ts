@@ -53,6 +53,23 @@ describe("bundled create-profile skill", () => {
       ),
     ).toEqual(["create-profile"]);
   });
+
+  test("body requires draft-and-confirm before create_profile", async () => {
+    const content = await readBundledSkillMarkdown("create-profile");
+    const parsed = parseSkillMarkdown(content, "create-profile/SKILL.md");
+    const body = parsed.body.toLowerCase();
+
+    expect(body).toContain("draft");
+    expect(body).toMatch(/confirm|confirmation|explicit/);
+    expect(body).toContain("create_profile");
+    expect(body).not.toMatch(/otherwise proceed/);
+    expect(body).toContain("memory.md");
+    expect(body).toMatch(/empty/);
+    expect(body).toContain("web_fetch");
+    expect(body).toMatch(/isSuper|is super|super profile/i);
+    expect(body).toMatch(/revise|edit/);
+    expect(body).toMatch(/open|dashboard|profiles/);
+  });
 });
 
 describe("bundled manage-skills skill", () => {
@@ -154,6 +171,12 @@ describe("bundled save-artifact skill", () => {
         (skill) => skill.name,
       ),
     ).toEqual(["save-artifact"]);
+
+    expect(
+      matchSkillsForMessage([discovered], "move it to artifact please").map(
+        (skill) => skill.name,
+      ),
+    ).toEqual(["save-artifact"]);
   });
 });
 
@@ -179,7 +202,7 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("archive-profile-memory");
     expect(created).toContain("save-artifact");
     expect(created).toContain("create-profile");
-    expect(created).toContain("coding-delegation");
+    expect(created).toContain("coding-agent");
     expect(created).toContain("coding-backend-codex");
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");

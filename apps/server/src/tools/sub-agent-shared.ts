@@ -11,8 +11,10 @@ export interface SubAgentRunInput {
   context?: string;
   timeoutMs?: number;
   userId?: string;
+  sessionId?: string;
   clientOrigin?: string;
   agentDepth: number;
+  onActivity?: (label: string) => void;
 }
 
 export interface SubAgentRunResult {

@@ -2,7 +2,6 @@ import type { ToolSummary } from "@nakama/core/contract";
 import { XIcon } from "lucide-react";
 import type { ChangeEvent, ReactNode, RefObject } from "react";
 import { Button } from "@/components/ui/button";
-import { ExpandableTextarea } from "@/components/ui/expandable-textarea";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,7 +20,6 @@ export function ProfileCreateDialogForm({
   profileIdHasValue,
   profileIdValid,
   profileIdHelpText,
-  prompt,
   avatarPreview,
   avatarInputRef,
   tools,
@@ -29,7 +27,6 @@ export function ProfileCreateDialogForm({
   selectedTools,
   onNameChange,
   onProfileIdChange,
-  onPromptChange,
   onAvatarSelected,
   onClearAvatar,
   onToolSelect,
@@ -42,7 +39,6 @@ export function ProfileCreateDialogForm({
   profileIdHasValue: boolean;
   profileIdValid: boolean;
   profileIdHelpText: string;
-  prompt: string;
   avatarPreview: string | null;
   avatarInputRef: RefObject<HTMLInputElement | null>;
   tools: ToolSummary[];
@@ -50,7 +46,6 @@ export function ProfileCreateDialogForm({
   selectedTools: ToolSummary[];
   onNameChange: (value: string) => void;
   onProfileIdChange: (value: string) => void;
-  onPromptChange: (value: string) => void;
   onAvatarSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onClearAvatar: () => void;
   onToolSelect: (toolId: string) => void;
@@ -146,14 +141,6 @@ export function ProfileCreateDialogForm({
         </div>
 
         <div className="space-y-4">
-          <ExpandableTextarea
-            label="System prompt"
-            htmlFor="create-profile-prompt"
-            value={prompt}
-            disabled={busy}
-            onChange={(event) => onPromptChange(event.target.value)}
-          />
-
           <Field label="Tools">
             {tools.length === 0 ? (
               <p className="text-sm text-muted-foreground">No tools available.</p>
@@ -184,12 +171,12 @@ export function ProfileCreateDialogForm({
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Selecting a tool adds it right away. Remove any you do not want below.
+                    Adds on select. Remove unwanted ones below.
                   </p>
                 </div>
 
-                <div className="rounded-md border border-border bg-muted/20 p-2">
-                  {selectedTools.length > 0 ? (
+                {selectedTools.length > 0 ? (
+                  <div className="rounded-md border border-border bg-muted/20 p-2">
                     <div className="max-h-32 overflow-y-auto pr-1">
                       <ul className="flex flex-wrap gap-2">
                         {selectedTools.map((tool) => (
@@ -209,10 +196,8 @@ export function ProfileCreateDialogForm({
                         ))}
                       </ul>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No tools added yet.</p>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </Field>

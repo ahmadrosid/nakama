@@ -220,6 +220,46 @@ describe("SkillsService", () => {
     expect(listed.skills.some((skill) => skill.name === "notes")).toBe(false);
   });
 
+  test("rejects deleting bundled system skills", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+
+    const listed = await service.listSkills();
+    const agentBrowser = listed.skills.find((skill) => skill.name === "agent-browser");
+    expect(agentBrowser).toBeTruthy();
+
+    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
+      "Bundled system skills cannot be deleted.",
+    );
+  });
+
+  test("composes always-on agent-browser capability prompt when assigned", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+
+    const agentBrowser = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "agent-browser",
+    );
+    expect(agentBrowser).toBeDefined();
+
+    expect(
+      await service.composeAgentBrowserCapabilityForProfile(ORG_ID, PROFILE_ID),
+    ).toBe("");
+
+    await db.assignSkillToProfile(PROFILE_ID, agentBrowser!.id);
+
+    const prompt = await service.composeAgentBrowserCapabilityForProfile(ORG_ID, PROFILE_ID);
+    expect(prompt).toContain("agent-browser skill");
+    expect(prompt).toContain("Available Agent Skills");
+    expect(prompt).toContain("Skills are workflow instructions");
+    expect(prompt).toContain("/skill agent-browser");
+    expect(prompt).toContain("screenshot artifacts/");
+  });
+
   test("deduplicates skills discovered from global and profile directories", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);

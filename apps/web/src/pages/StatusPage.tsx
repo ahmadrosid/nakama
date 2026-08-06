@@ -29,7 +29,7 @@ const iconTileClass =
   "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
 const iconClass = "size-5 text-foreground";
 
-export function StatusPage() {
+export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: status, error, isLoading } = useSystemStatusQuery();
   const { user } = useAuth();
   const refreshSystemStatus = useRefreshSystemStatus();
@@ -37,10 +37,13 @@ export function StatusPage() {
   const canManageWorkers = user?.isPlatformAdmin === true;
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className={cn("min-w-0", embedded ? "divide-y divide-border" : "space-y-6")}>
       {errorMessage ? (
         <div
-          className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3"
+          className={cn(
+            "flex flex-wrap items-start justify-between gap-3 border-destructive/40 bg-destructive/10 px-4 py-3",
+            embedded ? "border-b" : "rounded-md border",
+          )}
           role="alert"
         >
           <p className="min-w-0 flex-1 text-sm text-destructive">
@@ -59,11 +62,15 @@ export function StatusPage() {
       ) : null}
 
       {isLoading && !status ? (
-        <StatusSkeleton />
+        <StatusSkeleton embedded={embedded} />
       ) : status ? (
         <>
-          <StatusDashboard status={status} canManageWorkers={canManageWorkers} />
-          <LlmUsageSection usage={status.llmUsage} />
+          <StatusDashboard
+            status={status}
+            canManageWorkers={canManageWorkers}
+            embedded={embedded}
+          />
+          <LlmUsageSection usage={status.llmUsage} embedded={embedded} />
         </>
       ) : null}
     </div>
@@ -73,16 +80,20 @@ export function StatusPage() {
 function StatusDashboard({
   status,
   canManageWorkers,
+  embedded = false,
 }: {
   status: SystemStatusResponse;
   canManageWorkers: boolean;
+  embedded?: boolean;
 }) {
   const summary = useMemo(() => deriveSummary(status), [status]);
   const services = useMemo(() => buildServiceColumns(status), [status]);
   const { automationWorker, telegramWorker, whatsappWorker, discordWorker } = status;
 
   return (
-    <section className={cn(sectionClass, "min-w-0 overflow-hidden")}>
+    <section
+      className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
+    >
       <SummaryStrip status={status} summary={summary} />
 
       <div className="grid grid-cols-1 divide-y divide-border border-b border-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
@@ -170,7 +181,13 @@ function StatusDashboard({
   );
 }
 
-function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
+function LlmUsageSection({
+  usage,
+  embedded = false,
+}: {
+  usage: LlmUsageStatus;
+  embedded?: boolean;
+}) {
   const modelLabel =
     usage.currentModel ??
     (usage.providerConfigured ? "Default model" : "Not configured");
@@ -179,7 +196,7 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
-    <section className={cn(sectionClass, "min-w-0 overflow-hidden")}>
+    <section className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
@@ -272,11 +289,14 @@ function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
               {usage.costEstimated
                 ? trackedModelCount > 1
                   ? `Based on tracked usage across ${trackedModelCount} models. Actual billing may differ.`
-                  : usage.provider === "openai_compatible" || usage.provider === "openrouter"
+                  : usage.provider === "openai_compatible" ||
+                      usage.provider === "openrouter" ||
+                      usage.provider === "cerebras" ||
+                      usage.provider === "fireworks"
                     ? `Based on pricing saved in Settings for ${modelLabel}. Actual billing may differ.`
                     : `Based on catalog pricing for ${modelLabel}. Actual billing may differ.`
-                : usage.provider === "openrouter"
-                  ? "Browse or add models in Settings → Manage model to save OpenRouter pricing for cost estimates."
+                : usage.provider === "openrouter" || usage.provider === "cerebras" || usage.provider === "fireworks"
+                  ? "Browse or add models in Settings → Manage model to save pricing for cost estimates."
                   : "Add input/output $/1M per model in Settings → Manage models to estimate cost."}
             </p>
           </div>
@@ -678,10 +698,13 @@ function ToneIcon({ tone, className }: { tone: StatusTone; className?: string })
   return <XCircleIcon className={cn("text-destructive", className)} aria-hidden />;
 }
 
-function StatusSkeleton() {
+function StatusSkeleton({ embedded = false }: { embedded?: boolean } = {}) {
   return (
     <div
-      className="h-80 animate-pulse rounded-md border border-border bg-muted/40"
+      className={cn(
+        "h-80 animate-pulse bg-muted/40",
+        embedded ? "border-0" : "rounded-md border border-border",
+      )}
       aria-busy="true"
       aria-label="Loading system status"
     />

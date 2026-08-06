@@ -286,6 +286,23 @@ CREATE TABLE IF NOT EXISTS org_invites (
 
 CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
 
+CREATE TABLE IF NOT EXISTS org_memory_proposals (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT,
+  session_id TEXT,
+  proposed_by_user_id TEXT,
+  bullet TEXT NOT NULL,
+  status TEXT NOT NULL,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  reviewer_user_id TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS org_memory_proposals_org_status ON org_memory_proposals (org_id, status);
+
 CREATE TABLE IF NOT EXISTS channel_org_mappings (
   channel TEXT NOT NULL,
   channel_user_id TEXT NOT NULL,
@@ -375,3 +392,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS composio_user_connections_user_toolkit_unique
 
 CREATE INDEX IF NOT EXISTS composio_user_connections_org_user
   ON composio_user_connections (org_id, user_id);
+
+CREATE TABLE IF NOT EXISTS artifact_shares (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  source_path TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  token_hash TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_token_hash_unique ON artifact_shares (token_hash);
+
+CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
+  ON artifact_shares (org_id, profile_id, source_path)
+  WHERE revoked_at IS NULL;

@@ -9,6 +9,9 @@ const BUILTIN_LABELS: Record<
   openrouter: "OpenRouter",
   gemini: "Gemini",
   deepseek: "DeepSeek",
+  cerebras: "Cerebras",
+  fireworks: "Fireworks",
+  ollama: "Ollama",
   opencode_go: "OpenCode Go",
 };
 

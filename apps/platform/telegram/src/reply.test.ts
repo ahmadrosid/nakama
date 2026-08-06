@@ -20,6 +20,10 @@ function createMessenger(): TelegramRichMessenger & {
       plain.push(text);
       return { message_id: plain.length };
     },
+    async sendRaw(text: string) {
+      plain.push(text);
+      return { message_id: plain.length };
+    },
     async edit() {},
   };
 }

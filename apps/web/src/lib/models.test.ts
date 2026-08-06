@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { encodeModelSelection, resolveModelThinkingSupport, resolveModelVisionSupport } from "./models";
+import {
+  encodeModelSelection,
+  firstAvailableProviderOption,
+  hasOpenCodeZenProvider,
+  isOpenCodeZenBaseUrl,
+  isProviderTypeAlreadyConfigured,
+  resolveModelThinkingSupport,
+  resolveModelVisionSupport,
+} from "./models";
 
 function group(
   providerId: string,
-  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek",
+  provider: "openai_compatible" | "openai" | "opencode_go" | "openrouter" | "deepseek" | "cerebras" | "fireworks",
   flags?: { supportsThinking?: boolean; supportsVision?: boolean },
 ) {
   return [
@@ -91,6 +99,38 @@ describe("resolveModelThinkingSupport", () => {
       ),
     ).toBe(true);
   });
+
+  test("treats cerebras models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras", { supportsThinking: true }),
+      ),
+    ).toBe(true);
+  });
+
+  test("treats fireworks models as opt-in only", () => {
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelThinkingSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks", { supportsThinking: true }),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("resolveModelVisionSupport", () => {
@@ -130,6 +170,119 @@ describe("resolveModelVisionSupport", () => {
         encodeModelSelection("openai-1", "model-1"),
         group("openai-1", "openai", { supportsVision: false }),
       ),
+    ).toBe(false);
+  });
+
+  test("treats cerebras models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("cb-1", "model-1"),
+        group("cb-1", "cerebras", { supportsVision: true }),
+      ),
+    ).toBe(true);
+  });
+
+  test("treats fireworks models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks"),
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("fw-1", "model-1"),
+        group("fw-1", "fireworks", { supportsVision: true }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("isProviderTypeAlreadyConfigured", () => {
+  test("treats builtin providers as taken once configured", () => {
+    const configured = new Set(["openai", "anthropic"]);
+
+    expect(isProviderTypeAlreadyConfigured("openai", configured)).toBe(true);
+    expect(isProviderTypeAlreadyConfigured("gemini", configured)).toBe(false);
+  });
+
+  test("always allows another openai_compatible instance", () => {
+    const configured = new Set(["openai_compatible", "openai"]);
+
+    expect(isProviderTypeAlreadyConfigured("openai_compatible", configured)).toBe(false);
+  });
+
+  test("always allows another ollama instance", () => {
+    const configured = new Set(["ollama", "openai"]);
+
+    expect(isProviderTypeAlreadyConfigured("ollama", configured)).toBe(false);
+  });
+});
+
+describe("firstAvailableProviderOption", () => {
+  test("keeps preferred provider when it is still free", () => {
+    expect(firstAvailableProviderOption(new Set(["anthropic"]), "openai")).toBe("openai");
+  });
+
+  test("falls through to the next free builtin, then custom", () => {
+    expect(firstAvailableProviderOption(new Set(["openai"]), "openai")).toBe("anthropic");
+    expect(
+      firstAvailableProviderOption(
+        new Set([
+          "openai",
+          "anthropic",
+          "openrouter",
+          "gemini",
+          "deepseek",
+          "cerebras",
+          "fireworks",
+          "opencode_go",
+        ]),
+        "openai",
+      ),
+    ).toBe("ollama");
+  });
+});
+
+describe("isOpenCodeZenBaseUrl", () => {
+  test("matches Zen v1 and rejects OpenCode Go", () => {
+    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1")).toBe(true);
+    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1/")).toBe(true);
+    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/go/v1")).toBe(false);
+    expect(isOpenCodeZenBaseUrl("https://api.openai.com/v1")).toBe(false);
+  });
+});
+
+describe("hasOpenCodeZenProvider", () => {
+  test("detects Zen by base URL or label on openai_compatible", () => {
+    expect(
+      hasOpenCodeZenProvider([
+        { type: "openai_compatible", baseUrl: "https://opencode.ai/zen/v1", label: "OpenCode Zen" },
+      ]),
+    ).toBe(true);
+
+    expect(
+      hasOpenCodeZenProvider([
+        { type: "openai_compatible", baseUrl: "https://localhost:11434/v1", label: "Ollama" },
+      ]),
+    ).toBe(false);
+
+    expect(
+      hasOpenCodeZenProvider([
+        { type: "openai_compatible", baseUrl: null, label: "OpenCode Zen" },
+      ]),
+    ).toBe(true);
+
+    expect(
+      hasOpenCodeZenProvider([{ type: "opencode_go", baseUrl: "https://opencode.ai/zen/go/v1" }]),
     ).toBe(false);
   });
 });

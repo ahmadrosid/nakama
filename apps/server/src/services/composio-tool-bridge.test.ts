@@ -158,13 +158,59 @@ describe("composio-tool-bridge", () => {
 
     const result = await tools[0]?.run(
       { toolkit_slug: "gmail" },
-      { clientOrigin: "http://localhost:3003" },
+      { clientOrigin: "https://nakama.example.com" },
     );
     expect(result).toMatchObject({
       toolkitSlug: "gmail",
       displayName: "Gmail",
       redirectUrl: "https://oauth.example.com/authorize",
     });
+  });
+
+  test("connect tool rejects loopback callback URLs", async () => {
+    const composioService = {
+      isAvailable: async () => true,
+      async getAssignedToolkitRecords() {
+        return [
+          {
+            orgToolkit: {
+              id: "ctk_1",
+              orgId: "org_1",
+              toolkitSlug: "gmail",
+              displayName: "Gmail",
+              status: "enabled",
+              cachedTools: [],
+              lastError: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            userConnection: null,
+            allowedActions: null,
+          },
+        ];
+      },
+      async connectToolkit() {
+        throw new Error("should not be called");
+      },
+    } as unknown as ComposioService;
+
+    const tools = await buildComposioConnectTools(
+      "org_1",
+      "usr_1",
+      "profile_1",
+      composioService,
+    );
+
+    const result = await tools[0]?.run(
+      { toolkit_slug: "gmail" },
+      { clientOrigin: "http://127.0.0.1:3003" },
+    );
+
+    expect(result).toMatchObject({
+      code: "COMPOSIO_POLICY",
+      toolkitSlug: "gmail",
+    });
+    expect(String((result as { error?: string }).error)).toContain("localhost");
   });
 
   test("resolveComposioCallbackBaseUrl prefers clientOrigin from browser", () => {

@@ -1,3 +1,4 @@
+import type { DeliverableChannelArtifact } from "@nakama/core/channel-artifact-delivery";
 import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,8 @@ export interface ChatSessionRecord {
   sessionId: string;
   profileId: string;
   updatedAt: string;
+  artifactShareUrls?: Record<string, string>;
+  deliverableArtifacts?: DeliverableChannelArtifact[];
 }
 
 type ChatSessionMap = Record<string, ChatSessionRecord>;
@@ -46,6 +49,33 @@ export class SessionStore {
 
   delete(chatId: string): void {
     delete this.map[chatId];
+  }
+
+  getArtifactShareUrls(chatId: string): Record<string, string> {
+    return { ...(this.get(chatId)?.artifactShareUrls ?? {}) };
+  }
+
+  getDeliverableArtifacts(chatId: string): DeliverableChannelArtifact[] {
+    return [...(this.get(chatId)?.deliverableArtifacts ?? [])];
+  }
+
+  updateArtifactState(
+    chatId: string,
+    update: {
+      artifactShareUrls?: Record<string, string>;
+      deliverableArtifacts?: DeliverableChannelArtifact[];
+    },
+  ): void {
+    const existing = this.get(chatId);
+    if (!existing) {
+      return;
+    }
+
+    this.set(chatId, {
+      ...existing,
+      artifactShareUrls: update.artifactShareUrls ?? existing.artifactShareUrls,
+      deliverableArtifacts: update.deliverableArtifacts ?? existing.deliverableArtifacts,
+    });
   }
 
   async save(): Promise<void> {

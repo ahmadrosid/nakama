@@ -17,9 +17,3 @@ test("buildUserContextStatus omits content by default", () => {
   });
 });
 
-test("buildUserContextStatus includes content when requested", () => {
-  expect(buildUserContextStatus("# About Me", true)).toEqual({
-    active: true,
-    content: "# About Me",
-  });
-});

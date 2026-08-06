@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Building2Icon,
-  ChevronsUpDownIcon,
+  ChevronDownIcon,
   PencilIcon,
   PlusIcon,
 } from "lucide-react";
@@ -49,27 +48,28 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const { user, orgs, activeOrg, switchOrg, createOrg, updateOrg } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editingOrg, setEditingOrg] = useState<UserOrgSummary | null>(null);
+  const editingOrgRef = useRef<UserOrgSummary | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
+  const slugEditedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!slugEdited) {
+    if (!slugEditedRef.current) {
       setSlug(slugifyOrganizationName(name));
     }
-  }, [name, slugEdited]);
+  }, [name]);
 
   if (!user || orgs.length === 0) {
     return null;
   }
 
   const label = activeOrg?.name ?? "Organization";
+  const initial = label.charAt(0).toUpperCase();
 
   function openEditDialog(org: UserOrgSummary) {
-    setEditingOrg(org);
+    editingOrgRef.current = org;
     setName(org.name);
     setError(null);
     setEditOpen(true);
@@ -99,7 +99,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       setCreateOpen(false);
       setName("");
       setSlug("");
-      setSlugEdited(false);
+      slugEditedRef.current = false;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create organization");
     } finally {
@@ -109,7 +109,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
 
   async function handleEdit(event: React.FormEvent) {
     event.preventDefault();
-    if (!editingOrg) {
+    if (!editingOrgRef.current) {
       return;
     }
 
@@ -124,9 +124,9 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
     setIsSubmitting(true);
 
     try {
-      await updateOrg(editingOrg.id, { name: trimmedName });
+      await updateOrg(editingOrgRef.current.id, { name: trimmedName });
       setEditOpen(false);
-      setEditingOrg(null);
+      editingOrgRef.current = null;
       setName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update organization");
@@ -141,18 +141,23 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       variant="ghost"
       title={collapsed ? label : undefined}
       className={cn(
-        "h-auto min-w-0 justify-start gap-2 px-2 py-1.5 text-left font-normal hover:bg-sidebar-accent/60",
-        collapsed ? "size-9 justify-center px-0" : "w-full",
+        "font-normal hover:bg-sidebar-accent/60 motion-reduce:transition-none",
+        collapsed
+          ? "sidebar-nav-link sidebar-nav-link--collapsed p-0"
+          : "h-auto w-full min-w-0 justify-start gap-2 px-2 py-1.5 text-left",
       )}
       aria-label={collapsed ? `Current organization: ${label}` : undefined}
     >
-      <Building2Icon className="size-4 shrink-0 text-muted-foreground" />
-      {!collapsed ? (
+      {collapsed ? (
+        <span className="flex size-8 items-center justify-center rounded-md bg-muted text-xs font-semibold text-foreground">
+          {initial}
+        </span>
+      ) : (
         <>
           <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-          <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
         </>
-      ) : null}
+      )}
     </Button>
   );
 
@@ -161,7 +166,15 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       <DropdownMenu>
         <DropdownMenuTrigger render={trigger} />
 
-        <DropdownMenuContent align="start" className="w-64 p-0">
+        <DropdownMenuContent
+          align="start"
+          side={collapsed ? "right" : "bottom"}
+          sideOffset={8}
+          className="w-64 p-0"
+        >
+          <div className="border-b border-border/50 px-2 py-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Select organization</p>
+          </div>
           <div className="p-1">
             {orgs.map((org) => (
               <DropdownMenuItem
@@ -201,13 +214,13 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
           {user.isPlatformAdmin ? (
             <div className="border-t border-border/50 bg-muted/30 p-1">
               <DropdownMenuItem
-                className="text-muted-foreground"
+                className="cursor-pointer text-muted-foreground"
                 onClick={() => {
                   setError(null);
                   setName("");
-                  setSlug("");
-                  setSlugEdited(false);
-                  setCreateOpen(true);
+      setSlug("");
+      slugEditedRef.current = false;
+      setCreateOpen(true);
                 }}
               >
                 <PlusIcon className="size-4" />
@@ -245,7 +258,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                   id="create-org-slug"
                   value={slug}
                   onChange={(event) => {
-                    setSlugEdited(true);
+                    slugEditedRef.current = true;
                     setSlug(event.target.value);
                   }}
                   placeholder="acme-corp"
@@ -268,7 +281,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
         onOpenChange={(open) => {
           setEditOpen(open);
           if (!open) {
-            setEditingOrg(null);
+            editingOrgRef.current = null;
             setError(null);
           }
         }}

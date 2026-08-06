@@ -1,0 +1,145 @@
+---
+title: "MCP Servers"
+description: "Connect external MCP servers to Nakama profiles and expose new tools safely."
+---
+
+An **MCP server** is an external tool provider. Nakama acts as an **MCP client**: it connects to servers you register, caches their tools, and exposes them in chat like [builtin tools](/builtin-tools).
+
+- Register a server once (platform admin)
+- Assign it to profiles that need it
+- Tools appear at chat time, namespaced as `{serverName}__{toolName}`
+
+Use MCP when you need product-specific or internal capabilities — databases, SaaS APIs, local binaries — without writing custom Nakama code. For capabilities every profile should have by default, use a builtin tool or [bundled skill](/skills) instead.
+
+## Transports
+
+| Transport | When to use | Config |
+|-----------|-------------|--------|
+| `http` | Remote endpoint (SaaS MCP, shared service) | `url`, optional `headers` |
+| `stdio` | Local command (`npx` package, binary) | `command`, optional `args`, `env` |
+
+**HTTP** — Nakama opens a streamable HTTP connection and reuses it across turns.
+
+```json
+{
+  "url": "https://mcp.example.com/sse",
+  "headers": { "Authorization": "Bearer my-token" }
+}
+```
+
+**stdio** — Nakama spawns one process **per profile**, with cwd set to that profile's soul directory (`~/.nakama/orgs/{orgId}/profiles/{profileId}/`). HTTP servers share one connection across profiles.
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "some-mcp-package"],
+  "env": { "API_KEY": "secret-value" }
+}
+```
+
+## Tool naming and lifecycle
+
+MCP tools are namespaced as `{serverName}__{toolName}` to avoid collisions with builtins and other servers (e.g. `github__read_file`). Invalid characters become `_`; duplicates get a numeric suffix.
+
+Nakama **caches** the tool list at connect time — it is not re-fetched on every chat turn.
+
+| State | Meaning |
+|-------|---------|
+| `connected` | Active connection and cached tools |
+| `disconnected` | No connection; tools stale or empty |
+| `error` | Last connect/sync failed — see `lastError` |
+
+- **Connect** — opens the client, fetches and caches tools
+- **Sync** — refreshes the cache from an existing connection (after the server adds/removes tools)
+- **Startup** — Nakama auto-reconnects every **enabled** server; failures log a warning and set status to `error`
+
+## Setup
+
+Platform admins manage servers at **Agent → System → MCP** and assign them on **Agent → Profiles** → profile → **MCP servers**. Registering a server does not assign it to any profile.
+
+### Add a server
+
+1. Open **Agent → System → MCP** → **Add server**
+2. Choose **HTTP** or **Command**, enter name and config
+3. **Test connection**, then save — enabled servers connect immediately
+
+### Assign to a profile
+
+1. Open the profile on **Agent → Profiles**
+2. In **MCP servers**, click **Assign existing** (or **Add MCP server** to register inline)
+3. Unassigning removes tools from the next chat; deleting a server removes it from all profiles
+
+### Example: Exa web search
+
+Nakama ships a preinstalled **exa** server (`https://mcp.exa.ai/mcp`) with `web_search_exa` and `web_fetch_exa`. The shared free tier can rate-limit; add your own [Exa API key](https://dashboard.exa.ai/api-keys) under **Headers**:
+
+- **Key:** `x-api-key`
+- **Value:** your API key
+
+![Add an HTTP MCP server with an Exa API key header](/screenshots/mcp-exa-api-key.png)
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai/mcp",
+      "headers": { "x-api-key": "YOUR_EXA_API_KEY" }
+    }
+  }
+}
+```
+
+Tools appear as `exa__web_search_exa` and `exa__web_fetch_exa`.
+
+### Import from an existing config
+
+Use **Import JSON** or paste a Cursor-style `mcpServers` block onto the form. A bare server object (top-level `command` or `url`) also works — the first entry fills the form for review.
+
+## Secrets
+
+HTTP headers and stdio `env` values are secrets:
+
+- API and dashboard return them as `••••••••`
+- Leave a field blank when editing to keep the stored value
+- **Test connection** merges your input with stored secrets, so you can test without re-entering them
+
+## Config reference
+
+### HTTP
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `url` | string | Yes | Valid URL |
+| `headers` | Record&lt;string, string&gt; | No | Auth or custom headers |
+
+### stdio
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `command` | string | Yes | Executable on PATH or absolute path |
+| `args` | string[] | No | Command arguments |
+| `env` | Record&lt;string, string&gt; | No | Child process environment |
+
+## Permissions
+
+MCP management is platform-admin only (same as profiles, builtins, and skills).
+
+| Actor | Manage MCP | Use MCP tools in chat |
+|-------|------------|----------------------|
+| Platform admin | Yes | Yes |
+| Org admin / member | No | Yes |
+| Org viewer | No | No |
+
+## Troubleshooting
+
+- **`error` status** — check `lastError`: wrong URL, missing `command`, unreachable host, or expired credentials
+- **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
+- **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
+- **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect
+- **Unexpected tool name** — names are sanitized to `a-zA-Z0-9_-`; `tools.list` on server `user.tolaria` becomes `user_tolaria__tools_list`
+
+## Related
+
+- [Builtin tools](/builtin-tools) — tools that ship with Nakama
+- [Profiles](/profiles) — designing bots and tool access
+- [Multi-tenancy](/multi-tenancy) — org roles and admin boundaries

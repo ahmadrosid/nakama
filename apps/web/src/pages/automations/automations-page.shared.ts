@@ -1,6 +1,5 @@
 import type {
   AutomationRunRecord,
-  AutomationRunStatus,
   AutomationTrigger,
   StoredAutomation,
 } from "@nakama/core/contract";
@@ -74,18 +73,6 @@ export function formatRunDayLabel(value: string): string {
     day: "numeric",
     year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
   });
-}
-
-export function runHistoryShellClass(status: AutomationRunStatus): string {
-  if (status === "failed") {
-    return "border-destructive/30";
-  }
-
-  if (status === "running") {
-    return "border-border/80";
-  }
-
-  return "border-border/60";
 }
 
 export function runPreviewText(run: AutomationRunRecord): string | null {

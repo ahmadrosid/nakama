@@ -28,6 +28,12 @@ export type StreamHandler = (delta: string) => void;
 export interface StreamHandlers {
   onChunk: StreamHandler;
   onThinking?: StreamHandler;
+  onToolInputDelta?: (event: {
+    toolCallId: string;
+    tool: string;
+    delta: string;
+    accumulatedArguments?: string;
+  }) => void;
   onToolStart?: (event: {
     toolCallId: string;
     tool: string;
@@ -38,6 +44,7 @@ export interface StreamHandlers {
     tool: string;
     result: unknown;
   }) => void;
+  onSubAgentActivity?: (event: { parentToolCallId: string; label: string }) => void;
   onTodosUpdated?: (todos: AgentTodo[]) => void;
   onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
 }
@@ -60,5 +67,9 @@ export interface RemoteChatSession {
   clear(): Promise<void>;
   purge(): Promise<void>;
   getMessages(): Promise<ChatMessage[]>;
+  subscribeStream(
+    handler: StreamHandler | StreamHandlers,
+    options?: SendStreamOptions,
+  ): Promise<{ reconnected: boolean; reply?: string }>;
   createAutomation(prompt: string): Promise<AutomationDefinition>;
 }

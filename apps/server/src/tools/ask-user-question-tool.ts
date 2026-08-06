@@ -8,47 +8,21 @@ export function createAskUserQuestionTools(
     {
       name: "ask_user_question",
       description:
-        "Ask the user a short step-by-step questionnaire when you need missing information before continuing. Prefer 2-4 predefined choices for each question, and when useful also allow the user to type their own custom answer. Keep the questionnaire concise and wait for the user's answers before continuing.",
+        "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
       parameters: {
         type: "object",
         properties: {
-          title: {
-            type: "string",
-            description: "Short heading shown above the questionnaire.",
-          },
+          title: { type: "string" },
           questions: {
             type: "array",
-            description: "Questions to show to the user.",
             items: {
               type: "object",
               properties: {
-                id: { type: "string", description: "Stable question identifier." },
-                prompt: { type: "string", description: "Question text shown to the user." },
-                allowCustomAnswer: {
-                  type: "boolean",
-                  description:
-                    "Whether the user may provide their own custom answer in addition to the listed choices.",
-                },
-                placeholder: {
-                  type: "string",
-                  description: "Optional placeholder for the custom answer input.",
-                },
-                choices: {
-                  type: "array",
-                  description:
-                    "Optional single-select choices shown to the user. Prefer concrete options first, and also allow custom input when the user may want to provide their own answer.",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string", description: "Stable choice identifier." },
-                      label: { type: "string", description: "Choice text shown to the user." },
-                    },
-                    required: ["id", "label"],
-                    additionalProperties: false,
-                  },
-                },
+                prompt: { type: "string" },
+                choices: { type: "array", items: { type: "string" } },
+                allowCustomAnswer: { type: "boolean" },
               },
-              required: ["id", "prompt", "allowCustomAnswer", "choices"],
+              required: ["prompt", "choices"],
               additionalProperties: false,
             },
           },
@@ -76,6 +50,54 @@ export function createAskUserQuestionTools(
   ];
 }
 
+function slugId(value: string, fallback: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return slug || fallback;
+}
+
+function readChoices(
+  input: unknown,
+): Array<{ id?: string; label: string }> | null {
+  if (!Array.isArray(input)) {
+    return null;
+  }
+
+  const choices: Array<{ id?: string; label: string }> = [];
+
+  for (const item of input) {
+    if (typeof item === "string") {
+      const label = item.trim();
+      if (!label) {
+        return null;
+      }
+      choices.push({ label });
+      continue;
+    }
+
+    // Tolerate legacy { id, label } payloads from older prompts/cassettes.
+    if (typeof item === "object" && item !== null) {
+      const record = item as Record<string, unknown>;
+      const label = typeof record.label === "string" ? record.label.trim() : "";
+      const id = typeof record.id === "string" ? record.id.trim() : "";
+      if (!label) {
+        return null;
+      }
+      choices.push(id ? { id, label } : { label });
+      continue;
+    }
+
+    return null;
+  }
+
+  return choices;
+}
+
 function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
   if (typeof input !== "object" || input === null) {
     return null;
@@ -89,50 +111,36 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
     return null;
   }
 
-  const parsed = questions.map((item) => {
+  const parsed = questions.map((item, questionIndex) => {
     if (typeof item !== "object" || item === null) {
       return null;
     }
 
     const question = item as Record<string, unknown>;
-    const id = typeof question.id === "string" ? question.id.trim() : "";
     const prompt = typeof question.prompt === "string" ? question.prompt.trim() : "";
+    const rawChoices = readChoices(question.choices);
     const allowCustomAnswer =
-      typeof question.allowCustomAnswer === "boolean" ? question.allowCustomAnswer : null;
+      typeof question.allowCustomAnswer === "boolean" ? question.allowCustomAnswer : false;
     const placeholder =
       typeof question.placeholder === "string" && question.placeholder.trim()
         ? question.placeholder.trim()
         : undefined;
-    const choicesInput = Array.isArray(question.choices) ? question.choices : null;
+    const explicitId = typeof question.id === "string" ? question.id.trim() : "";
 
-    if (!id || !prompt || allowCustomAnswer === null || !choicesInput) {
+    if (!prompt || !rawChoices) {
       return null;
     }
 
-    const choices = choicesInput.map((choice) => {
-      if (typeof choice !== "object" || choice === null) {
-        return null;
-      }
-
-      const value = choice as Record<string, unknown>;
-      const choiceId = typeof value.id === "string" ? value.id.trim() : "";
-      const label = typeof value.label === "string" ? value.label.trim() : "";
-
-      if (!choiceId || !label) {
-        return null;
-      }
-
-      return { id: choiceId, label };
-    });
-
-    if (choices.some((choice) => choice === null)) {
-      return null;
-    }
+    const questionId = explicitId || slugId(prompt, `q${questionIndex + 1}`);
+    const choices = rawChoices.map((choice, choiceIndex) => ({
+      id: choice.id || slugId(choice.label, `${questionId}_c${choiceIndex + 1}`),
+      label: choice.label,
+    }));
 
     return {
-      id,
+      id: questionId,
       prompt,
-      choices: choices as Array<{ id: string; label: string }>,
+      choices,
       allowCustomAnswer,
       placeholder,
     };

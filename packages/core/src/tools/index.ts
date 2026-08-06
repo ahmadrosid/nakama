@@ -9,3 +9,4 @@ export * from "./schema";
 export * from "./web-search";
 export * from "./web-fetch";
 export * from "./email";
+export * from "./extract-document-text";

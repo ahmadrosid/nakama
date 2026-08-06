@@ -8,14 +8,17 @@ import type {
   StoredCodingAgentHarnessRecord,
 } from "@nakama/db";
 import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
+import type { UserConfig } from "@nakama/core";
 import { ensureProcessPath, ensureBunGlobalInstallDirs, getToolExecutionEnv } from "../lib/ensure-process-path";
+import { mergeCodingAgentSpawnEnv, resolveCodingAgentSpawnBundle } from "./coding-agent-spawn-env";
+import { buildHarnessNonInteractiveArgs } from "./coding-agent-command";
 
 export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   installed: boolean;
   version: string | null;
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "install" | "login" | "retry" | null;
+  nextStep: "install" | "retry" | null;
   statusMessage: string | null;
 }
 
@@ -71,11 +74,17 @@ export interface CodingAgentWorkspaceSettings {
 
 const PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
 
+export interface CodingAgentHarnessProbeContext {
+  userConfig?: UserConfig | null;
+  profileModel?: string | null;
+}
+
 export interface ListCodingAgentHarnessStatusesOptions {
   /** When true, run live readiness probes for installed harnesses. Default false (use cache). */
   probe?: boolean;
   /** When set with probe, only probe this harness id. */
   harnessId?: string | null;
+  probeContext?: CodingAgentHarnessProbeContext;
 }
 
 export interface CodingAgentHarnessInstallProgress {
@@ -149,17 +158,33 @@ export async function listCodingAgentHarnessStatuses(
         probe && (probeHarnessId === null || probeHarnessId === harness.id);
 
       if (!shouldProbe) {
-        return buildHarnessStatusFromCache(harness, runtime);
+        if (isProbeCacheFresh(harness.probeCache)) {
+          return buildHarnessStatusFromCache(harness, runtime);
+        }
+
+        const light = await probeHarnessLight(harness, options.probeContext);
+
+        return {
+          ...harness,
+          ...runtime,
+          authenticated: light.authenticated,
+          ready: light.ready,
+          nextStep: light.nextStep,
+          statusMessage: light.statusMessage,
+        };
       }
 
-      const probed = await probeHarnessReadiness({
-        ...harness,
-        ...runtime,
-        authenticated: null,
-        ready: false,
-        nextStep: null,
-        statusMessage: null,
-      });
+      const probed = await probeHarnessExec(
+        {
+          ...harness,
+          ...runtime,
+          authenticated: null,
+          ready: false,
+          nextStep: null,
+          statusMessage: null,
+        },
+        options.probeContext,
+      );
 
       return {
         ...harness,
@@ -176,6 +201,7 @@ export async function listCodingAgentHarnessStatuses(
 export async function refreshCodingAgentHarnessProbe(
   db: DatabaseAdapter,
   harnessId: string,
+  probeContext?: CodingAgentHarnessProbeContext,
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const harness = settings.harnesses.find((entry) => entry.id === harnessId);
@@ -199,14 +225,17 @@ export async function refreshCodingAgentHarnessProbe(
     };
   }
 
-  const probe = await probeHarnessReadiness({
-    ...harness,
-    ...runtime,
-    authenticated: null,
-    ready: false,
-    nextStep: null,
-    statusMessage: null,
-  });
+  const probe = await probeHarnessExec(
+    {
+      ...harness,
+      ...runtime,
+      authenticated: null,
+      ready: false,
+      nextStep: null,
+      statusMessage: null,
+    },
+    probeContext,
+  );
 
   const checkedAt = new Date().toISOString();
   const probeCache: StoredCodingAgentHarnessProbeCache = {
@@ -309,6 +338,7 @@ export function isCodingAgentCommand(
 export async function resolveCodingAgentHarness(
   db: DatabaseAdapter,
   preferredKind?: StoredCodingAgentHarnessKind | null,
+  probeContext?: CodingAgentHarnessProbeContext,
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const statuses = await listCodingAgentHarnessStatuses(db);
@@ -320,10 +350,7 @@ export async function resolveCodingAgentHarness(
     }
 
     const message =
-      harness.statusMessage ??
-      (harness.nextStep === "login"
-        ? authenticationHelpForHarness(harness.kind)
-        : `${harness.name} is not ready.`);
+      harness.statusMessage ?? `${harness.name} is not ready.`;
 
     return new Error(message);
   };
@@ -333,7 +360,7 @@ export async function resolveCodingAgentHarness(
       return harness;
     }
 
-    const refreshed = await refreshCodingAgentHarnessProbe(db, harness.id);
+    const refreshed = await refreshCodingAgentHarnessProbe(db, harness.id, probeContext);
 
     if (refreshed.ready) {
       return refreshed;
@@ -370,6 +397,7 @@ export async function resolveCodingAgentHarness(
 export async function verifyCodingAgentHarness(
   db: DatabaseAdapter,
   harnessId?: string | null,
+  probeContext?: CodingAgentHarnessProbeContext,
 ): Promise<{
   ok: boolean;
   harnessId: string | null;
@@ -378,7 +406,7 @@ export async function verifyCodingAgentHarness(
   installed: boolean;
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "install" | "login" | "retry" | null;
+  nextStep: "install" | "retry" | null;
   statusMessage: string | null;
   error: string | null;
 }> {
@@ -407,7 +435,7 @@ export async function verifyCodingAgentHarness(
   let harness: CodingAgentHarnessStatus;
 
   try {
-    harness = await refreshCodingAgentHarnessProbe(db, targetHarnessId);
+    harness = await refreshCodingAgentHarnessProbe(db, targetHarnessId, probeContext);
   } catch {
     return {
       ok: false,
@@ -436,9 +464,7 @@ export async function verifyCodingAgentHarness(
     error: harness.installed
       ? harness.ready
         ? null
-        : harness.nextStep === "login"
-          ? authenticationHelpForHarness(harness.kind)
-          : harness.statusMessage ?? `Nakama could not verify ${harness.name} yet.`
+        : harness.statusMessage ?? `Nakama could not verify ${harness.name} yet.`
       : `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
   };
 }
@@ -680,18 +706,58 @@ export async function installCodingAgentHarness(
   return updated;
 }
 
-async function probeHarnessReadiness(
+async function probeHarnessLight(
   harness: CodingAgentHarnessStatus,
+  probeContext?: CodingAgentHarnessProbeContext,
 ): Promise<{
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "login" | "retry" | null;
+  nextStep: "retry" | null;
   statusMessage: string | null;
 }> {
+  const { routing } = await resolveCodingAgentSpawnBundle({
+    userConfig: probeContext?.userConfig,
+    profileModel: probeContext?.profileModel ?? null,
+    harnessKind: harness.kind,
+  });
+
+  if (routing.active) {
+    return {
+      authenticated: true,
+      ready: true,
+      nextStep: null,
+      statusMessage: `${harness.name} is installed and provider passthrough is active.`,
+    };
+  }
+
+  return {
+    authenticated: routing.configured ? false : null,
+    ready: false,
+    nextStep: "retry",
+    statusMessage:
+      routing.error ??
+      `${harness.name} is installed but provider passthrough is not active. Check Settings → Provider.`,
+  };
+}
+
+async function probeHarnessExec(
+  harness: CodingAgentHarnessStatus,
+  probeContext?: CodingAgentHarnessProbeContext,
+): Promise<{
+  authenticated: boolean | null;
+  ready: boolean;
+  nextStep: "retry" | null;
+  statusMessage: string | null;
+}> {
+  const { spawn, routing } = await resolveCodingAgentSpawnBundle({
+    userConfig: probeContext?.userConfig,
+    profileModel: probeContext?.profileModel ?? null,
+    harnessKind: harness.kind,
+  });
   const tempDir = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-probe-"));
 
   try {
-    const result = await runProbeCommand(harness, tempDir);
+    const result = await runProbeCommand(harness, tempDir, spawn.env);
     const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
 
     if (result.timedOut) {
@@ -708,7 +774,7 @@ async function probeHarnessReadiness(
         authenticated: true,
         ready: true,
         nextStep: null,
-        statusMessage: `${harness.name} is installed and ready.`,
+        statusMessage: `${harness.name} is installed and ready via Nakama provider passthrough.`,
       };
     }
 
@@ -716,8 +782,10 @@ async function probeHarnessReadiness(
       return {
         authenticated: false,
         ready: false,
-        nextStep: "login",
-        statusMessage: `${harness.name} is installed but still needs login.`,
+        nextStep: "retry",
+        statusMessage:
+          routing.error ??
+          `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`,
       };
     }
 
@@ -728,6 +796,7 @@ async function probeHarnessReadiness(
       statusMessage: `${harness.name} is installed but the readiness check failed.`,
     };
   } finally {
+    await spawn.cleanup?.();
     await rm(tempDir, { recursive: true, force: true });
   }
 }
@@ -735,6 +804,7 @@ async function probeHarnessReadiness(
 async function runProbeCommand(
   harness: CodingAgentHarnessStatus,
   cwd: string,
+  spawnEnv: Record<string, string> = {},
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -744,12 +814,16 @@ async function runProbeCommand(
   const { spawn } = await import("node:child_process");
   const timeoutMs = 15_000;
   const prompt = "Reply with OK and nothing else.";
-  const args = buildProbeArgs(harness, prompt, cwd);
+  const args = buildHarnessNonInteractiveArgs(harness.kind, {
+    prompt,
+    cwd,
+    baseArgs: harness.args,
+  });
 
   return new Promise((resolve) => {
     const child = spawn(harness.command, args, {
       cwd,
-      env: getToolExecutionEnv(),
+      env: mergeCodingAgentSpawnEnv(getToolExecutionEnv(), spawnEnv),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -788,68 +862,10 @@ async function runProbeCommand(
   });
 }
 
-function buildProbeArgs(
-  harness: CodingAgentHarnessStatus,
-  prompt: string,
-  cwd: string,
-): string[] {
-  const baseArgs = [...harness.args];
-
-  if (harness.kind === "codex") {
-    return [
-      ...baseArgs,
-      "exec",
-      "--skip-git-repo-check",
-      "--sandbox",
-      "workspace-write",
-      "--ask-for-approval",
-      "never",
-      "--color",
-      "never",
-      prompt,
-    ];
-  }
-
-  if (harness.kind === "claude_code") {
-    return [
-      ...baseArgs,
-      "--print",
-      "--permission-mode",
-      "bypassPermissions",
-      "--output-format",
-      "text",
-      prompt,
-    ];
-  }
-
-  return [
-    ...baseArgs,
-    "run",
-    "--dir",
-    cwd,
-    "--format",
-    "default",
-    "--dangerously-skip-permissions",
-    prompt,
-  ];
-}
-
 function looksLikeAuthenticationFailure(output: string): boolean {
   return /log\s?in|login|sign\s?in|authenticate|authentication|not authenticated|api key|token|credential/i.test(
     output,
   );
-}
-
-function authenticationHelpForHarness(kind: StoredCodingAgentHarnessKind): string {
-  if (kind === "codex") {
-    return "Codex is installed, but it still needs authentication. Run `codex login` on this machine, then check again.";
-  }
-
-  if (kind === "claude_code") {
-    return "Claude Code is installed, but it still needs authentication. Finish Claude Code login on this machine, then check again.";
-  }
-
-  return "OpenCode is installed, but it still needs authentication. Finish OpenCode login on this machine, then check again.";
 }
 
 async function runInstallCommand(

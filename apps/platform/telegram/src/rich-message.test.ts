@@ -58,4 +58,20 @@ describe("createTelegramRichMessenger", () => {
     expect(edits).toEqual([{ chatId: 99, messageId: 7, text: "Done now" }]);
     expect(editOptions).toEqual([undefined]);
   });
+
+  test("sendRaw preserves share URLs without markdown stripping", async () => {
+    const shareUrl =
+      "http://127.0.0.1:4310/s/tc_share_a7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
+    const footer = `slides.html: ${shareUrl}`;
+    const { ctx, replies, replyOptions } = createMessageContext({
+      userId: 42,
+      text: "hello",
+    });
+    const messenger = createTelegramRichMessenger(ctx);
+
+    await messenger.sendRaw(footer);
+
+    expect(replies).toEqual([footer]);
+    expect(replyOptions).toEqual([undefined]);
+  });
 });

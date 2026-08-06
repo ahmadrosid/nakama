@@ -9,6 +9,7 @@ export const BUILTIN_TOOL_IDS = {
   web_search: "tool_web_search",
   web_fetch: "tool_web_fetch",
   email: "tool_email",
+  extract_document_text: "tool_extract_document_text",
 } as const;
 
 export const BASH_TOOL_ID = "tool_bash";

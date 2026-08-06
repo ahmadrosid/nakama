@@ -1,5 +1,6 @@
 import path from "node:path";
-import { describe, expect, test, spyOn, afterEach } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
+import type { ChatMessage } from "@nakama/core/contract";
 import { TelegramAuthStore } from "./auth-store";
 import { createChatHandler } from "./chat-handler";
 import { UNSUPPORTED_DOCUMENT_TYPES_REPLY, UNSUPPORTED_MEDIA_REPLY } from "./attachments";
@@ -14,16 +15,27 @@ import {
   writeTelegramConfigIni,
 } from "./test-helpers";
 
+// These handler tests run in ~0.2s locally but occasionally exceed the 5000ms
+// default under CI's concurrent all-workspace load. Give them more headroom.
+setDefaultTimeout(10_000);
+
 async function waitForCondition(
   condition: () => boolean,
   message: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  // Prefer real intervals over setTimeout(0) spins — under CI's concurrent
+  // workspace load, session I/O can easily take tens of ms before sendStream runs.
+  const timeoutMs = options.timeoutMs ?? 2_000;
+  const intervalMs = options.intervalMs ?? 10;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
     if (condition()) {
       return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
   throw new Error(message);
@@ -900,7 +912,10 @@ describe("createChatHandler security", () => {
 
       const authStore = new TelegramAuthStore();
       await authStore.reload();
-      const { client, calls, getStreamControl } = createMockClient({ streaming: true });
+      const { client, calls, getStreamControl } = createMockClient({
+        streaming: true,
+        autoComplete: false,
+      });
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
       );
@@ -925,16 +940,22 @@ describe("createChatHandler security", () => {
 
       const chatPromise = handleMessage(chatAttempt.ctx);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(getStreamControl()?.signal).toBeDefined();
+      try {
+        await waitForCondition(
+          () => getStreamControl()?.signal != null,
+          "Expected in-flight stream control before /stop",
+        );
 
-      await handleMessage(stopAttempt.ctx);
+        await handleMessage(stopAttempt.ctx);
+        await chatPromise;
 
-      await chatPromise;
-
-      expect(calls.sendStream).toBe(1);
-      expect(stopAttempt.replies).toEqual([]);
-      expect(chatAttempt.replies).toEqual(["Stopped."]);
+        expect(calls.sendStream).toBe(1);
+        expect(stopAttempt.replies).toEqual([]);
+        expect(chatAttempt.replies).toEqual(["Stopped."]);
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
     });
   });
 
@@ -1092,7 +1113,7 @@ describe("createChatHandler security", () => {
 
       const authStore = new TelegramAuthStore();
       await authStore.reload();
-      const { client } = createMockClient({
+      const { client, getStreamControl } = createMockClient({
         streaming: true,
         autoComplete: false,
         steps: [
@@ -1129,22 +1150,30 @@ describe("createChatHandler security", () => {
 
       const chatPromise = handleMessage(chatAttempt.ctx);
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      await handleMessage(stopAttempt.ctx);
-      await chatPromise;
+      try {
+        await waitForCondition(
+          () => getStreamControl()?.signal != null,
+          "Expected in-flight stream control before /stop",
+        );
+        await handleMessage(stopAttempt.ctx);
+        await chatPromise;
 
-      expect(chatAttempt.replies).toEqual([
-        "🛠️ Working\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        "Stopped.",
-      ]);
-      expect(chatAttempt.edits).toEqual([
-        {
-          chatId: 4242,
-          messageId: 1,
-          text: "⏹️ Stopped\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        },
-      ]);
-      expect(stopAttempt.replies).toEqual([]);
+        expect(chatAttempt.replies).toEqual([
+          "🛠️ Working\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
+          "Stopped.",
+        ]);
+        expect(chatAttempt.edits).toEqual([
+          {
+            chatId: 4242,
+            messageId: 1,
+            text: "⏹️ Stopped\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
+          },
+        ]);
+        expect(stopAttempt.replies).toEqual([]);
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
     });
   });
 
@@ -1931,6 +1960,208 @@ describe("createChatHandler document attachments", () => {
 
       expect(calls.sendStream).toBe(0);
       expect(replies).toEqual([UNSUPPORTED_MEDIA_REPLY]);
+    });
+  });
+});
+
+describe("createChatHandler artifact delivery", () => {
+  const metaJson = JSON.stringify({
+    mimeType: "text/markdown",
+    savedAt: "2026-07-13T10:00:00.000Z",
+    sizeBytes: 42,
+  });
+
+  const artifactMessages: ChatMessage[] = [
+    { role: "user", content: "save report" },
+    {
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        {
+          id: "tool_1",
+          name: "write_file",
+          arguments: { path: "artifacts/report.md", content: "# Report" },
+        },
+        {
+          id: "tool_2",
+          name: "write_file",
+          arguments: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
+        },
+      ],
+    },
+    {
+      role: "tool",
+      toolCallId: "tool_1",
+      name: "write_file",
+      content: JSON.stringify({
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md",
+        bytesWritten: 8,
+      }),
+    },
+    {
+      role: "tool",
+      toolCallId: "tool_2",
+      name: "write_file",
+      content: JSON.stringify({
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md.nakama-meta.json",
+        bytesWritten: metaJson.length,
+      }),
+    },
+    { role: "assistant", content: "Saved the report." },
+  ];
+
+  test("posts a publish share link after a paired save-artifact turn", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({ messages: artifactMessages });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("4242", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createMessageContext({ userId: 4242, text: "thanks" });
+      await handleMessage(ctx);
+
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(replies.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(true);
+    });
+  });
+
+  test("does not publish when the turn has no sidecar pair", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({
+        messages: [
+          { role: "user", content: "save" },
+          {
+            role: "assistant",
+            content: "",
+            toolCalls: [
+              {
+                id: "tool_1",
+                name: "write_file",
+                arguments: { path: "artifacts/draft.md", content: "draft" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            toolCallId: "tool_1",
+            name: "write_file",
+            content: JSON.stringify({
+              path: "/home/.nakama/orgs/org/profiles/default/artifacts/draft.md",
+              bytesWritten: 5,
+            }),
+          },
+        ],
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("4242", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { ctx, replies } = createMessageContext({ userId: 4242, text: "thanks" });
+      await handleMessage(ctx);
+
+      expect(calls.publishProfileArtifactShare).toBe(0);
+      expect(replies.some((reply) => reply.includes("/s/"))).toBe(false);
+    });
+  });
+
+  test("sends a document when the user asks to attach a saved artifact", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [4242],
+      });
+
+      const authStore = new TelegramAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient();
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("4242", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+        deliverableArtifacts: [
+          {
+            filename: "report.md",
+            path: "report.md",
+            mimeType: "text/markdown",
+            sizeBytes: 42,
+            savedAt: "2026-07-13T10:00:00.000Z",
+            shareUrl: "https://app.example/s/tok_test",
+            sharePath: "/s/tok_test",
+          },
+        ],
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        client,
+        config: { botToken: "1234567890:TEST", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      let sendDocumentCalls = 0;
+      const { ctx } = createMessageContext({ userId: 4242, text: "send me the file" });
+      (ctx.api as { sendDocument: typeof ctx.api.sendMessage }).sendDocument = async () => {
+        sendDocumentCalls += 1;
+        return { message_id: 99 };
+      };
+
+      await handleMessage(ctx);
+
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(sendDocumentCalls).toBe(1);
     });
   });
 });

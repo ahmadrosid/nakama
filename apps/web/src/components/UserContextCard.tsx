@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NakamaApiError } from "@nakama/core/api-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +50,7 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
   const [editorOpen, setEditorOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [autoInitAttempted, setAutoInitAttempted] = useState(false);
+  const autoInitAttemptedRef = useRef(false);
 
   const busy = initMutation.isPending || writeMutation.isPending;
   const isDirty = content !== savedContent;
@@ -68,11 +68,12 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
 
   // Auto-create USER.md in wizard contexts so the user can immediately edit
   useEffect(() => {
-    if (!autoInit || autoInitAttempted || isActive || isLoading || !status) {
+    if (!autoInit || autoInitAttemptedRef.current || isActive || isLoading || !status) {
       return;
     }
 
-    setAutoInitAttempted(true);
+    autoInitAttemptedRef.current = true;
+    let cancelled = false;
 
     async function autoCreate() {
       setFormError(null);
@@ -80,18 +81,32 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
 
       try {
         const result = await initMutation.mutateAsync();
+        if (cancelled) {
+          return;
+        }
+
         await refetch();
+        if (cancelled) {
+          return;
+        }
+
         if (result.created) {
           setEditorOpen(true);
         }
         setHint(result.created ? "Template created." : "USER.md already exists.");
       } catch (error) {
-        setFormError(formatUserContextError(error));
+        if (!cancelled) {
+          setFormError(formatUserContextError(error));
+        }
       }
     }
 
     void autoCreate();
-  }, [autoInit, autoInitAttempted, isActive, isLoading, status, initMutation, refetch]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoInit, isActive, isLoading, status, initMutation, refetch]);
 
   function handleEditorOpenChange(open: boolean) {
     setEditorOpen(open);

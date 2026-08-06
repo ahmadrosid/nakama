@@ -1,5 +1,5 @@
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
-import { builtinTools, type ToolContext, type ToolDefinition } from "@nakama/core";
+import { builtinTools, type ToolContext, type ToolDefinition, type UserConfig } from "@nakama/core";
 import { isEmailConfigComplete, loadEmailConfig } from "@nakama/core/email-config";
 import { emailTool } from "@nakama/core/tools/email";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
@@ -27,8 +27,9 @@ export async function resolveProfileStoredTools(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
+  options: { userConfig?: UserConfig | null } = {},
 ): Promise<ToolDefinition[]> {
-  const tools = await resolveToolsFromStorage(records, db, builtinOverrides);
+  const tools = await resolveToolsFromStorage(records, db, builtinOverrides, options);
   return omitUnavailableBuiltinTools(
     tools,
     isEmailConfigComplete(await loadEmailConfig()),
@@ -39,11 +40,12 @@ export async function resolveToolsFromStorage(
   records: StoredToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
+  options: { userConfig?: UserConfig | null } = {},
 ): Promise<ToolDefinition[]> {
   const builtinMap = new Map(
     [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool]),
   );
-  const serverTools = buildServerTools(db);
+  const serverTools = buildServerTools(db, options.userConfig);
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {
@@ -81,8 +83,11 @@ async function resolveStoredTool(
   return null;
 }
 
-function buildServerTools(db?: DatabaseAdapter): Map<string, ToolDefinition> {
-  const bash = db ? createCodingAgentAwareBashTool(db) : bashTool;
+function buildServerTools(
+  db?: DatabaseAdapter,
+  userConfig?: UserConfig | null,
+): Map<string, ToolDefinition> {
+  const bash = db ? createCodingAgentAwareBashTool(db, userConfig) : bashTool;
   const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
   if (registeredSubAgentTool) {
@@ -92,11 +97,14 @@ function buildServerTools(db?: DatabaseAdapter): Map<string, ToolDefinition> {
   return map;
 }
 
-function createCodingAgentAwareBashTool(db: DatabaseAdapter): ToolDefinition {
+function createCodingAgentAwareBashTool(
+  db: DatabaseAdapter,
+  userConfig?: UserConfig | null,
+): ToolDefinition {
   return {
     ...bashTool,
     run: async (input, context: ToolContext) => {
-      const enriched = await enrichCodingAgentBashInput(db, input, context);
+      const enriched = await enrichCodingAgentBashInput(db, input, context, userConfig);
       return runBash(enriched, context);
     },
   };

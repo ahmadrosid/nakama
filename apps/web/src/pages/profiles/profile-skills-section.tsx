@@ -1,4 +1,5 @@
 import { Trash2Icon } from "lucide-react";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { Button } from "@/components/ui/button";
 import type { ProfileDetail, SkillSummary } from "@nakama/core/contract";
@@ -14,6 +15,7 @@ export function ProfileSkillsSection({
   onDelete,
   onViewDetail,
   onRemove,
+  onAssignBash,
 }: {
   detail: ProfileDetail;
   busy: boolean;
@@ -24,6 +26,7 @@ export function ProfileSkillsSection({
   onDelete: (skillId: string) => void;
   onViewDetail: (skillId: string) => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
+  onAssignBash: () => void | Promise<void>;
 }) {
   return (
     <div className="pt-5">
@@ -42,9 +45,11 @@ export function ProfileSkillsSection({
             skills={allSkills}
             assignedSkillIds={assignedSkillIds}
             disabled={busy}
-            buttonLabel="Manage skills"
+            buttonLabel="Add skills"
             onAssign={onAssign}
             onDelete={onDelete}
+            bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
+            onAssignBash={onAssignBash}
           />
         </div>
       </div>
@@ -65,24 +70,13 @@ export function ProfileSkillsSection({
               <button
                 type="button"
                 disabled={busy}
-                className="flex min-w-0 flex-1 items-start text-left disabled:opacity-50"
+                className="min-w-0 flex-1 text-left disabled:opacity-50"
                 aria-label={`View details for ${skill.name}`}
                 onClick={() => onViewDetail(skill.id)}
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium leading-tight text-foreground">
-                    {skill.name}
-                  </p>
-                  <p className="mt-0.5 line-clamp-1 text-xs leading-snug text-muted-foreground">
-                    {[
-                      skill.description,
-                      skill.hasTool ? "includes tool" : null,
-                      skill.disableModelInvocation ? "explicit invoke only" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                </div>
+                <p className="truncate text-sm font-medium leading-tight text-foreground">
+                  {skill.name}
+                </p>
               </button>
               <Button
                 type="button"

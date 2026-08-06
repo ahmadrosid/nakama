@@ -1,6 +1,8 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -15,6 +17,11 @@ const DEFAULT_PANEL_WIDTH = 448;
 export function ChatAttachmentPanelProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(null);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const configRef = useRef<ChatAttachmentPanelConfig | null>(config);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   const hide = useCallback((id?: string) => {
     setConfig((current) => {
@@ -29,18 +36,21 @@ export function ChatAttachmentPanelProvider({ children }: { children: ReactNode 
   }, []);
 
   const show = useCallback((nextConfig: ChatAttachmentPanelConfig) => {
-    setConfig((current) => {
-      if (current && current.id !== nextConfig.id) {
-        current.onClose?.();
-      }
-      return nextConfig;
-    });
+    const current = configRef.current;
+    if (current && current.id !== nextConfig.id) {
+      current.onClose?.();
+    }
+    setConfig(nextConfig);
     if (nextConfig.defaultWidth != null) {
       setWidth(nextConfig.defaultWidth);
     }
   }, []);
 
   const update = useCallback((id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => {
+    if (patch.defaultWidth != null) {
+      setWidth(patch.defaultWidth);
+    }
+
     setConfig((current) => {
       if (!current || current.id !== id) {
         return current;
@@ -50,10 +60,8 @@ export function ChatAttachmentPanelProvider({ children }: { children: ReactNode 
   }, []);
 
   const handlePanelClose = useCallback(() => {
-    setConfig((current) => {
-      current?.onClose?.();
-      return null;
-    });
+    configRef.current?.onClose?.();
+    setConfig(null);
   }, []);
 
   const value = useMemo(
@@ -75,6 +83,7 @@ export function ChatAttachmentPanelProvider({ children }: { children: ReactNode 
         {config ? (
           <AttachmentDetailPanel
             title={config.title}
+            subtitle={config.subtitle}
             headerActions={config.headerActions}
             bodyClassName={config.bodyClassName}
             resizable={config.resizable ?? !config.fullscreen}

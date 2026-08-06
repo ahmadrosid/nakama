@@ -1,3 +1,5 @@
+import type { LoadAttachmentBytes } from "./attachments/content";
+
 export type AutomationTrigger =
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
@@ -77,7 +79,11 @@ export interface HealthResponse {
   userConfigured: boolean;
   /** A Composio project API key is saved on this server. */
   composioConfigured: boolean;
-  /** Nakama can reach the Composio API with the saved key. */
+  /**
+   * Whether Nakama can reach the Composio API with the saved key.
+   * Probed only on `GET /v1/system/status` (`server.composioAvailable`).
+   * `GET /health` always returns `false` so liveness stays local and fast.
+   */
   composioAvailable: boolean;
 }
 
@@ -259,9 +265,17 @@ export interface WebPublicUrlSettingsResponse {
 
 export interface AuthUserResponse {
   email: string;
+  name?: string | null;
+  phone?: string | null;
   isPlatformAdmin?: boolean;
   activeOrgId?: string | null;
   orgId?: string | null;
+}
+
+export interface UpdateAuthProfileRequest {
+  name?: string | null;
+  email?: string;
+  phone?: string | null;
 }
 
 export type OrgRole = "admin" | "member" | "viewer";
@@ -340,7 +354,7 @@ export interface ListOrgMembersResponse {
 export interface AddOrgMemberRequest {
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   role: OrgRole;
 }
 
@@ -352,6 +366,116 @@ export interface UpdateOrgMemberRequest {
   name?: string | null;
   phone?: string | null;
   role?: OrgRole;
+}
+
+export interface OrgMemoryResponse {
+  content: string;
+}
+
+export interface UpdateOrgMemoryRequest {
+  content: string;
+}
+
+export interface AddOrgMemoryFactRequest {
+  bullet: string;
+  pin?: boolean;
+}
+
+export interface OrgMemorySearchRequest {
+  query: string;
+}
+
+export interface OrgMemorySearchMatchEntry {
+  source: string;
+  bullet: string;
+  tier?: "pinned" | "recent-log" | "archive";
+  date?: string;
+}
+
+export interface OrgMemorySearchResponse {
+  query: string;
+  matches: OrgMemorySearchMatchEntry[];
+}
+
+export interface ArchiveOrgMemoryRequest {
+  entries: string[];
+  reason?: string;
+}
+
+export interface ArchiveOrgMemoryResponse {
+  archived: number;
+  activeBytes: number;
+  archivePath: string;
+}
+
+export interface PinOrgMemoryRequest {
+  bullet: string;
+}
+
+export interface UnpinOrgMemoryRequest {
+  bullet: string;
+}
+
+export type OrgMemoryChangeAction =
+  | "edit"
+  | "approve"
+  | "add_fact"
+  | "pin"
+  | "unpin"
+  | "archive"
+  | "restore";
+
+export interface OrgMemoryChangeLogEntry {
+  id: string;
+  orgId: string;
+  createdAt: string;
+  actorUserId: string | null;
+  action: OrgMemoryChangeAction;
+  label: string;
+  restoredFromId?: string | null;
+}
+
+export interface ListOrgMemoryHistoryResponse {
+  changes: OrgMemoryChangeLogEntry[];
+}
+
+export interface RestoreOrgMemoryHistoryResponse {
+  content: string;
+}
+
+export interface OrgMemoryHistoryRevisionResponse {
+  change: OrgMemoryChangeLogEntry;
+  content: string;
+}
+
+export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
+
+export interface OrgMemoryProposal {
+  id: string;
+  orgId: string;
+  profileId: string | null;
+  sessionId: string | null;
+  proposedByUserId: string | null;
+  bullet: string;
+  status: OrgMemoryProposalStatus;
+  pinned: boolean;
+  reviewerUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface ListOrgMemoryProposalsResponse {
+  proposals: OrgMemoryProposal[];
+  pendingCount: number;
+}
+
+export interface ApproveOrgMemoryProposalRequest {
+  pin?: boolean;
+}
+
+export interface OrgMemoryProposalResponse {
+  proposal: OrgMemoryProposal;
+  content?: string;
 }
 
 export interface InviteOrgMemberRequest {
@@ -466,6 +590,11 @@ export interface SessionMessagesResponse {
   questionnaire: AgentQuestionnaire | null;
 }
 
+export interface SessionStatusResponse {
+  active: boolean;
+  startedAt?: string;
+}
+
 export interface SessionSummary {
   id: string;
   profileId: string;
@@ -540,6 +669,13 @@ export type StreamEvent =
   | { type: "chunk"; delta: string }
   | { type: "thinking"; delta: string }
   | {
+      type: "tool_input_delta";
+      toolCallId: string;
+      tool: string;
+      delta: string;
+      accumulatedArguments?: string;
+    }
+  | {
       type: "tool_start";
       toolCallId: string;
       tool: string;
@@ -553,6 +689,11 @@ export type StreamEvent =
     }
   | { type: "todos_updated"; todos: AgentTodo[] }
   | { type: "questionnaire_updated"; questionnaire: AgentQuestionnaire | null }
+  | {
+      type: "sub_agent_activity";
+      parentToolCallId: string;
+      label: string;
+    }
   | { type: "done"; reply: string }
   | { type: "error"; error: string };
 
@@ -879,6 +1020,15 @@ export interface SendEmailTestResponse {
 
 export type CodingHarnessKind = "codex" | "claude_code" | "opencode";
 
+export interface CodingAgentProviderPassthroughSummary {
+  active: boolean;
+  configured: boolean;
+  compatible: boolean;
+  providerLabel: string | null;
+  model: string | null;
+  message?: string | null;
+}
+
 export interface CodingHarnessStatus {
   id: string;
   kind: CodingHarnessKind;
@@ -892,7 +1042,7 @@ export interface CodingHarnessStatus {
   version: string | null;
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "install" | "login" | "retry" | null;
+  nextStep: "install" | "retry" | null;
   statusMessage: string | null;
 }
 
@@ -900,6 +1050,7 @@ export interface CodingHarnessSettingsResponse {
   configured: boolean;
   selectedHarnessId: string | null;
   activeHarnessId: string | null;
+  providerPassthrough: CodingAgentProviderPassthroughSummary;
   harnesses: CodingHarnessStatus[];
 }
 
@@ -915,7 +1066,7 @@ export interface VerifyCodingHarnessResponse {
   installed: boolean;
   authenticated: boolean | null;
   ready: boolean;
-  nextStep: "install" | "login" | "retry" | null;
+  nextStep: "install" | "retry" | null;
   statusMessage: string | null;
   error: string | null;
 }
@@ -934,6 +1085,29 @@ export type CodingHarnessInstallEvent =
   | {
       type: "done";
       status: CodingHarnessStatus;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
+
+export interface AgentBrowserStatusResponse {
+  installed: boolean;
+  version: string | null;
+  ready: boolean;
+  installCommand: string;
+  statusMessage: string | null;
+  nextStep: "install" | null;
+}
+
+export type AgentBrowserInstallEvent =
+  | {
+      type: "progress";
+      message: string;
+    }
+  | {
+      type: "done";
+      status: AgentBrowserStatusResponse;
     }
   | {
       type: "error";
@@ -967,6 +1141,12 @@ export interface CodingAgentLaunchPlanResponse {
   harnessKind: CodingHarnessKind;
   harnessName: string;
   model: string | null;
+  providerPassthrough?: {
+    active: boolean;
+    providerLabel: string | null;
+    model: string | null;
+    message: string | null;
+  };
 }
 
 export interface WhatsAppSettingsResponse {
@@ -1046,6 +1226,7 @@ export interface ProviderInstanceSummary {
   label: string;
   hasApiKey: boolean;
   baseUrl?: string | null;
+  hostMode?: OllamaHostMode | null;
   customModels?: CustomModelEntry[];
   modelCount: number;
   createdAt: string;
@@ -1062,6 +1243,7 @@ export interface CreateProviderRequest {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1075,6 +1257,7 @@ export interface UpdateProviderRequest {
   label?: string;
   apiKey?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1102,6 +1285,9 @@ export interface DiscoverModelsRequest {
   baseUrl?: string;
   apiKey?: string;
   providerId?: string;
+  /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
+  provider?: "ollama" | "openai_compatible" | "fireworks";
+  hostMode?: OllamaHostMode;
 }
 
 export interface ConfigureProviderRequest {
@@ -1110,6 +1296,7 @@ export interface ConfigureProviderRequest {
   model?: string;
   displayName?: string;
   baseUrl?: string;
+  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
 }
 
@@ -1393,6 +1580,40 @@ export interface DeleteArtifactResponse {
   filename: string;
 }
 
+export interface PublishArtifactShareRequest {
+  path: string;
+}
+
+export interface PublishArtifactShareResponse {
+  id: string;
+  token: string;
+  shareUrl: string | null;
+  sharePath: string;
+  webPublicUrlConfigured: boolean;
+  refreshed: boolean;
+}
+
+export interface ArtifactShareStatusResponse {
+  id: string;
+  active: boolean;
+  sharePath: string;
+  shareUrl: string | null;
+  webPublicUrlConfigured: boolean;
+  createdAt: string;
+}
+
+export interface RevokeArtifactShareResponse {
+  revoked: boolean;
+  id: string;
+}
+
+export interface PublicArtifactShareResponse {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  inlineAllowed: boolean;
+}
+
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
 export interface KnowledgeBaseDocument {
@@ -1455,8 +1676,13 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "cerebras"
+  | "fireworks"
+  | "ollama"
   | "openai_compatible"
   | "opencode_go";
+
+export type OllamaHostMode = "local" | "cloud";
 
 export type GenerateTextFormat = "json" | "text";
 
@@ -1542,6 +1768,12 @@ export interface GenerateChatInput {
 export interface StreamChatHandlers {
   onChunk: (delta: string) => void;
   onThinking?: (delta: string) => void;
+  onToolInputDelta?: (event: {
+    toolCallId: string;
+    tool: string;
+    delta: string;
+    accumulatedArguments?: string;
+  }) => void;
   onToolStart?: (event: {
     toolCallId: string;
     tool: string;
@@ -1577,12 +1809,20 @@ export interface ToolContext {
   clientOrigin?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;
+  /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
+  orgRole?: OrgRole;
+  /** Loads a provider-neutral document/image reference scoped to this execution. */
+  loadAttachment?: LoadAttachmentBytes;
+  /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
+  emitSubAgentActivity?: (label: string) => void;
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
   name: string;
   description: string;
   parameters?: JsonSchema;
+  /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
+  parallelSafe?: boolean;
   run(input: Input, context: ToolContext): Promise<Output>;
 }
 

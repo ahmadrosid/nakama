@@ -26,7 +26,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThinkingState } from "@/components/chat/ThinkingState";
 import { formatSessionTimestamp, type ChatListItem } from "@/lib/chat-history";
+import {
+  awaitingModelLabel,
+  isAwaitingModelResponse,
+} from "@/lib/chat-stream";
 import { isPastedTextDocument } from "@/lib/pasted-text";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
@@ -41,6 +46,8 @@ interface ChatMessageListProps {
   modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
+  /** True while the assistant reply SSE stream is in flight. */
+  streamActive?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   emptyMessage?: string;
@@ -61,6 +68,7 @@ export function ChatMessageList({
   modelLabel,
   branchingMessageId,
   actionsDisabled = false,
+  streamActive = false,
   onBranchMessage,
   onRetryMessage,
   emptyMessage,
@@ -68,6 +76,11 @@ export function ChatMessageList({
   contentClassName,
 }: ChatMessageListProps) {
   const turns = groupMessagesIntoTurns(messages);
+  const showAwaitingPlaceholder =
+    streamActive && isAwaitingModelResponse(messages);
+  const awaitingLabel = showAwaitingPlaceholder
+    ? awaitingModelLabel(messages)
+    : null;
 
   return (
     <Conversation className={cn("min-h-0 flex-1", className)}>
@@ -75,7 +88,7 @@ export function ChatMessageList({
         {messages.length === 0 && emptyMessage ? (
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         ) : null}
-        {turns.map((turn) =>
+        {turns.map((turn, turnIndex) =>
           turn.kind === "user" ? (
             <ChatMessageRow key={turn.message.id} message={turn.message} />
           ) : (
@@ -87,6 +100,10 @@ export function ChatMessageList({
               modelLabel={modelLabel}
               branchingMessageId={branchingMessageId}
               actionsDisabled={actionsDisabled}
+              streamActive={streamActive}
+              awaitingLabel={
+                turnIndex === turns.length - 1 ? awaitingLabel : null
+              }
               onBranchMessage={onBranchMessage}
               onRetryMessage={onRetryMessage}
             />
@@ -131,6 +148,8 @@ function AssistantTurn({
   modelLabel,
   branchingMessageId,
   actionsDisabled,
+  streamActive,
+  awaitingLabel,
   onBranchMessage,
   onRetryMessage,
 }: {
@@ -140,6 +159,8 @@ function AssistantTurn({
   modelLabel?: string | null;
   branchingMessageId?: string | null;
   actionsDisabled?: boolean;
+  streamActive: boolean;
+  awaitingLabel?: "Thinking…" | "Working…" | null;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
@@ -148,7 +169,10 @@ function AssistantTurn({
   const artifacts = extractTurnArtifacts(turnMessages);
   const turnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
-  const showActions = isAssistantTurnComplete(turnMessages) && anchorMessage != null;
+  const turnComplete = isAssistantTurnComplete(turnMessages);
+  // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
+  const showArtifacts = !streamActive && turnComplete && artifacts.length > 0;
+  const showActions = !streamActive && turnComplete && anchorMessage != null;
 
   return (
     <div className="group flex w-full max-w-full flex-col gap-3 mr-auto ml-0 items-start justify-start">
@@ -164,7 +188,8 @@ function AssistantTurn({
           modelLabel={modelLabel}
         />
       ))}
-      {profileId && artifacts.length > 0 ? (
+      {awaitingLabel ? <ThinkingState label={awaitingLabel} /> : null}
+      {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {
             const chipId = `${turnKey}:${artifact.path}`;
@@ -231,10 +256,15 @@ function findAssistantTurnAnchor(messages: ChatListItem[]): ChatListItem | null 
 }
 
 function assistantTurnContent(messages: ChatListItem[]): string {
-  return messages
-    .filter((message) => message.role === "assistant" && message.content.trim())
-    .map((message) => message.content.trim())
-    .join("\n\n");
+  const parts: string[] = [];
+
+  for (const message of messages) {
+    if (message.role === "assistant" && message.content.trim()) {
+      parts.push(message.content.trim());
+    }
+  }
+
+  return parts.join("\n\n");
 }
 
 function isBranchableAssistantMessage(message: ChatListItem): boolean {
@@ -394,12 +424,11 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
     <div className="space-y-2">
       {message.imageAttachments?.length ? (
         <div className="flex flex-wrap gap-2">
-          {message.imageAttachments.map((image, index) => (
+          {message.imageAttachments.map((image) => (
             <ImageAttachmentPreview
-              key={image.url ?? `image-attachment-${index}`}
+              key={image.url ?? `image-attachment-${message.id}-${image.description ?? "unnamed"}`}
               url={image.url}
               description={image.description}
-              caption={message.content || null}
             />
           ))}
         </div>

@@ -20,6 +20,8 @@ export function parseMcpToolParameters(inputSchema: unknown): McpToolParameter[]
     return [];
   }
 
+  const requiredNames = new Set(required);
+
   return Object.entries(properties as Record<string, unknown>).map(([name, property]) => {
     const propertyRecord =
       typeof property === "object" && property !== null
@@ -33,7 +35,7 @@ export function parseMcpToolParameters(inputSchema: unknown): McpToolParameter[]
         typeof propertyRecord.description === "string"
           ? propertyRecord.description
           : undefined,
-      required: required.includes(name),
+      required: requiredNames.has(name),
     };
   });
 }

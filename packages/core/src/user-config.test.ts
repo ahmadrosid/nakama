@@ -97,6 +97,82 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers[1]?.customModels?.[0]?.supportsThinking).toBe(true);
   });
 
+  test("round-trips cerebras models_json with capability flags", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const cerebrasId = createProviderInstanceId();
+
+    await saveUserConfig({
+      defaultProviderId: cerebrasId,
+      providers: [
+        {
+          id: cerebrasId,
+          type: "cerebras",
+          label: "Cerebras",
+          apiKey: "csk-test",
+          customModels: [
+            {
+              id: "gpt-oss-120b",
+              name: "GPT OSS 120B",
+              default: true,
+              supportsThinking: true,
+              supportsVision: false,
+              inputPerMillionUsd: 0.25,
+              outputPerMillionUsd: 0.69,
+            },
+          ],
+          createdAt: "2026-07-16T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const loaded = await loadUserConfig();
+    expect(loaded?.providers[0]?.type).toBe("cerebras");
+    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("gpt-oss-120b");
+    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(true);
+    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(0.25);
+  });
+
+  test("round-trips fireworks models_json with capability flags", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const fireworksId = createProviderInstanceId();
+
+    await saveUserConfig({
+      defaultProviderId: fireworksId,
+      providers: [
+        {
+          id: fireworksId,
+          type: "fireworks",
+          label: "Fireworks",
+          apiKey: "fw-test",
+          customModels: [
+            {
+              id: "accounts/fireworks/models/kimi-k2p6",
+              name: "Kimi K2.6",
+              default: true,
+              supportsThinking: true,
+              supportsVision: false,
+              inputPerMillionUsd: 0.6,
+              outputPerMillionUsd: 2.5,
+            },
+          ],
+          createdAt: "2026-07-24T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const loaded = await loadUserConfig();
+    expect(loaded?.providers[0]?.type).toBe("fireworks");
+    expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe(
+      "accounts/fireworks/models/kimi-k2p6",
+    );
+    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(true);
+    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(0.6);
+  });
+
   test("repairs literal undefined label on load", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

@@ -1,9 +1,15 @@
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
-import type { CodingAgentHarnessStatus } from "./coding-agent-harness-service";
 import {
-  buildSpawnEnvForHarness,
-  type CodingAgentSpawnEnvOptions,
+  resolveCodingAgentSpawnBundle,
+  redactSpawnEnvForPrompt,
 } from "./coding-agent-spawn-env";
+
+export interface CodingAgentCommandHarness {
+  kind: StoredCodingAgentHarnessKind;
+  name: string;
+  command: string;
+  args: string[];
+}
 
 export interface CodingAgentCommandTemplate {
   backend: StoredCodingAgentHarnessKind;
@@ -13,15 +19,69 @@ export interface CodingAgentCommandTemplate {
   notes: string[];
 }
 
-export function buildCodingAgentCommandTemplate(
-  harness: Pick<CodingAgentHarnessStatus, "kind" | "name" | "command" | "args">,
+export function buildHarnessNonInteractiveArgs(
+  kind: StoredCodingAgentHarnessKind,
+  options: { prompt: string; cwd: string; baseArgs?: string[] },
+): string[] {
+  const baseArgs = [...(options.baseArgs ?? [])];
+  const prompt = options.prompt.trim() || "Reply with OK and nothing else.";
+
+  if (kind === "codex") {
+    return [
+      ...baseArgs,
+      "exec",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "--ask-for-approval",
+      "never",
+      "--color",
+      "never",
+      prompt,
+    ];
+  }
+
+  if (kind === "claude_code") {
+    return [
+      ...baseArgs,
+      "--print",
+      "--permission-mode",
+      "bypassPermissions",
+      "--output-format",
+      "text",
+      prompt,
+    ];
+  }
+
+  return [
+    ...baseArgs,
+    "run",
+    "--dir",
+    options.cwd,
+    "--format",
+    "default",
+    "--dangerously-skip-permissions",
+    prompt,
+  ];
+}
+
+export async function buildCodingAgentCommandTemplate(
+  harness: CodingAgentCommandHarness,
   taskPrompt: string,
   cwd: string,
-  spawnEnvOptions: CodingAgentSpawnEnvOptions = {},
-): CodingAgentCommandTemplate {
+  options: {
+    userConfig?: import("@nakama/core").UserConfig | null;
+    profileModel?: string | null;
+  } = {},
+): Promise<CodingAgentCommandTemplate> {
   const escapedTask = shellEscape(taskPrompt.trim());
   const baseCommand = [harness.command, ...harness.args].join(" ");
-  const spawnEnv = buildSpawnEnvForHarness(harness.kind, spawnEnvOptions);
+  const { spawn } = await resolveCodingAgentSpawnBundle({
+    userConfig: options.userConfig,
+    profileModel: options.profileModel,
+    harnessKind: harness.kind,
+  });
+  const spawnEnv = spawn.env;
   const shared = {
     backend: harness.kind,
     harnessName: harness.name,
@@ -104,10 +164,10 @@ export function formatCodingAgentCommandContext(
   if (Object.keys(template.spawnEnv).length > 0) {
     lines.push(
       "",
-      "When the inference gateway is enabled, Nakama injects these env vars at spawn time:",
+      "When Nakama provider passthrough is active, these env vars are merged at spawn time:",
       "",
       "```json",
-      JSON.stringify(template.spawnEnv, null, 2),
+      JSON.stringify(redactSpawnEnvForPrompt(template.spawnEnv), null, 2),
       "```",
     );
   }

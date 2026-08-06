@@ -18,6 +18,22 @@ const compatibleInstance = {
   createdAt: "2026-06-07T10:00:00.000Z",
 };
 
+const cerebrasInstance = {
+  id: "cb-1",
+  type: "cerebras" as const,
+  label: "Cerebras",
+  apiKey: "csk-test",
+  createdAt: "2026-07-16T10:00:00.000Z",
+};
+
+const fireworksInstance = {
+  id: "fw-1",
+  type: "fireworks" as const,
+  label: "Fireworks",
+  apiKey: "fw-test",
+  createdAt: "2026-07-24T10:00:00.000Z",
+};
+
 describe("estimateUsageCostUsd", () => {
   test("computes cost from catalog pricing", () => {
     const cost = estimateUsageCostUsd("claude-sonnet-4-6", 1_000_000, 1_000_000);
@@ -67,6 +83,42 @@ describe("estimateUsageCostUsd", () => {
         },
       }),
     ).toBe(0);
+  });
+
+  test("uses saved pricing for cerebras custom models", () => {
+    const cost = estimateUsageCostUsd("gpt-oss-120b", 1_000_000, 1_000_000, {
+      provider: "cerebras",
+      providerInstance: {
+        ...cerebrasInstance,
+        customModels: [
+          {
+            id: "gpt-oss-120b",
+            inputPerMillionUsd: 0.25,
+            outputPerMillionUsd: 0.69,
+          },
+        ],
+      },
+    });
+
+    expect(cost).toBeCloseTo(0.94, 5);
+  });
+
+  test("uses saved pricing for fireworks custom models", () => {
+    const cost = estimateUsageCostUsd("accounts/fireworks/models/kimi-k2p6", 1_000_000, 1_000_000, {
+      provider: "fireworks",
+      providerInstance: {
+        ...fireworksInstance,
+        customModels: [
+          {
+            id: "accounts/fireworks/models/kimi-k2p6",
+            inputPerMillionUsd: 0.5,
+            outputPerMillionUsd: 2,
+          },
+        ],
+      },
+    });
+
+    expect(cost).toBeCloseTo(2.5, 5);
   });
 
   test("does not estimate compatible models without user pricing", () => {

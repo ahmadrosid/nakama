@@ -13,6 +13,7 @@ import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { emailTool } from "./email";
+import { extractDocumentTextTool } from "./extract-document-text";
 import {
   jsonSchemaFromZod,
   parseToolInput,
@@ -645,6 +646,7 @@ export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
   description:
     "Read text from a file in the active profile workspace. Word .docx files are converted to Markdown. Use offset/limit for large files.",
   parameters: jsonSchemaFromZod(readFileInputSchema),
+  parallelSafe: true,
   run(input, context) {
     return runReadFile(input, context);
   },
@@ -723,6 +725,7 @@ export const builtinTools: ToolDefinition[] = [
   webSearchTool,
   webFetchTool,
   emailTool,
+  extractDocumentTextTool,
 ];
 
 export { PathGuardError };

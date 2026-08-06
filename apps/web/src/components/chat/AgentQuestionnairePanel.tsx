@@ -24,28 +24,29 @@ export function AgentQuestionnairePanel({
   const [answers, setAnswers] = useState<Record<string, DraftAnswerState>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const activeQuestionRef = useRef<HTMLDivElement | null>(null);
+  const [syncedQuestionnaire, setSyncedQuestionnaire] = useState(questionnaire);
 
-  useEffect(() => {
+  if (questionnaire !== syncedQuestionnaire) {
+    setSyncedQuestionnaire(questionnaire);
     if (!questionnaire) {
       setAnswers({});
       setCurrentQuestionIndex(0);
-      return;
+    } else {
+      setAnswers(
+        Object.fromEntries(
+          questionnaire.questions.map((question) => [
+            question.id,
+            {
+              selectedChoiceId: null,
+              selectedChoiceLabel: null,
+              customAnswer: "",
+            },
+          ]),
+        ),
+      );
+      setCurrentQuestionIndex(0);
     }
-
-    setAnswers(
-      Object.fromEntries(
-        questionnaire.questions.map((question) => [
-          question.id,
-          {
-            selectedChoiceId: null,
-            selectedChoiceLabel: null,
-            customAnswer: "",
-          },
-        ]),
-      ),
-    );
-    setCurrentQuestionIndex(0);
-  }, [questionnaire]);
+  }
 
   const resolvedAnswers = useMemo(() => {
     if (!questionnaire) {

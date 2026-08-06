@@ -1,8 +1,10 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
 import { PlusIcon, Trash2Icon } from "lucide-react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
+import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
 
@@ -29,6 +31,10 @@ export function ModelListEditor({
   browseLabel = "Browse models.dev",
   onChange,
 }: ModelListEditorProps) {
+  const rowKeysRef = useRef<string[]>([]);
+  // Keep React keys available on the first paint (avoids undefined keys + useEffect).
+  syncRowKeys(rowKeysRef.current, models.length);
+
   const updateRow = (index: number, patch: Partial<ModelListRow>) => {
     onChange(
       models.map((row, rowIndex) =>
@@ -38,6 +44,7 @@ export function ModelListEditor({
   };
 
   const removeRow = (index: number) => {
+    rowKeysRef.current.splice(index, 1);
     onChange(models.filter((_, rowIndex) => rowIndex !== index));
   };
 
@@ -63,7 +70,10 @@ export function ModelListEditor({
           </thead>
           <tbody>
             {models.map((row, index) => (
-              <tr key={`model-row-${index}`} className="border-b border-border/60 last:border-0">
+              <tr
+                key={row.id.trim() || rowKeysRef.current[index]}
+                className="border-b border-border/60 last:border-0"
+              >
                 <td className="px-2 py-1.5">
                   <InputGroup>
                     <InputGroupInput
@@ -168,7 +178,10 @@ export function ModelListEditor({
           size="sm"
           variant="outline"
           disabled={disabled}
-          onClick={() => onChange([...models, emptyRow()])}
+          onClick={() => {
+            rowKeysRef.current.push(createClientId());
+            onChange([...models, emptyRow()]);
+          }}
         >
           <PlusIcon className="mr-1 size-4" />
           Add model

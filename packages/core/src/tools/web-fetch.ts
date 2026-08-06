@@ -382,6 +382,7 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
     "Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. " +
     "Use for retrieving a known URL; use web_search when you need to discover sources.",
   parameters: webFetchParameters(),
+  parallelSafe: true,
   async run(input) {
     let parsed: { url: string; raw?: boolean };
     try {

@@ -38,31 +38,16 @@ export function DiscordSettingsPairingSection({
       <SettingsRow
         label="Pairing code"
         description={
-          isPaired
-            ? "Discord is linked. Generate a new code to link another account."
-            : pairingCode
-              ? "Send this code to your bot in Discord to finish linking."
+          pairingCode
+            ? isPaired
+              ? "Send this code to your bot in Discord to link another account."
+              : "Send this code to your bot in Discord to finish linking."
+            : isPaired
+              ? "Discord is linked. Generate a new code to link another account."
               : "Generate a code, then message it to your bot once."
         }
       >
-        {isPaired ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={regeneratePending || savePending}
-            onClick={onRegenerateHandshake}
-          >
-            {regeneratePending ? (
-              <Spinner />
-            ) : (
-              <>
-                <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                New code
-              </>
-            )}
-          </Button>
-        ) : pairingCode ? (
+        {pairingCode ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
               {pairingCode}
@@ -101,6 +86,23 @@ export function DiscordSettingsPairingSection({
               )}
             </Button>
           </div>
+        ) : isPaired ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={regeneratePending || savePending}
+            onClick={onRegenerateHandshake}
+          >
+            {regeneratePending ? (
+              <Spinner />
+            ) : (
+              <>
+                <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+                New code
+              </>
+            )}
+          </Button>
         ) : (
           <Button
             type="button"
@@ -120,7 +122,7 @@ export function DiscordSettingsPairingSection({
         )}
       </SettingsRow>
 
-      {!isPaired && pairingCode ? <DiscordPairingGuide inviteUrl={inviteUrl} /> : null}
+      {pairingCode ? <DiscordPairingGuide inviteUrl={inviteUrl} /> : null}
     </div>
   );
 }

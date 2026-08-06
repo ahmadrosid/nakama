@@ -35,6 +35,9 @@ jobs:
       - name: Build docs
         run: bun run build
         working-directory: docs/website
+        env:
+          NODE_ENV: production
+          NAKAMA_DOCS_GITHUB_PAGES: 'true'
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -42,7 +45,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: docs/website/.vitepress/dist
+          path: docs/website/out
 
       - name: Deploy to GitHub Pages
         id: deployment

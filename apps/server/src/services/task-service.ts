@@ -5,10 +5,14 @@ import type {
   TaskStatus,
   UpdateTaskRequest,
 } from "@nakama/core";
-import { createId } from "@nakama/core";
+import { createId, NakamaApiError } from "@nakama/core";
+import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import type { DatabaseAdapter, StoredTaskRecord } from "@nakama/db";
 import { isValidTaskStatus, validateTaskInput } from "./task-validate";
 import type { TaskRunner } from "./task-runner";
+
+/** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
+export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
 
 export class TaskService {
   private taskRunner: TaskRunner | null = null;
@@ -37,6 +41,7 @@ export class TaskService {
     orgId: string,
     input: CreateTaskRequest,
     profileIdOverride?: string,
+    access?: ProfileAccess,
   ): Promise<StoredTask> {
     const status = input.status ?? "backlog";
     validateTaskInput({
@@ -48,6 +53,7 @@ export class TaskService {
     const profileId = await this.resolveProfileId(
       orgId,
       profileIdOverride ?? input.profileId,
+      access,
     );
 
     const now = new Date().toISOString();
@@ -72,7 +78,7 @@ export class TaskService {
     id: string,
     orgId: string,
     input: UpdateTaskRequest,
-    options?: { triggerRun?: boolean },
+    options?: { triggerRun?: boolean; access?: ProfileAccess },
   ): Promise<StoredTask> {
     const existing = await this.db.getTask(id);
 
@@ -93,7 +99,7 @@ export class TaskService {
     let profileId = existing.profileId;
 
     if (input.profileId !== undefined) {
-      profileId = await this.resolveProfileId(orgId, input.profileId);
+      profileId = await this.resolveProfileId(orgId, input.profileId, options?.access);
     }
 
     const statusChanged = status !== existing.status;
@@ -203,12 +209,19 @@ export class TaskService {
     });
   }
 
-  private async resolveProfileId(orgId: string, profileId?: string): Promise<string> {
+  private async resolveProfileId(
+    orgId: string,
+    profileId?: string,
+    access?: ProfileAccess,
+  ): Promise<string> {
     const trimmed = profileId?.trim();
 
     if (trimmed) {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
       if (profile) {
+        if (profile.isSuper && access && !canAccessSuperBotProfile(access)) {
+          throw new NakamaApiError("Super Bot is only available to org admins.", 403);
+        }
         return profile.id;
       }
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
 import { getProfileSoulDir } from "@nakama/core";
-import { LOCAL_CLIENT_EMAIL } from "@nakama/core/local-auth";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
 import { OrgService } from "./org-service";
@@ -39,11 +39,8 @@ describe("OrgService", () => {
     expect(bootstrapped.user.email).toBe("admin@acme.com");
 
     const members = await orgService.listMembers(bootstrapped.organization.id);
-    expect(members.members).toHaveLength(2);
-    expect(members.members.map((member) => member.email).sort()).toEqual([
-      "admin@acme.com",
-      LOCAL_CLIENT_EMAIL,
-    ]);
+    expect(members.members).toHaveLength(1);
+    expect(members.members.map((member) => member.email).sort()).toEqual(["admin@acme.com"]);
 
     const profiles = await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id);
     expect(profiles.some((profile) => profile.isDefault)).toBe(true);
@@ -137,9 +134,7 @@ describe("OrgService", () => {
     expect(organizations).toEqual([created.organization]);
 
     const members = await orgService.listMembers(created.organization.id);
-    expect(members.members).toHaveLength(1);
-    expect(members.members[0]?.email).toBe(LOCAL_CLIENT_EMAIL);
-    expect(members.members[0]?.role).toBe("admin");
+    expect(members.members).toHaveLength(0);
 
     const profiles = await databaseAdapter.listProfilesForOrg(created.organization.id);
     expect(profiles.some((profile) => profile.isSuper && profile.name === "Super Bot")).toBe(true);
@@ -184,6 +179,26 @@ describe("OrgService", () => {
     expect(added.temporaryPassword).toHaveLength(12);
   });
 
+  test("adds a member without phone", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-no-member-phone",
+    });
+
+    const added = await orgService.addMember({
+      orgId: created.organization.id,
+      name: "Member Two",
+      email: "member-no-phone@acme.com",
+      phone: "",
+      role: "member",
+    });
+
+    expect(added.member.email).toBe("member-no-phone@acme.com");
+    expect(added.member.phone).toBeNull();
+    expect(added.temporaryPassword).toHaveLength(12);
+  });
+
   test("allows changing password after provisioning", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({
@@ -215,6 +230,30 @@ describe("OrgService", () => {
       status: 401,
       message: "Current password is incorrect.",
     });
+  });
+
+  test("updates own profile email phone and name", async () => {
+    const { orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-profile",
+      admin: {
+        name: "Acme Admin",
+        email: "admin@acme.com",
+        phone: "+628123456789",
+      },
+    });
+
+    const userId = created.adminMember!.member.userId;
+    const updated = await orgService.updateOwnProfile(userId, {
+      name: "Updated Admin",
+      email: "updated@acme.com",
+      phone: "",
+    });
+
+    expect(updated.name).toBe("Updated Admin");
+    expect(updated.email).toBe("updated@acme.com");
+    expect(updated.phone).toBeNull();
   });
 
   test("rejects duplicate slugs", async () => {
@@ -322,10 +361,9 @@ describe("OrgService", () => {
     });
 
     const listed = await orgService.listMembers(created.organization.id);
-    expect(listed.members).toHaveLength(3);
+    expect(listed.members).toHaveLength(2);
     expect(listed.members.map((member) => member.email).sort()).toEqual([
       "admin@acme.com",
-      LOCAL_CLIENT_EMAIL,
       "viewer@acme.com",
     ]);
 
@@ -340,11 +378,8 @@ describe("OrgService", () => {
 
     await orgService.removeMember(created.organization.id, added.member.userId);
     const afterRemoval = await orgService.listMembers(created.organization.id);
-    expect(afterRemoval.members).toHaveLength(2);
-    expect(afterRemoval.members.map((member) => member.email).sort()).toEqual([
-      "admin@acme.com",
-      LOCAL_CLIENT_EMAIL,
-    ]);
+    expect(afterRemoval.members).toHaveLength(1);
+    expect(afterRemoval.members.map((member) => member.email).sort()).toEqual(["admin@acme.com"]);
   });
 
   test("protects the last org admin from removal or demotion", async () => {
@@ -360,11 +395,7 @@ describe("OrgService", () => {
     });
 
     const adminUserId = created.adminMember!.member.userId;
-    const localClientUserId = created.organization.id
-      ? (await orgService.listMembers(created.organization.id)).members.find(
-          (member) => member.email === LOCAL_CLIENT_EMAIL,
-        )?.userId
-      : undefined;
+    const localClientUserId = LOCAL_CLIENT_USER_ID;
 
     expect(localClientUserId).toBeTruthy();
 

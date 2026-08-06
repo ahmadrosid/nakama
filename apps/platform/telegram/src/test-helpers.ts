@@ -2,7 +2,7 @@ import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
-import type { NakamaClient } from "@nakama/client";
+import type { ChatMessage } from "@nakama/core/contract";
 import type { AgentTodo, UserOrgSummary } from "@nakama/core/contract";
 import {
   assertBridgeClientMethods,
@@ -10,7 +10,7 @@ import {
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { StreamHandlers } from "@nakama/client";
+import type { StreamHandlers, NakamaClient } from "@nakama/client";
 import type { Context } from "grammy";
 import type { TelegramBotInfo } from "./group-message";
 
@@ -175,6 +175,7 @@ export function createMockClient(
         isSuper?: boolean;
       }>
     >;
+    messages?: ChatMessage[];
   } = {},
 ) {
   const calls = {
@@ -185,6 +186,8 @@ export function createMockClient(
     listUserOrgs: 0,
     setOrgId: 0,
     transcribeAudio: 0,
+    publishProfileArtifactShare: 0,
+    readProfileArtifactContent: 0,
   };
   const orgIds: string[] = [];
   let lastCreateSessionProfileId: string | undefined;
@@ -300,7 +303,7 @@ export function createMockClient(
         messagesAfter: 4,
       };
     },
-    getMessages: async () => [],
+    getMessages: async () => options.messages ?? [],
     clear: async () => {},
     send: async () => "ok",
     purge: async () => {},
@@ -353,6 +356,24 @@ export function createMockClient(
     transcribeAudio: async () => {
       calls.transcribeAudio += 1;
       return { text: "Transcribed voice message" };
+    },
+    publishProfileArtifactShare: async () => {
+      calls.publishProfileArtifactShare += 1;
+      return {
+        id: "share_test",
+        token: "tok_test",
+        shareUrl: "https://app.example/s/tok_test",
+        sharePath: "/s/tok_test",
+        webPublicUrlConfigured: true,
+        refreshed: false,
+      };
+    },
+    readProfileArtifactContent: async () => {
+      calls.readProfileArtifactContent += 1;
+      return {
+        contentType: "text/markdown",
+        data: new TextEncoder().encode("# Report").buffer,
+      };
     },
   } as unknown as NakamaClient;
 

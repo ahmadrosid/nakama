@@ -120,6 +120,17 @@ export function isTextArtifactMimeType(mimeType: string): boolean {
   );
 }
 
+/** Raster images previewable with `<img>`; SVG stays in the text path. */
+export function isImageArtifactMimeType(mimeType: string): boolean {
+  const normalized = normalizeMimeType(mimeType);
+
+  if (!normalized.startsWith("image/") || normalized === "image/svg+xml") {
+    return false;
+  }
+
+  return true;
+}
+
 /** True when the type carries no information about how to render the bytes. */
 export function isUnknownArtifactMimeType(mimeType: string): boolean {
   return normalizeMimeType(mimeType) === UNKNOWN_MIME_TYPE;
@@ -193,4 +204,14 @@ export function looksLikeUtf8Text(bytes: Uint8Array): boolean {
   } catch {
     return false;
   }
+}
+
+/** MIME types that must not be served inline on the app origin (public shares). */
+export function isBrowserExecutableArtifactMimeType(mimeType: string): boolean {
+  const normalized = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+  return (
+    normalized === "text/html" ||
+    normalized === "application/xhtml+xml" ||
+    normalized.startsWith("image/svg")
+  );
 }

@@ -19,14 +19,21 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
+import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
+import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
+import { ProviderSelect } from "@/components/ProviderSelect";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
   apiKeyPlaceholder,
   type SelectedProvider,
   PROVIDER_OPTIONS,
 } from "@/lib/models";
+import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 
 interface ProviderSetupFormProps {
   submitLabel?: string;
@@ -43,6 +50,10 @@ export function ProviderSetupForm({
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
+  const apiKeyOptional =
+    form.selectedProvider === "openai_compatible" ||
+    (form.selectedProvider === "ollama" && !ollamaKeyRequired);
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
@@ -63,78 +74,35 @@ export function ProviderSetupForm({
       )}
 
       <FormField id="provider" label="Provider" density={density}>
-        <Select
+        <ProviderSelect
+          id="provider"
           value={isBrowsing ? "__browse__" : form.selectedProvider}
           disabled={form.busy}
-          onValueChange={(v) => {
-            if (v === "__browse__") {
+          configuredTypes={form.configuredTypes}
+          onValueChange={(nextValue) => {
+            if (nextValue === "__browse__") {
               setIsBrowsing(true);
-            } else if (isSelectedProvider(v)) {
-              setIsBrowsing(false);
-              form.handleProviderSelect(v);
+              return;
             }
+
+            setIsBrowsing(false);
+            form.handleProviderSelect(nextValue);
           }}
-        >
-          <SelectTrigger
-            id="provider"
-            className={density === "compact" ? "w-full" : "w-full sm:max-w-sm"}
-          >
-            <SelectValue>
-              {isBrowsing
-                ? "Browse models.dev…"
-                : (PROVIDER_OPTIONS.find((o) => o.id === form.selectedProvider)?.label ??
-                  form.selectedProvider)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {PROVIDER_OPTIONS.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.label}
-              </SelectItem>
-            ))}
-            <SelectItem value="__browse__">Browse models.dev…</SelectItem>
-          </SelectContent>
-        </Select>
+        />
       </FormField>
 
       {isBrowsing ? (
         <ModelsBrowseList
           onSelect={handleBrowseSelect}
+          configuredTypes={form.configuredTypes}
+          openCodeZenConfigured={form.openCodeZenConfigured}
           className="h-72 rounded-md border border-border"
         />
       ) : (
         <>
-          {form.selectedProvider === "openai_compatible" ? (
-            <CustomProviderFields
-              displayName={form.displayName}
-              baseUrl={form.baseUrl}
-              apiKey={form.apiKey}
-              customModels={form.customModels}
-              disabled={form.busy}
-              density={density}
-              showThinkingToggle
-              displayNameError={form.displayNameError}
-              baseUrlError={form.baseUrlError}
-              modelsError={form.modelsError}
-              onDisplayNameChange={form.setDisplayName}
-              onBaseUrlChange={form.setBaseUrl}
-              onCustomModelsChange={form.setCustomModels}
-            />
-          ) : null}
-
-          {form.selectedProvider === "openrouter" ? (
-            <OpenRouterProviderModelFields
-              customModels={form.openRouterModels}
-              disabled={form.busy}
-              density={density}
-              modelsError={form.openRouterModelsError}
-              onCustomModelsChange={form.handleOpenRouterModelsChange}
-            />
-          ) : null}
-
           <FormField
             id="api-key"
-            label={form.selectedProvider === "openai_compatible" ? "API key (optional)" : "API key"}
+            label={apiKeyOptional ? "API key (optional)" : "API key"}
             density={density}
             footer={
               form.apiKeyError ? (
@@ -176,7 +144,95 @@ export function ProviderSetupForm({
             </InputGroup>
           </FormField>
 
+          {form.selectedProvider === "openai_compatible" ? (
+            <CustomProviderFields
+              displayName={form.displayName}
+              baseUrl={form.baseUrl}
+              apiKey={form.apiKey}
+              customModels={form.customModels}
+              disabled={form.busy}
+              density={density}
+              showThinkingToggle
+              displayNameError={form.displayNameError}
+              baseUrlError={form.baseUrlError}
+              modelsError={form.modelsError}
+              onDisplayNameChange={form.setDisplayName}
+              onBaseUrlChange={form.setBaseUrl}
+              onCustomModelsChange={form.setCustomModels}
+            />
+          ) : null}
+
+          {form.selectedProvider === "openrouter" ? (
+            <OpenRouterProviderModelFields
+              customModels={form.openRouterModels}
+              disabled={form.busy}
+              density={density}
+              modelsError={form.openRouterModelsError}
+              onCustomModelsChange={form.handleOpenRouterModelsChange}
+            />
+          ) : null}
+
+          {form.selectedProvider === "ollama" ? (
+            <>
+              <OllamaProviderSetupFields
+                hostMode={form.ollamaHostMode}
+                baseUrl={form.baseUrl}
+                disabled={form.busy}
+                density={density}
+                baseUrlError={form.baseUrlError}
+                onHostModeChange={form.handleOllamaHostModeChange}
+                onBaseUrlChange={form.setBaseUrl}
+              />
+              <BrowsableModelFields
+                fieldId="ollama-models"
+                customModels={form.customModels}
+                disabled={form.busy}
+                density={density}
+                modelsError={form.modelsError}
+                browseLabel="Browse Ollama"
+                showPricing={false}
+                showThinkingToggle={false}
+                footerHint={
+                  <>
+                    Add models by ID or browse live models from your Ollama host (for example{" "}
+                    <span className="font-mono">llama3.2</span>).
+                  </>
+                }
+                onCustomModelsChange={form.setCustomModels}
+                toModelRow={(row: { id: string; name: string }) => ({
+                  id: row.id,
+                  name: row.name,
+                })}
+                renderBrowse={(onSelect) => (
+                  <RemoteModelsBrowseList
+                    onSelect={onSelect}
+                    className="h-72 rounded-md border border-border"
+                    baseUrl={form.baseUrl}
+                    apiKey={form.apiKey}
+                    provider="ollama"
+                    hostMode={form.ollamaHostMode}
+                    browseLabel="Ollama"
+                  />
+                )}
+              />
+            </>
+          ) : null}
+
+          {isShortlistBrowseProvider(form.selectedProvider) ? (
+            <ShortlistBrowseProviderModelFields
+              provider={form.selectedProvider}
+              customModels={form.shortlistModels}
+              disabled={form.busy}
+              density={density}
+              modelsError={form.shortlistModelsError}
+              apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
+              onCustomModelsChange={form.handleShortlistModelsChange}
+            />
+          ) : null}
+
           {form.selectedProvider !== "openrouter" &&
+          !isShortlistBrowseProvider(form.selectedProvider) &&
+          form.selectedProvider !== "ollama" &&
           form.selectedProvider !== "openai_compatible" ? (
             <FormField id="model" label="Model" density={density}>
               <Select
@@ -210,7 +266,7 @@ export function ProviderSetupForm({
               type="submit"
               disabled={
                 form.busy ||
-                (form.selectedProvider !== "openai_compatible" && !form.apiKey.trim())
+                (!apiKeyOptional && !form.apiKey.trim())
               }
             >
               {form.busy ? (
@@ -227,12 +283,4 @@ export function ProviderSetupForm({
       )}
     </form>
   );
-}
-
-function isSelectedProvider(value: string | null): value is SelectedProvider {
-  if (value == null) {
-    return false;
-  }
-
-  return PROVIDER_OPTIONS.some((option) => option.id === value);
 }

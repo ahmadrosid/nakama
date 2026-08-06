@@ -1,7 +1,16 @@
 import type { EmailConfigFile } from "../email-config";
-import { resolveFromAddress, toMailboxConfig } from "../email-config";
+import { toMailboxConfig } from "../email-config";
 
 export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
+export const MAX_EMAIL_MESSAGE_BYTES = 10 * 1024 * 1024;
+
+export interface MailAttachment {
+  id: string;
+  filename: string;
+  mediaType: string;
+  size: number;
+  disposition: "attachment" | "inline" | null;
+}
 
 export interface MailMessageSummary {
   uid: number;
@@ -15,6 +24,7 @@ export interface MailMessage extends MailMessageSummary {
   text?: string;
   html?: string;
   truncated?: boolean;
+  attachments?: MailAttachment[];
 }
 
 export interface MailSendInput {
@@ -33,6 +43,11 @@ export interface MailReader {
   disconnect(): Promise<void>;
   listMessages(folder: string, limit: number): Promise<MailMessageSummary[]>;
   readMessage(folder: string, uid: number): Promise<MailMessage | null>;
+  readAttachment(
+    folder: string,
+    uid: number,
+    attachmentId: string,
+  ): Promise<{ metadata: MailAttachment; data: Buffer } | null>;
   searchMessages(
     folder: string,
     query: string,

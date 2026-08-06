@@ -164,24 +164,26 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
 
     setError(null);
 
-    for (const file of Array.from(files)) {
-      if (!isKnowledgeBaseFile(file)) {
-        setError(`Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`);
-        continue;
-      }
-
-      try {
-        const document = await fileToDocumentAttachment(file);
-        if (!document) {
-          setError(`Failed to read file: ${file.name}`);
-          continue;
+    await Promise.all(
+      Array.from(files).map(async (file) => {
+        if (!isKnowledgeBaseFile(file)) {
+          setError(`Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`);
+          return;
         }
 
-        await uploadMutation.mutateAsync({ profileId, document });
-      } catch (err) {
-        setError(formatError(err));
-      }
-    }
+        try {
+          const document = await fileToDocumentAttachment(file);
+          if (!document) {
+            setError(`Failed to read file: ${file.name}`);
+            return;
+          }
+
+          await uploadMutation.mutateAsync({ profileId, document });
+        } catch (err) {
+          setError(formatError(err));
+        }
+      }),
+    );
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";

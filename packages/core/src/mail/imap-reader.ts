@@ -1,14 +1,51 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { MAX_DOCUMENT_BYTES } from "../message-content";
 import type { MailboxConfig } from "./types";
 import {
   formatMailAddress,
+  MAX_EMAIL_MESSAGE_BYTES,
   truncateMailBody,
+  type MailAttachment,
   type MailMessage,
   type MailMessageSummary,
   type MailReader,
 } from "./types";
 import { sanitizeMailError } from "./sanitize";
+
+function toIsoDate(value: Date | string | undefined): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+
+  return new Date().toISOString();
+}
+
+function asUidList(uids: number[] | false): number[] {
+  return uids === false ? [] : uids;
+}
+
+function attachmentMetadata(
+  attachment: { filename?: string; contentType?: string; size?: number; contentDisposition?: string },
+  id: string,
+): MailAttachment {
+  return {
+    id,
+    filename: (attachment.filename || "attachment").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 255),
+    mediaType: attachment.contentType?.toLowerCase() || "application/octet-stream",
+    size: attachment.size ?? 0,
+    disposition:
+      attachment.contentDisposition === "inline"
+        ? "inline"
+        : attachment.contentDisposition === "attachment"
+          ? "attachment"
+          : null,
+  };
+}
 
 export function createImapReader(config: MailboxConfig): MailReader {
   const client = new ImapFlow({
@@ -56,7 +93,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
         uid: message.uid,
         subject: message.envelope?.subject?.trim() || "(no subject)",
         from: formatMailAddress(message.envelope?.from?.[0]),
-        date: (message.internalDate ?? new Date()).toISOString(),
+        date: toIsoDate(message.internalDate),
         folder,
       });
     }
@@ -79,8 +116,8 @@ export function createImapReader(config: MailboxConfig): MailReader {
       const lock = await client.getMailboxLock(folder);
 
       try {
-        const uids = await client.search({ all: true }, { uid: true });
-        return summariesFromUids(folder, uids, limit);
+        const uids = asUidList(await client.search({ all: true }, { uid: true }));
+        return await summariesFromUids(folder, uids, limit);
       } finally {
         lock.release();
       }
@@ -90,6 +127,10 @@ export function createImapReader(config: MailboxConfig): MailReader {
       const lock = await client.getMailboxLock(folder);
 
       try {
+        const overview = await client.fetchOne(uid, { size: true }, { uid: true });
+        if (overview && overview.size != null && overview.size > MAX_EMAIL_MESSAGE_BYTES) {
+          throw new Error(`Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`);
+        }
         for await (const message of client.fetch(
           uid,
           { source: true, envelope: true, internalDate: true },
@@ -100,10 +141,14 @@ export function createImapReader(config: MailboxConfig): MailReader {
           if (!source) {
             continue;
           }
+          if (source.length > MAX_EMAIL_MESSAGE_BYTES) {
+            throw new Error(`Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`);
+          }
 
           const parsed = await simpleParser(source);
           const textBody = parsed.text?.trim() ?? "";
-          const htmlBody = parsed.html?.trim() ?? "";
+          const htmlBody =
+            typeof parsed.html === "string" ? parsed.html.trim() : "";
           const preferred = textBody || htmlBody;
           const truncated = preferred
             ? truncateMailBody(preferred)
@@ -113,12 +158,58 @@ export function createImapReader(config: MailboxConfig): MailReader {
             uid: message.uid,
             subject: message.envelope?.subject?.trim() || "(no subject)",
             from: formatMailAddress(message.envelope?.from?.[0]),
-            date: (message.internalDate ?? new Date()).toISOString(),
+            date: toIsoDate(message.internalDate),
             folder,
             ...(textBody ? { text: truncated.text } : {}),
             ...(!textBody && htmlBody ? { html: truncated.text } : {}),
             ...(truncated.truncated ? { truncated: true } : {}),
+            ...(parsed.attachments.length > 0
+              ? {
+                  attachments: parsed.attachments.map((attachment, index) =>
+                    attachmentMetadata(attachment, String(index)),
+                  ),
+                }
+              : {}),
           } satisfies MailMessage;
+        }
+
+        return null;
+      } finally {
+        lock.release();
+      }
+    },
+    async readAttachment(folder, uid, attachmentId) {
+      await ensureConnected();
+      const lock = await client.getMailboxLock(folder);
+
+      try {
+        const overview = await client.fetchOne(uid, { size: true }, { uid: true });
+        if (overview && overview.size != null && overview.size > MAX_EMAIL_MESSAGE_BYTES) {
+          throw new Error(`Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`);
+        }
+        for await (const message of client.fetch(
+          uid,
+          { source: true },
+          { uid: true },
+        )) {
+          if (!message.source || message.source.length > MAX_EMAIL_MESSAGE_BYTES) {
+            throw new Error(`Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`);
+          }
+          const parsed = await simpleParser(message.source);
+          const index = Number.parseInt(attachmentId, 10);
+          const attachment = Number.isInteger(index) ? parsed.attachments[index] : undefined;
+          if (!attachment) {
+            return null;
+          }
+
+          const metadata = attachmentMetadata(attachment, attachmentId);
+          if (metadata.size > MAX_DOCUMENT_BYTES) {
+            throw new Error(`Email attachment exceeds ${MAX_DOCUMENT_BYTES} bytes.`);
+          }
+          if (attachment.content.length > MAX_DOCUMENT_BYTES) {
+            throw new Error(`Email attachment exceeds ${MAX_DOCUMENT_BYTES} bytes.`);
+          }
+          return { metadata, data: attachment.content };
         }
 
         return null;
@@ -137,13 +228,15 @@ export function createImapReader(config: MailboxConfig): MailReader {
       const lock = await client.getMailboxLock(folder);
 
       try {
-        const uids = await client.search(
-          {
-            or: [{ subject: trimmed }, { from: trimmed }, { body: trimmed }],
-          },
-          { uid: true },
+        const uids = asUidList(
+          await client.search(
+            {
+              or: [{ subject: trimmed }, { from: trimmed }, { body: trimmed }],
+            },
+            { uid: true },
+          ),
         );
-        return summariesFromUids(folder, uids, limit);
+        return await summariesFromUids(folder, uids, limit);
       } finally {
         lock.release();
       }
