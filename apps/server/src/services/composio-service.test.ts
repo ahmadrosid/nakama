@@ -234,4 +234,129 @@ describe("ComposioService", () => {
       restore();
     }
   });
+
+  test("formatProfileConnectionsContext guides search+invoke workflow and tool selection", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    try {
+      await seedOrgWithAdmin(db);
+      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      await db.upsertComposioUserConnection({
+        id: "cuc_admin",
+        orgId: ORG_ID,
+        userId: USER_ID,
+        toolkitId: toolkit.id,
+        status: "connected",
+        connectedAccountId: "ca_admin",
+        sessionIdEnc: null,
+        oauthStateHash: null,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.upsertProfile({
+        id: "profile_1",
+        orgId: ORG_ID,
+        name: "Bot",
+        model: null,
+        systemPrompt: "",
+        isDefault: true,
+        isSuper: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.replaceProfileComposioToolkits("profile_1", [
+        { profileId: "profile_1", toolkitId: toolkit.id, allowedActions: null },
+      ]);
+
+      const context = await service.formatProfileConnectionsContext(
+        ORG_ID,
+        USER_ID,
+        "profile_1",
+      );
+
+      expect(context).toContain("composio__search_actions");
+      expect(context).toContain("composio__invoke_action");
+      expect(context).toContain("composio__connect_account");
+      // Selection guidance: steer toward web_search for public facts.
+      expect(context).toContain("web_search");
+      // Per-toolkit connection status line.
+      expect(context).toContain("`gmail`");
+      expect(context).toContain("connected");
+    } finally {
+      restore();
+    }
+  });
+
+  test("formatProfileConnectionsContext omits search/invoke workflow when no toolkit is connected", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    try {
+      await seedOrgWithAdmin(db);
+      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      await db.upsertProfile({
+        id: "profile_unconnected",
+        orgId: ORG_ID,
+        name: "Bot",
+        model: null,
+        systemPrompt: "",
+        isDefault: false,
+        isSuper: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.replaceProfileComposioToolkits("profile_unconnected", [
+        { profileId: "profile_unconnected", toolkitId: toolkit.id, allowedActions: null },
+      ]);
+
+      const context = await service.formatProfileConnectionsContext(
+        ORG_ID,
+        USER_ID,
+        "profile_unconnected",
+      );
+
+      // Assigned toolkit is listed, but no connection exists.
+      expect(context).toContain("`gmail`");
+      expect(context).toContain("not_connected");
+      // The search/invoke workflow is not exposed until a toolkit is connected.
+      expect(context).not.toContain("composio__search_actions");
+      expect(context).not.toContain("composio__invoke_action");
+      // Connect-account guidance is still present.
+      expect(context).toContain("composio__connect_account");
+    } finally {
+      restore();
+    }
+  });
+
+  test("formatProfileConnectionsContext is empty when no toolkits are assigned", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    try {
+      await seedOrgWithAdmin(db);
+      await db.upsertProfile({
+        id: "profile_empty",
+        orgId: ORG_ID,
+        name: "Bot",
+        model: null,
+        systemPrompt: "",
+        isDefault: false,
+        isSuper: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const context = await service.formatProfileConnectionsContext(
+        ORG_ID,
+        USER_ID,
+        "profile_empty",
+      );
+
+      expect(context).toBe("");
+    } finally {
+      restore();
+    }
+  });
 });
