@@ -42,7 +42,7 @@ If you used org-shared connections before this model, existing connected toolkit
 
 ## Chat behavior
 
-- Assigned Composio tools are namespaced as `composio__{toolkit}__{tool}`.
+- Assigned Composio toolkits are exposed to the agent as two tools — `composio__search_actions` (search the action catalog) and `composio__invoke_action` (call a specific action by slug). The agent searches first, then invokes; this keeps token overhead flat regardless of how many actions a toolkit has.
 - When the user's account is not connected, chat exposes `composio__connect_account` so the agent can generate an OAuth link and send it in the reply.
 - **Web chat:** callback URL comes from the browser automatically (`window.location.origin`).
 - **Setup wizard:** silently saves `window.location.origin` during first-time setup (no extra step shown).

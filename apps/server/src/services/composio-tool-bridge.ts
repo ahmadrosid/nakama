@@ -5,7 +5,6 @@ import {
 } from "./composio-callback-url";
 import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
-import { sanitizeLlmToolNamePart } from "./mcp-tool-bridge";
 
 const COMPOSIO_META_TOOL_PATTERN = /^COMPOSIO_(MANAGE|WAIT|SEARCH|MULTI)/;
 const composioSessionUrls = new Map<string, string>();
@@ -39,10 +38,6 @@ async function ensureComposioMcpConnection(
 
 export function composioConnectionKey(orgId: string, userId: string, profileId: string): string {
   return `composio:${orgId}:${userId}:${profileId}`;
-}
-
-export function namespacedComposioToolName(toolkitSlug: string, toolSlug: string): string {
-  return `composio__${sanitizeLlmToolNamePart(toolkitSlug)}__${sanitizeLlmToolNamePart(toolSlug)}`;
 }
 
 function isBlockedComposioMetaTool(toolSlug: string): boolean {
