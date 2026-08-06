@@ -433,9 +433,19 @@ async function fetchRemoteOpenAIModelsRaw(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Could not fetch models (${response.status}): ${await response.text()}`,
+    const body = await response.text();
+    console.warn(
+      `Could not fetch models (${response.status}) from ${baseUrl}/models:`,
+      body,
     );
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        "Add an API key before discovering models from this endpoint.",
+      );
+    }
+
+    throw new Error(`Could not fetch models (${response.status}): ${body}`);
   }
 
   const payload = (await response.json()) as {
