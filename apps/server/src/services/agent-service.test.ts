@@ -317,7 +317,7 @@ describe("AgentService coding delegation context", () => {
           enabled: true,
         },
       ],
-      selectedCodingAgentHarness: "coding-harness-opencode",
+      selectedCodingAgentHarness: null,
       updatedAt: new Date().toISOString(),
     });
 
@@ -329,9 +329,10 @@ describe("AgentService coding delegation context", () => {
     expect(context).toContain("bash");
     expect(context).toContain("opencode run");
     expect(context).not.toContain("delegate_coding_task");
+    expect(context).not.toContain("workspace settings");
   });
 
-  test("falls back gracefully when no harness is ready", async () => {
+  test("lists install commands when no coding agent CLI is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
       id: WORKSPACE_SETTINGS_ID,
@@ -347,8 +348,54 @@ describe("AgentService coding delegation context", () => {
       formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
     }).formatCodingDelegationContext("org_test", "profile_test");
 
-    expect(context).toContain("bash");
+    expect(context).toContain("No coding agent CLI is installed");
+    expect(context).toContain("npm install -g");
+    expect(context).not.toContain("workspace settings");
     expect(context).not.toContain("delegate_coding_task");
+  });
+
+  test("asks the user when multiple coding agent CLIs are installed", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await installFakeOpenCode(tempBinDir);
+    await Bun.write(path.join(tempBinDir, "claude"), "#!/bin/sh\necho claude\n");
+    await Bun.spawn(["chmod", "+x", path.join(tempBinDir, "claude")]).exited;
+
+    await db.upsertWorkspaceSettings({
+      id: WORKSPACE_SETTINGS_ID,
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-opencode",
+          kind: "opencode",
+          name: "OpenCode",
+          command: "opencode",
+          args: [],
+          enabled: true,
+        },
+        {
+          id: "coding-harness-claude-code",
+          kind: "claude_code",
+          name: "Claude Code",
+          command: "claude",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: "coding-harness-opencode",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const service = new AgentService(null, null, db);
+    const context = await (service as unknown as {
+      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
+    }).formatCodingDelegationContext("org_test", "profile_test");
+
+    expect(context).toContain("Multiple coding agent CLIs are installed");
+    expect(context).toContain("Ask the user which one to use");
+    expect(context).toContain("OpenCode");
+    expect(context).toContain("Claude Code");
+    expect(context).not.toContain("opencode run");
   });
 });
 
