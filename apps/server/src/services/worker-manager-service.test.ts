@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { WorkerManagerService } from "./worker-manager-service";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
+import { setCrashLogger, type CrashReport } from "@nakama/core/crash-report";
 
 function createMockPm2() {
   const mockPm2 = {
@@ -457,6 +458,34 @@ describe("WorkerManagerService", () => {
       await service.recoverDesiredWorkers();
 
       expect(mockPm2.start).not.toHaveBeenCalled();
+    });
+
+    test("a worker that stays down is reported, not just logged", async () => {
+      const reports: CrashReport[] = [];
+      setCrashLogger((report) => {
+        reports.push(report);
+      });
+
+      const mockPm2 = createMockPm2();
+      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) => cb(null, []));
+      mockPm2.start = mock((_opts: unknown, cb: (err: Error | null) => void) =>
+        cb(new Error("PM2 start failed")),
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      try {
+        await setWorkerDesiredRunning("automation", false);
+        await setWorkerDesiredRunning("telegram", true);
+        await service.recoverDesiredWorkers();
+
+        // Nothing throws past the catch in recoverDesiredWorkers, so without a report the
+        // channel simply looks idle to the operator who enabled it.
+        expect(reports).toHaveLength(1);
+        expect(reports[0]?.kind).toBe("invariant");
+        expect(reports[0]?.message).toContain("telegram");
+      } finally {
+        setCrashLogger(null);
+      }
     });
   });
 

@@ -3,10 +3,13 @@ import { fileURLToPath } from "node:url";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 import { installCrashHandlers } from "@nakama/core/crash-report";
 import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import { reconcileOrphanedAutomationRuns } from "./services/orphaned-runs";
 
 ensureProcessPath();
 installCrashHandlers("server");
 installCrashReportSink();
+
+const processStartedAtMs = Date.now();
 import { createHonoApp } from "./http/app";
 import { AgentService } from "./services/agent-service";
 import { AutomationRunner } from "./services/automation-runner";
@@ -79,6 +82,10 @@ const config = loadConfig();
 const database = await createDatabase(config.databaseUrl, { baseDir: getUserConfigDir() });
 
 await seedDatabase(database.adapter);
+
+// Runs are completed in a finally block, so anything still marked running from before this
+// process started was cut off by a restart or a crash and will never finish on its own.
+await reconcileOrphanedAutomationRuns(database.adapter, processStartedAtMs);
 
 const authService = new AuthService();
 

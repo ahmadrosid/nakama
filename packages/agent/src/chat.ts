@@ -12,6 +12,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
+import { reportInvariant } from "@nakama/core/crash-report";
 
 export interface AgentRequest {
   prompt: string;
@@ -469,11 +470,28 @@ async function runConversation(
     history.push(result.assistantMessage);
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
+      // Only after tools actually ran. A first response that is empty can be an ordinary
+      // model result; an empty one after a round of tool calls is work the user paid for
+      // and never saw.
+      if (iteration > 0 && !result.content.trim()) {
+        void reportInvariant("agent ran tools but finished the turn with no reply", {
+          source: "agent",
+        });
+      }
+
       return result.content;
     }
 
     await executeToolCalls(tools, result.toolCalls, history, handlers, toolContext);
   }
+
+  // Falling out of the loop means the cap was hit, not that the model finished. The reply
+  // below is a partial answer the user cannot tell apart from a complete one, so it is
+  // reported rather than only returned.
+  void reportInvariant(
+    `agent tool loop hit the ${MAX_TOOL_ITERATIONS} iteration cap without a final answer`,
+    { source: "agent" },
+  );
 
   const lastAssistant = [...history]
     .reverse()
