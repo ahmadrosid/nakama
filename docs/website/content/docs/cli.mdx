@@ -1,6 +1,6 @@
 ---
 title: "CLI"
-description: "Use Nakama from the terminal — interactive chat, slash commands, and coding-agent launch."
+description: "Use Nakama from the terminal — interactive chat and slash commands."
 ---
 
 ## Run the CLI
@@ -70,38 +70,6 @@ Paste an image path or use clipboard attach:
 ```
 
 When your terminal supports it, paste with an empty prompt (`Ctrl+V` / `Cmd+V`) to attach from the clipboard.
-
-## Launch a coding agent
-
-To spawn Codex, Claude Code, or OpenCode directly (outside chat):
-
-```bash
-bun run dev:cli -- launch claude
-bun run dev:cli -- launch codex
-bun run dev:cli -- launch opencode
-```
-
-Common flags:
-
-| Flag | Description |
-|---|---|
-| `--org`, `-o` | Organization context |
-| `--profile`, `-p` | Profile for gateway routing |
-| `--model`, `-m` | Override model |
-| `--cwd` | Working directory (defaults to current shell directory) |
-| `--yes`, `-y` | Skip confirmation prompts |
-| `--save-harness` | Persist harness selection in Integrations |
-| `--` | Forward args to the coding CLI |
-
-Examples:
-
-```bash
-bun run dev:cli -- launch claude --org org_abc --profile super_bot
-bun run dev:cli -- launch claude -- --print "fix failing tests"
-bun run dev:cli -- launch codex --model gpt-4.1 -- --help
-```
-
-See [Coding agent](/coding-agent) for harness setup, provider passthrough, and runtime behavior.
 
 ## Rotate local auth token
 

@@ -186,7 +186,7 @@ They are hidden from the `/skill` slash picker (like `create-automation` and `ma
 
 ### Coding agent
 
-The `coding-agent` bundled skill teaches when to invoke a coding agent and how to summarize CLI results. Super Bot receives it by default. You can also launch a coding agent directly from the CLI (`nakama launch`). Setup, harness configuration, gateway routing, and runtime flow are in [Coding agent](/coding-agent).
+The `coding-agent` bundled skill teaches when to invoke a coding agent, how to install CLIs via `bash`, when to ask which backend to use, and how to summarize CLI results. Super Bot receives it by default. Setup and runtime flow are in [Coding agent](/coding-agent).
 
 ### Agent browser
 
@@ -232,7 +232,7 @@ Viewers cannot invoke agents, so they cannot trigger skills either.
 
 - [Profiles](/profiles) — how skills attach to a bot
 - [Self-improving skills](/self-improving-skills) — agents save workflows as skills; optional admin approval
-- [Coding agent](/coding-agent) — harness setup and the `coding-agent` skill
+- [Coding agent](/coding-agent) — skill-driven install and the `coding-agent` skill
 - [Agent browser](/agent-browser) — interactive browsing via `bash` and the `agent-browser` skill
 - [Builtin tools](/builtin-tools) — the actions a profile can take
 - [MCP servers](/mcp) — external tools assigned to a profile
