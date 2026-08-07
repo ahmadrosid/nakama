@@ -277,10 +277,10 @@ export function sessionStorageKey(profileId: string): string {
   return `nakama:session:${profileId}`;
 }
 
-export const HISTORY_SESSION_CHANNELS = ["web", "telegram", "whatsapp"] as const satisfies readonly AgentChannel[];
+export const HISTORY_SESSION_CHANNELS = ["web", "telegram", "whatsapp", "discord"] as const satisfies readonly AgentChannel[];
 
 export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
-  return channel === "telegram" || channel === "whatsapp";
+  return channel === "telegram" || channel === "whatsapp" || channel === "discord";
 }
 
 export function formatSessionChannelLabel(channel: AgentChannel): string {
@@ -289,6 +289,8 @@ export function formatSessionChannelLabel(channel: AgentChannel): string {
       return "Telegram";
     case "whatsapp":
       return "WhatsApp";
+    case "discord":
+      return "Discord";
     case "web":
       return "Web";
     default:
