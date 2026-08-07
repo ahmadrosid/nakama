@@ -57,4 +57,5 @@ After the coding agent returns:
 - Summarize what changed in plain language using stdout/stderr from the bash result.
 - Mention what was verified.
 - Call out any remaining risks, gaps, or follow-up work.
+- If the user asked to resolve an issue / ship / open a PR, the coding brief should have required branch + commit + push + `gh pr create` (see backend guidance, especially Cursor). Confirm the PR URL before treating the task as done.
 - If the coding agent run failed (non-zero exit, timeout, or empty useful output), explain the failure clearly and decide whether to retry, adjust the prompt, or ask the user.

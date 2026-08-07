@@ -5,7 +5,11 @@ import { getGlobalSkillsDir, SKILL_FILE_NAME } from "../paths";
 import { BUNDLED_SKILL_NAMES, readBundledSkillMarkdown } from "./index";
 
 /** Bundled skills whose installed SKILL.md must be overwritten on startup (content drift). */
-const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>(["manage-skills"]);
+const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
+  "manage-skills",
+  "coding-agent",
+  "coding-backend-cursor",
+]);
 
 const RENAMED_BUNDLED_SKILL_DIRS = [["coding-delegation", "coding-agent"]] as const;
 
