@@ -304,7 +304,7 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Returns:** `{ exitCode, stdout, stderr, timedOut }`
 
-**Coding-agent spawn env:** When `codingAgent: true` and the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), Nakama merges provider passthrough env vars on the server before spawn. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
+**Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 

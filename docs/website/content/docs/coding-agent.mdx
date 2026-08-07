@@ -56,6 +56,7 @@ Nakama supports CLI-backed backends on the machine running the server:
 | **Codex** | `codex` | OpenAI Codex CLI one-shot `exec` runs |
 | **Claude Code** | `claude` | Anthropic Claude Code print mode (`-p`) |
 | **OpenCode** | `opencode` | Provider-agnostic OpenCode `run` |
+| **pi** | `pi` | pi coding agent CLI |
 
 ## Setup
 
@@ -97,8 +98,10 @@ Nakama injects your configured LLM provider credentials at coding-agent spawn ti
 
 The `bash` tool merges spawn env when:
 
-- `codingAgent: true` is set on the bash call, **and**
-- the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`)
+- the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or
+- `codingAgent: true` is set **and** the command starts with a known harness binary
+
+If `codingAgent: true` is set but the command does not start with a known binary, Nakama fails closed (no provider env merge) so the wrong credentials are never applied.
 
 Passthrough follows the **binary in the command**, not a dashboard selection.
 
