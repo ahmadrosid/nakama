@@ -358,7 +358,7 @@ describe("AgentService coding delegation context", () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
     await Bun.write(path.join(tempBinDir, "claude"), "#!/bin/sh\necho claude\n");
-    await Bun.spawn(["chmod", "+x", path.join(tempBinDir, "claude")]).exited;
+    await chmod(path.join(tempBinDir, "claude"), 0o755);
 
     await db.upsertWorkspaceSettings({
       id: WORKSPACE_SETTINGS_ID,

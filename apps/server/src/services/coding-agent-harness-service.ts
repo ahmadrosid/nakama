@@ -319,11 +319,32 @@ export async function saveCodingAgentWorkspaceSettings(
   };
 }
 
+function matchesHarnessBinary(command: string, binary: string): boolean {
+  const trimmed = command.trim();
+  const harnessBinary = binary.trim();
+
+  if (!harnessBinary) {
+    return false;
+  }
+
+  return trimmed === harnessBinary || trimmed.startsWith(`${harnessBinary} `);
+}
+
 export function isCodingAgentCommand(
   command: string,
   harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>,
 ): boolean {
-  return inferCodingAgentHarnessKind(command, harnesses) != null;
+  for (const harness of harnesses) {
+    if (!harness.enabled) {
+      continue;
+    }
+
+    if (matchesHarnessBinary(command, harness.command)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** First enabled harness whose configured command matches argv0 / prefix. */
@@ -331,20 +352,12 @@ export function inferCodingAgentHarnessKind(
   command: string,
   harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "kind" | "command" | "enabled">>,
 ): StoredCodingAgentHarnessKind | null {
-  const trimmed = command.trim();
-
   for (const harness of harnesses) {
     if (!harness.enabled) {
       continue;
     }
 
-    const binary = harness.command.trim();
-
-    if (!binary) {
-      continue;
-    }
-
-    if (trimmed === binary || trimmed.startsWith(`${binary} `)) {
+    if (matchesHarnessBinary(command, harness.command)) {
       return harness.kind;
     }
   }
