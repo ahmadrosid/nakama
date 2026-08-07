@@ -52,7 +52,6 @@ import type {
   SoulStackResponse,
   SyncSkillsResponse,
   SoulStatusResponse,
-  CodingHarnessSettingsResponse,
   AgentBrowserStatusResponse,
   TelegramSettingsResponse,
   DiscordSettingsResponse,
@@ -60,8 +59,6 @@ import type {
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
-  UpdateCodingHarnessSettingsRequest,
-  VerifyCodingHarnessResponse,
   ToolDefinition,
   UpdateProfileRequest,
   UpdateSoulFileRequest,
@@ -210,11 +207,6 @@ import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import {
   resolveCodingAgentHarness,
 } from "./coding-agent-harness-service";
-import {
-  getCodingHarnessSettings,
-  setCodingHarnessSettings,
-  verifyCodingHarnessSettings,
-} from "./coding-agent-settings";
 import { getAgentBrowserStatus } from "./agent-browser-service";
 import {
   buildCodingAgentCommandTemplate,
@@ -929,20 +921,6 @@ export class AgentService {
       to,
       messageId: result.messageId,
     };
-  }
-
-  async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
-    return getCodingHarnessSettings(this.db, this.userConfig);
-  }
-
-  async setCodingHarnessSettings(
-    input: UpdateCodingHarnessSettingsRequest,
-  ): Promise<CodingHarnessSettingsResponse> {
-    return setCodingHarnessSettings(this.db, this.userConfig, input);
-  }
-
-  async verifyCodingHarness(harnessId?: string): Promise<VerifyCodingHarnessResponse> {
-    return verifyCodingHarnessSettings(this.db, this.userConfig, harnessId);
   }
 
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {

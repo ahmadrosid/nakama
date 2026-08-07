@@ -1110,78 +1110,14 @@ export interface SendEmailTestResponse {
   messageId: string;
 }
 
-export type CodingHarnessKind = "codex" | "claude_code" | "opencode" | "pi";
-
-export interface CodingAgentProviderPassthroughSummary {
+export type CodingAgentProviderPassthroughSummary = {
   active: boolean;
   configured: boolean;
   compatible: boolean;
   providerLabel: string | null;
   model: string | null;
   message?: string | null;
-}
-
-export interface CodingHarnessStatus {
-  id: string;
-  kind: CodingHarnessKind;
-  name: string;
-  command: string;
-  enabled: boolean;
-  installed: boolean;
-  selected: boolean;
-  installHint: string;
-  installCommand: string;
-  version: string | null;
-  authenticated: boolean | null;
-  ready: boolean;
-  nextStep: "install" | "retry" | null;
-  statusMessage: string | null;
-}
-
-export interface CodingHarnessSettingsResponse {
-  configured: boolean;
-  selectedHarnessId: string | null;
-  activeHarnessId: string | null;
-  providerPassthrough: CodingAgentProviderPassthroughSummary;
-  harnesses: CodingHarnessStatus[];
-}
-
-export interface VerifyCodingHarnessRequest {
-  harnessId?: string;
-}
-
-export interface VerifyCodingHarnessResponse {
-  ok: boolean;
-  harnessId: string | null;
-  name: string | null;
-  version: string | null;
-  installed: boolean;
-  authenticated: boolean | null;
-  ready: boolean;
-  nextStep: "install" | "retry" | null;
-  statusMessage: string | null;
-  error: string | null;
-}
-
-export interface CodingHarnessInstallRequest {
-  harnessId: string;
-}
-
-export type CodingHarnessInstallEvent =
-  | {
-      type: "progress";
-      harnessId: string;
-      name: string;
-      message: string;
-    }
-  | {
-      type: "done";
-      status: CodingHarnessStatus;
-    }
-  | {
-      type: "error";
-      error: string;
-    };
+};
 
 export interface AgentBrowserStatusResponse {
   installed: boolean;
@@ -1206,14 +1142,6 @@ export type AgentBrowserInstallEvent =
       error: string;
     };
 
-export interface UpdateCodingHarnessSettingsRequest {
-  selectedHarnessId?: string | null;
-  harnesses?: Array<{
-    id: string;
-    command?: string;
-    enabled?: boolean;
-  }>;
-}
 
 export interface WhatsAppSettingsResponse {
   configured: boolean;

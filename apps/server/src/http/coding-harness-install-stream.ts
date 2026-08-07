@@ -1,5 +1,5 @@
 import { formatServerError } from "@nakama/core";
-import type { AgentBrowserInstallEvent, CodingHarnessInstallEvent } from "@nakama/core";
+import type { AgentBrowserInstallEvent } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 
@@ -62,15 +62,6 @@ export function streamInstallEvents<TEvent extends { type: string }>(
       Connection: "keep-alive",
     },
   });
-}
-
-export function streamCodingHarnessInstall(
-  executor: (send: (event: CodingHarnessInstallEvent) => void) => Promise<void>,
-  options: {
-    timeoutMessage?: string;
-  } = {},
-): Response {
-  return streamInstallEvents<CodingHarnessInstallEvent>(executor, options);
 }
 
 export function streamAgentBrowserInstall(
