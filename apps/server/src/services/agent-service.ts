@@ -1603,7 +1603,11 @@ export class AgentService {
   async discoverModels(request: DiscoverModelsRequest): Promise<ModelsResponse> {
     const providerId = request.providerId?.trim();
     if (providerId) {
-      return this.discoverModelsForProvider(providerId);
+      return this.discoverModelsForProvider(providerId, {
+        baseUrl: request.baseUrl?.trim() || undefined,
+        apiKey: request.apiKey,
+        hostMode: request.hostMode,
+      });
     }
 
     if (request.provider === "fireworks") {
@@ -1670,7 +1674,14 @@ export class AgentService {
     };
   }
 
-  async discoverModelsForProvider(providerId: string): Promise<ModelsResponse> {
+  async discoverModelsForProvider(
+    providerId: string,
+    overrides?: {
+      baseUrl?: string;
+      apiKey?: string;
+      hostMode?: DiscoverModelsRequest["hostMode"];
+    },
+  ): Promise<ModelsResponse> {
     const instance = findProviderInstance(
       this.userConfig ?? { providers: [], defaultProviderId: null },
       providerId,
@@ -1682,8 +1693,11 @@ export class AgentService {
 
     if (instance.type === "ollama" || instance.type === "openai_compatible") {
       const hostMode =
-        instance.type === "ollama" ? resolveOllamaHostMode(instance) : undefined;
+        instance.type === "ollama"
+          ? (overrides?.hostMode ?? resolveOllamaHostMode(instance))
+          : undefined;
       const apiKey =
+        overrides?.apiKey?.trim() ||
         instance.apiKey.trim() ||
         (instance.type === "ollama"
           ? readEnvValue(process.env, apiKeyEnvVarForProvider("ollama") ?? "") || ""
@@ -1693,7 +1707,9 @@ export class AgentService {
         throw new Error("Add an API key before discovering Ollama Cloud models.");
       }
 
+      // Prefer an explicit baseUrl (e.g. unsaved Edit provider field) over the stored one.
       const baseUrl =
+        overrides?.baseUrl ||
         instance.baseUrl?.trim() ||
         (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
 
@@ -1705,7 +1721,7 @@ export class AgentService {
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
           : await fetchRemoteOpenAIModels(baseUrl, apiKey);
-      const remoteInstance = { ...instance, customModels: entries };
+      const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);
 
       return {
