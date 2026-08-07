@@ -138,12 +138,29 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     // Threads share the parent channel's org selection — do not key by thread id.
     const channelOrgKey = resolveChannelOrgKey(parentChannelId, userId, isGuild);
     const conversationKey = resolveConversationKey(message, channelId, isGuild);
-    // Serialize per user+parent channel so thread create/reuse and in-thread chat don't race.
-    const lockKey = isGuild
-      ? resolveThreadLookupKey(parentChannelId, userId)
-      : conversationKey;
+    const shouldRouteToThread =
+      isGuild &&
+      !isThread &&
+      (groupDecision?.reason === "bot-mention" || groupDecision?.reason === "reply-to-bot");
 
-    await withChatLock(lockKey, async () => {
+    // Parent-channel mentions create a NEW thread, then lock per that thread so
+    // concurrent agent runs in other threads for the same user are allowed.
+    if (shouldRouteToThread) {
+      await handleGuildParentMention({
+        message,
+        channel,
+        messenger,
+        userId,
+        parentChannelId,
+        channelOrgKey,
+        botInfo,
+        text,
+      });
+      return;
+    }
+
+    // DMs and in-thread follow-ups serialize per conversation/thread key.
+    await withChatLock(conversationKey, async () => {
       await authStore.reload();
       const isAuthorized = authStore.isAuthorized(userId);
 
@@ -200,82 +217,138 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      let replyChannel = channel;
-      let replyConversationKey = conversationKey;
-      let replyMessenger = messenger;
-      let replyIsThread = isThread;
+      await handleChatMessage(
+        channel,
+        conversationKey,
+        messenger,
+        messageText,
+        isGuild,
+        isThread,
+      );
+    });
+  }
 
-      const shouldRouteToThread =
-        isGuild &&
-        !isThread &&
-        (groupDecision?.reason === "bot-mention" || groupDecision?.reason === "reply-to-bot");
+  async function handleGuildParentMention(options: {
+    message: Message;
+    channel: TextBasedChannel;
+    messenger: DiscordMessenger;
+    userId: string;
+    parentChannelId: string;
+    channelOrgKey: string;
+    botInfo: DiscordBotInfo | undefined;
+    text: string | undefined;
+  }): Promise<void> {
+    const {
+      message,
+      channel,
+      messenger,
+      userId,
+      parentChannelId,
+      channelOrgKey,
+      botInfo,
+      text,
+    } = options;
 
-      if (shouldRouteToThread) {
-        const thread = await resolveOrCreateGuildThread(
-          message,
-          channelId,
-          userId,
-          messageText,
-        );
+    await authStore.reload();
 
-        if (thread) {
-          replyChannel = thread;
-          replyConversationKey = `g:${channelId}:t:${thread.id}`;
-          replyMessenger = createDiscordMessenger(thread);
-          replyIsThread = true;
-        }
-      }
+    if (!authStore.isAuthorized(userId)) {
+      await messenger.send(LINK_IN_PRIVATE_REPLY);
+      return;
+    }
 
+    if (text && looksLikeHandshakeAttempt(text)) {
+      await messenger.send(LINK_IN_PRIVATE_REPLY);
+      return;
+    }
+
+    const orgGateText = text && botInfo ? stripBotMention(text, botInfo) : text;
+    const orgReady = await ensureOrgReady(messenger, channelOrgKey, orgGateText);
+    if (!orgReady) {
+      return;
+    }
+
+    if (!text) {
+      await messenger.send("Text messages only.");
+      return;
+    }
+
+    const messageText = botInfo ? stripBotMention(text, botInfo) : text;
+
+    if (!messageText) {
+      return;
+    }
+
+    const thread = await createGuildThread(message, parentChannelId, userId, messageText);
+
+    if (!thread) {
+      await withChatLock(parentChannelId, async () => {
+        await handleChatMessage(channel, parentChannelId, messenger, messageText, true, false);
+      });
+      return;
+    }
+
+    const replyConversationKey = `g:${parentChannelId}:t:${thread.id}`;
+    const replyChannel = thread as TextBasedChannel;
+    const replyMessenger = createDiscordMessenger(replyChannel);
+
+    await withChatLock(replyConversationKey, async () => {
       await handleChatMessage(
         replyChannel,
         replyConversationKey,
         replyMessenger,
         messageText,
-        isGuild,
-        replyIsThread,
+        true,
+        true,
       );
     });
   }
 
-  async function resolveOrCreateGuildThread(
+  /** Always start a fresh Discord thread from a parent-channel mention/reply. */
+  async function createGuildThread(
     message: Message,
     parentChannelId: string,
     userId: string,
     messageText: string,
   ): Promise<ThreadChannel | null> {
     const lookupKey = resolveThreadLookupKey(parentChannelId, userId);
-    // Re-check after the chat lock so concurrent mentions do not create duplicate threads.
-    const existingThreadId = threadStore.get(lookupKey);
-
-    if (existingThreadId) {
-      try {
-        const fetched = await message.client.channels.fetch(existingThreadId);
-
-        if (fetched?.isThread()) {
-          if (fetched.archived) {
-            await fetched.setArchived(false);
-          }
-
-          return fetched;
-        }
-      } catch (error) {
-        console.warn(
-          `Stored Discord thread ${existingThreadId} is unavailable; creating a new one.`,
-          error,
-        );
-      }
-    }
 
     try {
       const thread = await message.startThread({
         name: deriveThreadName(messageText),
         autoArchiveDuration: 1440,
       });
-      threadStore.set(lookupKey, thread.id);
+      threadStore.add(lookupKey, thread.id);
       await threadStore.save();
       return thread;
     } catch (error) {
       console.error("Failed to create Discord thread; falling back to channel reply:", error);
+      return null;
+    }
+  }
+
+  async function createGuildThreadFromChannel(
+    channel: TextBasedChannel,
+    parentChannelId: string,
+    userId: string,
+    threadName = "Nakama chat",
+  ): Promise<ThreadChannel | null> {
+    if (!("threads" in channel) || typeof channel.threads?.create !== "function") {
+      return null;
+    }
+
+    const lookupKey = resolveThreadLookupKey(parentChannelId, userId);
+
+    try {
+      const thread = await channel.threads.create({
+        name: threadName.slice(0, 100),
+        autoArchiveDuration: 1440,
+        reason: "Nakama /new conversation",
+      });
+      threadStore.add(lookupKey, thread.id);
+      await threadStore.save();
+      return thread;
+    } catch (error) {
+      console.error("Failed to create Discord thread for /new:", error);
       return null;
     }
   }
@@ -314,6 +387,40 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       console.error("Failed to archive Discord thread after /close:", error);
       await messenger.send("Couldn't archive the thread. Check the bot's Manage Threads permission.");
     }
+  }
+
+  async function handleNewFromParentChannel(
+    interaction: ChatInputCommandInteraction,
+    parentChannelId: string,
+    userId: string,
+    messenger: DiscordMessenger,
+  ): Promise<void> {
+    const channel = interaction.channel;
+
+    if (!channel || channel.isDMBased() || channel.isThread()) {
+      await messenger.send("Use /new in a server channel to open a new bot thread.");
+      return;
+    }
+
+    const thread = await createGuildThreadFromChannel(
+      channel,
+      parentChannelId,
+      userId,
+      "Nakama chat",
+    );
+
+    if (!thread) {
+      await messenger.send(
+        "Couldn't create a thread. Check the bot's Create Public Threads permission.",
+      );
+      return;
+    }
+
+    const conversationKey = `g:${parentChannelId}:t:${thread.id}`;
+    stopActiveStream(conversationKey);
+    pendingQuestionnaires.delete(conversationKey);
+    await createAndBindSession(conversationKey);
+    await messenger.send(`Started a new conversation in <#${thread.id}>.`);
   }
 
   async function handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -400,6 +507,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           return;
         }
         case "new": {
+          if (isGuild && !interaction.channel?.isThread()) {
+            await handleNewFromParentChannel(interaction, orgChannelId, userId, messenger);
+            return;
+          }
+
           stopActiveStream(conversationKey);
           pendingQuestionnaires.delete(conversationKey);
           await createAndBindSession(conversationKey);

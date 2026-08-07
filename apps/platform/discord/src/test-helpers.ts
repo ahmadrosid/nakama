@@ -228,6 +228,8 @@ export interface MockGuildChatMessage {
   lastThreadName: string | null;
 }
 
+let guildThreadSeq = 0;
+
 export function createGuildChatMessage(options: {
   userId?: string;
   channelId?: string;
@@ -320,6 +322,25 @@ export function createGuildChatMessage(options: {
         edit: async () => {},
       }),
     },
+    threads: {
+      create: async ({ name }: { name: string }) => {
+        startThreadCalls += 1;
+        lastThreadName = name;
+        if (options.startThreadError) {
+          throw options.startThreadError;
+        }
+
+        guildThreadSeq += 1;
+        createdThreadId = `created_thread_${guildThreadSeq}`;
+        const thread = createThreadChannel(createdThreadId, channelId, false);
+        existingThreads.set(createdThreadId, {
+          id: createdThreadId,
+          parentId: channelId,
+          archived: false,
+        });
+        return thread;
+      },
+    },
   };
 
   const channel = options.inThread
@@ -362,7 +383,8 @@ export function createGuildChatMessage(options: {
         throw options.startThreadError;
       }
 
-      createdThreadId = `created_thread_${startThreadCalls}`;
+      guildThreadSeq += 1;
+      createdThreadId = `created_thread_${guildThreadSeq}`;
       const thread = createThreadChannel(createdThreadId, channelId, false);
       existingThreads.set(createdThreadId, {
         id: createdThreadId,
@@ -402,15 +424,20 @@ export function createSlashInteraction(options: {
   inThread?: boolean;
   parentId?: string;
   threadId?: string;
+  startThreadError?: Error;
 }): {
   interaction: import("discord.js").ChatInputCommandInteraction;
   replies: string[];
+  createdThreadId: string | null;
+  startThreadCalls: number;
 } {
   const replies: string[] = [];
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
   const threadId = options.threadId ?? "thread_1";
   const parentId = options.parentId ?? channelId;
+  let createdThreadId: string | null = null;
+  let startThreadCalls = 0;
 
   const channel = options.inThread
     ? {
@@ -429,6 +456,22 @@ export function createSlashInteraction(options: {
         parentId: null,
         isDMBased: () => false,
         isThread: () => false,
+        threads: {
+          create: async ({ name }: { name: string }) => {
+            startThreadCalls += 1;
+            if (options.startThreadError) {
+              throw options.startThreadError;
+            }
+            createdThreadId = `slash_thread_${startThreadCalls}`;
+            return {
+              id: createdThreadId,
+              parentId: channelId,
+              name,
+              isThread: () => true,
+              isDMBased: () => false,
+            };
+          },
+        },
       };
 
   const interaction = {
@@ -447,7 +490,16 @@ export function createSlashInteraction(options: {
     },
   } as unknown as import("discord.js").ChatInputCommandInteraction;
 
-  return { interaction, replies };
+  return {
+    interaction,
+    replies,
+    get createdThreadId() {
+      return createdThreadId;
+    },
+    get startThreadCalls() {
+      return startThreadCalls;
+    },
+  };
 }
 
 export async function writeDiscordConfigIni(

@@ -60,7 +60,11 @@ export function resolveConversationKey(message: Message, channelId: string, isGu
   return channelId;
 }
 
-/** Persisted mapping key: one chat thread per user in a parent guild channel. */
+/**
+ * Persisted ownership key for bot-started threads in a parent guild channel.
+ * Values may be one thread id (legacy) or several — each @mention from the
+ * parent channel adds a new thread without dropping ownership of older ones.
+ */
 export function resolveThreadLookupKey(channelId: string, userId: string): string {
   return `g:${channelId}:u:${userId}`;
 }

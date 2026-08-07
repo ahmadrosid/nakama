@@ -15,7 +15,7 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     stop: "Stop the current agent reply",
     clear: "Clear chat history",
     compact: "Compact conversation history",
-    new: "Start a new conversation",
+    new: "Start a new conversation (opens a new thread in server channels)",
     close: "Close this bot conversation thread",
     status: "Show server and model status",
   };
