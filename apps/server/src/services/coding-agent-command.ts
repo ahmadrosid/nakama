@@ -177,9 +177,10 @@ export async function buildCodingAgentCommandTemplate(
       ].join(" "),
       notes: [
         "Cursor Agent uses host Cursor authentication — Nakama does not inject provider credentials.",
+        "Before coding: ensure the target repo exists in the profile workspace; git clone it there if missing, then run from that folder.",
         "Use --yolo so unattended background runs do not block on permission prompts.",
         "Summarize the final outcome from stream-json output; do not dump the full event stream to the user.",
-        "Run from the profile workspace cwd unless the user specifies another path inside it.",
+        "Run from the repo checkout inside the profile workspace unless the user specifies another path inside it.",
       ],
     };
   }

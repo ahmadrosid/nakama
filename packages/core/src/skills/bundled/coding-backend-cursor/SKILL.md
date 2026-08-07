@@ -14,12 +14,23 @@ You are preparing a coding agent run for Cursor Agent CLI (`agent`), orchestrate
 - Nakama does **not** auto-install Cursor Agent and does **not** inject Nakama provider credentials. Host Cursor auth is required.
 - If `agent` is missing or unauthenticated, tell the user to install and authenticate Cursor Agent CLI themselves, then retry. Do not run `npm install -g` for this backend.
 
+## Repo setup (do this before coding)
+
+Bash runs in the **profile workspace**. Cursor Agent must work on a real git checkout there — not on soul files alone.
+
+1. Identify the target repo (URL or folder name from the user). If unclear, ask once.
+2. Check whether that repo already exists under the workspace (e.g. `ls`, or `test -d <dir>/.git`).
+3. If it is missing, clone it into the workspace with `bash` (`git clone <url> <dir>`), then continue.
+4. Run Cursor Agent **inside that repo folder** (`cd <dir> && …` or `agent --workspace <dir> …`).
+
+Do not invent a repo URL. Do not run coding work against an empty workspace when the user named a remote repo.
+
 ## Command (required shape)
 
-Non-interactive print mode for unattended background runs from Nakama:
+Non-interactive print mode for unattended background runs from Nakama (from the repo directory):
 
 ```bash
-agent -p 'Implement the requested change and summarize what you verified' --output-format stream-json --yolo
+cd <repo-dir> && agent -p 'Implement the requested change and summarize what you verified' --output-format stream-json --yolo
 ```
 
 - `-p` / `--print` — non-interactive one-shot
