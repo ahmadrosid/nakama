@@ -48,11 +48,13 @@ export function WorkerActionBar({
   pm2Managed,
   workerName,
   className,
+  showLogs = true,
 }: {
   running: boolean;
   pm2Managed: boolean;
   workerName: string;
   className?: string;
+  showLogs?: boolean;
 }) {
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const startWorker = useStartWorker();
@@ -111,17 +113,51 @@ export function WorkerActionBar({
             Start
           </Button>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={() => setLogDialogOpen(true)}
-        >
-          <ScrollTextIcon className="size-3.5" strokeWidth={2} aria-hidden />
-          View logs
-        </Button>
+        {showLogs ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setLogDialogOpen(true)}
+          >
+            <ScrollTextIcon className="size-3.5" strokeWidth={2} aria-hidden />
+            View logs
+          </Button>
+        ) : null}
       </div>
+      {showLogs ? (
+        <WorkerLogDialog
+          workerName={workerName}
+          open={logDialogOpen}
+          onOpenChange={setLogDialogOpen}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function WorkerViewLogsButton({
+  workerName,
+  className,
+}: {
+  workerName: string;
+  className?: string;
+}) {
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn("text-muted-foreground", className)}
+        onClick={() => setLogDialogOpen(true)}
+      >
+        <ScrollTextIcon className="size-3.5" strokeWidth={2} aria-hidden />
+        View logs
+      </Button>
       <WorkerLogDialog
         workerName={workerName}
         open={logDialogOpen}
