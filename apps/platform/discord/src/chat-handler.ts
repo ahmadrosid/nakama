@@ -769,6 +769,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     chatId: string,
     profileId?: string,
   ): Promise<RemoteChatSession> {
+    pendingQuestionnaires.delete(chatId);
     const resolvedProfileId = profileId ?? (await resolveSessionProfileId(chatId));
     const session = await client.createSession("discord", {
       profileId: resolvedProfileId,
