@@ -50,7 +50,7 @@ When repo work should run on a coding agent, use the `bash` tool to run the CLI:
 5. Call `bash` with `codingAgent: true` **and** a command that starts with the harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`) so Nakama can recognize the harness. For Codex/Claude/OpenCode/pi, Nakama may merge provider passthrough spawn env. For **Cursor Agent**, spawn env stays empty — host Cursor auth is used instead. Use an explicit `timeoutMs` suited to the task — use 600000–1800000 ms (10–30 minutes) for substantial coding runs; keep shorter timeouts for quick checks.
 6. Prefer precise change requests over broad open-ended prompts.
 7. If the user names a preferred backend, use that CLI.
-8. For Cursor Agent: ensure the target repo exists in the profile workspace (clone if missing), set bash cwd to that repo, run `agent -p '<task>' --output-format text --yolo` with codingAgent true (argv0 must be `agent`, not `cd && agent`). Prefer text over stream-json. If output looks truncated, verify with git status/diff. See backend guidance.
+8. For Cursor Agent: ensure the target repo exists in the profile workspace (clone if missing), set bash cwd to that repo, run `agent -p '<task>' --output-format text --yolo` with codingAgent true (argv0 must be `agent`, not `cd && agent`). Prefer text; stream-json is summarized automatically with a full log under `artifacts/coding-agent-runs/`. See backend guidance.
 
 After the coding agent returns:
 

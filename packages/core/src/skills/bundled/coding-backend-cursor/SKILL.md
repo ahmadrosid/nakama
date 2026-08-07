@@ -42,11 +42,11 @@ bash args:
 Flags:
 
 - `-p` / `--print` — non-interactive one-shot
-- `--output-format text` — short final answer for Nakama (prefer this; avoid `stream-json`, which blows bash's stdout cap and looks truncated mid-run)
+- `--output-format text` — short final answer for Nakama (preferred). `stream-json` also works: Nakama summarizes the NDJSON into assistant/tools/result and saves the full log under `artifacts/coding-agent-runs/`.
 - `--yolo` — required for unattended background dispatch
 
 ## After the run
 
-- Summarize the final text for the user.
-- If stdout looks truncated (`...[truncated]`) or unclear, verify completion with `git status` / `git diff --stat` in the repo (via bash `cwd`), then report what changed.
+- Summarize the returned stdout for the user (already summarized if stream-json was used).
+- If the result is unclear, verify completion with `git status` / `git diff --stat` in the repo (via bash `cwd`), then report what changed. Use the full log path from stdout when you need raw events.
 - If the run failed (non-zero exit, timeout, auth error, or empty useful output), explain clearly and ask the user to fix host install/auth when that is the cause.

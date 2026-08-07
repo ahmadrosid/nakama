@@ -179,9 +179,9 @@ export async function buildCodingAgentCommandTemplate(
         "Cursor Agent uses host Cursor authentication — Nakama does not inject provider credentials.",
         "Before coding: ensure the target repo exists in the profile workspace; git clone it there if missing.",
         "Set bash cwd to the repo directory and keep argv0 as `agent` (do not prefix with cd && — codingAgent requires the harness binary first).",
-        "Prefer --output-format text so bash stdout stays under Nakama's output cap; avoid stream-json for orchestration.",
+        "Prefer --output-format text for a short final answer. If stream-json is used, Nakama summarizes it and saves the full log under artifacts/coding-agent-runs/.",
         "Use --yolo so unattended background runs do not block on permission prompts.",
-        "After the run: summarize the final text. If output looks truncated or unclear, verify with git status / git diff --stat in the repo.",
+        "After the run: summarize the returned stdout for the user. If unclear, verify with git status / git diff --stat in the repo (full raw log path is included when present).",
       ],
     };
   }
