@@ -2,6 +2,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 import type { ToolContext, UserConfig } from "@nakama/core";
 import { mergeCodingAgentSpawnEnv } from "./coding-agent-spawn-env";
 import {
+  inferCodingAgentHarnessKind,
   isCodingAgentCommand,
   loadCodingAgentWorkspaceSettings,
   resolveCodingAgentHarness,
@@ -37,16 +38,23 @@ export async function enrichCodingAgentBashInput(
   const workspace = await loadCodingAgentWorkspaceSettings(db);
   const codingAgentRequested = record.codingAgent === true;
   const matchesHarness = isCodingAgentCommand(command, workspace.harnesses);
+  const inferredKind = inferCodingAgentHarnessKind(command, workspace.harnesses);
 
   if (!codingAgentRequested && !matchesHarness) {
     return input;
+  }
+
+  if (codingAgentRequested && !inferredKind) {
+    throw new Error(
+      "codingAgent was set but the bash command does not start with a known coding-agent CLI (codex, claude, opencode, or pi). Use the harness binary as argv0 so Nakama can merge the correct provider passthrough env.",
+    );
   }
 
   const profileModel =
     context.profileId !== undefined && context.profileId.length > 0
       ? await resolveProfileModelId(db, context.profileId)
       : null;
-  const harness = await resolveCodingAgentHarness(db, null, {
+  const harness = await resolveCodingAgentHarness(db, inferredKind, {
     userConfig,
     profileModel,
   });

@@ -205,7 +205,9 @@ import {
 import { formatToolActivityLabel } from "../tools/sub-agent-activity";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import {
-  resolveCodingAgentHarness,
+  getCodingHarnessInstallCommand,
+  listInstalledCodingAgentHarnesses,
+  type CodingAgentHarnessStatus,
 } from "./coding-agent-harness-service";
 import { getAgentBrowserStatus } from "./agent-browser-service";
 import {
@@ -2808,21 +2810,57 @@ export class AgentService {
     orgId: string,
     profileId: string,
   ): Promise<string> {
+    const profile = await this.db.getProfile(profileId);
+    const installed = await listInstalledCodingAgentHarnesses(this.db);
+    const workspaceRoot = getProfileSoulDir(orgId, profileId);
+    const probeContext = {
+      userConfig: this.userConfig,
+      profileModel: profile?.model ?? null,
+    };
+
+    if (installed.length === 0) {
+      const installLines = [
+        "# Coding Agent Harness",
+        "No coding agent CLI is installed on this host.",
+        "Install one with bash (shared host — confirm with the operator before global installs), then retry:",
+        "",
+        `- Codex: \`${getCodingHarnessInstallCommand("codex")}\``,
+        `- Claude Code: \`${getCodingHarnessInstallCommand("claude_code")}\``,
+        `- OpenCode: \`${getCodingHarnessInstallCommand("opencode")}\``,
+        `- pi: \`${getCodingHarnessInstallCommand("pi")}\``,
+      ];
+      return installLines.join("\n");
+    }
+
+    if (installed.length > 1) {
+      const names = installed.map((harness) => `- ${harness.name} (\`${harness.command}\`)`).join("\n");
+      return [
+        "# Coding Agent Harness",
+        "Multiple coding agent CLIs are installed. Ask the user which one to use before running a coding task.",
+        "Do not pick one silently.",
+        "",
+        "Installed:",
+        names,
+        "",
+        "After the user chooses, run that CLI via `bash` with `codingAgent: true` (or a command that starts with the harness binary).",
+      ].join("\n");
+    }
+
+    const harness = installed[0]!;
+    return this.formatSingleCodingHarnessContext(harness, workspaceRoot, probeContext);
+  }
+
+  private async formatSingleCodingHarnessContext(
+    harness: CodingAgentHarnessStatus,
+    workspaceRoot: string,
+    probeContext: { userConfig: typeof this.userConfig; profileModel: string | null },
+  ): Promise<string> {
     try {
-      const profile = await this.db.getProfile(profileId);
-      const harness = await resolveCodingAgentHarness(this.db, null, {
-        userConfig: this.userConfig,
-        profileModel: profile?.model ?? null,
-      });
-      const workspaceRoot = getProfileSoulDir(orgId, profileId);
       const template = await buildCodingAgentCommandTemplate(
         harness,
         "<task prompt>",
         workspaceRoot,
-        {
-          userConfig: this.userConfig,
-          profileModel: profile?.model ?? null,
-        },
+        probeContext,
       );
       const backendSkillName = getBackendSkillName(harness.kind);
       const backendSkill = await readBundledSkillBody(backendSkillName);
@@ -2836,7 +2874,8 @@ export class AgentService {
     } catch {
       return [
         "# Coding Agent Harness",
-        "No coding agent harness is ready. Configure and verify a harness in workspace settings before invoking a coding agent via `bash`.",
+        `${harness.name} is installed (\`${harness.command}\`) but is not ready yet.`,
+        "Check Settings → Provider for passthrough compatibility, or retry after the CLI finishes installing.",
       ].join("\n");
     }
   }
