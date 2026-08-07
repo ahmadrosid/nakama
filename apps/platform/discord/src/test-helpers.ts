@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { spyOn } from "bun:test";
-import type { ChatMessage } from "@nakama/core/contract";
+import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
 import type { UserOrgSummary } from "@nakama/core/contract";
 import {
   assertBridgeClientMethods,
@@ -10,7 +10,7 @@ import {
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { NakamaClient } from "@nakama/client";
+import type { NakamaClient, StreamHandlers } from "@nakama/client";
 import type { Message } from "discord.js";
 
 export function createDefaultTestOrgs(): UserOrgSummary[] {

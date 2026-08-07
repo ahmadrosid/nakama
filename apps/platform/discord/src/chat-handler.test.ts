@@ -218,3 +218,123 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 });
+
+describe("createChatHandler questionnaire delivery", () => {
+  const questionnaire = {
+    id: "qset_1",
+    title: "Need input",
+    questions: [
+      {
+        id: "how-to-run",
+        prompt: "How should I run this?",
+        choices: [
+          { id: "playwright", label: "Build Playwright e2e" },
+          { id: "manual", label: "Manual steps only" },
+        ],
+        allowCustomAnswer: true,
+      },
+    ],
+  };
+
+  test("posts the questionnaire when ask_user_question fires and skips empty reply", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeDiscordConfigIni(homeDir, {
+        botToken: "discord-bot-token",
+        pairedUserIds: ["424242424242424242"],
+      });
+
+      const authStore = new DiscordAuthStore();
+      await authStore.reload();
+      const { client } = createMockClient({
+        onSendStream: async (_input, handlers) => {
+          handlers?.onQuestionnaireUpdated?.(questionnaire);
+          return "";
+        },
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("dm_channel_1", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { handleMessage } = createChatHandler({
+        client,
+        config: { botToken: "discord-bot-token", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { message, sentMessages } = createDmMessage({
+        userId: "424242424242424242",
+        content: "help me ship this",
+      });
+      await handleMessage(message);
+
+      expect(sentMessages.some((reply) => reply.includes("Need input"))).toBe(true);
+      expect(sentMessages.some((reply) => reply.includes("a) Build Playwright e2e"))).toBe(true);
+      expect(sentMessages.some((reply) => reply.includes("(empty reply)"))).toBe(false);
+    });
+  });
+
+  test("maps the next Discord reply into Answers for the pending questionnaire", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeDiscordConfigIni(homeDir, {
+        botToken: "discord-bot-token",
+        pairedUserIds: ["424242424242424242"],
+      });
+
+      const authStore = new DiscordAuthStore();
+      await authStore.reload();
+      const streamedInputs: unknown[] = [];
+      const { client } = createMockClient({
+        questionnaire,
+        onSendStream: async (input) => {
+          streamedInputs.push(input);
+          return "Got it.";
+        },
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("dm_channel_1", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { handleMessage } = createChatHandler({
+        client,
+        config: { botToken: "discord-bot-token", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { message, sentMessages } = createDmMessage({
+        userId: "424242424242424242",
+        content: "a",
+      });
+      await handleMessage(message);
+
+      expect(streamedInputs[0]).toEqual({
+        message: [
+          "Answers",
+          "",
+          "Q: How should I run this?",
+          "A: Build Playwright e2e",
+        ].join("\n"),
+      });
+      expect(sentMessages).toContain("Got it.");
+    });
+  });
+});

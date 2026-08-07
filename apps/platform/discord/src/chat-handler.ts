@@ -246,6 +246,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       switch (interaction.commandName) {
         case "clear": {
           stopActiveStream(conversationKey);
+          pendingQuestionnaires.delete(conversationKey);
           const session = await resolveSession(conversationKey);
           await session.clear();
           clearSessionArtifactState(conversationKey);
@@ -263,6 +264,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
         case "new": {
           stopActiveStream(conversationKey);
+          pendingQuestionnaires.delete(conversationKey);
           await createAndBindSession(conversationKey);
           await messenger.send("Started a new conversation.");
           return;
@@ -600,6 +602,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     client.setOrgId(picked.id);
 
     if (previousOrgId && previousOrgId !== picked.id) {
+      pendingQuestionnaires.delete(conversationKey);
       sessionStore.delete(conversationKey);
       await sessionStore.save();
     }
@@ -671,6 +674,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const { scope, profile: picked } = resolved;
 
     if (scope.orgId !== currentOrgId) {
+      pendingQuestionnaires.delete(conversationKey);
       orgStore.set(channelOrgKey, scope.orgId);
       await orgStore.save();
       client.setOrgId(scope.orgId);
