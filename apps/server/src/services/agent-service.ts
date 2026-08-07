@@ -1603,7 +1603,11 @@ export class AgentService {
   async discoverModels(request: DiscoverModelsRequest): Promise<ModelsResponse> {
     const providerId = request.providerId?.trim();
     if (providerId) {
-      return this.discoverModelsForProvider(providerId);
+      const baseUrlOverride = request.baseUrl?.trim();
+      return this.discoverModelsForProvider(
+        providerId,
+        baseUrlOverride ? baseUrlOverride : undefined,
+      );
     }
 
     if (request.provider === "fireworks") {
@@ -1670,7 +1674,10 @@ export class AgentService {
     };
   }
 
-  async discoverModelsForProvider(providerId: string): Promise<ModelsResponse> {
+  async discoverModelsForProvider(
+    providerId: string,
+    baseUrlOverride?: string,
+  ): Promise<ModelsResponse> {
     const instance = findProviderInstance(
       this.userConfig ?? { providers: [], defaultProviderId: null },
       providerId,
@@ -1693,9 +1700,12 @@ export class AgentService {
         throw new Error("Add an API key before discovering Ollama Cloud models.");
       }
 
-      const baseUrl =
+      const resolvedBaseUrl =
         instance.baseUrl?.trim() ||
         (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
+      const override = baseUrlOverride?.trim();
+      const baseUrl =
+        override && override !== resolvedBaseUrl ? override : resolvedBaseUrl;
 
       if (!baseUrl) {
         throw new Error("A base URL is required to discover models.");

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,6 +9,7 @@ import {
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
 import type { StoredProfileRecord } from "@nakama/db";
+import * as providers from "../providers";
 import { AgentService } from "./agent-service";
 import { SkillsService } from "./skills-service";
 
@@ -451,6 +452,82 @@ describe("AgentService skill_manage injection", () => {
       includeAutomationTools: false,
     });
     expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(false);
+  });
+});
+
+describe("AgentService discoverModels baseUrl override", () => {
+  const storedBaseUrl = "https://stored.example/v1";
+  const editedBaseUrl = "https://edited.example/v1";
+  let fetchSpy: ReturnType<typeof spyOn<typeof providers, "fetchRemoteOpenAIModels">> | null =
+    null;
+  let probed: string[] = [];
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    fetchSpy = null;
+    probed = [];
+  });
+
+  function createService() {
+    const db = createInMemoryDatabaseAdapter();
+    return new AgentService(
+      {
+        defaultProviderId: "compat-1",
+        providers: [
+          {
+            id: "compat-1",
+            type: "openai_compatible",
+            label: "Compat",
+            apiKey: "secret",
+            baseUrl: storedBaseUrl,
+            customModels: [],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+      null,
+      db,
+    );
+  }
+
+  function stubFetch() {
+    probed = [];
+    fetchSpy = spyOn(providers, "fetchRemoteOpenAIModels").mockImplementation(async (baseUrl) => {
+      probed.push(baseUrl);
+      return [{ id: "model-a", name: "model-a" }];
+    });
+  }
+
+  test("override differing from stored probes the override URL", async () => {
+    stubFetch();
+    const result = await createService().discoverModels({
+      providerId: "compat-1",
+      baseUrl: editedBaseUrl,
+    });
+
+    expect(probed).toEqual([editedBaseUrl]);
+    expect(result.baseUrl).toBe(editedBaseUrl);
+  });
+
+  test("override equal to stored probes the stored URL", async () => {
+    stubFetch();
+    const result = await createService().discoverModels({
+      providerId: "compat-1",
+      baseUrl: storedBaseUrl,
+    });
+
+    expect(probed).toEqual([storedBaseUrl]);
+    expect(result.baseUrl).toBe(storedBaseUrl);
+  });
+
+  test("no override probes the stored URL", async () => {
+    stubFetch();
+    const result = await createService().discoverModels({
+      providerId: "compat-1",
+    });
+
+    expect(probed).toEqual([storedBaseUrl]);
+    expect(result.baseUrl).toBe(storedBaseUrl);
   });
 });
 

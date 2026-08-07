@@ -47,7 +47,7 @@ export function RemoteModelsBrowseList({
     queryFn: async () => {
       const response = await client.discoverModels(
         providerId?.trim()
-          ? { providerId: providerId.trim() }
+          ? { providerId: providerId.trim(), baseUrl: trimmedBaseUrl || undefined }
           : {
               baseUrl: trimmedBaseUrl,
               apiKey,
