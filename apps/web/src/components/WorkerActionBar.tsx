@@ -79,8 +79,9 @@ export function WorkerActionBar({
           <>
             <Button
               type="button"
-              variant="destructive"
+              variant="outline"
               size="sm"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
               disabled={isBusy}
               aria-busy={stopping || undefined}
               onClick={() => stopWorker.mutate(workerName)}
