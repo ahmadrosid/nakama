@@ -1,7 +1,7 @@
 import type { DeliverableChannelArtifact } from "@nakama/core/channel-artifact-delivery";
 import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface ChatSessionRecord {
   sessionId: string;
@@ -80,7 +80,7 @@ export class SessionStore {
 
   async save(): Promise<void> {
     await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: getDiscordConfigDir(),
+      ensureDir: dirname(this.path),
     });
   }
 }

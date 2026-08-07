@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   explainGuildMessageHandling,
   resolveConversationKey,
+  resolveOrgChannelId,
+  resolveThreadLookupKey,
   stripBotMention,
 } from "./guild-message";
 
@@ -71,17 +73,97 @@ describe("explainGuildMessageHandling", () => {
     expect(decision.shouldHandle).toBe(true);
     expect(decision.reason).toBe("reply-to-bot");
   });
+
+  test("handles messages in bot-owned threads without mention", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({ content: "continue here", thread: true }),
+      BOT_INFO,
+      { botOwnsThread: true },
+    );
+
+    expect(decision.shouldHandle).toBe(true);
+    expect(decision.reason).toBe("in-thread");
+  });
+
+  test("handles messages in bot-owned threads that also mention the bot as in-thread", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({
+        content: "<@999000111222333444> still in thread",
+        mentionsBot: true,
+        thread: true,
+      }),
+      BOT_INFO,
+      { botOwnsThread: true },
+    );
+
+    expect(decision.shouldHandle).toBe(true);
+    expect(decision.reason).toBe("in-thread");
+  });
+
+  test("ignores messages in threads the agent did not start", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({ content: "continue here", thread: true }),
+      BOT_INFO,
+      { botOwnsThread: false },
+    );
+
+    expect(decision.shouldHandle).toBe(false);
+    expect(decision.reason).toBe("foreign-thread");
+  });
+
+  test("ignores mentions inside threads the agent did not start", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({
+        content: "<@999000111222333444> please join",
+        mentionsBot: true,
+        thread: true,
+      }),
+      BOT_INFO,
+      { botOwnsThread: false },
+    );
+
+    expect(decision.shouldHandle).toBe(false);
+    expect(decision.reason).toBe("foreign-thread");
+  });
+
+  test("still requires a trigger in plain channels", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({ content: "" }),
+      BOT_INFO,
+    );
+
+    expect(decision.shouldHandle).toBe(false);
+    expect(decision.reason).toBe("no-text");
+  });
 });
 
 describe("resolveConversationKey", () => {
   test("uses thread suffix for thread channels", () => {
     const key = resolveConversationKey(
       createGuildMessage({ thread: true, parentId: "parent_1" }),
-      "parent_1",
+      "thread_1",
       true,
     );
 
     expect(key).toBe("g:parent_1:t:thread_1");
+  });
+});
+
+describe("resolveOrgChannelId", () => {
+  test("uses parent channel id for guild threads", () => {
+    const message = createGuildMessage({ thread: true, parentId: "parent_1" });
+    expect(resolveOrgChannelId(message, "thread_1", true)).toBe("parent_1");
+  });
+
+  test("uses channel id for plain guild channels", () => {
+    const message = createGuildMessage({ content: "hi" });
+    expect(resolveOrgChannelId(message, "channel_1", true)).toBe("channel_1");
+  });
+});
+
+describe("resolveThreadLookupKey", () => {
+  test("maps channel and user to a stable lookup key", () => {
+    expect(resolveThreadLookupKey("channel_1", "user_1")).toBe("g:channel_1:u:user_1");
   });
 });
 

@@ -26,6 +26,11 @@ const geminiProvider: ProviderInstance = {
 };
 
 describe("coding-agent provider routing", () => {
+  test("Cursor Agent is never provider-compatible", () => {
+    expect(isProviderCompatibleWithHarness("anthropic", "cursor_agent")).toBe(false);
+    expect(isProviderCompatibleWithHarness("openai", "cursor_agent")).toBe(false);
+  });
+
   test("anthropic provider routes to Claude Code with Anthropic base URL", () => {
     const routing = resolveCodingAgentProviderRouting({
       userConfig: {

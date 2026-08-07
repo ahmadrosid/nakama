@@ -13,6 +13,7 @@ import { DiscordAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
 import { SessionStore } from "./session-store";
+import { ThreadStore } from "./thread-store";
 
 let spawnedChild: Bun.Subprocess | null = null;
 let clientStop: (() => void) | null = null;
@@ -74,6 +75,9 @@ try {
   const sessionStore = new SessionStore();
   await sessionStore.load();
 
+  const threadStore = new ThreadStore();
+  await threadStore.load();
+
   const orgStore = new ChannelOrgStore(getChannelOrgSelectionPath("discord"));
   await orgStore.load();
 
@@ -84,6 +88,7 @@ try {
     client,
     authStore,
     sessionStore,
+    threadStore,
     orgStore,
   });
 

@@ -259,6 +259,11 @@ export async function buildSpawnEnvForHarness(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "openai",
 ): Promise<CodingAgentSpawnEnvResult> {
+  // Cursor Agent uses host Cursor auth — never merge Nakama provider credentials.
+  if (kind === "cursor_agent") {
+    return { env: {} };
+  }
+
   if (!routing.active) {
     return { env: {} };
   }

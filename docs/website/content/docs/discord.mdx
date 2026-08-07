@@ -50,6 +50,7 @@ This toggle is required. Without it, the bridge worker logs `Used disallowed int
    - **Send Messages**
    - **Read Message History**
    - **Send Messages in Threads** (recommended if you use threads)
+   - **Manage Threads** (recommended so `/close` can archive bot conversation threads)
 4. Copy the generated URL, open it, pick a server, and approve
 
 You can also use the **Invite bot to server** link on **Integrations → Discord** after saving your token — Nakama generates an invite with the right permissions.
@@ -129,6 +130,8 @@ In Discord threads, each thread keeps its own Nakama session.
 - new threads use the default Discord profile until you switch them
 - `/profile` in the main channel changes the channel-level profile
 - `/org` stays channel-level, so switch org first if a thread needs a profile from another org
+- `/close` inside a bot-started thread archives it and frees the slot so the next @mention opens a new one
+- the bot ignores messages in threads it did not start, including @mentions
 
 Replies in server channels are visible to everyone in that channel. Nakama prefixes those messages so the agent knows the reply is public.
 
@@ -144,6 +147,7 @@ Session control uses Discord slash commands. Org and profile switching use text 
 | `/clear` | Slash | Clear chat history |
 | `/compact` | Slash | Compact conversation history |
 | `/new` | Slash | Start a new conversation |
+| `/close` | Slash | Close (archive) the bot conversation thread |
 | `/status` | Slash | Show server and model status |
 | `/org` | Text | Choose or switch organization |
 | `/profile` | Text | Choose or switch profile |

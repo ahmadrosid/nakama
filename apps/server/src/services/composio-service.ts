@@ -75,7 +75,11 @@ function titleCaseToolkit(slug: string): string {
 }
 
 export class ComposioService {
+  private static readonly REACHABILITY_TTL_MS = 30_000;
+
   private apiClientCache: { key: string; client: ComposioApiClient } | null = null;
+  private reachabilityCache: { value: boolean; expiresAt: number } | null = null;
+  private reachabilityInflight: Promise<boolean> | null = null;
   private readonly profileSessionCache = new Map<
     string,
     { fingerprint: string; endpoint: ComposioSessionMcpEndpoint }
@@ -88,6 +92,8 @@ export class ComposioService {
 
   reloadConfiguration(): void {
     this.apiClientCache = null;
+    this.reachabilityCache = null;
+    this.reachabilityInflight = null;
   }
 
   /**
@@ -138,17 +144,56 @@ export class ComposioService {
   }
 
   async isReachable(): Promise<boolean> {
+    const cached = this.reachabilityCache;
+    const now = Date.now();
+
+    if (cached) {
+      if (cached.expiresAt > now) {
+        return cached.value;
+      }
+
+      // Stale-while-revalidate: status polls every 10s — never block on a warm cache.
+      if (!this.reachabilityInflight) {
+        this.reachabilityInflight = this.probeReachability().finally(() => {
+          this.reachabilityInflight = null;
+        });
+      }
+      return cached.value;
+    }
+
+    if (this.reachabilityInflight) {
+      return this.reachabilityInflight;
+    }
+
+    this.reachabilityInflight = this.probeReachability().finally(() => {
+      this.reachabilityInflight = null;
+    });
+    return this.reachabilityInflight;
+  }
+
+  private async probeReachability(): Promise<boolean> {
     const apiClient = await this.getApiClient();
     if (!apiClient) {
+      this.cacheReachability(false);
       return false;
     }
 
     try {
-      await apiClient.listCatalogToolkits();
+      // Limit 1: reachability only — full catalog fetch is ~1s and used by listToolkits.
+      await apiClient.listCatalogToolkits({ limit: 1 });
+      this.cacheReachability(true);
       return true;
     } catch {
+      this.cacheReachability(false);
       return false;
     }
+  }
+
+  private cacheReachability(value: boolean): void {
+    this.reachabilityCache = {
+      value,
+      expiresAt: Date.now() + ComposioService.REACHABILITY_TTL_MS,
+    };
   }
 
   async validateConfiguration(apiKey?: string): Promise<void> {
@@ -163,7 +208,7 @@ export class ComposioService {
     }
 
     try {
-      await client.listCatalogToolkits();
+      await client.listCatalogToolkits({ limit: 1 });
     } catch (error) {
       throw new NakamaApiError(
         error instanceof Error ? error.message : "Failed to validate Composio API key.",

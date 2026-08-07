@@ -45,9 +45,17 @@ export function RemoteModelsBrowseList({
       apiKey: apiKey.trim() ? "set" : "",
     }),
     queryFn: async () => {
+      // When providerId is set, still forward baseUrl so Edit provider can probe a
+      // typed (unsaved) URL while the server resolves stored credentials via id.
       const response = await client.discoverModels(
         providerId?.trim()
-          ? { providerId: providerId.trim() }
+          ? {
+              providerId: providerId.trim(),
+              ...(trimmedBaseUrl ? { baseUrl: trimmedBaseUrl } : {}),
+              ...(apiKey.trim() ? { apiKey } : {}),
+              ...(provider ? { provider } : {}),
+              ...(hostMode ? { hostMode } : {}),
+            }
           : {
               baseUrl: trimmedBaseUrl,
               apiKey,

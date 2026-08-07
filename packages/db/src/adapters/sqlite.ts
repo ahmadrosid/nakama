@@ -3092,7 +3092,13 @@ function parseCodingAgentHarnesses(
         return [];
       }
 
-      if (kind !== "codex" && kind !== "claude_code" && kind !== "opencode") {
+      if (
+        kind !== "codex" &&
+        kind !== "claude_code" &&
+        kind !== "opencode" &&
+        kind !== "pi" &&
+        kind !== "cursor_agent"
+      ) {
         return [];
       }
 

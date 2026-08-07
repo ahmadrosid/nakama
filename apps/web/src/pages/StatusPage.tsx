@@ -5,7 +5,6 @@ import {
   CheckCircle2Icon,
   ClockIcon,
   CoinsIcon,
-  ServerIcon,
   SparklesIcon,
   XCircleIcon,
   ZapIcon,
@@ -15,7 +14,7 @@ import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { LlmUsageStatus, SystemStatusResponse } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
-import { WorkerActionBar } from "@/components/WorkerActionBar";
+import { WorkerActionBar, WorkerViewLogsButton } from "@/components/WorkerActionBar";
 import { buildServiceColumns, deriveSummary, type StatusTone } from "@/pages/status-page.shared";
 import { useAuth } from "@/context/use-auth";
 import { useRefreshSystemStatus, useSystemStatusQuery } from "@/hooks/use-system-status";
@@ -27,7 +26,6 @@ import { cn } from "@/lib/utils";
 const sectionClass = "rounded-md border border-border bg-card";
 const iconTileClass =
   "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40";
-const iconClass = "size-5 text-foreground";
 
 export function StatusPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: status, error, isLoading } = useSystemStatusQuery();
@@ -90,6 +88,32 @@ function StatusDashboard({
   const services = useMemo(() => buildServiceColumns(status), [status]);
   const { automationWorker, telegramWorker, whatsappWorker, discordWorker } = status;
 
+  const workerByTitle: Record<
+    string,
+    {
+      worker: Pick<SystemStatusResponse["automationWorker"], "running" | "process">;
+      workerName: string;
+      footerLink?: { label: string; to: string };
+    }
+  > = {
+    Automation: { worker: automationWorker, workerName: "automation" },
+    Telegram: { worker: telegramWorker, workerName: "telegram" },
+    WhatsApp: {
+      worker: whatsappWorker,
+      workerName: "whatsapp",
+      footerLink:
+        whatsappWorker.configured && whatsappWorker.running && !whatsappWorker.paired
+          ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
+          : undefined,
+    },
+    Discord: { worker: discordWorker, workerName: "discord" },
+  };
+
+  const workerRows = services.map((service) => ({
+    ...service,
+    ...workerByTitle[service.title],
+  }));
+
   return (
     <section
       className={cn("min-w-0 overflow-hidden", !embedded && sectionClass)}
@@ -105,77 +129,36 @@ function StatusDashboard({
         />
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0 xl:grid-cols-4">
-        {services.map((service) => {
-          if (service.title === "Automation") {
-            return (
-              <WorkerServiceColumn
-                key={service.title}
-                icon={service.icon}
-                title={service.title}
-                status={service.status}
-                tone={service.tone}
-                worker={automationWorker}
-                workerName="automation"
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              <th className="border-b border-border px-5 py-2.5 font-medium">Service</th>
+              <th className="border-b border-border px-5 py-2.5 font-medium">Status</th>
+              <th className="border-b border-border px-5 py-2.5 font-medium">
+                {canManageWorkers ? "Actions" : <span className="sr-only">Actions</span>}
+              </th>
+              <th className="border-b border-border px-5 py-2.5 font-medium">
+                {canManageWorkers ? "Logs" : <span className="sr-only">Logs</span>}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {workerRows.map((row) => (
+              <WorkerServiceRow
+                key={row.title}
+                icon={row.icon}
+                title={row.title}
+                status={row.status}
+                tone={row.tone}
+                worker={row.worker}
+                workerName={row.workerName}
                 canManage={canManageWorkers}
+                footerLink={row.footerLink}
               />
-            );
-          }
-
-          if (service.title === "Telegram") {
-            return (
-              <WorkerServiceColumn
-                key={service.title}
-                icon={service.icon}
-                title={service.title}
-                status={service.status}
-                tone={service.tone}
-                worker={telegramWorker}
-                workerName="telegram"
-                canManage={canManageWorkers}
-              />
-            );
-          }
-
-          if (service.title === "WhatsApp") {
-            return (
-              <WorkerServiceColumn
-                key={service.title}
-                icon={service.icon}
-                title={service.title}
-                status={service.status}
-                tone={service.tone}
-                worker={whatsappWorker}
-                workerName="whatsapp"
-                canManage={canManageWorkers}
-                footerLink={
-                  whatsappWorker.configured &&
-                  whatsappWorker.running &&
-                  !whatsappWorker.paired
-                    ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
-                    : undefined
-                }
-              />
-            );
-          }
-
-          if (service.title === "Discord") {
-            return (
-              <WorkerServiceColumn
-                key={service.title}
-                icon={service.icon}
-                title={service.title}
-                status={service.status}
-                tone={service.tone}
-                worker={discordWorker}
-                workerName="discord"
-                canManage={canManageWorkers}
-              />
-            );
-          }
-
-          return <ServiceColumn key={service.title} {...service} />;
-        })}
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -483,26 +466,39 @@ function SummaryStrip({
 }) {
   return (
     <div
-      className="flex flex-wrap items-start gap-3 border-b border-border px-5 py-4 sm:gap-4"
+      className={cn(
+        "flex flex-wrap items-start gap-3 border-b border-border px-5 py-4 sm:gap-4",
+        summary.tone === "warn" && "bg-amber-500/[0.04] dark:bg-amber-400/[0.05]",
+        summary.tone === "bad" && "bg-destructive/5",
+      )}
     >
-      <div className={cn(iconTileClass, "bg-background/70")}>
+      <div
+        className={cn(
+          iconTileClass,
+          summary.tone === "ok" && "bg-background/70",
+          summary.tone === "warn" && "border-amber-500/25 bg-amber-500/10",
+          summary.tone === "bad" && "border-destructive/25 bg-destructive/10",
+        )}
+      >
         <ToneIcon tone={summary.tone} className="size-5" />
       </div>
       <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-sm font-semibold text-foreground">{summary.title}</p>
-        <p className="text-sm text-muted-foreground">{summary.description}</p>
-        {summary.tone === "warn" ? (
+        <p className="text-sm font-semibold text-balance text-foreground">{summary.title}</p>
+        <p className="text-sm text-pretty text-muted-foreground">{summary.description}</p>
+        {summary.action ? (
           <Link
-            to={PAGE_PATHS.settings}
-            className="inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+            to={summary.action.to}
+            className="inline-flex min-h-10 items-center text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            Open Settings
+            {summary.action.label}
           </Link>
         ) : null}
       </div>
-      <div className="flex items-center gap-1.5 text-xs leading-none text-muted-foreground">
+      <div className="ml-auto flex basis-full items-center justify-end gap-1.5 text-xs leading-none text-muted-foreground sm:basis-auto">
         <ClockIcon className="size-3.5 shrink-0 opacity-70" aria-hidden />
-        <span title={formatDate(status.checkedAt)}>Updated {formatRelativeTime(status.checkedAt)}</span>
+        <span title={formatDate(status.checkedAt)}>
+          Updated <span className="tabular-nums">{formatRelativeTime(status.checkedAt)}</span>
+        </span>
       </div>
     </div>
   );
@@ -539,73 +535,32 @@ function QuickStat({
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
-function ServiceColumn({
-  icon: Icon,
-  title,
+function ServiceStatusBadge({
   status,
   tone,
 }: {
-  icon: LucideIcon;
-  title: string;
   status: string;
   tone: ServiceStatusTone;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 p-5">
-      <span
-        className={cn(
-          iconTileClass,
-          tone === "bad" && "bg-destructive/5",
-        )}
-      >
-        <Icon className={iconClass} aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <h2 className="type-section-title leading-tight">{title}</h2>
-        <p
-          className={cn(
-            "mt-1 text-xs font-medium leading-none",
-            tone === "ok" && "text-emerald-700 dark:text-emerald-300",
-            tone === "warn" && "text-amber-700 dark:text-amber-300",
-            tone === "bad" && "text-destructive",
-            tone === "muted" && "text-muted-foreground",
-          )}
-        >
-          {status}
-        </p>
-      </div>
-    </div>
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        tone === "ok" &&
+          "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200",
+        tone === "warn" &&
+          "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100",
+        tone === "bad" &&
+          "border-destructive/30 bg-destructive/10 text-destructive",
+        tone === "muted" && "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      {status}
+    </span>
   );
 }
 
-function MetricsDisplay({
-  cpuPercent,
-  memoryMb,
-}: {
-  cpuPercent: number | null | undefined;
-  memoryMb: number | null | undefined;
-}) {
-  if (cpuPercent == null && memoryMb == null) return null;
-
-  return (
-    <div className="flex items-center gap-3 border-t border-border px-5 py-2">
-      {cpuPercent != null ? (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <ZapIcon className="size-3" aria-hidden />
-          CPU: {cpuPercent.toFixed(1)}%
-        </span>
-      ) : null}
-      {memoryMb != null ? (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <ServerIcon className="size-3" aria-hidden />
-          Mem: {memoryMb < 1 ? `${(memoryMb * 1024).toFixed(0)} KB` : `${memoryMb.toFixed(1)} MB`}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function WorkerServiceColumn({
+function WorkerServiceRow({
   icon: Icon,
   title,
   status,
@@ -624,55 +579,50 @@ function WorkerServiceColumn({
   canManage: boolean;
   footerLink?: { label: string; to: string };
 }) {
+  const pm2Managed = worker.process?.managed ?? false;
+
   return (
-    <div className="flex flex-col">
-      <div className="flex min-w-0 items-center gap-3 p-5">
-        <span
-          className={cn(
-            iconTileClass,
-            tone === "bad" && "bg-destructive/5",
-          )}
-        >
-          <Icon className={iconClass} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="type-section-title leading-tight">{title}</h2>
-          <p
-            className={cn(
-              "mt-1 text-xs font-medium leading-none",
-              tone === "ok" && "text-emerald-700 dark:text-emerald-300",
-              tone === "warn" && "text-amber-700 dark:text-amber-300",
-              tone === "bad" && "text-destructive",
-              tone === "muted" && "text-muted-foreground",
-            )}
-          >
-            {status}
-          </p>
+    <tr className="last:[&>td]:border-b-0">
+      <td className="border-b border-border px-5 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="truncate font-medium text-foreground">{title}</span>
         </div>
-      </div>
-      {canManage ? (
-        <WorkerActionBar
-          className="border-t border-border px-5 py-2"
-          running={worker.running}
-          pm2Managed={worker.process?.managed ?? false}
-          workerName={workerName}
-        />
-      ) : null}
-      {footerLink ? (
-        <div className="border-t border-border px-5 py-2">
-          <Link
-            to={footerLink.to}
-            className="text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/90"
-          >
-            {footerLink.label}
-          </Link>
+      </td>
+      <td className="border-b border-border px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ServiceStatusBadge status={status} tone={tone} />
+          {footerLink ? (
+            <Link
+              to={footerLink.to}
+              className="text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/90"
+            >
+              {footerLink.label}
+            </Link>
+          ) : null}
         </div>
-      ) : null}
-      <MetricsDisplay
-        cpuPercent={worker.process?.cpuPercent}
-        memoryMb={worker.process?.memoryMb}
-      />
-    </div>
+      </td>
+      <td className="border-b border-border px-5 py-3">
+        {canManage ? (
+          <WorkerActionBar
+            className="w-fit"
+            running={worker.running}
+            pm2Managed={pm2Managed}
+            workerName={workerName}
+            showLogs={false}
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="border-b border-border px-5 py-3">
+        {canManage && pm2Managed ? (
+          <WorkerViewLogsButton workerName={workerName} />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+    </tr>
   );
 }
 

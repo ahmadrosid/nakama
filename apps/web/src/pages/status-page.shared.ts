@@ -6,6 +6,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { SystemStatusResponse } from "@nakama/core/contract";
+import { PAGE_PATHS } from "@/lib/navigation";
 
 export type StatusTone = "ok" | "warn" | "bad";
 
@@ -115,10 +116,16 @@ function discordServiceStatus(
   return { status: "Healthy", tone: "ok" };
 }
 
+export type StatusSummaryAction = {
+  label: string;
+  to: string;
+};
+
 export function deriveSummary(status: SystemStatusResponse): {
   tone: StatusTone;
   title: string;
   description: string;
+  action?: StatusSummaryAction;
 } {
   if (!status.server.ok) {
     return {
@@ -141,6 +148,7 @@ export function deriveSummary(status: SystemStatusResponse): {
       tone: "warn",
       title: "Telegram bridge offline",
       description: "Start the Telegram worker (bun run dev:telegram) to receive messages.",
+      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
     };
   }
 
@@ -149,6 +157,7 @@ export function deriveSummary(status: SystemStatusResponse): {
       tone: "warn",
       title: "WhatsApp offline",
       description: "Start the WhatsApp worker to receive messages.",
+      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
     };
   }
 
@@ -157,6 +166,7 @@ export function deriveSummary(status: SystemStatusResponse): {
       tone: "warn",
       title: "Discord bridge offline",
       description: "Start the bridge worker from Integrations → Discord to receive messages.",
+      action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
     };
   }
 
@@ -165,6 +175,7 @@ export function deriveSummary(status: SystemStatusResponse): {
       tone: "warn",
       title: "Running with warnings",
       description: "Configure an LLM provider before chat or automation runs can succeed.",
+      action: { label: "Open Settings", to: PAGE_PATHS.settings },
     };
   }
 

@@ -6,7 +6,7 @@ import {
   type Client,
 } from "discord.js";
 
-const COMMAND_NAMES = ["start", "help", "stop", "clear", "compact", "new", "status"] as const;
+const COMMAND_NAMES = ["start", "help", "stop", "clear", "compact", "new", "close", "status"] as const;
 
 export function buildSlashCommands(): SlashCommandBuilder[] {
   const descriptions: Record<(typeof COMMAND_NAMES)[number], string> = {
@@ -16,6 +16,7 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     clear: "Clear chat history",
     compact: "Compact conversation history",
     new: "Start a new conversation",
+    close: "Close this bot conversation thread",
     status: "Show server and model status",
   };
 

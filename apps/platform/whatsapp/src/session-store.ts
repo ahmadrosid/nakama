@@ -1,7 +1,6 @@
 import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { getWhatsAppConfigDir } from "@nakama/core/whatsapp-config";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 export interface ChatSessionRecord {
   sessionId: string;
@@ -51,7 +50,7 @@ export class SessionStore {
 
   async save(): Promise<void> {
     await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: getWhatsAppConfigDir(),
+      ensureDir: dirname(this.path),
     });
   }
 }

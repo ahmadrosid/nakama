@@ -28,7 +28,7 @@ interface CodingAgentInstallPlan {
   displayCommand: string;
 }
 
-const HARNESS_PACKAGES: Record<StoredCodingAgentHarnessKind, string> = {
+const HARNESS_PACKAGES: Partial<Record<StoredCodingAgentHarnessKind, string>> = {
   codex: "@openai/codex",
   claude_code: "@anthropic-ai/claude-code",
   opencode: "opencode-ai",
@@ -52,6 +52,14 @@ export function buildCodingHarnessInstallPlan(
   packageManager: "npm" | "bun" = detectCodingHarnessPackageManager(),
 ): CodingAgentInstallPlan {
   const pkg = HARNESS_PACKAGES[kind];
+
+  if (!pkg) {
+    throw new Error(
+      kind === "cursor_agent"
+        ? "Cursor Agent CLI cannot be auto-installed. Install and authenticate it on the host yourself (verify with `agent --version`)."
+        : `No auto-install package is configured for coding harness kind ${kind}.`,
+    );
+  }
 
   if (packageManager === "bun") {
     return {
@@ -124,6 +132,14 @@ const DEFAULT_HARNESSES: StoredCodingAgentHarnessRecord[] = [
     kind: "pi",
     name: "pi.dev",
     command: "pi",
+    args: [],
+    enabled: true,
+  },
+  {
+    id: "coding-harness-cursor-agent",
+    kind: "cursor_agent",
+    name: "Cursor Agent",
+    command: "agent",
     args: [],
     enabled: true,
   },
@@ -685,6 +701,10 @@ export function getCodingHarnessInstallCommand(kind: StoredCodingAgentHarnessKin
 }
 
 export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind): string {
+  if (kind === "cursor_agent") {
+    return "Install and authenticate Cursor Agent CLI on this machine yourself (verify with `agent --version`), then check again.";
+  }
+
   if (kind === "codex") {
     return "Install the Codex CLI on this machine, then check again.";
   }
@@ -758,6 +778,15 @@ async function probeHarnessLight(
   nextStep: "retry" | null;
   statusMessage: string | null;
 }> {
+  if (harness.kind === "cursor_agent") {
+    return {
+      authenticated: null,
+      ready: true,
+      nextStep: null,
+      statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
+    };
+  }
+
   const { routing } = await resolveCodingAgentSpawnBundle({
     userConfig: probeContext?.userConfig,
     profileModel: probeContext?.profileModel ?? null,
@@ -792,6 +821,15 @@ async function probeHarnessExec(
   nextStep: "retry" | null;
   statusMessage: string | null;
 }> {
+  if (harness.kind === "cursor_agent") {
+    return {
+      authenticated: null,
+      ready: true,
+      nextStep: null,
+      statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
+    };
+  }
+
   const { spawn, routing } = await resolveCodingAgentSpawnBundle({
     userConfig: probeContext?.userConfig,
     profileModel: probeContext?.profileModel ?? null,

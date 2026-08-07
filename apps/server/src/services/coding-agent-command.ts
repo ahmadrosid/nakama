@@ -62,6 +62,17 @@ export function buildHarnessNonInteractiveArgs(
     ];
   }
 
+  if (kind === "cursor_agent") {
+    return [
+      ...baseArgs,
+      "-p",
+      prompt,
+      "--output-format",
+      "text",
+      "--yolo",
+    ];
+  }
+
   if (kind === "pi") {
     const piArgs = [...baseArgs];
 
@@ -153,6 +164,28 @@ export async function buildCodingAgentCommandTemplate(
     };
   }
 
+  if (harness.kind === "cursor_agent") {
+    return {
+      ...shared,
+      command: [
+        baseCommand,
+        "-p",
+        escapedTask,
+        "--output-format",
+        "text",
+        "--yolo",
+      ].join(" "),
+      notes: [
+        "Cursor Agent uses host Cursor authentication — Nakama does not inject provider credentials.",
+        "Before coding: ensure the target repo exists in the profile workspace; git clone it there if missing.",
+        "Set bash cwd to the repo directory and keep argv0 as `agent` (do not prefix with cd && — codingAgent requires the harness binary first).",
+        "Prefer --output-format text for a short final answer. If stream-json is used, Nakama summarizes it and saves the full log under artifacts/coding-agent-runs/.",
+        "Use --yolo so unattended background runs do not block on permission prompts.",
+        "After the run: summarize the returned stdout for the user. If unclear, verify with git status / git diff --stat in the repo (full raw log path is included when present).",
+      ],
+    };
+  }
+
   if (harness.kind === "pi") {
     const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
     const piModel = routing.model
@@ -206,7 +239,9 @@ export function formatCodingAgentCommandContext(
   const lines = [
     "# Coding Agent Harness",
     `Selected backend: ${template.harnessName} (${template.backend}).`,
-    "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
+    template.backend === "cursor_agent"
+      ? "Run via the `bash` tool with cwd set to the repo checkout and codingAgent: true (or argv0 `agent`). Cursor uses host auth — Nakama does not merge provider credentials. Do not use `cd … && agent`."
+      : "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
     "",
     "```bash",
     template.command,
@@ -236,7 +271,12 @@ export function formatCodingAgentCommandContext(
 
 function getBackendSkillName(
   backend: StoredCodingAgentHarnessKind,
-): "coding-backend-codex" | "coding-backend-claude-code" | "coding-backend-opencode" | "coding-backend-pi" {
+):
+  | "coding-backend-codex"
+  | "coding-backend-claude-code"
+  | "coding-backend-opencode"
+  | "coding-backend-pi"
+  | "coding-backend-cursor" {
   if (backend === "codex") {
     return "coding-backend-codex";
   }
@@ -247,6 +287,10 @@ function getBackendSkillName(
 
   if (backend === "pi") {
     return "coding-backend-pi";
+  }
+
+  if (backend === "cursor_agent") {
+    return "coding-backend-cursor";
   }
 
   return "coding-backend-opencode";

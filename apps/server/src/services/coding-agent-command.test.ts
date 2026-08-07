@@ -89,6 +89,33 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Fix lint errors'");
   });
 
+  test("builds Cursor Agent print command with text output and yolo", async () => {
+    const template = await buildCodingAgentCommandTemplate(
+      {
+        kind: "cursor_agent",
+        name: "Cursor Agent",
+        command: "agent",
+        args: [],
+      },
+      "Where are the built-in skills",
+      "/tmp/workspace",
+      {
+        userConfig: anthropicUserConfig,
+        profileModel: "claude-sonnet-4-6",
+      },
+    );
+
+    expect(template.backend).toBe("cursor_agent");
+    expect(template.command).toContain("agent");
+    expect(template.command).toContain("-p");
+    expect(template.command).toContain("--output-format");
+    expect(template.command).toContain("text");
+    expect(template.command).not.toContain("stream-json");
+    expect(template.command).toContain("--yolo");
+    expect(template.command).toContain("'Where are the built-in skills'");
+    expect(template.spawnEnv).toEqual({});
+  });
+
   test("reflects custom harness command from workspace settings", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
@@ -145,5 +172,30 @@ describe("formatCodingAgentCommandContext", () => {
     expect(context).toContain("Nakama provider passthrough");
     expect(context).not.toContain("sk-ant-test");
     expect(context).toContain('"***"');
+  });
+
+  test("does not claim provider passthrough for Cursor Agent", async () => {
+    const context = formatCodingAgentCommandContext(
+      await buildCodingAgentCommandTemplate(
+        {
+          kind: "cursor_agent",
+          name: "Cursor Agent",
+          command: "agent",
+          args: [],
+        },
+        "Ship feature",
+        "/tmp/workspace",
+        {
+          userConfig: anthropicUserConfig,
+          profileModel: "claude-sonnet-4-6",
+        },
+      ),
+    );
+
+    expect(context).toContain("host auth");
+    expect(context).toContain("cwd");
+    expect(context).not.toContain("When Nakama provider passthrough is active");
+    expect(context).toContain("--yolo");
+    expect(context).toContain("--output-format text");
   });
 });

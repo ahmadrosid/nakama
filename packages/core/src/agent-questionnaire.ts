@@ -20,6 +20,114 @@ export function formatAgentQuestionnaireAnswersMessage(
   return lines.join("\n");
 }
 
+export function formatAgentQuestionnaireMessage(questionnaire: AgentQuestionnaire): string {
+  const lines = [questionnaire.title.trim(), ""];
+
+  questionnaire.questions.forEach((question, questionIndex) => {
+    lines.push(`${questionIndex + 1}. ${question.prompt.trim()}`);
+
+    question.choices.forEach((choice, choiceIndex) => {
+      lines.push(`   ${choiceLetter(choiceIndex)}) ${choice.label.trim()}`);
+    });
+
+    if (question.allowCustomAnswer) {
+      lines.push("   Or reply with your own answer.");
+    }
+
+    lines.push("");
+  });
+
+  if (questionnaire.questions.length === 1) {
+    lines.push("Reply with your answer in chat.");
+  } else {
+    lines.push("Reply with your answers in chat.");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+export function tryParseChannelQuestionnaireAnswers(
+  questionnaire: AgentQuestionnaire,
+  text: string,
+): AgentQuestionAnswer[] | null {
+  const trimmed = text.trim();
+
+  if (!trimmed || questionnaire.questions.length === 0) {
+    return null;
+  }
+
+  if (questionnaire.questions.length === 1) {
+    const question = questionnaire.questions[0]!;
+    const answer = resolveQuestionAnswer(question, trimmed);
+
+    if (!answer) {
+      return null;
+    }
+
+    return [
+      {
+        questionId: question.id,
+        prompt: question.prompt,
+        answer,
+      },
+    ];
+  }
+
+  const byIndex = new Map<number, string>();
+
+  for (const rawLine of trimmed.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    const match = line.match(/^(\d+)\s*[.):\-]\s*(.+)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    const index = Number(match[1]);
+    const value = match[2]?.trim() ?? "";
+
+    if (!Number.isInteger(index) || index < 1 || !value) {
+      return null;
+    }
+
+    byIndex.set(index, value);
+  }
+
+  if (byIndex.size !== questionnaire.questions.length) {
+    return null;
+  }
+
+  const answers: AgentQuestionAnswer[] = [];
+
+  for (let index = 0; index < questionnaire.questions.length; index += 1) {
+    const question = questionnaire.questions[index]!;
+    const raw = byIndex.get(index + 1);
+
+    if (!raw) {
+      return null;
+    }
+
+    const answer = resolveQuestionAnswer(question, raw);
+
+    if (!answer) {
+      return null;
+    }
+
+    answers.push({
+      questionId: question.id,
+      prompt: question.prompt,
+      answer,
+    });
+  }
+
+  return answers;
+}
+
 export function parseAgentQuestionnaireAnswersMessage(
   value: string,
 ): AgentQuestionAnswer[] | null {
@@ -77,4 +185,52 @@ export function parseAgentQuestionnaireAnswersMessage(
   }
 
   return answers.length > 0 ? answers : null;
+}
+
+function resolveQuestionAnswer(
+  question: AgentQuestionnaire["questions"][number],
+  raw: string,
+): string | null {
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const byNumber = trimmed.match(/^(\d+)$/);
+  if (byNumber) {
+    const index = Number(byNumber[1]) - 1;
+    const choice = question.choices[index];
+    if (choice) {
+      return choice.label;
+    }
+  }
+
+  const byLetter = trimmed.match(/^([a-z])$/i);
+  if (byLetter) {
+    const index = byLetter[1]!.toLowerCase().charCodeAt(0) - "a".charCodeAt(0);
+    const choice = question.choices[index];
+    if (choice) {
+      return choice.label;
+    }
+  }
+
+  const labelMatch = question.choices.find(
+    (choice) => choice.label.trim().toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (labelMatch) {
+    return labelMatch.label;
+  }
+
+  if (question.allowCustomAnswer || question.choices.length === 0) {
+    return trimmed;
+  }
+
+  // Channel chats: accept free text even when choices exist so Discord/Telegram
+  // users are not stuck without buttons.
+  return trimmed;
+}
+
+function choiceLetter(index: number): string {
+  return String.fromCharCode("a".charCodeAt(0) + index);
 }

@@ -80,6 +80,41 @@ describe("StatusPage helpers", () => {
     });
   });
 
+  test("points bridge-offline warnings at Integrations", () => {
+    const status = {
+      ...healthyStatus,
+      telegramWorker: {
+        ...healthyStatus.telegramWorker,
+        running: false,
+        ok: false,
+      },
+    };
+
+    expect(deriveSummary(status)).toEqual({
+      tone: "warn",
+      title: "Telegram bridge offline",
+      description: "Start the Telegram worker (bun run dev:telegram) to receive messages.",
+      action: { label: "Open Integrations", to: "/integrations" },
+    });
+  });
+
+  test("points provider warnings at Settings", () => {
+    const status = {
+      ...healthyStatus,
+      server: {
+        ...healthyStatus.server,
+        providerConfigured: false,
+      },
+    };
+
+    expect(deriveSummary(status)).toEqual({
+      tone: "warn",
+      title: "Running with warnings",
+      description: "Configure an LLM provider before chat or automation runs can succeed.",
+      action: { label: "Open Settings", to: "/settings" },
+    });
+  });
+
   test("maps bridge health to service columns", () => {
     const columns = buildServiceColumns(healthyStatus);
     expect(columns.map((column) => column.title)).toEqual([

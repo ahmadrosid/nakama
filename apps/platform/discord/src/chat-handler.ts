@@ -1,5 +1,6 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
-import type { SendMessageInput } from "@nakama/core/contract";
+import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
+import type { AgentQuestionnaire, SendMessageInput } from "@nakama/core/contract";
 import {
   findOrgBySelectionInput,
   formatOrgSelectionPrompt,
@@ -17,7 +18,12 @@ import {
   resolveProfileInScopes,
   type ProfileScope,
 } from "@nakama/core/profiles";
-import type { ChatInputCommandInteraction, Message, TextBasedChannel } from "discord.js";
+import type {
+  ChatInputCommandInteraction,
+  Message,
+  TextBasedChannel,
+  ThreadChannel,
+} from "discord.js";
 import {
   clearActiveStream,
   isAbortError,
@@ -37,6 +43,8 @@ import {
   resolveBotInfo,
   resolveChannelOrgKey,
   resolveConversationKey,
+  resolveOrgChannelId,
+  resolveThreadLookupKey,
   stripBotMention,
   type DiscordBotInfo,
 } from "./guild-message";
@@ -51,14 +59,20 @@ import {
   deliverDiscordTurnArtifactShares,
   maybeSendRequestedDiscordArtifactAttachment,
 } from "./channel-artifact-flow";
+import { DiscordQuestionnaireMessage } from "./questionnaire-message";
 import type { SessionStore } from "./session-store";
+import type { ThreadStore } from "./thread-store";
 import { DiscordTodoStatusMessage } from "./todo-status-message";
 import { createTypingLoop } from "./typing-indicator";
 
 const chatLocks = new Map<string, Promise<void>>();
+const pendingQuestionnaires = new Map<string, AgentQuestionnaire>();
 
 const GROUP_MESSAGE_PREFIX =
   "[Discord channel — your reply is visible to everyone in this channel.]\n";
+
+/** Posted when tools start before the model wrote any status text. */
+const DISCORD_EARLY_ACK_FALLBACK = "On it.";
 
 const LINK_IN_PRIVATE_REPLY =
   "Link your account in a private DM with this bot first.";
@@ -78,13 +92,21 @@ export interface ChatHandlerDeps {
   config: DiscordBridgeConfig;
   authStore: DiscordAuthStore;
   sessionStore: SessionStore;
+  threadStore: ThreadStore;
   orgStore: ChannelOrgStore;
   getBotInfo?: () => DiscordBotInfo | undefined;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
-  const { client, config, authStore, sessionStore, orgStore, getBotInfo = () => undefined } =
-    deps;
+  const {
+    client,
+    config,
+    authStore,
+    sessionStore,
+    threadStore,
+    orgStore,
+    getBotInfo = () => undefined,
+  } = deps;
 
   return {
     handleMessage,
@@ -102,18 +124,26 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const channelId = message.channel.id;
     const text = message.content?.trim();
     const isGuild = isDiscordGuildMessage(message);
+    const isThread = isDiscordThreadMessage(message);
     const botInfo = resolveBotInfo(message, getBotInfo());
-    const groupDecision = isGuild ? explainGuildMessageHandling(message, botInfo) : null;
+    const botOwnsThread = isThread ? threadStore.hasThreadId(channelId) : false;
+    const groupDecision = isGuild
+      ? explainGuildMessageHandling(message, botInfo, { botOwnsThread })
+      : null;
 
     if (groupDecision && !groupDecision.shouldHandle) {
       return;
     }
-
-    const channelOrgKey = resolveChannelOrgKey(channelId, userId, isGuild);
+    const parentChannelId = resolveOrgChannelId(message, channelId, isGuild);
+    // Threads share the parent channel's org selection — do not key by thread id.
+    const channelOrgKey = resolveChannelOrgKey(parentChannelId, userId, isGuild);
     const conversationKey = resolveConversationKey(message, channelId, isGuild);
-    const isThread = isDiscordThreadMessage(message);
+    // Serialize per user+parent channel so thread create/reuse and in-thread chat don't race.
+    const lockKey = isGuild
+      ? resolveThreadLookupKey(parentChannelId, userId)
+      : conversationKey;
 
-    await withChatLock(conversationKey, async () => {
+    await withChatLock(lockKey, async () => {
       await authStore.reload();
       const isAuthorized = authStore.isAuthorized(userId);
 
@@ -170,14 +200,120 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      let replyChannel = channel;
+      let replyConversationKey = conversationKey;
+      let replyMessenger = messenger;
+      let replyIsThread = isThread;
+
+      const shouldRouteToThread =
+        isGuild &&
+        !isThread &&
+        (groupDecision?.reason === "bot-mention" || groupDecision?.reason === "reply-to-bot");
+
+      if (shouldRouteToThread) {
+        const thread = await resolveOrCreateGuildThread(
+          message,
+          channelId,
+          userId,
+          messageText,
+        );
+
+        if (thread) {
+          replyChannel = thread;
+          replyConversationKey = `g:${channelId}:t:${thread.id}`;
+          replyMessenger = createDiscordMessenger(thread);
+          replyIsThread = true;
+        }
+      }
+
       await handleChatMessage(
-        channel,
-        withGroupContext({ message: messageText }, isGuild),
-        conversationKey,
-        messenger,
+        replyChannel,
+        replyConversationKey,
+        replyMessenger,
         messageText,
+        isGuild,
+        replyIsThread,
       );
     });
+  }
+
+  async function resolveOrCreateGuildThread(
+    message: Message,
+    parentChannelId: string,
+    userId: string,
+    messageText: string,
+  ): Promise<ThreadChannel | null> {
+    const lookupKey = resolveThreadLookupKey(parentChannelId, userId);
+    // Re-check after the chat lock so concurrent mentions do not create duplicate threads.
+    const existingThreadId = threadStore.get(lookupKey);
+
+    if (existingThreadId) {
+      try {
+        const fetched = await message.client.channels.fetch(existingThreadId);
+
+        if (fetched?.isThread()) {
+          if (fetched.archived) {
+            await fetched.setArchived(false);
+          }
+
+          return fetched;
+        }
+      } catch (error) {
+        console.warn(
+          `Stored Discord thread ${existingThreadId} is unavailable; creating a new one.`,
+          error,
+        );
+      }
+    }
+
+    try {
+      const thread = await message.startThread({
+        name: deriveThreadName(messageText),
+        autoArchiveDuration: 1440,
+      });
+      threadStore.set(lookupKey, thread.id);
+      await threadStore.save();
+      return thread;
+    } catch (error) {
+      console.error("Failed to create Discord thread; falling back to channel reply:", error);
+      return null;
+    }
+  }
+
+  async function handleCloseThread(
+    interaction: ChatInputCommandInteraction,
+    conversationKey: string,
+    messenger: DiscordMessenger,
+  ): Promise<void> {
+    const channel = interaction.channel;
+
+    if (!channel?.isThread()) {
+      await messenger.send("Use /close inside a bot conversation thread.");
+      return;
+    }
+
+    if (!threadStore.hasThreadId(channel.id)) {
+      await messenger.send("I can only close threads I started.");
+      return;
+    }
+
+    stopActiveStream(conversationKey);
+    pendingQuestionnaires.delete(conversationKey);
+
+    if (threadStore.deleteByThreadId(channel.id)) {
+      await threadStore.save();
+    }
+
+    await messenger.send("Thread closed.");
+
+    try {
+      if (!channel.archived) {
+        await channel.setArchived(true);
+      }
+    } catch (error) {
+      console.error("Failed to archive Discord thread after /close:", error);
+      await messenger.send("Couldn't archive the thread. Check the bot's Manage Threads permission.");
+    }
   }
 
   async function handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -187,7 +323,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const userId = interaction.user.id;
     const channelId = interaction.channelId;
     const isGuild = !interaction.channel?.isDMBased();
-    const channelOrgKey = resolveChannelOrgKey(channelId, userId, isGuild);
+    const orgChannelId =
+      isGuild && interaction.channel?.isThread()
+        ? (interaction.channel.parentId ?? channelId)
+        : channelId;
+    const channelOrgKey = resolveChannelOrgKey(orgChannelId, userId, isGuild);
     const conversationKey = isGuild
       ? interaction.channel?.isThread()
         ? `g:${interaction.channel.parentId ?? channelId}:t:${interaction.channel.id}`
@@ -230,6 +370,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      if (interaction.commandName === "close") {
+        await handleCloseThread(interaction, conversationKey, messenger);
+        return;
+      }
+
       const orgReady = await ensureOrgReady(messenger, channelOrgKey, undefined);
       if (!orgReady) {
         return;
@@ -238,9 +383,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       switch (interaction.commandName) {
         case "clear": {
           stopActiveStream(conversationKey);
+          pendingQuestionnaires.delete(conversationKey);
           const session = await resolveSession(conversationKey);
           await session.clear();
-          clearSessionArtifactState(conversationKey);
+          await clearSessionArtifactState(conversationKey);
           await messenger.send("History cleared.");
           return;
         }
@@ -255,6 +401,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         }
         case "new": {
           stopActiveStream(conversationKey);
+          pendingQuestionnaires.delete(conversationKey);
           await createAndBindSession(conversationKey);
           await messenger.send("Started a new conversation.");
           return;
@@ -345,10 +492,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function handleChatMessage(
     channel: TextBasedChannel,
-    input: SendMessageInput,
     conversationKey: string,
     messenger: DiscordMessenger,
     attachUserText: string,
+    isGuild: boolean,
+    isThread: boolean,
   ): Promise<void> {
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
@@ -365,16 +513,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       });
     }
 
+    // Forward free text to the agent — do not gate Discord replies on questionnaire parsing.
+    const streamInput = withGroupContext({ message: attachUserText }, isGuild, isThread);
+
     const signal = registerActiveStream(conversationKey);
     const typingLoop = createTypingLoop(messenger);
     const todoStatus = new DiscordTodoStatusMessage(messenger);
+    const questionnaireStatus = new DiscordQuestionnaireMessage(messenger);
     typingLoop.start();
 
     let reply = "";
+    let earlyAck: Promise<void> | undefined;
+    let postedQuestionnaire = false;
 
     try {
       reply = await session.sendStream(
-        input,
+        streamInput,
         {
           onThinking: () => {
             typingLoop.ping();
@@ -384,6 +538,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           },
           onToolStart: () => {
             typingLoop.ping();
+            if (earlyAck) {
+              return;
+            }
+
+            const earlyText = reply.trim() || DISCORD_EARLY_ACK_FALLBACK;
+            reply = "";
+            earlyAck = replyAsChat(messenger, earlyText);
           },
           onToolEnd: () => {
             typingLoop.ping();
@@ -392,10 +553,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             typingLoop.ping();
             void todoStatus.update(todos);
           },
+          onQuestionnaireUpdated: (questionnaire) => {
+            typingLoop.ping();
+            if (hasActiveAgentQuestionnaire(questionnaire)) {
+              postedQuestionnaire = true;
+              pendingQuestionnaires.set(conversationKey, questionnaire!);
+              void questionnaireStatus.update(questionnaire);
+            } else {
+              pendingQuestionnaires.delete(conversationKey);
+              questionnaireStatus.clear();
+            }
+          },
         },
         { signal },
       );
 
+      await earlyAck;
       await todoStatus.complete();
 
       if (signal.aborted) {
@@ -407,6 +580,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
     } catch (error) {
+      await earlyAck;
       if (isAbortError(error)) {
         await todoStatus.stop();
         if (reply.trim()) {
@@ -427,12 +601,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await replyAsChat(messenger, reply);
-    } else {
+    } else if (!postedQuestionnaire && !earlyAck) {
       await messenger.send("(empty reply)");
     }
 
     if (profileId) {
       await deliverDiscordTurnArtifactShares({
+        channel,
         client,
         session,
         conversationKey,
@@ -514,6 +689,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     client.setOrgId(picked.id);
 
     if (previousOrgId && previousOrgId !== picked.id) {
+      pendingQuestionnaires.delete(conversationKey);
       sessionStore.delete(conversationKey);
       await sessionStore.save();
     }
@@ -585,6 +761,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const { scope, profile: picked } = resolved;
 
     if (scope.orgId !== currentOrgId) {
+      pendingQuestionnaires.delete(conversationKey);
       orgStore.set(channelOrgKey, scope.orgId);
       await orgStore.save();
       client.setOrgId(scope.orgId);
@@ -679,6 +856,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     chatId: string,
     profileId?: string,
   ): Promise<RemoteChatSession> {
+    pendingQuestionnaires.delete(chatId);
     const resolvedProfileId = profileId ?? (await resolveSessionProfileId(chatId));
     const session = await client.createSession("discord", {
       profileId: resolvedProfileId,
@@ -709,7 +887,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     return pickProfileForOrg(profiles, config.profileId).id;
   }
 
-  function clearSessionArtifactState(conversationKey: string): void {
+  async function clearSessionArtifactState(conversationKey: string): Promise<void> {
     const existing = sessionStore.get(conversationKey);
     if (!existing) {
       return;
@@ -720,12 +898,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       profileId: existing.profileId,
       updatedAt: new Date().toISOString(),
     });
-    void sessionStore.save();
+    await sessionStore.save();
   }
 }
 
-function withGroupContext(input: SendMessageInput, isGroup: boolean): SendMessageInput {
-  if (!isGroup) {
+function withGroupContext(
+  input: SendMessageInput,
+  isGuild: boolean,
+  isThread: boolean,
+): SendMessageInput {
+  // Threads are a private-ish conversation surface — skip the public-channel warning.
+  if (!isGuild || isThread) {
     return input;
   }
 
@@ -736,6 +919,28 @@ function withGroupContext(input: SendMessageInput, isGroup: boolean): SendMessag
   }
 
   return { ...input, message: GROUP_MESSAGE_PREFIX.trim() };
+}
+
+function deriveThreadName(messageText: string): string {
+  const cleaned = messageText.replace(/\s+/g, " ").trim();
+
+  if (!cleaned) {
+    return "Nakama chat";
+  }
+
+  // Discord thread names are capped at 100 characters.
+  if (cleaned.length <= 100) {
+    return cleaned;
+  }
+
+  const sliced = cleaned.slice(0, 100);
+  const lastSpace = sliced.lastIndexOf(" ");
+
+  if (lastSpace > 40) {
+    return sliced.slice(0, lastSpace);
+  }
+
+  return sliced;
 }
 
 function getOrgSelection(

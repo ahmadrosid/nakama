@@ -52,13 +52,10 @@ export function PromptInputForm({
         ref={formRef}
         {...props}
       >
-        {/* Glow under an opaque face; 1px inset keeps the soft edge off the content. */}
+        {/* Glow under an opaque face; keep overflow visible so slash skill picker can escape upward. */}
         <div
           ref={hostRef}
-          className={cn(
-            "composer-rim relative rounded-xl p-px",
-            rimActive ? "overflow-visible" : "overflow-hidden",
-          )}
+          className="composer-rim relative overflow-visible rounded-xl p-px"
         >
           <ComposerRimGlow hostRef={hostRef} active={rimActive} />
           <InputGroup

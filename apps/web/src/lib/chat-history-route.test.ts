@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  HISTORY_SESSION_CHANNELS,
   buildChatPath,
   buildNewChatPath,
   chatProfileIdFromPath,
+  formatSessionChannelLabel,
   isChatSessionPath,
+  isReadOnlySessionChannel,
   parseChatRouteParams,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
@@ -212,5 +215,11 @@ describe("chat history route helpers", () => {
     const profiles = [{ id: "default" }, { id: "super" }];
     expect(pickKnownProfileId(profiles, "missing", "super")).toBe("super");
     expect(pickKnownProfileId(profiles, "missing")).toBeNull();
+  });
+
+  test("history lists discord sessions as read-only channel chats", () => {
+    expect(HISTORY_SESSION_CHANNELS).toContain("discord");
+    expect(isReadOnlySessionChannel("discord")).toBe(true);
+    expect(formatSessionChannelLabel("discord")).toBe("Discord");
   });
 });

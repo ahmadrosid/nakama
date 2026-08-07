@@ -1,7 +1,7 @@
 import type { DeliverableChannelArtifact } from "@nakama/core/channel-artifact-delivery";
 import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { getTelegramConfigDir } from "@nakama/core/telegram-config";
+import { dirname, join } from "node:path";
 
 export interface ChatSessionRecord {
   sessionId: string;
@@ -80,13 +80,9 @@ export class SessionStore {
 
   async save(): Promise<void> {
     await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: getTelegramConfigDir(),
+      ensureDir: dirname(this.path),
     });
   }
-}
-
-function getTelegramConfigDir(): string {
-  return join(homedir(), ".nakama", "telegram");
 }
 
 function getChatSessionsPath(): string {

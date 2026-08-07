@@ -121,6 +121,7 @@ export const HELP_TEXT = `Nakama Discord commands:
 /clear — clear chat history
 /compact — compact conversation history
 /new — start a new conversation
+/close — close this bot conversation thread
 /org — choose or switch organization (send as text)
 /profile — choose or switch bot profile (send as text)
 /status — server and model status

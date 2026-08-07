@@ -33,6 +33,7 @@ const MESSAGING_CHANNEL_PROMPT = {
     format: [
       "Discord supports a Markdown subset: **bold**, *italic*, __underline__, ~~strikethrough~~, inline code, fenced code blocks, and headings.",
       "Avoid tables and very long code blocks; keep messages compact for chat.",
+      "For work that needs tools, send a brief status line first (what you are about to do), then use tools, then send a short outcome when finished.",
     ],
   },
 } as const satisfies Record<MessagingChannel, MessagingChannelPromptConfig>;

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   getProfileSoulDir,
   guardFilePath,
@@ -7,10 +8,16 @@ import {
   type ToolDefinition,
 } from "@nakama/core";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
+import {
+  commandLooksLikeCursorAgent,
+  formatCodingAgentBashStdout,
+} from "./cursor-agent-output";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 30 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
+/** In-memory capture for coding-agent runs before summarize / keep-tail. */
+const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
 
 export interface BashInput {
   command: string;
@@ -29,6 +36,11 @@ export interface BashOutput {
 
 interface BashRunOptions {
   workspaceRoot?: string;
+}
+
+interface ShellRunOptions {
+  codingAgentMode: boolean;
+  workspaceRoot: string;
 }
 
 export const bashTool: ToolDefinition<BashInput, BashOutput> = {
@@ -100,8 +112,13 @@ export async function runBash(
     : workspaceRoot;
   const timeoutMs = readTimeout(readOptionalNumber(input, "timeoutMs"));
   const env = readStringRecord(readOptionalRecord(input, "env"));
+  const codingAgentMode =
+    readOptionalBoolean(input, "codingAgent") === true || commandLooksLikeCursorAgent(command);
 
-  return runShellCommand(command, cwd, timeoutMs, env);
+  return runShellCommand(command, cwd, timeoutMs, env, {
+    codingAgentMode,
+    workspaceRoot,
+  });
 }
 
 function runShellCommand(
@@ -109,6 +126,7 @@ function runShellCommand(
   cwd: string,
   timeoutMs: number,
   envOverrides: Record<string, string> = {},
+  options: ShellRunOptions,
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     const child = spawn("/bin/bash", ["-lc", command], {
@@ -120,6 +138,8 @@ function runShellCommand(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let stdoutOverflow = false;
+    let stderrOverflow = false;
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
@@ -127,10 +147,24 @@ function runShellCommand(
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
+      if (options.codingAgentMode) {
+        const next = appendCodingAgentCapture(stdout, String(chunk));
+        stdout = next.value;
+        stdoutOverflow = stdoutOverflow || next.overflowed;
+        return;
+      }
+
       stdout = appendOutput(stdout, String(chunk));
     });
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
+      if (options.codingAgentMode) {
+        const next = appendCodingAgentCapture(stderr, String(chunk));
+        stderr = next.value;
+        stderrOverflow = stderrOverflow || next.overflowed;
+        return;
+      }
+
       stderr = appendOutput(stderr, String(chunk));
     });
 
@@ -141,14 +175,88 @@ function runShellCommand(
 
     child.on("close", (exitCode) => {
       clearTimeout(timeoutId);
-      resolve({
-        exitCode,
+
+      void finalizeCodingAgentOutput({
+        codingAgentMode: options.codingAgentMode,
+        workspaceRoot: options.workspaceRoot,
         stdout,
         stderr,
+        stdoutOverflow,
+        stderrOverflow,
+        exitCode,
         timedOut,
-      });
+      })
+        .then(resolve)
+        .catch(reject);
     });
   });
+}
+
+async function finalizeCodingAgentOutput(args: {
+  codingAgentMode: boolean;
+  workspaceRoot: string;
+  stdout: string;
+  stderr: string;
+  stdoutOverflow: boolean;
+  stderrOverflow: boolean;
+  exitCode: number | null;
+  timedOut: boolean;
+}): Promise<BashOutput> {
+  if (!args.codingAgentMode) {
+    return {
+      exitCode: args.exitCode,
+      stdout: args.stdout,
+      stderr: args.stderr,
+      timedOut: args.timedOut,
+    };
+  }
+
+  const logPath = await writeCodingAgentLog(args.workspaceRoot, args.stdout, args.stderr);
+  let stdout = formatCodingAgentBashStdout(args.stdout, {
+    logPath,
+    exitCode: args.exitCode,
+  });
+  if (args.stdoutOverflow) {
+    stdout = `${stdout}\n\n(stdout capture hit ${CODING_AGENT_MAX_CAPTURE_CHARS} char limit; see full log)`;
+  }
+
+  let stderr = keepTail(args.stderr, MAX_OUTPUT_CHARS);
+  if (args.stderrOverflow) {
+    stderr = `${stderr}\n\n(stderr capture hit ${CODING_AGENT_MAX_CAPTURE_CHARS} char limit; see full log)`;
+  }
+
+  return {
+    exitCode: args.exitCode,
+    stdout,
+    stderr,
+    timedOut: args.timedOut,
+  };
+}
+
+async function writeCodingAgentLog(
+  workspaceRoot: string,
+  stdout: string,
+  stderr: string,
+): Promise<string | null> {
+  try {
+    const dir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `${stamp}-${Math.random().toString(36).slice(2, 8)}.log`;
+    const absolutePath = path.join(dir, fileName);
+    const body = [
+      "=== stdout ===",
+      stdout,
+      "",
+      "=== stderr ===",
+      stderr,
+      "",
+    ].join("\n");
+    await writeFile(absolutePath, body, "utf8");
+    return path.join("artifacts", "coding-agent-runs", fileName);
+  } catch {
+    return null;
+  }
 }
 
 function appendOutput(current: string, chunk: string): string {
@@ -159,6 +267,33 @@ function appendOutput(current: string, chunk: string): string {
   }
 
   return combined.slice(0, MAX_OUTPUT_CHARS) + "\n...[truncated]";
+}
+
+function appendCodingAgentCapture(
+  current: string,
+  chunk: string,
+): { value: string; overflowed: boolean } {
+  if (current.length >= CODING_AGENT_MAX_CAPTURE_CHARS) {
+    return { value: current, overflowed: true };
+  }
+
+  const remaining = CODING_AGENT_MAX_CAPTURE_CHARS - current.length;
+  if (chunk.length <= remaining) {
+    return { value: current + chunk, overflowed: false };
+  }
+
+  return {
+    value: current + chunk.slice(0, remaining),
+    overflowed: true,
+  };
+}
+
+function keepTail(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+
+  return `...[truncated]\n${value.slice(value.length - maxChars)}`;
 }
 
 async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
@@ -178,6 +313,14 @@ function readTimeout(value: unknown): number {
 }
 
 function readOptionalNumber(input: unknown, key: string): unknown {
+  if (typeof input !== "object" || input === null || !(key in input)) {
+    return undefined;
+  }
+
+  return (input as Record<string, unknown>)[key];
+}
+
+function readOptionalBoolean(input: unknown, key: string): unknown {
   if (typeof input !== "object" || input === null || !(key in input)) {
     return undefined;
   }

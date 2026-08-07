@@ -1,8 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { spyOn } from "bun:test";
-import type { ChatMessage } from "@nakama/core/contract";
+import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
 import type { UserOrgSummary } from "@nakama/core/contract";
 import {
   assertBridgeClientMethods,
@@ -10,7 +9,7 @@ import {
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { NakamaClient } from "@nakama/client";
+import type { NakamaClient, StreamHandlers } from "@nakama/client";
 import type { Message } from "discord.js";
 
 export function createDefaultTestOrgs(): UserOrgSummary[] {
@@ -27,9 +26,32 @@ export function createDefaultTestOrgs(): UserOrgSummary[] {
   ];
 }
 
+export function createMultiTestOrgs(): UserOrgSummary[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: "org_a",
+      name: "Personal",
+      slug: "helipod",
+      role: "admin",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "org_b",
+      name: "Tinyclaw",
+      slug: "tinyclaw",
+      role: "member",
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+}
+
 export function createMockClient(
   options: {
     messages?: ChatMessage[];
+    questionnaire?: AgentQuestionnaire | null;
     profiles?: Array<{
       id: string;
       name?: string;
@@ -38,17 +60,23 @@ export function createMockClient(
       isSuper?: boolean;
     }>;
     orgs?: UserOrgSummary[];
+    onSendStream?: (input: unknown, handlers?: StreamHandlers) => Promise<string>;
+    artifactContentBytes?: Uint8Array;
   } = {},
 ) {
   const calls = {
     createSession: 0,
     sendStream: 0,
+    getSessionMessages: 0,
     publishProfileArtifactShare: 0,
     readProfileArtifactContent: 0,
   };
 
-  const sendStream = async () => {
+  const sendStream = async (input: unknown, handlers?: StreamHandlers) => {
     calls.sendStream += 1;
+    if (options.onSendStream) {
+      return options.onSendStream(input, handlers);
+    }
     return "Agent reply";
   };
 
@@ -77,6 +105,16 @@ export function createMockClient(
       return session;
     },
     createChatSession: () => session,
+    getSessionMessages: async () => {
+      calls.getSessionMessages += 1;
+      return {
+        channel: "discord" as const,
+        messages: options.messages ?? [],
+        messageMeta: [],
+        todos: [],
+        questionnaire: options.questionnaire ?? null,
+      };
+    },
     health: async () => ({ ok: true, providerConfigured: false }),
     listProfiles: async () =>
       parseListProfilesResponse({
@@ -112,9 +150,10 @@ export function createMockClient(
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
+      const data = options.artifactContentBytes ?? new TextEncoder().encode("# Report");
       return {
         contentType: "text/markdown",
-        data: new TextEncoder().encode("# Report").buffer,
+        data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
       };
     },
   } as unknown as NakamaClient;
@@ -178,6 +217,239 @@ export function createDmMessage(options: {
   };
 }
 
+export interface MockGuildChatMessage {
+  message: Message;
+  channelSentMessages: string[];
+  threadSentMessages: string[];
+  startThreadCalls: number;
+  createdThreadId: string | null;
+  channelFileSendCalls: number;
+  threadFileSendCalls: number;
+  lastThreadName: string | null;
+}
+
+export function createGuildChatMessage(options: {
+  userId?: string;
+  channelId?: string;
+  threadId?: string;
+  parentId?: string;
+  content?: string;
+  mentionsBot?: boolean;
+  replyToBot?: boolean;
+  inThread?: boolean;
+  startThreadError?: Error;
+  existingThreads?: Map<
+    string,
+    {
+      id: string;
+      archived?: boolean;
+      parentId?: string;
+    }
+  >;
+}): MockGuildChatMessage {
+  const channelSentMessages: string[] = [];
+  const threadSentMessages: string[] = [];
+  let startThreadCalls = 0;
+  let createdThreadId: string | null = null;
+  let lastThreadName: string | null = null;
+  let channelFileSendCalls = 0;
+  let threadFileSendCalls = 0;
+
+  const userId = options.userId ?? "424242424242424242";
+  const channelId = options.channelId ?? "guild_channel_1";
+  const threadId = options.threadId ?? "thread_1";
+  const parentId = options.parentId ?? channelId;
+  const botId = "bot_id";
+  const existingThreads = options.existingThreads ?? new Map();
+
+  const messages = new Map<string, { author: { id: string } }>();
+  if (options.replyToBot) {
+    messages.set("reply_1", { author: { id: botId } });
+  }
+
+  function createThreadChannel(id: string, parent: string, archived = false) {
+    return {
+      id,
+      parentId: parent,
+      archived,
+      isDMBased: () => false,
+      isTextBased: () => true,
+      isThread: () => true,
+      setArchived: async (value: boolean) => {
+        archived = value;
+        return createThreadChannel(id, parent, archived);
+      },
+      send: async (payload: string | { files: unknown[] }) => {
+        if (typeof payload === "string") {
+          threadSentMessages.push(payload);
+          return { id: `tmsg_${threadSentMessages.length}` };
+        }
+
+        threadFileSendCalls += 1;
+        return { id: `tfile_${threadFileSendCalls}` };
+      },
+      sendTyping: async () => {},
+      messages: {
+        cache: messages,
+        fetch: async () => ({
+          edit: async () => {},
+        }),
+      },
+    };
+  }
+
+  const parentChannel = {
+    id: channelId,
+    parentId: null as string | null,
+    isDMBased: () => false,
+    isTextBased: () => true,
+    isThread: () => false,
+    send: async (payload: string | { files: unknown[] }) => {
+      if (typeof payload === "string") {
+        channelSentMessages.push(payload);
+        return { id: `cmsg_${channelSentMessages.length}` };
+      }
+
+      channelFileSendCalls += 1;
+      return { id: `cfile_${channelFileSendCalls}` };
+    },
+    sendTyping: async () => {},
+    messages: {
+      cache: messages,
+      fetch: async () => ({
+        edit: async () => {},
+      }),
+    },
+  };
+
+  const channel = options.inThread
+    ? createThreadChannel(threadId, parentId, false)
+    : parentChannel;
+
+  const clientChannels = {
+    fetch: async (id: string) => {
+      const known = existingThreads.get(id);
+      if (known) {
+        return createThreadChannel(known.id, known.parentId ?? parentId, known.archived ?? false);
+      }
+
+      if (createdThreadId && id === createdThreadId) {
+        return createThreadChannel(createdThreadId, channelId, false);
+      }
+
+      throw new Error(`Unknown channel ${id}`);
+    },
+  };
+
+  const message = {
+    author: { id: userId, bot: false },
+    content: options.content ?? "",
+    mentions: {
+      users: {
+        has: (id: string) => (options.mentionsBot ? id === botId : false),
+      },
+    },
+    reference: options.replyToBot ? { messageId: "reply_1" } : null,
+    channel,
+    client: {
+      user: { id: botId, username: "nakamabot" },
+      channels: clientChannels,
+    },
+    startThread: async ({ name }: { name: string }) => {
+      startThreadCalls += 1;
+      lastThreadName = name;
+      if (options.startThreadError) {
+        throw options.startThreadError;
+      }
+
+      createdThreadId = `created_thread_${startThreadCalls}`;
+      const thread = createThreadChannel(createdThreadId, channelId, false);
+      existingThreads.set(createdThreadId, {
+        id: createdThreadId,
+        parentId: channelId,
+        archived: false,
+      });
+      return thread;
+    },
+  } as unknown as Message;
+
+  return {
+    message,
+    channelSentMessages,
+    threadSentMessages,
+    get startThreadCalls() {
+      return startThreadCalls;
+    },
+    get createdThreadId() {
+      return createdThreadId;
+    },
+    get lastThreadName() {
+      return lastThreadName;
+    },
+    get channelFileSendCalls() {
+      return channelFileSendCalls;
+    },
+    get threadFileSendCalls() {
+      return threadFileSendCalls;
+    },
+  };
+}
+
+export function createSlashInteraction(options: {
+  userId?: string;
+  channelId?: string;
+  commandName: string;
+  inThread?: boolean;
+  parentId?: string;
+  threadId?: string;
+}): {
+  interaction: import("discord.js").ChatInputCommandInteraction;
+  replies: string[];
+} {
+  const replies: string[] = [];
+  const userId = options.userId ?? "424242424242424242";
+  const channelId = options.channelId ?? "guild_channel_1";
+  const threadId = options.threadId ?? "thread_1";
+  const parentId = options.parentId ?? channelId;
+
+  const channel = options.inThread
+    ? {
+        id: threadId,
+        parentId,
+        archived: false,
+        isDMBased: () => false,
+        isThread: () => true,
+        setArchived: async (value: boolean) => {
+          channel.archived = value;
+          return channel;
+        },
+      }
+    : {
+        id: channelId,
+        parentId: null,
+        isDMBased: () => false,
+        isThread: () => false,
+      };
+
+  const interaction = {
+    user: { id: userId },
+    channelId: options.inThread ? threadId : channelId,
+    channel,
+    commandName: options.commandName,
+    reply: async ({ content }: { content: string }) => {
+      replies.push(content);
+    },
+    followUp: async ({ content }: { content: string }) => {
+      replies.push(content);
+    },
+    editReply: async ({ content }: { content: string }) => {
+      replies.push(content);
+    },
+  } as unknown as import("discord.js").ChatInputCommandInteraction;
+
+  return { interaction, replies };
+}
+
 export async function writeDiscordConfigIni(
   homeDir: string,
   config: {
@@ -207,14 +479,33 @@ export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return new ChannelOrgStore(path.join(homeDir, ".nakama", "discord", "org-selection.json"));
 }
 
+let tempHomeChain: Promise<void> = Promise.resolve();
+
 export async function withTempHome<T>(run: (homeDir: string) => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const previous = tempHomeChain;
+  tempHomeChain = previous.then(() => gate);
+
+  await previous;
+
   const homeDir = await mkdtemp(path.join(os.tmpdir(), "nakama-discord-home-"));
-  const homedirSpy = spyOn(os, "homedir").mockReturnValue(homeDir);
+  const configDir = path.join(homeDir, ".nakama");
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = configDir;
 
   try {
     return await run(homeDir);
   } finally {
-    homedirSpy.mockRestore();
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
     await rm(homeDir, { recursive: true, force: true });
+    release();
   }
 }

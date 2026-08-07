@@ -25,10 +25,12 @@ describe("coding-agent harness resolution", () => {
     const harnesses = [
       { kind: "claude_code" as const, command: "claude", enabled: true },
       { kind: "codex" as const, command: "codex", enabled: true },
+      { kind: "cursor_agent" as const, command: "agent", enabled: true },
     ];
 
     expect(inferCodingAgentHarnessKind("codex exec 'task'", harnesses)).toBe("codex");
     expect(inferCodingAgentHarnessKind("claude -p 'task'", harnesses)).toBe("claude_code");
+    expect(inferCodingAgentHarnessKind("agent -p 'task' --yolo", harnesses)).toBe("cursor_agent");
     expect(inferCodingAgentHarnessKind("npm install -g @openai/codex", harnesses)).toBeNull();
   });
 
@@ -38,6 +40,37 @@ describe("coding-agent harness resolution", () => {
       args: ["install", "-g", "--trust", "opencode-ai"],
       displayCommand: "bun install -g --trust opencode-ai",
     });
+  });
+
+  test("refuses auto-install plan for Cursor Agent", () => {
+    expect(() => buildCodingHarnessInstallPlan("cursor_agent", "npm")).toThrow(/cannot be auto-installed/i);
+  });
+
+  test("marks Cursor Agent ready when installed without provider passthrough", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: "workspace-settings",
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-cursor-agent",
+          kind: "cursor_agent",
+          name: "Cursor Agent",
+          command: "echo",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const statuses = await listCodingAgentHarnessStatuses(db);
+    const cursor = statuses.find((harness) => harness.id === "coding-harness-cursor-agent");
+    expect(cursor?.installed).toBe(true);
+    expect(cursor?.ready).toBe(true);
+    expect(cursor?.statusMessage).toMatch(/host Cursor auth/i);
   });
 
   test("refreshCodingAgentHarnessProbe persists cached readiness", async () => {

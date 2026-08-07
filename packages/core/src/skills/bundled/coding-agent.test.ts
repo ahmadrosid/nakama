@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { matchSkillsForMessage } from "../match";
@@ -58,5 +58,27 @@ describe("ensureBundledSkillFiles for coding agent", () => {
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");
     expect(created).toContain("coding-backend-pi");
+    expect(created).toContain("coding-backend-cursor");
+  });
+
+  test("force-refreshes coding-agent and coding-backend-cursor when installed copies are stale", async () => {
+    const codingAgentPath = join(configDir, "agent", "skills", "coding-agent", "SKILL.md");
+    const cursorPath = join(configDir, "agent", "skills", "coding-backend-cursor", "SKILL.md");
+    await mkdir(join(configDir, "agent", "skills", "coding-agent"), { recursive: true });
+    await mkdir(join(configDir, "agent", "skills", "coding-backend-cursor"), { recursive: true });
+    await Bun.write(codingAgentPath, "---\nname: coding-agent\ndescription: stale\n---\n");
+    await Bun.write(cursorPath, "---\nname: coding-backend-cursor\ndescription: stale\n---\n");
+
+    const created = await ensureBundledSkillFiles();
+    const codingAgent = await readFile(codingAgentPath, "utf8");
+    const cursor = await readFile(cursorPath, "utf8");
+
+    expect(created).toContain("coding-agent");
+    expect(created).toContain("coding-backend-cursor");
+    expect(codingAgent).toContain("gh pr create");
+    expect(codingAgent).not.toContain("description: stale");
+    expect(cursor).toContain("Commits and pull requests");
+    expect(cursor).toContain("open a PR with gh");
+    expect(cursor).not.toContain("description: stale");
   });
 });
