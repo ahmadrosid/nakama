@@ -58,7 +58,7 @@ describe("createChatHandler artifact delivery", () => {
     { role: "assistant", content: "Saved the report." },
   ];
 
-  test("posts a publish share link after a paired save-artifact turn", async () => {
+  test("auto-uploads a small artifact after a paired save-artifact turn", async () => {
     await withTempHome(async (homeDir) => {
       await writeDiscordConfigIni(homeDir, {
         botToken: "discord-bot-token",
@@ -88,13 +88,104 @@ describe("createChatHandler artifact delivery", () => {
         orgStore,
       });
 
-      const { message, sentMessages } = createDmMessage({
+      const { message, sentMessages, fileSendCalls } = createDmMessage({
         userId: "424242424242424242",
         content: "thanks",
       });
       await handleMessage(message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(fileSendCalls).toBe(1);
+      expect(sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
+        false,
+      );
+    });
+  });
+
+  test("falls back to a share link when the artifact exceeds the Discord attachment cap", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeDiscordConfigIni(homeDir, {
+        botToken: "discord-bot-token",
+        pairedUserIds: ["424242424242424242"],
+      });
+
+      const oversizedMeta = JSON.stringify({
+        mimeType: "video/mp4",
+        savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 9 * 1024 * 1024,
+      });
+      const oversizedMessages: ChatMessage[] = [
+        { role: "user", content: "save video" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            {
+              id: "tool_1",
+              name: "write_file",
+              arguments: { path: "artifacts/clip.mp4", content: "binary" },
+            },
+            {
+              id: "tool_2",
+              name: "write_file",
+              arguments: { path: "artifacts/clip.mp4.nakama-meta.json", content: oversizedMeta },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          toolCallId: "tool_1",
+          name: "write_file",
+          content: JSON.stringify({
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4",
+            bytesWritten: 9 * 1024 * 1024,
+          }),
+        },
+        {
+          role: "tool",
+          toolCallId: "tool_2",
+          name: "write_file",
+          content: JSON.stringify({
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4.nakama-meta.json",
+            bytesWritten: oversizedMeta.length,
+          }),
+        },
+        { role: "assistant", content: "Saved the clip." },
+      ];
+
+      const authStore = new DiscordAuthStore();
+      await authStore.reload();
+      const { client, calls } = createMockClient({ messages: oversizedMessages });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+      );
+      await sessionStore.load();
+      sessionStore.set("dm_channel_1", {
+        sessionId: "session_test",
+        profileId: "default",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const { handleMessage } = createChatHandler({
+        client,
+        config: { botToken: "discord-bot-token", profileId: "default" },
+        authStore,
+        sessionStore,
+        orgStore,
+      });
+
+      const { message, sentMessages, fileSendCalls } = createDmMessage({
+        userId: "424242424242424242",
+        content: "thanks",
+      });
+      await handleMessage(message);
+
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(calls.readProfileArtifactContent).toBe(0);
+      expect(fileSendCalls).toBe(0);
       expect(sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
         true,
       );

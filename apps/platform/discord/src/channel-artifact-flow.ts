@@ -6,10 +6,14 @@ import {
   isAttachIntent,
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
+  type DeliverableChannelArtifact,
 } from "@nakama/core";
 import type { TextBasedChannel } from "discord.js";
 import type { SessionStore } from "./session-store";
-import { sendDiscordArtifactAttachment } from "./send-artifact-attachment";
+import {
+  DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
+  sendDiscordArtifactAttachment,
+} from "./send-artifact-attachment";
 import type { DiscordMessenger } from "./messenger";
 
 export async function maybeSendRequestedDiscordArtifactAttachment(input: {
@@ -43,6 +47,7 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
 }
 
 export async function deliverDiscordTurnArtifactShares(input: {
+  channel: TextBasedChannel;
   client: NakamaClient;
   session: RemoteChatSession;
   conversationKey: string;
@@ -83,11 +88,54 @@ export async function deliverDiscordTurnArtifactShares(input: {
   });
   await input.sessionStore.save();
 
-  const footer = formatArtifactShareFooter(delivered, {
+  const fallbackArtifacts: DeliverableChannelArtifact[] = [];
+
+  for (const artifact of delivered) {
+    const uploaded = await tryUploadDiscordArtifact({
+      channel: input.channel,
+      client: input.client,
+      profileId: input.profileId,
+      artifact,
+    });
+
+    if (!uploaded) {
+      fallbackArtifacts.push(artifact);
+    }
+  }
+
+  const footer = formatArtifactShareFooter(fallbackArtifacts, {
     webPublicUrlConfigured,
   });
 
   if (footer.trim()) {
     await input.messenger.send(footer);
+  }
+}
+
+async function tryUploadDiscordArtifact(input: {
+  channel: TextBasedChannel;
+  client: NakamaClient;
+  profileId: string;
+  artifact: DeliverableChannelArtifact;
+}): Promise<boolean> {
+  if (input.artifact.sizeBytes > DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES) {
+    return false;
+  }
+
+  try {
+    const { data } = await input.client.readProfileArtifactContent(input.profileId, input.artifact.path);
+    const bytes = new Uint8Array(data);
+    if (bytes.byteLength > DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES) {
+      return false;
+    }
+
+    const result = await sendDiscordArtifactAttachment(input.channel, {
+      filename: input.artifact.filename,
+      bytes,
+    });
+
+    return result.ok;
+  } catch {
+    return false;
   }
 }

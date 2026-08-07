@@ -40,6 +40,7 @@ export function createMockClient(
     }>;
     orgs?: UserOrgSummary[];
     onSendStream?: (input: unknown, handlers?: StreamHandlers) => Promise<string>;
+    artifactContentBytes?: Uint8Array;
   } = {},
 ) {
   const calls = {
@@ -128,9 +129,10 @@ export function createMockClient(
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
+      const data = options.artifactContentBytes ?? new TextEncoder().encode("# Report");
       return {
         contentType: "text/markdown",
-        data: new TextEncoder().encode("# Report").buffer,
+        data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
       };
     },
   } as unknown as NakamaClient;

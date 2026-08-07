@@ -468,6 +468,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (profileId) {
       await deliverDiscordTurnArtifactShares({
+        channel,
         client,
         session,
         conversationKey,
