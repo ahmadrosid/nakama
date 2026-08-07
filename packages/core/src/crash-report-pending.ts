@@ -55,3 +55,35 @@ export async function appendPendingCrashReport(report: CrashReport): Promise<voi
 export async function clearPendingCrashReports(): Promise<void> {
   await writePendingCrashReports([]);
 }
+
+export function getLastCrashReportPath(): string {
+  return join(getUserConfigDir(), "crash-report-last.json");
+}
+
+/**
+ * Keeps the most recent report, already scrubbed, so `nakama report --show` can print
+ * exactly what would leave the machine. Without it every claim about what is sent has to
+ * be taken on trust, which is the wrong way round for something that phones home.
+ */
+export async function recordLastCrashReport(report: CrashReport): Promise<void> {
+  await writePrivateTextFile(
+    getLastCrashReportPath(),
+    `${JSON.stringify(report, null, 2)}\n`,
+    { ensureDir: getUserConfigDir() },
+  );
+}
+
+export async function readLastCrashReport(): Promise<CrashReport | null> {
+  const raw = await readTextOrNull(getLastCrashReportPath());
+
+  if (raw === null) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as CrashReport) : null;
+  } catch {
+    return null;
+  }
+}

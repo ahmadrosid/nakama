@@ -39,7 +39,7 @@ test("scrubText removes email addresses", () => {
   const scrubbed = scrubText("owner alice@example.com could not be notified");
 
   expect(scrubbed).not.toContain("alice@example.com");
-  expect(scrubbed).toContain("[email]");
+  expect(scrubbed).toContain("<email>");
 });
 
 test("scrubText replaces the home directory with a tilde", () => {
@@ -62,6 +62,52 @@ test("scrubText keeps the diagnostic parts of a stack frame", () => {
   expect(scrubbed).toContain("TypeError");
   expect(scrubbed).toContain("resolveTools");
   expect(scrubbed).toContain("a.ts:12:3");
+});
+
+describe("scrubText removes the data an error message quotes back", () => {
+  test("a printed JSON payload does not survive", () => {
+    const scrubbed = scrubText(
+      'Unexpected token in {"name":"Budi","email":"budi@klinik.example","age":34}',
+    );
+
+    expect(scrubbed).not.toContain("Budi");
+    expect(scrubbed).not.toContain("klinik");
+    expect(scrubbed).toContain("Unexpected token in");
+  });
+
+  test("a nested payload does not survive either", () => {
+    const scrubbed = scrubText('failed on {"patient":{"name":"Budi","room":"A1"}}');
+
+    expect(scrubbed).not.toContain("Budi");
+    expect(scrubbed).not.toContain("A1");
+  });
+
+  test("a rejected value in double quotes does not survive", () => {
+    const scrubbed = scrubText('Invalid value "Budi" for field name');
+
+    expect(scrubbed).not.toContain("Budi");
+    expect(scrubbed).toContain("for field name");
+  });
+
+  test("a printed row does not survive", () => {
+    const scrubbed = scrubText("constraint failed for ['Budi', 34, 'jakarta']");
+
+    expect(scrubbed).not.toContain("Budi");
+    expect(scrubbed).not.toContain("jakarta");
+  });
+
+  test("single-quoted identifiers stay readable, which is the whole trade", () => {
+    expect(scrubText("Cannot find module 'crash-report'")).toContain("'crash-report'");
+    expect(scrubText("Cannot read property 'sessionId' of undefined")).toContain(
+      "'sessionId'",
+    );
+  });
+
+  test("an apostrophe in prose is not treated as a quote", () => {
+    const scrubbed = scrubText("the worker didn't start and it's still down");
+
+    expect(scrubbed).toBe("the worker didn't start and it's still down");
+  });
 });
 
 test("scrubText truncates runaway text", () => {

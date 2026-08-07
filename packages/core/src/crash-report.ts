@@ -6,6 +6,7 @@ import {
   appendPendingCrashReport,
   clearPendingCrashReports,
   readPendingCrashReports,
+  recordLastCrashReport,
 } from "./crash-report-pending";
 import { hashId, scrubBreadcrumbData, scrubText } from "./crash-report-scrub";
 
@@ -285,6 +286,16 @@ export async function reportError(
 
   const currentSink = sink;
   const consent = await currentCrashReportConsent();
+
+  if (currentSink) {
+    // Recorded whatever the answer is, so someone who has not decided yet, or who said
+    // no, can still read exactly what would have gone out before they choose.
+    try {
+      await recordLastCrashReport(report);
+    } catch {
+      // Inspectability is a convenience; it must not turn one crash into two.
+    }
+  }
 
   if (consent === "granted") {
     if (currentSink) {

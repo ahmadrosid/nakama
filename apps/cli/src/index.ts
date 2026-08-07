@@ -8,6 +8,7 @@ import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-serv
 import { installCrashHandlers } from "@nakama/core/crash-report";
 import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
 import { runCrashConsentPromptIfNeeded } from "./crash-consent";
+import { isCrashReportShowCommand, runCrashReportShow } from "./crash-report-command";
 import { setTheme, type Theme, detectTheme } from "./styled-text";
 import {
   formatRotateTokenError,
@@ -17,6 +18,11 @@ import {
 
 installCrashHandlers("cli");
 installCrashReportSink();
+
+if (isCrashReportShowCommand()) {
+  await runCrashReportShow();
+  process.exit(0);
+}
 
 if (isRotateTokenCommand()) {
   try {
