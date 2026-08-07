@@ -6,6 +6,9 @@ import { useRestartWorker, useStartWorker, useStopWorker } from "@/hooks/use-wor
 import { WorkerLogDialog } from "@/components/WorkerLogDialog";
 import { cn } from "@/lib/utils";
 
+const glyphTransition =
+  "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+
 function ActionGlyph({
   icon: Icon,
   busy,
@@ -16,11 +19,11 @@ function ActionGlyph({
   iconClassName?: string;
 }) {
   return (
-    <span className="relative inline-flex size-3.5 shrink-0 items-center justify-center">
+    <span className="relative size-3.5 shrink-0" aria-hidden={!busy}>
       <Icon
         className={cn(
-          "absolute size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]",
-          busy ? "opacity-0 scale-25 blur-[4px]" : "opacity-100 scale-100 blur-0",
+          glyphTransition,
+          busy ? "scale-[0.25] opacity-0 blur-[4px]" : "scale-100 opacity-100 blur-0",
           iconClassName,
         )}
         strokeWidth={2}
@@ -28,14 +31,13 @@ function ActionGlyph({
       />
       <Loader2Icon
         className={cn(
-          "absolute size-3.5 animate-spin transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]",
-          busy ? "opacity-100 scale-100 blur-0" : "opacity-0 scale-25 blur-[4px]",
+          glyphTransition,
+          "animate-spin",
+          busy ? "scale-100 opacity-100 blur-0" : "scale-[0.25] opacity-0 blur-[4px]",
         )}
         strokeWidth={2}
         aria-hidden={!busy}
-        {...(busy
-          ? { role: "status" as const, "aria-label": "Loading" }
-          : {})}
+        {...(busy ? { role: "status" as const, "aria-label": "Loading" } : {})}
       />
     </span>
   );
