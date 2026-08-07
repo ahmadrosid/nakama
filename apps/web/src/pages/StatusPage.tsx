@@ -130,14 +130,16 @@ function StatusDashboard({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
           <thead className="text-xs text-muted-foreground">
             <tr>
               <th className="border-b border-border px-5 py-2.5 font-medium">Service</th>
               <th className="border-b border-border px-5 py-2.5 font-medium">Status</th>
-              <th className="border-b border-border px-5 py-2.5 font-medium">Resources</th>
               <th className="border-b border-border px-5 py-2.5 font-medium">
                 {canManageWorkers ? "Actions" : <span className="sr-only">Actions</span>}
+              </th>
+              <th className="border-b border-border px-5 py-2.5 font-medium">
+                {canManageWorkers ? "Logs" : <span className="sr-only">Logs</span>}
               </th>
             </tr>
           </thead>
@@ -533,41 +535,28 @@ function QuickStat({
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
-function statusToneClass(tone: ServiceStatusTone): string {
-  return cn(
-    tone === "ok" && "text-emerald-700 dark:text-emerald-300",
-    tone === "warn" && "text-amber-700 dark:text-amber-300",
-    tone === "bad" && "text-destructive",
-    tone === "muted" && "text-muted-foreground",
-  );
-}
-
-function MetricsDisplay({
-  cpuPercent,
-  memoryMb,
+function ServiceStatusBadge({
+  status,
+  tone,
 }: {
-  cpuPercent: number | null | undefined;
-  memoryMb: number | null | undefined;
+  status: string;
+  tone: ServiceStatusTone;
 }) {
-  if (cpuPercent == null && memoryMb == null) {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
-
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      {cpuPercent != null ? (
-        <span className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
-          <ZapIcon className="size-3" aria-hidden />
-          CPU: {cpuPercent.toFixed(1)}%
-        </span>
-      ) : null}
-      {memoryMb != null ? (
-        <span className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
-          <ServerIcon className="size-3" aria-hidden />
-          Mem: {memoryMb < 1 ? `${(memoryMb * 1024).toFixed(0)} KB` : `${memoryMb.toFixed(1)} MB`}
-        </span>
-      ) : null}
-    </div>
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        tone === "ok" &&
+          "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200",
+        tone === "warn" &&
+          "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100",
+        tone === "bad" &&
+          "border-destructive/30 bg-destructive/10 text-destructive",
+        tone === "muted" && "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      {status}
+    </span>
   );
 }
 
@@ -590,31 +579,23 @@ function WorkerServiceRow({
   canManage: boolean;
   footerLink?: { label: string; to: string };
 }) {
+  const pm2Managed = worker.process?.managed ?? false;
+
   return (
     <tr className="last:[&>td]:border-b-0">
       <td className="border-b border-border px-5 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className={cn(
-              iconTileClass,
-              "size-8",
-              tone === "bad" && "bg-destructive/5",
-            )}
-          >
-            <Icon className="size-4 text-foreground" aria-hidden />
-          </span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="truncate font-medium text-foreground">{title}</span>
         </div>
       </td>
       <td className="border-b border-border px-5 py-3">
-        <div className="space-y-1">
-          <p className={cn("text-xs font-medium leading-none", statusToneClass(tone))}>
-            {status}
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <ServiceStatusBadge status={status} tone={tone} />
           {footerLink ? (
             <Link
               to={footerLink.to}
-              className="inline-flex text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/90"
+              className="text-xs font-medium text-primary underline underline-offset-4 hover:text-primary/90"
             >
               {footerLink.label}
             </Link>
@@ -622,19 +603,21 @@ function WorkerServiceRow({
         </div>
       </td>
       <td className="border-b border-border px-5 py-3">
-        <MetricsDisplay
-          cpuPercent={worker.process?.cpuPercent}
-          memoryMb={worker.process?.memoryMb}
-        />
-      </td>
-      <td className="border-b border-border px-5 py-3">
         {canManage ? (
           <WorkerActionBar
             className="w-fit"
             running={worker.running}
-            pm2Managed={worker.process?.managed ?? false}
+            pm2Managed={pm2Managed}
             workerName={workerName}
+            showLogs={false}
           />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="border-b border-border px-5 py-3">
+        {canManage && pm2Managed ? (
+          <WorkerViewLogsButton workerName={workerName} />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
