@@ -16,7 +16,11 @@ export function useClearWorkerLogs(workerName: string) {
   return useMutation({
     mutationFn: () => client.clearWorkerLogs(workerName),
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      queryClient.setQueriesData({ queryKey: [...queryKeys.workerLogs, workerName] }, {
+        stdout: "",
+        stderr: "",
+      });
+      void queryClient.invalidateQueries({
         queryKey: [...queryKeys.workerLogs, workerName],
       });
     },

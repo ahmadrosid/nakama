@@ -94,8 +94,8 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
     <div className="min-w-0 p-4 sm:p-5">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="type-section-title">All tools</h2>
-          <p className="type-body mt-1 text-xs">
+          <h2 className="type-section-title text-balance">All tools</h2>
+          <p className="type-body mt-1 text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
               : `${tools.length} registered · ${customTools.length} custom · ${builtinTools.length} built-in`}
@@ -119,11 +119,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
         <div className="space-y-6">
           <ToolListSection
             title="Custom tools"
-            description={
-              customTools.length === 0
-                ? "No custom tools yet. Ask Super Bot to create one."
-                : `${customTools.length} registered`
-            }
             tools={customTools}
             busy={busy}
             canUsePlayground={canUsePlayground}
@@ -135,7 +130,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
           <ToolListSection
             title="Built-in tools"
-            description={`${builtinTools.length} registered`}
             tools={builtinTools}
             busy={busy}
             canUsePlayground={canUsePlayground}
@@ -207,7 +201,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
 
 function ToolListSection({
   title,
-  description,
   tools,
   busy,
   canUsePlayground,
@@ -217,7 +210,6 @@ function ToolListSection({
   onConfigureEmail,
 }: {
   title: string;
-  description: string;
   tools: ToolDetail[];
   busy: boolean;
   canUsePlayground: boolean;
@@ -228,14 +220,16 @@ function ToolListSection({
 }) {
   return (
     <section>
-      <div className="mb-3">
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <div className="mb-3 flex items-baseline gap-2">
+        <h3 className="type-section-title text-balance">{title}</h3>
+        {tools.length > 0 ? (
+          <span className="tabular-nums text-xs text-muted-foreground">{tools.length}</span>
+        ) : null}
       </div>
 
       {tools.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border px-4 py-6 text-center">
-          <p className="text-xs text-muted-foreground">None registered.</p>
+          <p className="text-xs text-pretty text-muted-foreground">None registered.</p>
           {onCreateTool ? (
             <Button type="button" size="sm" disabled={busy} onClick={onCreateTool}>
               <PlusIcon className="size-4" aria-hidden />
@@ -310,7 +304,7 @@ function ToolListItem({
 
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
         {deletable ? (
-          <span className="scope-badge scope-badge-custom">custom tool</span>
+          <span className="scope-badge scope-badge-custom">custom</span>
         ) : (
           <span className="scope-badge scope-badge-active">built-in</span>
         )}

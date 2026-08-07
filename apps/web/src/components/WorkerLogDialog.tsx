@@ -22,6 +22,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
   const clearLogs = useClearWorkerLogs(workerName);
   const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
   const [copied, setCopied] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorMessage = error ? formatError(error) : null;
   const clearErrorMessage = clearLogs.error ? formatError(clearLogs.error) : null;
@@ -32,6 +33,7 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
   function selectTab(tab: "stdout" | "stderr") {
     setActiveTab(tab);
     setCopied(false);
+    setConfirmClear(false);
   }
 
   async function copyLogs() {
@@ -54,9 +56,26 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
     }
   }
 
+  async function handleClearLogs() {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+
+    try {
+      await clearLogs.mutateAsync();
+      setCopied(false);
+      setConfirmClear(false);
+      await refetch();
+    } catch {
+      // Error surface via clearLogs.error
+    }
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       setCopied(false);
+      setConfirmClear(false);
       void refetch();
     }
     onOpenChange(nextOpen);
@@ -126,7 +145,10 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             size="sm"
             className="text-xs"
             disabled={isLoading || clearLogs.isPending}
-            onClick={() => void refetch().then(() => setCopied(false))}
+            onClick={() => {
+              setConfirmClear(false);
+              void refetch().then(() => setCopied(false));
+            }}
           >
             Refresh
           </Button>
@@ -136,17 +158,10 @@ export function WorkerLogDialog({ workerName, open, onOpenChange }: WorkerLogDia
             size="sm"
             className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
             disabled={isLoading || clearLogs.isPending}
-            onClick={() => {
-              if (confirm("Are you sure you want to clear the logs?")) {
-                void clearLogs.mutateAsync().then(() => {
-                  setCopied(false);
-                  return refetch();
-                });
-              }
-            }}
+            onClick={() => void handleClearLogs()}
           >
             <Trash2Icon className="mr-1 size-3" aria-hidden />
-            Clear
+            {confirmClear ? "Confirm?" : "Clear"}
           </Button>
         </div>
 

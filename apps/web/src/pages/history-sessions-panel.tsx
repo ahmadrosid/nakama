@@ -61,10 +61,10 @@ export function HistorySessionsPanel({
           <Input
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search…"
+            placeholder="Search chats…"
             disabled={!profileId || initialLoading}
             className={cn("pl-9", isSearching && "pr-9")}
-            aria-label="Search conversations"
+            aria-label="Search chats"
           />
           {isSearching ? (
             <button
@@ -79,13 +79,13 @@ export function HistorySessionsPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground tabular-nums">{countLabel}</span>
+          <span className="tabular-nums text-xs text-muted-foreground">{countLabel}</span>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             disabled={refreshing || busy || !profileId}
-            aria-label="Refresh"
+            aria-label="Refresh chats"
             onClick={onRefresh}
           >
             {refreshing ? <Spinner className="size-4" /> : <RefreshCwIcon className="size-4" />}
@@ -95,7 +95,7 @@ export function HistorySessionsPanel({
 
       {profiles.length === 0 ? (
         <HistoryEmptyMessage
-          message="Create a profile first."
+          message="Create a profile to start chatting."
           actionLabel="Go to Profiles"
           onAction={onGoToProfiles}
         />
@@ -104,18 +104,16 @@ export function HistorySessionsPanel({
       ) : filteredSessions.length === 0 ? (
         <HistoryEmptyMessage
           message={
-            sessions.length > 0
-              ? "No conversations match your search."
-              : "No saved chats for this profile."
+            sessions.length > 0 ? "No chats match your search." : "No chats yet."
           }
-          actionLabel={sessions.length > 0 ? "Clear search" : "Go to Chat"}
+          actionLabel={sessions.length > 0 ? "Clear search" : "New chat"}
           onAction={() => (sessions.length > 0 ? onClearSearch() : onGoToChat())}
         />
       ) : (
         <div className="divide-y divide-border">
           {groupedSessions.map((group) => (
             <section key={group.label}>
-              <p className="px-4 py-2 text-xs text-muted-foreground">{group.label}</p>
+              <p className="px-4 py-2 text-xs font-medium text-muted-foreground">{group.label}</p>
               <ul>
                 {group.sessions.map((session) => (
                   <li key={session.id}>
@@ -136,6 +134,10 @@ export function HistorySessionsPanel({
   );
 }
 
+function formatMessageCount(count: number): string {
+  return count === 1 ? "1 message" : `${count} messages`;
+}
+
 function HistorySessionRow({
   session,
   disabled,
@@ -150,15 +152,15 @@ function HistorySessionRow({
   const title = formatSessionTitle(session);
 
   return (
-    <div className="group flex items-center gap-2 px-4 py-3 hover:bg-muted/40">
+    <div className="group flex items-center gap-2 px-4 py-3 transition-colors duration-150 ease-out hover:bg-muted/40">
       <button
         type="button"
         disabled={disabled}
         className="min-w-0 flex-1 text-left disabled:opacity-50"
         onClick={onOpen}
       >
-        <p className="truncate text-sm text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="truncate text-sm font-medium text-foreground">{title}</p>
+        <p className="mt-0.5 text-pretty text-xs text-muted-foreground">
           {session.channel !== "web" ? (
             <>
               <span>{formatSessionChannelLabel(session.channel)}</span>
@@ -169,7 +171,7 @@ function HistorySessionRow({
             {formatSessionRelativeTime(session.updatedAt)}
           </time>
           {" · "}
-          {session.messageCount} messages
+          <span className="tabular-nums">{formatMessageCount(session.messageCount)}</span>
         </p>
       </button>
 
@@ -202,7 +204,7 @@ function HistoryEmptyMessage({
 }) {
   return (
     <div className="px-4 py-12 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <p className="text-pretty text-sm text-muted-foreground">{message}</p>
       {actionLabel && onAction ? (
         <Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={onAction}>
           {actionLabel}
@@ -214,7 +216,7 @@ function HistoryEmptyMessage({
 
 function HistoryListSkeleton() {
   return (
-    <div className="divide-y divide-border" aria-busy="true">
+    <div className="divide-y divide-border" aria-busy="true" aria-label="Loading chats">
       {Array.from({ length: 4 }).map((_, index) => (
         <div key={index} className="space-y-2 px-4 py-3">
           <div className="h-4 w-2/3 animate-pulse rounded bg-muted/50" />

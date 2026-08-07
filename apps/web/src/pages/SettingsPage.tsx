@@ -55,7 +55,7 @@ export function SettingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="space-y-0.5">
               <p className="text-sm font-medium text-foreground">Appearance</p>
-              <p className="text-xs text-muted-foreground">Color theme</p>
+              <p className="text-pretty text-xs text-muted-foreground">Color theme</p>
             </div>
             <ThemeToggle />
           </div>
@@ -66,11 +66,11 @@ export function SettingsPage() {
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-sm font-medium text-foreground">Timezone</p>
                   {timezoneHint ? (
-                    <p className="text-xs text-emerald-200" role="status">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
                       {timezoneHint}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">For scheduled automations</p>
+                    <p className="text-pretty text-xs text-muted-foreground">For scheduled automations</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">

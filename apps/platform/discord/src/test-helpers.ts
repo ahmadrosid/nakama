@@ -254,6 +254,7 @@ export function createGuildChatMessage(options: {
   let lastThreadName: string | null = null;
   let channelFileSendCalls = 0;
   let threadFileSendCalls = 0;
+  const mockInstanceId = `m${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
@@ -362,7 +363,7 @@ export function createGuildChatMessage(options: {
         throw options.startThreadError;
       }
 
-      createdThreadId = `created_thread_${startThreadCalls}`;
+      createdThreadId = `created_thread_${mockInstanceId}_${startThreadCalls}`;
       const thread = createThreadChannel(createdThreadId, channelId, false);
       existingThreads.set(createdThreadId, {
         id: createdThreadId,

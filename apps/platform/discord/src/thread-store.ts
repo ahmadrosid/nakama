@@ -2,11 +2,10 @@ import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
 import { dirname, join } from "node:path";
 
-type ThreadMap = Record<string, string>;
-
+/** Persisted ownership of Discord threads the bot started. */
 export class ThreadStore {
   private readonly path: string;
-  private map: ThreadMap = {};
+  private owned = new Set<string>();
 
   constructor(path = getThreadMapPath()) {
     this.path = path;
@@ -16,64 +15,61 @@ export class ThreadStore {
     const raw = await readTextOrNull(this.path);
 
     if (raw === null) {
-      this.map = {};
+      this.owned = new Set();
       return;
     }
 
-    const parsed = JSON.parse(raw) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      this.owned = new Set();
+      return;
+    }
 
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      this.map = {};
+      this.owned = new Set();
       return;
     }
 
-    const next: ThreadMap = {};
+    const next = new Set<string>();
 
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    // Legacy shape: { "g:channel:u:user": "threadId" } — keep values as owned ids.
+    // Ownership shape: { "threadId": "threadId" } (or any object whose values are thread ids).
+    for (const value of Object.values(parsed as Record<string, unknown>)) {
       if (typeof value === "string" && value.trim()) {
-        next[key] = value;
+        next.add(value.trim());
       }
     }
 
-    this.map = next;
+    this.owned = next;
   }
 
-  get(lookupKey: string): string | undefined {
-    return this.map[lookupKey];
+  /** Record a Discord thread id created/tracked by this bot. */
+  add(threadId: string): void {
+    const id = threadId.trim();
+    if (!id) {
+      return;
+    }
+    this.owned.add(id);
   }
 
   /** True when this thread id was created/tracked by the Discord agent. */
   hasThreadId(threadId: string): boolean {
-    for (const stored of Object.values(this.map)) {
-      if (stored === threadId) {
-        return true;
-      }
-    }
-    return false;
+    return this.owned.has(threadId);
   }
 
-  set(lookupKey: string, threadId: string): void {
-    this.map[lookupKey] = threadId;
-  }
-
-  delete(lookupKey: string): void {
-    delete this.map[lookupKey];
-  }
-
-  /** Drop every mapping that points at this Discord thread id. */
+  /** Drop ownership for this Discord thread id. */
   deleteByThreadId(threadId: string): boolean {
-    let removed = false;
-    for (const [key, value] of Object.entries(this.map)) {
-      if (value === threadId) {
-        delete this.map[key];
-        removed = true;
-      }
-    }
-    return removed;
+    return this.owned.delete(threadId);
   }
 
   async save(): Promise<void> {
-    await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+    const map: Record<string, string> = {};
+    for (const id of this.owned) {
+      map[id] = id;
+    }
+    await writePrivateTextFile(this.path, `${JSON.stringify(map, null, 2)}\n`, {
       ensureDir: dirname(this.path),
     });
   }

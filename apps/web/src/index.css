@@ -652,15 +652,15 @@
   }
 
   .scope-badge {
-    @apply shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold normal-case tracking-normal;
+    @apply inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal;
   }
 
   .scope-badge-active {
-    @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300;
+    @apply bg-emerald-500/10 text-emerald-700 dark:text-emerald-300;
   }
 
   .scope-badge-custom {
-    @apply bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200;
+    @apply bg-amber-500/10 text-amber-800 dark:text-amber-200;
   }
 
   .chat-markdown {

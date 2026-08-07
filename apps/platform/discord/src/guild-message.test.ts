@@ -3,7 +3,6 @@ import {
   explainGuildMessageHandling,
   resolveConversationKey,
   resolveOrgChannelId,
-  resolveThreadLookupKey,
   stripBotMention,
 } from "./guild-message";
 
@@ -111,7 +110,7 @@ describe("explainGuildMessageHandling", () => {
     expect(decision.reason).toBe("foreign-thread");
   });
 
-  test("ignores mentions inside threads the agent did not start", () => {
+  test("claims a foreign thread when the bot is @mentioned", () => {
     const decision = explainGuildMessageHandling(
       createGuildMessage({
         content: "<@999000111222333444> please join",
@@ -122,8 +121,23 @@ describe("explainGuildMessageHandling", () => {
       { botOwnsThread: false },
     );
 
-    expect(decision.shouldHandle).toBe(false);
-    expect(decision.reason).toBe("foreign-thread");
+    expect(decision.shouldHandle).toBe(true);
+    expect(decision.reason).toBe("claim-thread");
+  });
+
+  test("claims a foreign thread when the user replies to the bot", () => {
+    const decision = explainGuildMessageHandling(
+      createGuildMessage({
+        content: "please join",
+        replyToBot: true,
+        thread: true,
+      }),
+      BOT_INFO,
+      { botOwnsThread: false },
+    );
+
+    expect(decision.shouldHandle).toBe(true);
+    expect(decision.reason).toBe("claim-thread");
   });
 
   test("still requires a trigger in plain channels", () => {
@@ -158,12 +172,6 @@ describe("resolveOrgChannelId", () => {
   test("uses channel id for plain guild channels", () => {
     const message = createGuildMessage({ content: "hi" });
     expect(resolveOrgChannelId(message, "channel_1", true)).toBe("channel_1");
-  });
-});
-
-describe("resolveThreadLookupKey", () => {
-  test("maps channel and user to a stable lookup key", () => {
-    expect(resolveThreadLookupKey("channel_1", "user_1")).toBe("g:channel_1:u:user_1");
   });
 });
 

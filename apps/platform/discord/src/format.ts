@@ -126,4 +126,4 @@ export const HELP_TEXT = `Nakama Discord commands:
 /profile — choose or switch bot profile (send as text)
 /status — server and model status
 
-In servers, @mention the bot or reply to it to chat. Pair in a DM first.`;
+In servers, @mention the bot or reply to it to chat — each mention in a parent channel opens a new thread. @mention inside another thread claims it. Pair in a DM first.`;

@@ -126,12 +126,16 @@ This keeps server channels usable without making the bot noisy.
 
 In Discord threads, each thread keeps its own Nakama session.
 
+- In a parent server channel, every `@mention` or reply to the bot starts a **new** Discord thread (you do not need `/close` or `/new` first)
+- Continue chatting inside a bot-started thread without mentioning the bot again
+- The same user can have multiple open bot threads in one channel, and agent replies in different threads can run at the same time
 - `/profile` inside a thread changes only that thread
 - new threads use the default Discord profile until you switch them
 - `/profile` in the main channel changes the channel-level profile
 - `/org` stays channel-level, so switch org first if a thread needs a profile from another org
-- `/close` inside a bot-started thread archives it and frees the slot so the next @mention opens a new one
-- the bot ignores messages in threads it did not start, including @mentions
+- `/close` inside a bot-started thread archives that thread only; other open bot threads stay usable
+- `/new` starts a fresh Nakama conversation in the current Discord thread (it does not open a new Discord thread)
+- threads the bot did not start stay quiet until you `@mention` the bot (or reply to it); that claims the thread so follow-ups work without another mention
 
 Replies in server channels are visible to everyone in that channel. Nakama prefixes those messages so the agent knows the reply is public.
 
@@ -146,13 +150,13 @@ Session control uses Discord slash commands. Org and profile switching use text 
 | `/stop` | Slash | Stop the current in-progress reply |
 | `/clear` | Slash | Clear chat history |
 | `/compact` | Slash | Compact conversation history |
-| `/new` | Slash | Start a new conversation |
-| `/close` | Slash | Close (archive) the bot conversation thread |
+| `/new` | Slash | Start a new conversation (same Discord thread) |
+| `/close` | Slash | Close (archive) this bot conversation thread |
 | `/status` | Slash | Show server and model status |
 | `/org` | Text | Choose or switch organization |
 | `/profile` | Text | Choose or switch profile |
 
-In servers, `@mention` the bot or reply to it to chat. Complete DM pairing first.
+In servers, `@mention` the bot or reply to it to chat — each mention in a parent channel opens a new thread. Complete DM pairing first.
 
 ## Reply formatting
 

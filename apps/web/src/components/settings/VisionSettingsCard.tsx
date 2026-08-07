@@ -83,7 +83,7 @@ export function VisionSettingsCard() {
         savedHint || formError ? (
           <>
             {savedHint ? (
-              <p className="text-xs text-emerald-200" role="status">
+              <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
                 {savedHint}
               </p>
             ) : null}

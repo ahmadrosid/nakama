@@ -26,13 +26,14 @@ export function HistoryDeleteDialog({
     <Dialog open={deleteTarget !== null} onOpenChange={onOpenChange}>
       <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-3">
-          <DialogTitle>Delete conversation?</DialogTitle>
-          <DialogDescription>
-            This removes {deleteTarget?.messageCount ?? 0} message
-            {(deleteTarget?.messageCount ?? 0) === 1 ? "" : "s"}. This cannot be undone.
+          <DialogTitle className="text-balance">Delete chat?</DialogTitle>
+          <DialogDescription className="text-pretty">
+            Deletes this chat and its{" "}
+            <span className="tabular-nums">{deleteTarget?.messageCount ?? 0}</span> message
+            {(deleteTarget?.messageCount ?? 0) === 1 ? "" : "s"} permanently.
           </DialogDescription>
           {deleteTarget ? (
-            <p className="text-sm font-medium text-foreground line-clamp-2">
+            <p className="line-clamp-2 text-sm font-medium text-foreground">
               {formatSessionTitle(deleteTarget)}
             </p>
           ) : null}

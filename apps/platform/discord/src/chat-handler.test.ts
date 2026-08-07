@@ -473,14 +473,12 @@ describe("createChatHandler guild thread routing", () => {
       expect(guild.lastThreadName).toBe("summarize this");
       expect(guild.threadSentMessages).toContain("Thread reply");
       expect(guild.channelSentMessages).not.toContain("Thread reply");
-      expect(threadStore.get("g:guild_channel_1:u:424242424242424242")).toBe(
-        guild.createdThreadId,
-      );
+      expect(threadStore.hasThreadId(guild.createdThreadId!)).toBe(true);
       expect(streamedInputs[0]).toEqual({ message: "summarize this" });
     });
   });
 
-  test("second mention in the same channel reuses the existing thread", async () => {
+  test("second mention in the same channel creates a new thread", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
         onSendStream: async () => "Again",
@@ -491,24 +489,109 @@ describe("createChatHandler guild thread routing", () => {
         mentionsBot: true,
       });
       await handleMessage(first.message);
-      const threadId = first.createdThreadId;
-      expect(threadId).toBeTruthy();
-      expect(threadStore.get("g:guild_channel_1:u:424242424242424242")).toBe(threadId);
-
-      const existingThreads = new Map([
-        [threadId!, { id: threadId!, parentId: "guild_channel_1", archived: false }],
-      ]);
+      const firstThreadId = first.createdThreadId;
+      expect(firstThreadId).toBeTruthy();
+      expect(first.startThreadCalls).toBe(1);
+      expect(threadStore.hasThreadId(firstThreadId!)).toBe(true);
 
       const second = createGuildChatMessage({
-        content: "<@bot_id> follow up",
+        content: "<@bot_id> follow up topic",
         mentionsBot: true,
-        existingThreads,
       });
       await handleMessage(second.message);
 
-      expect(second.startThreadCalls).toBe(0);
+      expect(second.startThreadCalls).toBe(1);
+      const secondThreadId = second.createdThreadId;
+      expect(secondThreadId).toBeTruthy();
+      expect(secondThreadId).not.toBe(firstThreadId);
+      expect(threadStore.hasThreadId(firstThreadId!)).toBe(true);
+      expect(threadStore.hasThreadId(secondThreadId!)).toBe(true);
       expect(second.threadSentMessages).toContain("Again");
       expect(second.channelSentMessages).not.toContain("Again");
+    });
+  });
+
+  test("first thread stays independent after a second mention creates another thread", async () => {
+    await withTempHome(async (homeDir) => {
+      const streamedByThread: string[] = [];
+      const { handleMessage, threadStore, sessionStore } = await createPairedHandler(homeDir, {
+        onSendStream: async (input) => {
+          streamedByThread.push(String((input as { message?: string }).message ?? ""));
+          return "ok";
+        },
+      });
+
+      const first = createGuildChatMessage({
+        content: "<@bot_id> topic one",
+        mentionsBot: true,
+      });
+      await handleMessage(first.message);
+      const firstThreadId = first.createdThreadId!;
+
+      const second = createGuildChatMessage({
+        content: "<@bot_id> topic two",
+        mentionsBot: true,
+      });
+      await handleMessage(second.message);
+
+      const followUp = createGuildChatMessage({
+        content: "continue topic one",
+        inThread: true,
+        threadId: firstThreadId,
+        parentId: "guild_channel_1",
+      });
+      await handleMessage(followUp.message);
+
+      expect(followUp.startThreadCalls).toBe(0);
+      expect(followUp.threadSentMessages).toContain("ok");
+      expect(threadStore.hasThreadId(firstThreadId)).toBe(true);
+      expect(sessionStore.get(`g:guild_channel_1:t:${firstThreadId}`)).toBeTruthy();
+      expect(streamedByThread).toContain("continue topic one");
+    });
+  });
+
+  test("overlapping parent mentions run agent turns concurrently", async () => {
+    await withTempHome(async (homeDir) => {
+      let releaseFirst!: () => void;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let entered = 0;
+      let maxInFlight = 0;
+      let inFlight = 0;
+
+      const { handleMessage } = await createPairedHandler(homeDir, {
+        onSendStream: async () => {
+          entered += 1;
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          if (entered === 1) {
+            await firstGate;
+          }
+          inFlight -= 1;
+          return "done";
+        },
+      });
+
+      const first = createGuildChatMessage({
+        content: "<@bot_id> slow",
+        mentionsBot: true,
+      });
+      const second = createGuildChatMessage({
+        content: "<@bot_id> fast",
+        mentionsBot: true,
+      });
+
+      const firstTurn = handleMessage(first.message);
+      await Bun.sleep(20);
+      const secondTurn = handleMessage(second.message);
+      await Bun.sleep(20);
+
+      expect(entered).toBe(2);
+      expect(maxInFlight).toBeGreaterThanOrEqual(2);
+
+      releaseFirst();
+      await Promise.all([firstTurn, secondTurn]);
     });
   });
 
@@ -522,7 +605,7 @@ describe("createChatHandler guild thread routing", () => {
         },
       });
 
-      threadStore.set("g:guild_channel_1:u:424242424242424242", "thread_42");
+      threadStore.add("thread_42");
       await threadStore.save();
 
       const guild = createGuildChatMessage({
@@ -539,7 +622,7 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
-  test("ignores messages in threads the agent did not start", async () => {
+  test("ignores unmentioned messages in threads the agent did not start", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
       const { handleMessage } = await createPairedHandler(homeDir, {
@@ -548,6 +631,29 @@ describe("createChatHandler guild thread routing", () => {
           return "Should not reply";
         },
       });
+
+      const guild = createGuildChatMessage({
+        content: "please join this thread",
+        inThread: true,
+        threadId: "user_thread_9",
+        parentId: "guild_channel_1",
+      });
+      await handleMessage(guild.message);
+
+      expect(guild.startThreadCalls).toBe(0);
+      expect(guild.threadSentMessages).toHaveLength(0);
+      expect(guild.channelSentMessages).toHaveLength(0);
+      expect(streamedInputs).toHaveLength(0);
+    });
+  });
+
+  test("claims a foreign thread on @mention and replies inside it", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
+        onSendStream: async () => "Joined the thread",
+      });
+
+      expect(threadStore.hasThreadId("user_thread_9")).toBe(false);
 
       const guild = createGuildChatMessage({
         content: "<@bot_id> please join this thread",
@@ -559,9 +665,19 @@ describe("createChatHandler guild thread routing", () => {
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(0);
-      expect(guild.threadSentMessages).toHaveLength(0);
+      expect(threadStore.hasThreadId("user_thread_9")).toBe(true);
+      expect(guild.threadSentMessages).toContain("Joined the thread");
       expect(guild.channelSentMessages).toHaveLength(0);
-      expect(streamedInputs).toHaveLength(0);
+
+      const followUp = createGuildChatMessage({
+        content: "keep going",
+        inThread: true,
+        threadId: "user_thread_9",
+        parentId: "guild_channel_1",
+      });
+      await handleMessage(followUp.message);
+
+      expect(followUp.threadSentMessages.length).toBeGreaterThan(0);
     });
   });
 
@@ -578,7 +694,7 @@ describe("createChatHandler guild thread routing", () => {
 
       orgStore.set("g:guild_channel_1", "org_a");
       await orgStore.save();
-      threadStore.set("g:guild_channel_1:u:424242424242424242", "thread_42");
+      threadStore.add("thread_42");
       await threadStore.save();
 
       const guild = createGuildChatMessage({
@@ -688,10 +804,11 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
-  test("close archives a bot-owned thread and clears the mapping", async () => {
+  test("close archives a bot-owned thread and clears ownership for that thread only", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleSlashCommand, threadStore } = await createPairedHandler(homeDir);
-      threadStore.set("g:guild_channel_1:u:424242424242424242", "thread_1");
+      const { handleSlashCommand, threadStore, handleMessage } = await createPairedHandler(homeDir);
+      threadStore.add("thread_1");
+      threadStore.add("thread_sibling");
       await threadStore.save();
 
       const closeCmd = createSlashInteraction({
@@ -704,15 +821,24 @@ describe("createChatHandler guild thread routing", () => {
 
       expect(closeCmd.replies).toContain("Thread closed.");
       expect((closeCmd.interaction.channel as { archived?: boolean }).archived).toBe(true);
-      expect(threadStore.get("g:guild_channel_1:u:424242424242424242")).toBeUndefined();
       expect(threadStore.hasThreadId("thread_1")).toBe(false);
+      expect(threadStore.hasThreadId("thread_sibling")).toBe(true);
+
+      const sibling = createGuildChatMessage({
+        content: "still here",
+        inThread: true,
+        threadId: "thread_sibling",
+        parentId: "guild_channel_1",
+      });
+      await handleMessage(sibling.message);
+      expect(sibling.threadSentMessages.length).toBeGreaterThan(0);
     });
   });
 
   test("close rejects non-thread channels and foreign threads", async () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, threadStore } = await createPairedHandler(homeDir);
-      threadStore.set("g:guild_channel_1:u:424242424242424242", "thread_owned");
+      threadStore.add("thread_owned");
       await threadStore.save();
 
       const channelClose = createSlashInteraction({

@@ -61,7 +61,7 @@ export function PairingStepTile({
         </span>
         <div className="min-w-0 space-y-0.5">
           <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-pretty text-xs text-muted-foreground">{description}</p>
         </div>
       </div>
     </div>
@@ -84,7 +84,7 @@ export function SettingsRow({
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? (
-          <p className="text-xs text-muted-foreground [text-wrap:pretty]">{description}</p>
+          <p className="text-pretty text-xs text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {children}
@@ -108,23 +108,25 @@ export function IntegrationStatusHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-3 px-4 py-3", className)}>
+    <div className={cn("flex flex-wrap items-start justify-between gap-3 px-4 py-3", className)}>
       <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground [text-wrap:pretty]">{subtitle}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-balance text-sm font-medium text-foreground">{title}</p>
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+              connected
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : configured
+                  ? "bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                  : "bg-muted text-muted-foreground",
+            )}
+          >
+            {statusBadge}
+          </span>
+        </div>
+        <p className="text-pretty text-xs text-muted-foreground">{subtitle}</p>
       </div>
-      <span
-        className={cn(
-          "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-          connected
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200"
-            : configured
-              ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-100"
-              : "border-border bg-muted text-muted-foreground",
-        )}
-      >
-        {statusBadge}
-      </span>
     </div>
   );
 }
@@ -156,7 +158,7 @@ export function IntegrationSettingsFooter({
             "min-w-0 text-xs",
             formError || loadError
               ? "text-destructive"
-              : "text-emerald-800 dark:text-emerald-200",
+              : "text-emerald-700 dark:text-emerald-300",
           )}
           role={formError || loadError ? "alert" : "status"}
         >

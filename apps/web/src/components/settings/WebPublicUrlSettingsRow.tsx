@@ -72,27 +72,25 @@ export function WebPublicUrlSettingsRow() {
 
   return (
     <div className="space-y-2 px-4 py-3">
-      <div className="space-y-0.5">
-        <label htmlFor="web-public-url" className="text-sm font-medium text-foreground">
-          Public web URL
-        </label>
-        {savedHint ? (
-          <p className="text-xs text-emerald-200" role="status">
-            {savedHint}
-          </p>
-        ) : formError ? (
-          <p className="text-xs text-destructive" role="alert">
-            {formError}
-          </p>
-        ) : (
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0 space-y-0.5">
+          <label htmlFor="web-public-url" className="text-balance text-sm font-medium text-foreground">
+            Public web URL
+          </label>
           <p className="text-pretty text-xs text-muted-foreground">For OAuth callbacks</p>
-        )}
-        {data?.envOverride ? (
-          <p className="text-pretty text-xs text-amber-800 dark:text-amber-200">
-            Server env overrides this with {data.envOverride}.
+        </div>
+        {savedHint ? (
+          <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
+            {savedHint}
           </p>
         ) : null}
       </div>
+
+      {data?.envOverride ? (
+        <p className="text-pretty text-xs text-amber-800 dark:text-amber-200">
+          Server env overrides this with {data.envOverride}.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
@@ -111,9 +109,10 @@ export function WebPublicUrlSettingsRow() {
             }
           }}
           placeholder="https://nakama.example.com"
-          className="min-w-0 flex-1"
+          className="min-w-[12rem] flex-1"
           disabled={saveMutation.isPending}
           aria-invalid={formError ? true : undefined}
+          aria-describedby={formError ? "web-public-url-error" : undefined}
         />
         <Button
           type="button"
@@ -140,6 +139,12 @@ export function WebPublicUrlSettingsRow() {
           )}
         </Button>
       </div>
+
+      {formError ? (
+        <p id="web-public-url-error" className="text-pretty text-xs text-destructive" role="alert">
+          {formError}
+        </p>
+      ) : null}
     </div>
   );
 }

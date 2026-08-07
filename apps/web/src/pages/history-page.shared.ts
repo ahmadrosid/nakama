@@ -1,7 +1,7 @@
 import type { SessionSummary } from "@nakama/core/contract";
 
 export function formatSessionTitle(session: SessionSummary): string {
-  return session.title?.trim() || "Untitled";
+  return session.title?.trim() || "Untitled chat";
 }
 
 export function groupSessionsByDate(sessions: SessionSummary[]): Array<{

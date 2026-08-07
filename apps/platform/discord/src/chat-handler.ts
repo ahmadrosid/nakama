@@ -44,7 +44,6 @@ import {
   resolveChannelOrgKey,
   resolveConversationKey,
   resolveOrgChannelId,
-  resolveThreadLookupKey,
   stripBotMention,
   type DiscordBotInfo,
 } from "./guild-message";
@@ -67,6 +66,7 @@ import { createTypingLoop } from "./typing-indicator";
 
 const chatLocks = new Map<string, Promise<void>>();
 const pendingQuestionnaires = new Map<string, AgentQuestionnaire>();
+const THREAD_OWNERSHIP_LOCK_KEY = "__discord_thread_ownership__";
 
 const GROUP_MESSAGE_PREFIX =
   "[Discord channel — your reply is visible to everyone in this channel.]\n";
@@ -131,101 +131,121 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       ? explainGuildMessageHandling(message, botInfo, { botOwnsThread })
       : null;
 
+    console.log(
+      "[discord] handle",
+      groupDecision?.reason ?? (isGuild ? "none" : "dm"),
+      { channelId, isThread, botOwnsThread, botId: botInfo?.id },
+    );
+
     if (groupDecision && !groupDecision.shouldHandle) {
+      console.log("[discord] skip", groupDecision.reason);
       return;
     }
+
+    if (isThread && groupDecision?.reason === "claim-thread") {
+      await withChatLock(THREAD_OWNERSHIP_LOCK_KEY, async () => {
+        threadStore.add(channelId);
+        await threadStore.save();
+      });
+      console.log("[discord] claimed thread", channelId);
+    }
+
     const parentChannelId = resolveOrgChannelId(message, channelId, isGuild);
     // Threads share the parent channel's org selection — do not key by thread id.
     const channelOrgKey = resolveChannelOrgKey(parentChannelId, userId, isGuild);
     const conversationKey = resolveConversationKey(message, channelId, isGuild);
-    // Serialize per user+parent channel so thread create/reuse and in-thread chat don't race.
-    const lockKey = isGuild
-      ? resolveThreadLookupKey(parentChannelId, userId)
-      : conversationKey;
 
-    await withChatLock(lockKey, async () => {
-      await authStore.reload();
-      const isAuthorized = authStore.isAuthorized(userId);
+    // Auth/org/thread-create run without the agent-stream lock so parallel parent mentions
+    // can each open a thread. Agent work locks per conversation/thread key below.
+    await authStore.reload();
+    const isAuthorized = authStore.isAuthorized(userId);
 
-      if (!isAuthorized) {
-        if (isGuild) {
-          await messenger.send(LINK_IN_PRIVATE_REPLY);
-          return;
-        }
-
-        if (!text) {
-          await messenger.send("Send your pairing code as text to link this chat.");
-          return;
-        }
-
-        await handlePairing(text, userId, messenger);
-        return;
-      }
-
-      if (isGuild && text && looksLikeHandshakeAttempt(text)) {
+    if (!isAuthorized) {
+      console.log("[discord] unauthorized", userId);
+      if (isGuild) {
         await messenger.send(LINK_IN_PRIVATE_REPLY);
         return;
       }
 
-      const command = text?.startsWith("/") ? parseTextCommand(text) : null;
-      const bypassOrgGate = command === "/help" || command === "/start" || command === "/org";
-
-      if (!bypassOrgGate) {
-        const orgGateText =
-          isGuild && text && botInfo ? stripBotMention(text, botInfo) : text;
-        const orgReady = await ensureOrgReady(messenger, channelOrgKey, orgGateText);
-        if (!orgReady) {
-          return;
-        }
-      }
-
       if (!text) {
-        await messenger.send("Text messages only.");
+        await messenger.send("Send your pairing code as text to link this chat.");
         return;
       }
 
-      if (command === "/org" || command === "/profile") {
+      await withChatLock(conversationKey, async () => {
+        await handlePairing(text, userId, messenger);
+      });
+      return;
+    }
+
+    if (isGuild && text && looksLikeHandshakeAttempt(text)) {
+      await messenger.send(LINK_IN_PRIVATE_REPLY);
+      return;
+    }
+
+    const command = text?.startsWith("/") ? parseTextCommand(text) : null;
+    const bypassOrgGate = command === "/help" || command === "/start" || command === "/org";
+
+    if (!bypassOrgGate) {
+      const orgGateText =
+        isGuild && text && botInfo ? stripBotMention(text, botInfo) : text;
+      const orgReady = await ensureOrgReady(messenger, channelOrgKey, orgGateText);
+      if (!orgReady) {
+        console.log("[discord] skip org-gate", channelOrgKey);
+        return;
+      }
+    }
+
+    if (!text) {
+      await messenger.send("Text messages only.");
+      return;
+    }
+
+    if (command === "/org" || command === "/profile") {
+      await withChatLock(conversationKey, async () => {
         await handleTextCommand(text, command, conversationKey, channelOrgKey, isThread, messenger);
-        return;
+      });
+      return;
+    }
+
+    if (text.startsWith("/")) {
+      await messenger.send("Use slash commands from Discord's command menu for session control.");
+      return;
+    }
+
+    const messageText = isGuild && botInfo ? stripBotMention(text, botInfo) : text;
+
+    if (!messageText) {
+      return;
+    }
+
+    let replyChannel = channel;
+    let replyConversationKey = conversationKey;
+    let replyMessenger = messenger;
+    let replyIsThread = isThread;
+
+    const shouldRouteToThread =
+      isGuild &&
+      !isThread &&
+      (groupDecision?.reason === "bot-mention" || groupDecision?.reason === "reply-to-bot");
+
+    if (shouldRouteToThread) {
+      const thread = await createGuildThread(message, messageText);
+
+      if (thread) {
+        replyChannel = thread;
+        replyConversationKey = `g:${channelId}:t:${thread.id}`;
+        replyMessenger = createDiscordMessenger(thread);
+        replyIsThread = true;
+        console.log("[discord] thread created", thread.id);
+      } else {
+        console.log("[discord] thread create failed, falling back to channel");
       }
+    }
 
-      if (text.startsWith("/")) {
-        await messenger.send("Use slash commands from Discord's command menu for session control.");
-        return;
-      }
+    console.log("[discord] chat start", replyConversationKey, messageText.slice(0, 80));
 
-      const messageText = isGuild && botInfo ? stripBotMention(text, botInfo) : text;
-
-      if (!messageText) {
-        return;
-      }
-
-      let replyChannel = channel;
-      let replyConversationKey = conversationKey;
-      let replyMessenger = messenger;
-      let replyIsThread = isThread;
-
-      const shouldRouteToThread =
-        isGuild &&
-        !isThread &&
-        (groupDecision?.reason === "bot-mention" || groupDecision?.reason === "reply-to-bot");
-
-      if (shouldRouteToThread) {
-        const thread = await resolveOrCreateGuildThread(
-          message,
-          channelId,
-          userId,
-          messageText,
-        );
-
-        if (thread) {
-          replyChannel = thread;
-          replyConversationKey = `g:${channelId}:t:${thread.id}`;
-          replyMessenger = createDiscordMessenger(thread);
-          replyIsThread = true;
-        }
-      }
-
+    await withChatLock(replyConversationKey, async () => {
       await handleChatMessage(
         replyChannel,
         replyConversationKey,
@@ -235,44 +255,24 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         replyIsThread,
       );
     });
+
+    console.log("[discord] chat done", replyConversationKey);
   }
 
-  async function resolveOrCreateGuildThread(
+  async function createGuildThread(
     message: Message,
-    parentChannelId: string,
-    userId: string,
     messageText: string,
   ): Promise<ThreadChannel | null> {
-    const lookupKey = resolveThreadLookupKey(parentChannelId, userId);
-    // Re-check after the chat lock so concurrent mentions do not create duplicate threads.
-    const existingThreadId = threadStore.get(lookupKey);
-
-    if (existingThreadId) {
-      try {
-        const fetched = await message.client.channels.fetch(existingThreadId);
-
-        if (fetched?.isThread()) {
-          if (fetched.archived) {
-            await fetched.setArchived(false);
-          }
-
-          return fetched;
-        }
-      } catch (error) {
-        console.warn(
-          `Stored Discord thread ${existingThreadId} is unavailable; creating a new one.`,
-          error,
-        );
-      }
-    }
-
     try {
       const thread = await message.startThread({
         name: deriveThreadName(messageText),
         autoArchiveDuration: 1440,
       });
-      threadStore.set(lookupKey, thread.id);
-      await threadStore.save();
+      // Brief lock so concurrent ownership saves do not drop a newly created id.
+      await withChatLock(THREAD_OWNERSHIP_LOCK_KEY, async () => {
+        threadStore.add(thread.id);
+        await threadStore.save();
+      });
       return thread;
     } catch (error) {
       console.error("Failed to create Discord thread; falling back to channel reply:", error);
@@ -300,9 +300,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     stopActiveStream(conversationKey);
     pendingQuestionnaires.delete(conversationKey);
 
-    if (threadStore.deleteByThreadId(channel.id)) {
-      await threadStore.save();
-    }
+    await withChatLock(THREAD_OWNERSHIP_LOCK_KEY, async () => {
+      if (threadStore.deleteByThreadId(channel.id)) {
+        await threadStore.save();
+      }
+    });
 
     await messenger.send("Thread closed.");
 

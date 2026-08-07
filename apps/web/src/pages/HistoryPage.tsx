@@ -113,11 +113,11 @@ export function HistoryPage() {
     }
 
     if (sessions.length === 0) {
-      return "No saved chats";
+      return "No chats";
     }
 
     if (isSearching && filteredSessions.length !== sessions.length) {
-      return `${filteredSessions.length} of ${sessions.length}`;
+      return `${filteredSessions.length} of ${sessions.length} chats`;
     }
 
     return `${sessions.length} chat${sessions.length === 1 ? "" : "s"}`;
