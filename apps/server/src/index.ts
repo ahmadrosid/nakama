@@ -1,8 +1,10 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureProcessPath } from "./lib/ensure-process-path";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 
 ensureProcessPath();
+installCrashHandlers("server");
 import { createHonoApp } from "./http/app";
 import { AgentService } from "./services/agent-service";
 import { AutomationRunner } from "./services/automation-runner";

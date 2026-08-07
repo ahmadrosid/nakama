@@ -5,12 +5,15 @@ import { parseCliProfileArgs } from "./profile";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
 import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 import { setTheme, type Theme, detectTheme } from "./styled-text";
 import {
   formatRotateTokenError,
   isRotateTokenCommand,
   runRotateToken,
 } from "./rotate-token";
+
+installCrashHandlers("cli");
 
 if (isRotateTokenCommand()) {
   try {

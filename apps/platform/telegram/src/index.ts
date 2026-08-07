@@ -9,10 +9,13 @@ import {
   readTelegramWorkerHeartbeat,
   writeTelegramWorkerHeartbeat,
 } from "@nakama/core/telegram-worker";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 import { TelegramAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
 import { SessionStore } from "./session-store";
+
+installCrashHandlers("worker:telegram");
 
 let spawnedChild: Bun.Subprocess | null = null;
 let botStop: (() => void) | null = null;

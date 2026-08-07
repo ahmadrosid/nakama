@@ -9,11 +9,14 @@ import {
   readDiscordWorkerHeartbeat,
   writeDiscordWorkerHeartbeat,
 } from "@nakama/core/discord-worker";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 import { DiscordAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
 import { SessionStore } from "./session-store";
 import { ThreadStore } from "./thread-store";
+
+installCrashHandlers("worker:discord");
 
 let spawnedChild: Bun.Subprocess | null = null;
 let clientStop: (() => void) | null = null;

@@ -5,8 +5,11 @@ import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core/automation-worker";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 import { loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
+
+installCrashHandlers("worker:automation");
 
 let spawnedChild: Bun.Subprocess | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
