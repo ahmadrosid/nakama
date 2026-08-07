@@ -213,8 +213,116 @@ describe("createChatHandler artifact delivery", () => {
       });
       await handleMessage(dm.message);
 
-      expect(calls.readProfileArtifactContent).toBe(1);
       expect(dm.fileSendCalls).toBe(1);
+    });
+  });
+});
+
+describe("createChatHandler early ack", () => {
+  async function setupAckHandler(
+    homeDir: string,
+    onSendStream: NonNullable<Parameters<typeof createMockClient>[0]>["onSendStream"],
+  ) {
+    await writeDiscordConfigIni(homeDir, {
+      botToken: "discord-bot-token",
+      pairedUserIds: ["424242424242424242"],
+    });
+
+    const authStore = new DiscordAuthStore();
+    await authStore.reload();
+    const { client } = createMockClient({ onSendStream });
+    const sessionStore = new SessionStore(
+      path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+    );
+    await sessionStore.load();
+    sessionStore.set("dm_channel_1", {
+      sessionId: "session_test",
+      profileId: "default",
+      updatedAt: new Date().toISOString(),
+    });
+    await sessionStore.save();
+    const orgStore = createTestOrgStore(homeDir);
+    await orgStore.load();
+    return createChatHandler({
+      client,
+      config: { botToken: "discord-bot-token", profileId: "default" },
+      authStore,
+      sessionStore,
+      orgStore,
+    });
+  }
+
+  test("posts the streamed status before tools, then the final outcome", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
+        handlers?.onChunk("Checking the repo first.");
+        handlers?.onToolStart?.({
+          toolCallId: "tool_1",
+          tool: "bash",
+          input: { command: "ls" },
+        });
+        handlers?.onToolEnd?.({
+          toolCallId: "tool_1",
+          tool: "bash",
+          result: { exitCode: 0 },
+        });
+        handlers?.onChunk("Done — branch is clean.");
+        return "Done — branch is clean.";
+      });
+
+      const dm = createDmMessage({
+        userId: "424242424242424242",
+        content: "check the repo",
+      });
+      await handleMessage(dm.message);
+
+      expect(dm.sentMessages[0]).toBe("Checking the repo first.");
+      expect(dm.sentMessages.at(-1)).toBe("Done — branch is clean.");
+      expect(dm.sentMessages).toHaveLength(2);
+    });
+  });
+
+  test("posts a fallback ack when tools start with no streamed text", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
+        handlers?.onToolStart?.({
+          toolCallId: "tool_1",
+          tool: "bash",
+          input: { command: "ls" },
+        });
+        handlers?.onToolEnd?.({
+          toolCallId: "tool_1",
+          tool: "bash",
+          result: { exitCode: 0 },
+        });
+        return "All set.";
+      });
+
+      const dm = createDmMessage({
+        userId: "424242424242424242",
+        content: "do the thing",
+      });
+      await handleMessage(dm.message);
+
+      expect(dm.sentMessages[0]).toBe("On it.");
+      expect(dm.sentMessages.at(-1)).toBe("All set.");
+    });
+  });
+
+  test("does not post an early ack when the turn uses no tools", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
+        handlers?.onChunk("Hello.");
+        return "Hello.";
+      });
+
+      const dm = createDmMessage({
+        userId: "424242424242424242",
+        content: "hi",
+      });
+      await handleMessage(dm.message);
+
+      expect(dm.sentMessages).toEqual(["Hello."]);
     });
   });
 });

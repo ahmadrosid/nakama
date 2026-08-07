@@ -68,6 +68,9 @@ const pendingQuestionnaires = new Map<string, AgentQuestionnaire>();
 const GROUP_MESSAGE_PREFIX =
   "[Discord channel — your reply is visible to everyone in this channel.]\n";
 
+/** Posted when tools start before the model wrote any status text. */
+const DISCORD_EARLY_ACK_FALLBACK = "On it.";
+
 const LINK_IN_PRIVATE_REPLY =
   "Link your account in a private DM with this bot first.";
 
@@ -394,6 +397,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     typingLoop.start();
 
     let reply = "";
+    let earlyAck: Promise<void> | undefined;
     let postedQuestionnaire = false;
 
     try {
@@ -408,6 +412,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           },
           onToolStart: () => {
             typingLoop.ping();
+            if (earlyAck) {
+              return;
+            }
+
+            const earlyText = reply.trim() || DISCORD_EARLY_ACK_FALLBACK;
+            reply = "";
+            earlyAck = replyAsChat(messenger, earlyText);
           },
           onToolEnd: () => {
             typingLoop.ping();
@@ -431,6 +442,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         { signal },
       );
 
+      await earlyAck;
       await todoStatus.complete();
 
       if (signal.aborted) {
@@ -442,6 +454,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
     } catch (error) {
+      await earlyAck;
       if (isAbortError(error)) {
         await todoStatus.stop();
         if (reply.trim()) {
@@ -462,7 +475,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await replyAsChat(messenger, reply);
-    } else if (!postedQuestionnaire) {
+    } else if (!postedQuestionnaire && !earlyAck) {
       await messenger.send("(empty reply)");
     }
 

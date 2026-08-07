@@ -163,3 +163,23 @@ test("buildChatSystemPrompt omits USER.md section when empty", () => {
 
   expect(prompt).not.toContain("# Personalisation (USER.md)");
 });
+
+test("buildChatSystemPrompt tells Discord to acknowledge before tools", () => {
+  const prompt = buildChatSystemPrompt([], {
+    channel: "discord",
+    enableToolLoop: true,
+  });
+
+  expect(prompt).toContain("send a brief status line first");
+  expect(prompt).toContain("then use tools");
+  expect(prompt).toContain("short outcome when finished");
+});
+
+test("buildChatSystemPrompt omits Discord ack-before-tools guidance on Telegram", () => {
+  const prompt = buildChatSystemPrompt([], {
+    channel: "telegram",
+    enableToolLoop: true,
+  });
+
+  expect(prompt).not.toContain("send a brief status line first");
+});
