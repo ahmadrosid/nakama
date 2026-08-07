@@ -3,12 +3,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_CRASH_REPORT_DSN,
   getCrashReportConfigPath,
   isCrashReportingAllowed,
   loadCrashReportConfig,
   readCrashReportEnvOverride,
   resetCrashReportConsentCache,
   resolveCrashReportConsent,
+  resolveCrashReportDsn,
   saveCrashReportConsent,
 } from "./crash-report-config";
 
@@ -96,6 +98,30 @@ test("DO_NOT_TRACK beats NAKAMA_CRASH_REPORTS", () => {
   expect(
     readCrashReportEnvOverride({ DO_NOT_TRACK: "1", NAKAMA_CRASH_REPORTS: "1" }),
   ).toBe("denied");
+});
+
+test("an empty NAKAMA_CRASH_REPORT_DSN turns delivery off rather than falling back", () => {
+  const file = { consent: "unset", installId: null, dsn: null } as const;
+
+  expect(resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "" })).toBeNull();
+  expect(resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "https://k@h/1" })).toBe(
+    "https://k@h/1",
+  );
+});
+
+test("the built-in ingest is used when nothing overrides it", () => {
+  const resolved = resolveCrashReportDsn({ consent: "unset", installId: null, dsn: null }, {});
+
+  expect(resolved).toBe(DEFAULT_CRASH_REPORT_DSN);
+});
+
+test("a dsn in the config file beats the built-in default", () => {
+  const resolved = resolveCrashReportDsn(
+    { consent: "unset", installId: null, dsn: "https://own@ingest.example.com/9" },
+    {},
+  );
+
+  expect(resolved).toBe("https://own@ingest.example.com/9");
 });
 
 test("an unreadable config never enables reporting", async () => {

@@ -21,7 +21,8 @@ export interface CrashReportConfig {
  * rate limited at the ingest, which is why this can ship in an open repo when a Discord
  * webhook URL cannot.
  */
-export const DEFAULT_CRASH_REPORT_DSN = "";
+export const DEFAULT_CRASH_REPORT_DSN =
+  "https://a9d0037386bb48ff984bc7909712e298@app.glitchtip.com/26619";
 
 const TRUTHY = new Set(["1", "true", "on", "yes"]);
 const FALSY = new Set(["0", "false", "off", "no"]);
@@ -96,9 +97,16 @@ export function resolveCrashReportDsn(
   file: CrashReportConfig,
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  return (
-    env.NAKAMA_CRASH_REPORT_DSN?.trim() || file.dsn || DEFAULT_CRASH_REPORT_DSN || null
-  );
+  // Set but empty means off. Falling through to the built-in default there would make
+  // NAKAMA_CRASH_REPORT_DSN="" silently start delivering to the project's own ingest,
+  // which is the opposite of what setting it to empty asks for.
+  const fromEnv = env.NAKAMA_CRASH_REPORT_DSN;
+
+  if (fromEnv !== undefined) {
+    return fromEnv.trim() || null;
+  }
+
+  return file.dsn || DEFAULT_CRASH_REPORT_DSN || null;
 }
 
 async function writeCrashReportConfig(config: CrashReportConfig): Promise<void> {
