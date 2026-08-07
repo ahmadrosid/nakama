@@ -12,7 +12,16 @@ export type CrashReportConsent = "granted" | "denied" | "unset";
 export interface CrashReportConfig {
   consent: CrashReportConsent;
   installId: string | null;
+  dsn: string | null;
 }
+
+/**
+ * Filled in with the project's public ingest DSN so a self-host install reports without
+ * the user configuring anything. A Sentry-style DSN is a public key by design and is
+ * rate limited at the ingest, which is why this can ship in an open repo when a Discord
+ * webhook URL cannot.
+ */
+export const DEFAULT_CRASH_REPORT_DSN = "";
 
 const TRUTHY = new Set(["1", "true", "on", "yes"]);
 const FALSY = new Set(["0", "false", "off", "no"]);
@@ -64,7 +73,7 @@ export async function loadCrashReportConfig(): Promise<CrashReportConfig> {
   const raw = await readTextOrNull(getCrashReportConfigPath());
 
   if (raw === null) {
-    return { consent: "unset", installId: null };
+    return { consent: "unset", installId: null, dsn: null };
   }
 
   const values = parseIni(raw);
@@ -72,6 +81,7 @@ export async function loadCrashReportConfig(): Promise<CrashReportConfig> {
   return {
     consent: parseConsent(values.consent),
     installId: values.install_id?.trim() || null,
+    dsn: values.dsn?.trim() || null,
   };
 }
 
@@ -82,6 +92,15 @@ export function resolveCrashReportConsent(
   return readCrashReportEnvOverride(env) ?? file.consent;
 }
 
+export function resolveCrashReportDsn(
+  file: CrashReportConfig,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  return (
+    env.NAKAMA_CRASH_REPORT_DSN?.trim() || file.dsn || DEFAULT_CRASH_REPORT_DSN || null
+  );
+}
+
 async function writeCrashReportConfig(config: CrashReportConfig): Promise<void> {
   const lines = [
     "# Nakama crash reports",
@@ -89,6 +108,7 @@ async function writeCrashReportConfig(config: CrashReportConfig): Promise<void> 
     "# consent=denied sends nothing. DO_NOT_TRACK=1 overrides this file.",
     `consent=${config.consent}`,
     ...(config.installId ? [`install_id=${config.installId}`] : []),
+    ...(config.dsn ? [`dsn=${config.dsn}`] : []),
     "",
   ];
 
@@ -109,6 +129,7 @@ export async function saveCrashReportConsent(
   const next: CrashReportConfig = {
     consent,
     installId: consent === "granted" ? (existing.installId ?? randomUUID()) : null,
+    dsn: existing.dsn,
   };
 
   await writeCrashReportConfig(next);
@@ -122,12 +143,19 @@ export function resetCrashReportConsentCache(): void {
   cached = null;
 }
 
-export async function isCrashReportingAllowed(): Promise<boolean> {
+export async function loadCachedCrashReportConfig(): Promise<CrashReportConfig> {
   cached ??= loadCrashReportConfig();
+  return cached;
+}
 
+export async function currentCrashReportConsent(): Promise<CrashReportConsent> {
   try {
-    return resolveCrashReportConsent(await cached) === "granted";
+    return resolveCrashReportConsent(await loadCachedCrashReportConfig());
   } catch {
-    return false;
+    return "denied";
   }
+}
+
+export async function isCrashReportingAllowed(): Promise<boolean> {
+  return (await currentCrashReportConsent()) === "granted";
 }

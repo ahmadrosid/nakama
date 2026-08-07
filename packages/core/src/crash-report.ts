@@ -1,7 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { NAKAMA_API_VERSION } from "./contract";
-import { isCrashReportingAllowed } from "./crash-report-config";
+import { currentCrashReportConsent, isCrashReportingAllowed } from "./crash-report-config";
+import {
+  appendPendingCrashReport,
+  clearPendingCrashReports,
+  readPendingCrashReports,
+} from "./crash-report-pending";
 import { hashId, scrubBreadcrumbData, scrubText } from "./crash-report-scrub";
 
 /**
@@ -279,16 +284,57 @@ export async function reportError(
   }
 
   const currentSink = sink;
+  const consent = await currentCrashReportConsent();
 
-  if (currentSink && (await isCrashReportingAllowed())) {
-    void Promise.resolve()
-      .then(() => currentSink(report))
-      .catch(() => {
-        // Delivery is best effort. Losing a report is acceptable; losing the process is not.
-      });
+  if (consent === "granted") {
+    if (currentSink) {
+      void Promise.resolve()
+        .then(() => currentSink(report))
+        .catch(() => {
+          // Delivery is best effort. Losing a report is acceptable; losing the process is not.
+        });
+    }
+  } else if (consent === "unset" && currentSink) {
+    // Held, not sent. The user has not been asked yet, and the first crash is usually the
+    // one worth having once they say yes. Requires a sink: with nowhere to deliver, a
+    // pending file is a queue that can never drain.
+    try {
+      await appendPendingCrashReport(report);
+    } catch {
+      // A full or read-only config dir must not turn one crash into two.
+    }
   }
 
   return report;
+}
+
+/**
+ * Sends what was held back while the install was waiting to be asked. Called once the
+ * answer comes back as yes.
+ */
+export async function flushPendingCrashReports(): Promise<number> {
+  const currentSink = sink;
+
+  if (!currentSink || !(await isCrashReportingAllowed())) {
+    return 0;
+  }
+
+  const pending = await readPendingCrashReports();
+
+  if (pending.length === 0) {
+    return 0;
+  }
+
+  for (const report of pending) {
+    try {
+      await currentSink(report);
+    } catch {
+      // Best effort, same as live delivery.
+    }
+  }
+
+  await clearPendingCrashReports();
+  return pending.length;
 }
 
 export async function reportInvariant(

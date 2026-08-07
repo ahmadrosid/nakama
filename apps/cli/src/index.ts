@@ -6,6 +6,8 @@ import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
 import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
 import { installCrashHandlers } from "@nakama/core/crash-report";
+import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import { runCrashConsentPromptIfNeeded } from "./crash-consent";
 import { setTheme, type Theme, detectTheme } from "./styled-text";
 import {
   formatRotateTokenError,
@@ -14,6 +16,7 @@ import {
 } from "./rotate-token";
 
 installCrashHandlers("cli");
+installCrashReportSink();
 
 if (isRotateTokenCommand()) {
   try {
@@ -24,6 +27,8 @@ if (isRotateTokenCommand()) {
     process.exit(1);
   }
 }
+
+await runCrashConsentPromptIfNeeded();
 
 function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
   for (let index = 0; index < argv.length; index += 1) {

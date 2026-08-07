@@ -38,7 +38,11 @@ afterEach(async () => {
 });
 
 test("a fresh install has never been asked and sends nothing", async () => {
-  expect(await loadCrashReportConfig()).toEqual({ consent: "unset", installId: null });
+  expect(await loadCrashReportConfig()).toEqual({
+    consent: "unset",
+    installId: null,
+    dsn: null,
+  });
   expect(await isCrashReportingAllowed()).toBe(false);
 });
 
