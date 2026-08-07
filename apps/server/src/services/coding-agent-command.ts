@@ -68,7 +68,7 @@ export function buildHarnessNonInteractiveArgs(
       "-p",
       prompt,
       "--output-format",
-      "stream-json",
+      "text",
       "--yolo",
     ];
   }
@@ -172,15 +172,16 @@ export async function buildCodingAgentCommandTemplate(
         "-p",
         escapedTask,
         "--output-format",
-        "stream-json",
+        "text",
         "--yolo",
       ].join(" "),
       notes: [
         "Cursor Agent uses host Cursor authentication — Nakama does not inject provider credentials.",
-        "Before coding: ensure the target repo exists in the profile workspace; git clone it there if missing, then run from that folder.",
+        "Before coding: ensure the target repo exists in the profile workspace; git clone it there if missing.",
+        "Set bash cwd to the repo directory and keep argv0 as `agent` (do not prefix with cd && — codingAgent requires the harness binary first).",
+        "Prefer --output-format text so bash stdout stays under Nakama's output cap; avoid stream-json for orchestration.",
         "Use --yolo so unattended background runs do not block on permission prompts.",
-        "Summarize the final outcome from stream-json output; do not dump the full event stream to the user.",
-        "Run from the repo checkout inside the profile workspace unless the user specifies another path inside it.",
+        "After the run: summarize the final text. If output looks truncated or unclear, verify with git status / git diff --stat in the repo.",
       ],
     };
   }
@@ -239,7 +240,7 @@ export function formatCodingAgentCommandContext(
     "# Coding Agent Harness",
     `Selected backend: ${template.harnessName} (${template.backend}).`,
     template.backend === "cursor_agent"
-      ? "Run the coding agent via the `bash` tool. Cursor Agent uses host auth — Nakama does not merge provider credentials. You may set `codingAgent: true` or rely on argv0 auto-detection for the `agent` binary."
+      ? "Run via the `bash` tool with cwd set to the repo checkout and codingAgent: true (or argv0 `agent`). Cursor uses host auth — Nakama does not merge provider credentials. Do not use `cd … && agent`."
       : "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
     "",
     "```bash",

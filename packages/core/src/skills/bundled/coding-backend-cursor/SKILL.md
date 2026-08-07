@@ -16,31 +16,37 @@ You are preparing a coding agent run for Cursor Agent CLI (`agent`), orchestrate
 
 ## Repo setup (do this before coding)
 
-Bash runs in the **profile workspace**. Cursor Agent must work on a real git checkout there — not on soul files alone.
+Bash defaults to the **profile workspace**. Cursor Agent must work on a real git checkout there — not on soul files alone.
 
 1. Identify the target repo (URL or folder name from the user). If unclear, ask once.
-2. Check whether that repo already exists under the workspace (e.g. `ls`, or `test -d <dir>/.git`).
-3. If it is missing, clone it into the workspace with `bash` (`git clone <url> <dir>`), then continue.
-4. Run Cursor Agent **inside that repo folder** (`cd <dir> && …` or `agent --workspace <dir> …`).
+2. Check whether that repo already exists under the workspace (`ls`, or `test -d <dir>/.git`).
+3. If it is missing, clone it into the workspace (`git clone <url> <dir>`), then continue.
+4. Hand off soon: give Cursor a short brief (issue URL + goal + constraints). Do not fully re-solve the bug with file tools first.
 
 Do not invent a repo URL. Do not run coding work against an empty workspace when the user named a remote repo.
 
 ## Command (required shape)
 
-Non-interactive print mode for unattended background runs from Nakama (from the repo directory):
+Set bash **`cwd`** to the repo directory. Keep argv0 as **`agent`** — never `cd … && agent` (with `codingAgent: true`, Nakama requires the harness binary first).
 
 ```bash
-cd <repo-dir> && agent -p 'Implement the requested change and summarize what you verified' --output-format stream-json --yolo
+agent -p 'Implement the requested change and summarize what you verified' --output-format text --yolo
 ```
 
-- `-p` / `--print` — non-interactive one-shot
-- `--output-format stream-json` — machine-readable event stream on stdout
-- `--yolo` — required for Nakama background dispatch so the CLI does not wait on interactive permission prompts
+bash args:
 
-Use an explicit bash `timeoutMs` suited to the task (often 600000–1800000 ms). Prefer `codingAgent: true` or a command that starts with `agent` so Nakama recognizes the harness binary (spawn env stays empty for Cursor).
+- `cwd`: absolute path to the repo checkout inside the profile workspace
+- `codingAgent: true`
+- `timeoutMs`: often 600000–1800000 for substantial runs
+
+Flags:
+
+- `-p` / `--print` — non-interactive one-shot
+- `--output-format text` — short final answer for Nakama (prefer this; avoid `stream-json`, which blows bash's stdout cap and looks truncated mid-run)
+- `--yolo` — required for unattended background dispatch
 
 ## After the run
 
-- Summarize the final outcome in plain language for the user.
-- Do **not** dump the full stream-json event log into the chat.
+- Summarize the final text for the user.
+- If stdout looks truncated (`...[truncated]`) or unclear, verify completion with `git status` / `git diff --stat` in the repo (via bash `cwd`), then report what changed.
 - If the run failed (non-zero exit, timeout, auth error, or empty useful output), explain clearly and ask the user to fix host install/auth when that is the cause.

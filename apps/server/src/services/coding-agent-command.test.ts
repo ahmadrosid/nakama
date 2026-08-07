@@ -89,7 +89,7 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("'Fix lint errors'");
   });
 
-  test("builds Cursor Agent print command with stream-json and yolo", async () => {
+  test("builds Cursor Agent print command with text output and yolo", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
         kind: "cursor_agent",
@@ -109,7 +109,8 @@ describe("buildCodingAgentCommandTemplate", () => {
     expect(template.command).toContain("agent");
     expect(template.command).toContain("-p");
     expect(template.command).toContain("--output-format");
-    expect(template.command).toContain("stream-json");
+    expect(template.command).toContain("text");
+    expect(template.command).not.toContain("stream-json");
     expect(template.command).toContain("--yolo");
     expect(template.command).toContain("'Where are the built-in skills'");
     expect(template.spawnEnv).toEqual({});
@@ -192,7 +193,9 @@ describe("formatCodingAgentCommandContext", () => {
     );
 
     expect(context).toContain("host auth");
+    expect(context).toContain("cwd");
     expect(context).not.toContain("When Nakama provider passthrough is active");
     expect(context).toContain("--yolo");
+    expect(context).toContain("--output-format text");
   });
 });

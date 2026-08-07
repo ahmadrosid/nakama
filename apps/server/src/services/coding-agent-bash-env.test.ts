@@ -184,7 +184,7 @@ describe("enrichCodingAgentBashInput", () => {
 
     const enriched = (await enrichCodingAgentBashInput(
       db,
-      { command: "echo -p 'task' --output-format stream-json --yolo", codingAgent: true },
+      { command: "echo -p 'task' --output-format text --yolo", codingAgent: true },
       { orgId: "org_test", profileId: "profile_test" },
       {
         providers: [anthropicProvider],
