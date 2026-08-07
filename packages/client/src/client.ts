@@ -103,8 +103,6 @@ import type {
   UpdateComposioSettingsRequest,
   UpdateEmailSettingsRequest,
   UpdateCodingHarnessSettingsRequest,
-  PrepareCodingAgentLaunchRequest,
-  CodingAgentLaunchPlanResponse,
   ComposioConnectRequest,
   ComposioConnectResponse,
   ComposioToolkitSummary,
@@ -1495,15 +1493,6 @@ export class NakamaClient {
     }
 
     return readAgentBrowserInstallStream(response.body, handlers, options?.signal);
-  }
-
-  async prepareCodingAgentLaunch(
-    request: PrepareCodingAgentLaunchRequest,
-  ): Promise<CodingAgentLaunchPlanResponse> {
-    return this.request<CodingAgentLaunchPlanResponse>("/v1/coding-agents/prepare-launch", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

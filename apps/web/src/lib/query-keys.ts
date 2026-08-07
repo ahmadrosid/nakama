@@ -71,9 +71,6 @@ export const queryKeys = {
   email: {
     settings: ["email", "settings"] as const,
   },
-  codingHarnesses: {
-    settings: ["codingHarnesses", "settings"] as const,
-  },
   agentBrowser: {
     settings: ["agentBrowser", "settings"] as const,
   },

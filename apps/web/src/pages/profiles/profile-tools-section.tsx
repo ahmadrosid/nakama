@@ -1,8 +1,7 @@
-import { BASH_TOOL_ID, BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
+import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CodingHarnessSettingsDialog } from "@/components/CodingHarnessSettingsDialog";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,6 @@ export function ProfileToolsSection({
     activeOrg?.role,
   );
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
-  const [codingHarnessConfigOpen, setCodingHarnessConfigOpen] = useState(false);
 
   return (
     <div className="pt-5">
@@ -61,9 +59,7 @@ export function ProfileToolsSection({
             const onConfigure =
               isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
                 ? () => setEmailConfigOpen(true)
-                : isOrgAdmin && tool.id === BASH_TOOL_ID
-                  ? () => setCodingHarnessConfigOpen(true)
-                  : undefined;
+                : undefined;
 
             return (
               <li
@@ -117,10 +113,6 @@ export function ProfileToolsSection({
       )}
 
       <EmailSettingsDialog open={emailConfigOpen} onOpenChange={setEmailConfigOpen} />
-      <CodingHarnessSettingsDialog
-        open={codingHarnessConfigOpen}
-        onOpenChange={setCodingHarnessConfigOpen}
-      />
     </div>
   );
 }

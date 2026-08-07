@@ -54,8 +54,6 @@ import type {
   SoulStatusResponse,
   CodingHarnessSettingsResponse,
   AgentBrowserStatusResponse,
-  CodingAgentLaunchPlanResponse,
-  PrepareCodingAgentLaunchRequest,
   TelegramSettingsResponse,
   DiscordSettingsResponse,
   ComposioSettingsResponse,
@@ -223,7 +221,6 @@ import {
   formatCodingAgentCommandContext,
   getBackendSkillName,
 } from "./coding-agent-command";
-import { prepareCodingAgentLaunch as buildCodingAgentLaunchPlan } from "./coding-agent-launcher";
 import { normalizeCodingAgentModel } from "./coding-agent-spawn-env";
 import { AgentTodoState } from "./agent-todo-state";
 import type { AutomationRunner } from "./automation-runner";
@@ -950,36 +947,6 @@ export class AgentService {
 
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
     return getAgentBrowserStatus();
-  }
-
-  async prepareCodingAgentLaunch(
-    orgId: string,
-    input: PrepareCodingAgentLaunchRequest,
-    options: {
-      persistSelection?: boolean;
-      orgRole?: OrgRole | null;
-      isPlatformAdmin?: boolean;
-      localCli?: boolean;
-    } = {},
-  ): Promise<CodingAgentLaunchPlanResponse> {
-    return buildCodingAgentLaunchPlan(
-      this.db,
-      {
-        orgId,
-        profileId: input.profileId,
-        backend: input.backend,
-        model: input.model,
-        cwd: input.cwd,
-        passthroughArgs: input.passthroughArgs,
-        persistSelection: options.persistSelection === true,
-        userConfig: this.userConfig,
-      },
-      {
-        orgRole: options.orgRole,
-        isPlatformAdmin: options.isPlatformAdmin,
-        localCli: options.localCli,
-      },
-    );
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

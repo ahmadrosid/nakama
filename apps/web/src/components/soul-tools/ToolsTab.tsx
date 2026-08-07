@@ -1,13 +1,11 @@
 import type { ToolDetail } from "@nakama/core/contract";
 import {
-  BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { CodingHarnessSettingsDialog } from "@/components/CodingHarnessSettingsDialog";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +46,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
   const deleteToolMutation = useDeleteToolMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
-  const [codingHarnessConfigOpen, setCodingHarnessConfigOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const loading = isLoading && tools.length === 0;
@@ -134,7 +131,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
             onCreateTool={goToCreateTool}
             onDelete={requestDeleteTool}
             onConfigureEmail={() => setEmailConfigOpen(true)}
-            onConfigureCodingHarnesses={() => setCodingHarnessConfigOpen(true)}
           />
 
           <ToolListSection
@@ -146,7 +142,6 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
             isOrgAdmin={isOrgAdmin}
             onDelete={requestDeleteTool}
             onConfigureEmail={() => setEmailConfigOpen(true)}
-            onConfigureCodingHarnesses={() => setCodingHarnessConfigOpen(true)}
           />
         </div>
       )}
@@ -166,13 +161,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
       </div>
 
       {isOrgAdmin ? (
-        <>
-          <EmailSettingsDialog open={emailConfigOpen} onOpenChange={setEmailConfigOpen} />
-          <CodingHarnessSettingsDialog
-            open={codingHarnessConfigOpen}
-            onOpenChange={setCodingHarnessConfigOpen}
-          />
-        </>
+        <EmailSettingsDialog open={emailConfigOpen} onOpenChange={setEmailConfigOpen} />
       ) : null}
 
       <Dialog
@@ -226,7 +215,6 @@ function ToolListSection({
   onCreateTool,
   onDelete,
   onConfigureEmail,
-  onConfigureCodingHarnesses,
 }: {
   title: string;
   description: string;
@@ -237,7 +225,6 @@ function ToolListSection({
   onCreateTool?: () => void;
   onDelete: (toolId: string, toolName: string) => void;
   onConfigureEmail: () => void;
-  onConfigureCodingHarnesses: () => void;
 }) {
   return (
     <section>
@@ -270,11 +257,7 @@ function ToolListSection({
               }
               onDelete={() => onDelete(tool.id, tool.name)}
               onConfigure={
-                isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email
-                  ? onConfigureEmail
-                  : isOrgAdmin && tool.id === BASH_TOOL_ID
-                    ? onConfigureCodingHarnesses
-                    : undefined
+                isOrgAdmin && tool.id === BUILTIN_TOOL_IDS.email ? onConfigureEmail : undefined
               }
             />
           ))}

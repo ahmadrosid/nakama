@@ -1215,32 +1215,6 @@ export interface UpdateCodingHarnessSettingsRequest {
   }>;
 }
 
-export interface PrepareCodingAgentLaunchRequest {
-  profileId: string;
-  backend?: string | null;
-  model?: string | null;
-  cwd?: string | null;
-  passthroughArgs?: string[];
-  persistSelection?: boolean;
-}
-
-export interface CodingAgentLaunchPlanResponse {
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  cwd: string;
-  harnessId: string;
-  harnessKind: CodingHarnessKind;
-  harnessName: string;
-  model: string | null;
-  providerPassthrough?: {
-    active: boolean;
-    providerLabel: string | null;
-    model: string | null;
-    message: string | null;
-  };
-}
-
 export interface WhatsAppSettingsResponse {
   configured: boolean;
   phoneNumberMasked: string | null;
