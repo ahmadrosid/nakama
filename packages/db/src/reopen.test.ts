@@ -14,6 +14,9 @@ describe("database reopen after restore", () => {
     }
   });
 
+  // Runs migrations twice against a real sqlite file. That is under a second locally but
+  // went past bun's 5s default on a CI runner building nine workspaces at once, and the
+  // ENOENT that followed was afterEach cleaning up underneath the timed-out body.
   test("reopen reads the replacement sqlite file at the same path", async () => {
     rootDir = await mkdtemp(join(tmpdir(), "nakama-db-reopen-"));
     const databaseUrl = `file:${join(rootDir, "sqlite", "nakama.sqlite")}`;
@@ -63,5 +66,5 @@ describe("database reopen after restore", () => {
     expect(await database.adapter.getUserByEmail("admin@example.com")).toBeNull();
 
     database.close();
-  });
+  }, 30_000);
 });
