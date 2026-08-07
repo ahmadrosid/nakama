@@ -125,6 +125,10 @@ export class ComposioService {
     }
 
     const client = createComposioApiClient(apiKey);
+    if (!client) {
+      return null;
+    }
+
     this.apiClientCache = { key: apiKey, client };
     return client;
   }

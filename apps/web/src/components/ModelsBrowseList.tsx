@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { type ModelsDevRow, useModelsDev } from "@/hooks/use-models-dev";
+import { formatError } from "@/lib/client";
 import { isProviderTypeAlreadyConfigured, type SelectedProvider } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
@@ -118,7 +119,7 @@ export function ModelsBrowseList({
           </div>
         ) : error ? (
           <div className="px-3 py-8 text-center text-sm text-destructive">
-            Failed to load: {String(error)}
+            Failed to load: {formatError(error)}
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-3 py-8 text-center text-sm text-muted-foreground">

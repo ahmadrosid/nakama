@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { Spinner } from "@/components/ui/spinner";
+import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
 const MODEL_ROW_HEIGHT = 73;
@@ -59,7 +60,7 @@ export function ModelBrowseShell({
           </div>
         ) : error ? (
           <div className="px-3 py-8 text-center text-sm text-destructive">
-            Failed to load: {String(error)}
+            Failed to load: {formatError(error)}
           </div>
         ) : isEmpty ? (
           <div className="px-3 py-8 text-center text-sm text-muted-foreground">
