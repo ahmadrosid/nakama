@@ -174,6 +174,86 @@ describe("ComposioService", () => {
     }
   });
 
+  test("isReachable probes with limit 1 and caches the result", async () => {
+    const { service, restore } = await createConfiguredService();
+    let calls = 0;
+    let lastLimit: number | undefined;
+
+    injectMockComposioClient(service, {
+      ...createMockClient(),
+      async listCatalogToolkits(options) {
+        calls += 1;
+        lastLimit = options?.limit;
+        return [{ slug: "gmail", name: "Gmail", description: null, logoUrl: null }];
+      },
+    });
+
+    try {
+      expect(await service.isReachable()).toBe(true);
+      expect(await service.isReachable()).toBe(true);
+      expect(calls).toBe(1);
+      expect(lastLimit).toBe(1);
+
+      (
+        service as unknown as {
+          reachabilityCache: { value: boolean; expiresAt: number } | null;
+        }
+      ).reachabilityCache = { value: true, expiresAt: Date.now() - 1 };
+
+      // Stale cache returns immediately and refreshes in the background.
+      expect(await service.isReachable()).toBe(true);
+      expect(calls).toBe(1);
+      const inflight = (
+        service as unknown as { reachabilityInflight: Promise<boolean> | null }
+      ).reachabilityInflight;
+      expect(inflight).not.toBeNull();
+      await inflight;
+      expect(calls).toBe(2);
+
+      service.reloadConfiguration();
+      injectMockComposioClient(service, {
+        ...createMockClient(),
+        async listCatalogToolkits(options) {
+          calls += 1;
+          lastLimit = options?.limit;
+          return [];
+        },
+      });
+      expect(await service.isReachable()).toBe(true);
+      expect(calls).toBe(3);
+      expect(lastLimit).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+
+  test("isReachable coalesces concurrent probes", async () => {
+    const { service, restore } = await createConfiguredService();
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    injectMockComposioClient(service, {
+      ...createMockClient(),
+      async listCatalogToolkits() {
+        calls += 1;
+        await gate;
+        return [];
+      },
+    });
+
+    try {
+      const pending = Promise.all([service.isReachable(), service.isReachable(), service.isReachable()]);
+      release();
+      expect(await pending).toEqual([true, true, true]);
+      expect(calls).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+
   test("resolveComposioActingUserId maps local client to earliest human admin", async () => {
     const { db, service, restore } = await createConfiguredService();
 

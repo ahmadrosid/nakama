@@ -20,7 +20,7 @@ export interface ComposioSessionMcpEndpoint {
 }
 
 export interface ComposioApiClient {
-  listCatalogToolkits(): Promise<ComposioCatalogToolkit[]>;
+  listCatalogToolkits(options?: { limit?: number }): Promise<ComposioCatalogToolkit[]>;
   linkToolkitAccount(
     userId: string,
     toolkitSlug: string,
@@ -223,8 +223,9 @@ export class SdkComposioApiClient implements ComposioApiClient {
     this.composio = new Composio({ apiKey });
   }
 
-  async listCatalogToolkits(): Promise<ComposioCatalogToolkit[]> {
-    const response = await this.composio.toolkits.getToolkits({ limit: 200 });
+  async listCatalogToolkits(options?: { limit?: number }): Promise<ComposioCatalogToolkit[]> {
+    const limit = options?.limit ?? 200;
+    const response = await this.composio.toolkits.getToolkits({ limit });
     const items = extractComposioListItems(response);
 
     return items
