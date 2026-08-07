@@ -6,7 +6,9 @@ import {
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
+  CRASH_ISSUE_TOOL_ID,
 } from "@nakama/core/tools/protected";
+import { CRASH_ISSUE_TOOL_NAME } from "@nakama/core/tools/crash-issue";
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
@@ -158,4 +160,24 @@ export async function ensureBashToolDefinition(db: DatabaseAdapter): Promise<voi
 export async function ensureSuperBotBashTool(db: DatabaseAdapter, profileId: string): Promise<void> {
   await ensureBashToolDefinition(db);
   await db.assignToolToProfile(profileId, BASH_TOOL_ID);
+}
+
+/**
+ * Seeded so it can be assigned, never assigned automatically. An agent that reads crash
+ * reports from strangers should not also be able to open issues unless someone chose that.
+ */
+export async function ensureCrashIssueToolDefinition(db: DatabaseAdapter): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.getTool(CRASH_ISSUE_TOOL_ID);
+
+  await db.upsertTool({
+    id: CRASH_ISSUE_TOOL_ID,
+    name: CRASH_ISSUE_TOOL_NAME,
+    description:
+      "Find or file a GitHub issue for a crash fingerprint in the configured repository.",
+    handlerType: "builtin",
+    handlerConfig: { name: CRASH_ISSUE_TOOL_NAME },
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
 }

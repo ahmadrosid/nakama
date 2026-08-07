@@ -15,6 +15,7 @@ export * from "./automation-worker";
 export * from "./config";
 export * from "./contract";
 export * from "./crash-report";
+export * from "./crash-issue-config";
 export * from "./crash-report-config";
 export * from "./crash-report-pending";
 export * from "./crash-report-scrub";

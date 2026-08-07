@@ -13,6 +13,7 @@ import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { emailTool } from "./email";
+import { crashIssueTool } from "./crash-issue";
 import { extractDocumentTextTool } from "./extract-document-text";
 import {
   jsonSchemaFromZod,
@@ -795,6 +796,7 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
+  crashIssueTool,
 ];
 
 export { PathGuardError };

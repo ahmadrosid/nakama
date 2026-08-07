@@ -12,6 +12,8 @@
     "./channel-org": "./src/channel-org.ts",
     "./contract": "./src/contract.ts",
     "./crash-report": "./src/crash-report.ts",
+    "./crash-issue-config": "./src/crash-issue-config.ts",
+    "./tools/crash-issue": "./src/tools/crash-issue.ts",
     "./crash-report-config": "./src/crash-report-config.ts",
     "./crash-report-pending": "./src/crash-report-pending.ts",
     "./crash-report-scrub": "./src/crash-report-scrub.ts",

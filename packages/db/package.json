@@ -10,6 +10,7 @@
     "bcryptjs": "^3.0.3"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target bun"
+    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "test": "bun test"
   }
 }

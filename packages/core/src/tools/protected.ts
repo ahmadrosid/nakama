@@ -15,10 +15,18 @@ export const BUILTIN_TOOL_IDS = {
 export const BASH_TOOL_ID = "tool_bash";
 export const SUB_AGENT_TOOL_ID = "tool_sub_agent";
 
+/**
+ * Kept out of BUILTIN_TOOL_IDS on purpose: everything in that map is assigned to every
+ * new profile. This one opens issues on a real repository, so it is assigned by hand to
+ * the triage profile only, the same way bash is.
+ */
+export const CRASH_ISSUE_TOOL_ID = "tool_crash_issue";
+
 export const PROTECTED_TOOL_IDS = new Set<string>([
   ...Object.values(BUILTIN_TOOL_IDS),
   BASH_TOOL_ID,
   SUB_AGENT_TOOL_ID,
+  CRASH_ISSUE_TOOL_ID,
 ]);
 
 export function isProtectedToolId(toolId: string): boolean {

@@ -1,7 +1,9 @@
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { builtinTools, type ToolContext, type ToolDefinition, type UserConfig } from "@nakama/core";
 import { isEmailConfigComplete, loadEmailConfig } from "@nakama/core/email-config";
+import { isCrashIssueConfigured, loadCrashIssueConfig } from "@nakama/core/crash-issue-config";
 import { emailTool } from "@nakama/core/tools/email";
+import { CRASH_ISSUE_TOOL_NAME } from "@nakama/core/tools/crash-issue";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { bashTool, runBash } from "../tools/bash";
 import { loadJavascriptTool } from "./javascript-tool-loader";
@@ -15,12 +17,17 @@ export function registerSubAgentTool(tool: ToolDefinition): void {
 export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
   emailConfigured: boolean,
+  crashIssuesConfigured = false,
 ): ToolDefinition[] {
-  if (emailConfigured) {
-    return tools;
-  }
+  // Defaults to unavailable: only the maintainer of the repo being reported on sets a
+  // token, so every other install must never see an issue-filing tool at all.
+  return tools.filter((tool) => {
+    if (!emailConfigured && tool.name === emailTool.name) {
+      return false;
+    }
 
-  return tools.filter((tool) => tool.name !== emailTool.name);
+    return crashIssuesConfigured || tool.name !== CRASH_ISSUE_TOOL_NAME;
+  });
 }
 
 export async function resolveProfileStoredTools(
@@ -33,6 +40,7 @@ export async function resolveProfileStoredTools(
   return omitUnavailableBuiltinTools(
     tools,
     isEmailConfigComplete(await loadEmailConfig()),
+    isCrashIssueConfigured(await loadCrashIssueConfig()),
   );
 }
 
