@@ -62,6 +62,17 @@ export function buildHarnessNonInteractiveArgs(
     ];
   }
 
+  if (kind === "cursor_agent") {
+    return [
+      ...baseArgs,
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--yolo",
+    ];
+  }
+
   if (kind === "pi") {
     const piArgs = [...baseArgs];
 
@@ -153,6 +164,26 @@ export async function buildCodingAgentCommandTemplate(
     };
   }
 
+  if (harness.kind === "cursor_agent") {
+    return {
+      ...shared,
+      command: [
+        baseCommand,
+        "-p",
+        escapedTask,
+        "--output-format",
+        "stream-json",
+        "--yolo",
+      ].join(" "),
+      notes: [
+        "Cursor Agent uses host Cursor authentication — Nakama does not inject provider credentials.",
+        "Use --yolo so unattended background runs do not block on permission prompts.",
+        "Summarize the final outcome from stream-json output; do not dump the full event stream to the user.",
+        "Run from the profile workspace cwd unless the user specifies another path inside it.",
+      ],
+    };
+  }
+
   if (harness.kind === "pi") {
     const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
     const piModel = routing.model
@@ -206,7 +237,9 @@ export function formatCodingAgentCommandContext(
   const lines = [
     "# Coding Agent Harness",
     `Selected backend: ${template.harnessName} (${template.backend}).`,
-    "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
+    template.backend === "cursor_agent"
+      ? "Run the coding agent via the `bash` tool. Cursor Agent uses host auth — Nakama does not merge provider credentials. You may set `codingAgent: true` or rely on argv0 auto-detection for the `agent` binary."
+      : "Run the coding agent via the `bash` tool. Set `codingAgent: true` so Nakama merges spawn env for this harness, or rely on auto-detection when the command starts with the harness binary.",
     "",
     "```bash",
     template.command,
@@ -236,7 +269,12 @@ export function formatCodingAgentCommandContext(
 
 function getBackendSkillName(
   backend: StoredCodingAgentHarnessKind,
-): "coding-backend-codex" | "coding-backend-claude-code" | "coding-backend-opencode" | "coding-backend-pi" {
+):
+  | "coding-backend-codex"
+  | "coding-backend-claude-code"
+  | "coding-backend-opencode"
+  | "coding-backend-pi"
+  | "coding-backend-cursor" {
   if (backend === "codex") {
     return "coding-backend-codex";
   }
@@ -247,6 +285,10 @@ function getBackendSkillName(
 
   if (backend === "pi") {
     return "coding-backend-pi";
+  }
+
+  if (backend === "cursor_agent") {
+    return "coding-backend-cursor";
   }
 
   return "coding-backend-opencode";

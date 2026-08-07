@@ -58,5 +58,6 @@ describe("ensureBundledSkillFiles for coding agent", () => {
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");
     expect(created).toContain("coding-backend-pi");
+    expect(created).toContain("coding-backend-cursor");
   });
 });

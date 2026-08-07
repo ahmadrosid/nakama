@@ -150,4 +150,50 @@ describe("enrichCodingAgentBashInput", () => {
       ),
     ).rejects.toThrow(/known coding-agent CLI/);
   });
+
+  test("does not merge provider credentials for Cursor Agent when routing is active", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      id: "workspace-settings",
+      visionModel: null,
+      transcriptionModel: null,
+      codingAgentHarnesses: [
+        {
+          id: "coding-harness-cursor-agent",
+          kind: "cursor_agent",
+          name: "Cursor Agent",
+          command: "echo",
+          args: [],
+          enabled: true,
+        },
+      ],
+      selectedCodingAgentHarness: null,
+      updatedAt: new Date().toISOString(),
+    });
+    await db.upsertProfile({
+      id: "profile_test",
+      orgId: "org_test",
+      name: "Test",
+      systemPrompt: "test",
+      model: "anthropic:claude-sonnet-4-6",
+      isDefault: true,
+      isSuper: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const enriched = (await enrichCodingAgentBashInput(
+      db,
+      { command: "echo -p 'task' --output-format stream-json --yolo", codingAgent: true },
+      { orgId: "org_test", profileId: "profile_test" },
+      {
+        providers: [anthropicProvider],
+        defaultProviderId: anthropicProvider.id,
+      },
+    )) as { env?: Record<string, string>; codingAgent?: boolean };
+
+    expect(enriched.codingAgent).toBe(true);
+    expect(enriched.env?.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(enriched.env?.OPENAI_API_KEY).toBeUndefined();
+  });
 });

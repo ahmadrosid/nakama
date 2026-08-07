@@ -2828,6 +2828,8 @@ export class AgentService {
         `- Claude Code: \`${getCodingHarnessInstallCommand("claude_code")}\``,
         `- OpenCode: \`${getCodingHarnessInstallCommand("opencode")}\``,
         `- pi: \`${getCodingHarnessInstallCommand("pi")}\``,
+        "",
+        "Cursor Agent CLI (`agent`) cannot be auto-installed. Tell the user to install and authenticate it on the host themselves, then verify with `agent --version`.",
       ];
       return installLines.join("\n");
     }

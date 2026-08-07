@@ -71,6 +71,11 @@ export function isProviderCompatibleWithHarness(
   providerType: ProviderName,
   harnessKind: StoredCodingAgentHarnessKind,
 ): boolean {
+  // Cursor Agent uses host Cursor auth — never Nakama provider passthrough.
+  if (harnessKind === "cursor_agent") {
+    return false;
+  }
+
   if (harnessKind === "claude_code") {
     return CLAUDE_CODE_PROVIDER_TYPES.has(providerType);
   }

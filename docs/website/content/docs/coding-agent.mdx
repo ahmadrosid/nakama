@@ -1,9 +1,9 @@
 ---
 title: "Coding Agent"
-description: "Hand off coding tasks to Codex, Claude Code, or OpenCode from Nakama chat, with optional provider passthrough from your Nakama LLM provider."
+description: "Hand off coding tasks to Codex, Claude Code, OpenCode, pi, or Cursor Agent from Nakama chat, with optional provider passthrough where the harness supports it."
 ---
 
-A Nakama profile is a general-purpose agent: it chats, explains, uses file tools, and follows your soul and skills. For **real coding work** — multi-file features, refactors, test fixes, repo-wide changes — a dedicated **coding agent** (Codex, Claude Code, or OpenCode) usually does better.
+A Nakama profile is a general-purpose agent: it chats, explains, uses file tools, and follows your soul and skills. For **real coding work** — multi-file features, refactors, test fixes, repo-wide changes — a dedicated **coding agent** (Codex, Claude Code, OpenCode, pi, or Cursor Agent) usually does better.
 
 Nakama keeps you in the same chat while handing those tasks to a CLI on the server. The Nakama agent orchestrates; the coding agent executes.
 
@@ -14,9 +14,9 @@ The mental model:
 - Nakama runs a coding-agent CLI through the `bash` tool
 - Nakama summarizes stdout/stderr and continues the conversation
 
-There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill**. Setup happens in chat: the agent can install missing CLIs and asks which backend to use when more than one is available.
+There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill**. Setup happens in chat: the agent can install missing npm-based CLIs (or tell you to install Cursor Agent yourself) and asks which backend to use when more than one is available.
 
-For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for Codex / Claude Code / OpenCode on large repo changes.
+For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for dedicated coding CLIs on large repo changes.
 
 ## Why use a coding agent
 
@@ -25,7 +25,7 @@ Nakama can edit files with `read_file`, `write_file`, and `edit_file`, but that 
 Dedicated coding agents are built for that job. Nakama adds this feature so you do not have to choose between "stay in Nakama" and "use a real coding CLI":
 
 - **Nakama** stays the conversation owner, permission boundary, and summarizer
-- **Coding agent** (Codex, Claude Code, or OpenCode) runs the heavy repo work on the server
+- **Coding agent** (Codex, Claude Code, OpenCode, pi, or Cursor Agent) runs the heavy repo work on the server
 - **Super Bot** is the default profile with `bash` and the `coding-agent` skill; other profiles can opt in
 
 ## How the pieces fit together
@@ -35,7 +35,7 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 | **`coding-agent` skill** | Teaches when to invoke a coding agent, how to install CLIs, when to ask which backend, and how to summarize results |
 | **`bash` tool** | Runs the coding-agent CLI in the profile workspace |
 | **Runtime discovery** | Nakama detects which CLIs are on the server `PATH` and injects harness context for the turn |
-| **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`) injected on matched turns |
+| **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`, `coding-backend-pi`, `coding-backend-cursor`) injected on matched turns |
 
 ```text
 User message (coding task)
@@ -57,6 +57,7 @@ Nakama supports CLI-backed backends on the machine running the server:
 | **Claude Code** | `claude` | Anthropic Claude Code print mode (`-p`) |
 | **OpenCode** | `opencode` | Provider-agnostic OpenCode `run` |
 | **pi** | `pi` | pi coding agent CLI |
+| **Cursor Agent** | `agent` | Cursor Agent print mode (`-p`) with `stream-json` output for unattended runs |
 
 ## Setup
 
@@ -69,13 +70,14 @@ Nakama supports CLI-backed backends on the machine running the server:
 
 You can assign `coding-agent` without pre-installing a CLI. The first coding turn installs or chooses a backend as needed.
 
-Assigning **`bash` + `coding-agent`** means the agent can run global package installs on the **server host**. On shared servers, treat that assignment as host-install capability.
+Assigning **`bash` + `coding-agent`** means the agent can run global package installs on the **server host** for Codex / Claude Code / OpenCode / pi. **Cursor Agent** is not auto-installed — install and authenticate it on the host yourself (`agent --version`). On shared servers, treat bash assignment as host-install capability for the npm-based CLIs.
+
 
 ### 2. Chat from a profile with coding-agent access
 
 When the user's message looks like a code-change request, the skill matcher attaches the full `coding-agent` body plus harness context for that turn:
 
-- **No CLI installed** — context lists install commands; the agent can install via `bash`, then retry
+- **No CLI installed** — context lists install commands for npm-based CLIs; Cursor Agent must be installed by the operator
 - **One CLI installed** — context includes that backend's command template
 - **Multiple CLIs installed** — the agent asks which one to use (per conversation) before running
 
@@ -90,6 +92,7 @@ Nakama injects your configured LLM provider credentials at coding-agent spawn ti
 | Claude Code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, model tier env vars |
 | Codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` (or temp `config.toml` + `CODEX_HOME`) |
 | OpenCode | Temp `opencode.json` via `XDG_CONFIG_HOME` |
+| Cursor Agent | None — uses host Cursor authentication; Nakama does not inject provider credentials |
 
 **Requirements:**
 
@@ -98,10 +101,10 @@ Nakama injects your configured LLM provider credentials at coding-agent spawn ti
 
 The `bash` tool merges spawn env when:
 
-- the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or
+- the command starts with a known harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`), or
 - `codingAgent: true` is set **and** the command starts with a known harness binary
 
-If `codingAgent: true` is set but the command does not start with a known binary, Nakama fails closed (no provider env merge) so the wrong credentials are never applied.
+If `codingAgent: true` is set but the command does not start with a known binary, Nakama fails closed (no provider env merge) so the wrong credentials are never applied. For Cursor Agent (`agent`), spawn env stays empty even when a Nakama provider is configured.
 
 Passthrough follows the **binary in the command**, not a dashboard selection.
 
@@ -165,7 +168,8 @@ Tool and skill assignment remain per profile.
 
 | Symptom | What to check |
 |---------|----------------|
-| Agent offers to install a CLI | Expected when none are on the server `PATH` — approve global install only if you operate that host |
+| Agent offers to install a CLI | Expected for Codex/Claude/OpenCode/pi when none are on `PATH` — approve global install only if you operate that host. For Cursor Agent, install it yourself on the host |
+| Cursor Agent missing / auth fails | Install and authenticate Cursor Agent CLI on the server host; verify with `agent --version` |
 | Nakama asks which coding agent to use | Multiple CLIs are installed; answer for this conversation |
 | Nakama explains instead of coding | Message may not match the skill; ask for an explicit repo change |
 | Claude Code asks for `/login` | Provider passthrough not applied — ensure Settings → Provider is compatible and the bash command starts with `claude` |

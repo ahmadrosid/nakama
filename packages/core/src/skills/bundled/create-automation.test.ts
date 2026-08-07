@@ -207,6 +207,7 @@ describe("ensureBundledSkillFiles", () => {
     expect(created).toContain("coding-backend-claude-code");
     expect(created).toContain("coding-backend-opencode");
     expect(created).toContain("coding-backend-pi");
+    expect(created).toContain("coding-backend-cursor");
   });
 
   test("does not overwrite existing skill files", async () => {

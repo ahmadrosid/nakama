@@ -350,6 +350,8 @@ describe("AgentService coding delegation context", () => {
 
     expect(context).toContain("No coding agent CLI is installed");
     expect(context).toContain("npm install -g");
+    expect(context).toContain("Cursor Agent CLI");
+    expect(context).toContain("cannot be auto-installed");
     expect(context).not.toContain("workspace settings");
     expect(context).not.toContain("delegate_coding_task");
   });

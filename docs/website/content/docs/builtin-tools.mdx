@@ -106,7 +106,7 @@ Legacy `.doc` (Word 97–2003) is not supported for generation or preview. Binar
 
 ## Coding agent
 
-Repo coding work is not a separate builtin. Profiles with the `coding-agent` skill invoke Codex, Claude Code, or OpenCode through `bash`. See [Coding agent](/coding-agent) for skill-driven install, multi-CLI choice, provider passthrough, and runtime behavior.
+Repo coding work is not a separate builtin. Profiles with the `coding-agent` skill invoke Codex, Claude Code, OpenCode, pi, or Cursor Agent through `bash`. See [Coding agent](/coding-agent) for skill-driven install, multi-CLI choice, provider passthrough, and runtime behavior.
 
 ## Tool reference
 
@@ -304,7 +304,7 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Returns:** `{ exitCode, stdout, stderr, timedOut }`
 
-**Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
+**Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 
@@ -410,7 +410,7 @@ All builtin tool IDs are protected and cannot be deleted from the dashboard.
 
 - [Org memory](/org-memory) — shared facts, admin UI, and API
 - [Skills](/skills) — bundled system skills and reusable profile procedures
-- [Coding agent](/coding-agent) — hand repo work to Codex, Claude Code, or OpenCode via `bash`
+- [Coding agent](/coding-agent) — hand repo work to Codex, Claude Code, OpenCode, pi, or Cursor Agent via `bash`
 - [Agent browser](/agent-browser) — interactive browsing via `bash` and the `agent-browser` skill
 - [Agent prompts](/agent-prompt) — how bundled system skills appear in the chat wrapper
 - [MCP servers](/mcp) — extend a profile with external tools via the Model Context Protocol
