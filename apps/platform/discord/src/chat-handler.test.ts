@@ -88,16 +88,16 @@ describe("createChatHandler artifact delivery", () => {
         orgStore,
       });
 
-      const { message, sentMessages, fileSendCalls } = createDmMessage({
+      const dm = createDmMessage({
         userId: "424242424242424242",
         content: "thanks",
       });
-      await handleMessage(message);
+      await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(1);
-      expect(fileSendCalls).toBe(1);
-      expect(sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
+      expect(dm.fileSendCalls).toBe(1);
+      expect(dm.sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
         false,
       );
     });
@@ -177,16 +177,16 @@ describe("createChatHandler artifact delivery", () => {
         orgStore,
       });
 
-      const { message, sentMessages, fileSendCalls } = createDmMessage({
+      const dm = createDmMessage({
         userId: "424242424242424242",
         content: "thanks",
       });
-      await handleMessage(message);
+      await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(0);
-      expect(fileSendCalls).toBe(0);
-      expect(sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
+      expect(dm.fileSendCalls).toBe(0);
+      expect(dm.sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
         true,
       );
     });
