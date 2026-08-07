@@ -30,6 +30,7 @@ export function createDefaultTestOrgs(): UserOrgSummary[] {
 export function createMockClient(
   options: {
     messages?: ChatMessage[];
+    questionnaire?: AgentQuestionnaire | null;
     profiles?: Array<{
       id: string;
       name?: string;
@@ -38,17 +39,22 @@ export function createMockClient(
       isSuper?: boolean;
     }>;
     orgs?: UserOrgSummary[];
+    onSendStream?: (input: unknown, handlers?: StreamHandlers) => Promise<string>;
   } = {},
 ) {
   const calls = {
     createSession: 0,
     sendStream: 0,
+    getSessionMessages: 0,
     publishProfileArtifactShare: 0,
     readProfileArtifactContent: 0,
   };
 
-  const sendStream = async () => {
+  const sendStream = async (input: unknown, handlers?: StreamHandlers) => {
     calls.sendStream += 1;
+    if (options.onSendStream) {
+      return options.onSendStream(input, handlers);
+    }
     return "Agent reply";
   };
 
@@ -77,6 +83,16 @@ export function createMockClient(
       return session;
     },
     createChatSession: () => session,
+    getSessionMessages: async () => {
+      calls.getSessionMessages += 1;
+      return {
+        channel: "discord" as const,
+        messages: options.messages ?? [],
+        messageMeta: [],
+        todos: [],
+        questionnaire: options.questionnaire ?? null,
+      };
+    },
     health: async () => ({ ok: true, providerConfigured: false }),
     listProfiles: async () =>
       parseListProfilesResponse({
