@@ -13,14 +13,10 @@ import {
   type TelegramSettingsResponse,
   type DiscordSettingsResponse,
   type ComposioSettingsResponse,
-  type CodingHarnessSettingsResponse,
-  type CodingHarnessInstallRequest,
   type AgentBrowserStatusResponse,
   type EmailSettingsResponse,
   type SendEmailTestRequest,
   type SendEmailTestResponse,
-  type VerifyCodingHarnessRequest,
-  type VerifyCodingHarnessResponse,
   type ThinkingSettingsResponse,
   type TimezoneSettingsResponse,
   type UpdateProviderRequest,
@@ -29,7 +25,6 @@ import {
   type UpdateDiscordSettingsRequest,
   type UpdateComposioSettingsRequest,
   type UpdateEmailSettingsRequest,
-  type UpdateCodingHarnessSettingsRequest,
   type UpdateThinkingRequest,
   type UpdateTimezoneRequest,
   type UpdateVisionRequest,
@@ -47,16 +42,15 @@ import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
 import { errorResponse, json, readJson, getRequestAuth } from "../shared";
 import { requireOrgAdminFromContext } from "../org-guards";
-import { installCodingAgentHarness } from "../../services/coding-agent-harness-service";
 import { installAgentBrowser } from "../../services/agent-browser-service";
-import { streamAgentBrowserInstall, streamCodingHarnessInstall } from "../coding-harness-install-stream";
+import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
 } from "../../services/external-model-catalog-service";
 
 export function registerModelRoutes(app: HonoApp, options: ServerOptions): void {
-  const { agent, workerManager, databaseAdapter } = options;
+  const { agent, workerManager } = options;
   const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
   const providerIdParam = z.object({
     providerId: z.string().openapi({ param: { name: "providerId", in: "path" } }),
@@ -87,17 +81,6 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   const discordSettingsSchema = z.object({}).passthrough().openapi("DiscordSettingsResponse");
   const composioSettingsSchema = z.object({}).passthrough().openapi("ComposioSettingsResponse");
   const emailSettingsSchema = z.object({}).passthrough().openapi("EmailSettingsResponse");
-  const codingHarnessSettingsSchema = z
-    .object({})
-    .passthrough()
-    .openapi("CodingHarnessSettingsResponse");
-  const codingHarnessInstallRequestSchema = z
-    .object({ harnessId: z.string() })
-    .openapi("CodingHarnessInstallRequest");
-  const codingHarnessInstallEventSchema = z
-    .object({})
-    .passthrough()
-    .openapi("CodingHarnessInstallEvent");
   const agentBrowserStatusSchema = z
     .object({})
     .passthrough()
@@ -109,18 +92,6 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   const sendEmailTestRequestSchema = z.object({ to: z.string().optional() }).openapi("SendEmailTestRequest");
   const sendEmailTestResponseSchema = z.object({ ok: z.literal(true), to: z.string(), messageId: z.string() }).openapi("SendEmailTestResponse");
   const updateEmailRequestSchema = z.object({}).passthrough().openapi("UpdateEmailSettingsRequest");
-  const updateCodingHarnessRequestSchema = z
-    .object({})
-    .passthrough()
-    .openapi("UpdateCodingHarnessSettingsRequest");
-  const verifyCodingHarnessRequestSchema = z
-    .object({})
-    .passthrough()
-    .openapi("VerifyCodingHarnessRequest");
-  const verifyCodingHarnessResponseSchema = z
-    .object({})
-    .passthrough()
-    .openapi("VerifyCodingHarnessResponse");
   const whatsappSettingsSchema = z.object({}).passthrough().openapi("WhatsAppSettingsResponse");
   const discoverModelsRequestSchema = z
     .object({
@@ -440,41 +411,6 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
   }));
   app.openAPIRegistry.registerPath(createRoute({
     method: "get",
-    path: "/v1/settings/coding-harnesses",
-    tags: ["Models"],
-    summary: "Get coding harness settings",
-    operationId: "getCodingHarnessSettings",
-    responses: { 200: { description: "Coding harness settings", content: { "application/json": { schema: codingHarnessSettingsSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "put",
-    path: "/v1/settings/coding-harnesses",
-    tags: ["Models"],
-    summary: "Update coding harness settings",
-    operationId: "setCodingHarnessSettings",
-    request: { body: { required: true, content: { "application/json": { schema: updateCodingHarnessRequestSchema } } } },
-    responses: { 200: { description: "Coding harness settings", content: { "application/json": { schema: codingHarnessSettingsSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/settings/coding-harnesses/verify",
-    tags: ["Models"],
-    summary: "Verify a coding harness",
-    operationId: "verifyCodingHarness",
-    request: { body: { required: false, content: { "application/json": { schema: verifyCodingHarnessRequestSchema } } } },
-    responses: { 200: { description: "Coding harness verification", content: { "application/json": { schema: verifyCodingHarnessResponseSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/settings/coding-harnesses/install",
-    tags: ["Models"],
-    summary: "Install a coding harness",
-    operationId: "installCodingHarness",
-    request: { body: { required: true, content: { "application/json": { schema: codingHarnessInstallRequestSchema } } } },
-    responses: { 200: { description: "Coding harness install stream", content: { "application/json": { schema: codingHarnessInstallEventSchema } } }, 400: { description: "Error", content: { "application/json": { schema: errorSchema } } }, 403: { description: "Forbidden", content: { "application/json": { schema: errorSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
     path: "/v1/settings/agent-browser",
     tags: ["Models"],
     summary: "Get agent-browser readiness",
@@ -713,70 +649,6 @@ export function registerModelRoutes(app: HonoApp, options: ServerOptions): void 
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);
     }
-  });
-
-  app.get("/v1/settings/coding-harnesses", async (c) => {
-    requireOrgAdminFromContext(c);
-    return json<CodingHarnessSettingsResponse>(await agent.getCodingHarnessSettings());
-  });
-
-  app.put("/v1/settings/coding-harnesses", async (c) => {
-    requireOrgAdminFromContext(c);
-    const body = await readJson<UpdateCodingHarnessSettingsRequest>(c.req.raw);
-
-    try {
-      return json<CodingHarnessSettingsResponse>(await agent.setCodingHarnessSettings(body));
-    } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 400);
-    }
-  });
-
-  app.post("/v1/settings/coding-harnesses/verify", async (c) => {
-    requireOrgAdminFromContext(c);
-    const body = await readJson<VerifyCodingHarnessRequest>(c.req.raw).catch(
-      () => ({} as VerifyCodingHarnessRequest),
-    );
-
-    try {
-      return json<VerifyCodingHarnessResponse>(await agent.verifyCodingHarness(body.harnessId));
-    } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      return errorResponse(message, 400);
-    }
-  });
-
-  app.post("/v1/settings/coding-harnesses/install", async (c) => {
-    requireOrgAdminFromContext(c);
-    const body = await readJson<CodingHarnessInstallRequest>(c.req.raw);
-
-    if (!databaseAdapter) {
-      return errorResponse("Database adapter is not configured.", 500);
-    }
-
-    return streamCodingHarnessInstall(async (send) => {
-      const status = await installCodingAgentHarness(databaseAdapter, body.harnessId, (progress) => {
-        send({
-          type: "progress",
-          harnessId: progress.harnessId,
-          name: progress.name,
-          message: progress.message,
-        });
-      });
-
-      send({
-        type: "done",
-        status,
-      });
-    }, {
-      timeoutMessage: "Install timed out while waiting for the coding harness installer.",
-    });
   });
 
   app.get("/v1/settings/agent-browser", async (c) => {

@@ -327,7 +327,7 @@ describe("profile service assignSkill", () => {
     }
   });
 
-  test("blocks coding-agent until a coding harness is ready", async () => {
+  test("assigns coding-agent without requiring a ready coding harness", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-assign-skill-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     process.env.PATH = tempConfigDir;
@@ -352,11 +352,13 @@ describe("profile service assignSkill", () => {
     const service = new ProfileService(db);
     const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
 
-    await expect(
-      service.assignSkill(ORG_ID, created.profile.id, {
-        skillId: "skill_coding_delegation",
-      }),
-    ).rejects.toThrow(/configure a ready coding agent harness/i);
+    const updated = await service.assignSkill(ORG_ID, created.profile.id, {
+      skillId: "skill_coding_delegation",
+    });
+
+    expect(updated.profile.skills.some((skill) => skill.id === "skill_coding_delegation")).toBe(
+      true,
+    );
   });
 });
 

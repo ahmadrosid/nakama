@@ -47,7 +47,6 @@ import {
   writeRuntimeServerUrl,
 } from "@nakama/core";
 import {
-  serverHasCodingHarnessVerify,
   serverHasTaskChat,
 } from "@nakama/core/ensure-server";
 import { ensureBundledSkillFiles } from "@nakama/core";
@@ -349,11 +348,9 @@ async function findRunningNakamaServerUrl(
       apiVersion?: number;
     };
     const hasTaskChat = await serverHasTaskChat(serverUrl, controller.signal);
-    const hasCodingHarnessVerify = await serverHasCodingHarnessVerify(serverUrl, controller.signal);
     return payload.ok === true &&
       payload.apiVersion === NAKAMA_API_VERSION &&
-      hasTaskChat &&
-      hasCodingHarnessVerify
+      hasTaskChat
       ? serverUrl
       : null;
   } catch {

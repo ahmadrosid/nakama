@@ -71,7 +71,7 @@ Good starting patterns:
 - **Knowledge bot**: `knowledge_base_search`, file tools, bundled system skills
 - **Ops bot**: file tools, bundled `save-artifact` skill, `email`
 - **Delegation bot**: `sub_agent` for in-process research/review/planning subtasks
-- **Coding agent (Super Bot or custom)**: `bash`, `coding-agent` skill, plus a configured harness in Integrations
+- **Coding agent (Super Bot or custom)**: `bash` + `coding-agent` skill
 
 ## Memory workflows
 
@@ -106,7 +106,7 @@ Legacy `.doc` (Word 97–2003) is not supported for generation or preview. Binar
 
 ## Coding agent
 
-Repo coding work is not a separate builtin. Profiles with the `coding-agent` skill invoke Codex, Claude Code, or OpenCode through `bash`. You can also launch a harness directly with `bun run dev:cli -- launch`. See [Coding agent](/coding-agent) for setup, provider passthrough, CLI flags, and runtime behavior.
+Repo coding work is not a separate builtin. Profiles with the `coding-agent` skill invoke Codex, Claude Code, or OpenCode through `bash`. See [Coding agent](/coding-agent) for skill-driven install, multi-CLI choice, provider passthrough, and runtime behavior.
 
 ## Tool reference
 
@@ -300,11 +300,11 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 | `cwd` | string | No | Working directory within the profile workspace |
 | `timeoutMs` | number | No | Default 30000, max 1800000 (30 minutes) |
 | `env` | object | No | Extra env vars merged at spawn time (string values) |
-| `codingAgent` | boolean | No | When true, Nakama merges coding-agent spawn env (gateway routing) for this command |
+| `codingAgent` | boolean | No | When true, Nakama merges coding-agent spawn env for a command that starts with a known harness binary |
 
 **Returns:** `{ exitCode, stdout, stderr, timedOut }`
 
-**Coding-agent spawn env:** When `codingAgent: true` (or the command matches the active harness binary), Nakama merges provider passthrough env vars on the server before spawn. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
+**Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 

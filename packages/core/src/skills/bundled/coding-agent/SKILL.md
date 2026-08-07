@@ -12,17 +12,42 @@ Keep ordinary conversation local:
 - Do not invoke the coding agent just because the topic is technical.
 - If the user only wants advice or an explanation, answer directly.
 
+## Prerequisites
+
+- This profile must have the **`bash`** tool assigned.
+- A coding agent CLI must be installed on the **Nakama server host** (Codex, Claude Code, OpenCode, or pi).
+
+Install with `bash` when missing (global installs affect the whole host — confirm with the operator on shared servers):
+
+```bash
+npm install -g @openai/codex
+npm install -g @anthropic-ai/claude-code
+npm install -g opencode-ai
+npm install -g @earendil-works/pi-coding-agent
+```
+
+(or the equivalent `bun install -g --trust …` if npm is unavailable)
+
+If the injected **Coding Agent Harness** context lists install commands, follow those. After install, retry the coding task.
+
+## Choosing a backend
+
+1. Read the injected **Coding Agent Harness** context.
+2. If it says **multiple** CLIs are installed, **ask the user which one to use** before running. Do not pick silently. Remember their choice for this conversation only.
+3. If exactly one CLI is available (or the context includes a single command template), use that backend.
+4. If none are installed, install via bash (above), then continue.
+
 ## Coding agent workflow
 
-When repo work should run on a coding agent, use the `bash` tool to run the configured CLI. The turn context includes harness details and a command template — follow that template unless the user explicitly requests a different backend.
+When repo work should run on a coding agent, use the `bash` tool to run the CLI:
 
-1. Read the injected **Coding Agent Harness** context for the selected backend and command template.
+1. Follow the injected harness context / command template for the chosen backend when present.
 2. Summarize the coding task in one concrete instruction block.
 3. Include only the context the coding agent needs: target behavior, affected files or areas when known, constraints, and what should be verified.
-4. Build the shell command from the template, substituting your task prompt. Escape quotes carefully or use a heredoc when the prompt is multi-line.
-5. Call `bash` with `codingAgent: true` (or a command that starts with the harness binary) so Nakama merges provider passthrough spawn env when configured. Use an explicit `timeoutMs` suited to the task — use 600000–1800000 ms (10–30 minutes) for substantial coding runs; keep shorter timeouts for quick checks.
+4. Build the shell command from the template (or backend guidance), substituting your task prompt. Escape quotes carefully or use a heredoc when the prompt is multi-line.
+5. Call `bash` with `codingAgent: true` **and** a command that starts with the harness binary (`codex`, `claude`, `opencode`, or `pi`) so Nakama merges provider passthrough spawn env. Use an explicit `timeoutMs` suited to the task — use 600000–1800000 ms (10–30 minutes) for substantial coding runs; keep shorter timeouts for quick checks.
 6. Prefer precise change requests over broad open-ended prompts.
-7. If there is a preferred backend or workflow constraint from the user, pass it through.
+7. If the user names a preferred backend, use that CLI.
 
 After the coding agent returns:
 

@@ -78,15 +78,10 @@ import type {
   TelegramSettingsResponse,
   DiscordSettingsResponse,
   ComposioSettingsResponse,
-  CodingHarnessSettingsResponse,
-  CodingHarnessInstallRequest,
-  CodingHarnessStatus,
   AgentBrowserStatusResponse,
   EmailSettingsResponse,
   SendEmailTestRequest,
   SendEmailTestResponse,
-  VerifyCodingHarnessRequest,
-  VerifyCodingHarnessResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
@@ -102,9 +97,6 @@ import type {
   UpdateDiscordSettingsRequest,
   UpdateComposioSettingsRequest,
   UpdateEmailSettingsRequest,
-  UpdateCodingHarnessSettingsRequest,
-  PrepareCodingAgentLaunchRequest,
-  CodingAgentLaunchPlanResponse,
   ComposioConnectRequest,
   ComposioConnectResponse,
   ComposioToolkitSummary,
@@ -185,7 +177,6 @@ import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
 import {
-  readCodingHarnessInstallStream,
   readAgentBrowserInstallStream,
   normalizeStreamHandlers,
   readStreamEvents,
@@ -1414,58 +1405,6 @@ export class NakamaClient {
     });
   }
 
-  async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
-    return this.request<CodingHarnessSettingsResponse>("/v1/settings/coding-harnesses");
-  }
-
-  async setCodingHarnessSettings(
-    request: UpdateCodingHarnessSettingsRequest,
-  ): Promise<CodingHarnessSettingsResponse> {
-    return this.request<CodingHarnessSettingsResponse>("/v1/settings/coding-harnesses", {
-      method: "PUT",
-      body: JSON.stringify(request),
-    });
-  }
-
-  async verifyCodingHarness(
-    request: VerifyCodingHarnessRequest,
-  ): Promise<VerifyCodingHarnessResponse> {
-    return this.request<VerifyCodingHarnessResponse>("/v1/settings/coding-harnesses/verify", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
-
-  async installCodingHarness(
-    request: CodingHarnessInstallRequest,
-    handlers: {
-      onProgress?: (message: string) => void;
-      onDone?: (status: CodingHarnessStatus) => void;
-    } = {},
-    options?: { signal?: AbortSignal },
-  ): Promise<CodingHarnessStatus> {
-    const response = await this.fetchImpl(`${this.baseUrl}/v1/settings/coding-harnesses/install`, {
-      method: "POST",
-      headers: this.buildHeaders("POST", {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      }),
-      body: JSON.stringify(request),
-      signal: options?.signal,
-      credentials: this.credentials,
-    });
-
-    if (!response.ok) {
-      throw await createApiError(response, "/v1/settings/coding-harnesses/install");
-    }
-
-    if (!response.body) {
-      throw new Error("Server returned an empty stream.");
-    }
-
-    return readCodingHarnessInstallStream(response.body, handlers, options?.signal);
-  }
-
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
     return this.request<AgentBrowserStatusResponse>("/v1/settings/agent-browser");
   }
@@ -1495,15 +1434,6 @@ export class NakamaClient {
     }
 
     return readAgentBrowserInstallStream(response.body, handlers, options?.signal);
-  }
-
-  async prepareCodingAgentLaunch(
-    request: PrepareCodingAgentLaunchRequest,
-  ): Promise<CodingAgentLaunchPlanResponse> {
-    return this.request<CodingAgentLaunchPlanResponse>("/v1/coding-agents/prepare-launch", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {

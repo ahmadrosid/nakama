@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   buildCodingHarnessInstallPlan,
+  inferCodingAgentHarnessKind,
   isCodingAgentCommand,
   listCodingAgentHarnessStatuses,
   refreshCodingAgentHarnessProbe,
@@ -18,6 +19,17 @@ describe("coding-agent harness resolution", () => {
     expect(isCodingAgentCommand("claude --print 'task'", [{ command: "claude", enabled: false }])).toBe(
       false,
     );
+  });
+
+  test("infers harness kind from argv0", () => {
+    const harnesses = [
+      { kind: "claude_code" as const, command: "claude", enabled: true },
+      { kind: "codex" as const, command: "codex", enabled: true },
+    ];
+
+    expect(inferCodingAgentHarnessKind("codex exec 'task'", harnesses)).toBe("codex");
+    expect(inferCodingAgentHarnessKind("claude -p 'task'", harnesses)).toBe("claude_code");
+    expect(inferCodingAgentHarnessKind("npm install -g @openai/codex", harnesses)).toBeNull();
   });
 
   test("buildCodingHarnessInstallPlan can use bun when npm is unavailable", () => {

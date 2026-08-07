@@ -319,24 +319,27 @@ export async function saveCodingAgentWorkspaceSettings(
   };
 }
 
+function matchesHarnessBinary(command: string, binary: string): boolean {
+  const trimmed = command.trim();
+  const harnessBinary = binary.trim();
+
+  if (!harnessBinary) {
+    return false;
+  }
+
+  return trimmed === harnessBinary || trimmed.startsWith(`${harnessBinary} `);
+}
+
 export function isCodingAgentCommand(
   command: string,
   harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>,
 ): boolean {
-  const trimmed = command.trim();
-
   for (const harness of harnesses) {
     if (!harness.enabled) {
       continue;
     }
 
-    const binary = harness.command.trim();
-
-    if (!binary) {
-      continue;
-    }
-
-    if (trimmed === binary || trimmed.startsWith(`${binary} `)) {
+    if (matchesHarnessBinary(command, harness.command)) {
       return true;
     }
   }
@@ -344,12 +347,37 @@ export function isCodingAgentCommand(
   return false;
 }
 
+/** First enabled harness whose configured command matches argv0 / prefix. */
+export function inferCodingAgentHarnessKind(
+  command: string,
+  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "kind" | "command" | "enabled">>,
+): StoredCodingAgentHarnessKind | null {
+  for (const harness of harnesses) {
+    if (!harness.enabled) {
+      continue;
+    }
+
+    if (matchesHarnessBinary(command, harness.command)) {
+      return harness.kind;
+    }
+  }
+
+  return null;
+}
+
+/** Light PATH discovery — installed harnesses without requiring a saved selection. */
+export async function listInstalledCodingAgentHarnesses(
+  db: DatabaseAdapter,
+): Promise<CodingAgentHarnessStatus[]> {
+  const statuses = await listCodingAgentHarnessStatuses(db);
+  return statuses.filter((harness) => harness.enabled && harness.installed);
+}
+
 export async function resolveCodingAgentHarness(
   db: DatabaseAdapter,
   preferredKind?: StoredCodingAgentHarnessKind | null,
   probeContext?: CodingAgentHarnessProbeContext,
 ): Promise<CodingAgentHarnessStatus> {
-  const settings = await loadCodingAgentWorkspaceSettings(db);
   const statuses = await listCodingAgentHarnessStatuses(db);
   const enabled = statuses.filter((harness) => harness.enabled);
 
@@ -388,19 +416,21 @@ export async function resolveCodingAgentHarness(
     return ensureReady(preferred);
   }
 
-  if (!settings.selectedHarnessId) {
+  const installed = enabled.filter((harness) => harness.installed);
+
+  if (installed.length === 1) {
+    return ensureReady(installed[0]!);
+  }
+
+  if (installed.length > 1) {
     throw new Error(
-      "No coding agent harness is selected. Choose one in workspace settings before using a coding agent.",
+      "Multiple coding agents are installed. Ask the user which one to use, then run that CLI via bash.",
     );
   }
 
-  const selected = enabled.find((harness) => harness.id === settings.selectedHarnessId);
-
-  if (!selected) {
-    throw new Error("The selected coding agent harness is unavailable or disabled.");
-  }
-
-  return ensureReady(selected);
+  throw new Error(
+    "No coding agent CLI is installed on this host. Install one via bash using the skill Prerequisites, then retry.",
+  );
 }
 
 export async function verifyCodingAgentHarness(

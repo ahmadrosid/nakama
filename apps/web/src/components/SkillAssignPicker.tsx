@@ -5,12 +5,10 @@ import {
 } from "@nakama/core/skills/bundled-names";
 import { CheckIcon, DownloadIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
-import { Link } from "react-router-dom";
 import {
   useAgentBrowserSettings,
   useInstallAgentBrowser,
 } from "@/hooks/use-agent-browser-settings";
-import { useCodingHarnessSettings } from "@/hooks/use-coding-harness-settings";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -147,23 +145,6 @@ function AgentBrowserPrerequisitesNotice({
       {installError ? (
         <p className="min-w-0 break-words text-destructive">{installError}</p>
       ) : null}
-    </div>
-  );
-}
-
-function CodingHarnessPrerequisitesNotice() {
-  return (
-    <div className="border-b border-border/60 px-6 py-3 text-xs text-amber-600 dark:text-amber-300">
-      Install and verify a coding agent in Integrations before assigning this skill.
-      <Button
-        type="button"
-        variant="link"
-        size="sm"
-        className="ml-1 h-auto px-0 py-0 text-amber-700 dark:text-amber-200"
-        render={<Link to="/integrations?section=coding-agents" />}
-      >
-        Open Integrations
-      </Button>
     </div>
   );
 }
@@ -442,7 +423,6 @@ export function SkillAssignPicker({
 
   const librarySkills = skills.filter((skill) => !runtimeOnlySkillNames.has(skill.name));
   const hasAgentBrowserSkill = librarySkills.some((skill) => skill.name === AGENT_BROWSER_SKILL_NAME);
-  const { data: codingHarnessSettings } = useCodingHarnessSettings(open);
   const { data: agentBrowserSettings } = useAgentBrowserSettings(open && hasAgentBrowserSkill);
   const installAgentBrowserMutation = useInstallAgentBrowser();
 
@@ -461,12 +441,8 @@ export function SkillAssignPicker({
     );
   }
 
-  function isCommandItemDisabled(skill: SkillSummary): boolean {
+  function isCommandItemDisabled(): boolean {
     if (disabled) {
-      return true;
-    }
-
-    if (skill.name === "coding-agent" && codingHarnessSettings?.configured === false) {
       return true;
     }
 
@@ -475,10 +451,7 @@ export function SkillAssignPicker({
   }
 
   function isSkillDisabled(skill: SkillSummary): boolean {
-    return (
-      (skill.name === "coding-agent" && codingHarnessSettings?.configured === false) ||
-      isAgentBrowserDisabled(skill)
-    );
+    return isAgentBrowserDisabled(skill);
   }
 
   function agentBrowserRowAction(skill: SkillSummary): AgentBrowserRowAction {
@@ -630,10 +603,6 @@ export function SkillAssignPicker({
                 />
               ) : null}
 
-              {codingHarnessSettings?.configured === false ? (
-                <CodingHarnessPrerequisitesNotice />
-              ) : null}
-
               <Command className="min-w-0 rounded-none bg-transparent">
                 <div className="min-w-0 border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
                   <CommandInput placeholder="Search skills…" />
@@ -649,7 +618,7 @@ export function SkillAssignPicker({
                           skill={skill}
                           disabled={disabled}
                           agentBrowserDisabled={isAgentBrowserDisabled(skill)}
-                          commandItemDisabled={isCommandItemDisabled(skill)}
+                          commandItemDisabled={isCommandItemDisabled()}
                           skillDisabled={isSkillDisabled(skill)}
                           rowAction={agentBrowserRowAction(skill)}
                           assigningBash={assigningBash}

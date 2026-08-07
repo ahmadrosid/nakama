@@ -1,20 +1,20 @@
 ---
 title: "Coding Agent"
-description: "Launch Codex, Claude Code, or OpenCode from Nakama chat or the CLI, with optional provider passthrough from your Nakama LLM provider."
+description: "Hand off coding tasks to Codex, Claude Code, or OpenCode from Nakama chat, with optional provider passthrough from your Nakama LLM provider."
 ---
 
 A Nakama profile is a general-purpose agent: it chats, explains, uses file tools, and follows your soul and skills. For **real coding work** — multi-file features, refactors, test fixes, repo-wide changes — a dedicated **coding agent** (Codex, Claude Code, or OpenCode) usually does better.
 
-Nakama's coding-agent feature keeps you in the same chat while handing those tasks to the selected CLI on the server. The Nakama agent orchestrates; the coding agent executes.
+Nakama keeps you in the same chat while handing those tasks to a CLI on the server. The Nakama agent orchestrates; the coding agent executes.
 
 The mental model:
 
 - The user still talks to Nakama
 - Nakama recognizes when the request is coding work, not casual explanation
-- Nakama runs the configured coding-agent CLI through the `bash` tool
+- Nakama runs a coding-agent CLI through the `bash` tool
 - Nakama summarizes stdout/stderr and continues the conversation
 
-There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill + a configured coding-agent harness** in Integrations.
+There is no separate delegate builtin for **repo coding work**. That workflow is **`bash` + the `coding-agent` skill**. Setup happens in chat: the agent can install missing CLIs and asks which backend to use when more than one is available.
 
 For **general in-process delegation** (research, review, planning), Nakama also offers the optional [`sub_agent`](/builtin-tools#sub_agent) tool — a same-profile sub-agent that returns a structured result. It does not spawn external CLIs and is not a substitute for Codex / Claude Code / OpenCode on large repo changes.
 
@@ -32,15 +32,15 @@ Dedicated coding agents are built for that job. Nakama adds this feature so you 
 
 | Piece | Role |
 |-------|------|
-| **Coding-agent harness** | Workspace setting: which CLI is installed, authenticated, and selected |
-| **`coding-agent` skill** | Teaches when to invoke a coding agent, how to build the `bash` command, and how to summarize results |
+| **`coding-agent` skill** | Teaches when to invoke a coding agent, how to install CLIs, when to ask which backend, and how to summarize results |
 | **`bash` tool** | Runs the coding-agent CLI in the profile workspace |
+| **Runtime discovery** | Nakama detects which CLIs are on the server `PATH` and injects harness context for the turn |
 | **Backend guidance** | Runtime-only bundled skills (`coding-backend-codex`, `coding-backend-claude-code`, `coding-backend-opencode`) injected on matched turns |
 
 ```text
 User message (coding task)
   → skill matcher activates coding-agent
-  → Nakama injects harness context + backend CLI guidance
+  → Nakama injects discovery context (install / one backend / ask when multiple)
   → Nakama agent calls bash with the coding-agent command
   → Nakama agent summarizes the result for the user
 ```
@@ -49,30 +49,37 @@ See [Agent prompts](/agent-prompt) for where harness context lands in the prompt
 
 ## Supported coding agents
 
-Nakama supports three CLI-backed harnesses on the machine running the server:
+Nakama supports CLI-backed backends on the machine running the server:
 
 | Agent | Default command | Typical use |
 |-------|-----------------|-------------|
 | **Codex** | `codex` | OpenAI Codex CLI one-shot `exec` runs |
 | **Claude Code** | `claude` | Anthropic Claude Code print mode (`-p`) |
 | **OpenCode** | `opencode` | Provider-agnostic OpenCode `run` |
-
-Harness command paths can be overridden in Integrations when the binary is not on the default `PATH`.
+| **pi** | `pi` | pi coding agent CLI |
 
 ## Setup
 
-### 1. Configure a coding-agent harness
+### 1. Assign tools and skills to the profile
 
-Platform admins open **Integrations → Coding agents** in the dashboard (`/integrations?section=coding-agents`).
+| Requirement | Super Bot | Other profiles |
+|-------------|-----------|----------------|
+| `bash` | Assigned by default | Assign manually |
+| `coding-agent` skill | Assigned by default | Assign manually |
 
-For each backend:
+You can assign `coding-agent` without pre-installing a CLI. The first coding turn installs or chooses a backend as needed.
 
-1. **Select** the coding agent Nakama should prefer
-2. **Install** the CLI on the server if it is missing (Nakama can run the documented global npm install from the UI)
-3. **Verify** readiness — Nakama checks that the binary runs and is authenticated
-4. **Save** workspace settings
+Assigning **`bash` + `coding-agent`** means the agent can run global package installs on the **server host**. On shared servers, treat that assignment as host-install capability.
 
-Until at least one harness is installed, verified, and **saved as the active selection**, coding-agent workflows are unavailable.
+### 2. Chat from a profile with coding-agent access
+
+When the user's message looks like a code-change request, the skill matcher attaches the full `coding-agent` body plus harness context for that turn:
+
+- **No CLI installed** — context lists install commands; the agent can install via `bash`, then retry
+- **One CLI installed** — context includes that backend's command template
+- **Multiple CLIs installed** — the agent asks which one to use (per conversation) before running
+
+Use an appropriate `bash` `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
 
 ### Provider passthrough
 
@@ -87,80 +94,18 @@ Nakama injects your configured LLM provider credentials at coding-agent spawn ti
 **Requirements:**
 
 - A compatible provider configured in Nakama (Settings → Provider)
-- Provider passthrough enabled in Integrations → Coding agents (default: on)
 - Claude Code requires an **Anthropic** provider; Codex and OpenCode support OpenAI-compatible providers (OpenAI, OpenRouter, DeepSeek, etc.)
 
 The `bash` tool merges spawn env when:
 
-- `codingAgent: true` is set on the bash call, or
-- the command starts with the active harness binary (auto-detection)
+- the command starts with a known harness binary (`codex`, `claude`, `opencode`, or `pi`), or
+- `codingAgent: true` is set **and** the command starts with a known harness binary
 
-`nakama launch` always requests a launch plan from the server, which includes the same spawn env (full secrets only for local-token CLI auth).
+If `codingAgent: true` is set but the command does not start with a known binary, Nakama fails closed (no provider env merge) so the wrong credentials are never applied.
 
-**Compatibility:** Integrations → Coding agents shows whether passthrough is active for the selected harness. Incompatible provider/harness pairs show a warning with a link to Settings → Provider.
+Passthrough follows the **binary in the command**, not a dashboard selection.
 
-**Readiness checks:** Opening Integrations or loading harness settings runs a light check (binary on `PATH` + provider passthrough active). Use **Run readiness check** to run a deeper exec probe that spawns the harness with passthrough env. `configured` and `activeHarnessId` reflect only the **selected** harness — Nakama does not fall back to another ready harness.
-
-**Security:** Passthrough injects the real org provider API key into subprocess env on the host. Use on trusted single-tenant machines only.
-
-### 2. Assign tools and skills to the profile
-
-| Requirement | Super Bot | Other profiles |
-|-------------|-----------|----------------|
-| `bash` | Assigned by default | Assign manually |
-| `coding-agent` skill | Assigned by default | Assign manually |
-
-Nakama blocks assigning `coding-agent` until a harness is ready. The skill picker links to Integrations when setup is incomplete.
-
-### 3. Chat from a profile with coding-agent access
-
-When the user's message looks like a code-change request, the skill matcher attaches the full `coding-agent` body plus harness context for that turn. The agent should call `bash` with an appropriate `timeoutMs` (often 10–30 minutes for large tasks; see [bash](/builtin-tools#bash)).
-
-## Launch directly (CLI)
-
-Power users can spawn an interactive coding agent from the terminal without going through chat:
-
-```bash
-bun run dev:cli -- launch claude
-```
-
-The CLI ensures the server is running, resolves org context, builds a launch plan via `POST /v1/coding-agents/prepare-launch`, and `exec`s the harness binary with merged spawn env.
-
-### Flags
-
-| Flag | Purpose |
-|------|---------|
-| `--org ID` | Organization for `X-Org-Id` (required when you belong to multiple orgs) |
-| `--profile ID` | Profile for provider/model routing (aliases: `super_bot`, `super-bot`, `Super Bot`) |
-| `--model MODEL` | Override the profile model for this launch |
-| `--cwd DIR` | Working directory (defaults to your current shell directory) |
-| `--yes` | Skip the profile picker when no `--profile` is set |
-| `--save-harness` | Persist the selected harness in Integrations (org admins only) |
-| `-- ARGS...` | Forward args to the coding CLI (for example one-shot `claude -p "task"`) |
-
-Org and profile preferences are saved in `~/.nakama/cli.ini` (`org_id`, `profile_id`). You can also set `NAKAMA_ORG_ID` in the environment.
-
-### Examples
-
-```bash
-# Interactive Claude Code in the current directory
-bun run dev:cli -- launch claude --org org_abc --profile "Super Bot"
-
-# One-shot print mode
-bun run dev:cli -- launch claude --org org_abc --profile super_bot -- --print "fix failing tests"
-
-# Codex with an explicit model override
-bun run dev:cli -- launch codex --model gpt-4.1 -- --help
-```
-
-### Verify provider passthrough
-
-After launch, the CLI prints either:
-
-- `Provider passthrough enabled (Anthropic / claude-sonnet-4-6)` — the harness should **not** ask for `/login`
-- A warning that passthrough is not active — configure a compatible provider in Settings → Provider
-
-Coding agents always use Nakama provider passthrough; harness-native vendor login (`claude /login`, etc.) is not supported yet.
+**Security:** Passthrough injects the real org provider API key into subprocess env on the host. Use on trusted machines only.
 
 ## When to use a coding agent vs Nakama alone
 
@@ -184,17 +129,18 @@ The `coding-agent` skill description is tuned so explain-only messages do not au
 
 On a matched turn, Nakama injects:
 
-- **Harness context** — selected coding agent and a shell command template
-- **Backend guidance** — CLI flags, auth notes, and safety patterns for that agent only
+- **Harness context** — installed backends, install hints, or a shell command template
+- **Backend guidance** — CLI flags, auth notes, and safety patterns for the active backend when a single template applies
 
 The Nakama agent then:
 
-1. Builds the shell command from the template and the task prompt
-2. Calls `bash` with `codingAgent: true` (or a harness-shaped command) and a long timeout when needed
-3. Reads stdout/stderr from the coding agent
-4. Summarizes what changed, what was verified, and any follow-up risks
+1. Asks which backend to use when multiple CLIs are installed (unless the user already chose in this chat)
+2. Builds the shell command from the template and the task prompt
+3. Calls `bash` with `codingAgent: true` and a harness-shaped command, with a long timeout when needed
+4. Reads stdout/stderr from the coding agent
+5. Summarizes what changed, what was verified, and any follow-up risks
 
-Runs execute in the **active profile workspace** when delegated from chat (`~/.nakama/orgs/{orgId}/profiles/{profileId}/`). `nakama launch` defaults to your **current shell directory** unless you pass `--cwd`. When provider passthrough is active, spawn env routes API calls to your Nakama-configured provider using the selected profile's model; otherwise the coding CLI uses vendor auth configured on the host.
+Runs execute in the **active profile workspace** (`~/.nakama/orgs/{orgId}/profiles/{profileId}/`). When provider passthrough is active, spawn env routes API calls to your Nakama-configured provider using the selected profile's model.
 
 ## Safety boundaries
 
@@ -202,32 +148,30 @@ Runs execute in the **active profile workspace** when delegated from chat (`~/.n
 - File tools remain scoped to the profile workspace; the coding-agent path does not bypass path guards
 - Do not use `bash` to create persistent `.sh` tool wrappers — register JavaScript tools under `~/.nakama/tools/` instead
 - Coding agents may write broadly inside the workspace or repo they are pointed at; use narrow task prompts and review results before committing or shipping
+- Global CLI installs affect the whole host; confirm with the operator on shared deployments
 
 ## Permissions
 
-| Actor | Configure harnesses | Assign `coding-agent` | Use coding agent in chat | `nakama launch` |
-|-------|---------------------|----------------------------|--------------------------|-----------------|
-| Platform admin | Yes | Yes | Yes | Yes |
-| Org admin | No | No | Yes (on assigned profiles) | Yes |
-| Org member | No | No | Yes | Yes |
-| Org viewer | No | No | No | No |
+| Actor | Assign `coding-agent` | Use coding agent in chat |
+|-------|------------------------|--------------------------|
+| Platform admin | Yes | Yes |
+| Org admin | No (platform-admin skill assignment) | Yes (on assigned profiles) |
+| Org member | No | Yes |
+| Org viewer | No | No |
 
-Harness settings are deployment-wide. Tool and skill assignment remain per profile.
+Tool and skill assignment remain per profile.
 
 ## Troubleshooting
 
 | Symptom | What to check |
 |---------|----------------|
-| Skill cannot be assigned | Open Integrations → Coding agents; install and verify a harness |
+| Agent offers to install a CLI | Expected when none are on the server `PATH` — approve global install only if you operate that host |
+| Nakama asks which coding agent to use | Multiple CLIs are installed; answer for this conversation |
 | Nakama explains instead of coding | Message may not match the skill; ask for an explicit repo change |
-| `nakama launch` returns Not found | Restart `bun run dev:server` after upgrading — stale server missing `/v1/coding-agents/prepare-launch` |
-| `nakama launch` returns Forbidden | Use `--org` with your org id; ensure you are not an org viewer |
-| Unknown profile `super_bot` | Use `Super Bot`, `super-bot`, or the profile id from the dashboard — Super Bot's id is not always literally `super_bot` |
-| CLI fails immediately | Binary missing from `PATH`, auth incomplete, or wrong harness selected |
-| Claude Code asks for `/login` | Provider passthrough off or spawn env not applied — restart `dev:server`; launch output should say passthrough is active; check Settings → Provider |
-| Provider passthrough inactive / no provider | Configure a compatible model provider in Nakama Settings for the launch profile |
+| Claude Code asks for `/login` | Provider passthrough not applied — ensure Settings → Provider is compatible and the bash command starts with `claude` |
+| Provider passthrough inactive / no provider | Configure a compatible model provider in Nakama Settings for the profile |
 | Run times out | Increase `bash` `timeoutMs`; split the task into smaller coding-agent runs |
-| Changes land outside the workspace | Command `cwd` or backend `--dir` may point outside the profile tree; `nakama launch` uses your shell cwd by default |
+| Changes land outside the workspace | Command `cwd` or backend `--dir` may point outside the profile tree |
 
 ## Next steps
 

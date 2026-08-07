@@ -79,7 +79,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         id: "integrations",
         label: "Integrations",
-        description: "Bridges, Composio, and coding agents",
+        description: "Bridges and Composio",
       },
       {
         id: "soul",

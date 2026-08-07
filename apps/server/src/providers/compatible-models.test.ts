@@ -1,9 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
+  fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
   mergeOpenRouterCatalog,
 } from "./compatible-models";
+
+let mockServer: ReturnType<typeof serve> | undefined;
+
+afterEach(() => {
+  mockServer?.stop(true);
+  mockServer = undefined;
+});
 
 describe("mergeOpenRouterCatalog", () => {
   test("merges custom display names over static entries", () => {
@@ -272,4 +281,49 @@ describe("compatibleModelSupportsThinking", () => {
       ]),
     ).toBe(false);
   });
+});
+
+describe("fetchRemoteOpenAIModels auth errors", () => {
+  for (const status of [401, 403] as const) {
+    test(`names the API key remedy for ${status} without upstream body`, async () => {
+      const upstreamBody = JSON.stringify({
+        error: "API key required for remote API access",
+      });
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+      mockServer = serve({
+        port: 0,
+        fetch() {
+          return new Response(upstreamBody, {
+            status,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      });
+
+      const baseUrl = `http://127.0.0.1:${mockServer.port}/v1`;
+
+      try {
+        await fetchRemoteOpenAIModels(baseUrl, "");
+        expect.unreachable("expected discovery to fail");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        const message = (error as Error).message;
+        expect(message).toContain("API key");
+        expect(message).not.toContain(upstreamBody);
+        expect(message).not.toContain("API key required for remote API access");
+      }
+
+      expect(
+        warn.mock.calls.some(
+          (args) =>
+            typeof args[0] === "string" &&
+            args[0].includes("Could not fetch models") &&
+            String(args[1] ?? args[0]).includes(upstreamBody),
+        ),
+      ).toBe(true);
+
+      warn.mockRestore();
+    });
+  }
 });

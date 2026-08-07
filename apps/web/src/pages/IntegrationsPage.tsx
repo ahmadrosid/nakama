@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BellRingIcon,
-  BotIcon,
   HashIcon,
   KeyRoundIcon,
   MessageCircleMoreIcon,
@@ -9,7 +8,6 @@ import {
   SendIcon,
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { CodingHarnessSettingsPanel } from "@/components/CodingHarnessSettingsDialog";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
@@ -55,12 +53,6 @@ const INTEGRATION_SECTIONS = [
     icon: PlugIcon,
   },
   {
-    id: "coding-agents",
-    label: "Coding agents",
-    description: "Coding agent CLI",
-    icon: BotIcon,
-  },
-  {
     id: "token",
     label: "Local token",
     description: "CLI and bridge access",
@@ -76,8 +68,7 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "notifications" ||
     value === "whatsapp" ||
     value === "discord" ||
-    value === "composio" ||
-    value === "coding-agents"
+    value === "composio"
   ) {
     return value;
   }
@@ -145,8 +136,6 @@ export function IntegrationsPage() {
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
           {section === "token" ? <LocalAuthTokenCard /> : null}
-
-          {section === "coding-agents" ? <CodingHarnessSettingsPanel embedded /> : null}
 
           {section === "composio" ? (
             <div className={cn(isOrgAdmin && "space-y-4")}>
