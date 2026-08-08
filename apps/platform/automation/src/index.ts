@@ -4,12 +4,20 @@ import {
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core/automation-worker";
 import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
+import {
   ensureServerRunning,
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
+
 import { loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
+
+installCrashHandlers("worker:automation");
+installCrashReportSink();
 
 let spawnedChild: Bun.Subprocess | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;

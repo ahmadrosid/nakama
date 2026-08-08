@@ -10,6 +10,7 @@ import {
 } from "@nakama/core/email-config";
 import { emailTool } from "@nakama/core/tools/email";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
+
 import { bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { loadJavascriptTool } from "./javascript-tool-loader";
@@ -29,11 +30,13 @@ export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
   emailConfigured: boolean
 ): ToolDefinition[] {
-  if (emailConfigured) {
-    return tools;
-  }
+  return tools.filter((tool) => {
+    if (!emailConfigured && tool.name === emailTool.name) {
+      return false;
+    }
 
-  return tools.filter((tool) => tool.name !== emailTool.name);
+    return true;
+  });
 }
 
 export async function resolveProfileStoredTools(

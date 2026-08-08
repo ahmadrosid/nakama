@@ -11,6 +11,7 @@ export * from "./automation-run-read";
 export * from "./automation-scheduler";
 export * from "./automation-validate";
 export * from "./automation-worker";
+
 export * from "./bridge-api";
 export * from "./channel-artifact-delivery";
 export * from "./channel-artifacts";
@@ -21,6 +22,7 @@ export * from "./composio";
 export * from "./composio-config";
 export * from "./config";
 export * from "./contract";
+export * from "./crash-report";
 // Explicit Discord exports — omit helpers that collide with telegram-* names
 // (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
 // isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config

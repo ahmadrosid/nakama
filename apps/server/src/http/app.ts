@@ -1,10 +1,17 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { formatServerError, NakamaApiError } from "@nakama/core";
+import {
+  createCrashContext,
+  currentCrashContext,
+  reportError,
+  runWithCrashContext,
+} from "@nakama/core/crash-report";
 import { tryServeStaticWeb } from "../static-web";
 import { createAuthMiddleware } from "./auth-middleware";
 import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
+
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerAutomationRoutes } from "./routes/automations";
@@ -35,10 +42,35 @@ import { registerWorkerRoutes } from "./routes/workers";
 import { errorResponse } from "./shared";
 import type { HonoApp } from "./types";
 
+/**
+ * A rejected request is not a defect. Reporting 4xx would bury the real crashes under
+ * every bad password and malformed body a public endpoint attracts.
+ */
+function isExpectedClientError(error: unknown): boolean {
+  if (error instanceof NakamaApiError) {
+    return error.status < 500;
+  }
+
+  return error instanceof SyntaxError;
+}
+
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
 
-  app.onError((err) => {
+  app.onError((err, c) => {
+    // Hono calls onError from inside compose, so a middleware try/catch around next()
+    // never sees the error. This still runs inside the AsyncLocalStorage scope opened
+    // below, which is what keeps the request id and breadcrumbs attached.
+    if (!isExpectedClientError(err)) {
+      const context = currentCrashContext();
+
+      if (context) {
+        context.route = `${c.req.method} ${c.req.routePath}`;
+      }
+
+      void reportError(err, { source: "server" });
+    }
+
     if (err instanceof NakamaApiError) {
       return errorResponse(
         err.message,
@@ -94,6 +126,17 @@ export function createHonoApp(options: ServerOptions) {
     // Apply security headers to the final response
     const finalResponse = c.res;
     c.res = applySecurityHeaders(finalResponse);
+  });
+
+  app.use("*", async (c, next) => {
+    const context = createCrashContext({
+      requestId: c.req.header("x-request-id"),
+      source: "server",
+    });
+
+    c.header("x-request-id", context.requestId);
+
+    return runWithCrashContext(context, () => next());
   });
 
   app.use("*", createAuthMiddleware(options));

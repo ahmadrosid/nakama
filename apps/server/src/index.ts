@@ -1,8 +1,14 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();
+installCrashHandlers("server");
+installCrashReportSink();
 
 import { mergeOrgMemoryWithApprovedBullet } from "@nakama/agent";
 import {
@@ -22,6 +28,7 @@ import {
   ensureBundledSkillsAssigned,
   seedDatabase,
 } from "@nakama/db";
+
 import { createHonoApp } from "./http/app";
 import { AgentService } from "./services/agent-service";
 import { AuthService } from "./services/auth-service";

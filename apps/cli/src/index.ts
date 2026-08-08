@@ -1,10 +1,19 @@
 import { createClient } from "@nakama/client";
 import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
+import {
   ensureServerRunning,
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { runChat } from "./chat";
+import { runCrashConsentPromptIfNeeded } from "./crash-consent";
+import {
+  isCrashReportShowCommand,
+  runCrashReportShow,
+} from "./crash-report-command";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
 import { parseCliProfileArgs } from "./profile";
 import {
@@ -18,6 +27,14 @@ import {
 } from "./setup";
 import { detectTheme, setTheme, type Theme } from "./styled-text";
 
+installCrashHandlers("cli");
+installCrashReportSink();
+
+if (isCrashReportShowCommand()) {
+  await runCrashReportShow();
+  process.exit(0);
+}
+
 if (isRotateTokenCommand()) {
   try {
     await runRotateToken();
@@ -27,6 +44,8 @@ if (isRotateTokenCommand()) {
     process.exit(1);
   }
 }
+
+await runCrashConsentPromptIfNeeded();
 
 function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
   for (let index = 0; index < argv.length; index += 1) {
