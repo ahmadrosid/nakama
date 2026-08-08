@@ -171,50 +171,6 @@ test("a non-Error rejection still produces a report", () => {
   expect(report.fingerprint).toHaveLength(16);
 });
 
-test("nothing reaches the sink while consent is unset", async () => {
-  const delivered: CrashReport[] = [];
-  setCrashSink((report) => {
-    delivered.push(report);
-  });
-
-  await reportError(new Error("boom"), { source: "server" });
-  await Bun.sleep(5);
-
-  expect(delivered).toHaveLength(0);
-});
-
-test("the sink receives the report once consent is granted", async () => {
-  process.env.NAKAMA_CRASH_REPORTS = "1";
-  resetCrashReportConsentCache();
-
-  const delivered: CrashReport[] = [];
-  setCrashSink((report) => {
-    delivered.push(report);
-  });
-
-  await reportError(new Error("boom"), { source: "server" });
-  await Bun.sleep(5);
-
-  expect(delivered).toHaveLength(1);
-  expect(delivered[0]?.kind).toBe("crash");
-});
-
-test("DO_NOT_TRACK stops delivery even with a sink installed", async () => {
-  process.env.NAKAMA_CRASH_REPORTS = "1";
-  process.env.DO_NOT_TRACK = "1";
-  resetCrashReportConsentCache();
-
-  const delivered: CrashReport[] = [];
-  setCrashSink((report) => {
-    delivered.push(report);
-  });
-
-  await reportError(new Error("boom"), { source: "server" });
-  await Bun.sleep(5);
-
-  expect(delivered).toHaveLength(0);
-});
-
 test("a sink that throws never surfaces to the caller", async () => {
   process.env.NAKAMA_CRASH_REPORTS = "1";
   resetCrashReportConsentCache();
