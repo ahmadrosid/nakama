@@ -3,13 +3,10 @@ import { fileURLToPath } from "node:url";
 import { installCrashHandlers } from "@nakama/core/crash-report";
 import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
 import { ensureProcessPath } from "./lib/ensure-process-path";
-import { reconcileOrphanedAutomationRuns } from "./services/orphaned-runs";
 
 ensureProcessPath();
 installCrashHandlers("server");
 installCrashReportSink();
-
-const processStartedAtMs = Date.now();
 
 import { mergeOrgMemoryWithApprovedBullet } from "@nakama/agent";
 import {
@@ -91,10 +88,6 @@ const database = await createDatabase(config.databaseUrl, {
 });
 
 await seedDatabase(database.adapter);
-
-// Runs are completed in a finally block, so anything still marked running from before this
-// process started was cut off by a restart or a crash and will never finish on its own.
-await reconcileOrphanedAutomationRuns(database.adapter, processStartedAtMs);
 
 const authService = new AuthService();
 
