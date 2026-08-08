@@ -1,36 +1,27 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { NAKAMA_API_VERSION } from "./contract";
-import {
-  currentCrashReportConsent,
-  isCrashReportingAllowed,
-} from "./crash-report-config";
-import {
-  appendPendingCrashReport,
-  clearPendingCrashReports,
-  readPendingCrashReports,
-  recordLastCrashReport,
-} from "./crash-report-pending";
-import { hashId, scrubBreadcrumbData, scrubText } from "./crash-report-scrub";
+import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
+import { getUserConfigDir } from "./user-config";
 
-/**
- * "crash" is something that threw. "invariant" is something that returned normally but
- * broke a promise the system makes: an automation that never finished, a worker that
- * stopped reporting, a turn that produced no output. The second kind is what users
- * actually notice and never report, so it shares this pipeline rather than getting one
- * of its own.
- */
 export type CrashReportKind = "crash" | "invariant";
+export type CrashReportConsent = "granted" | "denied" | "unset";
+export type CrashSink = (report: CrashReport) => void | Promise<void>;
+export type CrashLogger = (report: CrashReport, error: unknown) => void;
 
 export const MAX_BREADCRUMBS = 50;
+export const MAX_PENDING_CRASH_REPORTS = 3;
+export const DEFAULT_CRASH_REPORT_DSN =
+  "https://a9d0037386bb48ff984bc7909712e298@app.glitchtip.com/26619";
 
-export interface Breadcrumb {
+export type Breadcrumb = {
   at: number;
   data?: Record<string, string | number | boolean>;
   kind: string;
-}
-
-export interface CrashContext {
+};
+export type CrashContext = {
   breadcrumbs: Breadcrumb[];
   orgIdHash?: string;
   requestId: string;
@@ -38,9 +29,8 @@ export interface CrashContext {
   sessionIdHash?: string;
   source: string;
   userIdHash?: string;
-}
-
-export interface CrashReport {
+};
+export type CrashReport = {
   at: string;
   breadcrumbs: Breadcrumb[];
   fingerprint: string;
@@ -55,12 +45,386 @@ export interface CrashReport {
   source: string;
   stack?: string;
   userIdHash?: string;
-}
-
-export type CrashSink = (report: CrashReport) => void | Promise<void>;
-export type CrashLogger = (report: CrashReport, error: unknown) => void;
+};
+export type CrashReportConfig = {
+  consent: CrashReportConsent;
+  dsn: string | null;
+  installId: string | null;
+};
+export type ReportErrorOptions = {
+  context?: CrashContext;
+  kind?: CrashReportKind;
+  source?: string;
+};
+export type SentryDsn = { endpoint: string; publicKey: string };
 
 const storage = new AsyncLocalStorage<CrashContext>();
+const installedSources = new Set<string>();
+const TRUTHY = new Set(["1", "true", "on", "yes"]);
+const FALSY = new Set(["0", "false", "off", "no"]);
+const MAX_TEXT_LENGTH = 4000;
+const MAX_VALUE_LENGTH = 200;
+const SEND_TIMEOUT_MS = 3000;
+const SENTRY_CLIENT = "nakama/1";
+const ALLOWED_BREADCRUMB_KEYS = new Set(
+  "attempt,argKeys,bytes,code,count,durationMs,kind,mcpServer,method,model,phase,provider,route,status,tool,worker".split(
+    ","
+  )
+);
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}/gi, "Bearer <redacted>"],
+  [/\bsk-[A-Za-z0-9_-]{8,}/g, "<redacted-key>"],
+  [/\bgh[pousr]_[A-Za-z0-9]{16,}/g, "<redacted-key>"],
+  [/\bxox[baprs]-[A-Za-z0-9-]{8,}/g, "<redacted-key>"],
+  [/\bAKIA[0-9A-Z]{16}\b/g, "<redacted-key>"],
+  [
+    /([A-Za-z0-9_]*(?:api[_-]?key|apikey|token|secret|passwd|password|authorization|credential))(["']?\s*[:=]\s*["']?)([^\s"',;)}]{3,})/gi,
+    "$1$2<redacted>",
+  ],
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<email>"],
+  [/\b[A-Za-z0-9_-]{32,}\b/g, "<redacted-token>"],
+];
+const HOME_PATH_PATTERNS = [
+  /\/(?:Users|home)\/[^/\s:"']+/g,
+  /[A-Za-z]:\\Users\\[^\\\s:"']+/g,
+];
+
+let logger: CrashLogger = defaultLogger;
+let sink: CrashSink | null = null;
+let cachedConfig: Promise<CrashReportConfig> | null = null;
+
+const configFile = () => join(getUserConfigDir(), "crash-reports.ini");
+const pendingFile = () =>
+  join(getUserConfigDir(), "crash-reports-pending.json");
+const lastFile = () => join(getUserConfigDir(), "crash-report-last.json");
+export const getCrashReportConfigPath = configFile;
+export const getPendingCrashReportsPath = pendingFile;
+export const getLastCrashReportPath = lastFile;
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await writePrivateTextFile(path, `${JSON.stringify(value, null, 2)}\n`, {
+    ensureDir: getUserConfigDir(),
+  });
+}
+
+async function readJson<T>(
+  path: string,
+  fallback: T,
+  guard: (v: unknown) => v is T
+): Promise<T> {
+  const raw = await readTextOrNull(path);
+  if (raw === null) {
+    return fallback;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return guard(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function hashId(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed
+    ? createHash("sha256").update(trimmed).digest("hex").slice(0, 12)
+    : undefined;
+}
+
+export function scrubText(value: string): string {
+  if (!value) {
+    return "";
+  }
+  let out = value;
+  const home = homedir();
+  if (home && home !== "/") {
+    out = out.split(home).join("~");
+  }
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    out = out.replace(pattern, replacement);
+  }
+  for (const pattern of HOME_PATH_PATTERNS) {
+    out = out.replace(pattern, "~");
+  }
+  out = out.replace(/"[^"\n]*"/g, '"<redacted>"');
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = out
+      .replace(/\{[^{}]*\}/g, "<redacted>")
+      .replace(/\[[^[\]]*\]/g, "<redacted>");
+    if (next === out) {
+      break;
+    }
+    out = next;
+  }
+  return out.length > MAX_TEXT_LENGTH
+    ? `${out.slice(0, MAX_TEXT_LENGTH)}…`
+    : out;
+}
+
+function scrubBreadcrumbValue(
+  value: unknown
+): string | number | boolean | undefined {
+  if (typeof value === "string") {
+    const scrubbed = scrubText(value);
+    return scrubbed.length > MAX_VALUE_LENGTH
+      ? `${scrubbed.slice(0, MAX_VALUE_LENGTH)}…`
+      : scrubbed;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value) && value.every((e) => typeof e === "string")) {
+    return scrubBreadcrumbValue(value.join(","));
+  }
+}
+
+export function scrubBreadcrumbData(
+  data: Record<string, unknown> | undefined
+): Record<string, string | number | boolean> | undefined {
+  if (!data) {
+    return;
+  }
+  const out: Record<string, string | number | boolean> = {};
+  let dropped = 0;
+  for (const [key, value] of Object.entries(data)) {
+    const scrubbed = ALLOWED_BREADCRUMB_KEYS.has(key)
+      ? scrubBreadcrumbValue(value)
+      : undefined;
+    if (scrubbed === undefined) {
+      dropped += 1;
+    } else {
+      out[key] = scrubbed;
+    }
+  }
+  if (dropped > 0) {
+    out.droppedKeys = dropped;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function readCrashReportEnvOverride(
+  env: Record<string, string | undefined> = process.env
+): CrashReportConsent | null {
+  if (TRUTHY.has(env.DO_NOT_TRACK?.trim().toLowerCase() ?? "")) {
+    return "denied";
+  }
+  const raw = env.NAKAMA_CRASH_REPORTS?.trim().toLowerCase();
+  if (!raw) {
+    return null;
+  }
+  if (TRUTHY.has(raw)) {
+    return "granted";
+  }
+  if (FALSY.has(raw)) {
+    return "denied";
+  }
+  return null;
+}
+
+export async function loadCrashReportConfig(): Promise<CrashReportConfig> {
+  const raw = await readTextOrNull(configFile());
+  if (raw === null) {
+    return { consent: "unset", dsn: null, installId: null };
+  }
+  const values = parseIni(raw);
+  const consent = values.consent?.trim().toLowerCase();
+  return {
+    consent: consent === "granted" || consent === "denied" ? consent : "unset",
+    dsn: values.dsn?.trim() || null,
+    installId: values.install_id?.trim() || null,
+  };
+}
+
+export function resolveCrashReportConsent(
+  file: CrashReportConfig,
+  env: Record<string, string | undefined> = process.env
+): CrashReportConsent {
+  return readCrashReportEnvOverride(env) ?? file.consent;
+}
+
+export function resolveCrashReportDsn(
+  file: CrashReportConfig,
+  env: Record<string, string | undefined> = process.env
+): string | null {
+  if (env.NAKAMA_CRASH_REPORT_DSN !== undefined) {
+    return env.NAKAMA_CRASH_REPORT_DSN.trim() || null;
+  }
+  return file.dsn || DEFAULT_CRASH_REPORT_DSN || null;
+}
+
+export function resetCrashReportConsentCache(): void {
+  cachedConfig = null;
+}
+
+export async function loadCachedCrashReportConfig(): Promise<CrashReportConfig> {
+  cachedConfig ??= loadCrashReportConfig();
+  return cachedConfig;
+}
+
+export async function saveCrashReportConsent(
+  consent: Exclude<CrashReportConsent, "unset">
+): Promise<CrashReportConfig> {
+  const existing = await loadCrashReportConfig();
+  const next: CrashReportConfig = {
+    consent,
+    dsn: existing.dsn,
+    installId:
+      consent === "granted" ? (existing.installId ?? randomUUID()) : null,
+  };
+  await writePrivateTextFile(
+    configFile(),
+    [
+      "# Nakama crash reports",
+      `consent=${next.consent}`,
+      ...(next.installId ? [`install_id=${next.installId}`] : []),
+      ...(next.dsn ? [`dsn=${next.dsn}`] : []),
+      "",
+    ].join("\n"),
+    { ensureDir: getUserConfigDir() }
+  );
+  resetCrashReportConsentCache();
+  return next;
+}
+
+export async function currentCrashReportConsent(): Promise<CrashReportConsent> {
+  try {
+    return resolveCrashReportConsent(await loadCachedCrashReportConfig());
+  } catch {
+    return "denied";
+  }
+}
+
+export async function isCrashReportingAllowed(): Promise<boolean> {
+  return (await currentCrashReportConsent()) === "granted";
+}
+
+export async function readPendingCrashReports(): Promise<CrashReport[]> {
+  return readJson(pendingFile(), [], Array.isArray);
+}
+
+export async function appendPendingCrashReport(
+  report: CrashReport
+): Promise<void> {
+  const existing = await readPendingCrashReports();
+  if (existing.some((entry) => entry.fingerprint === report.fingerprint)) {
+    return;
+  }
+  await writeJson(
+    pendingFile(),
+    [...existing, report].slice(-MAX_PENDING_CRASH_REPORTS)
+  );
+}
+
+export async function clearPendingCrashReports(): Promise<void> {
+  await writeJson(pendingFile(), []);
+}
+
+export async function recordLastCrashReport(
+  report: CrashReport
+): Promise<void> {
+  await writeJson(lastFile(), report);
+}
+
+export async function readLastCrashReport(): Promise<CrashReport | null> {
+  return readJson(
+    lastFile(),
+    null,
+    (v): v is CrashReport => Boolean(v) && typeof v === "object"
+  );
+}
+
+export function parseSentryDsn(dsn: string): SentryDsn | null {
+  try {
+    const url = new URL(dsn.trim());
+    const publicKey = url.username;
+    const segments = url.pathname.split("/").filter(Boolean);
+    const projectId = segments.pop();
+    if (!(publicKey && projectId)) {
+      return null;
+    }
+    const prefix = segments.length > 0 ? `/${segments.join("/")}` : "";
+    return {
+      endpoint: `${url.protocol}//${url.host}${prefix}/api/${projectId}/store/`,
+      publicKey,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function toSentryEvent(
+  report: CrashReport,
+  options: { installId: string | null } = { installId: null }
+): Record<string, unknown> {
+  return {
+    event_id: randomUUID().replace(/-/g, ""),
+    exception: { values: [{ type: report.name, value: report.message }] },
+    fingerprint: [report.fingerprint],
+    level: report.kind === "invariant" ? "warning" : "error",
+    logger: "nakama",
+    platform: "node",
+    timestamp: report.at,
+    ...(options.installId ? { user: { id: options.installId } } : {}),
+    extra: {
+      ...(report.stack ? { stack: report.stack } : {}),
+      ...(report.requestId ? { request_id: report.requestId } : {}),
+      ...(report.orgIdHash ? { org: report.orgIdHash } : {}),
+      ...(report.userIdHash ? { user_hash: report.userIdHash } : {}),
+      ...(report.sessionIdHash ? { session: report.sessionIdHash } : {}),
+    },
+    tags: {
+      api_version: String(report.runtime.apiVersion),
+      arch: report.runtime.arch,
+      bun: report.runtime.bun,
+      kind: report.kind,
+      os: report.runtime.platform,
+      source: report.source,
+      ...(report.route ? { route: report.route } : {}),
+    },
+  };
+}
+
+export async function sendSentryEvent(
+  dsn: SentryDsn,
+  event: Record<string, unknown>,
+  timeoutMs = SEND_TIMEOUT_MS
+): Promise<boolean> {
+  try {
+    const response = await fetch(dsn.endpoint, {
+      body: JSON.stringify(event),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_client=${SENTRY_CLIENT}, sentry_key=${dsn.publicKey}`,
+      },
+      method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function createCrashReportSink(): CrashSink {
+  return async (report) => {
+    const config = await loadCachedCrashReportConfig();
+    const dsn = parseSentryDsn(resolveCrashReportDsn(config) ?? "");
+    if (!dsn) {
+      return;
+    }
+    await sendSentryEvent(
+      dsn,
+      toSentryEvent(report, { installId: config.installId })
+    );
+  };
+}
+
+export function installCrashReportSink(): void {
+  setCrashSink(createCrashReportSink());
+}
 
 export function createCrashContext(seed: {
   source: string;
@@ -68,10 +432,10 @@ export function createCrashContext(seed: {
   route?: string;
 }): CrashContext {
   return {
+    breadcrumbs: [],
     requestId: seed.requestId?.trim() || randomUUID(),
     source: seed.source,
     ...(seed.route ? { route: seed.route } : {}),
-    breadcrumbs: [],
   };
 }
 
@@ -89,101 +453,37 @@ export function setCrashContextIds(ids: {
   sessionId?: string | null;
 }): void {
   const context = storage.getStore();
-
   if (!context) {
     return;
   }
-
   const orgIdHash = hashId(ids.orgId);
   const userIdHash = hashId(ids.userId);
   const sessionIdHash = hashId(ids.sessionId);
-
   if (orgIdHash) {
     context.orgIdHash = orgIdHash;
   }
-
   if (userIdHash) {
     context.userIdHash = userIdHash;
   }
-
   if (sessionIdHash) {
     context.sessionIdHash = sessionIdHash;
   }
 }
 
-/**
- * Memory only, and thrown away when the request finishes without an error. Nothing is
- * written to disk on the happy path, which is what keeps this cheap enough that nobody
- * has a reason to turn it off.
- */
 export function breadcrumb(kind: string, data?: Record<string, unknown>): void {
   const context = storage.getStore();
-
   if (!context) {
     return;
   }
-
   const scrubbed = scrubBreadcrumbData(data);
-
   context.breadcrumbs.push({
     at: Date.now(),
     kind,
     ...(scrubbed ? { data: scrubbed } : {}),
   });
-
   if (context.breadcrumbs.length > MAX_BREADCRUMBS) {
     context.breadcrumbs.shift();
   }
-}
-
-function normalizeMessage(message: string): string {
-  return (
-    message
-      .replace(
-        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
-        "<uuid>"
-      )
-      // Mixed letter-and-digit runs are nakama ids (prof_01J..., nanoid). Leaving them in
-      // gives every occurrence its own fingerprint, which is the one failure mode that
-      // makes deduplication useless. Over-merging is the safer direction: name and top
-      // frame still keep genuinely different bugs apart.
-      .replace(
-        /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{8,}\b/g,
-        "<id>"
-      )
-      .replace(/'[^']*'|"[^"]*"/g, "<str>")
-      // Not \b\d+\b: there is no word boundary inside "30000ms", and timeout messages
-      // are the most common place a varying number shows up.
-      .replace(/\d+/g, "<n>")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-}
-
-/**
- * Line and column are deliberately dropped. Keeping them splits one bug into a new
- * fingerprint on every release that shifts the file, which defeats deduplication.
- */
-function topApplicationFrame(stack: string | undefined): string {
-  if (!stack) {
-    return "";
-  }
-
-  for (const line of stack.split("\n").slice(1)) {
-    const trimmed = line.trim();
-
-    if (!trimmed.startsWith("at ")) {
-      continue;
-    }
-
-    if (trimmed.includes("node_modules") || trimmed.includes("node:")) {
-      continue;
-    }
-
-    return trimmed.replace(/:\d+:\d+(\)?)$/, "$1").replace(/\s+/g, " ");
-  }
-
-  return "";
 }
 
 export function fingerprintError(
@@ -191,44 +491,37 @@ export function fingerprintError(
   message: string,
   stack: string | undefined
 ): string {
-  const parts = [name, normalizeMessage(message), topApplicationFrame(stack)];
+  const normalized = message
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      "<uuid>"
+    )
+    .replace(
+      /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{8,}\b/g,
+      "<id>"
+    )
+    .replace(/'[^']*'|"[^"]*"/g, "<str>")
+    .replace(/\d+/g, "<n>")
+    .replace(/\s+/g, " ")
+    .trim();
+  let frame = "";
+  if (stack) {
+    for (const line of stack.split("\n").slice(1)) {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith("at ") &&
+        !trimmed.includes("node_modules") &&
+        !trimmed.includes("node:")
+      ) {
+        frame = trimmed.replace(/:\d+:\d+(\)?)$/, "$1").replace(/\s+/g, " ");
+        break;
+      }
+    }
+  }
   return createHash("sha256")
-    .update(parts.join("|"))
+    .update([name, normalized, frame].join("|"))
     .digest("hex")
     .slice(0, 16);
-}
-
-function errorToParts(error: unknown): {
-  name: string;
-  message: string;
-  stack?: string;
-} {
-  if (error instanceof Error) {
-    return {
-      message: error.message || String(error),
-      name: error.name || "Error",
-      ...(error.stack ? { stack: error.stack } : {}),
-    };
-  }
-
-  if (typeof error === "string") {
-    return { message: error, name: "NonError" };
-  }
-
-  try {
-    return {
-      message: JSON.stringify(error) ?? String(error),
-      name: "NonError",
-    };
-  } catch {
-    return { message: String(error), name: "NonError" };
-  }
-}
-
-export interface ReportErrorOptions {
-  context?: CrashContext;
-  kind?: CrashReportKind;
-  source?: string;
 }
 
 export function buildCrashReport(
@@ -236,35 +529,47 @@ export function buildCrashReport(
   options: ReportErrorOptions = {}
 ): CrashReport {
   const context = options.context ?? storage.getStore();
-  const parts = errorToParts(error);
-  const stack = parts.stack ? scrubText(parts.stack) : undefined;
-
+  let name = "NonError";
+  let message: string;
+  let stack: string | undefined;
+  if (error instanceof Error) {
+    name = error.name || "Error";
+    message = error.message || String(error);
+    stack = error.stack;
+  } else if (typeof error === "string") {
+    message = error;
+  } else {
+    try {
+      message = JSON.stringify(error) ?? String(error);
+    } catch {
+      message = String(error);
+    }
+  }
+  const scrubbedStack = stack ? scrubText(stack) : undefined;
   return {
-    fingerprint: fingerprintError(parts.name, parts.message, parts.stack),
-    kind: options.kind ?? "crash",
-    message: scrubText(parts.message),
-    name: parts.name,
-    ...(stack ? { stack } : {}),
-    source: options.source ?? context?.source ?? "unknown",
-    ...(context?.requestId ? { requestId: context.requestId } : {}),
-    ...(context?.route ? { route: context.route } : {}),
-    ...(context?.orgIdHash ? { orgIdHash: context.orgIdHash } : {}),
-    ...(context?.userIdHash ? { userIdHash: context.userIdHash } : {}),
-    ...(context?.sessionIdHash ? { sessionIdHash: context.sessionIdHash } : {}),
     at: new Date().toISOString(),
     breadcrumbs: context?.breadcrumbs ? [...context.breadcrumbs] : [],
+    fingerprint: fingerprintError(name, message, stack),
+    kind: options.kind ?? "crash",
+    message: scrubText(message),
+    name,
     runtime: {
       apiVersion: NAKAMA_API_VERSION,
       arch: process.arch,
       bun: Bun.version,
       platform: process.platform,
     },
+    source: options.source ?? context?.source ?? "unknown",
+    ...(scrubbedStack ? { stack: scrubbedStack } : {}),
+    ...(context?.requestId ? { requestId: context.requestId } : {}),
+    ...(context?.route ? { route: context.route } : {}),
+    ...(context?.orgIdHash ? { orgIdHash: context.orgIdHash } : {}),
+    ...(context?.userIdHash ? { userIdHash: context.userIdHash } : {}),
+    ...(context?.sessionIdHash ? { sessionIdHash: context.sessionIdHash } : {}),
   };
 }
 
 function defaultLogger(report: CrashReport, error: unknown): void {
-  // The local log carries the unscrubbed error on purpose: it never leaves the machine,
-  // and a redacted local log is useless for the person debugging their own install.
   console.error(
     `[nakama:${report.kind}] ${report.source} ${report.fingerprint}` +
       `${report.requestId ? ` req=${report.requestId}` : ""}` +
@@ -272,9 +577,6 @@ function defaultLogger(report: CrashReport, error: unknown): void {
     error
   );
 }
-
-let logger: CrashLogger = defaultLogger;
-let sink: CrashSink | null = null;
 
 export function setCrashLogger(next: CrashLogger | null): void {
   logger = next ?? defaultLogger;
@@ -284,82 +586,55 @@ export function setCrashSink(next: CrashSink | null): void {
   sink = next;
 }
 
-/**
- * Never throws and never blocks the caller on the network. A crash reporter that can
- * fail the request it is reporting on is worse than no crash reporter.
- */
 export async function reportError(
   error: unknown,
   options: ReportErrorOptions = {}
 ): Promise<CrashReport> {
   const report = buildCrashReport(error, options);
-
   try {
     logger(report, error);
   } catch {
-    // A logger that throws must not take the process with it.
+    // ignore
   }
-
   const currentSink = sink;
-  const consent = await currentCrashReportConsent();
-
   if (currentSink) {
-    // Recorded whatever the answer is, so someone who has not decided yet, or who said
-    // no, can still read exactly what would have gone out before they choose.
     try {
       await recordLastCrashReport(report);
     } catch {
-      // Inspectability is a convenience; it must not turn one crash into two.
+      // ignore
     }
   }
-
-  if (consent === "granted") {
-    if (currentSink) {
-      void Promise.resolve()
-        .then(() => currentSink(report))
-        .catch(() => {
-          // Delivery is best effort. Losing a report is acceptable; losing the process is not.
-        });
-    }
+  const consent = await currentCrashReportConsent();
+  if (consent === "granted" && currentSink) {
+    void Promise.resolve()
+      .then(() => currentSink(report))
+      .catch(() => {});
   } else if (consent === "unset" && currentSink) {
-    // Held, not sent. The user has not been asked yet, and the first crash is usually the
-    // one worth having once they say yes. Requires a sink: with nowhere to deliver, a
-    // pending file is a queue that can never drain.
     try {
       await appendPendingCrashReport(report);
     } catch {
-      // A full or read-only config dir must not turn one crash into two.
+      // ignore
     }
   }
-
   return report;
 }
 
-/**
- * Sends what was held back while the install was waiting to be asked. Called once the
- * answer comes back as yes.
- */
 export async function flushPendingCrashReports(): Promise<number> {
   const currentSink = sink;
-
   if (!(currentSink && (await isCrashReportingAllowed()))) {
     return 0;
   }
-
   const pending = await readPendingCrashReports();
-
   if (pending.length === 0) {
     return 0;
   }
-
   for (const report of pending) {
     try {
       await currentSink(report);
     } catch {
-      // Best effort, same as live delivery.
+      // best effort
     }
   }
-
   await clearPendingCrashReports();
   return pending.length;
 }
@@ -371,36 +646,21 @@ export async function reportInvariant(
   return reportError(new Error(message), { ...options, kind: "invariant" });
 }
 
-const installedSources = new Set<string>();
-
-/**
- * Uses uncaughtExceptionMonitor rather than uncaughtException: the monitor observes the
- * error and leaves Bun's own crash-and-exit behaviour intact. Listening to
- * uncaughtException would swallow the crash and leave a half-dead process behind.
- *
- * unhandledRejection has no monitor variant, and merely listening suppresses Bun's
- * default exit(1), so the exit is re-applied by hand below.
- */
 export function installCrashHandlers(source: string): () => void {
   if (installedSources.has(source)) {
     return () => {};
   }
-
   installedSources.add(source);
-
   const onUncaught = (error: unknown) => {
     void reportError(error, { source });
   };
-
   const onRejection = (reason: unknown) => {
     void reportError(reason, { source }).finally(() => {
       process.exit(1);
     });
   };
-
   process.on("uncaughtExceptionMonitor", onUncaught);
   process.on("unhandledRejection", onRejection);
-
   return () => {
     process.off("uncaughtExceptionMonitor", onUncaught);
     process.off("unhandledRejection", onRejection);
