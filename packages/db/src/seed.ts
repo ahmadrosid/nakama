@@ -7,7 +7,6 @@ import {
 import { ensureLocalClientAccess } from "./local-client";
 import {
   ensureBashToolDefinition,
-  ensureCrashIssueToolDefinition,
   ensureGenerateImageToolDefinition,
   ensureOrgSuperBotProfiles,
 } from "./org-profiles";

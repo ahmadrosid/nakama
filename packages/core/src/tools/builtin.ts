@@ -7,7 +7,6 @@ import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { getProfileSoulDir } from "../soul/resolve";
-import { crashIssueTool } from "./crash-issue";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
@@ -865,7 +864,6 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
-  crashIssueTool,
 ];
 
 export { PathGuardError };

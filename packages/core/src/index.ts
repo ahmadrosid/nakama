@@ -22,7 +22,6 @@ export * from "./composio";
 export * from "./composio-config";
 export * from "./config";
 export * from "./contract";
-export * from "./crash-issue-config";
 export * from "./crash-report";
 export * from "./crash-report-config";
 export * from "./crash-report-pending";
