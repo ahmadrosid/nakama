@@ -125,13 +125,13 @@ test("sendSentryEvent reports failure instead of throwing when the ingest is dow
   expect(await sendSentryEvent(dsn!, {}, 200)).toBe(false);
 });
 
-test("the sink is a no-op when no DSN is configured", async () => {
+test("the sink fails when no DSN is configured", async () => {
   process.env.NAKAMA_CRASH_REPORT_DSN = "";
   resetCrashReportConsentCache();
 
-  await expect(
-    createCrashReportSink()(sampleReport())
-  ).resolves.toBeUndefined();
+  await expect(createCrashReportSink()(sampleReport())).rejects.toThrow(
+    /DSN is not configured/
+  );
 });
 
 test("the sink delivers to the configured DSN", async () => {

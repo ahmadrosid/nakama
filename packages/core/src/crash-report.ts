@@ -63,10 +63,22 @@ const SEND_TIMEOUT_MS = 3000;
 const SENTRY_CLIENT = "nakama/1";
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}/gi, "Bearer <redacted>"],
+  [
+    /\b((?:Proxy-)?Authorization:\s*Basic\s+)[A-Za-z0-9+/=_-]+/gi,
+    "$1<redacted>",
+  ],
   [/\bsk-[A-Za-z0-9_-]{8,}/g, "<redacted-key>"],
   [/\bgh[pousr]_[A-Za-z0-9]{16,}/g, "<redacted-key>"],
   [/\bxox[baprs]-[A-Za-z0-9-]{8,}/g, "<redacted-key>"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "<redacted-key>"],
+  [
+    /hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+/gi,
+    "hooks.slack.com/services/<redacted>",
+  ],
+  [
+    /([A-Za-z][A-Za-z0-9+.-]*:\/\/)([^/\s:@]+):([^/\s@]+)@/g,
+    "$1<redacted>:<redacted>@",
+  ],
   [
     /([A-Za-z0-9_]*(?:api[_-]?key|apikey|token|secret|passwd|password|authorization|credential))(["']?\s*[:=]\s*["']?)([^\s"',;)}]{3,})/gi,
     "$1$2<redacted>",
@@ -244,7 +256,8 @@ export async function isCrashReportingAllowed(): Promise<boolean> {
 }
 
 export async function readPendingCrashReports(): Promise<CrashReport[]> {
-  return readJson(pendingFile(), [], Array.isArray);
+  const entries = await readJson(pendingFile(), [], Array.isArray);
+  return entries.filter(isCrashReport).map(scrubStoredCrashReport);
 }
 
 export async function appendPendingCrashReport(
@@ -271,11 +284,34 @@ export async function recordLastCrashReport(
 }
 
 export async function readLastCrashReport(): Promise<CrashReport | null> {
-  return readJson(
-    lastFile(),
-    null,
-    (v): v is CrashReport => Boolean(v) && typeof v === "object"
+  const report = await readJson(lastFile(), null, (v): v is CrashReport =>
+    isCrashReport(v)
   );
+  return report ? scrubStoredCrashReport(report) : null;
+}
+
+function isCrashReport(value: unknown): value is CrashReport {
+  if (!(value && typeof value === "object")) {
+    return false;
+  }
+  const report = value as Record<string, unknown>;
+  return (
+    typeof report.fingerprint === "string" &&
+    typeof report.message === "string" &&
+    typeof report.name === "string" &&
+    typeof report.at === "string" &&
+    typeof report.source === "string" &&
+    (report.kind === "crash" || report.kind === "invariant") &&
+    Array.isArray(report.breadcrumbs)
+  );
+}
+
+function scrubStoredCrashReport(report: CrashReport): CrashReport {
+  return {
+    ...report,
+    message: scrubText(report.message),
+    ...(report.stack ? { stack: scrubText(report.stack) } : {}),
+  };
 }
 
 export function parseSentryDsn(dsn: string): SentryDsn | null {
@@ -345,12 +381,15 @@ export function createCrashReportSink(): CrashSink {
     const config = await loadCachedCrashReportConfig();
     const dsn = parseSentryDsn(resolveCrashReportDsn(config) ?? "");
     if (!dsn) {
-      return;
+      throw new Error("crash report DSN is not configured");
     }
-    await sendSentryEvent(
+    const ok = await sendSentryEvent(
       dsn,
       toSentryEvent(report, { installId: config.installId })
     );
+    if (!ok) {
+      throw new Error("crash report delivery failed");
+    }
   };
 }
 
@@ -555,15 +594,18 @@ export async function flushPendingCrashReports(): Promise<number> {
   if (pending.length === 0) {
     return 0;
   }
+  const remaining: CrashReport[] = [];
+  let sent = 0;
   for (const report of pending) {
     try {
       await currentSink(report);
+      sent += 1;
     } catch {
-      // best effort
+      remaining.push(report);
     }
   }
-  await clearPendingCrashReports();
-  return pending.length;
+  await writeJson(pendingFile(), remaining);
+  return sent;
 }
 
 export async function reportInvariant(
@@ -579,17 +621,19 @@ export function installCrashHandlers(source: string): () => void {
   }
   installedSources.add(source);
   const onUncaught = (error: unknown) => {
-    void reportError(error, { source });
+    void reportError(error, { source }).finally(() => {
+      process.exit(1);
+    });
   };
   const onRejection = (reason: unknown) => {
     void reportError(reason, { source }).finally(() => {
       process.exit(1);
     });
   };
-  process.on("uncaughtExceptionMonitor", onUncaught);
+  process.on("uncaughtException", onUncaught);
   process.on("unhandledRejection", onRejection);
   return () => {
-    process.off("uncaughtExceptionMonitor", onUncaught);
+    process.off("uncaughtException", onUncaught);
     process.off("unhandledRejection", onRejection);
     installedSources.delete(source);
   };

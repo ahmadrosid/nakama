@@ -45,6 +45,34 @@ describe("scrubText removes credentials", () => {
   }
 });
 
+test("scrubText removes URI passwords", () => {
+  const scrubbed = scrubText(
+    "connect failed postgres://alice:s3cret-pass@db.internal:5432/app"
+  );
+
+  expect(scrubbed).not.toContain("s3cret-pass");
+  expect(scrubbed).not.toContain("alice");
+  expect(scrubbed).toContain("postgres://<redacted>:<redacted>@");
+});
+
+test("scrubText removes HTTP Basic credentials", () => {
+  const scrubbed = scrubText(
+    "upstream said Authorization: Basic YWxpY2U6c2VjcmV0"
+  );
+
+  expect(scrubbed).not.toContain("YWxpY2U6c2VjcmV0");
+  expect(scrubbed.toLowerCase()).toContain("authorization");
+});
+
+test("scrubText removes Slack webhook URLs", () => {
+  const scrubbed = scrubText(
+    "post failed https://hooks.slack.com/services/T00/B00/XXXX"
+  );
+
+  expect(scrubbed).not.toContain("T00/B00/XXXX");
+  expect(scrubbed).toContain("hooks.slack.com/services/<redacted>");
+});
+
 test("scrubText removes email addresses", () => {
   const scrubbed = scrubText("owner alice@example.com could not be notified");
 

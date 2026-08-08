@@ -38,7 +38,10 @@ export async function runCrashConsentPromptIfNeeded(): Promise<void> {
     const subject =
       pending.length === 1 ? "an error" : `${pending.length} errors`;
     console.log(`\nNakama hit ${subject} recently.`);
-    console.log("The report carries the stack trace and no message content.");
+    console.log(
+      "The report carries a scrubbed error message and stack (no chat content)."
+    );
+    console.log("Inspect with: nakama report --show");
     answer = (await rl.question("Send it so the bug gets fixed? [y/N/never] "))
       .trim()
       .toLowerCase();

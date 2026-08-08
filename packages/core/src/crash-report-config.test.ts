@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -74,9 +74,9 @@ test("denying drops the install id", async () => {
 
 test("the consent file is written with private permissions", async () => {
   await saveCrashReportConsent("granted");
-  const contents = await readFile(getCrashReportConfigPath(), "utf8");
-
-  expect(contents).toContain("consent=granted");
+  const { mode } = await Bun.file(getCrashReportConfigPath()).stat();
+  // biome-ignore lint/suspicious/noBitwiseOperators: file mode bits
+  expect(mode & 0o777).toBe(0o600);
 });
 
 test("DO_NOT_TRACK overrides a stored grant", async () => {

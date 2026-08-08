@@ -120,6 +120,17 @@ test("a consenting install sends live and holds nothing", async () => {
   expect(await readPendingCrashReports()).toHaveLength(0);
 });
 
+test("flushing keeps reports that the sink rejects", async () => {
+  await saveCrashReportConsent("granted");
+  await appendPendingCrashReport(reportWithMessage("will fail"));
+  setCrashSink(async () => {
+    throw new Error("ingest down");
+  });
+
+  expect(await flushPendingCrashReports()).toBe(0);
+  expect(await readPendingCrashReports()).toHaveLength(1);
+});
+
 test("saying yes later sends what was held and empties the file", async () => {
   const delivered: CrashReport[] = [];
   setCrashSink((report) => {

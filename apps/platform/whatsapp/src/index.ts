@@ -3,7 +3,7 @@ import {
   ChannelOrgStore,
   getChannelOrgSelectionPath,
 } from "@nakama/core/channel-org";
-import { reportError } from "@nakama/core/crash-report";
+import { installCrashReportSink, reportError } from "@nakama/core/crash-report";
 import {
   ensureServerRunning,
   stopSpawnedServer,
@@ -45,6 +45,7 @@ function persistWorkerHeartbeat(): void {
 }
 
 registerProcessLifecycleLogging();
+installCrashReportSink();
 registerCleanupHandlers(() => {
   outboundServer?.stop();
   socketHandle?.stop();
