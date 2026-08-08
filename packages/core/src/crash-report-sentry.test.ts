@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { hostname } from "node:os";
-import { buildCrashReport, type CrashReport } from "./crash-report";
-import { resetCrashReportConsentCache } from "./crash-report-config";
 import {
+  buildCrashReport,
+  type CrashReport,
   createCrashReportSink,
   parseSentryDsn,
+  resetCrashReportConsentCache,
   sendSentryEvent,
   toSentryEvent,
-} from "./crash-report-sentry";
+} from "./crash-report";
 
 let previousDsn: string | undefined;
 

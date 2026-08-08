@@ -1,13 +1,11 @@
 import * as readline from "node:readline/promises";
-import { flushPendingCrashReports } from "@nakama/core/crash-report";
-import {
-  currentCrashReportConsent,
-  saveCrashReportConsent,
-} from "@nakama/core/crash-report-config";
 import {
   clearPendingCrashReports,
+  currentCrashReportConsent,
+  flushPendingCrashReports,
   readPendingCrashReports,
-} from "@nakama/core/crash-report-pending";
+  saveCrashReportConsent,
+} from "@nakama/core/crash-report";
 
 /**
  * Asked on the first crash rather than at install, so an install that never breaks is

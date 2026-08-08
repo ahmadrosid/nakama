@@ -16,11 +16,7 @@ export const MAX_PENDING_CRASH_REPORTS = 3;
 export const DEFAULT_CRASH_REPORT_DSN =
   "https://a9d0037386bb48ff984bc7909712e298@app.glitchtip.com/26619";
 
-export type Breadcrumb = {
-  at: number;
-  data?: Record<string, string | number | boolean>;
-  kind: string;
-};
+export type Breadcrumb = { at: number; kind: string };
 export type CrashContext = {
   breadcrumbs: Breadcrumb[];
   orgIdHash?: string;
@@ -63,14 +59,8 @@ const installedSources = new Set<string>();
 const TRUTHY = new Set(["1", "true", "on", "yes"]);
 const FALSY = new Set(["0", "false", "off", "no"]);
 const MAX_TEXT_LENGTH = 4000;
-const MAX_VALUE_LENGTH = 200;
 const SEND_TIMEOUT_MS = 3000;
 const SENTRY_CLIENT = "nakama/1";
-const ALLOWED_BREADCRUMB_KEYS = new Set(
-  "attempt,argKeys,bytes,code,count,durationMs,kind,mcpServer,method,model,phase,provider,route,status,tool,worker".split(
-    ","
-  )
-);
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}/gi, "Bearer <redacted>"],
   [/\bsk-[A-Za-z0-9_-]{8,}/g, "<redacted-key>"],
@@ -83,10 +73,6 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
   ],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<email>"],
   [/\b[A-Za-z0-9_-]{32,}\b/g, "<redacted-token>"],
-];
-const HOME_PATH_PATTERNS = [
-  /\/(?:Users|home)\/[^/\s:"']+/g,
-  /[A-Za-z]:\\Users\\[^\\\s:"']+/g,
 ];
 
 let logger: CrashLogger = defaultLogger;
@@ -143,10 +129,10 @@ export function scrubText(value: string): string {
   for (const [pattern, replacement] of SECRET_PATTERNS) {
     out = out.replace(pattern, replacement);
   }
-  for (const pattern of HOME_PATH_PATTERNS) {
-    out = out.replace(pattern, "~");
-  }
-  out = out.replace(/"[^"\n]*"/g, '"<redacted>"');
+  out = out
+    .replace(/\/(?:Users|home)\/[^/\s:"']+/g, "~")
+    .replace(/[A-Za-z]:\\Users\\[^\\\s:"']+/g, "~")
+    .replace(/"[^"\n]*"/g, '"<redacted>"');
   for (let pass = 0; pass < 4; pass += 1) {
     const next = out
       .replace(/\{[^{}]*\}/g, "<redacted>")
@@ -159,50 +145,6 @@ export function scrubText(value: string): string {
   return out.length > MAX_TEXT_LENGTH
     ? `${out.slice(0, MAX_TEXT_LENGTH)}…`
     : out;
-}
-
-function scrubBreadcrumbValue(
-  value: unknown
-): string | number | boolean | undefined {
-  if (typeof value === "string") {
-    const scrubbed = scrubText(value);
-    return scrubbed.length > MAX_VALUE_LENGTH
-      ? `${scrubbed.slice(0, MAX_VALUE_LENGTH)}…`
-      : scrubbed;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (Array.isArray(value) && value.every((e) => typeof e === "string")) {
-    return scrubBreadcrumbValue(value.join(","));
-  }
-}
-
-export function scrubBreadcrumbData(
-  data: Record<string, unknown> | undefined
-): Record<string, string | number | boolean> | undefined {
-  if (!data) {
-    return;
-  }
-  const out: Record<string, string | number | boolean> = {};
-  let dropped = 0;
-  for (const [key, value] of Object.entries(data)) {
-    const scrubbed = ALLOWED_BREADCRUMB_KEYS.has(key)
-      ? scrubBreadcrumbValue(value)
-      : undefined;
-    if (scrubbed === undefined) {
-      dropped += 1;
-    } else {
-      out[key] = scrubbed;
-    }
-  }
-  if (dropped > 0) {
-    out.droppedKeys = dropped;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function readCrashReportEnvOverride(
@@ -368,22 +310,12 @@ export function toSentryEvent(
     platform: "node",
     timestamp: report.at,
     ...(options.installId ? { user: { id: options.installId } } : {}),
-    extra: {
-      ...(report.stack ? { stack: report.stack } : {}),
-      ...(report.requestId ? { request_id: report.requestId } : {}),
-      ...(report.orgIdHash ? { org: report.orgIdHash } : {}),
-      ...(report.userIdHash ? { user_hash: report.userIdHash } : {}),
-      ...(report.sessionIdHash ? { session: report.sessionIdHash } : {}),
-    },
     tags: {
-      api_version: String(report.runtime.apiVersion),
-      arch: report.runtime.arch,
-      bun: report.runtime.bun,
       kind: report.kind,
       os: report.runtime.platform,
       source: report.source,
-      ...(report.route ? { route: report.route } : {}),
     },
+    ...(report.stack ? { extra: { stack: report.stack } } : {}),
   };
 }
 
@@ -470,17 +402,12 @@ export function setCrashContextIds(ids: {
   }
 }
 
-export function breadcrumb(kind: string, data?: Record<string, unknown>): void {
+export function breadcrumb(kind: string): void {
   const context = storage.getStore();
   if (!context) {
     return;
   }
-  const scrubbed = scrubBreadcrumbData(data);
-  context.breadcrumbs.push({
-    at: Date.now(),
-    kind,
-    ...(scrubbed ? { data: scrubbed } : {}),
-  });
+  context.breadcrumbs.push({ at: Date.now(), kind });
   if (context.breadcrumbs.length > MAX_BREADCRUMBS) {
     context.breadcrumbs.shift();
   }

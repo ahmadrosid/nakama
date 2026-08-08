@@ -3,8 +3,10 @@ import {
   ChannelOrgStore,
   getChannelOrgSelectionPath,
 } from "@nakama/core/channel-org";
-import { installCrashHandlers } from "@nakama/core/crash-report";
-import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
 import {
   clearDiscordWorkerHeartbeat,
   isHeartbeatAlive,

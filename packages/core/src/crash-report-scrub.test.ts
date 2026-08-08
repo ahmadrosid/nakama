@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
-import { hashId, scrubBreadcrumbData, scrubText } from "./crash-report-scrub";
+import { hashId, scrubText } from "./crash-report";
 
 /**
  * These assert the negative side: given a payload that carries real secrets, none of
@@ -132,48 +132,6 @@ test("scrubText truncates runaway text", () => {
   const scrubbed = scrubText("x".repeat(10_000));
 
   expect(scrubbed.length).toBeLessThanOrEqual(4001);
-});
-
-describe("scrubBreadcrumbData", () => {
-  test("drops every key that is not allowlisted", () => {
-    const scrubbed = scrubBreadcrumbData({
-      messages: ["hello"],
-      orgName: "orgx",
-      prompt: "summarise the patient record for Budi",
-      tool: "bash",
-      toolArgs: { command: "cat ~/.ssh/id_rsa" },
-    });
-
-    expect(scrubbed).toEqual({ droppedKeys: 4, tool: "bash" });
-  });
-
-  test("scrubs secrets inside an allowlisted value", () => {
-    const scrubbed = scrubBreadcrumbData({
-      provider: "anthropic key sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
-    });
-
-    expect(scrubbed?.provider).not.toContain("sk-ant-api03");
-  });
-
-  test("keeps numbers and booleans on allowlisted keys", () => {
-    expect(
-      scrubBreadcrumbData({ count: 3, durationMs: 12, status: 500 })
-    ).toEqual({
-      count: 3,
-      durationMs: 12,
-      status: 500,
-    });
-  });
-
-  test("drops an allowlisted key holding a nested object", () => {
-    expect(scrubBreadcrumbData({ tool: { name: "bash" } })).toEqual({
-      droppedKeys: 1,
-    });
-  });
-
-  test("returns undefined when nothing survives", () => {
-    expect(scrubBreadcrumbData(undefined)).toBeUndefined();
-  });
 });
 
 describe("hashId", () => {

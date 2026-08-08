@@ -23,10 +23,6 @@ export * from "./composio-config";
 export * from "./config";
 export * from "./contract";
 export * from "./crash-report";
-export * from "./crash-report-config";
-export * from "./crash-report-pending";
-export * from "./crash-report-scrub";
-export * from "./crash-report-sentry";
 // Explicit Discord exports — omit helpers that collide with telegram-* names
 // (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
 // isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config

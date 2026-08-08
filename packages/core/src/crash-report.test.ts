@@ -12,12 +12,12 @@ import {
   MAX_BREADCRUMBS,
   reportError,
   reportInvariant,
+  resetCrashReportConsentCache,
   runWithCrashContext,
   setCrashContextIds,
   setCrashLogger,
   setCrashSink,
 } from "./crash-report";
-import { resetCrashReportConsentCache } from "./crash-report-config";
 
 let configDir = "";
 let previousConfigDir: string | undefined;
@@ -54,13 +54,12 @@ test("breadcrumbs are scoped to the running context", () => {
   });
 
   runWithCrashContext(context, () => {
-    breadcrumb("route.enter", { method: "POST", status: 200 });
+    breadcrumb("route.enter");
     expect(currentCrashContext()).toBe(context);
   });
 
   expect(context.breadcrumbs).toHaveLength(1);
   expect(context.breadcrumbs[0]?.kind).toBe("route.enter");
-  expect(context.breadcrumbs[0]?.data).toEqual({ method: "POST", status: 200 });
 });
 
 test("breadcrumb outside a context is a no-op rather than a throw", () => {
@@ -72,15 +71,15 @@ test("the breadcrumb buffer is bounded and keeps the most recent entries", () =>
 
   runWithCrashContext(context, () => {
     for (let index = 0; index < MAX_BREADCRUMBS + 10; index += 1) {
-      breadcrumb("tool.call", { count: index });
+      breadcrumb(`tool.call.${index}`);
     }
   });
 
   expect(context.breadcrumbs).toHaveLength(MAX_BREADCRUMBS);
-  expect(context.breadcrumbs[0]?.data).toEqual({ count: 10 });
-  expect(context.breadcrumbs.at(-1)?.data).toEqual({
-    count: MAX_BREADCRUMBS + 9,
-  });
+  expect(context.breadcrumbs[0]?.kind).toBe("tool.call.10");
+  expect(context.breadcrumbs.at(-1)?.kind).toBe(
+    `tool.call.${MAX_BREADCRUMBS + 9}`
+  );
 });
 
 test("context ids are hashed, never carried raw", () => {

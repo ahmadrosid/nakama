@@ -1,7 +1,9 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installCrashHandlers } from "@nakama/core/crash-report";
-import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();

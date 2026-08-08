@@ -1,17 +1,13 @@
 import {
   currentCrashReportConsent,
-  loadCachedCrashReportConfig,
-  resolveCrashReportDsn,
-} from "@nakama/core/crash-report-config";
-import {
   getLastCrashReportPath,
+  loadCachedCrashReportConfig,
+  parseSentryDsn,
   readLastCrashReport,
   readPendingCrashReports,
-} from "@nakama/core/crash-report-pending";
-import {
-  parseSentryDsn,
+  resolveCrashReportDsn,
   toSentryEvent,
-} from "@nakama/core/crash-report-sentry";
+} from "@nakama/core/crash-report";
 
 export function isCrashReportShowCommand(
   argv = process.argv.slice(2)

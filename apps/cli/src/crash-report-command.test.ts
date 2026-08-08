@@ -2,12 +2,12 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCrashReport } from "@nakama/core/crash-report";
-import { resetCrashReportConsentCache } from "@nakama/core/crash-report-config";
 import {
+  buildCrashReport,
   readLastCrashReport,
   recordLastCrashReport,
-} from "@nakama/core/crash-report-pending";
+  resetCrashReportConsentCache,
+} from "@nakama/core/crash-report";
 import {
   isCrashReportShowCommand,
   runCrashReportShow,

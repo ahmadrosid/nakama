@@ -3,9 +3,10 @@ import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core/automation-worker";
-
-import { installCrashHandlers } from "@nakama/core/crash-report";
-import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import {
+  installCrashHandlers,
+  installCrashReportSink,
+} from "@nakama/core/crash-report";
 import {
   ensureServerRunning,
   stopSpawnedServer,

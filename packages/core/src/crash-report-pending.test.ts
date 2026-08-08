@@ -3,23 +3,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  appendPendingCrashReport,
   buildCrashReport,
   type CrashReport,
+  clearPendingCrashReports,
   flushPendingCrashReports,
+  MAX_PENDING_CRASH_REPORTS,
+  readPendingCrashReports,
   reportError,
+  resetCrashReportConsentCache,
+  saveCrashReportConsent,
   setCrashLogger,
   setCrashSink,
 } from "./crash-report";
-import {
-  resetCrashReportConsentCache,
-  saveCrashReportConsent,
-} from "./crash-report-config";
-import {
-  appendPendingCrashReport,
-  clearPendingCrashReports,
-  MAX_PENDING_CRASH_REPORTS,
-  readPendingCrashReports,
-} from "./crash-report-pending";
 
 let configDir = "";
 let previousConfigDir: string | undefined;

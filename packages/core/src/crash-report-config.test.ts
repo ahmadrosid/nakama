@@ -12,7 +12,7 @@ import {
   resolveCrashReportConsent,
   resolveCrashReportDsn,
   saveCrashReportConsent,
-} from "./crash-report-config";
+} from "./crash-report";
 
 let configDir = "";
 let previousConfigDir: string | undefined;
