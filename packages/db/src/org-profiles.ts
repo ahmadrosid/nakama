@@ -189,4 +189,3 @@ export async function ensureSuperBotBashTool(
   await ensureBashToolDefinition(db);
   await db.assignToolToProfile(profileId, BASH_TOOL_ID);
 }
-

@@ -5,14 +5,9 @@ import {
   type UserConfig,
 } from "@nakama/core";
 import {
-  isCrashIssueConfigured,
-  loadCrashIssueConfig,
-} from "@nakama/core/crash-issue-config";
-import {
   isEmailConfigComplete,
   loadEmailConfig,
 } from "@nakama/core/email-config";
-import { CRASH_ISSUE_TOOL_NAME } from "@nakama/core/tools/crash-issue";
 import { emailTool } from "@nakama/core/tools/email";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 
@@ -33,17 +28,14 @@ export function registerGenerateImageTool(tool: ToolDefinition | null): void {
 
 export function omitUnavailableBuiltinTools(
   tools: ToolDefinition[],
-  emailConfigured: boolean,
-  crashIssuesConfigured = false
+  emailConfigured: boolean
 ): ToolDefinition[] {
-  // Defaults to unavailable: only the maintainer of the repo being reported on sets a
-  // token, so every other install must never see an issue-filing tool at all.
   return tools.filter((tool) => {
     if (!emailConfigured && tool.name === emailTool.name) {
       return false;
     }
 
-    return crashIssuesConfigured || tool.name !== CRASH_ISSUE_TOOL_NAME;
+    return true;
   });
 }
 
@@ -61,8 +53,7 @@ export async function resolveProfileStoredTools(
   );
   return omitUnavailableBuiltinTools(
     tools,
-    isEmailConfigComplete(await loadEmailConfig()),
-    isCrashIssueConfigured(await loadCrashIssueConfig())
+    isEmailConfigComplete(await loadEmailConfig())
   );
 }
 

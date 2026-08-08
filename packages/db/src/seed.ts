@@ -42,7 +42,6 @@ export async function seedDatabase(db: DatabaseAdapter): Promise<void> {
   await ensureSubAgentToolDefinition(db);
   await ensureBashToolDefinition(db);
   await ensureGenerateImageToolDefinition(db);
-  await ensureCrashIssueToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);
   await ensureOrgSuperBotProfiles(db);
