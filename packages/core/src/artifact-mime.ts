@@ -17,56 +17,56 @@ export const LEGACY_DOC_UNSUPPORTED_MESSAGE =
   "Legacy .doc files (Word 97-2003) are not supported. Convert the file to .docx and try again.";
 
 const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
-  docx: DOCX_MEDIA_TYPE,
+  bash: "text/plain",
+  cjs: "application/javascript",
+  conf: "text/plain",
+  css: "text/css",
+  csv: "text/csv",
   doc: LEGACY_DOC_MEDIA_TYPE,
-  md: "text/markdown",
-  markdown: "text/markdown",
-  mdx: "text/markdown",
-  html: "text/html",
+  docx: DOCX_MEDIA_TYPE,
+  env: "text/plain",
+  gif: "image/gif",
+  go: "text/plain",
   htm: "text/html",
-  xhtml: "application/xhtml+xml",
+  html: "text/html",
+  ini: "text/plain",
+  java: "text/plain",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  js: "application/javascript",
   json: "application/json",
   jsonl: "application/json",
-  js: "application/javascript",
-  mjs: "application/javascript",
-  cjs: "application/javascript",
-  ts: "text/plain",
-  tsx: "text/plain",
   jsx: "text/plain",
+  log: "text/plain",
+  m4v: "video/mp4",
+  markdown: "text/markdown",
+  md: "text/markdown",
+  mdx: "text/markdown",
+  mjs: "application/javascript",
+  mov: "video/quicktime",
+  mp4: "video/mp4",
+  ogv: "video/ogg",
+  pdf: "application/pdf",
+  php: "text/plain",
+  png: "image/png",
   py: "text/plain",
   rb: "text/plain",
-  go: "text/plain",
   rs: "text/plain",
-  java: "text/plain",
-  php: "text/plain",
-  sql: "text/plain",
   sh: "text/plain",
-  bash: "text/plain",
-  zsh: "text/plain",
-  env: "text/plain",
-  ini: "text/plain",
-  conf: "text/plain",
+  sql: "text/plain",
+  svg: "image/svg+xml",
+  toml: "text/plain",
+  ts: "text/plain",
+  tsv: "text/tab-separated-values",
+  tsx: "text/plain",
+  txt: "text/plain",
+  webm: "video/webm",
+  webp: "image/webp",
+  xhtml: "application/xhtml+xml",
+  xml: "application/xml",
   yaml: "text/plain",
   yml: "text/plain",
-  toml: "text/plain",
-  css: "text/css",
-  xml: "application/xml",
-  svg: "image/svg+xml",
-  csv: "text/csv",
-  tsv: "text/tab-separated-values",
-  txt: "text/plain",
-  log: "text/plain",
-  pdf: "application/pdf",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  mp4: "video/mp4",
-  m4v: "video/mp4",
-  webm: "video/webm",
-  mov: "video/quicktime",
-  ogv: "video/ogg",
+  zsh: "text/plain",
 };
 
 function fileExtension(filename: string): string {
@@ -94,7 +94,10 @@ export function normalizeMimeType(mimeType: string): string {
  * Resolve the type to preview by: a declared type wins, unless it is missing or
  * the generic binary fallback — then trust the filename extension.
  */
-export function resolveArtifactMimeType(declaredMimeType: string, filename: string): string {
+export function resolveArtifactMimeType(
+  declaredMimeType: string,
+  filename: string
+): string {
   const declared = normalizeMimeType(declaredMimeType);
 
   if (!declared || declared === UNKNOWN_MIME_TYPE) {
@@ -148,43 +151,47 @@ export function isUnknownArtifactMimeType(mimeType: string): boolean {
 
 /** A `.docx` is a ZIP of OOXML parts: never UTF-8, but convertible to Markdown. */
 export function isDocxFile(filename: string, mediaType = ""): boolean {
-  return fileExtension(filename) === "docx" || normalizeMimeType(mediaType) === DOCX_MEDIA_TYPE;
+  return (
+    fileExtension(filename) === "docx" ||
+    normalizeMimeType(mediaType) === DOCX_MEDIA_TYPE
+  );
 }
 
 export function isLegacyDocFile(filename: string, mediaType = ""): boolean {
   return (
-    fileExtension(filename) === "doc" || normalizeMimeType(mediaType) === LEGACY_DOC_MEDIA_TYPE
+    fileExtension(filename) === "doc" ||
+    normalizeMimeType(mediaType) === LEGACY_DOC_MEDIA_TYPE
   );
 }
 
 const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  bash: "bash",
+  cjs: "javascript",
+  conf: "ini",
+  css: "css",
+  env: "ini",
+  go: "go",
+  ini: "ini",
+  java: "java",
+  js: "javascript",
   json: "json",
   jsonl: "json",
-  js: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
   jsx: "jsx",
-  ts: "typescript",
-  tsx: "tsx",
+  mjs: "javascript",
+  php: "php",
   py: "python",
   rb: "ruby",
-  go: "go",
   rs: "rust",
-  java: "java",
-  php: "php",
-  sql: "sql",
   sh: "bash",
-  bash: "bash",
-  zsh: "bash",
+  sql: "sql",
+  svg: "xml",
+  toml: "toml",
+  ts: "typescript",
+  tsx: "tsx",
+  xml: "xml",
   yaml: "yaml",
   yml: "yaml",
-  toml: "toml",
-  ini: "ini",
-  conf: "ini",
-  env: "ini",
-  css: "css",
-  xml: "xml",
-  svg: "xml",
+  zsh: "bash",
 };
 
 /**

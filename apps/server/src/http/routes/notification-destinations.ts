@@ -15,31 +15,38 @@ import type { HonoApp } from "../types";
 
 export function registerNotificationDestinationRoutes(
   app: HonoApp,
-  options: ServerOptions,
+  options: ServerOptions
 ): void {
   const service = new NotificationDestinationService(
     options.databaseAdapter,
-    options.authService,
+    options.authService
   );
 
   app.get("/v1/notification-destinations", async (c) => {
     const auth = requireOrgAdminFromContext(c);
-    return json<ListNotificationDestinationsResponse>(await service.list(auth.activeOrgId!));
+    return json<ListNotificationDestinationsResponse>(
+      await service.list(auth.activeOrgId!)
+    );
   });
 
   app.post("/v1/notification-destinations", async (c) => {
     const auth = requireOrgAdminFromContext(c);
 
     try {
-      const body = await readJson<CreateNotificationDestinationRequest>(c.req.raw);
+      const body = await readJson<CreateNotificationDestinationRequest>(
+        c.req.raw
+      );
       return json<NotificationDestinationWithSecret>(
-        await service.create(auth.activeOrgId!, body),
+        await service.create(auth.activeOrgId!, body)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -47,32 +54,50 @@ export function registerNotificationDestinationRoutes(
     const auth = requireOrgAdminFromContext(c);
 
     try {
-      const body = await readJson<UpdateNotificationDestinationRequest>(c.req.raw);
+      const body = await readJson<UpdateNotificationDestinationRequest>(
+        c.req.raw
+      );
       return json<NotificationDestinationSummary>(
-        await service.update(auth.activeOrgId!, c.req.param("destinationId"), body),
+        await service.update(
+          auth.activeOrgId!,
+          c.req.param("destinationId"),
+          body
+        )
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
-    }
-  });
-
-  app.post("/v1/notification-destinations/:destinationId/rotate-key", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
-
-    try {
-      return json<RegenerateNotificationDestinationKeyResponse>(
-        await service.regenerateKey(auth.activeOrgId!, c.req.param("destinationId")),
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
       );
-    } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
     }
   });
+
+  app.post(
+    "/v1/notification-destinations/:destinationId/rotate-key",
+    async (c) => {
+      const auth = requireOrgAdminFromContext(c);
+
+      try {
+        return json<RegenerateNotificationDestinationKeyResponse>(
+          await service.regenerateKey(
+            auth.activeOrgId!,
+            c.req.param("destinationId")
+          )
+        );
+      } catch (error) {
+        if (error instanceof NakamaApiError) {
+          return errorResponse(error.message, error.status);
+        }
+        return errorResponse(
+          error instanceof Error ? error.message : String(error),
+          400
+        );
+      }
+    }
+  );
 
   app.delete("/v1/notification-destinations/:destinationId", async (c) => {
     const auth = requireOrgAdminFromContext(c);
@@ -84,7 +109,10 @@ export function registerNotificationDestinationRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 }

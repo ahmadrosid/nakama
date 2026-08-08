@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import {
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
@@ -23,7 +23,7 @@ describe("knowledge base store", () => {
     process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
 
     if (tempConfigDir) {
-      await rm(tempConfigDir, { recursive: true, force: true });
+      await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
     }
   });
@@ -34,7 +34,7 @@ describe("knowledge base store", () => {
     await import("node:fs/promises").then(({ mkdir }) =>
       mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "profiles", profileId), {
         recursive: true,
-      }),
+      })
     );
   }
 
@@ -42,11 +42,13 @@ describe("knowledge base store", () => {
     const profileId = "profile_kb_test";
     await setupProfile(profileId);
 
-    const content = Buffer.from("needle in haystack", "utf8").toString("base64");
+    const content = Buffer.from("needle in haystack", "utf8").toString(
+      "base64"
+    );
     const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+      data: content,
       filename: "notes.txt",
       mediaType: "text/plain",
-      data: content,
     });
 
     expect(uploaded.status).toBe("ready");
@@ -58,24 +60,31 @@ describe("knowledge base store", () => {
 
     const extracted = await readFile(
       getKnowledgeBaseExtractedPath(ORG_ID, profileId, uploaded.id),
-      "utf8",
+      "utf8"
     );
     expect(extracted).toContain("# source: notes.txt");
     expect(extracted).toContain("needle in haystack");
 
-    const manifest = await readFile(getKnowledgeBaseManifestPath(ORG_ID, profileId), "utf8");
+    const manifest = await readFile(
+      getKnowledgeBaseManifestPath(ORG_ID, profileId),
+      "utf8"
+    );
     expect(manifest).toContain(uploaded.id);
 
     const storedPath = getKnowledgeBaseStoredDocumentPath(
       ORG_ID,
       profileId,
       uploaded.id,
-      uploaded.filename,
+      uploaded.filename
     );
     expect(storedPath).toContain(uploaded.id);
     expect(await readFile(storedPath, "utf8")).toContain("needle in haystack");
 
-    const deleted = await deleteKnowledgeBaseDocument(ORG_ID, profileId, uploaded.id);
+    const deleted = await deleteKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      uploaded.id
+    );
     expect(deleted).toBe(true);
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
   });
@@ -86,10 +95,10 @@ describe("knowledge base store", () => {
 
     await expect(
       uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+        data: Buffer.from("zip").toString("base64"),
         filename: "archive.zip",
         mediaType: "application/zip",
-        data: Buffer.from("zip").toString("base64"),
-      }),
+      })
     ).rejects.toThrow(/Unsupported knowledge base document type/);
   });
 
@@ -104,39 +113,41 @@ describe("knowledge base store", () => {
       "profiles",
       profileId,
       "data",
-      "knowledge-base",
+      "knowledge-base"
     );
     await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
-    await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), { recursive: true });
+    await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), {
+      recursive: true,
+    });
     await writeFile(
       path.join(legacyDir, "manifest.json"),
       JSON.stringify(
         {
           documents: [
             {
-              id: "kb_legacy",
               filename: "legacy.txt",
+              id: "kb_legacy",
               mediaType: "text/plain",
               sizeBytes: 11,
-              uploadedAt: "2026-06-13T00:00:00.000Z",
               status: "ready",
+              uploadedAt: "2026-06-13T00:00:00.000Z",
             },
           ],
         },
         null,
-        2,
+        2
       ),
-      "utf8",
+      "utf8"
     );
     await writeFile(
       path.join(legacyDir, "extracted", "kb_legacy.txt"),
       "# source: legacy.txt\n\nlegacy body\n",
-      "utf8",
+      "utf8"
     );
     await writeFile(
       path.join(legacyDir, "uploads", "kb_legacy", "legacy.txt"),
       "legacy body\n",
-      "utf8",
+      "utf8"
     );
 
     await listKnowledgeBaseDocuments(ORG_ID, profileId);
@@ -150,11 +161,11 @@ describe("knowledge base store", () => {
           "profiles",
           profileId,
           "knowledge-base",
-          "manifest.json",
+          "manifest.json"
         ),
-        "utf8",
-      ),
-    ).toContain("\"documents\"");
+        "utf8"
+      )
+    ).toContain('"documents"');
     expect(
       await readFile(
         path.join(
@@ -164,10 +175,10 @@ describe("knowledge base store", () => {
           "profiles",
           profileId,
           "knowledge-base",
-          "kb_legacy.extracted.txt",
+          "kb_legacy.extracted.txt"
         ),
-        "utf8",
-      ),
+        "utf8"
+      )
     ).toContain("legacy body");
     expect(
       await readFile(
@@ -178,11 +189,13 @@ describe("knowledge base store", () => {
           "profiles",
           profileId,
           "knowledge-base",
-          "kb_legacy--legacy.txt",
+          "kb_legacy--legacy.txt"
         ),
-        "utf8",
-      ),
+        "utf8"
+      )
     ).toContain("legacy body");
-    await expect(readFile(path.join(legacyDir, "manifest.json"), "utf8")).rejects.toThrow();
+    await expect(
+      readFile(path.join(legacyDir, "manifest.json"), "utf8")
+    ).rejects.toThrow();
   });
 });

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { createHonoApp } from "../app";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
 import { ProfileService } from "../../services/profile-service";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { setupFreshInstallSession, loginUserSession } from "../test-session-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
+import { createHonoApp } from "../app";
+import {
+  loginUserSession,
+  setupFreshInstallSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profiles-skills-write-approval-test-");
 
@@ -14,24 +17,28 @@ function createApp() {
   const authService = new AuthService();
   const profileService = new ProfileService(databaseAdapter);
   return {
-    databaseAdapter,
-    authService,
-    profileService,
     app: createHonoApp({
       agent: {
         updateProfile: (orgId: string, profileId: string, body: unknown) =>
-          profileService.updateProfile(orgId, profileId, body as Parameters<ProfileService["updateProfile"]>[2]),
+          profileService.updateProfile(
+            orgId,
+            profileId,
+            body as Parameters<ProfileService["updateProfile"]>[2]
+          ),
       } as never,
-      automationService: {} as never,
-      taskService: {} as never,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      workerManager: {} as never,
-      mcpService: {} as never,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as never,
       databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
       webDistDir: null,
+      workerManager: {} as never,
     }),
+    authService,
+    databaseAdapter,
+    profileService,
   };
 }
 
@@ -40,47 +47,62 @@ const BASE = "http://localhost:4310";
 describe("profile skillsWriteApproval auth", () => {
   test("org admin can patch skillsWriteApproval only; other fields forbidden", async () => {
     const { app, databaseAdapter } = createApp();
-    const platformSession = await setupFreshInstallSession(app, databaseAdapter, "platform@org.com");
+    const platformSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "platform@org.com"
+    );
     const orgId = platformSession.orgId!;
 
     const inviteResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/members`, {
-        method: "POST",
-        headers: platformSession.headers({ "X-CSRF-Token": platformSession.csrfToken }, orgId),
         body: JSON.stringify({
           email: "orgadmin@org.com",
           name: "Org Admin",
           role: "admin",
         }),
-      }),
+        headers: platformSession.headers(
+          { "X-CSRF-Token": platformSession.csrfToken },
+          orgId
+        ),
+        method: "POST",
+      })
     );
     const invited = (await inviteResp.json()) as { temporaryPassword: string };
     const orgAdminSession = await loginUserSession(
       app,
       "orgadmin@org.com",
       invited.temporaryPassword,
-      orgId,
+      orgId
     );
 
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
 
     const okResp = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}`, {
-        method: "PUT",
-        headers: orgAdminSession.headers({ "X-CSRF-Token": orgAdminSession.csrfToken }, orgId),
         body: JSON.stringify({ skillsWriteApproval: true }),
-      }),
+        headers: orgAdminSession.headers(
+          { "X-CSRF-Token": orgAdminSession.csrfToken },
+          orgId
+        ),
+        method: "PUT",
+      })
     );
     expect(okResp.status).toBe(200);
-    const okBody = (await okResp.json()) as { profile: { skillsWriteApproval: boolean | null } };
+    const okBody = (await okResp.json()) as {
+      profile: { skillsWriteApproval: boolean | null };
+    };
     expect(okBody.profile.skillsWriteApproval).toBe(true);
 
     const reviewResp = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}`, {
-        method: "PUT",
-        headers: orgAdminSession.headers({ "X-CSRF-Token": orgAdminSession.csrfToken }, orgId),
         body: JSON.stringify({ skillsPostTurnReview: true }),
-      }),
+        headers: orgAdminSession.headers(
+          { "X-CSRF-Token": orgAdminSession.csrfToken },
+          orgId
+        ),
+        method: "PUT",
+      })
     );
     expect(reviewResp.status).toBe(200);
     const reviewBody = (await reviewResp.json()) as {
@@ -90,10 +112,13 @@ describe("profile skillsWriteApproval auth", () => {
 
     const forbiddenResp = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}`, {
-        method: "PUT",
-        headers: orgAdminSession.headers({ "X-CSRF-Token": orgAdminSession.csrfToken }, orgId),
         body: JSON.stringify({ name: "Renamed", skillsWriteApproval: false }),
-      }),
+        headers: orgAdminSession.headers(
+          { "X-CSRF-Token": orgAdminSession.csrfToken },
+          orgId
+        ),
+        method: "PUT",
+      })
     );
     expect(forbiddenResp.status).toBe(403);
   });

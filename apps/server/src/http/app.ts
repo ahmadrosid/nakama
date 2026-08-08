@@ -1,42 +1,46 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { createAuthMiddleware } from "./auth-middleware";
-import { createOrgContextMiddleware } from "./org-middleware";
-import type { ServerOptions } from "./context";
-import type { HonoApp } from "./types";
-import { NakamaApiError, formatServerError } from "@nakama/core";
+import { formatServerError, NakamaApiError } from "@nakama/core";
 import {
   createCrashContext,
   currentCrashContext,
   reportError,
   runWithCrashContext,
 } from "@nakama/core/crash-report";
-import { errorResponse } from "./shared";
-import { registerSystemRoutes } from "./routes/system";
-import { registerAuthRoutes } from "./routes/auth";
-import { registerSetupImportRoutes } from "./routes/setup-import";
-import { registerWorkerRoutes } from "./routes/workers";
-import { registerModelRoutes } from "./routes/models";
-import { registerUserContextRoutes } from "./routes/user-context";
-import { registerSessionRoutes } from "./routes/sessions";
-import { registerProfileRoutes } from "./routes/profiles";
+import { tryServeStaticWeb } from "../static-web";
+import { createAuthMiddleware } from "./auth-middleware";
+import type { ServerOptions } from "./context";
+import { serializeHttpOpenApiSpec } from "./openapi";
+import { createOrgContextMiddleware } from "./org-middleware";
+
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
-import { registerMcpRoutes } from "./routes/mcp";
-import { registerSkillRoutes } from "./routes/skills";
-import { registerToolRoutes } from "./routes/tools";
+import { registerAuthRoutes } from "./routes/auth";
 import { registerAutomationRoutes } from "./routes/automations";
-import { registerTaskRoutes } from "./routes/tasks";
-import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
-import { registerOrgMemberRoutes } from "./routes/org-members";
-import { registerOrgMemoryRoutes } from "./routes/org-memory";
-import { registerSkillProposalRoutes } from "./routes/skill-proposals";
-import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
+import {
+  registerComposioOAuthRoutes,
+  registerComposioRoutes,
+} from "./routes/composio";
+import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
+import { registerMcpRoutes } from "./routes/mcp";
+import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
 import { registerNotificationWebhookRoutes } from "./routes/notification-webhooks";
-import { registerComposioOAuthRoutes, registerComposioRoutes } from "./routes/composio";
-import { registerDataPortabilityRoutes } from "./routes/data-portability";
-import { tryServeStaticWeb } from "../static-web";
-import { serializeHttpOpenApiSpec } from "./openapi";
+import { registerOrgMemberRoutes } from "./routes/org-members";
+import { registerOrgMemoryRoutes } from "./routes/org-memory";
+import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
+import { registerProfileRoutes } from "./routes/profiles";
+import { registerSessionRoutes } from "./routes/sessions";
+import { registerSetupImportRoutes } from "./routes/setup-import";
+import { registerSkillProposalRoutes } from "./routes/skill-proposals";
+import { registerSkillSuggestionRoutes } from "./routes/skill-suggestions";
+import { registerSkillRoutes } from "./routes/skills";
+import { registerSystemRoutes } from "./routes/system";
+import { registerTaskRoutes } from "./routes/tasks";
+import { registerToolRoutes } from "./routes/tools";
+import { registerUserContextRoutes } from "./routes/user-context";
+import { registerWorkerRoutes } from "./routes/workers";
+import { errorResponse } from "./shared";
+import type { HonoApp } from "./types";
 
 /**
  * A rejected request is not a defect. Reporting 4xx would bury the real crashes under
@@ -71,7 +75,7 @@ export function createHonoApp(options: ServerOptions) {
       return errorResponse(
         err.message,
         err.status,
-        err.profiles ? { profiles: err.profiles } : undefined,
+        err.profiles ? { profiles: err.profiles } : undefined
       );
     }
 
@@ -92,15 +96,21 @@ export function createHonoApp(options: ServerOptions) {
       if (!headers.has("Referrer-Policy")) {
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       }
-      headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';");
+      headers.set(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+      );
       // Only enable HSTS if the request is secure (HTTPS)
       if (new URL(c.req.url).protocol === "https:") {
-        headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        headers.set(
+          "Strict-Transport-Security",
+          "max-age=31536000; includeSubDomains"
+        );
       }
       return new Response(response.body, {
+        headers,
         status: response.status,
         statusText: response.statusText,
-        headers,
       });
     };
 
@@ -120,8 +130,8 @@ export function createHonoApp(options: ServerOptions) {
 
   app.use("*", async (c, next) => {
     const context = createCrashContext({
-      source: "server",
       requestId: c.req.header("x-request-id"),
+      source: "server",
     });
 
     c.header("x-request-id", context.requestId);
@@ -164,9 +174,7 @@ export function createHonoApp(options: ServerOptions) {
     });
   });
 
-  app.all("*", (c) => {
-    return errorResponse("Not found", 404);
-  });
+  app.all("*", (c) => errorResponse("Not found", 404));
 
   return app;
 }

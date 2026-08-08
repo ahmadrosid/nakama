@@ -8,7 +8,10 @@ import {
   readLastCrashReport,
   recordLastCrashReport,
 } from "@nakama/core/crash-report-pending";
-import { isCrashReportShowCommand, runCrashReportShow } from "./crash-report-command";
+import {
+  isCrashReportShowCommand,
+  runCrashReportShow,
+} from "./crash-report-command";
 
 let configDir = "";
 let previousConfigDir: string | undefined;
@@ -40,7 +43,7 @@ afterEach(async () => {
 
   delete process.env.NAKAMA_CRASH_REPORT_DSN;
   resetCrashReportConsentCache();
-  await rm(configDir, { recursive: true, force: true });
+  await rm(configDir, { force: true, recursive: true });
 });
 
 function output(): string {
@@ -68,7 +71,9 @@ test("it prints where reports go, so that is not something to take on trust", as
 });
 
 test("it prints the stored report and the exact payload the ingest receives", async () => {
-  const report = buildCrashReport(new Error("provider call failed"), { source: "server" });
+  const report = buildCrashReport(new Error("provider call failed"), {
+    source: "server",
+  });
   await recordLastCrashReport(report);
 
   await runCrashReportShow();
@@ -81,8 +86,10 @@ test("it prints the stored report and the exact payload the ingest receives", as
 
 test("what it prints is the scrubbed report, not the raw error", async () => {
   const report = buildCrashReport(
-    new Error('rejected {"name":"Budi"} with key sk-ant-api03-abcdefghijklmnopqrstuvwx'),
-    { source: "server" },
+    new Error(
+      'rejected {"name":"Budi"} with key sk-ant-api03-abcdefghijklmnopqrstuvwx'
+    ),
+    { source: "server" }
   );
   await recordLastCrashReport(report);
 

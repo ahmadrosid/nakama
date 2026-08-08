@@ -1,13 +1,13 @@
 import {
-  extractLatestTurnMessages,
-  resolveSkillPostTurnReviewEnabled,
-  type ChatMessage,
-  type UserConfig,
-} from "@nakama/core";
-import {
   generateSkillPostTurnReview,
   type SkillPostTurnReviewOutcome,
 } from "@nakama/agent";
+import {
+  type ChatMessage,
+  extractLatestTurnMessages,
+  resolveSkillPostTurnReviewEnabled,
+  type UserConfig,
+} from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { resolveProfileProviderSelection } from "./provider-instance-helpers";
@@ -30,23 +30,23 @@ export type PostTurnReviewSkipReason =
 
 export interface PostTurnReviewEligibility {
   eligible: boolean;
+  hasToolError: boolean;
   reason?: PostTurnReviewSkipReason;
   toolCallCount: number;
-  hasToolError: boolean;
   usedSkillManage: boolean;
 }
 
 export interface PostTurnReviewRunnerContext {
-  sessionId: string;
+  messages: ChatMessage[];
   orgId: string;
   profileId: string;
-  userId: string | null;
-  messages: ChatMessage[];
+  sessionId: string;
   turnMessages: ChatMessage[];
+  userId: string | null;
 }
 
 export type PostTurnReviewRunner = (
-  context: PostTurnReviewRunnerContext,
+  context: PostTurnReviewRunnerContext
 ) => Promise<SkillPostTurnReviewOutcome | void>;
 
 export function countToolCallsInTurn(turnMessages: ChatMessage[]): number {
@@ -83,10 +83,12 @@ export function turnHasToolError(turnMessages: ChatMessage[]): boolean {
 
 export function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
   for (const message of turnMessages) {
-    if (message.role === "assistant" && message.toolCalls) {
-      if (message.toolCalls.some((call) => call.name === SKILL_MANAGE_TOOL_NAME)) {
-        return true;
-      }
+    if (
+      message.role === "assistant" &&
+      message.toolCalls &&
+      message.toolCalls.some((call) => call.name === SKILL_MANAGE_TOOL_NAME)
+    ) {
+      return true;
     }
     if (message.role === "tool" && message.name === SKILL_MANAGE_TOOL_NAME) {
       return true;
@@ -96,7 +98,7 @@ export function turnUsedSkillManage(turnMessages: ChatMessage[]): boolean {
 }
 
 export function evaluatePostTurnReviewTurnEligibility(
-  turnMessages: ChatMessage[],
+  turnMessages: ChatMessage[]
 ): PostTurnReviewEligibility {
   const toolCallCount = countToolCallsInTurn(turnMessages);
   const hasToolError = turnHasToolError(turnMessages);
@@ -105,28 +107,29 @@ export function evaluatePostTurnReviewTurnEligibility(
   if (usedSkillManage) {
     return {
       eligible: false,
+      hasToolError,
       reason: "skill_manage_already_used",
       toolCallCount,
-      hasToolError,
       usedSkillManage,
     };
   }
 
-  const complex = toolCallCount >= MIN_TOOL_CALLS_FOR_COMPLEX_TURN || hasToolError;
+  const complex =
+    toolCallCount >= MIN_TOOL_CALLS_FOR_COMPLEX_TURN || hasToolError;
   if (!complex) {
     return {
       eligible: false,
+      hasToolError,
       reason: "turn_not_complex",
       toolCallCount,
-      hasToolError,
       usedSkillManage,
     };
   }
 
   return {
     eligible: true,
-    toolCallCount,
     hasToolError,
+    toolCallCount,
     usedSkillManage,
   };
 }
@@ -138,7 +141,7 @@ export class SkillPostTurnReviewService {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly getUserConfig: () => UserConfig | null,
-    runner?: PostTurnReviewRunner,
+    runner?: PostTurnReviewRunner
   ) {
     this.runner = runner ?? ((context) => this.reviewTurnWithLlm(context));
   }
@@ -155,7 +158,7 @@ export class SkillPostTurnReviewService {
   }
 
   async reviewTurnWithLlm(
-    context: PostTurnReviewRunnerContext,
+    context: PostTurnReviewRunnerContext
   ): Promise<SkillPostTurnReviewOutcome> {
     const provider = await this.resolveProviderForProfile(context.profileId);
     if (!provider) {
@@ -164,18 +167,20 @@ export class SkillPostTurnReviewService {
 
     const assigned = await this.db.listSkillsForProfile(context.profileId);
     const catalog = assigned.map((skill) => ({
-      name: skill.name,
       description: skill.description,
+      name: skill.name,
     }));
 
     return generateSkillPostTurnReview({
-      turnMessages: context.turnMessages,
       catalog,
       provider,
+      turnMessages: context.turnMessages,
     });
   }
 
-  async runPostTurnSkillReview(sessionId: string): Promise<PostTurnReviewSkipReason | "ran"> {
+  async runPostTurnSkillReview(
+    sessionId: string
+  ): Promise<PostTurnReviewSkipReason | "ran"> {
     if (this.inFlight.has(sessionId)) {
       return "in_flight";
     }
@@ -217,7 +222,9 @@ export class SkillPostTurnReviewService {
       }
 
       const storedMessages = await this.db.listMessagesForSession(sessionId);
-      const messages = storedMessages.map((record) => record.payload as ChatMessage);
+      const messages = storedMessages.map(
+        (record) => record.payload as ChatMessage
+      );
       const turnMessages = extractLatestTurnMessages(messages);
       const eligibility = evaluatePostTurnReviewTurnEligibility(turnMessages);
       if (!eligibility.eligible) {
@@ -225,12 +232,12 @@ export class SkillPostTurnReviewService {
       }
 
       await this.runner({
-        sessionId,
+        messages,
         orgId: profile.orgId,
         profileId: profile.id,
-        userId: session.userId ?? null,
-        messages,
+        sessionId,
         turnMessages,
+        userId: session.userId ?? null,
       });
 
       return "ran";
@@ -251,9 +258,9 @@ export class SkillPostTurnReviewService {
     }
 
     const selection = resolveProfileProviderSelection({
-      providers: userConfig.providers,
       defaultProviderId: userConfig.defaultProviderId,
       profileModel: profile.model,
+      providers: userConfig.providers,
     });
 
     if (!selection) {

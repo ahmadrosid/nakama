@@ -2,27 +2,27 @@ import type { SoulStackFiles } from "@nakama/core/contract";
 
 export const SOUL_FILES = [
   {
+    description: "Identity, worldview, and opinions",
     key: "soul" as const,
     label: "SOUL.md",
-    description: "Identity, worldview, and opinions",
     writable: true,
   },
   {
+    description: "Voice, tone, and formatting",
     key: "style" as const,
     label: "STYLE.md",
-    description: "Voice, tone, and formatting",
     writable: true,
   },
   {
+    description: "Operating instructions and workflows",
     key: "instructions" as const,
     label: "INSTRUCTIONS.md",
-    description: "Operating instructions and workflows",
     writable: true,
   },
   {
+    description: "Continuity and context to carry forward",
     key: "memory" as const,
     label: "MEMORY.md",
-    description: "Continuity and context to carry forward",
     writable: true,
   },
 ] satisfies Array<{

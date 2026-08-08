@@ -10,7 +10,9 @@ describe("splitStreamingMarkdown", () => {
   });
 
   test("seals completed paragraphs at blank-line boundaries", () => {
-    expect(splitStreamingMarkdown("First paragraph.\n\nSecond still typing")).toEqual({
+    expect(
+      splitStreamingMarkdown("First paragraph.\n\nSecond still typing")
+    ).toEqual({
       sealed: "First paragraph.\n\n",
       tail: "Second still typing",
     });
@@ -25,7 +27,8 @@ describe("splitStreamingMarkdown", () => {
   });
 
   test("seals after a closed fence when a later blank line appears", () => {
-    const content = "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\nAfter";
+    const content =
+      "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\nAfter";
     expect(splitStreamingMarkdown(content)).toEqual({
       sealed: "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\n",
       tail: "After",

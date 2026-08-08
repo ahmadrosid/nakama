@@ -11,26 +11,26 @@ import type { JsonSchema, ToolDefinition } from "../contract";
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
 export interface WebFetchInput {
-  url: string;
   raw?: boolean;
+  url: string;
 }
 
 const HTTP_S_URL_REGEX = /^https?:\/\/.+$/i;
 
 export const webFetchInputSchema = z
   .object({
+    raw: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, return the raw response body without Markdown conversion. Defaults to false."
+      ),
     url: z
       .string()
       .min(1)
       .url()
       .regex(HTTP_S_URL_REGEX, "url must use http: or https:")
       .describe("Absolute http: or https: URL to fetch."),
-    raw: z
-      .boolean()
-      .optional()
-      .describe(
-        "When true, return the raw response body without Markdown conversion. Defaults to false.",
-      ),
   })
   .strict();
 
@@ -40,12 +40,12 @@ export function webFetchParameters(): JsonSchema {
 }
 
 export interface WebFetchOutput {
-  url: string;
-  finalUrl: string;
-  status: number;
-  contentType: string;
   bytes: number;
   content: string;
+  contentType: string;
+  finalUrl: string;
+  status: number;
+  url: string;
 }
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -208,8 +208,12 @@ function isPrivateIpv6(ip: string): boolean {
 
 function isPrivateIp(ip: string): boolean {
   const family = isIP(ip);
-  if (family === 4) return isPrivateIpv4(ip);
-  if (family === 6) return isPrivateIpv6(ip);
+  if (family === 4) {
+    return isPrivateIpv4(ip);
+  }
+  if (family === 6) {
+    return isPrivateIpv6(ip);
+  }
   return true;
 }
 
@@ -218,7 +222,9 @@ async function assertPublicHostname(hostname: string): Promise<void> {
 
   if (isIP(bare)) {
     if (isPrivateIp(bare)) {
-      throw new Error(`web_fetch blocked: address ${bare} is private or reserved.`);
+      throw new Error(
+        `web_fetch blocked: address ${bare} is private or reserved.`
+      );
     }
     return;
   }
@@ -227,11 +233,15 @@ async function assertPublicHostname(hostname: string): Promise<void> {
   try {
     records = await dnsLookup(bare, { all: true });
   } catch (err) {
-    throw new Error(`web_fetch failed to resolve hostname ${bare}: ${(err as Error).message}`);
+    throw new Error(
+      `web_fetch failed to resolve hostname ${bare}: ${(err as Error).message}`
+    );
   }
 
   if (records.length === 0) {
-    throw new Error(`web_fetch failed to resolve hostname ${bare}: no records.`);
+    throw new Error(
+      `web_fetch failed to resolve hostname ${bare}: no records.`
+    );
   }
 
   let privateAddress: string | null = null;
@@ -244,7 +254,7 @@ async function assertPublicHostname(hostname: string): Promise<void> {
   }
 
   throw new Error(
-    `web_fetch blocked: hostname ${bare} resolves to private address ${privateAddress}.`,
+    `web_fetch blocked: hostname ${bare} resolves to private address ${privateAddress}.`
   );
 }
 
@@ -257,7 +267,9 @@ function parseUrl(rawUrl: string): URL {
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`web_fetch: unsupported protocol ${url.protocol} (use http or https).`);
+    throw new Error(
+      `web_fetch: unsupported protocol ${url.protocol} (use http or https).`
+    );
   }
 
   if (!url.hostname) {
@@ -273,34 +285,39 @@ function contentTypeIsHtml(contentType: string): boolean {
 
 async function fetchWithRedirects(
   url: URL,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<{ response: Response; finalUrl: string }> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     const response = await fetch(current, {
-      redirect: "manual",
-      signal,
       headers: {
         accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-        "user-agent": "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
+        "user-agent":
+          "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
       },
+      redirect: "manual",
+      signal,
     });
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) {
-        throw new Error(`web_fetch: redirect ${response.status} without Location header.`);
+        throw new Error(
+          `web_fetch: redirect ${response.status} without Location header.`
+        );
       }
       const nextUrl = new URL(location, current);
       if (nextUrl.protocol !== "http:" && nextUrl.protocol !== "https:") {
-        throw new Error(`web_fetch: redirect to unsupported protocol ${nextUrl.protocol}.`);
+        throw new Error(
+          `web_fetch: redirect to unsupported protocol ${nextUrl.protocol}.`
+        );
       }
       await assertPublicHostname(nextUrl.hostname);
       current = nextUrl;
       continue;
     }
 
-    return { response, finalUrl: current.toString() };
+    return { finalUrl: current.toString(), response };
   }
 
   throw new Error(`web_fetch: exceeded ${MAX_REDIRECTS} redirects.`);
@@ -308,7 +325,7 @@ async function fetchWithRedirects(
 
 async function readBoundedBody(
   response: Response,
-  maxBytes: number,
+  maxBytes: number
 ): Promise<{ body: string; truncated: boolean }> {
   // If length is known and oversized, reject up-front.
   const contentLength = response.headers.get("content-length");
@@ -316,7 +333,7 @@ async function readBoundedBody(
     const declared = Number(contentLength);
     if (Number.isFinite(declared) && declared > maxBytes) {
       throw new Error(
-        `web_fetch: response body exceeds ${maxBytes} bytes (Content-Length: ${declared}).`,
+        `web_fetch: response body exceeds ${maxBytes} bytes (Content-Length: ${declared}).`
       );
     }
   }
@@ -337,12 +354,16 @@ async function readBoundedBody(
 
   for (;;) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      break;
+    }
 
     received += value.byteLength;
     if (received > maxBytes) {
       truncated = true;
-      text += decoder.decode(value.subarray(0, value.byteLength - (received - maxBytes)));
+      text += decoder.decode(
+        value.subarray(0, value.byteLength - (received - maxBytes))
+      );
       break;
     }
 
@@ -371,18 +392,20 @@ export async function convertHtmlToMarkdown(html: string): Promise<string> {
       // node `table`"), so any page or document containing a table fails to convert.
       .use(remarkGfm)
       .use(remarkStringify, { bullet: "-", fences: true })
-      .process(cleanedHtml),
+      .process(cleanedHtml)
   );
-  return removeCommentNoise(markdown).replace(/\n{3,}/g, "\n\n").trim();
+  return removeCommentNoise(markdown)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
-  name: WEB_FETCH_TOOL_NAME,
   description:
     "Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. " +
     "Use for retrieving a known URL; use web_search when you need to discover sources.",
-  parameters: webFetchParameters(),
+  name: WEB_FETCH_TOOL_NAME,
   parallelSafe: true,
+  parameters: webFetchParameters(),
   async run(input) {
     let parsed: { url: string; raw?: boolean };
     try {
@@ -390,7 +413,10 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
     } catch (err) {
       if (err instanceof z.ZodError) {
         const issue = err.issues[0];
-        const at = issue.path && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+        const at =
+          issue.path && issue.path.length > 0
+            ? ` at ${issue.path.join(".")}`
+            : "";
         throw new Error(`web_fetch: invalid parameter${at}: ${issue.message}`);
       }
       throw err instanceof Error ? err : new Error(String(err));
@@ -404,10 +430,15 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const { response, finalUrl } = await fetchWithRedirects(url, controller.signal);
+      const { response, finalUrl } = await fetchWithRedirects(
+        url,
+        controller.signal
+      );
 
       if (response.status < 200 || response.status >= 300) {
-        throw new Error(`web_fetch failed: HTTP ${response.status} ${response.statusText}.`);
+        throw new Error(
+          `web_fetch failed: HTTP ${response.status} ${response.statusText}.`
+        );
       }
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -416,19 +447,21 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
 
       let content = body;
       const shouldConvert =
-        !raw && contentTypeIsHtml(contentType) && body.trimStart().startsWith("<");
+        !raw &&
+        contentTypeIsHtml(contentType) &&
+        body.trimStart().startsWith("<");
 
       if (shouldConvert) {
         content = await convertHtmlToMarkdown(body);
       }
 
       return {
-        url: url.toString(),
-        finalUrl,
-        status: response.status,
-        contentType,
         bytes,
         content,
+        contentType,
+        finalUrl,
+        status: response.status,
+        url: url.toString(),
       };
     } catch (err) {
       if ((err as Error).name === "AbortError") {

@@ -1,23 +1,34 @@
-import { NakamaApiError, generateTemporaryPassword } from "@nakama/core";
-import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import {
+  generateTemporaryPassword,
+  getProfileSoulDir,
+  initSoulDirectory,
+  NakamaApiError,
+} from "@nakama/core";
 import type {
+  AcceptOrgInviteRequest,
   AddOrgMemberResponse,
+  AuthUserResponse,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   ListOrgMembersResponse,
+  ListUserOrgsResponse,
+  OrganizationSummary,
   OrgInviteCreatedResponse,
   OrgInviteSummary,
   OrgMemberResponse,
   OrgMemberSummary,
   OrgRole,
-  OrganizationSummary,
-  AcceptOrgInviteRequest,
-  AuthUserResponse,
-  ListUserOrgsResponse,
-  UpdateOrgMemberRequest,
   UpdateOrganizationRequest,
+  UpdateOrgMemberRequest,
   UserOrgSummary,
 } from "@nakama/core/contract";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import type {
+  DatabaseAdapter,
+  StoredOrganizationRecord,
+  StoredOrgInviteRecord,
+  StoredUserRecord,
+} from "@nakama/db";
 import {
   ensureLocalClientAccess,
   ORG_INVITE_EXPIRY_DAYS,
@@ -25,13 +36,6 @@ import {
   seedOrgDefaultProfile,
   seedOrgSuperBotProfile,
 } from "@nakama/db";
-import type {
-  DatabaseAdapter,
-  StoredOrganizationRecord,
-  StoredOrgInviteRecord,
-  StoredUserRecord,
-} from "@nakama/db";
-import { getProfileSoulDir, initSoulDirectory } from "@nakama/core";
 import type { AuthService } from "./auth-service";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -41,7 +45,7 @@ const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 export class OrgService {
   constructor(
     private readonly databaseAdapter: DatabaseAdapter,
-    private readonly authService: AuthService,
+    private readonly authService: AuthService
   ) {}
 
   async listOrganizations(): Promise<OrganizationSummary[]> {
@@ -51,15 +55,14 @@ export class OrgService {
 
   async updateOrganization(
     orgId: string,
-    request: UpdateOrganizationRequest,
+    request: UpdateOrganizationRequest
   ): Promise<OrganizationSummary> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
     if (!org) {
       throw new NakamaApiError("Not found", 404);
     }
 
-    const name =
-      request.name !== undefined ? request.name.trim() : org.name;
+    const name = request.name === undefined ? org.name : request.name.trim();
     if (request.name !== undefined && !name) {
       throw new NakamaApiError("Organization name is required.", 400);
     }
@@ -68,14 +71,14 @@ export class OrgService {
     const updated: StoredOrganizationRecord = {
       ...org,
       name,
-      skillsWriteApproval:
-        request.skillsWriteApproval !== undefined
-          ? request.skillsWriteApproval
-          : org.skillsWriteApproval ?? false,
       skillsPostTurnReview:
-        request.skillsPostTurnReview !== undefined
-          ? request.skillsPostTurnReview
-          : org.skillsPostTurnReview ?? false,
+        request.skillsPostTurnReview === undefined
+          ? (org.skillsPostTurnReview ?? false)
+          : request.skillsPostTurnReview,
+      skillsWriteApproval:
+        request.skillsWriteApproval === undefined
+          ? (org.skillsWriteApproval ?? false)
+          : request.skillsWriteApproval,
       updatedAt: now,
     };
 
@@ -85,20 +88,20 @@ export class OrgService {
 
   async createOrganization(
     request: CreateOrganizationRequest,
-    creatorUserId?: string,
+    creatorUserId?: string
   ): Promise<CreateOrganizationResponse> {
     const organization = await this.insertOrganization(request);
 
     if (request.admin) {
       const adminMember = await this.addMember({
-        orgId: organization.id,
-        name: request.admin.name,
         email: request.admin.email,
+        name: request.admin.name,
+        orgId: organization.id,
         phone: request.admin.phone,
         role: "admin",
       });
 
-      return { organization, adminMember };
+      return { adminMember, organization };
     }
 
     if (creatorUserId) {
@@ -106,18 +109,18 @@ export class OrgService {
       if (creator) {
         const now = new Date().toISOString();
         await this.databaseAdapter.upsertOrgMember({
-          orgId: organization.id,
-          userId: creator.id,
-          role: "admin",
           createdAt: now,
+          orgId: organization.id,
+          role: "admin",
+          userId: creator.id,
         });
 
         return {
-          organization,
           adminMember: {
             member: toOrgMemberSummary(creator, "admin", now),
             temporaryPassword: null,
           },
+          organization,
         };
       }
     }
@@ -126,7 +129,8 @@ export class OrgService {
   }
 
   async listUserOrgs(userId: string): Promise<ListUserOrgsResponse> {
-    const memberships = await this.databaseAdapter.listUserOrganizations(userId);
+    const memberships =
+      await this.databaseAdapter.listUserOrganizations(userId);
     return {
       orgs: memberships.map((membership) => ({
         ...toOrganizationSummary(membership.organization),
@@ -138,9 +142,10 @@ export class OrgService {
   async resolveActiveOrgId(
     userId: string,
     sessionId?: string,
-    requestedOrgId?: string | null,
+    requestedOrgId?: string | null
   ): Promise<string | null> {
-    const memberships = await this.databaseAdapter.listUserOrganizations(userId);
+    const memberships =
+      await this.databaseAdapter.listUserOrganizations(userId);
     if (memberships.length === 0) {
       return null;
     }
@@ -149,10 +154,14 @@ export class OrgService {
     const matched = trimmed
       ? memberships.find((membership) => membership.organization.id === trimmed)
       : undefined;
-    const activeOrgId = matched?.organization.id ?? memberships[0]!.organization.id;
+    const activeOrgId =
+      matched?.organization.id ?? memberships[0]!.organization.id;
 
     if (sessionId && activeOrgId !== (trimmed ?? null)) {
-      await this.databaseAdapter.updateBrowserSessionActiveOrgId(sessionId, activeOrgId);
+      await this.databaseAdapter.updateBrowserSessionActiveOrgId(
+        sessionId,
+        activeOrgId
+      );
     }
 
     return activeOrgId;
@@ -163,9 +172,11 @@ export class OrgService {
     orgId: string;
     sessionId?: string;
   }): Promise<UserOrgSummary> {
-    const memberships = await this.databaseAdapter.listUserOrganizations(input.userId);
+    const memberships = await this.databaseAdapter.listUserOrganizations(
+      input.userId
+    );
     const membership = memberships.find(
-      (record) => record.organization.id === input.orgId,
+      (record) => record.organization.id === input.orgId
     );
 
     if (!membership) {
@@ -175,7 +186,7 @@ export class OrgService {
     if (input.sessionId) {
       await this.databaseAdapter.updateBrowserSessionActiveOrgId(
         input.sessionId,
-        membership.organization.id,
+        membership.organization.id
       );
     }
 
@@ -188,21 +199,21 @@ export class OrgService {
   async buildAuthUserResponse(
     user: StoredUserRecord,
     sessionId?: string,
-    requestedOrgId?: string | null,
+    requestedOrgId?: string | null
   ): Promise<AuthUserResponse> {
     const activeOrgId = await this.resolveActiveOrgId(
       user.id,
       sessionId,
-      requestedOrgId,
+      requestedOrgId
     );
 
     return {
-      email: user.email,
-      name: user.name ?? null,
-      phone: user.phone ?? null,
-      isPlatformAdmin: Boolean(user.isPlatformAdmin),
       activeOrgId,
+      email: user.email,
+      isPlatformAdmin: Boolean(user.isPlatformAdmin),
+      name: user.name ?? null,
       orgId: activeOrgId,
+      phone: user.phone ?? null,
     };
   }
 
@@ -212,7 +223,7 @@ export class OrgService {
       name?: string | null;
       email?: string;
       phone?: string | null;
-    },
+    }
   ): Promise<AuthUserResponse> {
     const user = await this.databaseAdapter.getUserById(userId);
     if (!user) {
@@ -221,9 +232,13 @@ export class OrgService {
 
     const now = new Date().toISOString();
     const name =
-      input.name !== undefined ? normalizeOptionalName(input.name) : (user.name ?? null);
+      input.name === undefined
+        ? (user.name ?? null)
+        : normalizeOptionalName(input.name);
     const phone =
-      input.phone !== undefined ? normalizeOptionalPhone(input.phone) : (user.phone ?? null);
+      input.phone === undefined
+        ? (user.phone ?? null)
+        : normalizeOptionalPhone(input.phone);
     let email = user.email;
 
     if (input.email !== undefined) {
@@ -235,7 +250,10 @@ export class OrgService {
       if (email !== user.email) {
         const existing = await this.databaseAdapter.getUserByEmail(email);
         if (existing && existing.id !== user.id) {
-          throw new NakamaApiError("An account with that email already exists.", 409);
+          throw new NakamaApiError(
+            "An account with that email already exists.",
+            409
+          );
         }
       }
     }
@@ -246,17 +264,17 @@ export class OrgService {
         {
           name,
           phone,
-          ...(email !== user.email ? { email } : {}),
+          ...(email === user.email ? {} : { email }),
         },
-        now,
+        now
       );
     }
 
     return this.buildAuthUserResponse({
       ...user,
+      email,
       name,
       phone,
-      email,
       updatedAt: now,
     });
   }
@@ -293,16 +311,22 @@ export class OrgService {
     const existingUser = await this.databaseAdapter.getUserByEmail(email);
 
     if (existingUser) {
-      const member = await this.databaseAdapter.getOrgMember(input.orgId, existingUser.id);
+      const member = await this.databaseAdapter.getOrgMember(
+        input.orgId,
+        existingUser.id
+      );
       if (member) {
-        throw new NakamaApiError("User is already a member of this organization.", 409);
+        throw new NakamaApiError(
+          "User is already a member of this organization.",
+          409
+        );
       }
 
       await this.databaseAdapter.upsertOrgMember({
-        orgId: input.orgId,
-        userId: existingUser.id,
-        role: input.role,
         createdAt: now,
+        orgId: input.orgId,
+        role: input.role,
+        userId: existingUser.id,
       });
 
       return {
@@ -313,21 +337,21 @@ export class OrgService {
 
     const temporaryPassword = generateTemporaryPassword();
     const user: StoredUserRecord = {
-      id: `user_${crypto.randomUUID().replace(/-/g, "")}`,
-      email,
-      name,
-      phone,
-      passwordHash: await this.authService.hashPassword(temporaryPassword),
       createdAt: now,
+      email,
+      id: `user_${crypto.randomUUID().replace(/-/g, "")}`,
+      name,
+      passwordHash: await this.authService.hashPassword(temporaryPassword),
+      phone,
       updatedAt: now,
     };
 
     await this.databaseAdapter.createUser(user);
     await this.databaseAdapter.upsertOrgMember({
-      orgId: input.orgId,
-      userId: user.id,
-      role: input.role,
       createdAt: now,
+      orgId: input.orgId,
+      role: input.role,
+      userId: user.id,
     });
 
     return {
@@ -364,25 +388,25 @@ export class OrgService {
 
     const now = new Date().toISOString();
     const user: StoredUserRecord = {
-      id: "user_admin",
-      email,
-      name,
-      phone,
-      isPlatformAdmin: true,
-      passwordHash: input.admin.passwordHash,
       createdAt: now,
+      email,
+      id: "user_admin",
+      isPlatformAdmin: true,
+      name,
+      passwordHash: input.admin.passwordHash,
+      phone,
       updatedAt: now,
     };
 
     await this.databaseAdapter.createUser(user);
     await this.databaseAdapter.upsertOrgMember({
-      orgId: organization.id,
-      userId: user.id,
-      role: "admin",
       createdAt: now,
+      orgId: organization.id,
+      role: "admin",
+      userId: user.id,
     });
 
-    return { user, organization };
+    return { organization, user };
   }
 
   async listMembers(orgId: string): Promise<ListOrgMembersResponse> {
@@ -422,38 +446,48 @@ export class OrgService {
   async updateMember(
     orgId: string,
     userId: string,
-    input: UpdateOrgMemberRequest,
+    input: UpdateOrgMemberRequest
   ): Promise<OrgMemberResponse> {
     const nextRole = input.role;
     if (nextRole !== undefined && !ORG_ROLES.includes(nextRole)) {
       throw new NakamaApiError("Invalid org role.", 400);
     }
 
-    const member = await this.assertCanChangeAdminMembership(orgId, userId, nextRole);
+    const member = await this.assertCanChangeAdminMembership(
+      orgId,
+      userId,
+      nextRole
+    );
     const user = await this.databaseAdapter.getUserById(userId);
     if (!user) {
       throw new NakamaApiError("Not found", 404);
     }
 
     const now = new Date().toISOString();
-    const name = input.name !== undefined ? normalizeOptionalName(input.name) : (user.name ?? null);
-    const phone = input.phone !== undefined ? normalizeOptionalPhone(input.phone) : (user.phone ?? null);
+    const name =
+      input.name === undefined
+        ? (user.name ?? null)
+        : normalizeOptionalName(input.name);
+    const phone =
+      input.phone === undefined
+        ? (user.phone ?? null)
+        : normalizeOptionalPhone(input.phone);
     const role = nextRole ?? member.role;
 
     if (user.name !== name || user.phone !== phone) {
       await this.databaseAdapter.updateUserProfile(
         userId,
         { name, phone },
-        now,
+        now
       );
     }
 
     if (member.role !== role) {
       await this.databaseAdapter.upsertOrgMember({
-        orgId,
-        userId,
-        role,
         createdAt: member.createdAt,
+        orgId,
+        role,
+        userId,
       });
     }
 
@@ -461,7 +495,7 @@ export class OrgService {
       member: toOrgMemberSummary(
         { ...user, name, phone, updatedAt: now },
         role,
-        member.createdAt,
+        member.createdAt
       ),
     };
   }
@@ -488,32 +522,44 @@ export class OrgService {
 
     const existingUser = await this.databaseAdapter.getUserByEmail(email);
     if (existingUser) {
-      const member = await this.databaseAdapter.getOrgMember(input.orgId, existingUser.id);
+      const member = await this.databaseAdapter.getOrgMember(
+        input.orgId,
+        existingUser.id
+      );
       if (member) {
-        throw new NakamaApiError("User is already a member of this organization.", 409);
+        throw new NakamaApiError(
+          "User is already a member of this organization.",
+          409
+        );
       }
     }
 
-    const pendingInvite = await this.databaseAdapter.getPendingOrgInvite(input.orgId, email);
+    const pendingInvite = await this.databaseAdapter.getPendingOrgInvite(
+      input.orgId,
+      email
+    );
     if (pendingInvite) {
-      throw new NakamaApiError("An invite is already pending for this email.", 409);
+      throw new NakamaApiError(
+        "An invite is already pending for this email.",
+        409
+      );
     }
 
     const now = new Date();
     const token = generateInviteToken();
     const record: StoredOrgInviteRecord = {
-      id: `invite_${crypto.randomUUID().replace(/-/g, "")}`,
-      orgId: input.orgId,
+      acceptedAt: null,
+      createdAt: now.toISOString(),
       email,
+      expiresAt: new Date(
+        now.getTime() + ORG_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString(),
+      id: `invite_${crypto.randomUUID().replace(/-/g, "")}`,
+      invitedByUserId: input.invitedByUserId,
+      orgId: input.orgId,
+      revokedAt: null,
       role: input.role,
       tokenHash: this.authService.hashToken(token),
-      invitedByUserId: input.invitedByUserId,
-      expiresAt: new Date(
-        now.getTime() + ORG_INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
-      ).toISOString(),
-      acceptedAt: null,
-      revokedAt: null,
-      createdAt: now.toISOString(),
     };
 
     await this.databaseAdapter.createOrgInvite(record);
@@ -535,7 +581,7 @@ export class OrgService {
     }
 
     const invite = await this.databaseAdapter.getOrgInviteByTokenHash(
-      this.authService.hashToken(token),
+      this.authService.hashToken(token)
     );
     if (!invite) {
       throw new NakamaApiError("Not found", 404);
@@ -545,7 +591,10 @@ export class OrgService {
 
     const password = request.password?.trim();
     if (!password) {
-      throw new NakamaApiError("Password is required to accept an invite.", 400);
+      throw new NakamaApiError(
+        "Password is required to accept an invite.",
+        400
+      );
     }
 
     assertNewPassword(password);
@@ -553,39 +602,48 @@ export class OrgService {
     const now = new Date().toISOString();
     let user = await this.databaseAdapter.getUserByEmail(invite.email);
 
-    if (!user) {
-      user = {
-        id: `user_${crypto.randomUUID().replace(/-/g, "")}`,
-        email: invite.email,
-        passwordHash: await this.authService.hashPassword(password),
-        createdAt: now,
-        updatedAt: now,
-      };
-      await this.databaseAdapter.createUser(user);
-    } else {
-      const valid = await this.authService.verifyPassword(password, user.passwordHash);
+    if (user) {
+      const valid = await this.authService.verifyPassword(
+        password,
+        user.passwordHash
+      );
       if (!valid) {
         throw new NakamaApiError("Invalid credentials", 401);
       }
+    } else {
+      user = {
+        createdAt: now,
+        email: invite.email,
+        id: `user_${crypto.randomUUID().replace(/-/g, "")}`,
+        passwordHash: await this.authService.hashPassword(password),
+        updatedAt: now,
+      };
+      await this.databaseAdapter.createUser(user);
     }
 
-    const existingMember = await this.databaseAdapter.getOrgMember(invite.orgId, user.id);
+    const existingMember = await this.databaseAdapter.getOrgMember(
+      invite.orgId,
+      user.id
+    );
     if (existingMember) {
-      throw new NakamaApiError("User is already a member of this organization.", 409);
+      throw new NakamaApiError(
+        "User is already a member of this organization.",
+        409
+      );
     }
 
     await this.databaseAdapter.upsertOrgMember({
-      orgId: invite.orgId,
-      userId: user.id,
-      role: invite.role,
       createdAt: now,
+      orgId: invite.orgId,
+      role: invite.role,
+      userId: user.id,
     });
     await this.databaseAdapter.markOrgInviteAccepted(invite.id, now);
 
     return {
-      user,
       orgId: invite.orgId,
       role: invite.role,
+      user,
     };
   }
 
@@ -603,7 +661,10 @@ export class OrgService {
     const newPassword = input.newPassword.trim();
     assertNewPassword(newPassword);
 
-    const valid = await this.authService.verifyPassword(currentPassword, user.passwordHash);
+    const valid = await this.authService.verifyPassword(
+      currentPassword,
+      user.passwordHash
+    );
     if (!valid) {
       throw new NakamaApiError("Current password is incorrect.", 401);
     }
@@ -612,15 +673,20 @@ export class OrgService {
     await this.databaseAdapter.updateUserPassword(
       user.id,
       await this.authService.hashPassword(newPassword),
-      now,
+      now
     );
   }
 
   private async assertCanChangeAdminMembership(
     orgId: string,
     userId: string,
-    nextRole?: OrgRole,
-  ): Promise<{ orgId: string; userId: string; role: OrgRole; createdAt: string }> {
+    nextRole?: OrgRole
+  ): Promise<{
+    orgId: string;
+    userId: string;
+    role: OrgRole;
+    createdAt: string;
+  }> {
     const member = await this.databaseAdapter.getOrgMember(orgId, userId);
     if (!member) {
       throw new NakamaApiError("Not found", 404);
@@ -637,7 +703,10 @@ export class OrgService {
     }
 
     if (nextRole !== undefined && nextRole !== "admin") {
-      throw new NakamaApiError("Cannot change role of the last org admin.", 409);
+      throw new NakamaApiError(
+        "Cannot change role of the last org admin.",
+        409
+      );
     }
 
     if (nextRole === undefined) {
@@ -648,7 +717,7 @@ export class OrgService {
   }
 
   private async insertOrganization(
-    request: CreateOrganizationRequest,
+    request: CreateOrganizationRequest
   ): Promise<OrganizationSummary> {
     const name = request.name.trim();
     const slug = request.slug.trim().toLowerCase();
@@ -657,17 +726,18 @@ export class OrgService {
       throw new NakamaApiError("Organization name is required.", 400);
     }
 
-    if (!slug || !SLUG_PATTERN.test(slug)) {
+    if (!(slug && SLUG_PATTERN.test(slug))) {
       throw new NakamaApiError(
         "Organization slug must use lowercase letters, numbers, and hyphens.",
-        400,
+        400
       );
     }
 
-    if (request.admin) {
-      if (!request.admin.name.trim() || !request.admin.email.trim()) {
-        throw new NakamaApiError("Admin name and email are required.", 400);
-      }
+    if (
+      request.admin &&
+      !(request.admin.name.trim() && request.admin.email.trim())
+    ) {
+      throw new NakamaApiError("Admin name and email are required.", 400);
     }
 
     const existing = await this.databaseAdapter.getOrganizationBySlug(slug);
@@ -677,10 +747,10 @@ export class OrgService {
 
     const now = new Date().toISOString();
     const record: StoredOrganizationRecord = {
+      createdAt: now,
       id: `org_${crypto.randomUUID().replace(/-/g, "")}`,
       name,
       slug,
-      createdAt: now,
       updatedAt: now,
     };
 
@@ -691,10 +761,16 @@ export class OrgService {
   }
 
   private async seedOrgProfiles(orgId: string): Promise<void> {
-    const defaultProfile = await seedOrgDefaultProfile(this.databaseAdapter, orgId);
+    const defaultProfile = await seedOrgDefaultProfile(
+      this.databaseAdapter,
+      orgId
+    );
     await initSoulDirectory(getProfileSoulDir(orgId, defaultProfile.id));
 
-    const superBotProfile = await seedOrgSuperBotProfile(this.databaseAdapter, orgId);
+    const superBotProfile = await seedOrgSuperBotProfile(
+      this.databaseAdapter,
+      orgId
+    );
     await initSoulDirectory(getProfileSoulDir(orgId, superBotProfile.id));
   }
 }
@@ -703,7 +779,9 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function normalizeOptionalPhone(phone: string | null | undefined): string | null {
+function normalizeOptionalPhone(
+  phone: string | null | undefined
+): string | null {
   const trimmed = phone?.trim() ?? "";
   if (!trimmed) {
     return null;
@@ -745,40 +823,42 @@ function assertNewPassword(password: string): void {
   }
 }
 
-function toOrganizationSummary(record: StoredOrganizationRecord): OrganizationSummary {
+function toOrganizationSummary(
+  record: StoredOrganizationRecord
+): OrganizationSummary {
   return {
+    createdAt: record.createdAt,
     id: record.id,
     name: record.name,
-    slug: record.slug,
-    skillsWriteApproval: record.skillsWriteApproval ?? false,
     skillsPostTurnReview: record.skillsPostTurnReview ?? false,
-    createdAt: record.createdAt,
+    skillsWriteApproval: record.skillsWriteApproval ?? false,
+    slug: record.slug,
     updatedAt: record.updatedAt,
   };
 }
 
 function toOrgInviteSummary(record: StoredOrgInviteRecord): OrgInviteSummary {
   return {
+    createdAt: record.createdAt,
+    email: record.email,
+    expiresAt: record.expiresAt,
     id: record.id,
     orgId: record.orgId,
-    email: record.email,
     role: record.role,
-    expiresAt: record.expiresAt,
-    createdAt: record.createdAt,
   };
 }
 
 function toOrgMemberSummary(
   user: StoredUserRecord,
   role: OrgRole,
-  createdAt: string,
+  createdAt: string
 ): OrgMemberSummary {
   return {
-    userId: user.id,
-    name: user.name ?? null,
+    createdAt,
     email: user.email,
+    name: user.name ?? null,
     phone: user.phone ?? null,
     role,
-    createdAt,
+    userId: user.id,
   };
 }

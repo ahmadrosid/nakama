@@ -1,11 +1,15 @@
 import {
   createSmtpSender,
+  type EmailOutboundAdapter,
   emailConfigToMailboxConfig,
   isEmailConfigComplete,
   loadEmailConfig,
-  type EmailOutboundAdapter,
 } from "@nakama/core";
-import type { DatabaseAdapter, CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
+import type {
+  CachedMcpTool,
+  DatabaseAdapter,
+  StoredMcpServerRecord,
+} from "@nakama/db";
 import type { McpClientManager } from "./mcp-client-manager";
 
 interface McpEmailTarget {
@@ -53,7 +57,7 @@ const BODY_FIELD_ALIASES = [
 export async function hasAutomationEmailDeliveryPath(
   db: DatabaseAdapter,
   profileId: string,
-  dependencies: McpEmailDeliveryDependencies = {},
+  dependencies: McpEmailDeliveryDependencies = {}
 ): Promise<boolean> {
   const loadConfig = dependencies.loadConfig ?? loadEmailConfig;
 
@@ -67,7 +71,7 @@ export async function hasAutomationEmailDeliveryPath(
 export function createMcpAwareEmailOutboundAdapter(
   db: DatabaseAdapter,
   manager: McpClientManager,
-  dependencies: McpEmailDeliveryDependencies = {},
+  dependencies: McpEmailDeliveryDependencies = {}
 ): EmailOutboundAdapter {
   return {
     async send(input) {
@@ -78,42 +82,49 @@ export function createMcpAwareEmailOutboundAdapter(
         if (isEmailConfigComplete(config)) {
           const sender = createSmtpSender(emailConfigToMailboxConfig(config));
           await sender.send({
-            to: input.to,
             subject: input.subject,
             text: input.text,
+            to: input.to,
           });
           return { ok: true };
         }
 
         if (!input.profileId) {
-          return { ok: false, error: "Email is not configured." };
+          return { error: "Email is not configured.", ok: false };
         }
 
         const target = await findProfileMcpEmailTarget(db, input.profileId);
 
         if (!target) {
-          return { ok: false, error: "Email is not configured." };
+          return { error: "Email is not configured.", ok: false };
         }
 
-        await ensureConnected(manager, target.server, input.orgId ?? undefined, input.profileId);
+        await ensureConnected(
+          manager,
+          target.server,
+          input.orgId ?? undefined,
+          input.profileId
+        );
         const result = await manager.callTool(
           target.server.id,
           target.server.transport,
           target.tool.name,
           buildToolArguments(target.tool, input),
           target.server.transport === "stdio" ? input.profileId : undefined,
-          target.server.transport === "stdio" ? (input.orgId ?? undefined) : undefined,
+          target.server.transport === "stdio"
+            ? (input.orgId ?? undefined)
+            : undefined
         );
 
         if (isErrorResult(result)) {
-          return { ok: false, error: result.error };
+          return { error: result.error, ok: false };
         }
 
         return { ok: true };
       } catch (error) {
         return {
-          ok: false,
           error: error instanceof Error ? error.message : String(error),
+          ok: false,
         };
       }
     },
@@ -122,13 +133,15 @@ export function createMcpAwareEmailOutboundAdapter(
 
 async function findProfileMcpEmailTarget(
   db: DatabaseAdapter,
-  profileId: string,
+  profileId: string
 ): Promise<McpEmailTarget | null> {
   const servers = await db.listMcpServersForProfile(profileId);
   return findBestMcpEmailTarget(servers);
 }
 
-function findBestMcpEmailTarget(servers: StoredMcpServerRecord[]): McpEmailTarget | null {
+function findBestMcpEmailTarget(
+  servers: StoredMcpServerRecord[]
+): McpEmailTarget | null {
   let best: (McpEmailTarget & { score: number }) | null = null;
 
   for (const server of servers) {
@@ -140,7 +153,7 @@ function findBestMcpEmailTarget(servers: StoredMcpServerRecord[]): McpEmailTarge
       }
 
       if (!best || score > best.score) {
-        best = { server, tool, score };
+        best = { score, server, tool };
       }
     }
   }
@@ -148,7 +161,10 @@ function findBestMcpEmailTarget(servers: StoredMcpServerRecord[]): McpEmailTarge
   return best ? { server: best.server, tool: best.tool } : null;
 }
 
-function scoreEmailTool(server: StoredMcpServerRecord, tool: CachedMcpTool): number {
+function scoreEmailTool(
+  server: StoredMcpServerRecord,
+  tool: CachedMcpTool
+): number {
   const serverText = `${server.name} ${server.transport}`.toLowerCase();
   const toolText = `${tool.name} ${tool.description}`.toLowerCase();
   const properties = readSchemaProperties(tool.inputSchema);
@@ -156,7 +172,7 @@ function scoreEmailTool(server: StoredMcpServerRecord, tool: CachedMcpTool): num
   const sendLike = /(send|draft|compose)/.test(toolText);
   const emailLike = /(email|gmail|mail)/.test(toolText);
 
-  if (!sendLike || !emailLike) {
+  if (!(sendLike && emailLike)) {
     return 0;
   }
 
@@ -199,11 +215,13 @@ async function ensureConnected(
   manager: McpClientManager,
   server: StoredMcpServerRecord,
   orgId: string | undefined,
-  profileId: string,
+  profileId: string
 ): Promise<void> {
   if (server.transport === "stdio") {
     if (!orgId) {
-      throw new Error("Profile organization is missing for stdio MCP email delivery.");
+      throw new Error(
+        "Profile organization is missing for stdio MCP email delivery."
+      );
     }
 
     await manager.ensureConnected(server, orgId, profileId);
@@ -217,7 +235,7 @@ async function ensureConnected(
 
 function buildToolArguments(
   tool: CachedMcpTool,
-  input: { to: string; subject: string; text: string },
+  input: { to: string; subject: string; text: string }
 ): Record<string, unknown> {
   const properties = readSchemaProperties(tool.inputSchema);
 
@@ -234,13 +252,15 @@ function buildToolArguments(
   }
 
   return {
-    to: input.to,
-    subject: input.subject,
     body: input.text,
+    subject: input.subject,
+    to: input.to,
   };
 }
 
-function readSchemaProperties(inputSchema: unknown): Record<string, unknown> | null {
+function readSchemaProperties(
+  inputSchema: unknown
+): Record<string, unknown> | null {
   if (!isRecord(inputSchema)) {
     return null;
   }
@@ -253,7 +273,7 @@ function assignSchemaValue(
   target: Record<string, unknown>,
   properties: Record<string, unknown>,
   candidates: string[],
-  value: string,
+  value: string
 ): void {
   const match = findSchemaKey(properties, candidates);
 
@@ -270,15 +290,21 @@ function schemaExpectsArray(schema: unknown): boolean {
 
 function findSchemaKey(
   properties: Record<string, unknown>,
-  candidates: string[],
+  candidates: string[]
 ): string | undefined {
   const normalizedCandidates = candidates.map(normalizeKey);
 
-  return Object.keys(properties).find((key) => normalizedCandidates.includes(normalizeKey(key)));
+  return Object.keys(properties).find((key) =>
+    normalizedCandidates.includes(normalizeKey(key))
+  );
 }
 
 function isErrorResult(value: unknown): value is { error: string } {
-  return isRecord(value) && typeof value.error === "string" && value.error.trim().length > 0;
+  return (
+    isRecord(value) &&
+    typeof value.error === "string" &&
+    value.error.trim().length > 0
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

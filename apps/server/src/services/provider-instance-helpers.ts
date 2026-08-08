@@ -1,16 +1,20 @@
 import {
+  createProviderInstanceId,
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
   findCustomModel,
+  findProviderInstance,
   isOllamaCloudInstance,
   isValidBaseUrl,
   normalizeBaseUrl,
+  normalizeProviderInstanceLabel,
+  type OllamaHostMode,
   ollamaRequiresApiKey,
-  parseOllamaHostMode,
+  type ProviderInstance,
   resolveOllamaHostMode,
   validateCustomModels,
   validateDisplayName,
-  type OllamaHostMode,
+  validateProviderInstanceLabel,
 } from "@nakama/core";
 import type {
   CreateProviderRequest,
@@ -19,43 +23,39 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import {
-  createProviderInstanceId,
-  findProviderInstance,
-  normalizeProviderInstanceLabel,
-  type ProviderInstance,
-  validateProviderInstanceLabel,
-} from "@nakama/core";
-import {
   getDefaultModel,
   getModelById,
   getModelsForProviderInstance,
   isCompatibleModelId,
   isOpenRouterModelSlug,
   resolveModel,
-  validateOpenCodeGoCustomModels,
   validateCerebrasCustomModels,
   validateFireworksCustomModels,
   validateOllamaCustomModels,
+  validateOpenCodeGoCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
 
 export function toProviderInstanceSummary(
   instance: ProviderInstance,
-  modelCount: number,
+  modelCount: number
 ): ProviderInstanceSummary {
   return {
-    id: instance.id,
-    type: instance.type,
-    label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
+    baseUrl: instance.baseUrl ?? null,
     hasApiKey:
       Boolean(instance.apiKey.trim()) ||
       instance.type === "openai_compatible" ||
       (instance.type === "ollama" && !isOllamaCloudInstance(instance)),
-    baseUrl: instance.baseUrl ?? null,
-    hostMode: instance.type === "ollama" ? resolveOllamaHostMode(instance) : null,
-    ...(instance.customModels?.length ? { customModels: instance.customModels } : {}),
-    modelCount,
+    hostMode:
+      instance.type === "ollama" ? resolveOllamaHostMode(instance) : null,
+    id: instance.id,
+    label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
+    type: instance.type,
+    ...(instance.customModels?.length
+      ? { customModels: instance.customModels }
+      : {}),
     createdAt: instance.createdAt,
+    modelCount,
   };
 }
 
@@ -65,7 +65,7 @@ export function countModelsForInstance(instance: ProviderInstance): number {
 
 export function resolveInitialModel(
   instance: ProviderInstance,
-  requestedModel?: string,
+  requestedModel?: string
 ): string {
   const trimmed = requestedModel?.trim();
 
@@ -78,7 +78,7 @@ export function resolveInitialModel(
 
 export function modelExistsOnInstance(
   instance: ProviderInstance,
-  modelId: string,
+  modelId: string
 ): boolean {
   const trimmed = modelId.trim();
 
@@ -145,13 +145,15 @@ export function modelExistsOnInstance(
   return Boolean(getModelById(trimmed)?.provider === instance.type);
 }
 
-export function resolveDefaultModelForInstance(instance: ProviderInstance): string {
+export function resolveDefaultModelForInstance(
+  instance: ProviderInstance
+): string {
   return getDefaultModel(instance.type, instance.customModels);
 }
 
 export function buildProviderInstanceFromCreateRequest(
   request: CreateProviderRequest,
-  existing: ProviderInstance[],
+  existing: ProviderInstance[]
 ): ProviderInstance {
   const type = request.type;
   const trimmedKey = request.apiKey.trim();
@@ -163,8 +165,8 @@ export function buildProviderInstanceFromCreateRequest(
 
   if (type === "ollama") {
     const hostMode = resolveOllamaHostMode({
-      hostMode: request.hostMode,
       baseUrl: request.baseUrl,
+      hostMode: request.hostMode,
     });
 
     if (ollamaRequiresApiKey(hostMode) && !apiKey) {
@@ -178,14 +180,16 @@ export function buildProviderInstanceFromCreateRequest(
     : fields.label;
   const label =
     type === "ollama" && fields.hostMode
-      ? normalizeProviderInstanceLabel(type, rawLabel, existing, { hostMode: fields.hostMode })
+      ? normalizeProviderInstanceLabel(type, rawLabel, existing, {
+          hostMode: fields.hostMode,
+        })
       : normalizeProviderInstanceLabel(type, rawLabel, existing);
 
   return {
-    id: createProviderInstanceId(),
-    type,
-    label,
     apiKey,
+    id: createProviderInstanceId(),
+    label,
+    type,
     ...fields,
     createdAt: new Date().toISOString(),
   };
@@ -193,7 +197,7 @@ export function buildProviderInstanceFromCreateRequest(
 
 export function applyProviderInstanceUpdate(
   instance: ProviderInstance,
-  request: UpdateProviderRequest,
+  request: UpdateProviderRequest
 ): ProviderInstance {
   const next: ProviderInstance = { ...instance };
 
@@ -255,7 +259,7 @@ export function applyProviderInstanceUpdate(
 }
 
 function buildProviderFieldsFromRequest(
-  request: CreateProviderRequest,
+  request: CreateProviderRequest
 ): Pick<ProviderInstance, "baseUrl" | "customModels" | "label" | "hostMode"> {
   const type = request.type;
 
@@ -264,7 +268,7 @@ function buildProviderFieldsFromRequest(
       request.hostMode ??
       (request.baseUrl?.includes("ollama.com") ? "cloud" : "local");
     const baseUrl = normalizeBaseUrl(
-      request.baseUrl?.trim() || defaultOllamaBaseUrl(resolvedHostMode),
+      request.baseUrl?.trim() || defaultOllamaBaseUrl(resolvedHostMode)
     );
 
     if (!isValidBaseUrl(baseUrl)) {
@@ -274,7 +278,9 @@ function buildProviderFieldsFromRequest(
     const customModels = request.customModels?.length
       ? validateOllamaCustomModels(request.customModels)
       : request.model?.trim()
-        ? validateOllamaCustomModels([{ id: request.model.trim(), default: true }])
+        ? validateOllamaCustomModels([
+            { default: true, id: request.model.trim() },
+          ])
         : undefined;
 
     if (!customModels?.length) {
@@ -283,8 +289,8 @@ function buildProviderFieldsFromRequest(
 
     return {
       baseUrl,
-      hostMode: resolvedHostMode,
       customModels,
+      hostMode: resolvedHostMode,
       label: defaultOllamaLabel(resolvedHostMode),
     };
   }
@@ -296,7 +302,7 @@ function buildProviderFieldsFromRequest(
 
     if (!customModels?.length && request.model?.trim()) {
       customModels = validateOpenCodeGoCustomModels([
-        { id: request.model.trim(), default: true },
+        { default: true, id: request.model.trim() },
       ]);
     }
 
@@ -315,14 +321,16 @@ function buildProviderFieldsFromRequest(
       : undefined;
 
     if (!customModels?.length && request.model?.trim()) {
-      customModels = validateCustomModels([{ id: request.model.trim(), default: true }]);
+      customModels = validateCustomModels([
+        { default: true, id: request.model.trim() },
+      ]);
     }
 
     if (!customModels?.length) {
       throw new Error("At least one model is required.");
     }
 
-    return { label, baseUrl, customModels };
+    return { baseUrl, customModels, label };
   }
 
   if (type === "openrouter") {
@@ -348,20 +356,20 @@ function buildProviderFieldsFromRequest(
       const catalogModel = getModelById(request.model.trim());
       customModels = validateFireworksCustomModels([
         {
-          id: request.model.trim(),
           default: true,
-          ...(catalogModel?.supportsThinking !== undefined
-            ? { supportsThinking: catalogModel.supportsThinking }
-            : {}),
-          ...(catalogModel?.supportsVision !== undefined
-            ? { supportsVision: catalogModel.supportsVision }
-            : {}),
-          ...(catalogModel?.inputPerMillionUsd !== undefined
-            ? { inputPerMillionUsd: catalogModel.inputPerMillionUsd }
-            : {}),
-          ...(catalogModel?.outputPerMillionUsd !== undefined
-            ? { outputPerMillionUsd: catalogModel.outputPerMillionUsd }
-            : {}),
+          id: request.model.trim(),
+          ...(catalogModel?.supportsThinking === undefined
+            ? {}
+            : { supportsThinking: catalogModel.supportsThinking }),
+          ...(catalogModel?.supportsVision === undefined
+            ? {}
+            : { supportsVision: catalogModel.supportsVision }),
+          ...(catalogModel?.inputPerMillionUsd === undefined
+            ? {}
+            : { inputPerMillionUsd: catalogModel.inputPerMillionUsd }),
+          ...(catalogModel?.outputPerMillionUsd === undefined
+            ? {}
+            : { outputPerMillionUsd: catalogModel.outputPerMillionUsd }),
         },
       ]);
     }
@@ -387,7 +395,7 @@ function buildProviderFieldsFromRequest(
 }
 
 export function mergeModelsForConfig(
-  providers: ProviderInstance[],
+  providers: ProviderInstance[]
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 
@@ -404,7 +412,7 @@ export interface ResolvedProfileProviderSelection {
 }
 
 export function decodeStoredModelSelection(
-  value: string | null | undefined,
+  value: string | null | undefined
 ): { providerId: string; modelId: string } | null {
   const trimmed = value?.trim();
 
@@ -419,13 +427,13 @@ export function decodeStoredModelSelection(
   }
 
   return {
-    providerId: trimmed.slice(0, separator),
     modelId: trimmed.slice(separator + 2),
+    providerId: trimmed.slice(0, separator),
   };
 }
 
 export function extractStoredModelId(
-  value: string | null | undefined,
+  value: string | null | undefined
 ): string | null {
   const trimmed = value?.trim();
 
@@ -442,7 +450,9 @@ export function resolveProfileProviderSelection(options: {
   profileModel: string | null | undefined;
 }): ResolvedProfileProviderSelection | null {
   const { providers, defaultProviderId, profileModel } = options;
-  const active = defaultProviderId ? findProviderInstance({ providers }, defaultProviderId) : null;
+  const active = defaultProviderId
+    ? findProviderInstance({ providers }, defaultProviderId)
+    : null;
   const fallbackInstance = active ?? providers[0] ?? null;
 
   if (!fallbackInstance) {
@@ -457,7 +467,11 @@ export function resolveProfileProviderSelection(options: {
     if (explicit && modelExistsOnInstance(explicit, decoded.modelId)) {
       return {
         instance: explicit,
-        model: resolveModel(explicit.type, decoded.modelId, explicit.customModels),
+        model: resolveModel(
+          explicit.type,
+          decoded.modelId,
+          explicit.customModels
+        ),
       };
     }
   }
@@ -466,10 +480,13 @@ export function resolveProfileProviderSelection(options: {
 
   if (selectedModel) {
     const matchingProviders = providers.filter((instance) =>
-      modelExistsOnInstance(instance, selectedModel),
+      modelExistsOnInstance(instance, selectedModel)
     );
 
-    if (active && matchingProviders.some((instance) => instance.id === active.id)) {
+    if (
+      active &&
+      matchingProviders.some((instance) => instance.id === active.id)
+    ) {
       return {
         instance: active,
         model: resolveModel(active.type, selectedModel, active.customModels),
@@ -479,14 +496,19 @@ export function resolveProfileProviderSelection(options: {
     const catalogProvider = getModelById(selectedModel)?.provider;
     const preferred =
       (catalogProvider
-        ? matchingProviders.find((instance) => instance.type === catalogProvider)
-        : null) ??
-      matchingProviders[0];
+        ? matchingProviders.find(
+            (instance) => instance.type === catalogProvider
+          )
+        : null) ?? matchingProviders[0];
 
     if (preferred) {
       return {
         instance: preferred,
-        model: resolveModel(preferred.type, selectedModel, preferred.customModels),
+        model: resolveModel(
+          preferred.type,
+          selectedModel,
+          preferred.customModels
+        ),
       };
     }
   }

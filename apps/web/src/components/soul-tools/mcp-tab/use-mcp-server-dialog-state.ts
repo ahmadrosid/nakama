@@ -6,20 +6,20 @@ import type {
   McpStdioConfig,
   McpTransport,
 } from "@nakama/core/contract";
-import { useState, type ClipboardEvent } from "react";
+import { type ClipboardEvent, useState } from "react";
 import {
   argsToArray,
   emptyHeaderRow,
   headersToRecord,
+  type McpHeaderRow,
   recordToHeaderRows,
   resolveFormTransport,
-  type McpHeaderRow,
 } from "@/components/soul-tools/mcp-tab/shared";
 import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { client, formatError } from "@/lib/client";
 import {
-  parseMcpConfigJson,
   type ParsedMcpServerImport,
+  parseMcpConfigJson,
 } from "@/lib/mcp-config-import";
 
 export function useMcpServerDialogState({
@@ -35,7 +35,7 @@ export function useMcpServerDialogState({
 }) {
   const isEdit = server != null;
   const { data: detail, isLoading: loadingDetail } = useMcpServerDetailQuery(
-    open && server ? server.id : null,
+    open && server ? server.id : null
   );
   const [name, setName] = useState("");
   const [transport, setTransport] = useState<McpTransport>("http");
@@ -66,13 +66,13 @@ export function useMcpServerDialogState({
       ? url.trim().length > 0
       : command.trim().length > 0);
 
-  const formResetKey = !open
-    ? "closed"
-    : !server
-      ? "create"
-      : detail
+  const formResetKey = open
+    ? server
+      ? detail
         ? `edit-${server.id}-${detail.name}-${detail.transport}`
-        : `edit-${server.id}-loading`;
+        : `edit-${server.id}-loading`
+      : "create"
+    : "closed";
   const [prevFormResetKey, setPrevFormResetKey] = useState(formResetKey);
 
   if (formResetKey !== prevFormResetKey) {
@@ -123,26 +123,26 @@ export function useMcpServerDialogState({
 
     if (activeTransport === "stdio") {
       return {
-        name: name.trim(),
-        transport: "stdio",
         config: {
-          command: command.trim(),
           args: argsToArray(args),
+          command: command.trim(),
           env: headersToRecord(env, isEdit),
         },
         connect: false,
+        name: name.trim(),
+        transport: "stdio",
         ...(isEdit && server ? { serverId: server.id } : {}),
       };
     }
 
     return {
-      name: name.trim(),
-      transport: "http",
       config: {
-        url: url.trim(),
         headers: headersToRecord(headers, isEdit),
+        url: url.trim(),
       },
       connect: false,
+      name: name.trim(),
+      transport: "http",
       ...(isEdit && server ? { serverId: server.id } : {}),
     };
   }
@@ -165,29 +165,29 @@ export function useMcpServerDialogState({
 
       if (result.ok) {
         setTestResult({
-          ok: true,
-          toolCount: result.toolCount,
-          tools: result.tools,
           message:
             result.toolCount === 0
               ? "Connected, but no tools were returned."
               : `Connected. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`,
+          ok: true,
+          toolCount: result.toolCount,
+          tools: result.tools,
         });
         return;
       }
 
       setTestResult({
+        message: result.error ?? "Connection test failed.",
         ok: false,
         toolCount: 0,
         tools: [],
-        message: result.error ?? "Connection test failed.",
       });
     } catch (error) {
       setTestResult({
+        message: formatError(error),
         ok: false,
         toolCount: 0,
         tools: [],
-        message: formatError(error),
       });
     } finally {
       setTesting(false);
@@ -284,44 +284,46 @@ export function useMcpServerDialogState({
     try {
       await onSubmit(buildRequest());
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : formatError(error));
+      setSubmitError(
+        error instanceof Error ? error.message : formatError(error)
+      );
     }
   }
 
   return {
-    isEdit,
-    idPrefix,
-    transport,
-    name,
-    url,
-    headers,
-    command,
     args,
+    canSubmit,
+    clearTestResult,
+    command,
     env,
     formDisabled,
-    loadingForm,
-    canSubmit,
-    testing,
-    testResult,
-    submitError,
-    importOpen,
+    handleImportApply,
+    handlePaste,
+    handleSubmit,
+    handleTestConnection,
+    headers,
+    idPrefix,
     importDraft,
     importError,
-    setImportOpen,
+    importOpen,
+    isEdit,
+    loadingForm,
+    name,
+    openImportDialog,
+    setArgs,
+    setCommand,
+    setEnv,
+    setHeaders,
     setImportDraft,
     setImportError,
-    setTransport,
+    setImportOpen,
     setName,
+    setTransport,
     setUrl,
-    setHeaders,
-    setCommand,
-    setArgs,
-    setEnv,
-    clearTestResult,
-    handleTestConnection,
-    handlePaste,
-    openImportDialog,
-    handleImportApply,
-    handleSubmit,
+    submitError,
+    testing,
+    testResult,
+    transport,
+    url,
   };
 }

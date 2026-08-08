@@ -15,7 +15,7 @@ import {
  * they hold the report and the CLI is the one that asks.
  */
 export async function runCrashConsentPromptIfNeeded(): Promise<void> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
     return;
   }
 
@@ -37,7 +37,8 @@ export async function runCrashConsentPromptIfNeeded(): Promise<void> {
   let answer = "";
 
   try {
-    const subject = pending.length === 1 ? "an error" : `${pending.length} errors`;
+    const subject =
+      pending.length === 1 ? "an error" : `${pending.length} errors`;
     console.log(`\nNakama hit ${subject} recently.`);
     console.log("The report carries the stack trace and no message content.");
     answer = (await rl.question("Send it so the bug gets fixed? [y/N/never] "))
@@ -52,7 +53,9 @@ export async function runCrashConsentPromptIfNeeded(): Promise<void> {
   if (answer === "y" || answer === "yes") {
     await saveCrashReportConsent("granted");
     const sent = await flushPendingCrashReports();
-    console.log(sent > 0 ? "Sent. Thanks." : "Saved. Reports will be sent from now on.");
+    console.log(
+      sent > 0 ? "Sent. Thanks." : "Saved. Reports will be sent from now on."
+    );
     return;
   }
 

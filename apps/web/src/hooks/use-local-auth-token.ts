@@ -7,6 +7,7 @@ export function useRotateLocalAuthToken() {
 
   return useMutation({
     mutationFn: () => client.rotateLocalAuthToken(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.workerLogs }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.workerLogs }),
   });
 }

@@ -1,12 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useWorkerLogs(workerName: string, lines = 500) {
   return useQuery({
-    queryKey: [...queryKeys.workerLogs, workerName, lines],
-    queryFn: () => client.getWorkerLogs(workerName, lines),
     enabled: false,
+    queryFn: () => client.getWorkerLogs(workerName, lines),
+    queryKey: [...queryKeys.workerLogs, workerName, lines],
   });
 }
 
@@ -16,10 +16,13 @@ export function useClearWorkerLogs(workerName: string) {
   return useMutation({
     mutationFn: () => client.clearWorkerLogs(workerName),
     onSuccess: () => {
-      queryClient.setQueriesData({ queryKey: [...queryKeys.workerLogs, workerName] }, {
-        stdout: "",
-        stderr: "",
-      });
+      queryClient.setQueriesData(
+        { queryKey: [...queryKeys.workerLogs, workerName] },
+        {
+          stderr: "",
+          stdout: "",
+        }
+      );
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.workerLogs, workerName],
       });

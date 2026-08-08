@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import {
+  extractLatestTurnMessages,
+  extractPairedTurnArtifacts,
+} from "./channel-artifacts";
 import type { ChatMessage } from "./contract";
-import { extractLatestTurnMessages, extractPairedTurnArtifacts } from "./channel-artifacts";
 
-const ARTIFACTS_ROOT = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+const ARTIFACTS_ROOT =
+  "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
 
 const metaJson = JSON.stringify({
   mimeType: "text/markdown",
@@ -10,14 +14,16 @@ const metaJson = JSON.stringify({
   sizeBytes: 42,
 });
 
-function assistantWithToolCalls(toolCalls: ChatMessage extends infer M
-  ? M extends { role: "assistant"; toolCalls?: infer T }
-    ? NonNullable<T>
+function assistantWithToolCalls(
+  toolCalls: ChatMessage extends infer M
+    ? M extends { role: "assistant"; toolCalls?: infer T }
+      ? NonNullable<T>
+      : never
     : never
-  : never): ChatMessage {
+): ChatMessage {
   return {
-    role: "assistant",
     content: "",
+    role: "assistant",
     toolCalls,
   };
 }
@@ -29,10 +35,10 @@ function toolMessage(input: {
   result: Record<string, unknown>;
 }): ChatMessage {
   return {
+    content: JSON.stringify(input.result),
+    name: input.name,
     role: "tool",
     toolCallId: input.id,
-    name: input.name,
-    content: JSON.stringify(input.result),
   };
 }
 
@@ -42,41 +48,47 @@ describe("extractPairedTurnArtifacts", () => {
     const sidecarPath = `${ARTIFACTS_ROOT}/report.md.nakama-meta.json`;
 
     const messages: ChatMessage[] = [
-      { role: "user", content: "save report" },
+      { content: "save report", role: "user" },
       assistantWithToolCalls([
         {
+          arguments: { content: "# Report", path: "artifacts/report.md" },
           id: "tool_1",
           name: "write_file",
-          arguments: { path: "artifacts/report.md", content: "# Report" },
         },
         {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/report.md.nakama-meta.json",
+          },
           id: "tool_2",
           name: "write_file",
-          arguments: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
         },
       ]),
       toolMessage({
         id: "tool_1",
+        input: { content: "# Report", path: "artifacts/report.md" },
         name: "write_file",
-        input: { path: "artifacts/report.md", content: "# Report" },
-        result: { path: contentPath, bytesWritten: 8 },
+        result: { bytesWritten: 8, path: contentPath },
       }),
       toolMessage({
         id: "tool_2",
+        input: {
+          content: metaJson,
+          path: "artifacts/report.md.nakama-meta.json",
+        },
         name: "write_file",
-        input: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
-        result: { path: sidecarPath, bytesWritten: metaJson.length },
+        result: { bytesWritten: metaJson.length, path: sidecarPath },
       }),
-      { role: "assistant", content: "Saved the report." },
+      { content: "Saved the report.", role: "assistant" },
     ];
 
     expect(extractPairedTurnArtifacts(messages)).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 42,
+        path: "report.md",
         savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 42,
       },
     ]);
   });
@@ -86,136 +98,344 @@ describe("extractPairedTurnArtifacts", () => {
 
     expect(
       extractPairedTurnArtifacts([
-        { role: "user", content: "save" },
+        { content: "save", role: "user" },
         assistantWithToolCalls([
           {
+            arguments: { content: "draft", path: "artifacts/draft.md" },
             id: "tool_1",
             name: "write_file",
-            arguments: { path: "artifacts/draft.md", content: "draft" },
           },
         ]),
         toolMessage({
           id: "tool_1",
+          input: { content: "draft", path: "artifacts/draft.md" },
           name: "write_file",
-          input: { path: "artifacts/draft.md", content: "draft" },
-          result: { path: contentPath, bytesWritten: 5 },
+          result: { bytesWritten: 5, path: contentPath },
         }),
-      ]),
+      ])
     ).toEqual([]);
   });
 
   test("ignores failed writes", () => {
     expect(
       extractPairedTurnArtifacts([
-        { role: "user", content: "save" },
+        { content: "save", role: "user" },
         assistantWithToolCalls([
           {
+            arguments: { content: "# Report", path: "artifacts/report.md" },
             id: "tool_1",
             name: "write_file",
-            arguments: { path: "artifacts/report.md", content: "# Report" },
           },
         ]),
         toolMessage({
           id: "tool_1",
+          input: { content: "# Report", path: "artifacts/report.md" },
           name: "write_file",
-          input: { path: "artifacts/report.md", content: "# Report" },
           result: { error: "permission denied" },
         }),
-      ]),
+      ])
     ).toEqual([]);
   });
 
   test("ignores writes outside artifacts/", () => {
     expect(
       extractPairedTurnArtifacts([
-        { role: "user", content: "save" },
+        { content: "save", role: "user" },
         assistantWithToolCalls([
           {
+            arguments: { content: "hello", path: "notes.txt" },
             id: "tool_1",
             name: "write_file",
-            arguments: { path: "notes.txt", content: "hello" },
           },
         ]),
         toolMessage({
           id: "tool_1",
+          input: { content: "hello", path: "notes.txt" },
           name: "write_file",
-          input: { path: "notes.txt", content: "hello" },
-          result: { path: "/tmp/notes.txt", bytesWritten: 5 },
+          result: { bytesWritten: 5, path: "/tmp/notes.txt" },
         }),
-      ]),
+      ])
     ).toEqual([]);
   });
 
   test("supports multiple pairs in one turn", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "save both" },
+      { content: "save both", role: "user" },
       assistantWithToolCalls([
         {
+          arguments: { content: "a", path: "artifacts/a.md" },
           id: "tool_1",
           name: "write_file",
-          arguments: { path: "artifacts/a.md", content: "a" },
         },
         {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/a.md.nakama-meta.json",
+          },
           id: "tool_2",
           name: "write_file",
-          arguments: { path: "artifacts/a.md.nakama-meta.json", content: metaJson },
         },
         {
+          arguments: { content: "b", path: "artifacts/b.md" },
           id: "tool_3",
           name: "write_file",
-          arguments: { path: "artifacts/b.md", content: "b" },
         },
         {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/b.md.nakama-meta.json",
+          },
           id: "tool_4",
           name: "write_file",
-          arguments: { path: "artifacts/b.md.nakama-meta.json", content: metaJson },
         },
       ]),
       toolMessage({
         id: "tool_1",
+        input: { content: "a", path: "artifacts/a.md" },
         name: "write_file",
-        input: { path: "artifacts/a.md", content: "a" },
-        result: { path: `${ARTIFACTS_ROOT}/a.md`, bytesWritten: 1 },
+        result: { bytesWritten: 1, path: `${ARTIFACTS_ROOT}/a.md` },
       }),
       toolMessage({
         id: "tool_2",
+        input: { content: metaJson, path: "artifacts/a.md.nakama-meta.json" },
         name: "write_file",
-        input: { path: "artifacts/a.md.nakama-meta.json", content: metaJson },
-        result: { path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`, bytesWritten: metaJson.length },
+        result: {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`,
+        },
       }),
       toolMessage({
         id: "tool_3",
+        input: { content: "b", path: "artifacts/b.md" },
         name: "write_file",
-        input: { path: "artifacts/b.md", content: "b" },
-        result: { path: `${ARTIFACTS_ROOT}/b.md`, bytesWritten: 1 },
+        result: { bytesWritten: 1, path: `${ARTIFACTS_ROOT}/b.md` },
       }),
       toolMessage({
         id: "tool_4",
+        input: { content: metaJson, path: "artifacts/b.md.nakama-meta.json" },
         name: "write_file",
-        input: { path: "artifacts/b.md.nakama-meta.json", content: metaJson },
-        result: { path: `${ARTIFACTS_ROOT}/b.md.nakama-meta.json`, bytesWritten: metaJson.length },
+        result: {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/b.md.nakama-meta.json`,
+        },
       }),
     ];
 
-    expect(extractPairedTurnArtifacts(messages).map((artifact) => artifact.path)).toEqual([
-      "a.md",
-      "b.md",
+    expect(
+      extractPairedTurnArtifacts(messages).map((artifact) => artifact.path)
+    ).toEqual(["a.md", "b.md"]);
+  });
+
+  test("extracts successful generate_image tool results without write_file pairs", () => {
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "draw a cat", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "a cat" },
+            id: "tool_img",
+            name: "generate_image",
+          },
+        ]),
+        toolMessage({
+          id: "tool_img",
+          input: { prompt: "a cat" },
+          name: "generate_image",
+          result: {
+            attachmentId: "att_1",
+            mimeType: "image/png",
+            model: "gpt-image-2",
+            path: "artifacts/cat.png",
+            sizeBytes: 2048,
+          },
+        }),
+        { content: "Here is your cat.", role: "assistant" },
+      ])
+    ).toEqual([
+      {
+        filename: "cat.png",
+        mimeType: "image/png",
+        path: "cat.png",
+        savedAt: "",
+        sizeBytes: 2048,
+      },
     ]);
+  });
+
+  test("ignores failed generate_image tool results", () => {
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "draw", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "a cat" },
+            id: "tool_img",
+            name: "generate_image",
+          },
+        ]),
+        toolMessage({
+          id: "tool_img",
+          input: { prompt: "a cat" },
+          name: "generate_image",
+          result: { error: "Image model is not configured." },
+        }),
+      ])
+    ).toEqual([]);
+  });
+
+  test("rejects generate_image results missing mimeType", () => {
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "draw", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "a cat" },
+            id: "tool_img",
+            name: "generate_image",
+          },
+        ]),
+        toolMessage({
+          id: "tool_img",
+          input: { prompt: "a cat" },
+          name: "generate_image",
+          result: {
+            path: "artifacts/cat.png",
+            sizeBytes: 2048,
+          },
+        }),
+      ])
+    ).toEqual([]);
+  });
+
+  test("rejects generate_image paths outside artifacts/", () => {
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "draw", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "a cat" },
+            id: "tool_img",
+            name: "generate_image",
+          },
+        ]),
+        toolMessage({
+          id: "tool_img",
+          input: { prompt: "a cat" },
+          name: "generate_image",
+          result: {
+            mimeType: "image/png",
+            path: "tmp/cat.png",
+            sizeBytes: 2048,
+          },
+        }),
+      ])
+    ).toEqual([]);
+  });
+
+  test("keeps oversized generate_image refs with their sizeBytes for channel policy", () => {
+    const oversized = 6 * 1024 * 1024;
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "draw", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "huge" },
+            id: "tool_img",
+            name: "generate_image",
+          },
+        ]),
+        toolMessage({
+          id: "tool_img",
+          input: { prompt: "huge" },
+          name: "generate_image",
+          result: {
+            mimeType: "image/png",
+            path: "artifacts/huge.png",
+            sizeBytes: oversized,
+          },
+        }),
+      ])
+    ).toEqual([
+      {
+        filename: "huge.png",
+        mimeType: "image/png",
+        path: "huge.png",
+        savedAt: "",
+        sizeBytes: oversized,
+      },
+    ]);
+  });
+
+  test("extracts write_file pairs and generate_image together in one turn", () => {
+    const messages: ChatMessage[] = [
+      { content: "save and draw", role: "user" },
+      assistantWithToolCalls([
+        {
+          arguments: { content: "a", path: "artifacts/a.md" },
+          id: "tool_1",
+          name: "write_file",
+        },
+        {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/a.md.nakama-meta.json",
+          },
+          id: "tool_2",
+          name: "write_file",
+        },
+        {
+          arguments: { prompt: "a cat" },
+          id: "tool_img",
+          name: "generate_image",
+        },
+      ]),
+      toolMessage({
+        id: "tool_1",
+        input: { content: "a", path: "artifacts/a.md" },
+        name: "write_file",
+        result: { bytesWritten: 1, path: `${ARTIFACTS_ROOT}/a.md` },
+      }),
+      toolMessage({
+        id: "tool_2",
+        input: { content: metaJson, path: "artifacts/a.md.nakama-meta.json" },
+        name: "write_file",
+        result: {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`,
+        },
+      }),
+      toolMessage({
+        id: "tool_img",
+        input: { prompt: "a cat" },
+        name: "generate_image",
+        result: {
+          attachmentId: "att_1",
+          mimeType: "image/png",
+          model: "gpt-image-2",
+          path: "artifacts/cat.png",
+          sizeBytes: 2048,
+        },
+      }),
+    ];
+
+    expect(
+      extractPairedTurnArtifacts(messages).map((artifact) => artifact.path)
+    ).toEqual(["a.md", "cat.png"]);
   });
 });
 
 describe("extractLatestTurnMessages", () => {
   test("slices from the last user message", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "first" },
-      { role: "assistant", content: "one" },
-      { role: "user", content: "second" },
-      { role: "assistant", content: "two" },
+      { content: "first", role: "user" },
+      { content: "one", role: "assistant" },
+      { content: "second", role: "user" },
+      { content: "two", role: "assistant" },
     ];
 
     expect(extractLatestTurnMessages(messages)).toEqual([
-      { role: "user", content: "second" },
-      { role: "assistant", content: "two" },
+      { content: "second", role: "user" },
+      { content: "two", role: "assistant" },
     ]);
   });
 });

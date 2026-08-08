@@ -20,11 +20,11 @@ import {
 import { cn } from "@/lib/utils";
 
 interface McpServerAssignPickerProps {
-  servers: McpServerSummary[];
-  disabled?: boolean;
   buttonLabel?: string;
-  onAssign: (serverId: string) => void | Promise<void>;
   className?: string;
+  disabled?: boolean;
+  onAssign: (serverId: string) => void | Promise<void>;
+  servers: McpServerSummary[];
 }
 
 export function McpServerAssignPicker({
@@ -43,25 +43,25 @@ export function McpServerAssignPicker({
   return (
     <>
       <Button
+        className={cn("w-full sm:w-auto", className)}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        size="sm"
         type="button"
         variant="outline"
-        size="sm"
-        disabled={disabled}
-        className={cn("w-full sm:w-auto", className)}
-        onClick={() => setOpen(true)}
       >
-        <PlusIcon className="size-4" aria-hidden />
+        <PlusIcon aria-hidden className="size-4" />
         {buttonLabel}
       </Button>
 
       <Dialog
-        open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
         }}
+        open={open}
       >
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
+          <DialogHeader className="gap-1 border-border border-b px-6 py-4 text-left">
             <DialogTitle>Add MCP server</DialogTitle>
             <DialogDescription>
               Choose an MCP server to allow for this profile.
@@ -69,7 +69,7 @@ export function McpServerAssignPicker({
           </DialogHeader>
 
           <Command className="rounded-none bg-transparent">
-            <div className="border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+            <div className="border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
               <CommandInput placeholder="Search MCP servers…" />
             </div>
             <CommandList className="max-h-72 p-1">
@@ -77,17 +77,17 @@ export function McpServerAssignPicker({
               <CommandGroup>
                 {servers.map((server) => (
                   <CommandItem
-                    key={server.id}
-                    value={server.name}
                     disabled={disabled}
+                    key={server.id}
                     onSelect={() => {
                       void onAssign(server.id);
                       setOpen(false);
                     }}
+                    value={server.name}
                   >
                     <div className="min-w-0">
                       <p>{server.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         {server.transport} · {server.toolCount} tool
                         {server.toolCount === 1 ? "" : "s"}
                       </p>

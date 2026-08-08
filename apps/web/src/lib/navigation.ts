@@ -1,14 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BellIcon,
+  BrainIcon,
+  CableIcon,
   CircleFadingPlusIcon,
   CircleUserRoundIcon,
-  BrainIcon,
-  KanbanIcon,
   ClockIcon,
   CogIcon,
+  KanbanIcon,
   WorkflowIcon,
-  CableIcon,
 } from "lucide-react";
 
 export type PageId =
@@ -23,75 +23,75 @@ export type PageId =
   | "notifications";
 
 export interface NavItem {
+  description: string;
   id: PageId;
   label: string;
-  description: string;
 }
 
 export interface NavGroup {
   id: string;
-  label: string;
   items: NavItem[];
+  label: string;
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "chat",
-    label: "Chat",
     items: [
       {
+        description: "New chat",
         id: "chat",
         label: "New chat",
-        description: "New chat",
       },
       {
+        description: "Browse and reopen saved chats",
         id: "history",
         label: "Chats",
-        description: "Browse and reopen saved chats",
       },
     ],
+    label: "Chat",
   },
   {
     id: "agent",
-    label: "Agent",
     items: [
       {
+        description: "Manage bot configs and tool allowlists",
         id: "profiles",
         label: "Profiles",
-        description: "Manage bot configs and tool allowlists",
       },
       {
+        description: "Draft workflows from natural language",
         id: "automations",
         label: "Automations",
-        description: "Draft workflows from natural language",
       },
       {
+        description: "Agent swarm kanban board",
         id: "tasks",
         label: "Tasks",
-        description: "Agent swarm kanban board",
       },
     ],
+    label: "Agent",
   },
   {
     id: "system",
-    label: "System",
     items: [
       {
+        description: "Bridges and Composio",
         id: "integrations",
         label: "Integrations",
-        description: "Bridges and Composio",
       },
       {
+        description: "Identity stack files and registered agent tools",
         id: "soul",
         label: "System",
-        description: "Identity stack files and registered agent tools",
       },
       {
+        description: "Provider API key and model",
         id: "settings",
         label: "Settings",
-        description: "Provider API key and model",
       },
     ],
+    label: "System",
   },
 ];
 
@@ -99,42 +99,47 @@ export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   notifications: {
+    description: "Automation runs and org memory proposals",
     id: "notifications",
     label: "Notifications",
-    description: "Automation runs and org memory proposals",
   },
 };
 
 export const NAV_ITEM_ICONS: Record<PageId, LucideIcon> = {
+  automations: WorkflowIcon,
   chat: CircleFadingPlusIcon,
   history: ClockIcon,
-  profiles: CircleUserRoundIcon,
-  soul: BrainIcon,
-  automations: WorkflowIcon,
-  tasks: KanbanIcon,
   integrations: CableIcon,
-  settings: CogIcon,
   notifications: BellIcon,
+  profiles: CircleUserRoundIcon,
+  settings: CogIcon,
+  soul: BrainIcon,
+  tasks: KanbanIcon,
 };
 
 export const SETUP_PATH = "/setup";
 
-export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set(["profiles", "soul"]);
+export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
+  "profiles",
+  "soul",
+]);
 
 export function canAccessSystemPage(
   isPlatformAdmin: boolean,
-  orgRole: string | undefined,
+  orgRole: string | undefined
 ): boolean {
   return isPlatformAdmin || orgRole === "admin";
 }
 
-export function canAccessIntegrationsPage(orgRole: string | undefined): boolean {
+export function canAccessIntegrationsPage(
+  orgRole: string | undefined
+): boolean {
   return orgRole === "admin" || orgRole === "member";
 }
 
 export function canUseToolPlayground(
   isPlatformAdmin: boolean,
-  orgRole: string | undefined,
+  orgRole: string | undefined
 ): boolean {
   return isPlatformAdmin || orgRole === "admin";
 }
@@ -153,7 +158,7 @@ export function profilePath(profileId: string): string {
 
 export function skillDetailPath(
   skillId: string,
-  options?: { profileId?: string },
+  options?: { profileId?: string }
 ): string {
   const path = `${PAGE_PATHS.profiles}/skills/${encodeURIComponent(skillId)}`;
   if (!options?.profileId) {
@@ -179,7 +184,7 @@ export function skillDetailBackTarget(searchParams: URLSearchParams): {
 
 export function toolPlaygroundPath(
   toolId: string,
-  options?: { fromProfileId?: string },
+  options?: { fromProfileId?: string }
 ): string {
   const path = `${PAGE_PATHS.soul}/playground/${encodeURIComponent(toolId)}`;
   if (!options?.fromProfileId) {
@@ -199,7 +204,9 @@ export function toolPlaygroundBackTarget(searchParams: URLSearchParams): {
   label: string;
 } {
   const fromProfileId =
-    searchParams.get("from") === "profiles" ? searchParams.get("profile") : null;
+    searchParams.get("from") === "profiles"
+      ? searchParams.get("profile")
+      : null;
   if (fromProfileId) {
     return { href: profilePath(fromProfileId), label: "Profile" };
   }
@@ -208,8 +215,8 @@ export function toolPlaygroundBackTarget(searchParams: URLSearchParams): {
 
 export function orgSkillProposalsPath(profileId?: string): string {
   const params = new URLSearchParams({
-    tab: "organization",
     skillProposals: "proposals",
+    tab: "organization",
   });
   if (profileId) {
     params.set("profileId", profileId);
@@ -218,15 +225,15 @@ export function orgSkillProposalsPath(profileId?: string): string {
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
+  automations: "/automations",
   chat: "/chat",
   history: "/history",
-  profiles: "/profiles",
-  soul: "/system",
-  automations: "/automations",
-  tasks: "/tasks",
   integrations: "/integrations",
-  settings: "/settings",
   notifications: "/notifications",
+  profiles: "/profiles",
+  settings: "/settings",
+  soul: "/system",
+  tasks: "/tasks",
 };
 
 export function pathForPage(pageId: PageId): string {
@@ -235,7 +242,7 @@ export function pathForPage(pageId: PageId): string {
 
 export function navHrefForPage(
   pageId: PageId,
-  chatProfileId?: string | null,
+  chatProfileId?: string | null
 ): string {
   if (pageId === "chat") {
     const params = new URLSearchParams({ new: "1" });
@@ -249,7 +256,9 @@ export function navHrefForPage(
 }
 
 export function findNavItem(pageId: PageId): NavItem | undefined {
-  return NAV_ITEMS.find((item) => item.id === pageId) ?? STANDALONE_PAGES[pageId];
+  return (
+    NAV_ITEMS.find((item) => item.id === pageId) ?? STANDALONE_PAGES[pageId]
+  );
 }
 
 export function pageIdFromPath(pathname: string): PageId | null {
@@ -257,15 +266,24 @@ export function pageIdFromPath(pathname: string): PageId | null {
     return "chat";
   }
 
-  if (pathname === PAGE_PATHS.soul || pathname.startsWith(`${PAGE_PATHS.soul}/`)) {
+  if (
+    pathname === PAGE_PATHS.soul ||
+    pathname.startsWith(`${PAGE_PATHS.soul}/`)
+  ) {
     return "soul";
   }
 
-  if (pathname === PAGE_PATHS.profiles || pathname.startsWith(`${PAGE_PATHS.profiles}/`)) {
+  if (
+    pathname === PAGE_PATHS.profiles ||
+    pathname.startsWith(`${PAGE_PATHS.profiles}/`)
+  ) {
     return "profiles";
   }
 
-  for (const [pageId, path] of Object.entries(PAGE_PATHS) as [PageId, string][]) {
+  for (const [pageId, path] of Object.entries(PAGE_PATHS) as [
+    PageId,
+    string,
+  ][]) {
     if (pageId === "chat" || pageId === "profiles") {
       continue;
     }

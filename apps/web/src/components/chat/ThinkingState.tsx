@@ -1,14 +1,21 @@
-import styles from "./ThinkingState.module.css";
 import { cn } from "@/lib/utils";
+import styles from "./ThinkingState.module.css";
 
 interface ThinkingStateProps {
   className?: string;
   label?: string;
 }
 
-export function ThinkingState({ className, label = "Thinking" }: ThinkingStateProps) {
+export function ThinkingState({
+  className,
+  label = "Thinking",
+}: ThinkingStateProps) {
   return (
-    <span className={cn(styles.shimmer, className)} role="status" aria-live="polite">
+    <span
+      aria-live="polite"
+      className={cn(styles.shimmer, className)}
+      role="status"
+    >
       {label}
     </span>
   );

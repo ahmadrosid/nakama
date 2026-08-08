@@ -1,6 +1,14 @@
 import { createClient } from "@nakama/client";
-import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import {
+  ChannelOrgStore,
+  getChannelOrgSelectionPath,
+} from "@nakama/core/channel-org";
+import { installCrashHandlers } from "@nakama/core/crash-report";
+import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import {
@@ -9,8 +17,6 @@ import {
   readTelegramWorkerHeartbeat,
   writeTelegramWorkerHeartbeat,
 } from "@nakama/core/telegram-worker";
-import { installCrashHandlers } from "@nakama/core/crash-report";
-import { installCrashReportSink } from "@nakama/core/crash-report-sentry";
 import { TelegramAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
@@ -42,7 +48,7 @@ try {
   ) {
     console.error(
       `Another Nakama Telegram bridge is already running (pid ${existingHeartbeat.pid}). ` +
-        "Stop the existing bridge worker or disable it in the dashboard before starting a new one.",
+        "Stop the existing bridge worker or disable it in the dashboard before starting a new one."
     );
     process.exit(1);
   }
@@ -52,15 +58,16 @@ try {
   spawnedChild = child;
 
   const client = createClient({
+    authToken:
+      (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined,
     baseUrl: serverUrl,
-    authToken: (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined,
     clientOrigin: resolveWebPublicUrl(),
   });
   const health = await client.health();
 
   if (!health.providerConfigured) {
     console.warn(
-      "Server has no provider configured. Chat runs in offline mode until an API key is set.",
+      "Server has no provider configured. Chat runs in offline mode until an API key is set."
     );
   }
 
@@ -71,7 +78,7 @@ try {
     console.error(
       `Nakama API authentication failed: ${message}\n` +
         "Restart the server so it can provision the local client user:\n" +
-        "  bun run dev:server",
+        "  bun run dev:server"
     );
     process.exit(1);
   }
@@ -86,10 +93,10 @@ try {
   await authStore.reload();
 
   const bot = await createBot(config, {
-    client,
-    sessionStore,
     authStore,
+    client,
     orgStore,
+    sessionStore,
   });
 
   console.log("Nakama Telegram bridge running (long polling).");
@@ -98,7 +105,9 @@ try {
   const authConfig = authStore.getConfig();
   const paired = authConfig?.pairedUserIds.length ?? 0;
   const pendingHandshake = authConfig?.handshakeCode ? "yes" : "no";
-  console.log(`Paired users: ${paired} · Pending handshake: ${pendingHandshake}`);
+  console.log(
+    `Paired users: ${paired} · Pending handshake: ${pendingHandshake}`
+  );
 
   botStop = () => bot.stop();
 

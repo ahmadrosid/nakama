@@ -6,8 +6,8 @@ import { saveComposioConfig } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
-import { ComposioService } from "./composio-service";
 import type { ComposioApiClient } from "./composio-api-client";
+import { ComposioService } from "./composio-service";
 
 const TEST_API_KEY = "ck_test";
 const USER_ID = "user_admin";
@@ -15,77 +15,100 @@ const ORG_ID = "org_1";
 
 function createMockClient(): ComposioApiClient {
   return {
-    async listCatalogToolkits() {
-      return [{ slug: "gmail", name: "Gmail", description: "Google Mail", logoUrl: null }];
-    },
-    async linkToolkitAccount(_userId, _toolkitSlug) {
-      return { redirectUrl: "https://example.com/oauth", connectedAccountId: "ca_1" };
-    },
-    async deleteConnectedAccount() {},
-    async createProfileSession(userId, _toolkitSlugs, _allowedTools, connectedAccounts = {}) {
+    async createProfileSession(
+      userId,
+      _toolkitSlugs,
+      _allowedTools,
+      connectedAccounts = {}
+    ) {
       expect(userId).toBe("nakama:user:user_admin");
       expect(connectedAccounts).toEqual({});
       return {
+        headers: { Authorization: "Bearer test" },
         sessionId: "sess_1",
         url: "https://mcp.composio.dev/sess_1",
-        headers: { Authorization: "Bearer test" },
       };
+    },
+    async deleteConnectedAccount() {},
+    async linkToolkitAccount(_userId, _toolkitSlug) {
+      return {
+        connectedAccountId: "ca_1",
+        redirectUrl: "https://example.com/oauth",
+      };
+    },
+    async listCatalogToolkits() {
+      return [
+        {
+          description: "Google Mail",
+          logoUrl: null,
+          name: "Gmail",
+          slug: "gmail",
+        },
+      ];
     },
     async listSessionTools() {
       return [
         {
-          slug: "GMAIL_SEND_EMAIL",
-          name: "Send Email",
           description: "Send an email",
-          inputSchema: { type: "object", properties: {} },
+          inputSchema: { properties: {}, type: "object" },
+          name: "Send Email",
+          slug: "GMAIL_SEND_EMAIL",
         },
       ];
     },
   };
 }
 
-function injectMockComposioClient(service: ComposioService, client: ComposioApiClient): void {
-  (service as unknown as { apiClientCache: { key: string; client: ComposioApiClient } | null }).apiClientCache =
-    {
-      key: TEST_API_KEY,
-      client,
-    };
+function injectMockComposioClient(
+  service: ComposioService,
+  client: ComposioApiClient
+): void {
+  (
+    service as unknown as {
+      apiClientCache: { key: string; client: ComposioApiClient } | null;
+    }
+  ).apiClientCache = {
+    client,
+    key: TEST_API_KEY,
+  };
 }
 
-async function seedOrgWithAdmin(db: ReturnType<typeof createInMemoryDatabaseAdapter>) {
+async function seedOrgWithAdmin(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+) {
   const now = "2026-01-01T00:00:00.000Z";
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Org",
     slug: "org",
-    createdAt: now,
     updatedAt: now,
   });
   await db.createUser({
-    id: USER_ID,
+    createdAt: now,
     email: "admin@example.com",
+    id: USER_ID,
     passwordHash: "hash",
-    createdAt: now,
     updatedAt: now,
   });
   await db.createUser({
-    id: LOCAL_CLIENT_USER_ID,
-    email: "local-client@nakama.internal",
-    passwordHash: "hash",
     createdAt: now,
+    email: "local-client@nakama.internal",
+    id: LOCAL_CLIENT_USER_ID,
+    passwordHash: "hash",
     updatedAt: now,
   });
   await db.upsertOrgMember({
-    orgId: ORG_ID,
-    userId: LOCAL_CLIENT_USER_ID,
-    role: "admin",
     createdAt: now,
+    orgId: ORG_ID,
+    role: "admin",
+    userId: LOCAL_CLIENT_USER_ID,
   });
   await db.upsertOrgMember({
-    orgId: ORG_ID,
-    userId: USER_ID,
-    role: "admin",
     createdAt: "2026-01-01T00:00:01.000Z",
+    orgId: ORG_ID,
+    role: "admin",
+    userId: USER_ID,
   });
 }
 
@@ -101,7 +124,6 @@ async function createConfiguredService() {
 
   return {
     db,
-    service,
     restore() {
       if (previous === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;
@@ -109,6 +131,7 @@ async function createConfiguredService() {
         process.env.NAKAMA_CONFIG_DIR = previous;
       }
     },
+    service,
   };
 }
 
@@ -117,7 +140,9 @@ describe("ComposioService", () => {
     const { service, restore } = await createConfiguredService();
 
     try {
-      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
       expect(toolkit.toolkitSlug).toBe("gmail");
       expect(toolkit.status).toBe("enabled");
 
@@ -138,7 +163,7 @@ describe("ComposioService", () => {
         ORG_ID,
         USER_ID,
         "gmail",
-        "http://localhost:4310",
+        "http://localhost:4310"
       );
 
       expect(response.redirectUrl).toBe("https://example.com/oauth");
@@ -184,7 +209,9 @@ describe("ComposioService", () => {
       async listCatalogToolkits(options) {
         calls += 1;
         lastLimit = options?.limit;
-        return [{ slug: "gmail", name: "Gmail", description: null, logoUrl: null }];
+        return [
+          { description: null, logoUrl: null, name: "Gmail", slug: "gmail" },
+        ];
       },
     });
 
@@ -198,7 +225,7 @@ describe("ComposioService", () => {
         service as unknown as {
           reachabilityCache: { value: boolean; expiresAt: number } | null;
         }
-      ).reachabilityCache = { value: true, expiresAt: Date.now() - 1 };
+      ).reachabilityCache = { expiresAt: Date.now() - 1, value: true };
 
       // Stale cache returns immediately and refreshes in the background.
       expect(await service.isReachable()).toBe(true);
@@ -245,7 +272,11 @@ describe("ComposioService", () => {
     });
 
     try {
-      const pending = Promise.all([service.isReachable(), service.isReachable(), service.isReachable()]);
+      const pending = Promise.all([
+        service.isReachable(),
+        service.isReachable(),
+        service.isReachable(),
+      ]);
       release();
       expect(await pending).toEqual([true, true, true]);
       expect(calls).toBe(1);
@@ -259,8 +290,12 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
-      expect(await service.resolveComposioActingUserId(ORG_ID, LOCAL_CLIENT_USER_ID)).toBe(USER_ID);
-      expect(await service.resolveComposioActingUserId(ORG_ID, USER_ID)).toBe(USER_ID);
+      expect(
+        await service.resolveComposioActingUserId(ORG_ID, LOCAL_CLIENT_USER_ID)
+      ).toBe(USER_ID);
+      expect(await service.resolveComposioActingUserId(ORG_ID, USER_ID)).toBe(
+        USER_ID
+      );
     } finally {
       restore();
     }
@@ -272,39 +307,41 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
-      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
       await db.upsertComposioUserConnection({
-        id: "cuc_admin",
-        orgId: ORG_ID,
-        userId: USER_ID,
-        toolkitId: toolkit.id,
-        status: "connected",
         connectedAccountId: "ca_admin",
-        sessionIdEnc: null,
-        oauthStateHash: null,
-        lastError: null,
         createdAt: now,
+        id: "cuc_admin",
+        lastError: null,
+        oauthStateHash: null,
+        orgId: ORG_ID,
+        sessionIdEnc: null,
+        status: "connected",
+        toolkitId: toolkit.id,
         updatedAt: now,
+        userId: USER_ID,
       });
       await db.upsertProfile({
+        createdAt: now,
         id: "profile_1",
-        orgId: ORG_ID,
-        name: "Bot",
-        model: null,
-        systemPrompt: "",
         isDefault: true,
         isSuper: false,
-        createdAt: now,
+        model: null,
+        name: "Bot",
+        orgId: ORG_ID,
+        systemPrompt: "",
         updatedAt: now,
       });
       await db.replaceProfileComposioToolkits("profile_1", [
-        { profileId: "profile_1", toolkitId: toolkit.id, allowedActions: null },
+        { allowedActions: null, profileId: "profile_1", toolkitId: toolkit.id },
       ]);
 
       const assigned = await service.getAssignedToolkitRecords(
         ORG_ID,
         LOCAL_CLIENT_USER_ID,
-        "profile_1",
+        "profile_1"
       );
 
       expect(assigned).toHaveLength(1);
@@ -321,39 +358,41 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
-      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
       await db.upsertComposioUserConnection({
-        id: "cuc_admin",
-        orgId: ORG_ID,
-        userId: USER_ID,
-        toolkitId: toolkit.id,
-        status: "connected",
         connectedAccountId: "ca_admin",
-        sessionIdEnc: null,
-        oauthStateHash: null,
-        lastError: null,
         createdAt: now,
+        id: "cuc_admin",
+        lastError: null,
+        oauthStateHash: null,
+        orgId: ORG_ID,
+        sessionIdEnc: null,
+        status: "connected",
+        toolkitId: toolkit.id,
         updatedAt: now,
+        userId: USER_ID,
       });
       await db.upsertProfile({
+        createdAt: now,
         id: "profile_1",
-        orgId: ORG_ID,
-        name: "Bot",
-        model: null,
-        systemPrompt: "",
         isDefault: true,
         isSuper: false,
-        createdAt: now,
+        model: null,
+        name: "Bot",
+        orgId: ORG_ID,
+        systemPrompt: "",
         updatedAt: now,
       });
       await db.replaceProfileComposioToolkits("profile_1", [
-        { profileId: "profile_1", toolkitId: toolkit.id, allowedActions: null },
+        { allowedActions: null, profileId: "profile_1", toolkitId: toolkit.id },
       ]);
 
       const context = await service.formatProfileConnectionsContext(
         ORG_ID,
         USER_ID,
-        "profile_1",
+        "profile_1"
       );
 
       expect(context).toContain("composio__search_actions");
@@ -375,26 +414,32 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
-      const toolkit = await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
       await db.upsertProfile({
+        createdAt: now,
         id: "profile_unconnected",
-        orgId: ORG_ID,
-        name: "Bot",
-        model: null,
-        systemPrompt: "",
         isDefault: false,
         isSuper: false,
-        createdAt: now,
+        model: null,
+        name: "Bot",
+        orgId: ORG_ID,
+        systemPrompt: "",
         updatedAt: now,
       });
       await db.replaceProfileComposioToolkits("profile_unconnected", [
-        { profileId: "profile_unconnected", toolkitId: toolkit.id, allowedActions: null },
+        {
+          allowedActions: null,
+          profileId: "profile_unconnected",
+          toolkitId: toolkit.id,
+        },
       ]);
 
       const context = await service.formatProfileConnectionsContext(
         ORG_ID,
         USER_ID,
-        "profile_unconnected",
+        "profile_unconnected"
       );
 
       // Assigned toolkit is listed, but no connection exists.
@@ -417,21 +462,21 @@ describe("ComposioService", () => {
     try {
       await seedOrgWithAdmin(db);
       await db.upsertProfile({
+        createdAt: now,
         id: "profile_empty",
-        orgId: ORG_ID,
-        name: "Bot",
-        model: null,
-        systemPrompt: "",
         isDefault: false,
         isSuper: false,
-        createdAt: now,
+        model: null,
+        name: "Bot",
+        orgId: ORG_ID,
+        systemPrompt: "",
         updatedAt: now,
       });
 
       const context = await service.formatProfileConnectionsContext(
         ORG_ID,
         USER_ID,
-        "profile_empty",
+        "profile_empty"
       );
 
       expect(context).toBe("");

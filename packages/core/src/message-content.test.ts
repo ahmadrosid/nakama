@@ -18,42 +18,42 @@ const tinyPngBase64 =
 describe("normalizeUserContent", () => {
   test("returns parts when images present", () => {
     const result = normalizeUserContent("see this", [
-      { mediaType: "image/png", data: tinyPngBase64 },
+      { data: tinyPngBase64, mediaType: "image/png" },
     ]);
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toEqual([
-      { type: "text", text: "see this" },
-      { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+      { text: "see this", type: "text" },
+      { data: tinyPngBase64, mediaType: "image/png", type: "image" },
     ]);
   });
 
   test("allows image-only message", () => {
     const result = normalizeUserContent("", [
-      { mediaType: "image/png", data: tinyPngBase64 },
+      { data: tinyPngBase64, mediaType: "image/png" },
     ]);
 
     expect(result).toEqual([
-      { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+      { data: tinyPngBase64, mediaType: "image/png", type: "image" },
     ]);
   });
 
   test("returns parts when documents present", () => {
     const result = normalizeUserContent("summarize", undefined, [
       {
+        data: "SGVsbG8=",
         filename: "notes.txt",
         mediaType: "text/plain",
-        data: "SGVsbG8=",
       },
     ]);
 
     expect(result).toEqual([
-      { type: "text", text: "summarize" },
+      { text: "summarize", type: "text" },
       {
-        type: "document",
+        data: "SGVsbG8=",
         filename: "notes.txt",
         mediaType: "text/plain",
-        data: "SGVsbG8=",
+        type: "document",
       },
     ]);
   });
@@ -61,18 +61,18 @@ describe("normalizeUserContent", () => {
   test("allows document-only message", () => {
     const result = normalizeUserContent("", undefined, [
       {
+        data: "SGVsbG8=",
         filename: "notes.txt",
         mediaType: "text/plain",
-        data: "SGVsbG8=",
       },
     ]);
 
     expect(result).toEqual([
       {
-        type: "document",
+        data: "SGVsbG8=",
         filename: "notes.txt",
         mediaType: "text/plain",
-        data: "SGVsbG8=",
+        type: "document",
       },
     ]);
   });
@@ -81,14 +81,16 @@ describe("normalizeUserContent", () => {
 describe("validateImageAttachments", () => {
   test("rejects unsupported media type", () => {
     expect(() =>
-      validateImageAttachments([{ mediaType: "image/bmp", data: tinyPngBase64 }]),
+      validateImageAttachments([
+        { data: tinyPngBase64, mediaType: "image/bmp" },
+      ])
     ).toThrow(NakamaApiError);
   });
 
   test("rejects oversized image", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
-      validateImageAttachments([{ mediaType: "image/png", data: huge }]),
+      validateImageAttachments([{ data: huge, mediaType: "image/png" }])
     ).toThrow(NakamaApiError);
   });
 });
@@ -97,8 +99,12 @@ describe("validateDocumentAttachments", () => {
   test("rejects unsupported media type", () => {
     expect(() =>
       validateDocumentAttachments([
-        { filename: "bad.bin", mediaType: "application/octet-stream", data: "YWJj" },
-      ]),
+        {
+          data: "YWJj",
+          filename: "bad.bin",
+          mediaType: "application/octet-stream",
+        },
+      ])
     ).toThrow(NakamaApiError);
   });
 
@@ -106,11 +112,12 @@ describe("validateDocumentAttachments", () => {
     expect(() =>
       validateDocumentAttachments([
         {
-          filename: "budget.xlsx",
-          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           data: "YWJj",
+          filename: "budget.xlsx",
+          mediaType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         },
-      ]),
+      ])
     ).not.toThrow();
   });
 
@@ -118,11 +125,11 @@ describe("validateDocumentAttachments", () => {
     expect(() =>
       validateDocumentAttachments([
         {
+          data: "YWJj",
           filename: "budget.xlsx",
           mediaType: "application/octet-stream",
-          data: "YWJj",
         },
-      ]),
+      ])
     ).not.toThrow();
   });
 
@@ -130,8 +137,8 @@ describe("validateDocumentAttachments", () => {
     const huge = "A".repeat((6 * 1024 * 1024 * 4) / 3);
     expect(() =>
       validateDocumentAttachments([
-        { filename: "big.pdf", mediaType: "application/pdf", data: huge },
-      ]),
+        { data: huge, filename: "big.pdf", mediaType: "application/pdf" },
+      ])
     ).toThrow(NakamaApiError);
   });
 
@@ -140,11 +147,12 @@ describe("validateDocumentAttachments", () => {
     expect(() =>
       validateDocumentAttachments([
         {
-          filename: "big.xlsx",
-          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           data: huge,
+          filename: "big.xlsx",
+          mediaType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         },
-      ]),
+      ])
     ).toThrow(NakamaApiError);
   });
 });
@@ -159,10 +167,10 @@ describe("getUserMessageText", () => {
   test("extracts text from parts", () => {
     expect(
       getUserMessageText([
-        { type: "text", text: "line one" },
-        { type: "image", mediaType: "image/png", data: tinyPngBase64 },
-        { type: "text", text: "line two" },
-      ]),
+        { text: "line one", type: "text" },
+        { data: tinyPngBase64, mediaType: "image/png", type: "image" },
+        { text: "line two", type: "text" },
+      ])
     ).toBe("line one\nline two");
   });
 });
@@ -170,11 +178,11 @@ describe("getUserMessageText", () => {
 describe("estimateUserContentTokens", () => {
   test("adds fixed tokens per image", () => {
     const tokens = estimateUserContentTokens([
-      { type: "text", text: "hi" },
-      { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+      { text: "hi", type: "text" },
+      { data: tinyPngBase64, mediaType: "image/png", type: "image" },
     ]);
 
-    expect(tokens).toBeGreaterThan(1_400);
+    expect(tokens).toBeGreaterThan(1400);
   });
 });
 
@@ -182,17 +190,17 @@ describe("stripImagesForCompaction", () => {
   test("replaces image parts with placeholder text", () => {
     const result = stripImagesForCompaction([
       {
-        role: "user",
         content: [
-          { type: "text", text: "diagram" },
-          { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+          { text: "diagram", type: "text" },
+          { data: tinyPngBase64, mediaType: "image/png", type: "image" },
         ],
+        role: "user",
       },
     ]);
 
     expect(result[0]).toEqual({
-      role: "user",
       content: "diagram\n[1 image omitted from summary]",
+      role: "user",
     });
   });
 });
@@ -200,8 +208,8 @@ describe("stripImagesForCompaction", () => {
 describe("parseDataUrl", () => {
   test("parses valid data url", () => {
     expect(parseDataUrl(`data:image/png;base64,${tinyPngBase64}`)).toEqual({
-      mediaType: "image/png",
       data: tinyPngBase64,
+      mediaType: "image/png",
     });
   });
 
@@ -214,9 +222,9 @@ describe("countUserImages", () => {
   test("counts image parts", () => {
     expect(
       countUserImages([
-        { type: "text", text: "x" },
-        { type: "image", mediaType: "image/png", data: tinyPngBase64 },
-      ]),
+        { text: "x", type: "text" },
+        { data: tinyPngBase64, mediaType: "image/png", type: "image" },
+      ])
     ).toBe(1);
   });
 });

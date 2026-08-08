@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { ModelListEditor, type ModelListRow } from "@/components/ModelListEditor";
+import {
+  ModelListEditor,
+  type ModelListRow,
+} from "@/components/ModelListEditor";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { Button } from "@/components/ui/button";
@@ -8,29 +11,29 @@ import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import type { ModelsDevRow } from "@/hooks/use-models-dev";
 
 interface CustomProviderFieldsProps {
-  displayName: string;
-  baseUrl: string;
   apiKey: string;
-  customModels: ModelListRow[];
-  disabled?: boolean;
-  identityReadOnly?: boolean;
-  density?: "default" | "compact";
-  showModelsEditor?: boolean;
-  displayNameError?: string | null;
+  baseUrl: string;
   baseUrlError?: string | null;
-  modelsError?: string | null;
+  browseLabel?: string;
   /**
    * `remote` fetches models from the provider endpoint via /v1/models/discover.
    * `models.dev` browses the public models.dev catalog (setup helper for custom endpoints).
    */
   browseSource?: "remote" | "models.dev";
-  remoteProvider?: "ollama" | "openai_compatible";
-  providerInstanceId?: string;
+  customModels: ModelListRow[];
+  density?: "default" | "compact";
+  disabled?: boolean;
+  displayName: string;
+  displayNameError?: string | null;
   hostMode?: "local" | "cloud";
-  browseLabel?: string;
-  onDisplayNameChange: (value: string) => void;
+  identityReadOnly?: boolean;
+  modelsError?: string | null;
   onBaseUrlChange: (value: string) => void;
   onCustomModelsChange: (models: ModelListRow[]) => void;
+  onDisplayNameChange: (value: string) => void;
+  providerInstanceId?: string;
+  remoteProvider?: "ollama" | "openai_compatible";
+  showModelsEditor?: boolean;
 }
 
 export function CustomProviderFields({
@@ -57,10 +60,13 @@ export function CustomProviderFields({
   const [isBrowsing, setIsBrowsing] = useState(false);
   const identityDisabled = disabled || identityReadOnly;
   const resolvedBrowseLabel =
-    browseLabel ??
-    (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
+    browseLabel ?? (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
 
-  const handleModelsDevSelect = (_provider: string, modelId: string, row: ModelsDevRow) => {
+  const handleModelsDevSelect = (
+    _provider: string,
+    modelId: string,
+    row: ModelsDevRow
+  ) => {
     const nextModel = { id: modelId, name: row.modelName };
     if (customModels.some((model) => model.id === nextModel.id)) {
       setIsBrowsing(false);
@@ -84,106 +90,111 @@ export function CustomProviderFields({
   return (
     <div className="space-y-4">
       <FormField
-        id="provider-display-name"
-        label="Provider name"
         density={density}
         footer={
           displayNameError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {displayNameError}
             </p>
           ) : null
         }
+        id="provider-display-name"
+        label="Provider name"
       >
         <InputGroup>
           <InputGroupInput
-            id="provider-display-name"
-            value={displayName}
-            disabled={identityDisabled}
-            readOnly={identityReadOnly}
-            placeholder="Ollama"
             aria-invalid={displayNameError != null}
+            disabled={identityDisabled}
+            id="provider-display-name"
             onChange={(event) => onDisplayNameChange(event.target.value)}
+            placeholder="Ollama"
+            readOnly={identityReadOnly}
+            value={displayName}
           />
         </InputGroup>
       </FormField>
 
       <FormField
-        id="provider-base-url"
-        label="Base URL"
         density={density}
         footer={
           baseUrlError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {baseUrlError}
             </p>
           ) : null
         }
+        id="provider-base-url"
+        label="Base URL"
       >
         <InputGroup>
           <InputGroupInput
-            id="provider-base-url"
-            value={baseUrl}
-            disabled={identityDisabled}
-            readOnly={identityReadOnly}
-            placeholder="http://localhost:11434/v1"
             aria-invalid={baseUrlError != null}
+            disabled={identityDisabled}
+            id="provider-base-url"
             onChange={(event) => onBaseUrlChange(event.target.value)}
+            placeholder="http://localhost:11434/v1"
+            readOnly={identityReadOnly}
+            value={baseUrl}
           />
         </InputGroup>
       </FormField>
 
       {showModelsEditor ? (
         <FormField
-          id="provider-models"
-          label="Models"
           density={density}
           footer={
             modelsError ? (
-              <p className="text-sm text-destructive" role="alert">
+              <p className="text-destructive text-sm" role="alert">
                 {modelsError}
               </p>
             ) : null
           }
+          id="provider-models"
+          label="Models"
         >
           {isBrowsing ? (
             <div className="space-y-2">
               {browseSource === "remote" ? (
                 <RemoteModelsBrowseList
-                  onSelect={handleRemoteSelect}
-                  className="h-72 rounded-md border border-border"
-                  providerId={providerInstanceId}
-                  baseUrl={baseUrl}
                   apiKey={apiKey}
-                  provider={remoteProvider}
-                  hostMode={hostMode}
+                  baseUrl={baseUrl}
                   browseLabel={resolvedBrowseLabel}
+                  className="h-72 rounded-md border border-border"
+                  hostMode={hostMode}
+                  onSelect={handleRemoteSelect}
+                  provider={remoteProvider}
+                  providerId={providerInstanceId}
                 />
               ) : (
                 <ModelsBrowseList
-                  onSelect={handleModelsDevSelect}
                   className="h-72 rounded-md border border-border"
+                  onSelect={handleModelsDevSelect}
                 />
               )}
               <div className="flex justify-end">
-                <Button type="button" size="sm" variant="outline" onClick={() => setIsBrowsing(false)}>
+                <Button
+                  onClick={() => setIsBrowsing(false)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
                   Back
                 </Button>
               </div>
             </div>
           ) : (
             <ModelListEditor
-              models={customModels}
-              disabled={disabled}
-              showPricing={false}
-              showThinking
               browseLabel={
                 browseSource === "remote"
                   ? `Browse ${resolvedBrowseLabel}`
                   : "Browse models.dev"
               }
+              disabled={disabled}
+              models={customModels}
               onBrowse={() => setIsBrowsing(true)}
               onChange={onCustomModelsChange}
+              showPricing={false}
+              showThinking
             />
           )}
         </FormField>

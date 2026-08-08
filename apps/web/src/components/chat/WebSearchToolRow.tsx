@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { ChatListItem } from "@/lib/chat-history";
-import { WebSourceCard } from "@/components/chat/WebSearch";
 import { useWebSourceSiteStates } from "@/components/chat/use-web-source-site-states";
+import { WebSourceCard } from "@/components/chat/WebSearch";
+import type { ChatListItem } from "@/lib/chat-history";
 import {
   buildWebSearchToolState,
   shouldRenderWebSearchToolRow,
@@ -30,17 +30,17 @@ export function WebSearchToolRow({ message }: { message: ChatListItem }) {
   return (
     <div className="w-full max-w-full">
       <WebSourceCard
-        mode="search"
         headerText={state.query ?? "the web"}
-        sources={state.sources}
-        siteStates={siteStates}
         isComplete={!isRunning}
-        open={open}
+        mode="search"
         onOpenChange={(nextOpen) => {
           if (isRunning) {
             setCollapsedWhileRunning(!nextOpen);
           }
         }}
+        open={open}
+        siteStates={siteStates}
+        sources={state.sources}
       />
     </div>
   );

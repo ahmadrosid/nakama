@@ -5,24 +5,24 @@ import type {
 } from "@nakama/core/contract";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
-import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import { type ModelListRow } from "@/components/ModelListEditor";
+import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import {
   seedManageModelRows,
   seedShortlistManageModelRows,
 } from "@/components/settings/provider-settings-seed";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { formatError } from "@/lib/client";
 import {
-  type SelectedProvider,
   defaultOllamaSetupBaseUrl,
+  type SelectedProvider,
   validateApiKeyForProvider,
   validateBaseUrlInput,
-  validateShortlistCapabilityModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenCodeGoModelsInput,
   validateOpenRouterModelsInput,
+  validateShortlistCapabilityModelsInput,
 } from "@/lib/models";
 
 export function useProviderInstanceCard({
@@ -34,7 +34,10 @@ export function useProviderInstanceCard({
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
-  onUpdate: (providerId: string, request: UpdateProviderRequest) => Promise<void>;
+  onUpdate: (
+    providerId: string,
+    request: UpdateProviderRequest
+  ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
 }) {
@@ -59,33 +62,35 @@ export function useProviderInstanceCard({
 
   const catalogModelsForType = useMemo(
     () => catalog.filter((model) => model.provider === providerType),
-    [catalog, providerType],
+    [catalog, providerType]
   );
 
   const instanceModels = useMemo(
     () => catalog.filter((model) => model.providerId === instance.id),
-    [catalog, instance.id],
+    [catalog, instance.id]
   );
 
   const openManage = () => {
     setDialogError(null);
 
     if (isCompatibleLike) {
-      setManageModels(seedManageModelRows(instance.customModels, instanceModels));
+      setManageModels(
+        seedManageModelRows(instance.customModels, instanceModels)
+      );
     } else if (isOpenRouter || isShortlistBrowse) {
       setManageModels(
         seedShortlistManageModelRows(
           instance.customModels,
           null,
-          instanceModels[0]?.name,
-        ),
+          instanceModels[0]?.name
+        )
       );
     } else if (isCatalogShortlist) {
       setManageModels(
         seedManageModelRows(
           instance.customModels,
-          instance.customModels?.length ? instanceModels : [],
-        ),
+          instance.customModels?.length ? instanceModels : []
+        )
       );
     }
 
@@ -97,7 +102,9 @@ export function useProviderInstanceCard({
     setEditLabel(instance.label);
     setEditBaseUrl(
       instance.baseUrl ??
-        (isOllama ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local") : ""),
+        (isOllama
+          ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local")
+          : "")
     );
     setManageModels(seedManageModelRows(instance.customModels, instanceModels));
     setEditOpen(true);
@@ -105,7 +112,7 @@ export function useProviderInstanceCard({
 
   const runUpdate = async (
     request: Parameters<typeof onUpdate>[1],
-    close?: () => void,
+    close?: () => void
   ) => {
     setBusy(true);
     setDialogError(null);
@@ -165,8 +172,8 @@ export function useProviderInstanceCard({
 
     await runUpdate(
       {
-        label: editLabel,
         baseUrl: editBaseUrl,
+        label: editLabel,
         ...(isOllama
           ? {
               hostMode: editBaseUrl.toLowerCase().includes("ollama.com")
@@ -176,7 +183,7 @@ export function useProviderInstanceCard({
           : {}),
         customModels: normalizeModelListRows(manageModels),
       },
-      () => setEditOpen(false),
+      () => setEditOpen(false)
     );
   };
 
@@ -196,7 +203,7 @@ export function useProviderInstanceCard({
 
     await runUpdate(
       { customModels: normalizeModelListRows(manageModels) },
-      () => setManageOpen(false),
+      () => setManageOpen(false)
     );
   };
 
@@ -212,38 +219,38 @@ export function useProviderInstanceCard({
     : seedManageModelRows(instance.customModels, instanceModels);
 
   return {
-    providerType,
+    apiKey,
+    busy,
+    catalogModelsForType,
+    dialogError,
+    editBaseUrl,
+    editLabel,
+    editManageModels,
+    editOpen,
+    handleDelete,
+    handleManageModelsChange,
+    handleReplaceKey,
+    isCatalogShortlist,
     isCompatibleLike,
     isOllama,
     isOpenRouter,
     isShortlistBrowse,
-    isCatalogShortlist,
-    catalogModelsForType,
-    busy,
-    dialogError,
-    replaceKeyOpen,
-    setReplaceKeyOpen,
-    editOpen,
-    setEditOpen,
-    manageOpen,
-    setManageOpen,
-    apiKey,
-    setApiKey,
-    showApiKey,
-    setShowApiKey,
-    editLabel,
-    setEditLabel,
-    editBaseUrl,
-    setEditBaseUrl,
     manageModels,
-    setManageModels,
-    editManageModels,
-    openManage,
+    manageOpen,
     openEdit,
-    handleReplaceKey,
-    handleDelete,
+    openManage,
+    providerType,
+    replaceKeyOpen,
     saveCompatible,
     saveManageModels,
-    handleManageModelsChange,
+    setApiKey,
+    setEditBaseUrl,
+    setEditLabel,
+    setEditOpen,
+    setManageModels,
+    setManageOpen,
+    setReplaceKeyOpen,
+    setShowApiKey,
+    showApiKey,
   };
 }

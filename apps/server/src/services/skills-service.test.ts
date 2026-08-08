@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { ensureBundledSkillFiles } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -54,7 +54,7 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const weather = (await service.listSkills()).skills.find(
-      (skill) => skill.name === "weather",
+      (skill) => skill.name === "weather"
     );
 
     expect(weather).toBeDefined();
@@ -64,7 +64,7 @@ describe("SkillsService", () => {
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
       PROFILE_ID,
-      "What's the weather in Jakarta?",
+      "What's the weather in Jakarta?"
     );
 
     expect(matched).toContain("Active Skill: weather");
@@ -78,7 +78,7 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const weather = (await service.listSkills()).skills.find(
-      (skill) => skill.name === "weather",
+      (skill) => skill.name === "weather"
     );
 
     expect(weather).toBeDefined();
@@ -88,7 +88,7 @@ describe("SkillsService", () => {
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
       PROFILE_ID,
-      "/skill weather",
+      "/skill weather"
     );
 
     expect(matched).toContain("Active Skill: weather");
@@ -102,7 +102,7 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const skill = (await service.listSkills()).skills.find(
-      (entry) => entry.name === "create-automation",
+      (entry) => entry.name === "create-automation"
     );
 
     expect(skill).toBeDefined();
@@ -112,7 +112,7 @@ describe("SkillsService", () => {
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
       PROFILE_ID,
-      "Schedule a daily summary at 9am",
+      "Schedule a daily summary at 9am"
     );
 
     expect(matched).toContain("Active Skill: create-automation");
@@ -127,7 +127,7 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const skill = (await service.listSkills()).skills.find(
-      (entry) => entry.name === "create-automation",
+      (entry) => entry.name === "create-automation"
     );
 
     expect(skill).toBeDefined();
@@ -137,7 +137,7 @@ describe("SkillsService", () => {
     const matched = await service.formatMatchedSkillsForPrompt(
       ORG_ID,
       PROFILE_ID,
-      "Explain how TLS works",
+      "Explain how TLS works"
     );
 
     expect(matched).toBe("");
@@ -150,7 +150,7 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const skill = (await service.listSkills()).skills.find(
-      (entry) => entry.name === "create-profile",
+      (entry) => entry.name === "create-profile"
     );
 
     expect(skill).toBeDefined();
@@ -166,7 +166,7 @@ describe("SkillsService", () => {
           skills.some((entry) => entry.name === "create-profile")
             ? "# Available Tools\n- read_file\n- write_file\n- edit_file"
             : "",
-      },
+      }
     );
 
     expect(matched).toContain("Active Skill: create-profile");
@@ -177,8 +177,9 @@ describe("SkillsService", () => {
       PROFILE_ID,
       "Explain TLS",
       {
-        appendContext: () => "# Available Tools\n- read_file\n- write_file\n- edit_file",
-      },
+        appendContext: () =>
+          "# Available Tools\n- read_file\n- write_file\n- edit_file",
+      }
     );
 
     expect(unrelated).toBe("");
@@ -189,15 +190,15 @@ describe("SkillsService", () => {
     const service = new SkillsService(db);
 
     const response = await service.createSkill(ORG_ID, {
-      name: "notes",
-      description: "Capture notes for the user.",
       body: "Use this skill when the user asks to save a note.",
+      description: "Capture notes for the user.",
+      name: "notes",
       profileId: PROFILE_ID,
     });
 
     expect(response.skill.name).toBe("notes");
     expect(response.skill.sourcePath).toContain(
-      join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes"),
+      join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes")
     );
 
     const listed = await service.listSkills();
@@ -209,8 +210,8 @@ describe("SkillsService", () => {
     const service = new SkillsService(db);
 
     const created = await service.createSkill(ORG_ID, {
-      name: "notes",
       description: "Capture notes for the user.",
+      name: "notes",
       profileId: PROFILE_ID,
     });
 
@@ -227,11 +228,13 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const listed = await service.listSkills();
-    const agentBrowser = listed.skills.find((skill) => skill.name === "agent-browser");
+    const agentBrowser = listed.skills.find(
+      (skill) => skill.name === "agent-browser"
+    );
     expect(agentBrowser).toBeTruthy();
 
     await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
-      "Bundled system skills cannot be deleted.",
+      "Bundled system skills cannot be deleted."
     );
   });
 
@@ -242,17 +245,20 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const agentBrowser = (await service.listSkills()).skills.find(
-      (skill) => skill.name === "agent-browser",
+      (skill) => skill.name === "agent-browser"
     );
     expect(agentBrowser).toBeDefined();
 
     expect(
-      await service.composeAgentBrowserCapabilityForProfile(ORG_ID, PROFILE_ID),
+      await service.composeAgentBrowserCapabilityForProfile(ORG_ID, PROFILE_ID)
     ).toBe("");
 
     await db.assignSkillToProfile(PROFILE_ID, agentBrowser!.id);
 
-    const prompt = await service.composeAgentBrowserCapabilityForProfile(ORG_ID, PROFILE_ID);
+    const prompt = await service.composeAgentBrowserCapabilityForProfile(
+      ORG_ID,
+      PROFILE_ID
+    );
     expect(prompt).toContain("agent-browser skill");
     expect(prompt).toContain("Available Agent Skills");
     expect(prompt).toContain("Skills are workflow instructions");
@@ -272,7 +278,12 @@ disable-model-invocation: true
 Use Claude Code guidance.
 `;
 
-    const globalDir = join(configDir, "agent", "skills", "coding-backend-claude-code");
+    const globalDir = join(
+      configDir,
+      "agent",
+      "skills",
+      "coding-backend-claude-code"
+    );
     const profileDir = join(
       configDir,
       "orgs",
@@ -280,7 +291,7 @@ Use Claude Code guidance.
       "profiles",
       PROFILE_ID,
       "skills",
-      "coding-backend-claude-code",
+      "coding-backend-claude-code"
     );
 
     await mkdir(globalDir, { recursive: true });
@@ -292,7 +303,7 @@ Use Claude Code guidance.
 
     const listed = await service.listSkills();
     const matches = listed.skills.filter(
-      (skill) => skill.name === "coding-backend-claude-code",
+      (skill) => skill.name === "coding-backend-claude-code"
     );
 
     expect(matches).toHaveLength(1);
@@ -309,7 +320,7 @@ Use Claude Code guidance.
       "profiles",
       PROFILE_ID,
       "skills",
-      "notes",
+      "notes"
     );
 
     await mkdir(profileDir, { recursive: true });
@@ -321,7 +332,7 @@ description: Capture notes for the user.
 ---
 
 Use this skill when the user asks to save a note.
-`,
+`
     );
 
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
@@ -331,7 +342,7 @@ Use this skill when the user asks to save a note.
 
     expect(notes).toBeDefined();
     expect(notes?.sourcePath).toContain(
-      join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes"),
+      join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes")
     );
   });
 
@@ -345,7 +356,7 @@ Use this skill when the user asks to save a note.
       "profiles",
       PROFILE_ID,
       "skills",
-      "notes",
+      "notes"
     );
 
     await mkdir(profileDir, { recursive: true });
@@ -357,11 +368,13 @@ description: Capture notes for the user.
 ---
 
 Original body.
-`,
+`
     );
 
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
-    const notes = (await service.listSkills()).skills.find((skill) => skill.name === "notes");
+    const notes = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "notes"
+    );
     expect(notes).toBeDefined();
 
     const patched = await service.patchSkill(ORG_ID, notes!.id, {
@@ -387,7 +400,7 @@ description: Deploy the service.
 ---
 
 Use staging first.
-`,
+`
     );
 
     const edited = await service.editAssignedProfileSkill(
@@ -400,7 +413,7 @@ description: Deploy with canary.
 ---
 
 Use canary then prod.
-`,
+`
     );
 
     expect(edited.skill.description).toBe("Deploy with canary.");
@@ -417,8 +430,8 @@ description: Renamed.
 ---
 
 Nope.
-`,
-      ),
+`
+      )
     ).rejects.toThrow(/must match skill name/i);
   });
 });

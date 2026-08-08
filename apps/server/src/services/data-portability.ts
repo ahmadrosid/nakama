@@ -21,28 +21,28 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { unzipSync, zipSync } from "fflate";
 import {
-  getUserConfigDir,
-  NAKAMA_API_VERSION,
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
+  getUserConfigDir,
+  NAKAMA_API_VERSION,
   type RestoreDataImportResponse,
 } from "@nakama/core";
+import { unzipSync, zipSync } from "fflate";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
 
 export interface CreateDataExportOptions {
-  rootDir?: string;
-  now?: Date;
   databasePath?: string | null;
+  now?: Date;
+  rootDir?: string;
 }
 
 export interface CreateDataExportResult {
-  filename: string;
   data: Buffer;
+  filename: string;
   manifest: DataExportManifest;
 }
 
@@ -51,19 +51,19 @@ export interface PreviewDataImportOptions {
 }
 
 export interface RestoreDataImportOptions {
-  rootDir?: string;
   confirm: boolean;
+  rootDir?: string;
 }
 
 interface ZipEntry {
-  name: string;
   data: Buffer;
+  name: string;
   uncompressedSize: number;
 }
 
 interface InventoryItem {
-  relativePath: string;
   absolutePath: string;
+  relativePath: string;
   size: number;
 }
 
@@ -71,38 +71,49 @@ const RESTORE_PREFIX = ".nakama-restore-";
 const BACKUP_PREFIX = ".nakama-backup-";
 
 export async function createNakamaDataExport(
-  options: CreateDataExportOptions = {},
+  options: CreateDataExportOptions = {}
 ): Promise<CreateDataExportResult> {
   const rootDir = resolve(options.rootDir ?? getUserConfigDir());
   const createdAt = (options.now ?? new Date()).toISOString();
   const { files, skipped } = await inventoryConfigRoot(rootDir);
   const topLevelPaths = Array.from(
-    new Set(files.map((file) => file.relativePath.split("/")[0]).filter(Boolean)),
+    new Set(
+      files.map((file) => file.relativePath.split("/")[0]).filter(Boolean)
+    )
   ).sort();
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
   if (options.databasePath) {
     const databasePath = resolve(options.databasePath);
     const relativeDatabasePath = relative(rootDir, databasePath);
-    if (relativeDatabasePath.startsWith("..") || isAbsolute(relativeDatabasePath)) {
-      skipped.push({ path: databasePath, reason: "Database path is outside the Nakama root." });
+    if (
+      relativeDatabasePath.startsWith("..") ||
+      isAbsolute(relativeDatabasePath)
+    ) {
+      skipped.push({
+        path: databasePath,
+        reason: "Database path is outside the Nakama root.",
+      });
     }
   }
 
   const manifest: DataExportManifest = {
-    kind: "nakama-export",
-    version: NAKAMA_EXPORT_FORMAT_VERSION,
     apiVersion: NAKAMA_API_VERSION,
     createdAt,
+    fileCount: files.length,
+    kind: "nakama-export",
+    skipped,
     sourceRootName: basename(rootDir) || ".nakama",
     topLevelPaths,
-    fileCount: files.length,
     totalBytes,
-    skipped,
+    version: NAKAMA_EXPORT_FORMAT_VERSION,
   };
 
   const entries: Record<string, Uint8Array> = {
-    [NAKAMA_EXPORT_MANIFEST]: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+    [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
+      JSON.stringify(manifest, null, 2),
+      "utf8"
+    ),
   };
 
   for (const file of files) {
@@ -111,27 +122,36 @@ export async function createNakamaDataExport(
   }
 
   return {
-    filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
     data: Buffer.from(zipSync(entries)),
+    filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
     manifest,
   };
 }
 
 export async function previewNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
-  options: PreviewDataImportOptions = {},
+  options: PreviewDataImportOptions = {}
 ): Promise<DataImportPreviewResponse> {
   const rootDir = resolve(options.rootDir ?? getUserConfigDir());
   const entries = readZip(toBuffer(archive));
   const manifest = readManifest(entries);
-  const restorableEntries = entries.filter((entry) => entry.name !== NAKAMA_EXPORT_MANIFEST);
+  const restorableEntries = entries.filter(
+    (entry) => entry.name !== NAKAMA_EXPORT_MANIFEST
+  );
 
   return {
-    manifest,
     archiveFileCount: restorableEntries.length,
-    archiveTotalBytes: restorableEntries.reduce((sum, entry) => sum + entry.uncompressedSize, 0),
+    archiveTotalBytes: restorableEntries.reduce(
+      (sum, entry) => sum + entry.uncompressedSize,
+      0
+    ),
+    manifest,
     topLevelPaths: Array.from(
-      new Set(restorableEntries.map((entry) => entry.name.split("/")[0]).filter(Boolean)),
+      new Set(
+        restorableEntries
+          .map((entry) => entry.name.split("/")[0])
+          .filter(Boolean)
+      )
     ).sort(),
     willReplaceRoot: await pathExists(rootDir),
   };
@@ -148,7 +168,7 @@ export function decodeArchiveRequestData(data: string): Buffer {
 
 export async function restoreNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
-  options: RestoreDataImportOptions,
+  options: RestoreDataImportOptions
 ): Promise<RestoreDataImportResponse> {
   if (!options.confirm) {
     throw new Error("Restore confirmation is required.");
@@ -160,7 +180,7 @@ export async function restoreNakamaDataImport(
 
   // Stage and back up inside rootDir so Docker volume mounts (e.g. /nakama/data)
   // are never renamed — rename(2) on a mount point returns EBUSY.
-  await mkdir(rootDir, { recursive: true, mode: 0o700 });
+  await mkdir(rootDir, { mode: 0o700, recursive: true });
   const stagingParent = await mkdtemp(join(rootDir, RESTORE_PREFIX));
   const stagedRoot = join(stagingParent, "root");
   const backupRoot = join(rootDir, `${BACKUP_PREFIX}${Date.now()}`);
@@ -169,7 +189,7 @@ export async function restoreNakamaDataImport(
   let restoreCommitted = false;
 
   try {
-    await mkdir(stagedRoot, { recursive: true, mode: 0o700 });
+    await mkdir(stagedRoot, { mode: 0o700, recursive: true });
     let restoredFileCount = 0;
 
     for (const entry of entries) {
@@ -183,7 +203,7 @@ export async function restoreNakamaDataImport(
 
     const existingEntries = await listMovableTopLevelEntries(rootDir);
     if (existingEntries.length > 0) {
-      await mkdir(backupRoot, { recursive: true, mode: 0o700 });
+      await mkdir(backupRoot, { mode: 0o700, recursive: true });
       for (const name of existingEntries) {
         await movePath(join(rootDir, name), join(backupRoot, name));
         backedUpEntries.push(name);
@@ -200,7 +220,7 @@ export async function restoreNakamaDataImport(
 
     if (backedUpEntries.length > 0) {
       try {
-        await rm(backupRoot, { recursive: true, force: true });
+        await rm(backupRoot, { force: true, recursive: true });
       } catch {
         // Restore already committed — leave an orphan backup rather than rolling back.
       }
@@ -208,15 +228,19 @@ export async function restoreNakamaDataImport(
 
     return {
       manifest,
-      restoredRoot: rootDir,
       restoredFileCount,
+      restoredRoot: rootDir,
     };
   } catch (error) {
-    if (!restoreCommitted && backedUpEntries.length > 0 && (await pathExists(backupRoot))) {
+    if (
+      !restoreCommitted &&
+      backedUpEntries.length > 0 &&
+      (await pathExists(backupRoot))
+    ) {
       try {
         if (backupComplete) {
           for (const name of await listMovableTopLevelEntries(rootDir)) {
-            await rm(join(rootDir, name), { recursive: true, force: true });
+            await rm(join(rootDir, name), { force: true, recursive: true });
           }
           for (const name of backedUpEntries) {
             const from = join(backupRoot, name);
@@ -229,7 +253,7 @@ export async function restoreNakamaDataImport(
           for (const name of backedUpEntries) {
             const live = join(rootDir, name);
             if (await pathExists(live)) {
-              await rm(live, { recursive: true, force: true });
+              await rm(live, { force: true, recursive: true });
             }
             const from = join(backupRoot, name);
             if (await pathExists(from)) {
@@ -237,7 +261,7 @@ export async function restoreNakamaDataImport(
             }
           }
         }
-        await rm(backupRoot, { recursive: true, force: true });
+        await rm(backupRoot, { force: true, recursive: true });
       } catch {
         // Keep backupRoot for manual recovery if rollback itself fails.
       }
@@ -245,7 +269,7 @@ export async function restoreNakamaDataImport(
 
     throw error;
   } finally {
-    await rm(stagingParent, { recursive: true, force: true });
+    await rm(stagingParent, { force: true, recursive: true });
   }
 }
 
@@ -272,7 +296,10 @@ async function inventoryConfigRoot(rootDir: string): Promise<{
       const relativePath = toZipPath(relative(rootDir, absolutePath));
 
       if (shouldSkipRelativePath(relativePath)) {
-        skipped.push({ path: relativePath, reason: "Internal data-portability temporary path." });
+        skipped.push({
+          path: relativePath,
+          reason: "Internal data-portability temporary path.",
+        });
         continue;
       }
 
@@ -282,17 +309,23 @@ async function inventoryConfigRoot(rootDir: string): Promise<{
       }
 
       if (!entry.isFile()) {
-        skipped.push({ path: relativePath, reason: "Only regular files are exported." });
+        skipped.push({
+          path: relativePath,
+          reason: "Only regular files are exported.",
+        });
         continue;
       }
 
       const stat = await lstat(absolutePath);
-      files.push({ relativePath, absolutePath, size: stat.size });
+      files.push({ absolutePath, relativePath, size: stat.size });
     }
   }
 }
 
-async function writeRestoredEntry(rootDir: string, entry: ZipEntry): Promise<void> {
+async function writeRestoredEntry(
+  rootDir: string,
+  entry: ZipEntry
+): Promise<void> {
   validateArchivePath(entry.name);
   const targetPath = resolve(rootDir, entry.name);
   const relativeTarget = relative(rootDir, targetPath);
@@ -300,7 +333,7 @@ async function writeRestoredEntry(rootDir: string, entry: ZipEntry): Promise<voi
     throw new Error(`Archive entry escapes restore root: ${entry.name}`);
   }
 
-  await mkdir(dirname(targetPath), { recursive: true, mode: 0o700 });
+  await mkdir(dirname(targetPath), { mode: 0o700, recursive: true });
   await writeFile(targetPath, entry.data, { mode: 0o600 });
 }
 
@@ -312,8 +345,8 @@ function readZip(buffer: Buffer): ZipEntry[] {
         validateArchivePath(name);
         const entryData = Buffer.from(data);
         return {
-          name,
           data: entryData,
+          name,
           uncompressedSize: entryData.length,
         };
       });
@@ -329,14 +362,18 @@ function readZip(buffer: Buffer): ZipEntry[] {
 }
 
 function readManifest(entries: ZipEntry[]): DataExportManifest {
-  const manifestEntry = entries.find((entry) => entry.name === NAKAMA_EXPORT_MANIFEST);
+  const manifestEntry = entries.find(
+    (entry) => entry.name === NAKAMA_EXPORT_MANIFEST
+  );
   if (!manifestEntry) {
     throw new Error("Archive is missing Nakama export manifest.");
   }
 
   let manifest: DataExportManifest;
   try {
-    manifest = JSON.parse(manifestEntry.data.toString("utf8")) as DataExportManifest;
+    manifest = JSON.parse(
+      manifestEntry.data.toString("utf8")
+    ) as DataExportManifest;
   } catch {
     throw new Error("Nakama export manifest is not valid JSON.");
   }
@@ -366,7 +403,11 @@ function validateArchivePath(path: string): void {
   }
 
   const normalized = normalize(path).split(sep).join("/");
-  if (normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")) {
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../")
+  ) {
     throw new Error(`Archive entry escapes restore root: ${path}`);
   }
 
@@ -413,7 +454,8 @@ async function pathExists(path: string): Promise<boolean> {
 async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {
   const entries = await readdir(rootDir);
   return entries.filter(
-    (name) => !name.startsWith(RESTORE_PREFIX) && !name.startsWith(BACKUP_PREFIX),
+    (name) =>
+      !(name.startsWith(RESTORE_PREFIX) || name.startsWith(BACKUP_PREFIX))
   );
 }
 
@@ -425,8 +467,8 @@ async function movePath(from: string, to: string): Promise<void> {
       throw error;
     }
 
-    await cp(from, to, { recursive: true, force: true });
-    await rm(from, { recursive: true, force: true });
+    await cp(from, to, { force: true, recursive: true });
+    await rm(from, { force: true, recursive: true });
   }
 }
 

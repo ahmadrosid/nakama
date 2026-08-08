@@ -1,11 +1,16 @@
-import { LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import {
+  LOCAL_CLIENT_EMAIL,
+  LOCAL_CLIENT_USER_ID,
+} from "@nakama/core/local-auth";
 import bcrypt from "bcryptjs";
 import type { DatabaseAdapter } from "./types";
 
 const SALT_ROUNDS = 10;
 const PLACEHOLDER_HASH = "unused";
 
-export async function ensureLocalClientAccess(db: DatabaseAdapter): Promise<void> {
+export async function ensureLocalClientAccess(
+  db: DatabaseAdapter
+): Promise<void> {
   const now = new Date().toISOString();
   let user = await db.getUserByEmail(LOCAL_CLIENT_EMAIL);
 
@@ -15,10 +20,10 @@ export async function ensureLocalClientAccess(db: DatabaseAdapter): Promise<void
 
   if (!user) {
     await db.createUser({
-      id: LOCAL_CLIENT_USER_ID,
-      email: LOCAL_CLIENT_EMAIL,
-      passwordHash: await bcrypt.hash(generateRandomPassword(), SALT_ROUNDS),
       createdAt: now,
+      email: LOCAL_CLIENT_EMAIL,
+      id: LOCAL_CLIENT_USER_ID,
+      passwordHash: await bcrypt.hash(generateRandomPassword(), SALT_ROUNDS),
       updatedAt: now,
     });
     user = await db.getUserByEmail(LOCAL_CLIENT_EMAIL);
@@ -26,7 +31,7 @@ export async function ensureLocalClientAccess(db: DatabaseAdapter): Promise<void
     await db.updateUserPassword(
       user.id,
       await bcrypt.hash(generateRandomPassword(), SALT_ROUNDS),
-      now,
+      now
     );
   }
 
@@ -41,10 +46,10 @@ export async function ensureLocalClientAccess(db: DatabaseAdapter): Promise<void
     }
 
     await db.upsertOrgMember({
-      orgId: org.id,
-      userId: user.id,
-      role: "admin",
       createdAt: now,
+      orgId: org.id,
+      role: "admin",
+      userId: user.id,
     });
   }
 }

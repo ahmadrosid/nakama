@@ -2,10 +2,10 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetCrashReportConsentCache } from "./crash-report-config";
 import {
   breadcrumb,
   buildCrashReport,
+  type CrashReport,
   createCrashContext,
   currentCrashContext,
   fingerprintError,
@@ -16,8 +16,8 @@ import {
   setCrashContextIds,
   setCrashLogger,
   setCrashSink,
-  type CrashReport,
 } from "./crash-report";
+import { resetCrashReportConsentCache } from "./crash-report-config";
 
 let configDir = "";
 let previousConfigDir: string | undefined;
@@ -44,11 +44,14 @@ afterEach(async () => {
   resetCrashReportConsentCache();
   setCrashLogger(null);
   setCrashSink(null);
-  await rm(configDir, { recursive: true, force: true });
+  await rm(configDir, { force: true, recursive: true });
 });
 
 test("breadcrumbs are scoped to the running context", () => {
-  const context = createCrashContext({ source: "server", route: "POST /v1/sessions" });
+  const context = createCrashContext({
+    route: "POST /v1/sessions",
+    source: "server",
+  });
 
   runWithCrashContext(context, () => {
     breadcrumb("route.enter", { method: "POST", status: 200 });
@@ -75,17 +78,25 @@ test("the breadcrumb buffer is bounded and keeps the most recent entries", () =>
 
   expect(context.breadcrumbs).toHaveLength(MAX_BREADCRUMBS);
   expect(context.breadcrumbs[0]?.data).toEqual({ count: 10 });
-  expect(context.breadcrumbs.at(-1)?.data).toEqual({ count: MAX_BREADCRUMBS + 9 });
+  expect(context.breadcrumbs.at(-1)?.data).toEqual({
+    count: MAX_BREADCRUMBS + 9,
+  });
 });
 
 test("context ids are hashed, never carried raw", () => {
   const context = createCrashContext({ source: "server" });
 
   runWithCrashContext(context, () => {
-    setCrashContextIds({ orgId: "org_realid", userId: "usr_realid", sessionId: null });
+    setCrashContextIds({
+      orgId: "org_realid",
+      sessionId: null,
+      userId: "usr_realid",
+    });
   });
 
-  const serialized = JSON.stringify(buildCrashReport(new Error("boom"), { context }));
+  const serialized = JSON.stringify(
+    buildCrashReport(new Error("boom"), { context })
+  );
 
   expect(serialized).not.toContain("org_realid");
   expect(serialized).not.toContain("usr_realid");
@@ -97,12 +108,12 @@ test("the same bug fingerprints the same across ids and line numbers", () => {
   const first = fingerprintError(
     "TypeError",
     "profile prof_01JABCDEF23 not found",
-    "TypeError\n    at resolveProfile (~/src/profiles.ts:12:3)",
+    "TypeError\n    at resolveProfile (~/src/profiles.ts:12:3)"
   );
   const second = fingerprintError(
     "TypeError",
     "profile prof_01JXYZGHI45 not found",
-    "TypeError\n    at resolveProfile (~/src/profiles.ts:48:9)",
+    "TypeError\n    at resolveProfile (~/src/profiles.ts:48:9)"
   );
 
   expect(first).toBe(second);
@@ -113,26 +124,36 @@ test("a uuid in the message does not fragment the fingerprint", () => {
   const first = fingerprintError(
     "Error",
     "run 3f2504e0-4f89-11d3-9a0c-0305e82c3301 timed out after 30000ms",
-    stack,
+    stack
   );
   const second = fingerprintError(
     "Error",
     "run 7c9e6679-7425-40de-944b-e07fc1f90ae7 timed out after 45000ms",
-    stack,
+    stack
   );
 
   expect(first).toBe(second);
 });
 
 test("different bugs fingerprint differently", () => {
-  const first = fingerprintError("TypeError", "a is undefined", "TypeError\n    at a (~/a.ts:1:1)");
-  const second = fingerprintError("RangeError", "b is out of range", "RangeError\n    at b (~/b.ts:1:1)");
+  const first = fingerprintError(
+    "TypeError",
+    "a is undefined",
+    "TypeError\n    at a (~/a.ts:1:1)"
+  );
+  const second = fingerprintError(
+    "RangeError",
+    "b is out of range",
+    "RangeError\n    at b (~/b.ts:1:1)"
+  );
 
   expect(first).not.toBe(second);
 });
 
 test("the report scrubs the message and stack", () => {
-  const error = new Error("auth failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345");
+  const error = new Error(
+    "auth failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345"
+  );
   const report = buildCrashReport(error, { source: "server" });
 
   expect(report.message).not.toContain("sk-ant-api03");
@@ -141,7 +162,9 @@ test("the report scrubs the message and stack", () => {
 });
 
 test("a non-Error rejection still produces a report", () => {
-  const report = buildCrashReport("plain string failure", { source: "worker:discord" });
+  const report = buildCrashReport("plain string failure", {
+    source: "worker:discord",
+  });
 
   expect(report.name).toBe("NonError");
   expect(report.message).toBe("plain string failure");
@@ -199,7 +222,9 @@ test("a sink that throws never surfaces to the caller", async () => {
     throw new Error("sink is down");
   });
 
-  await expect(reportError(new Error("boom"), { source: "server" })).resolves.toBeDefined();
+  await expect(
+    reportError(new Error("boom"), { source: "server" })
+  ).resolves.toBeDefined();
   await Bun.sleep(5);
 });
 
@@ -226,13 +251,13 @@ test("reportInvariant marks the report as an unmet expectation", async () => {
 
 test("the report carries the request id and route for correlation", async () => {
   const context = createCrashContext({
-    source: "server",
     requestId: "req-123",
     route: "POST /v1/sessions",
+    source: "server",
   });
 
   const report = await runWithCrashContext(context, () =>
-    reportError(new Error("boom")),
+    reportError(new Error("boom"))
   );
 
   expect(report.requestId).toBe("req-123");

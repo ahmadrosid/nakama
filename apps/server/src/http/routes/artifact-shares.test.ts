@@ -3,39 +3,43 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getProfileArtifactsDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { createHonoApp } from "../app";
-import { isPublicRouteRequest } from "../public-routes";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
-import { setupFreshInstallSession } from "../test-session-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
+import { createHonoApp } from "../app";
+import { isPublicRouteRequest } from "../public-routes";
+import { setupFreshInstallSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-artifact-shares-test-");
 
 function createApp(databaseAdapter = createInMemoryDatabaseAdapter()) {
   const authService = new AuthService();
   return {
-    databaseAdapter,
-    authService,
     app: createHonoApp({
       agent: {} as never,
-      automationService: {} as never,
-      taskService: {} as never,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      workerManager: {} as never,
-      mcpService: {} as never,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as never,
       databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
       webDistDir: null,
+      workerManager: {} as never,
     }),
+    authService,
+    databaseAdapter,
   };
 }
 
 describe("artifact share routes", () => {
   test("public artifact share GET is allowlisted", () => {
-    expect(isPublicRouteRequest("GET", "/v1/public/artifact-shares/abc123")).toBe(true);
-    expect(isPublicRouteRequest("POST", "/v1/public/artifact-shares/abc123")).toBe(false);
+    expect(
+      isPublicRouteRequest("GET", "/v1/public/artifact-shares/abc123")
+    ).toBe(true);
+    expect(
+      isPublicRouteRequest("POST", "/v1/public/artifact-shares/abc123")
+    ).toBe(false);
   });
 
   test("member can publish and anonymous visitor can read snapshot", async () => {
@@ -46,13 +50,13 @@ describe("artifact share routes", () => {
     const now = new Date().toISOString();
 
     await databaseAdapter.upsertProfile({
-      id: profileId,
-      orgId,
-      name: "Share Test",
-      systemPrompt: "test",
-      model: "openrouter/auto",
-      isSuper: false,
       createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Share Test",
+      orgId,
+      systemPrompt: "test",
       updatedAt: now,
     });
 
@@ -61,17 +65,20 @@ describe("artifact share routes", () => {
     await writeFile(join(artifactsDir, "report.md"), "# Shared report", "utf8");
 
     const publishResponse = await app.fetch(
-      new Request(`http://localhost:4310/v1/profiles/${profileId}/artifacts/shares`, {
-        method: "POST",
-        headers: session.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": session.csrfToken,
-          },
-          orgId,
-        ),
-        body: JSON.stringify({ path: "report.md" }),
-      }),
+      new Request(
+        `http://localhost:4310/v1/profiles/${profileId}/artifacts/shares`,
+        {
+          body: JSON.stringify({ path: "report.md" }),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
     );
 
     expect(publishResponse.status).toBe(201);
@@ -83,8 +90,8 @@ describe("artifact share routes", () => {
 
     const publicResponse = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`,
-      ),
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`
+      )
     );
 
     expect(publicResponse.status).toBe(200);
@@ -94,23 +101,23 @@ describe("artifact share routes", () => {
       new Request(
         `http://localhost:4310/v1/profiles/${profileId}/artifacts/shares/${published.id}`,
         {
-          method: "DELETE",
           headers: session.headers(
             {
               "X-CSRF-Token": session.csrfToken,
             },
-            orgId,
+            orgId
           ),
-        },
-      ),
+          method: "DELETE",
+        }
+      )
     );
 
     expect(revokeResponse.status).toBe(200);
 
     const afterRevoke = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`,
-      ),
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`
+      )
     );
     expect(afterRevoke.status).toBe(404);
     void authService;
@@ -124,13 +131,13 @@ describe("artifact share routes", () => {
     const now = new Date().toISOString();
 
     await databaseAdapter.upsertProfile({
-      id: profileId,
-      orgId,
-      name: "Share Video",
-      systemPrompt: "test",
-      model: "openrouter/auto",
-      isSuper: false,
       createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Share Video",
+      orgId,
+      systemPrompt: "test",
       updatedAt: now,
     });
 
@@ -144,21 +151,24 @@ describe("artifact share routes", () => {
         mimeType: "application/octet-stream",
         savedAt: now,
         sizeBytes: 13,
-      }),
+      })
     );
 
     const publishResponse = await app.fetch(
-      new Request(`http://localhost:4310/v1/profiles/${profileId}/artifacts/shares`, {
-        method: "POST",
-        headers: session.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": session.csrfToken,
-          },
-          orgId,
-        ),
-        body: JSON.stringify({ path: "clip.mp4" }),
-      }),
+      new Request(
+        `http://localhost:4310/v1/profiles/${profileId}/artifacts/shares`,
+        {
+          body: JSON.stringify({ path: "clip.mp4" }),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
     );
 
     expect(publishResponse.status).toBe(201);
@@ -166,8 +176,8 @@ describe("artifact share routes", () => {
 
     const metaResponse = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}?meta=1`,
-      ),
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}?meta=1`
+      )
     );
     expect(metaResponse.status).toBe(200);
     const meta = (await metaResponse.json()) as {
@@ -181,11 +191,13 @@ describe("artifact share routes", () => {
 
     const publicResponse = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`,
-      ),
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(published.token)}`
+      )
     );
     expect(publicResponse.status).toBe(200);
     expect(publicResponse.headers.get("Content-Type")).toBe("video/mp4");
-    expect(publicResponse.headers.get("Content-Disposition")).toContain("inline");
+    expect(publicResponse.headers.get("Content-Disposition")).toContain(
+      "inline"
+    );
   });
 });

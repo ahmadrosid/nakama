@@ -19,7 +19,7 @@ describe("sub_agent chat formatting", () => {
     expect(
       formatSubAgentTitle({
         task: "Research Microsandbox integration\nwith more detail",
-      }),
+      })
     ).toBe("Research Microsandbox integration");
   });
 
@@ -31,18 +31,18 @@ describe("sub_agent chat formatting", () => {
     expect(
       formatSubAgentSubtitle(
         {
-          task: "Research Microsandbox integration",
           context: "Researching Microsandbox capabilities",
+          task: "Research Microsandbox integration",
         },
         undefined,
-        true,
-      ),
+        true
+      )
     ).toBe("Researching Microsandbox capabilities");
   });
 
   test("formatSubAgentSubtitle uses Working when running without context", () => {
     expect(
-      formatSubAgentSubtitle({ task: "Research Microsandbox" }, undefined, true),
+      formatSubAgentSubtitle({ task: "Research Microsandbox" }, undefined, true)
     ).toBe("Working…");
   });
 
@@ -52,8 +52,8 @@ describe("sub_agent chat formatting", () => {
         { task: "Research Microsandbox" },
         undefined,
         true,
-        "Reading SOUL.md",
-      ),
+        "Reading SOUL.md"
+      )
     ).toBe("Reading SOUL.md");
   });
 
@@ -62,12 +62,12 @@ describe("sub_agent chat formatting", () => {
       formatSubAgentSubtitle(
         { task: "Research" },
         {
+          output: "Full writeup…",
           status: "success",
           summary: "Two integration paths look promising.",
-          output: "Full writeup…",
         },
-        false,
-      ),
+        false
+      )
     ).toBe("Two integration paths look promising.");
   });
 
@@ -75,17 +75,27 @@ describe("sub_agent chat formatting", () => {
     expect(
       formatSubAgentSubtitle(
         { task: "Research" },
-        { status: "timeout", summary: "", output: "", error: "Sub-agent timed out." },
-        false,
-      ),
+        {
+          error: "Sub-agent timed out.",
+          output: "",
+          status: "timeout",
+          summary: "",
+        },
+        false
+      )
     ).toBe("Sub-agent timed out.");
 
     expect(
       formatSubAgentSubtitle(
         { task: "Research" },
-        { status: "fail", summary: "", output: "", error: "Nested not allowed." },
-        false,
-      ),
+        {
+          error: "Nested not allowed.",
+          output: "",
+          status: "fail",
+          summary: "",
+        },
+        false
+      )
     ).toBe("Nested not allowed.");
   });
 
@@ -97,32 +107,32 @@ describe("sub_agent chat formatting", () => {
   test("formatSubAgentToolResult prefers output then summary", () => {
     expect(
       formatSubAgentToolResult({
+        output: "Long body",
         status: "success",
         summary: "Short",
-        output: "Long body",
-      }),
+      })
     ).toBe("Long body");
 
     expect(
       formatSubAgentToolResult({
+        output: "",
         status: "success",
         summary: "Short",
-        output: "",
-      }),
+      })
     ).toBe("Short");
   });
 
   test("formatToolActionLabel and formatToolResult route through sub_agent helpers", () => {
-    expect(
-      formatToolActionLabel("sub_agent", { task: "Draft a plan" }),
-    ).toBe("Draft a plan");
+    expect(formatToolActionLabel("sub_agent", { task: "Draft a plan" })).toBe(
+      "Draft a plan"
+    );
 
     expect(
       formatToolResult("sub_agent", {
+        output: "Full",
         status: "success",
         summary: "Done",
-        output: "Full",
-      }),
+      })
     ).toBe("Full");
   });
 });

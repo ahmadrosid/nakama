@@ -13,7 +13,10 @@ export function prepareDiscordReply(text: string): string {
   return text.trim();
 }
 
-export function splitDiscordMessage(text: string, maxLen = DISCORD_MAX_MESSAGE_LENGTH): string[] {
+export function splitDiscordMessage(
+  text: string,
+  maxLen = DISCORD_MAX_MESSAGE_LENGTH
+): string[] {
   const trimmed = prepareDiscordReply(text);
 
   if (!trimmed) {
@@ -86,7 +89,7 @@ function hardSplit(text: string, maxLen: number): string[] {
 
 export function renderDiscordTodoStatus(
   todos: AgentTodo[],
-  state: DiscordTodoRunState,
+  state: DiscordTodoRunState
 ): string {
   const header =
     state === "completed"
@@ -126,4 +129,4 @@ export const HELP_TEXT = `Nakama Discord commands:
 /profile — choose or switch bot profile (send as text)
 /status — server and model status
 
-In servers, @mention the bot or reply to it to chat — each mention in a parent channel opens a new thread. @mention inside another thread claims it. Pair in a DM first.`;
+In servers, @mention the bot (or a role it holds) or reply to it to chat — each mention in a parent channel opens a new thread. @mention inside another thread claims it. Pair in a DM first.`;

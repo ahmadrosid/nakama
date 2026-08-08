@@ -1,22 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatListItem } from "./chat-history";
 import {
   createReplayAwareHandlers,
   isActiveTurnConflictError,
   materializedToolCallIds,
   seedStreamingStateForActiveTurn,
 } from "./chat-stream-resume";
-import type { ChatListItem } from "./chat-history";
 
 describe("chat-stream-resume", () => {
   test("materializedToolCallIds collects tool rows", () => {
     const messages: ChatListItem[] = [
-      { id: "1", role: "user", content: "hi" },
+      { content: "hi", id: "1", role: "user" },
       {
+        content: "bash completed",
         id: "tool_1",
         role: "tool",
-        content: "bash completed",
-        toolCallId: "call_1",
         tool: "bash",
+        toolCallId: "call_1",
         toolStatus: "done",
       },
     ];
@@ -25,7 +25,7 @@ describe("chat-stream-resume", () => {
   });
 
   test("seedStreamingStateForActiveTurn appends assistant shell after user message", () => {
-    const messages: ChatListItem[] = [{ id: "1", role: "user", content: "hi" }];
+    const messages: ChatListItem[] = [{ content: "hi", id: "1", role: "user" }];
     const next = seedStreamingStateForActiveTurn(messages);
 
     expect(next).toHaveLength(2);
@@ -35,13 +35,13 @@ describe("chat-stream-resume", () => {
 
   test("seedStreamingStateForActiveTurn appends assistant shell after tool rows", () => {
     const messages: ChatListItem[] = [
-      { id: "1", role: "user", content: "run" },
+      { content: "run", id: "1", role: "user" },
       {
+        content: "bash completed",
         id: "tool_1",
         role: "tool",
-        content: "bash completed",
-        toolCallId: "call_1",
         tool: "bash",
+        toolCallId: "call_1",
         toolStatus: "running",
       },
     ];
@@ -60,18 +60,18 @@ describe("chat-stream-resume", () => {
           seen.push(event.toolCallId);
         },
       },
-      new Set(["call_1"]),
+      new Set(["call_1"])
     );
 
     handlers.onToolStart?.({
-      toolCallId: "call_1",
-      tool: "bash",
       input: {},
+      tool: "bash",
+      toolCallId: "call_1",
     });
     handlers.onToolStart?.({
-      toolCallId: "call_2",
-      tool: "bash",
       input: {},
+      tool: "bash",
+      toolCallId: "call_2",
     });
 
     expect(seen).toEqual(["call_2"]);
@@ -79,7 +79,9 @@ describe("chat-stream-resume", () => {
 
   test("isActiveTurnConflictError detects server conflict copy", () => {
     expect(
-      isActiveTurnConflictError("A response is already in progress for this session."),
+      isActiveTurnConflictError(
+        "A response is already in progress for this session."
+      )
     ).toBe(true);
   });
 });

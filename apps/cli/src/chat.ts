@@ -1,6 +1,11 @@
+import type {
+  NakamaClient,
+  RemoteChatSession,
+  StreamHandlers,
+} from "@nakama/client";
 import {
-  formatClientError,
   type AgentChannel,
+  formatClientError,
   type HealthResponse,
   type InitSoulResponse,
   type InitUserContextResponse,
@@ -10,30 +15,38 @@ import {
   type SoulStatusResponse,
   type UserContextStatusResponse,
 } from "@nakama/core";
-import type { RemoteChatSession, StreamHandlers } from "@nakama/client";
-import type { NakamaClient } from "@nakama/client";
-import { mergeSendInput, parseImageLine } from "./image-input";
-import { formatSlashCommands, effectiveModelState, isActiveModelOption, resolveModelSwitchTarget, resolveSuggestions } from "./commands";
 import { saveCliProfileId } from "./cli-config";
 import {
+  effectiveModelState,
+  formatSlashCommands,
+  isActiveModelOption,
+  resolveModelSwitchTarget,
+  resolveSuggestions,
+} from "./commands";
+import { mergeSendInput, parseImageLine } from "./image-input";
+import { MessageQueue, type PendingMessage } from "./message-queue";
+import { PersistentPrompt } from "./persistent-prompt";
+import {
+  type CliProfileOptions,
   resolveProfileInput,
   resolveStartupProfile,
-  type CliProfileOptions,
 } from "./profile";
-import { PersistentPrompt } from "./persistent-prompt";
-import { PromptCancelledError, promptLine, type PromptLineResult } from "./prompt";
-import { MessageQueue, type PendingMessage } from "./message-queue";
+import {
+  PromptCancelledError,
+  type PromptLineResult,
+  promptLine,
+} from "./prompt";
 import { sendStreamCancellable } from "./stream-abort";
-import { ThinkingIndicator } from "./thinking-indicator";
-import { TerminalRenderer } from "./terminal-renderer";
-import { TerminalInput } from "./terminal-input";
 import { styledLine } from "./styled-text";
+import { TerminalInput } from "./terminal-input";
+import { TerminalRenderer } from "./terminal-renderer";
+import { ThinkingIndicator } from "./thinking-indicator";
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
 
 interface RunChatOptions {
-  client: NakamaClient;
   channel: AgentChannel;
+  client: NakamaClient;
   offline?: boolean;
   profileId?: CliProfileOptions["profileId"];
   signal?: AbortSignal;
@@ -61,14 +74,18 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   console.log("");
 
   if (options.offline) {
-    console.log("Server has no provider configured. Chat runs in offline mode.");
+    console.log(
+      "Server has no provider configured. Chat runs in offline mode."
+    );
     console.log("");
   } else {
     try {
       await printCurrentModel(options.client);
     } catch (error) {
       printError(error);
-      console.log("Restart the server to pick up the latest API:\n  bun run dev:server");
+      console.log(
+        "Restart the server to pick up the latest API:\n  bun run dev:server"
+      );
     }
     console.log("");
   }
@@ -78,38 +95,38 @@ export async function runChat(options: RunChatOptions): Promise<void> {
     await renderer.anchorFromCursor();
 
     await runStickyChat({
-      options,
-      renderer,
-      terminalInput,
-      session,
-      currentProfileId,
       currentProfile,
-      onSessionChange: (next) => {
-        session = next;
-      },
+      currentProfileId,
       onProfileChange: (profileId, profile) => {
         currentProfileId = profileId;
         currentProfile = profile;
       },
+      onSessionChange: (next) => {
+        session = next;
+      },
+      options,
+      renderer,
+      session,
+      terminalInput,
     });
     return;
   }
 
   await runBlockingChat({
-    options,
-    session,
     currentProfileId,
     onSessionChange: (next) => {
       session = next;
     },
+    options,
+    session,
   });
 }
 
 interface ChatContext {
-  options: RunChatOptions;
-  session: RemoteChatSession;
   currentProfileId: string;
   onSessionChange: (session: RemoteChatSession) => void;
+  options: RunChatOptions;
+  session: RemoteChatSession;
 }
 
 async function runStickyChat(
@@ -118,7 +135,7 @@ async function runStickyChat(
     terminalInput: TerminalInput;
     currentProfile: ProfileSummary;
     onProfileChange: (profileId: string, profile: ProfileSummary) => void;
-  },
+  }
 ): Promise<void> {
   const { options, renderer, terminalInput } = context;
   let session = context.session;
@@ -174,32 +191,43 @@ async function runStickyChat(
 
   function createStreamHandlers(): StreamHandlers {
     return {
-      onThinking: () => {
-        thinkingIndicator.start();
-      },
       onChunk: (delta) => {
         thinkingIndicator.stop();
         renderer.appendStreamChunk(delta);
       },
-      onToolStart: (event) => {
-        thinkingIndicator.stop();
-        renderer.appendToolLine(styledLine(` [tool: ${event.tool}] `, { dim: true }));
+      onThinking: () => {
+        thinkingIndicator.start();
       },
       onToolEnd: (event) => {
-        renderer.appendToolLine(styledLine(` [tool: ${event.tool} done] `, { dim: true }));
+        renderer.appendToolLine(
+          styledLine(` [tool: ${event.tool} done] `, { dim: true })
+        );
+      },
+      onToolStart: (event) => {
+        thinkingIndicator.stop();
+        renderer.appendToolLine(
+          styledLine(` [tool: ${event.tool}] `, { dim: true })
+        );
       },
     };
   }
 
-  async function sendMessageStream(input: SendMessageInput): Promise<{ aborted: boolean }> {
+  async function sendMessageStream(
+    input: SendMessageInput
+  ): Promise<{ aborted: boolean }> {
     if (!thinkingIndicator.isActive()) {
       thinkingIndicator.start();
     }
 
     try {
-      return await sendStreamCancellable(session, input, createStreamHandlers(), {
-        signal: abortController?.signal,
-      });
+      return await sendStreamCancellable(
+        session,
+        input,
+        createStreamHandlers(),
+        {
+          signal: abortController?.signal,
+        }
+      );
     } catch (error) {
       thinkingIndicator.stop();
       throw error;
@@ -232,7 +260,7 @@ async function runStickyChat(
     }
 
     let aborted = false;
-    let caught: unknown = undefined;
+    let caught: unknown;
 
     try {
       const result = await sendMessageStream(message.sendInput);
@@ -256,11 +284,13 @@ async function runStickyChat(
     }
   }
 
-  async function handleChatMessage(promptResult: PromptLineResult): Promise<void> {
+  async function handleChatMessage(
+    promptResult: PromptLineResult
+  ): Promise<void> {
     const line = promptResult.text.trim();
     const hasImages = Boolean(promptResult.images?.length);
 
-    if (!line && !hasImages) {
+    if (!(line || hasImages)) {
       return;
     }
 
@@ -269,8 +299,8 @@ async function runStickyChat(
     try {
       const fromPath = await parseImageLine(line);
       sendInput = mergeSendInput(line, {
-        promptImages: promptResult.images,
         fromPath,
+        promptImages: promptResult.images,
       });
     } catch (error) {
       writeError(error);
@@ -278,7 +308,11 @@ async function runStickyChat(
     }
 
     lastUserMessage = sendInput.message || line;
-    const pending: PendingMessage = { line, images: promptResult.images, sendInput };
+    const pending: PendingMessage = {
+      images: promptResult.images,
+      line,
+      sendInput,
+    };
     renderer.scrollToLatest();
 
     if (isStreaming) {
@@ -291,7 +325,9 @@ async function runStickyChat(
     await startSend(pending);
   }
 
-  async function handleSlashCommand(line: string): Promise<"handled" | "exit" | "unhandled"> {
+  async function handleSlashCommand(
+    line: string
+  ): Promise<"handled" | "exit" | "unhandled"> {
     if (isExitCommand(line)) {
       return "exit";
     }
@@ -311,7 +347,9 @@ async function runStickyChat(
 
       try {
         const result = await session.compact({ force: true });
-        writeOutput(`Compacted (${result.action}). Messages: ${result.messagesAfter}`);
+        writeOutput(
+          `Compacted (${result.action}). Messages: ${result.messagesAfter}`
+        );
       } catch (error) {
         writeError(error);
       }
@@ -329,7 +367,12 @@ async function runStickyChat(
 
     if (line === "/status") {
       try {
-        await printStatus(options.client, writeOutput, currentProfile, modelsCache);
+        await printStatus(
+          options.client,
+          writeOutput,
+          currentProfile,
+          modelsCache
+        );
       } catch (error) {
         writeError(error);
       }
@@ -348,15 +391,17 @@ async function runStickyChat(
         const image = await readClipboardImage();
 
         if (!image) {
-          writeOutput("No image on clipboard. Copy a screenshot or image first.");
+          writeOutput(
+            "No image on clipboard. Copy a screenshot or image first."
+          );
           return "handled";
         }
 
         lastUserMessage = "";
         await startSend({
-          line: "",
           images: [image],
-          sendInput: { message: "", images: [image] },
+          line: "",
+          sendInput: { images: [image], message: "" },
         });
       } catch (error) {
         writeError(error);
@@ -419,7 +464,9 @@ async function runStickyChat(
     if (!arg) {
       try {
         const settings = await options.client.getThinkingSettings();
-        writeOutput(`Thinking: ${settings.enabled ? "on" : "off"} (${settings.effort} effort)`);
+        writeOutput(
+          `Thinking: ${settings.enabled ? "on" : "off"} (${settings.effort} effort)`
+        );
       } catch (error) {
         writeError(error);
       }
@@ -449,14 +496,17 @@ async function runStickyChat(
         return "handled";
       }
 
-      const saved = await options.client.setThinkingSettings({ enabled, effort });
+      const saved = await options.client.setThinkingSettings({
+        effort,
+        enabled,
+      });
       session = await options.client.createSession(options.channel, {
         profileId: currentProfileId,
       });
       context.onSessionChange(session);
       lastUserMessage = null;
       writeOutput(
-        `Thinking ${saved.enabled ? "enabled" : "disabled"} (${saved.effort} effort). Chat history reset.`,
+        `Thinking ${saved.enabled ? "enabled" : "disabled"} (${saved.effort} effort). Chat history reset.`
       );
     } catch (error) {
       writeError(error);
@@ -470,7 +520,9 @@ async function runStickyChat(
     const arg = line.slice("/debug".length).trim().toLowerCase();
 
     if (!arg) {
-      writeOutput(`Debug overlay: ${renderer.isDebugOverlayEnabled() ? "on" : "off"}`);
+      writeOutput(
+        `Debug overlay: ${renderer.isDebugOverlayEnabled() ? "on" : "off"}`
+      );
       return "handled";
     }
 
@@ -488,7 +540,12 @@ async function runStickyChat(
     const modelArg = line.slice("/model".length).trim();
 
     if (!modelArg) {
-      await printCurrentModel(options.client, writeOutput, currentProfile, modelsCache);
+      await printCurrentModel(
+        options.client,
+        writeOutput,
+        currentProfile,
+        modelsCache
+      );
       return "handled";
     }
 
@@ -508,14 +565,17 @@ async function runStickyChat(
 
       if (target === "ambiguous") {
         writeOutput(
-          `Ambiguous model: ${modelArg}. Use /model <provider-id>::<model-id> (see /models).`,
+          `Ambiguous model: ${modelArg}. Use /model <provider-id>::<model-id> (see /models).`
         );
         return "handled";
       }
 
-      const profileResponse = await options.client.updateProfile(currentProfileId, {
-        model: `${target.providerId}::${target.modelId}`,
-      });
+      const profileResponse = await options.client.updateProfile(
+        currentProfileId,
+        {
+          model: `${target.providerId}::${target.modelId}`,
+        }
+      );
       currentProfile = profileResponse.profile;
       session = await options.client.createSession(options.channel, {
         profileId: currentProfileId,
@@ -536,7 +596,10 @@ async function runStickyChat(
     const profileArg = line.slice("/profile".length).trim();
 
     if (!profileArg) {
-      for (const profileLine of formatProfilesLines(profilesCache, currentProfileId)) {
+      for (const profileLine of formatProfilesLines(
+        profilesCache,
+        currentProfileId
+      )) {
         writeOutput(profileLine);
       }
 
@@ -571,7 +634,9 @@ async function runStickyChat(
       });
       context.onSessionChange(session);
       lastUserMessage = null;
-      writeOutput(`Profile switched to ${currentProfile.name}. Chat history reset.`);
+      writeOutput(
+        `Profile switched to ${currentProfile.name}. Chat history reset.`
+      );
     } catch (error) {
       writeError(error);
     }
@@ -618,7 +683,8 @@ async function runStickyChat(
           writeOutput(outputLine);
         }
       } else {
-        const status = await options.client.getProfileSoulStatus(currentProfileId);
+        const status =
+          await options.client.getProfileSoulStatus(currentProfileId);
         for (const outputLine of formatSoulStatusLines(status)) {
           writeOutput(outputLine);
         }
@@ -660,24 +726,30 @@ async function runStickyChat(
   let exiting = false;
 
   prompt = new PersistentPrompt({
-    renderer,
-    terminalInput,
     getSuggestions: (input) => {
       const active = effectiveModelState(currentProfile, modelsCache);
 
       return resolveSuggestions({
+        currentModel: active.modelId,
+        currentProfileId,
+        currentProviderId: active.providerId,
         input,
         models: modelsCache?.models,
-        currentModel: active.modelId,
-        currentProviderId: active.providerId,
         profiles: profilesCache,
-        currentProfileId,
       });
     },
     onAbortStream: () => {
       if (isStreaming && abortController) {
         abortController.abort();
       }
+    },
+    onCancel: () => {
+      if (isStreaming && abortController) {
+        abortController.abort();
+        return;
+      }
+
+      exiting = true;
     },
     onScrollHistory: (event) => {
       if (event === "line_up") {
@@ -707,19 +779,11 @@ async function runStickyChat(
 
       renderer.scrollToLatest();
     },
-    onCancel: () => {
-      if (isStreaming && abortController) {
-        abortController.abort();
-        return;
-      }
-
-      exiting = true;
-    },
     onSubmit: async (result) => {
       const line = result.text.trim();
       const hasImages = Boolean(result.images?.length);
 
-      if (!line && !hasImages) {
+      if (!(line || hasImages)) {
         return;
       }
 
@@ -738,6 +802,8 @@ async function runStickyChat(
 
       await handleChatMessage(result);
     },
+    renderer,
+    terminalInput,
   });
 
   syncPendingMessages();
@@ -770,8 +836,8 @@ async function runStickyChat(
 
 async function runBlockingChat(context: ChatContext): Promise<void> {
   const { options } = context;
-  let session = context.session;
-  let currentProfileId = context.currentProfileId;
+  const session = context.session;
+  const currentProfileId = context.currentProfileId;
   let processing = false;
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
@@ -805,25 +871,27 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
 
   function createStreamHandlers(): StreamHandlers {
     return {
-      onThinking: () => {
-        thinkingIndicator.start();
-      },
       onChunk: (delta) => {
         thinkingIndicator.stop();
         lastChunk = delta;
         process.stdout.write(delta);
       },
-      onToolStart: (event) => {
-        thinkingIndicator.stop();
-        process.stdout.write(`\n\x1b[2m [tool: ${event.tool}] \x1b[0m\n`);
+      onThinking: () => {
+        thinkingIndicator.start();
       },
       onToolEnd: (event) => {
         process.stdout.write(`\x1b[2m [tool: ${event.tool} done] \x1b[0m\n`);
       },
+      onToolStart: (event) => {
+        thinkingIndicator.stop();
+        process.stdout.write(`\n\x1b[2m [tool: ${event.tool}] \x1b[0m\n`);
+      },
     };
   }
 
-  async function sendMessageStream(input: SendMessageInput): Promise<{ aborted: boolean }> {
+  async function sendMessageStream(
+    input: SendMessageInput
+  ): Promise<{ aborted: boolean }> {
     lastChunk = null;
     abortController = new AbortController();
     thinkingIndicator.start();
@@ -832,9 +900,14 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
     });
 
     try {
-      return await sendStreamCancellable(session, input, createStreamHandlers(), {
-        signal: abortController.signal,
-      });
+      return await sendStreamCancellable(
+        session,
+        input,
+        createStreamHandlers(),
+        {
+          signal: abortController.signal,
+        }
+      );
     } catch (error) {
       thinkingIndicator.stop();
       throw error;
@@ -869,19 +942,31 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         promptResult = await promptLine("> ", {
           getSuggestions: (input) => {
             const profile =
-              profilesCache.find((entry) => entry.id === currentProfileId) ?? null;
+              profilesCache.find((entry) => entry.id === currentProfileId) ??
+              null;
             const active = effectiveModelState(
-              profile ?? { id: currentProfileId, name: "", model: null, isSuper: false, toolCount: 0, mcpServerCount: 0, soulActive: false, hasAvatar: false, createdAt: "", updatedAt: "" },
-              modelsCache,
+              profile ?? {
+                createdAt: "",
+                hasAvatar: false,
+                id: currentProfileId,
+                isSuper: false,
+                mcpServerCount: 0,
+                model: null,
+                name: "",
+                soulActive: false,
+                toolCount: 0,
+                updatedAt: "",
+              },
+              modelsCache
             );
 
             return resolveSuggestions({
+              currentModel: active.modelId,
+              currentProfileId,
+              currentProviderId: active.providerId,
               input,
               models: modelsCache?.models,
-              currentModel: active.modelId,
-              currentProviderId: active.providerId,
               profiles: profilesCache,
-              currentProfileId,
             });
           },
         });
@@ -896,7 +981,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       const line = promptResult.text.trim();
       const hasImages = Boolean(promptResult.images?.length);
 
-      if (!line && !hasImages) {
+      if (!(line || hasImages)) {
         continue;
       }
 
@@ -917,7 +1002,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
             options.client,
             (text) => console.log(text),
             currentProfile,
-            modelsCache,
+            modelsCache
           );
         } catch (error) {
           printError(error);
@@ -933,8 +1018,8 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       try {
         const fromPath = await parseImageLine(line);
         sendInput = mergeSendInput(line, {
-          promptImages: promptResult.images,
           fromPath,
+          promptImages: promptResult.images,
         });
       } catch (error) {
         printError(error);
@@ -967,14 +1052,14 @@ async function printCurrentModel(
   client: NakamaClient,
   write: (text: string) => void = (text) => console.log(text),
   profile: ProfileSummary | null = null,
-  cachedModels: ModelsResponse | null = null,
+  cachedModels: ModelsResponse | null = null
 ): Promise<void> {
   const models = cachedModels ?? (await client.getModels());
   const active = profile
     ? effectiveModelState(profile, models)
     : { modelId: null, providerId: models.currentProviderId };
 
-  if (!models.provider || !active.modelId) {
+  if (!(models.provider && active.modelId)) {
     write("No model configured.");
     return;
   }
@@ -986,7 +1071,7 @@ async function printCurrentModel(
 export function formatStatusLines(
   health: HealthResponse,
   models: ModelsResponse | null,
-  profile: ProfileSummary | null,
+  profile: ProfileSummary | null
 ): string[] {
   const lines = [
     `Server: ${health.ok ? "ok" : "degraded"}`,
@@ -1016,11 +1101,11 @@ async function printStatus(
   client: NakamaClient,
   write: (text: string) => void,
   profile: ProfileSummary | null,
-  cachedModels: ModelsResponse | null,
+  cachedModels: ModelsResponse | null
 ): Promise<void> {
   const health = await client.health();
   const models = health.providerConfigured
-    ? cachedModels ?? (await client.getModels())
+    ? (cachedModels ?? (await client.getModels()))
     : null;
 
   for (const line of formatStatusLines(health, models, profile)) {
@@ -1032,7 +1117,7 @@ async function printModels(
   client: NakamaClient,
   write: (text: string) => void = (text) => console.log(text),
   profile: ProfileSummary | null = null,
-  cachedModels: ModelsResponse | null = null,
+  cachedModels: ModelsResponse | null = null
 ): Promise<void> {
   const models = cachedModels ?? (await client.getModels());
 
@@ -1057,7 +1142,7 @@ async function printModels(
       .join(" ");
 
     write(
-      `${markers} ${model.name} [${model.providerLabel ?? model.provider}] (${model.id})`,
+      `${markers} ${model.name} [${model.providerLabel ?? model.provider}] (${model.id})`
     );
   }
 
@@ -1112,7 +1197,7 @@ function printError(error: unknown): void {
 
 function formatProfilesLines(
   profiles: ProfileSummary[],
-  currentProfileId: string | null,
+  currentProfileId: string | null
 ): string[] {
   const lines = ["Profiles:"];
 
@@ -1124,7 +1209,9 @@ function formatProfilesLines(
       .filter(Boolean)
       .join(", ");
 
-    lines.push(`  ${profile.id} — ${profile.name}${markers ? ` (${markers})` : ""}`);
+    lines.push(
+      `  ${profile.id} — ${profile.name}${markers ? ` (${markers})` : ""}`
+    );
   }
 
   lines.push("Use /profile <id> to switch.");
@@ -1147,13 +1234,17 @@ function formatSoulStatusLines(status: SoulStatusResponse): string[] {
     `  STYLE.md    ${status.files.style ? "✓" : "—"}`,
     `  INSTRUCTIONS.md ${status.files.instructions ? "✓" : "—"}`,
     `  MEMORY.md   ${status.files.memory ? "✓" : "—"}`,
-    `  examples/   ${status.files.examples ? "✓" : "—"}`,
+    `  examples/   ${status.files.examples ? "✓" : "—"}`
   );
 
-  if (!status.active) {
-    lines.push("Soul files are missing. Run /soul init to scaffold templates for this profile.");
+  if (status.active) {
+    lines.push(
+      "Edit the files above to shape agent identity. Start a new session to reload."
+    );
   } else {
-    lines.push("Edit the files above to shape agent identity. Start a new session to reload.");
+    lines.push(
+      "Soul files are missing. Run /soul init to scaffold templates for this profile."
+    );
   }
 
   return lines;
@@ -1172,17 +1263,23 @@ function formatSoulInitLines(result: InitSoulResponse): string[] {
     lines.push(`  ${file}`);
   }
 
-  lines.push("Edit SOUL.md, STYLE.md, and INSTRUCTIONS.md, then start a new session.");
+  lines.push(
+    "Edit SOUL.md, STYLE.md, and INSTRUCTIONS.md, then start a new session."
+  );
   return lines;
 }
 
 function formatUserStatusLines(status: UserContextStatusResponse): string[] {
   const lines = [`Active: ${status.active ? "yes" : "no"}`];
 
-  if (!status.active) {
-    lines.push("Run /user init to scaffold USER.md, or edit it from the account menu (web).");
+  if (status.active) {
+    lines.push(
+      "Edit USER.md from the account menu (web). Start a new session to reload."
+    );
   } else {
-    lines.push("Edit USER.md from the account menu (web). Start a new session to reload.");
+    lines.push(
+      "Run /user init to scaffold USER.md, or edit it from the account menu (web)."
+    );
   }
 
   return lines;
@@ -1191,10 +1288,12 @@ function formatUserStatusLines(status: UserContextStatusResponse): string[] {
 function formatUserInitLines(result: InitUserContextResponse): string[] {
   const lines: string[] = [];
 
-  if (!result.created) {
-    lines.push("Template already exists — nothing created.");
+  if (result.created) {
+    lines.push(
+      "Created USER.md. Edit it from the account menu (web), then start a new session."
+    );
   } else {
-    lines.push("Created USER.md. Edit it from the account menu (web), then start a new session.");
+    lines.push("Template already exists — nothing created.");
   }
 
   return lines;

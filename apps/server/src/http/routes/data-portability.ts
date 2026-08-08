@@ -1,9 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import {
-  type DataImportPreviewResponse,
-  type PreviewDataImportRequest,
-  type RestoreDataImportRequest,
-  type RestoreDataImportResponse,
+import type {
+  DataImportPreviewResponse,
+  PreviewDataImportRequest,
+  RestoreDataImportRequest,
+  RestoreDataImportResponse,
 } from "@nakama/core";
 import {
   createNakamaDataExport,
@@ -11,13 +11,18 @@ import {
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
-import { errorResponse, json, readJson } from "../shared";
-import { requirePlatformAdminFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";
+import { requirePlatformAdminFromContext } from "../org-guards";
+import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
-export function registerDataPortabilityRoutes(app: HonoApp, options: ServerOptions): void {
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+export function registerDataPortabilityRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const importRequestSchema = z
     .object({
       data: z.string(),
@@ -29,79 +34,109 @@ export function registerDataPortabilityRoutes(app: HonoApp, options: ServerOptio
       data: z.string(),
     })
     .openapi("RestoreDataImportRequest");
-  const previewResponseSchema = z.object({}).passthrough().openapi("DataImportPreviewResponse");
-  const restoreResponseSchema = z.object({}).passthrough().openapi("RestoreDataImportResponse");
+  const previewResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("DataImportPreviewResponse");
+  const restoreResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("RestoreDataImportResponse");
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/platform/data/export",
-      tags: ["Platform"],
-      summary: "Export Nakama data",
       operationId: "exportPlatformData",
+      path: "/v1/platform/data/export",
       responses: {
         200: {
-          description: "Nakama data export ZIP",
           content: {
             "application/zip": {
-              schema: z.string().openapi({ type: "string", format: "binary" }),
+              schema: z.string().openapi({ format: "binary", type: "string" }),
             },
           },
+          description: "Nakama data export ZIP",
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Export Nakama data",
+      tags: ["Platform"],
+    })
   );
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/platform/data/import/preview",
-      tags: ["Platform"],
-      summary: "Preview Nakama data import",
       operationId: "previewPlatformDataImport",
+      path: "/v1/platform/data/import/preview",
       request: {
         body: {
-          required: true,
           content: { "application/json": { schema: importRequestSchema } },
+          required: true,
         },
       },
       responses: {
         200: {
-          description: "Import preview",
           content: { "application/json": { schema: previewResponseSchema } },
+          description: "Import preview",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Preview Nakama data import",
+      tags: ["Platform"],
+    })
   );
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/platform/data/import/restore",
-      tags: ["Platform"],
-      summary: "Restore Nakama data import",
       operationId: "restorePlatformDataImport",
+      path: "/v1/platform/data/import/restore",
       request: {
         body: {
-          required: true,
           content: { "application/json": { schema: restoreRequestSchema } },
+          required: true,
         },
       },
       responses: {
         200: {
-          description: "Import restored",
           content: { "application/json": { schema: restoreResponseSchema } },
+          description: "Import restored",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Restore Nakama data import",
+      tags: ["Platform"],
+    })
   );
 
   app.get("/v1/platform/data/export", async (c) => {
@@ -120,7 +155,9 @@ export function registerDataPortabilityRoutes(app: HonoApp, options: ServerOptio
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
 
     try {
-      const preview = await previewNakamaDataImport(decodeArchiveRequestData(body.data));
+      const preview = await previewNakamaDataImport(
+        decodeArchiveRequestData(body.data)
+      );
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
@@ -133,9 +170,12 @@ export function registerDataPortabilityRoutes(app: HonoApp, options: ServerOptio
 
     let restore;
     try {
-      restore = await restoreNakamaDataImport(decodeArchiveRequestData(body.data), {
-        confirm: body.confirm,
-      });
+      restore = await restoreNakamaDataImport(
+        decodeArchiveRequestData(body.data),
+        {
+          confirm: body.confirm,
+        }
+      );
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }

@@ -1,12 +1,15 @@
-import { InputGroup } from "@/components/ui/input-group";
+import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
 import {
   ComposerRimGlow,
   useComposerRimHost,
 } from "@/components/chat/composer-rim-glow";
+import { InputGroup } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
-import type { FormEventHandler, HTMLAttributes, ReactNode } from "react";
 
-export type PromptInputFormProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit"> & {
+export type PromptInputFormProps = Omit<
+  HTMLAttributes<HTMLFormElement>,
+  "onSubmit"
+> & {
   accept?: string;
   multiple?: boolean;
   inputGroupClassName?: string;
@@ -54,14 +57,14 @@ export function PromptInputForm({
       >
         {/* Glow under an opaque face; keep overflow visible so slash skill picker can escape upward. */}
         <div
-          ref={hostRef}
           className="composer-rim relative overflow-visible rounded-xl p-px"
+          ref={hostRef}
         >
-          <ComposerRimGlow hostRef={hostRef} active={rimActive} />
+          <ComposerRimGlow active={rimActive} hostRef={hostRef} />
           <InputGroup
             className={cn(
               "relative z-[1] w-full overflow-hidden rounded-[calc(0.75rem-1px)] bg-card dark:bg-card",
-              inputGroupClassName,
+              inputGroupClassName
             )}
           >
             {children}

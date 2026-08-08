@@ -29,22 +29,35 @@ describe("skill paths", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await expect(
-      resolveSkillDiscoveryDirs({ orgId: ORG_ID, profileId: "profile_default" }),
+      resolveSkillDiscoveryDirs({ orgId: ORG_ID, profileId: "profile_default" })
     ).resolves.toEqual([
       path.join(configDir, "agent", "skills"),
-      path.join(configDir, "orgs", ORG_ID, "profiles", "profile_default", "skills"),
+      path.join(
+        configDir,
+        "orgs",
+        ORG_ID,
+        "profiles",
+        "profile_default",
+        "skills"
+      ),
     ]);
   });
 
   test("resolveSkillDiscoveryDirs does not scan every profile when profileId is omitted", async () => {
     configDir = await mkdtemp(path.join(tmpdir(), "nakama-paths-test-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    await mkdir(path.join(configDir, "orgs", ORG_ID, "profiles", "profile_a", "skills"), {
-      recursive: true,
-    });
-    await mkdir(path.join(configDir, "orgs", ORG_ID, "profiles", "profile_b", "skills"), {
-      recursive: true,
-    });
+    await mkdir(
+      path.join(configDir, "orgs", ORG_ID, "profiles", "profile_a", "skills"),
+      {
+        recursive: true,
+      }
+    );
+    await mkdir(
+      path.join(configDir, "orgs", ORG_ID, "profiles", "profile_b", "skills"),
+      {
+        recursive: true,
+      }
+    );
 
     await expect(resolveSkillDiscoveryDirs()).resolves.toEqual([
       path.join(configDir, "agent", "skills"),
@@ -72,7 +85,12 @@ disable-model-invocation: true
 Use Claude Code guidance.
 `;
 
-    const globalDir = path.join(configDir, "agent", "skills", "coding-backend-claude-code");
+    const globalDir = path.join(
+      configDir,
+      "agent",
+      "skills",
+      "coding-backend-claude-code"
+    );
     const profileDir = path.join(
       configDir,
       "orgs",
@@ -80,7 +98,7 @@ Use Claude Code guidance.
       "profiles",
       "profile_default",
       "skills",
-      "coding-backend-claude-code",
+      "coding-backend-claude-code"
     );
 
     await mkdir(globalDir, { recursive: true });
@@ -88,7 +106,10 @@ Use Claude Code guidance.
     await writeFile(path.join(globalDir, "SKILL.md"), skillMarkdown);
     await writeFile(path.join(profileDir, "SKILL.md"), skillMarkdown);
 
-    const discovered = await discoverSkills({ orgId: ORG_ID, profileId: "profile_default" });
+    const discovered = await discoverSkills({
+      orgId: ORG_ID,
+      profileId: "profile_default",
+    });
 
     expect(discovered).toHaveLength(1);
     expect(discovered[0]?.name).toBe("coding-backend-claude-code");

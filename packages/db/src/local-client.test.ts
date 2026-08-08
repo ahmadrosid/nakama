@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { LOCAL_CLIENT_EMAIL, LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import {
+  LOCAL_CLIENT_EMAIL,
+  LOCAL_CLIENT_USER_ID,
+} from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { ensureLocalClientAccess } from "./local-client";
 
@@ -9,17 +12,17 @@ describe("ensureLocalClientAccess", () => {
     const now = new Date().toISOString();
 
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_a",
       name: "Org A",
       slug: "org-a",
-      createdAt: now,
       updatedAt: now,
     });
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_b",
       name: "Org B",
       slug: "org-b",
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -40,10 +43,10 @@ describe("ensureLocalClientAccess", () => {
     const now = new Date().toISOString();
 
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_a",
       name: "Org A",
       slug: "org-a",
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -69,10 +72,10 @@ describe("ensureLocalClientAccess", () => {
     const now = new Date().toISOString();
 
     await db.createUser({
-      id: LOCAL_CLIENT_USER_ID,
-      email: LOCAL_CLIENT_EMAIL,
-      passwordHash: "unused",
       createdAt: now,
+      email: LOCAL_CLIENT_EMAIL,
+      id: LOCAL_CLIENT_USER_ID,
+      passwordHash: "unused",
       updatedAt: now,
     });
 

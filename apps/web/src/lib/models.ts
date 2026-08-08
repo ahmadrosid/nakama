@@ -22,7 +22,7 @@ export function isOpenRouterModelSlug(model: string): boolean {
 
 export function filterModelsByProvider(
   models: ProviderModelOption[],
-  provider: SelectedProvider | null | undefined,
+  provider: SelectedProvider | null | undefined
 ): ProviderModelOption[] {
   if (!provider) {
     return models;
@@ -33,7 +33,7 @@ export function filterModelsByProvider(
 
 export function defaultModelForProvider(
   models: ProviderModelOption[],
-  provider: SelectedProvider,
+  provider: SelectedProvider
 ): string {
   const providerModels = filterModelsByProvider(models, provider);
   return (
@@ -45,7 +45,7 @@ export function defaultModelForProvider(
 
 export function formatProviderLabel(
   provider: string | null | undefined,
-  displayName?: string | null,
+  displayName?: string | null
 ): string {
   if (
     provider === "openai" ||
@@ -65,27 +65,30 @@ export function formatProviderLabel(
   return provider ?? "Provider";
 }
 
-export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> = [
-  { id: "openai", label: "OpenAI" },
-  { id: "anthropic", label: "Anthropic" },
-  { id: "openrouter", label: "OpenRouter" },
-  { id: "gemini", label: "Gemini" },
-  { id: "deepseek", label: "DeepSeek" },
-  { id: "cerebras", label: "Cerebras" },
-  { id: "fireworks", label: "Fireworks" },
-  { id: "ollama", label: "Ollama" },
-  { id: "opencode_go", label: "OpenCode Go" },
-  { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
-];
+export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
+  [
+    { id: "openai", label: "OpenAI" },
+    { id: "anthropic", label: "Anthropic" },
+    { id: "openrouter", label: "OpenRouter" },
+    { id: "gemini", label: "Gemini" },
+    { id: "deepseek", label: "DeepSeek" },
+    { id: "cerebras", label: "Cerebras" },
+    { id: "fireworks", label: "Fireworks" },
+    { id: "ollama", label: "Ollama" },
+    { id: "opencode_go", label: "OpenCode Go" },
+    { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
+  ];
 
 /** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
-export function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
+export function allowsMultipleProviderInstances(
+  provider: SelectedProvider
+): boolean {
   return provider === "openai_compatible" || provider === "ollama";
 }
 
 export function isProviderTypeAlreadyConfigured(
   provider: SelectedProvider,
-  configuredTypes: ReadonlySet<string>,
+  configuredTypes: ReadonlySet<string>
 ): boolean {
   if (allowsMultipleProviderInstances(provider)) {
     return false;
@@ -96,21 +99,23 @@ export function isProviderTypeAlreadyConfigured(
 
 export function firstAvailableProviderOption(
   configuredTypes: ReadonlySet<string>,
-  preferred: SelectedProvider = "openai",
+  preferred: SelectedProvider = "openai"
 ): SelectedProvider {
   if (!isProviderTypeAlreadyConfigured(preferred, configuredTypes)) {
     return preferred;
   }
 
   const next = PROVIDER_OPTIONS.find(
-    (option) => !isProviderTypeAlreadyConfigured(option.id, configuredTypes),
+    (option) => !isProviderTypeAlreadyConfigured(option.id, configuredTypes)
   );
 
   return next?.id ?? "openai_compatible";
 }
 
 /** OpenCode Zen free catalog — not OpenCode Go (`/zen/go`). */
-export function isOpenCodeZenBaseUrl(baseUrl: string | null | undefined): boolean {
+export function isOpenCodeZenBaseUrl(
+  baseUrl: string | null | undefined
+): boolean {
   const trimmed = baseUrl?.trim();
   if (!trimmed) {
     return false;
@@ -127,13 +132,18 @@ export function isOpenCodeZenBaseUrl(baseUrl: string | null | undefined): boolea
   } catch {
     const normalized = trimmed.toLowerCase();
     return (
-      normalized.includes("opencode.ai/zen") && !normalized.includes("opencode.ai/zen/go")
+      normalized.includes("opencode.ai/zen") &&
+      !normalized.includes("opencode.ai/zen/go")
     );
   }
 }
 
 export function hasOpenCodeZenProvider(
-  providers: ReadonlyArray<{ type: string; baseUrl?: string | null; label?: string | null }>,
+  providers: ReadonlyArray<{
+    type: string;
+    baseUrl?: string | null;
+    label?: string | null;
+  }>
 ): boolean {
   return providers.some((provider) => {
     if (provider.type !== "openai_compatible") {
@@ -187,13 +197,16 @@ export function apiKeyPlaceholder(provider: SelectedProvider): string {
 export function validateApiKeyForProvider(
   apiKey: string,
   provider: SelectedProvider,
-  options?: { ollamaHostMode?: OllamaHostMode },
+  options?: { ollamaHostMode?: OllamaHostMode }
 ): string | null {
   if (provider === "openai_compatible") {
     return null;
   }
 
-  if (provider === "ollama" && !ollamaRequiresApiKey(options?.ollamaHostMode ?? "local")) {
+  if (
+    provider === "ollama" &&
+    !ollamaRequiresApiKey(options?.ollamaHostMode ?? "local")
+  ) {
     return null;
   }
 
@@ -234,7 +247,7 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
 }
 
 export function validateCustomModelsInput(
-  models: Array<{ id: string }>,
+  models: Array<{ id: string }>
 ): string | null {
   const valid = models.filter((model) => model.id.trim());
 
@@ -250,7 +263,7 @@ export function validateOpenRouterModelsInput(
     id: string;
     inputPerMillionUsd?: number;
     outputPerMillionUsd?: number;
-  }>,
+  }>
 ): string | null {
   const listError = validateCustomModelsInput(models);
   if (listError) {
@@ -278,7 +291,7 @@ export function validateShortlistCapabilityModelsInput(
     id: string;
     inputPerMillionUsd?: number;
     outputPerMillionUsd?: number;
-  }>,
+  }>
 ): string | null {
   const listError = validateCustomModelsInput(models);
   if (listError) {
@@ -297,7 +310,9 @@ export function validateShortlistCapabilityModelsInput(
 }
 
 export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
-  return hostMode === "cloud" ? OLLAMA_CLOUD_DEFAULT_BASE_URL : OLLAMA_LOCAL_DEFAULT_BASE_URL;
+  return hostMode === "cloud"
+    ? OLLAMA_CLOUD_DEFAULT_BASE_URL
+    : OLLAMA_LOCAL_DEFAULT_BASE_URL;
 }
 
 const OPENCODE_GO_MODEL_ID_PATTERN = /^opencode-go\/[\w.-]+$/;
@@ -310,14 +325,14 @@ export function validateOpenCodeGoModelId(model: string): string | null {
   }
 
   if (!OPENCODE_GO_MODEL_ID_PATTERN.test(trimmed)) {
-    return 'Use opencode-go/model format, e.g. opencode-go/kimi-k2.7-code';
+    return "Use opencode-go/model format, e.g. opencode-go/kimi-k2.7-code";
   }
 
   return null;
 }
 
 export function validateOpenCodeGoModelsInput(
-  models: Array<{ id: string }>,
+  models: Array<{ id: string }>
 ): string | null {
   const listError = validateCustomModelsInput(models);
   if (listError) {
@@ -334,10 +349,13 @@ export function validateOpenCodeGoModelsInput(
   return null;
 }
 
-export type ShortlistCapabilityProvider = Extract<SelectedProvider, "cerebras" | "fireworks">;
+export type ShortlistCapabilityProvider = Extract<
+  SelectedProvider,
+  "cerebras" | "fireworks"
+>;
 
 export function isShortlistCapabilityProvider(
-  provider: SelectedProvider,
+  provider: SelectedProvider
 ): provider is ShortlistCapabilityProvider {
   return provider === "cerebras" || provider === "fireworks";
 }
@@ -354,7 +372,7 @@ type ShortlistModelRow = {
 
 export function modelsFromShortlistRows(
   provider: ShortlistCapabilityProvider,
-  rows: ShortlistModelRow[],
+  rows: ShortlistModelRow[]
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 
@@ -369,16 +387,18 @@ export function modelsFromShortlistRows(
       name: row.name?.trim() || id,
       provider,
       ...(row.default ? { default: true } : {}),
-      ...(row.supportsThinking !== undefined
-        ? { supportsThinking: row.supportsThinking }
-        : {}),
-      ...(row.supportsVision !== undefined ? { supportsVision: row.supportsVision } : {}),
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
+      ...(row.supportsThinking === undefined
+        ? {}
+        : { supportsThinking: row.supportsThinking }),
+      ...(row.supportsVision === undefined
+        ? {}
+        : { supportsVision: row.supportsVision }),
+      ...(row.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: row.inputPerMillionUsd }),
+      ...(row.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: row.outputPerMillionUsd }),
     });
   }
 
@@ -392,7 +412,7 @@ export function modelsFromOpenRouterRows(
     default?: boolean;
     inputPerMillionUsd?: number;
     outputPerMillionUsd?: number;
-  }>,
+  }>
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 
@@ -407,12 +427,12 @@ export function modelsFromOpenRouterRows(
       name: row.name?.trim() || id,
       provider: "openrouter" as const,
       ...(row.default ? { default: true } : {}),
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
+      ...(row.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: row.inputPerMillionUsd }),
+      ...(row.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: row.outputPerMillionUsd }),
     });
   }
 
@@ -429,7 +449,7 @@ export function appendOpenRouterModelRow(
   }>,
   modelId: string,
   modelName: string,
-  pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number },
+  pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number }
 ): Array<{
   id: string;
   name: string;
@@ -454,26 +474,26 @@ export function appendOpenRouterModelRow(
       id: row.id,
       name: row.name ?? row.id,
       ...(row.default ? { default: true } : {}),
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
+      ...(row.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: row.inputPerMillionUsd }),
+      ...(row.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: row.outputPerMillionUsd }),
     });
   }
 
   if (base.some((row) => row.id === modelId)) {
     return base.map((row) => ({
+      default: row.id === modelId,
       id: row.id,
       name: row.name ?? row.id,
-      default: row.id === modelId,
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
+      ...(row.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: row.inputPerMillionUsd }),
+      ...(row.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: row.outputPerMillionUsd }),
     }));
   }
 
@@ -481,30 +501,30 @@ export function appendOpenRouterModelRow(
     ...base.map((row) => ({
       id: row.id,
       name: row.name ?? row.id,
-      ...(row.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: row.inputPerMillionUsd }
-        : {}),
-      ...(row.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: row.outputPerMillionUsd }
-        : {}),
+      ...(row.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: row.inputPerMillionUsd }),
+      ...(row.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: row.outputPerMillionUsd }),
     })),
     {
+      default: true,
       id: modelId,
       name: modelName,
-      default: true,
-      ...(pricing?.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: pricing.inputPerMillionUsd }
-        : {}),
-      ...(pricing?.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: pricing.outputPerMillionUsd }
-        : {}),
+      ...(pricing?.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: pricing.inputPerMillionUsd }),
+      ...(pricing?.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: pricing.outputPerMillionUsd }),
     },
   ];
 }
 
 export function resolveOpenRouterSetupModel(
   rows: Array<{ id: string; default?: boolean }>,
-  selectedModel: string,
+  selectedModel: string
 ): string {
   const trimmed = selectedModel.trim();
   const valid = rows.filter((row) => row.id.trim());
@@ -532,7 +552,7 @@ export function validateCustomOpenRouterModel(model: string): string | null {
 
 export function getModelDisplayName(
   models: ProviderModelOption[],
-  modelId: string | null | undefined,
+  modelId: string | null | undefined
 ): string {
   if (!modelId) {
     return "Unknown";
@@ -553,10 +573,12 @@ export function buildCreateProviderRequest(options: {
   const request = buildConfigureProviderRequest(options);
 
   return {
-    type: request.provider,
     apiKey: request.apiKey,
+    type: request.provider,
     ...(request.model ? { model: request.model } : {}),
-    ...(options.displayName?.trim() ? { label: options.displayName.trim() } : {}),
+    ...(options.displayName?.trim()
+      ? { label: options.displayName.trim() }
+      : {}),
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
     ...(request.customModels ? { customModels: request.customModels } : {}),
@@ -581,9 +603,9 @@ export function buildConfigureProviderRequest(options: {
   if (options.provider === "openai_compatible") {
     return {
       ...request,
-      displayName: options.displayName?.trim(),
       baseUrl: options.baseUrl?.trim(),
       customModels: options.customModels,
+      displayName: options.displayName?.trim(),
     };
   }
 
@@ -635,12 +657,15 @@ export function buildConfigureProviderRequest(options: {
   return request;
 }
 
-export function encodeModelSelection(providerId: string, modelId: string): string {
+export function encodeModelSelection(
+  providerId: string,
+  modelId: string
+): string {
   return `${providerId}::${modelId}`;
 }
 
 export function decodeModelSelection(
-  value: string,
+  value: string
 ): { providerId: string; modelId: string } | null {
   const separator = value.indexOf("::");
 
@@ -649,13 +674,13 @@ export function decodeModelSelection(
   }
 
   return {
-    providerId: value.slice(0, separator),
     modelId: value.slice(separator + 2),
+    providerId: value.slice(0, separator),
   };
 }
 
 export function extractModelId(
-  value: string | null | undefined,
+  value: string | null | undefined
 ): string | null {
   if (!value) {
     return null;
@@ -664,9 +689,7 @@ export function extractModelId(
   return decodeModelSelection(value)?.modelId ?? value;
 }
 
-export function groupModelsByProvider(
-  models: ProviderModelOption[],
-): Array<{
+export function groupModelsByProvider(models: ProviderModelOption[]): Array<{
   providerId: string;
   providerLabel: string;
   models: ProviderModelOption[];
@@ -678,7 +701,8 @@ export function groupModelsByProvider(
 
   for (const model of models) {
     const providerId = model.providerId ?? model.provider;
-    const providerLabel = model.providerLabel ?? formatProviderLabel(model.provider);
+    const providerLabel =
+      model.providerLabel ?? formatProviderLabel(model.provider);
     const existing = groups.get(providerId);
 
     if (existing) {
@@ -687,9 +711,9 @@ export function groupModelsByProvider(
     }
 
     groups.set(providerId, {
+      models: [model],
       providerId,
       providerLabel,
-      models: [model],
     });
   }
 
@@ -700,7 +724,7 @@ export const UNSET_MODEL_VALUE = "";
 
 export function profileModelSelectionValue(
   modelId: string | null,
-  groups: ReturnType<typeof groupModelsByProvider>,
+  groups: ReturnType<typeof groupModelsByProvider>
 ): string {
   if (!modelId) {
     return UNSET_MODEL_VALUE;
@@ -709,7 +733,9 @@ export function profileModelSelectionValue(
   const decoded = decodeModelSelection(modelId);
 
   if (decoded && decoded.providerId !== "__unknown__") {
-    const group = groups.find((entry) => entry.providerId === decoded.providerId);
+    const group = groups.find(
+      (entry) => entry.providerId === decoded.providerId
+    );
 
     if (group?.models.some((model) => model.id === decoded.modelId)) {
       return modelId;
@@ -729,7 +755,7 @@ export function profileModelSelectionValue(
 
 export function profileModelLabel(
   modelId: string | null,
-  groups: ReturnType<typeof groupModelsByProvider>,
+  groups: ReturnType<typeof groupModelsByProvider>
 ): string {
   if (!modelId) {
     return "Select model";
@@ -739,7 +765,9 @@ export function profileModelLabel(
   const resolvedModelId = decoded?.modelId ?? modelId;
 
   if (decoded && decoded.providerId !== "__unknown__") {
-    const group = groups.find((entry) => entry.providerId === decoded.providerId);
+    const group = groups.find(
+      (entry) => entry.providerId === decoded.providerId
+    );
     const match = group?.models.find((model) => model.id === resolvedModelId);
 
     if (match) {
@@ -759,7 +787,7 @@ export function profileModelLabel(
 
 export function effectiveProfileModelSelection(
   profileModel: string | null | undefined,
-  groups: ReturnType<typeof groupModelsByProvider>,
+  groups: ReturnType<typeof groupModelsByProvider>
 ): string | null {
   if (!profileModel) {
     return null;
@@ -770,10 +798,10 @@ export function effectiveProfileModelSelection(
 
 export function resolveModelThinkingSupport(
   selection: string | null | undefined,
-  groups: ReturnType<typeof groupModelsByProvider>,
+  groups: ReturnType<typeof groupModelsByProvider>
 ): boolean | undefined {
   if (!selection) {
-    return undefined;
+    return;
   }
 
   const decoded = decodeModelSelection(selection);
@@ -781,7 +809,9 @@ export function resolveModelThinkingSupport(
 
   const findModel = () => {
     if (decoded && decoded.providerId !== "__unknown__") {
-      const group = groups.find((entry) => entry.providerId === decoded.providerId);
+      const group = groups.find(
+        (entry) => entry.providerId === decoded.providerId
+      );
       const match = group?.models.find((model) => model.id === resolvedModelId);
       if (match) {
         return match;
@@ -794,13 +824,11 @@ export function resolveModelThinkingSupport(
         return match;
       }
     }
-
-    return undefined;
   };
 
   const model = findModel();
   if (!model) {
-    return undefined;
+    return;
   }
 
   if (
@@ -819,10 +847,10 @@ export function resolveModelThinkingSupport(
 
 export function resolveModelVisionSupport(
   selection: string | null | undefined,
-  groups: ReturnType<typeof groupModelsByProvider>,
+  groups: ReturnType<typeof groupModelsByProvider>
 ): boolean | undefined {
   if (!selection) {
-    return undefined;
+    return;
   }
 
   const decoded = decodeModelSelection(selection);
@@ -830,7 +858,9 @@ export function resolveModelVisionSupport(
 
   const findModel = () => {
     if (decoded && decoded.providerId !== "__unknown__") {
-      const group = groups.find((entry) => entry.providerId === decoded.providerId);
+      const group = groups.find(
+        (entry) => entry.providerId === decoded.providerId
+      );
       const match = group?.models.find((model) => model.id === resolvedModelId);
       if (match) {
         return match;
@@ -843,16 +873,21 @@ export function resolveModelVisionSupport(
         return match;
       }
     }
-
-    return undefined;
   };
 
   const model = findModel();
   if (!model) {
-    return undefined;
+    return;
   }
 
-  if (model.provider === "openai_compatible" || model.provider === "opencode_go" || model.provider === "deepseek" || model.provider === "cerebras" || model.provider === "fireworks" || model.provider === "ollama") {
+  if (
+    model.provider === "openai_compatible" ||
+    model.provider === "opencode_go" ||
+    model.provider === "deepseek" ||
+    model.provider === "cerebras" ||
+    model.provider === "fireworks" ||
+    model.provider === "ollama"
+  ) {
     return model.supportsVision === true;
   }
 
@@ -865,8 +900,23 @@ export const TRANSCRIPTION_MODEL_OPTIONS = [
   { id: "gpt-4o-mini-transcribe", name: "GPT-4o mini Transcribe" },
 ] as const;
 
+/** Sole v1 image-generation model option (matches server allowlist). */
+export const IMAGE_GENERATION_MODEL_OPTIONS = [
+  { id: "gpt-image-2", name: "GPT Image 2" },
+] as const;
+
+/** Workspace selection string accepted by `/v1/settings/image-generation`. */
+export const IMAGE_GENERATION_SELECTION =
+  `openai::${IMAGE_GENERATION_MODEL_OPTIONS[0].id}` as const;
+
 export function modelsFromCustomRows(
-  rows: Array<{ id: string; name?: string; default?: boolean; inputPerMillionUsd?: number; outputPerMillionUsd?: number }>,
+  rows: Array<{
+    id: string;
+    name?: string;
+    default?: boolean;
+    inputPerMillionUsd?: number;
+    outputPerMillionUsd?: number;
+  }>
 ): ProviderModelOption[] {
   const models: ProviderModelOption[] = [];
 

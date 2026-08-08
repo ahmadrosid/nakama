@@ -1,38 +1,41 @@
-import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
-import {
-  readWorkerDesiredState,
-  readRuntimeServerUrl,
-  setWorkerDesiredRunning,
-  type PlatformWorkerName,
-} from "@nakama/core";
-import { reportInvariant } from "@nakama/core/crash-report";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
+import {
+  type PlatformWorkerName,
+  readRuntimeServerUrl,
+  readWorkerDesiredState,
+  setWorkerDesiredRunning,
+} from "@nakama/core";
+import { reportInvariant } from "@nakama/core/crash-report";
 
 const WORKER_SCRIPTS: Record<string, string> = {
+  automation: "apps/platform/automation/src/index.ts",
+  discord: "apps/platform/discord/src/index.ts",
   telegram: "apps/platform/telegram/src/index.ts",
   whatsapp: "apps/platform/whatsapp/src/index.ts",
-  discord: "apps/platform/discord/src/index.ts",
-  automation: "apps/platform/automation/src/index.ts",
 };
 
 const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
+  automation: "apps/platform/automation/dist/index.js",
+  discord: "apps/platform/discord/dist/index.js",
   telegram: "apps/platform/telegram/dist/index.js",
   whatsapp: "apps/platform/whatsapp/dist/index.js",
-  discord: "apps/platform/discord/dist/index.js",
-  automation: "apps/platform/automation/dist/index.js",
 };
 
 const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
 
 function promisifyPm2<T>(
-  fn: (cb: (err: Error | null, result?: T) => void) => void,
+  fn: (cb: (err: Error | null, result?: T) => void) => void
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     fn((err, result) => {
-      if (err) reject(err);
-      else resolve(result as T);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result as T);
+      }
     });
   });
 }
@@ -42,7 +45,7 @@ export class WorkerManagerService {
 
   constructor(
     private readonly projectRoot: string,
-    pm2?: typeof import("pm2"),
+    pm2?: typeof import("pm2")
   ) {
     this.pm2Module = pm2 ?? null;
   }
@@ -58,12 +61,14 @@ export class WorkerManagerService {
       this.pm2Module = pm2;
       return pm2;
     } catch {
-      throw new Error("PM2 is not available. Install it with: npm install -g pm2");
+      throw new Error(
+        "PM2 is not available. Install it with: npm install -g pm2"
+      );
     }
   }
 
   private async withPm2<T>(
-    action: (pm2: NonNullable<typeof import("pm2")>) => Promise<T>,
+    action: (pm2: NonNullable<typeof import("pm2")>) => Promise<T>
   ): Promise<T> {
     const pm2 = await this.ensurePm2();
 
@@ -96,7 +101,7 @@ export class WorkerManagerService {
 
   private async removeWorkerFromPm2(
     pm2: NonNullable<typeof import("pm2")>,
-    name: string,
+    name: string
   ): Promise<void> {
     await promisifyPm2<void>((cb) => pm2.stop(name, cb)).catch(() => {});
     await promisifyPm2<void>((cb) => pm2.delete(name, cb)).catch(() => {});
@@ -115,14 +120,14 @@ export class WorkerManagerService {
       await promisifyPm2<void>((cb) =>
         pm2.start(
           {
-            script: "bun",
             args: ["run", script],
-            name,
             cwd: this.projectRoot,
             env: this.workerProcessEnv(),
+            name,
+            script: "bun",
           },
-          cb,
-        ),
+          cb
+        )
       );
     });
   }
@@ -160,9 +165,12 @@ export class WorkerManagerService {
         console.warn(`Could not recover ${name} worker: ${message}`);
         // The operator asked for this worker and it is not running. Nothing throws past
         // here, so without this the channel just stays quiet and looks idle.
-        void reportInvariant(`${name} worker was enabled but could not be started`, {
-          source: "server",
-        });
+        void reportInvariant(
+          `${name} worker was enabled but could not be started`,
+          {
+            source: "server",
+          }
+        );
       }
     }
   }
@@ -176,10 +184,16 @@ export class WorkerManagerService {
   }
 
   private pm2ProcessToInfo(
-    match: Pm2ProcessDescription | undefined,
+    match: Pm2ProcessDescription | undefined
   ): WorkerProcessInfo {
     if (!match) {
-      return { managed: true, status: "stopped", cpuPercent: null, memoryMb: null, uptimeSeconds: null };
+      return {
+        cpuPercent: null,
+        managed: true,
+        memoryMb: null,
+        status: "stopped",
+        uptimeSeconds: null,
+      };
     }
 
     const status = match.pm2_env?.status ?? null;
@@ -189,10 +203,12 @@ export class WorkerManagerService {
         : null;
 
     return {
-      managed: true,
-      status: mappedStatus,
       cpuPercent: match.monit?.cpu ?? null,
-      memoryMb: match.monit ? Math.round(match.monit.memory / 1024 / 1024 * 100) / 100 : null,
+      managed: true,
+      memoryMb: match.monit
+        ? Math.round((match.monit.memory / 1024 / 1024) * 100) / 100
+        : null,
+      status: mappedStatus,
       uptimeSeconds: match.pm2_env?.pm_uptime
         ? Math.round((Date.now() - match.pm2_env.pm_uptime) / 1000)
         : null,
@@ -200,7 +216,13 @@ export class WorkerManagerService {
   }
 
   private pm2UnavailableInfo(): WorkerProcessInfo {
-    return { managed: false, status: null, cpuPercent: null, memoryMb: null, uptimeSeconds: null };
+    return {
+      cpuPercent: null,
+      managed: false,
+      memoryMb: null,
+      status: null,
+      uptimeSeconds: null,
+    };
   }
 
   async getWorkerStatus(name: string): Promise<WorkerProcessInfo | null> {
@@ -225,23 +247,26 @@ export class WorkerManagerService {
         VALID_WORKERS.map((name) => {
           const match = list.find((p) => p.name === name);
           return [name, this.pm2ProcessToInfo(match)];
-        }),
+        })
       );
     } catch {
       return Object.fromEntries(
-        VALID_WORKERS.map((name) => [name, this.pm2UnavailableInfo()]),
+        VALID_WORKERS.map((name) => [name, this.pm2UnavailableInfo()])
       );
     }
   }
 
-  async getWorkerLogs(name: string, lines: number): Promise<WorkerLogsResponse> {
+  async getWorkerLogs(
+    name: string,
+    lines: number
+  ): Promise<WorkerLogsResponse> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
     }
 
     return this.withPm2(async (pm2) => {
       const descriptions = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
-        pm2.describe(name, cb),
+        pm2.describe(name, cb)
       );
       const desc = descriptions[0];
       const outPath = desc?.pm2_env?.pm_out_log_path as string | undefined;
@@ -252,7 +277,7 @@ export class WorkerManagerService {
         errPath ? readLastLines(errPath, lines) : "",
       ]);
 
-      return { stdout, stderr };
+      return { stderr, stdout };
     });
   }
 
@@ -267,9 +292,9 @@ export class WorkerManagerService {
   }
 
   private async listAllPm2Processes(): Promise<Pm2ProcessDescription[]> {
-    return this.withPm2(async (pm2) => {
-      return promisifyPm2<Pm2ProcessDescription[]>((cb) => pm2.list(cb));
-    });
+    return this.withPm2(async (pm2) =>
+      promisifyPm2<Pm2ProcessDescription[]>((cb) => pm2.list(cb))
+    );
   }
 
   private workerProcessEnv(): Record<string, string> {
@@ -306,10 +331,10 @@ async function readLastLines(path: string, lineCount: number): Promise<string> {
 }
 
 interface Pm2ProcessDescription {
+  monit?: { cpu: number; memory: number };
   name?: string;
   pid?: number;
   pm_id?: number;
-  monit?: { cpu: number; memory: number };
   pm2_env?: {
     status?: string;
     pm_uptime?: number;

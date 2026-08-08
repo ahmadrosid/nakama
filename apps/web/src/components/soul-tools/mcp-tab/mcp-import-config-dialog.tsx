@@ -27,21 +27,21 @@ export function McpImportConfigDialog({
   onApply: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="gap-5 p-6 sm:max-w-lg">
         <DialogHeader className="gap-2">
           <DialogTitle>Import MCP config</DialogTitle>
           <DialogDescription>
-            Paste JSON from your MCP client config. The first server entry will fill this form.
+            Paste JSON from your MCP client config. The first server entry will
+            fill this form.
           </DialogDescription>
         </DialogHeader>
 
         <Textarea
-          value={importDraft}
-          disabled={formDisabled}
           autoFocus
-          rows={10}
           className="min-h-48 font-mono text-sm"
+          disabled={formDisabled}
+          onChange={(event) => onImportDraftChange(event.target.value)}
           placeholder={`{
   "mcpServers": {
     "my-server": {
@@ -50,12 +50,13 @@ export function McpImportConfigDialog({
     }
   }
 }`}
-          onChange={(event) => onImportDraftChange(event.target.value)}
+          rows={10}
+          value={importDraft}
         />
 
         {importError ? (
           <p
-            className="rounded-md bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+            className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
             role="alert"
           >
             {importError}
@@ -63,13 +64,17 @@ export function McpImportConfigDialog({
         ) : null}
 
         <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
           <Button
-            type="button"
             disabled={formDisabled || !importDraft.trim()}
             onClick={onApply}
+            type="button"
           >
             Apply to form
           </Button>

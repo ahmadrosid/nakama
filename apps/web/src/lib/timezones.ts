@@ -1,4 +1,7 @@
-import type { ListTimezonesResponse, TimezoneCatalogEntry } from "@nakama/core/contract";
+import type {
+  ListTimezonesResponse,
+  TimezoneCatalogEntry,
+} from "@nakama/core/contract";
 
 export function getBrowserTimezone(): string {
   try {
@@ -9,7 +12,7 @@ export function getBrowserTimezone(): string {
 }
 
 export function getTimezoneEntries(
-  response: ListTimezonesResponse | undefined,
+  response: ListTimezonesResponse | undefined
 ): TimezoneCatalogEntry[] {
   if (!response) {
     return [];
@@ -20,11 +23,11 @@ export function getTimezoneEntries(
 
 export function findTimezoneEntry(
   id: string | undefined,
-  response: ListTimezonesResponse | undefined,
+  response: ListTimezonesResponse | undefined
 ): TimezoneCatalogEntry | null {
   const trimmed = id?.trim();
 
-  if (!trimmed || !response) {
+  if (!(trimmed && response)) {
     return null;
   }
 
@@ -41,14 +44,10 @@ export function findTimezoneEntry(
 
 export function searchTimezoneEntries(
   query: string,
-  response: ListTimezonesResponse | undefined,
+  response: ListTimezonesResponse | undefined
 ): TimezoneCatalogEntry[] {
   const entries = getTimezoneEntries(response);
-  const tokens = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   if (tokens.length === 0) {
     return entries;
@@ -77,7 +76,7 @@ export function searchTimezoneEntries(
 export function getTimezoneDisplay(
   value: string | undefined,
   emptyLabel = "Select timezone",
-  response?: ListTimezonesResponse,
+  response?: ListTimezonesResponse
 ): string {
   const trimmed = value?.trim();
 
@@ -90,7 +89,7 @@ export function getTimezoneDisplay(
 
 export function getFilteredTimezoneGroups(
   query: string,
-  response: ListTimezonesResponse | undefined,
+  response: ListTimezonesResponse | undefined
 ): ListTimezonesResponse["groups"] {
   if (!response) {
     return [];
@@ -100,7 +99,9 @@ export function getFilteredTimezoneGroups(
     return response.groups;
   }
 
-  const matches = new Set(searchTimezoneEntries(query, response).map((entry) => entry.id));
+  const matches = new Set(
+    searchTimezoneEntries(query, response).map((entry) => entry.id)
+  );
 
   const groups: typeof response.groups = [];
 

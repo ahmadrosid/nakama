@@ -1,17 +1,19 @@
 import type { ProviderName, UserConfig } from "@nakama/core";
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
 import {
-  resolveCodingAgentProviderRouting,
-  type CodingAgentProviderRouting,
-} from "./coding-agent-provider-routing";
-import {
   createHarnessConfigDir,
   writeCodexConfigToml,
   writeOpenCodeConfig,
   writePiModelsJson,
 } from "./coding-agent-harness-config-files";
+import {
+  type CodingAgentProviderRouting,
+  resolveCodingAgentProviderRouting,
+} from "./coding-agent-provider-routing";
 
-export function normalizeCodingAgentModel(model: string | null | undefined): string | null {
+export function normalizeCodingAgentModel(
+  model: string | null | undefined
+): string | null {
   if (!model?.trim()) {
     return null;
   }
@@ -37,7 +39,7 @@ export function normalizeCodingAgentModel(model: string | null | undefined): str
 export function formatModelForHarness(
   harnessKind: StoredCodingAgentHarnessKind,
   providerType: ProviderName,
-  model: string,
+  model: string
 ): string {
   if (providerType === "openrouter" || providerType === "opencode_go") {
     return model.trim();
@@ -78,24 +80,24 @@ export async function resolveCodingAgentSpawnBundle(options: {
   env?: Record<string, string | undefined>;
 }): Promise<CodingAgentSpawnBundle> {
   const routing = resolveCodingAgentProviderRouting({
-    userConfig: options.userConfig,
-    profileModel: options.profileModel,
-    harnessKind: options.harnessKind,
     env: options.env,
+    harnessKind: options.harnessKind,
+    profileModel: options.profileModel,
+    userConfig: options.userConfig,
   });
 
   const spawn = await buildSpawnEnvForHarness(
     options.harnessKind,
     routing,
-    routing.providerType ?? "openai",
+    routing.providerType ?? "openai"
   );
 
   return { routing, spawn };
 }
 
 export interface CodingAgentSpawnEnvResult {
-  env: Record<string, string>;
   cleanup?: () => Promise<void>;
+  env: Record<string, string>;
 }
 
 export const CODING_AGENT_CREDENTIAL_ENV_KEYS = [
@@ -126,37 +128,42 @@ export const CODING_AGENT_CREDENTIAL_ENV_KEYS = [
  */
 const PI_PROVIDER_NAME: Partial<Record<ProviderName, string>> = {
   anthropic: "anthropic",
-  openai: "openai",
-  openrouter: "openrouter",
-  openai_compatible: "nakama",
-  opencode_go: "opencode",
-  deepseek: "deepseek",
   cerebras: "cerebras",
+  deepseek: "deepseek",
   fireworks: "fireworks",
   ollama: "ollama",
+  openai: "openai",
+  openai_compatible: "nakama",
+  opencode_go: "opencode",
+  openrouter: "openrouter",
 };
 
 const PI_DEFAULT_BASE_URLS: Partial<Record<ProviderName, string>> = {
   anthropic: "https://api.anthropic.com",
+  cerebras: "https://api.cerebras.ai/v1",
+  deepseek: "https://api.deepseek.com",
+  fireworks: "https://api.fireworks.ai/inference",
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
-  deepseek: "https://api.deepseek.com",
-  cerebras: "https://api.cerebras.ai/v1",
-  fireworks: "https://api.fireworks.ai/inference",
 };
 
 export function mapNakamaProviderToPi(
   providerType: ProviderName,
-  baseUrl?: string | null,
+  baseUrl?: string | null
 ): string | null {
   const builtinName = PI_PROVIDER_NAME[providerType];
-  if (!builtinName) return null;
+  if (!builtinName) {
+    return null;
+  }
 
   // For providers with a non-default base URL (proxy/gateway), use the custom
   // "nakama" provider entry from models.json instead of the built-in provider.
   if (baseUrl) {
     const defaultUrl = PI_DEFAULT_BASE_URLS[providerType];
-    if (defaultUrl && baseUrl.replace(/\/+$/, "") !== defaultUrl.replace(/\/+$/, "")) {
+    if (
+      defaultUrl &&
+      baseUrl.replace(/\/+$/, "") !== defaultUrl.replace(/\/+$/, "")
+    ) {
       return "nakama";
     }
   }
@@ -166,43 +173,47 @@ export function mapNakamaProviderToPi(
 
 export function buildClaudeCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName = "anthropic",
+  providerType: ProviderName = "anthropic"
 ): Record<string, string> {
-  if (!routing.active || !routing.baseUrl || !routing.apiKey) {
+  if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
 
   const model = formatModelForHarness(
     "claude_code",
     providerType,
-    routing.model ?? "claude-sonnet-4-6",
+    routing.model ?? "claude-sonnet-4-6"
   );
 
   return {
-    ANTHROPIC_BASE_URL: routing.baseUrl.replace(/\/$/, ""),
     ANTHROPIC_API_KEY: routing.apiKey,
+    ANTHROPIC_BASE_URL: routing.baseUrl.replace(/\/$/, ""),
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
     ANTHROPIC_DEFAULT_OPUS_MODEL: model,
     ANTHROPIC_DEFAULT_SONNET_MODEL: model,
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
-    CLAUDE_CODE_SUBAGENT_MODEL: model,
     CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
-    DISABLE_TELEMETRY: "1",
-    DISABLE_ERROR_REPORTING: "1",
-    DISABLE_FEEDBACK_COMMAND: "1",
     CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: "1",
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    CLAUDE_CODE_SUBAGENT_MODEL: model,
+    DISABLE_ERROR_REPORTING: "1",
+    DISABLE_FEEDBACK_COMMAND: "1",
+    DISABLE_TELEMETRY: "1",
   };
 }
 
 export function buildCodexSpawnEnv(
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName = "openai",
+  providerType: ProviderName = "openai"
 ): Record<string, string> {
-  if (!routing.active || !routing.baseUrl || !routing.apiKey) {
+  if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
 
-  const model = formatModelForHarness("codex", providerType, routing.model ?? "gpt-4.1");
+  const model = formatModelForHarness(
+    "codex",
+    providerType,
+    routing.model ?? "gpt-4.1"
+  );
 
   return {
     OPENAI_API_KEY: routing.apiKey,
@@ -213,9 +224,9 @@ export function buildCodexSpawnEnv(
 
 export async function buildOpenCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName = "openai",
+  providerType: ProviderName = "openai"
 ): Promise<CodingAgentSpawnEnvResult> {
-  if (!routing.active || !routing.baseUrl || !routing.apiKey) {
+  if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return { env: {} };
   }
 
@@ -223,18 +234,18 @@ export async function buildOpenCodeSpawnEnv(
   await writeOpenCodeConfig(configDir.dir, routing, "opencode", providerType);
 
   return {
+    cleanup: configDir.cleanup,
     env: {
       XDG_CONFIG_HOME: configDir.dir,
     },
-    cleanup: configDir.cleanup,
   };
 }
 
 export async function buildPiSpawnEnv(
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName = "openai",
+  providerType: ProviderName = "openai"
 ): Promise<CodingAgentSpawnEnvResult> {
-  if (!routing.active || !routing.baseUrl || !routing.apiKey) {
+  if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return { env: {} };
   }
 
@@ -247,17 +258,17 @@ export async function buildPiSpawnEnv(
   await writePiModelsJson(configDir.dir, routing, providerType);
 
   return {
+    cleanup: configDir.cleanup,
     env: {
       PI_CODING_AGENT_DIR: configDir.dir,
     },
-    cleanup: configDir.cleanup,
   };
 }
 
 export async function buildSpawnEnvForHarness(
   kind: StoredCodingAgentHarnessKind,
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName = "openai",
+  providerType: ProviderName = "openai"
 ): Promise<CodingAgentSpawnEnvResult> {
   // Cursor Agent uses host Cursor auth — never merge Nakama provider credentials.
   if (kind === "cursor_agent") {
@@ -287,11 +298,11 @@ export async function buildSpawnEnvForHarness(
     await writeCodexConfigToml(configDir.dir, routing, "codex", providerType);
 
     return {
+      cleanup: configDir.cleanup,
       env: {
         CODEX_HOME: configDir.dir,
         ...env,
       },
-      cleanup: configDir.cleanup,
     };
   }
 
@@ -301,7 +312,10 @@ export async function buildSpawnEnvForHarness(
 export function mergeCodingAgentSpawnEnv(
   baseEnv: NodeJS.ProcessEnv,
   spawnEnv: Record<string, string>,
-  options: { protectCredentialKeys?: boolean; callerEnv?: Record<string, string> } = {},
+  options: {
+    protectCredentialKeys?: boolean;
+    callerEnv?: Record<string, string>;
+  } = {}
 ): NodeJS.ProcessEnv {
   const callerEnv = options.callerEnv ?? {};
   const merged: Record<string, string> = { ...spawnEnv };
@@ -310,7 +324,7 @@ export function mergeCodingAgentSpawnEnv(
     if (
       options.protectCredentialKeys &&
       CODING_AGENT_CREDENTIAL_ENV_KEYS.includes(
-        key as (typeof CODING_AGENT_CREDENTIAL_ENV_KEYS)[number],
+        key as (typeof CODING_AGENT_CREDENTIAL_ENV_KEYS)[number]
       )
     ) {
       continue;
@@ -322,7 +336,9 @@ export function mergeCodingAgentSpawnEnv(
   return { ...baseEnv, ...merged };
 }
 
-export function redactSpawnEnvForPrompt(env: Record<string, string>): Record<string, string> {
+export function redactSpawnEnvForPrompt(
+  env: Record<string, string>
+): Record<string, string> {
   const redacted: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(env)) {
@@ -344,7 +360,7 @@ export function redactSpawnEnvForPrompt(env: Record<string, string>): Record<str
 
 export function redactSpawnEnvForApi(
   env: Record<string, string>,
-  options: { includeSecrets: boolean },
+  options: { includeSecrets: boolean }
 ): Record<string, string> {
   if (options.includeSecrets) {
     return { ...env };

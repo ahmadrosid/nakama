@@ -1,22 +1,27 @@
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, writeFile, unlink, mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { WorkerManagerService } from "./worker-manager-service";
+import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
-import { setCrashLogger, type CrashReport } from "@nakama/core/crash-report";
+import { type CrashReport, setCrashLogger } from "@nakama/core/crash-report";
+import { WorkerManagerService } from "./worker-manager-service";
 
 function createMockPm2() {
   const mockPm2 = {
     connect: mock((cb: (err: Error | null) => void) => cb(null)),
-    disconnect: mock(() => {}),
     delete: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
+    describe: mock(
+      (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [])
+    ),
+    disconnect: mock(() => {}),
+    flush: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
+    list: mock((cb: (err: Error | null, list: unknown[]) => void) =>
+      cb(null, [])
+    ),
+    restart: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     start: mock((_opts: unknown, cb: (err: Error | null) => void) => cb(null)),
     stop: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
-    restart: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
-    list: mock((cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
-    describe: mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) => cb(null, [])),
-    flush: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
   };
 
   return mockPm2 as unknown as typeof import("pm2");
@@ -32,7 +37,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (configDir) {
-    await rm(configDir, { recursive: true, force: true });
+    await rm(configDir, { force: true, recursive: true });
     configDir = null;
   }
 
@@ -74,15 +79,26 @@ describe("WorkerManagerService", () => {
 
       await service.startWorker("telegram");
 
-      expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
-      expect(mockPm2.delete).toHaveBeenCalledWith("telegram", expect.any(Function));
+      expect(mockPm2.stop).toHaveBeenCalledWith(
+        "telegram",
+        expect.any(Function)
+      );
+      expect(mockPm2.delete).toHaveBeenCalledWith(
+        "telegram",
+        expect.any(Function)
+      );
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
       expect(opts.script).toBe("bun");
       expect(opts.args).toContain("apps/platform/telegram/src/index.ts");
       expect(opts.interpreter).toBeUndefined();
       expect(opts.name).toBe("telegram");
-      expect(await readWorkerDesiredState()).toEqual({ telegram: true, whatsapp: false, discord: false, automation: true });
+      expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
+        telegram: true,
+        whatsapp: false,
+      });
     });
 
     test("starts whatsapp worker", async () => {
@@ -111,13 +127,25 @@ describe("WorkerManagerService", () => {
       expect(opts.script).toBe("bun");
       expect(opts.args).toContain("apps/platform/automation/src/index.ts");
       expect(opts.interpreter).toBeUndefined();
-      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, discord: false, automation: true });
+      expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
+        telegram: false,
+        whatsapp: false,
+      });
     });
 
     test("starts worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
-      const distFilePath = join(tmpProjectRoot, "apps/platform/whatsapp/dist/index.js");
-      await mkdir(join(tmpProjectRoot, "apps/platform/whatsapp/dist"), { recursive: true });
+      const tmpProjectRoot = await mkdtemp(
+        join(tmpdir(), "nakama-worker-dist-")
+      );
+      const distFilePath = join(
+        tmpProjectRoot,
+        "apps/platform/whatsapp/dist/index.js"
+      );
+      await mkdir(join(tmpProjectRoot, "apps/platform/whatsapp/dist"), {
+        recursive: true,
+      });
       await writeFile(distFilePath, "console.log('ok')");
 
       const mockPm2 = createMockPm2();
@@ -128,13 +156,20 @@ describe("WorkerManagerService", () => {
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
       expect(opts.args).toContain("apps/platform/whatsapp/dist/index.js");
 
-      await rm(tmpProjectRoot, { recursive: true, force: true });
+      await rm(tmpProjectRoot, { force: true, recursive: true });
     });
 
     test("starts telegram worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
-      const distFilePath = join(tmpProjectRoot, "apps/platform/telegram/dist/index.js");
-      await mkdir(join(tmpProjectRoot, "apps/platform/telegram/dist"), { recursive: true });
+      const tmpProjectRoot = await mkdtemp(
+        join(tmpdir(), "nakama-worker-dist-")
+      );
+      const distFilePath = join(
+        tmpProjectRoot,
+        "apps/platform/telegram/dist/index.js"
+      );
+      await mkdir(join(tmpProjectRoot, "apps/platform/telegram/dist"), {
+        recursive: true,
+      });
       await writeFile(distFilePath, "console.log('ok')");
 
       const mockPm2 = createMockPm2();
@@ -145,13 +180,20 @@ describe("WorkerManagerService", () => {
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
       expect(opts.args).toContain("apps/platform/telegram/dist/index.js");
 
-      await rm(tmpProjectRoot, { recursive: true, force: true });
+      await rm(tmpProjectRoot, { force: true, recursive: true });
     });
 
     test("starts automation worker from dist when dist build exists", async () => {
-      const tmpProjectRoot = await mkdtemp(join(tmpdir(), "nakama-worker-dist-"));
-      const distFilePath = join(tmpProjectRoot, "apps/platform/automation/dist/index.js");
-      await mkdir(join(tmpProjectRoot, "apps/platform/automation/dist"), { recursive: true });
+      const tmpProjectRoot = await mkdtemp(
+        join(tmpdir(), "nakama-worker-dist-")
+      );
+      const distFilePath = join(
+        tmpProjectRoot,
+        "apps/platform/automation/dist/index.js"
+      );
+      await mkdir(join(tmpProjectRoot, "apps/platform/automation/dist"), {
+        recursive: true,
+      });
       await writeFile(distFilePath, "console.log('ok')");
 
       const mockPm2 = createMockPm2();
@@ -162,7 +204,7 @@ describe("WorkerManagerService", () => {
       const opts = (mockPm2.start as ReturnType<typeof mock>).mock.calls[0][0];
       expect(opts.args).toContain("apps/platform/automation/dist/index.js");
 
-      await rm(tmpProjectRoot, { recursive: true, force: true });
+      await rm(tmpProjectRoot, { force: true, recursive: true });
     });
 
     test("throws for unknown worker", async () => {
@@ -173,11 +215,13 @@ describe("WorkerManagerService", () => {
     test("throws when PM2 start fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.start = mock((_opts: unknown, cb: (err: Error | null) => void) =>
-        cb(new Error("PM2 start failed")),
+        cb(new Error("PM2 start failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
-      expect(service.startWorker("telegram")).rejects.toThrow("PM2 start failed");
+      expect(service.startWorker("telegram")).rejects.toThrow(
+        "PM2 start failed"
+      );
     });
   });
 
@@ -188,8 +232,16 @@ describe("WorkerManagerService", () => {
 
       await service.stopWorker("telegram");
 
-      expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
-      expect(await readWorkerDesiredState()).toEqual({ telegram: false, whatsapp: false, discord: false, automation: true });
+      expect(mockPm2.stop).toHaveBeenCalledWith(
+        "telegram",
+        expect.any(Function)
+      );
+      expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
+        telegram: false,
+        whatsapp: false,
+      });
     });
 
     test("throws for unknown worker", async () => {
@@ -205,8 +257,14 @@ describe("WorkerManagerService", () => {
 
       await service.restartWorker("telegram");
 
-      expect(mockPm2.stop).toHaveBeenCalledWith("telegram", expect.any(Function));
-      expect(mockPm2.delete).toHaveBeenCalledWith("telegram", expect.any(Function));
+      expect(mockPm2.stop).toHaveBeenCalledWith(
+        "telegram",
+        expect.any(Function)
+      );
+      expect(mockPm2.delete).toHaveBeenCalledWith(
+        "telegram",
+        expect.any(Function)
+      );
       expect(mockPm2.restart).not.toHaveBeenCalled();
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
     });
@@ -223,22 +281,22 @@ describe("WorkerManagerService", () => {
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
         cb(null, [
           {
+            monit: { cpu: 2.5, memory: 45_000_000 },
             name: "telegram",
             pid: 1234,
-            pm2_env: { status: "online", pm_uptime: Date.now() - 60000 },
-            monit: { cpu: 2.5, memory: 45_000_000 },
+            pm2_env: { pm_uptime: Date.now() - 60_000, status: "online" },
           },
-        ]),
+        ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
       const status = await service.getWorkerStatus("telegram");
 
       expect(status).toEqual({
-        managed: true,
-        status: "online",
         cpuPercent: 2.5,
+        managed: true,
         memoryMb: 42.92,
+        status: "online",
         uptimeSeconds: expect.any(Number),
       });
     });
@@ -246,17 +304,17 @@ describe("WorkerManagerService", () => {
     test("returns managed: true / stopped when worker not in PM2 list", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, []),
+        cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
       const status = await service.getWorkerStatus("telegram");
 
       expect(status).toEqual({
-        managed: true,
-        status: "stopped",
         cpuPercent: null,
+        managed: true,
         memoryMb: null,
+        status: "stopped",
         uptimeSeconds: null,
       });
     });
@@ -264,17 +322,17 @@ describe("WorkerManagerService", () => {
     test("returns managed: false when PM2 connect fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.connect = mock((cb: (err: Error | null) => void) =>
-        cb(new Error("PM2 daemon not running")),
+        cb(new Error("PM2 daemon not running"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
       const status = await service.getWorkerStatus("telegram");
 
       expect(status).toEqual({
-        managed: false,
-        status: null,
         cpuPercent: null,
+        managed: false,
         memoryMb: null,
+        status: null,
         uptimeSeconds: null,
       });
     });
@@ -292,11 +350,11 @@ describe("WorkerManagerService", () => {
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
         cb(null, [
           {
-            name: "telegram",
-            pm2_env: { status: "online", pm_uptime: Date.now() - 120000 },
             monit: { cpu: 3.1, memory: 60_000_000 },
+            name: "telegram",
+            pm2_env: { pm_uptime: Date.now() - 120_000, status: "online" },
           },
-        ]),
+        ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -313,7 +371,7 @@ describe("WorkerManagerService", () => {
     test("returns managed: false for all when PM2 connect fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.connect = mock((cb: (err: Error | null) => void) =>
-        cb(new Error("connect failed")),
+        cb(new Error("connect failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -333,16 +391,17 @@ describe("WorkerManagerService", () => {
       await writeFile(errPath, "err1\nerr2\nerr3\n");
 
       const mockPm2 = createMockPm2();
-      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, [
-          {
-            name: "whatsapp",
-            pm2_env: {
-              pm_out_log_path: outPath,
-              pm_err_log_path: errPath,
+      mockPm2.describe = mock(
+        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+          cb(null, [
+            {
+              name: "whatsapp",
+              pm2_env: {
+                pm_err_log_path: errPath,
+                pm_out_log_path: outPath,
+              },
             },
-          },
-        ]),
+          ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -357,16 +416,17 @@ describe("WorkerManagerService", () => {
 
     test("returns empty strings when log files are missing", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, [
-          {
-            name: "whatsapp",
-            pm2_env: {
-              pm_out_log_path: "/nonexistent/out.log",
-              pm_err_log_path: "/nonexistent/err.log",
+      mockPm2.describe = mock(
+        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+          cb(null, [
+            {
+              name: "whatsapp",
+              pm2_env: {
+                pm_err_log_path: "/nonexistent/err.log",
+                pm_out_log_path: "/nonexistent/out.log",
+              },
             },
-          },
-        ]),
+          ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -378,13 +438,14 @@ describe("WorkerManagerService", () => {
 
     test("returns empty strings when pm2_env has no log paths", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, [
-          {
-            name: "whatsapp",
-            pm2_env: {},
-          },
-        ]),
+      mockPm2.describe = mock(
+        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+          cb(null, [
+            {
+              name: "whatsapp",
+              pm2_env: {},
+            },
+          ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -396,17 +457,22 @@ describe("WorkerManagerService", () => {
 
     test("throws for unknown worker", async () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.getWorkerLogs("foobar", 10)).rejects.toThrow("Unknown worker");
+      expect(service.getWorkerLogs("foobar", 10)).rejects.toThrow(
+        "Unknown worker"
+      );
     });
 
     test("throws when PM2 describe fails", async () => {
       const mockPm2 = createMockPm2();
-      mockPm2.describe = mock((_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(new Error("PM2 describe failed")),
+      mockPm2.describe = mock(
+        (_name: string, cb: (err: Error | null, list: unknown[]) => void) =>
+          cb(new Error("PM2 describe failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
-      expect(service.getWorkerLogs("whatsapp", 10)).rejects.toThrow("PM2 describe failed");
+      expect(service.getWorkerLogs("whatsapp", 10)).rejects.toThrow(
+        "PM2 describe failed"
+      );
     });
   });
 
@@ -414,7 +480,7 @@ describe("WorkerManagerService", () => {
     test("starts workers marked as desired when they are not online", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, []),
+        cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -428,7 +494,7 @@ describe("WorkerManagerService", () => {
     test("recovers automation worker when desired", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
-        cb(null, []),
+        cb(null, [])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -445,11 +511,11 @@ describe("WorkerManagerService", () => {
       mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
         cb(null, [
           {
-            name: "telegram",
-            pm2_env: { status: "online", pm_uptime: Date.now() },
             monit: { cpu: 1, memory: 1_000_000 },
+            name: "telegram",
+            pm2_env: { pm_uptime: Date.now(), status: "online" },
           },
-        ]),
+        ])
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -467,9 +533,11 @@ describe("WorkerManagerService", () => {
       });
 
       const mockPm2 = createMockPm2();
-      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) => cb(null, []));
+      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [])
+      );
       mockPm2.start = mock((_opts: unknown, cb: (err: Error | null) => void) =>
-        cb(new Error("PM2 start failed")),
+        cb(new Error("PM2 start failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
@@ -496,22 +564,29 @@ describe("WorkerManagerService", () => {
 
       await service.clearWorkerLogs("whatsapp");
 
-      expect(mockPm2.flush).toHaveBeenCalledWith("whatsapp", expect.any(Function));
+      expect(mockPm2.flush).toHaveBeenCalledWith(
+        "whatsapp",
+        expect.any(Function)
+      );
     });
 
     test("throws for unknown worker", async () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.clearWorkerLogs("foobar")).rejects.toThrow("Unknown worker");
+      expect(service.clearWorkerLogs("foobar")).rejects.toThrow(
+        "Unknown worker"
+      );
     });
 
     test("throws when PM2 flush fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.flush = mock((_name: string, cb: (err: Error | null) => void) =>
-        cb(new Error("PM2 flush failed")),
+        cb(new Error("PM2 flush failed"))
       );
       const service = new WorkerManagerService(projectRoot, mockPm2);
 
-      expect(service.clearWorkerLogs("whatsapp")).rejects.toThrow("PM2 flush failed");
+      expect(service.clearWorkerLogs("whatsapp")).rejects.toThrow(
+        "PM2 flush failed"
+      );
     });
   });
 });

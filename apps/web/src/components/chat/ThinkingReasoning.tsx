@@ -1,22 +1,22 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import styles from "./ThinkingReasoning.module.css";
 import { ThinkingState } from "@/components/chat/ThinkingState";
 import { useRafCoalescedValue } from "@/hooks/use-raf-coalesced-value";
-import { splitThinkingLines } from "@/lib/thinking-text";
 import { formatElapsedSeconds } from "@/lib/elapsed-time";
+import { splitThinkingLines } from "@/lib/thinking-text";
 import { cn } from "@/lib/utils";
+import styles from "./ThinkingReasoning.module.css";
 
 const MAX_H = 100;
 const COLLAPSE_BEAT = 360;
 
 export interface ThinkingReasoningProps {
-  text: string;
+  children?: ReactNode;
+  className?: string;
   isThinkingStreaming: boolean;
   isWorkActive: boolean;
   startedAt?: string;
-  className?: string;
-  children?: ReactNode;
+  text: string;
 }
 
 function useThinkingElapsed(isWorkActive: boolean, startedAt?: string): number {
@@ -34,7 +34,9 @@ function useThinkingElapsed(isWorkActive: boolean, startedAt?: string): number {
     }
 
     const update = () => {
-      setElapsed(Math.max(1, Math.floor((Date.now() - anchorRef.current!) / 1000)));
+      setElapsed(
+        Math.max(1, Math.floor((Date.now() - anchorRef.current!) / 1000))
+      );
     };
 
     update();
@@ -53,7 +55,7 @@ function ThinkingReasoningViewport({
   isWorkActive: boolean;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [fade, setFade] = useState({ top: false, bottom: false });
+  const [fade, setFade] = useState({ bottom: false, top: false });
 
   // Append-only stream: sealed lines keep a content-prefix key; the live tail
   // keeps a fixed key so growing text does not remount / re-fade.
@@ -62,10 +64,10 @@ function ThinkingReasoningViewport({
     return sentences.map((text, index) => {
       const isLiveTail = isWorkActive && index === sentences.length - 1;
       if (isLiveTail) {
-        return { key: "live-tail", text, fresh: true as const };
+        return { fresh: true as const, key: "live-tail", text };
       }
       sealedPrefix = `${sealedPrefix}\0${text}`;
-      return { key: `sealed:${sealedPrefix}`, text, fresh: false as const };
+      return { fresh: false as const, key: `sealed:${sealedPrefix}`, text };
     });
   }, [sentences, isWorkActive]);
 
@@ -77,13 +79,14 @@ function ThinkingReasoningViewport({
 
     const overflows = element.scrollHeight > element.clientHeight + 1;
     if (!overflows) {
-      setFade({ top: false, bottom: false });
+      setFade({ bottom: false, top: false });
       return;
     }
 
     setFade({
+      bottom:
+        element.scrollTop + element.clientHeight < element.scrollHeight - 1,
       top: element.scrollTop > 1,
-      bottom: element.scrollTop + element.clientHeight < element.scrollHeight - 1,
     });
   };
 
@@ -119,21 +122,21 @@ function ThinkingReasoningViewport({
 
   return (
     <div
-      ref={viewportRef}
       className={cn(styles.viewport, styles.viewportScroll)}
+      onScroll={handleScroll}
+      ref={viewportRef}
       style={{
-        maxHeight: `${MAX_H}px`,
         maskImage: mask,
+        maxHeight: `${MAX_H}px`,
         WebkitMaskImage: mask,
       }}
-      onScroll={handleScroll}
     >
       <div className={styles.stream}>
         {items.map((item) => (
           <p
-            key={item.key}
             className={styles.sentence}
             data-fresh={item.fresh || undefined}
+            key={item.key}
           >
             {item.text}
           </p>
@@ -153,7 +156,10 @@ export function ThinkingReasoning({
 }: ThinkingReasoningProps) {
   const displayText = useRafCoalescedValue(text, isThinkingStreaming);
   const trimmed = displayText.trim();
-  const sentences = useMemo(() => splitThinkingLines(displayText), [displayText]);
+  const sentences = useMemo(
+    () => splitThinkingLines(displayText),
+    [displayText]
+  );
   const hasBody = sentences.length > 0 || Boolean(children);
   const elapsedSeconds = useThinkingElapsed(isWorkActive, startedAt);
   const [done, setDone] = useState(!isWorkActive && hasBody);
@@ -170,7 +176,9 @@ export function ThinkingReasoning({
       return;
     }
 
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
     const delay = reducedMotion ? 0 : COLLAPSE_BEAT;
     const timerId = window.setTimeout(() => {
       setDone(true);
@@ -184,7 +192,7 @@ export function ThinkingReasoning({
     return <ThinkingState className={className} />;
   }
 
-  if (!hasBody && !isWorkActive) {
+  if (!(hasBody || isWorkActive)) {
     return null;
   }
 
@@ -199,22 +207,17 @@ export function ThinkingReasoning({
   };
 
   return (
-    <div
-      className={cn(
-        styles.root,
-        className,
-      )}
-    >
+    <div className={cn(styles.root, className)}>
       <button
-        type="button"
+        aria-expanded={expanded}
+        aria-label="Toggle thought"
         className={cn(
           styles.header,
           done && styles.headerClickable,
-          expanded && styles.headerExpanded,
+          expanded && styles.headerExpanded
         )}
-        aria-expanded={expanded}
-        aria-label="Toggle thought"
         onClick={() => done && toggle()}
+        type="button"
       >
         {done ? (
           <span className={styles.label}>
@@ -229,37 +232,45 @@ export function ThinkingReasoning({
         )}
         {done ? (
           <svg
+            aria-hidden="true"
             className={styles.chevron}
+            height="12"
             viewBox="0 0 24 24"
             width="12"
-            height="12"
-            aria-hidden="true"
           >
             <path
               d="m4.5 15.75 7.5-7.5 7.5 7.5"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
+              strokeWidth="1.8"
             />
           </svg>
         ) : null}
       </button>
 
-      <div className={cn(styles.collapsible, !expanded && styles.collapsibleCollapsed)}>
+      <div
+        className={cn(
+          styles.collapsible,
+          !expanded && styles.collapsibleCollapsed
+        )}
+      >
         <div className={styles.inner}>
           {showTimeline ? (
             <div className={styles.timeline}>
               {sentences.length > 0 ? (
                 <ThinkingReasoningViewport
-                  sentences={sentences}
                   isWorkActive={isWorkActive}
+                  sentences={sentences}
                 />
               ) : null}
               {children ? (
                 <div
-                  className={cn(styles.tools, sentences.length > 0 && styles.toolsAfterReasoning)}
+                  className={cn(
+                    styles.tools,
+                    sentences.length > 0 && styles.toolsAfterReasoning
+                  )}
                 >
                   {children}
                 </div>

@@ -2,26 +2,28 @@ import { describe, expect, test } from "bun:test";
 import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
 import { createAgentHarness } from "./index";
 
-function providerReturning(usage?: ChatCompletionResult["usage"]): ProviderClient {
+function providerReturning(
+  usage?: ChatCompletionResult["usage"]
+): ProviderClient {
   return {
-    name: "openai",
-    async generateText() {
-      return { content: "unused" };
-    },
     async generateChat() {
       return {
+        assistantMessage: { content: "Hello", role: "assistant" },
         content: "Hello",
         toolCalls: [],
-        assistantMessage: { role: "assistant", content: "Hello" },
         usage,
       };
     },
+    async generateText() {
+      return { content: "unused" };
+    },
+    name: "openai",
     async streamChat(_input, handlers) {
       handlers.onChunk("Hello");
       return {
+        assistantMessage: { content: "Hello", role: "assistant" },
         content: "Hello",
         toolCalls: [],
-        assistantMessage: { role: "assistant", content: "Hello" },
         usage,
       };
     },
@@ -38,17 +40,17 @@ describe("chat context usage", () => {
       }),
     });
     const session = harness.createChatSession({
+      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
       enableToolLoop: false,
-      compaction: { contextWindow: 100_000, maxOutputTokens: 8_000 },
     });
 
     await session.send("hi");
 
     expect(session.getContextUsage()).toEqual({
-      usedTokens: 12_000,
-      usableContextTokens: 92_000,
       contextWindow: 100_000,
       source: "provider",
+      usableContextTokens: 92_000,
+      usedTokens: 12_000,
     });
   });
 
@@ -57,8 +59,8 @@ describe("chat context usage", () => {
       provider: providerReturning(undefined),
     });
     const session = harness.createChatSession({
+      compaction: { contextWindow: 100_000, maxOutputTokens: 8000 },
       enableToolLoop: false,
-      compaction: { contextWindow: 100_000, maxOutputTokens: 8_000 },
     });
 
     await session.send("hello world");
@@ -74,9 +76,9 @@ describe("chat context usage", () => {
       provider: providerReturning(undefined),
     });
     const session = harness.createChatSession({
-      enableToolLoop: false,
       compaction: { contextWindow: 100_000, maxOutputTokens: 20_000 },
-      initialHistory: [{ role: "user", content: "a".repeat(400) }],
+      enableToolLoop: false,
+      initialHistory: [{ content: "a".repeat(400), role: "user" }],
     });
 
     const usage = session.getContextUsage();

@@ -1,5 +1,9 @@
+import type {
+  OrgMemberSummary,
+  ProfileSummary,
+  SkillProposal,
+} from "@nakama/core/contract";
 import { useState } from "react";
-import type { OrgMemberSummary, ProfileSummary, SkillProposal } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +20,10 @@ import {
   useRejectSkillProposal,
   useSkillProposals,
 } from "@/hooks/use-skill-proposals";
-import { formatSessionRelativeTime, formatSessionTimestamp } from "@/lib/chat-history";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 
@@ -24,7 +31,10 @@ function shortenId(value: string): string {
   return value.length > 16 ? `${value.slice(0, 12)}…` : value;
 }
 
-function resolveProposer(userId: string | null, members: OrgMemberSummary[]): string | null {
+function resolveProposer(
+  userId: string | null,
+  members: OrgMemberSummary[]
+): string | null {
   if (!userId) {
     return null;
   }
@@ -94,7 +104,9 @@ function ProposalReviewDialog({
   async function handleApprove() {
     try {
       await approveMutation.mutateAsync(proposal.id);
-      toast(`Approved ${actionLabel(proposal.action).toLowerCase()} for "${proposal.skillName}".`);
+      toast(
+        `Approved ${actionLabel(proposal.action).toLowerCase()} for "${proposal.skillName}".`
+      );
       onOpenChange(false);
     } catch (err) {
       toast(formatError(err));
@@ -112,39 +124,54 @@ function ProposalReviewDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="gap-4 overflow-hidden p-4 sm:max-w-lg sm:p-6">
         <DialogHeader className="pr-8">
           <DialogTitle>
-            {actionLabel(proposal.action)} skill &ldquo;{proposal.skillName}&rdquo;?
+            {actionLabel(proposal.action)} skill &ldquo;{proposal.skillName}
+            &rdquo;?
           </DialogTitle>
         </DialogHeader>
 
         <div className="min-w-0 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            <time dateTime={proposal.createdAt} title={formatSessionTimestamp(proposal.createdAt)}>
+          <p className="text-muted-foreground text-xs">
+            <time
+              dateTime={proposal.createdAt}
+              title={formatSessionTimestamp(proposal.createdAt)}
+            >
               {formatSessionRelativeTime(proposal.createdAt)}
             </time>
             {proposer ? <> · {proposer}</> : null}
           </p>
 
-          <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-foreground">
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/50 p-3 font-mono text-foreground text-xs leading-relaxed">
             {preview}
           </pre>
 
           {proposal.warnings && proposal.warnings.length > 0 ? (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
+            <p className="text-amber-600 text-xs dark:text-amber-400">
               {proposal.warnings.join(" ")}
             </p>
           ) : null}
         </div>
 
         <DialogFooter className="mx-0 mb-0 gap-2 border-t-0 bg-transparent p-0 pt-2 sm:justify-end">
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void handleReject()}>
+          <Button
+            disabled={busy}
+            onClick={() => void handleReject()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             {rejectMutation.isPending ? <Spinner className="mr-2" /> : null}
             Reject
           </Button>
-          <Button type="button" size="sm" disabled={busy} onClick={() => void handleApprove()}>
+          <Button
+            disabled={busy}
+            onClick={() => void handleApprove()}
+            size="sm"
+            type="button"
+          >
             {approveMutation.isPending ? <Spinner className="mr-2" /> : null}
             Approve
           </Button>
@@ -154,8 +181,14 @@ function ProposalReviewDialog({
   );
 }
 
-function resolveProfileLabel(profileId: string, profiles: ProfileSummary[]): string {
-  return profiles.find((profile) => profile.id === profileId)?.name ?? shortenId(profileId);
+function resolveProfileLabel(
+  profileId: string,
+  profiles: ProfileSummary[]
+): string {
+  return (
+    profiles.find((profile) => profile.id === profileId)?.name ??
+    shortenId(profileId)
+  );
 }
 
 function ProposalRow({
@@ -174,38 +207,47 @@ function ProposalRow({
 
   return (
     <>
-      <div className="flex items-start gap-2 overflow-hidden py-2 pl-4 pr-4">
+      <div className="flex items-start gap-2 overflow-hidden py-2 pr-4 pl-4">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-sm font-medium text-foreground">
+          <p className="font-medium text-foreground text-sm">
             {actionLabel(proposal.action)} · {proposal.skillName}
           </p>
-          <p className="line-clamp-3 max-w-full min-w-0 break-all font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+          <p className="line-clamp-3 min-w-0 max-w-full whitespace-pre-wrap break-all font-mono text-muted-foreground text-xs leading-relaxed">
             {preview}
           </p>
           {proposal.warnings && proposal.warnings.length > 0 ? (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
+            <p className="text-amber-600 text-xs dark:text-amber-400">
               Warning: {proposal.warnings.join(" ")}
             </p>
           ) : null}
-          <p className="text-xs text-muted-foreground">
-            <time dateTime={proposal.createdAt} title={formatSessionTimestamp(proposal.createdAt)}>
+          <p className="text-muted-foreground text-xs">
+            <time
+              dateTime={proposal.createdAt}
+              title={formatSessionTimestamp(proposal.createdAt)}
+            >
               {formatSessionRelativeTime(proposal.createdAt)}
             </time>
             {profileLabel ? <> · {profileLabel}</> : null}
             {proposer ? <> · {proposer}</> : null}
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setDialogOpen(true)}>
+        <Button
+          className="shrink-0"
+          onClick={() => setDialogOpen(true)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           Review
         </Button>
       </div>
 
       <ProposalReviewDialog
-        proposal={proposal}
-        orgId={orgId}
-        proposer={proposer}
-        open={dialogOpen}
         onOpenChange={setDialogOpen}
+        open={dialogOpen}
+        orgId={orgId}
+        proposal={proposal}
+        proposer={proposer}
       />
     </>
   );
@@ -221,8 +263,8 @@ export function SkillProposalsPanel({
   showProfileLabels?: boolean;
 }) {
   const { data, isLoading, error } = useSkillProposals(orgId, {
-    status: "pending",
     profileId,
+    status: "pending",
   });
   const { data: membersData } = useOrgMembers(orgId);
   const { data: profiles = [] } = useProfilesQuery();
@@ -230,19 +272,27 @@ export function SkillProposalsPanel({
   const members = membersData?.members ?? [];
 
   if (isLoading) {
-    return <p className="px-4 py-2 text-xs text-muted-foreground">Loading proposals…</p>;
+    return (
+      <p className="px-4 py-2 text-muted-foreground text-xs">
+        Loading proposals…
+      </p>
+    );
   }
 
   if (error) {
     return (
-      <p className="px-4 py-2 text-sm text-destructive" role="alert">
+      <p className="px-4 py-2 text-destructive text-sm" role="alert">
         {formatError(error)}
       </p>
     );
   }
 
   if (proposals.length === 0) {
-    return <p className="px-4 py-2 text-xs text-muted-foreground">No pending skill proposals.</p>;
+    return (
+      <p className="px-4 py-2 text-muted-foreground text-xs">
+        No pending skill proposals.
+      </p>
+    );
   }
 
   return (
@@ -250,12 +300,14 @@ export function SkillProposalsPanel({
       {proposals.map((proposal) => (
         <ProposalRow
           key={proposal.id}
-          proposal={proposal}
           orgId={orgId}
-          proposer={resolveProposer(proposal.proposedByUserId, members)}
           profileLabel={
-            showProfileLabels ? resolveProfileLabel(proposal.profileId, profiles) : null
+            showProfileLabels
+              ? resolveProfileLabel(proposal.profileId, profiles)
+              : null
           }
+          proposal={proposal}
+          proposer={resolveProposer(proposal.proposedByUserId, members)}
         />
       ))}
     </div>

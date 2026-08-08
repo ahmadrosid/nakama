@@ -1,6 +1,6 @@
 import type { StoredTask, TaskStatus } from "@nakama/core/contract";
-import { PlusIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -17,8 +17,8 @@ import {
   useUpdateTaskMutation,
 } from "@/hooks/use-tasks";
 import { formatError } from "@/lib/client";
-import { loadTaskMessages } from "@/lib/task-messages";
 import { queryKeys } from "@/lib/query-keys";
+import { loadTaskMessages } from "@/lib/task-messages";
 import { cn } from "@/lib/utils";
 
 function isHistoryTask(task: StoredTask | null): task is StoredTask {
@@ -31,12 +31,7 @@ function countByStatus(tasks: StoredTask[], status: TaskStatus): number {
 
 export function TasksPage() {
   const queryClient = useQueryClient();
-  const {
-    data: tasks = [],
-    isLoading,
-    error,
-    refetch,
-  } = useTasksQuery();
+  const { data: tasks = [], isLoading, error, refetch } = useTasksQuery();
   const { data: profiles = [] } = useProfilesQuery();
   const createMutation = useCreateTaskMutation();
   const updateMutation = useUpdateTaskMutation();
@@ -66,17 +61,17 @@ export function TasksPage() {
 
   const profileById = useMemo(
     () => new Map(profiles.map((profile) => [profile.id, profile])),
-    [profiles],
+    [profiles]
   );
 
   const metrics = useMemo(
     () => ({
-      total: tasks.length,
-      inProgress: countByStatus(tasks, "in_progress"),
       done: countByStatus(tasks, "done"),
       failed: countByStatus(tasks, "failed"),
+      inProgress: countByStatus(tasks, "in_progress"),
+      total: tasks.length,
     }),
-    [tasks],
+    [tasks]
   );
 
   const busy =
@@ -93,13 +88,17 @@ export function TasksPage() {
     }
   }, [focusedTask, focusedTaskId]);
 
-  async function handleMoveTask(taskId: string, status: TaskStatus, position: number) {
+  async function handleMoveTask(
+    taskId: string,
+    status: TaskStatus,
+    position: number
+  ) {
     setPageError(null);
 
     try {
       await updateMutation.mutateAsync({
+        input: { position, status },
         taskId,
-        input: { status, position },
       });
     } catch (moveError) {
       setPageError(formatError(moveError));
@@ -116,10 +115,10 @@ export function TasksPage() {
 
     try {
       await createMutation.mutateAsync({
-        title: input.title,
         description: input.description,
-        prompt: input.prompt,
         profileId: input.profileId,
+        prompt: input.prompt,
+        title: input.title,
       });
     } catch (createError) {
       setPageError(formatError(createError));
@@ -141,8 +140,8 @@ export function TasksPage() {
 
     try {
       await updateMutation.mutateAsync({
-        taskId: detailTask.id,
         input,
+        taskId: detailTask.id,
       });
       setDetailTask(null);
     } catch (saveError) {
@@ -204,8 +203,8 @@ export function TasksPage() {
     if (isHistoryTask(task)) {
       setFocusedTaskId(task.id);
       void queryClient.fetchQuery({
-        queryKey: queryKeys.tasks.messages(task.id),
         queryFn: () => loadTaskMessages(task.id),
+        queryKey: queryKeys.tasks.messages(task.id),
       });
       return;
     }
@@ -217,85 +216,85 @@ export function TasksPage() {
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col",
-        showHistoryPanel && "lg:flex-row lg:overflow-hidden",
+        showHistoryPanel && "lg:flex-row lg:overflow-hidden"
       )}
     >
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6",
-          showHistoryPanel && "bg-muted/10",
+          showHistoryPanel && "bg-muted/10"
         )}
       >
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 space-y-1">
             <h1 className="type-page-title">Agent Swarm</h1>
             <p className="type-body max-w-2xl">
-              Kanban board for multi-agent work. Start tasks with play, drag across columns, and
-              open done or failed cards to review run chat.
+              Kanban board for multi-agent work. Start tasks with play, drag
+              across columns, and open done or failed cards to review run chat.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="size-4" aria-hidden />
+            <Button onClick={() => setCreateOpen(true)} size="sm" type="button">
+              <PlusIcon aria-hidden className="size-4" />
               New task
             </Button>
           </div>
         </header>
 
         {!isLoading || tasks.length > 0 ? (
-          <TasksPageMetrics metrics={metrics} compact={showHistoryPanel} />
+          <TasksPageMetrics compact={showHistoryPanel} metrics={metrics} />
         ) : null}
 
         <TasksPageBoardSection
-          isLoading={isLoading}
-          tasks={tasks}
           errorMessage={errorMessage}
-          profileById={profileById}
-          runningTaskIds={runningTaskIds}
-          startingTaskId={startingTaskId}
           focusedTaskId={focusedTaskId}
+          isLoading={isLoading}
+          onCreateOpen={() => setCreateOpen(true)}
+          onFocusTask={handleFocusTask}
+          onMoveTask={handleMoveTask}
+          onOpenTask={setDetailTask}
           onRetry={() => {
             setPageError(null);
             void refetch();
           }}
-          onCreateOpen={() => setCreateOpen(true)}
-          onMoveTask={handleMoveTask}
-          onFocusTask={handleFocusTask}
-          onOpenTask={setDetailTask}
           onStartTask={handleStartTask}
+          profileById={profileById}
+          runningTaskIds={runningTaskIds}
+          startingTaskId={startingTaskId}
+          tasks={tasks}
         />
       </div>
 
       {showHistoryPanel && focusedTask ? (
         <TaskRunHistoryPanel
           key={focusedTask.id}
-          task={focusedTask}
-          profile={profileById.get(focusedTask.profileId) ?? null}
           onClose={() => setFocusedTaskId(null)}
+          profile={profileById.get(focusedTask.profileId) ?? null}
+          task={focusedTask}
         />
       ) : null}
 
       <CreateTaskDialog
+        busy={createMutation.isPending}
+        onCreate={handleCreate}
+        onOpenChange={setCreateOpen}
         open={createOpen}
         profiles={profiles}
-        busy={createMutation.isPending}
-        onOpenChange={setCreateOpen}
-        onCreate={handleCreate}
       />
 
       <TaskDetailDialog
-        task={detailTask}
-        profiles={profiles}
         busy={busy}
+        onDelete={handleDelete}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTask(null);
           }
         }}
-        onSave={handleSave}
-        onDelete={handleDelete}
         onRun={() => handleRun()}
+        onSave={handleSave}
+        profiles={profiles}
+        task={detailTask}
       />
     </div>
   );

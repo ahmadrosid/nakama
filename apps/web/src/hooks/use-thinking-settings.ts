@@ -1,4 +1,7 @@
-import type { ThinkingEffort, UpdateThinkingRequest } from "@nakama/core/contract";
+import type {
+  ThinkingEffort,
+  UpdateThinkingRequest,
+} from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
@@ -9,16 +12,16 @@ import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const thinkingSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.thinkingSettings,
   queryFn: () => client.getThinkingSettings(),
+  queryKey: queryKeys.thinkingSettings,
 });
 
 export function buildThinkingSettingsPayload(
-  effort: ThinkingEffort,
+  effort: ThinkingEffort
 ): UpdateThinkingRequest {
   return {
-    enabled: true,
     effort,
+    enabled: true,
   };
 }
 
@@ -30,12 +33,15 @@ export function useSaveThinkingSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (settings: UpdateThinkingRequest) => client.setThinkingSettings(settings),
+    mutationFn: (settings: UpdateThinkingRequest) =>
+      client.setThinkingSettings(settings),
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.thinkingSettings,
+      });
+    },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.thinkingSettings, saved);
-    },
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.thinkingSettings });
     },
   });
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { pathExists } from "./fs";
 import {
   createProviderInstanceId,
@@ -17,7 +17,7 @@ describe("ensureUserConfigDir", () => {
 
   afterEach(async () => {
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
 
@@ -39,7 +39,7 @@ describe("user config multi-provider", () => {
 
   afterEach(async () => {
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
 
@@ -55,34 +55,34 @@ describe("user config multi-provider", () => {
 
     await saveUserConfig({
       defaultProviderId: openaiId,
-      timezone: "UTC",
-      thinkingEnabled: true,
-      thinkingEffort: "medium",
       providers: [
         {
-          id: openaiId,
-          type: "openai",
-          label: "Work OpenAI",
           apiKey: "sk-test",
           createdAt: "2026-06-07T10:00:00.000Z",
+          id: openaiId,
+          label: "Work OpenAI",
+          type: "openai",
         },
         {
-          id: compatibleId,
-          type: "openai_compatible",
-          label: "Ollama",
           apiKey: "",
           baseUrl: "http://localhost:11434/v1",
+          createdAt: "2026-06-07T11:00:00.000Z",
           customModels: [
             {
+              default: true,
               id: "llama3.2",
               name: "Llama 3.2",
-              default: true,
               supportsThinking: true,
             },
           ],
-          createdAt: "2026-06-07T11:00:00.000Z",
+          id: compatibleId,
+          label: "Ollama",
+          type: "openai_compatible",
         },
       ],
+      thinkingEffort: "medium",
+      thinkingEnabled: true,
+      timezone: "UTC",
     });
 
     const raw = await readFile(getUserConfigPath(), "utf8");
@@ -94,7 +94,9 @@ describe("user config multi-provider", () => {
     expect(loaded?.providers).toHaveLength(2);
     expect(loaded?.defaultProviderId).toBe(openaiId);
     expect(loaded?.providers[1]?.customModels?.[0]?.id).toBe("llama3.2");
-    expect(loaded?.providers[1]?.customModels?.[0]?.supportsThinking).toBe(true);
+    expect(loaded?.providers[1]?.customModels?.[0]?.supportsThinking).toBe(
+      true
+    );
   });
 
   test("round-trips cerebras models_json with capability flags", async () => {
@@ -107,22 +109,22 @@ describe("user config multi-provider", () => {
       defaultProviderId: cerebrasId,
       providers: [
         {
-          id: cerebrasId,
-          type: "cerebras",
-          label: "Cerebras",
           apiKey: "csk-test",
+          createdAt: "2026-07-16T10:00:00.000Z",
           customModels: [
             {
-              id: "gpt-oss-120b",
-              name: "GPT OSS 120B",
               default: true,
+              id: "gpt-oss-120b",
+              inputPerMillionUsd: 0.25,
+              name: "GPT OSS 120B",
+              outputPerMillionUsd: 0.69,
               supportsThinking: true,
               supportsVision: false,
-              inputPerMillionUsd: 0.25,
-              outputPerMillionUsd: 0.69,
             },
           ],
-          createdAt: "2026-07-16T10:00:00.000Z",
+          id: cerebrasId,
+          label: "Cerebras",
+          type: "cerebras",
         },
       ],
     });
@@ -130,8 +132,12 @@ describe("user config multi-provider", () => {
     const loaded = await loadUserConfig();
     expect(loaded?.providers[0]?.type).toBe("cerebras");
     expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe("gpt-oss-120b");
-    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(true);
-    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(0.25);
+    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
+      true
+    );
+    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(
+      0.25
+    );
   });
 
   test("round-trips fireworks models_json with capability flags", async () => {
@@ -144,22 +150,22 @@ describe("user config multi-provider", () => {
       defaultProviderId: fireworksId,
       providers: [
         {
-          id: fireworksId,
-          type: "fireworks",
-          label: "Fireworks",
           apiKey: "fw-test",
+          createdAt: "2026-07-24T10:00:00.000Z",
           customModels: [
             {
-              id: "accounts/fireworks/models/kimi-k2p6",
-              name: "Kimi K2.6",
               default: true,
+              id: "accounts/fireworks/models/kimi-k2p6",
+              inputPerMillionUsd: 0.6,
+              name: "Kimi K2.6",
+              outputPerMillionUsd: 2.5,
               supportsThinking: true,
               supportsVision: false,
-              inputPerMillionUsd: 0.6,
-              outputPerMillionUsd: 2.5,
             },
           ],
-          createdAt: "2026-07-24T10:00:00.000Z",
+          id: fireworksId,
+          label: "Fireworks",
+          type: "fireworks",
         },
       ],
     });
@@ -167,10 +173,14 @@ describe("user config multi-provider", () => {
     const loaded = await loadUserConfig();
     expect(loaded?.providers[0]?.type).toBe("fireworks");
     expect(loaded?.providers[0]?.customModels?.[0]?.id).toBe(
-      "accounts/fireworks/models/kimi-k2p6",
+      "accounts/fireworks/models/kimi-k2p6"
     );
-    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(true);
-    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(0.6);
+    expect(loaded?.providers[0]?.customModels?.[0]?.supportsThinking).toBe(
+      true
+    );
+    expect(loaded?.providers[0]?.customModels?.[0]?.inputPerMillionUsd).toBe(
+      0.6
+    );
   });
 
   test("repairs literal undefined label on load", async () => {
@@ -187,7 +197,7 @@ label=undefined
 api_key=test-key
 created_at=2026-06-15T00:00:00.000Z
 `,
-      "utf8",
+      "utf8"
     );
 
     const loaded = await loadUserConfig();
@@ -195,8 +205,8 @@ created_at=2026-06-15T00:00:00.000Z
   });
 
   test("normalizeProviderInstanceLabel rejects undefined string", () => {
-    expect(
-      normalizeProviderInstanceLabel("openrouter", "undefined", []),
-    ).toBe("OpenRouter");
+    expect(normalizeProviderInstanceLabel("openrouter", "undefined", [])).toBe(
+      "OpenRouter"
+    );
   });
 });

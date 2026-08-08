@@ -10,8 +10,9 @@ function createMessenger(): TelegramRichMessenger & {
   const plain: string[] = [];
 
   return {
-    rich,
+    async edit() {},
     plain,
+    rich,
     async send(text: string) {
       rich.push(text);
       return { message_id: rich.length };
@@ -24,7 +25,6 @@ function createMessenger(): TelegramRichMessenger & {
       plain.push(text);
       return { message_id: plain.length };
     },
-    async edit() {},
   };
 }
 

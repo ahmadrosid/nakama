@@ -11,16 +11,16 @@ export function contextUsageRatio(usage: ChatContextUsage): number {
 }
 
 export function formatTokenCount(tokens: number): string {
-  if (tokens < 1_000) {
+  if (tokens < 1000) {
     return String(Math.max(0, Math.round(tokens)));
   }
 
   if (tokens < 10_000) {
-    return `${(tokens / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+    return `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   }
 
   if (tokens < 1_000_000) {
-    return `${Math.round(tokens / 1_000)}k`;
+    return `${Math.round(tokens / 1000)}k`;
   }
 
   return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;

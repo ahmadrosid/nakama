@@ -26,20 +26,20 @@ describe("chat-stream-web-fetch", () => {
     expect(
       parseWebFetchUrls({
         urls: ["https://example.com/a", "https://example.org/b"],
-      }),
+      })
     ).toEqual(["https://example.com/a", "https://example.org/b"]);
   });
 
   test("formatWebFetchHeaderText uses hostname or page count", () => {
     expect(formatWebFetchHeaderText(["https://docs.example.com/guide"])).toBe(
-      "docs.example.com/guide",
+      "docs.example.com/guide"
     );
     expect(
       formatWebFetchHeaderText([
         "https://example.com/a",
         "https://example.com/b",
         "https://example.com/c",
-      ]),
+      ])
     ).toBe("3 pages");
   });
 
@@ -62,27 +62,27 @@ describe("chat-stream-web-fetch", () => {
 
     expect(sources).toHaveLength(2);
     expect(sources[0]).toMatchObject({
-      title: "Nakama Docs",
       href: "https://ahmadrosid.github.io/nakama/getting-started.md",
+      title: "Nakama Docs",
     });
     expect(sources[1]?.title).toBe("Telegram");
   });
 
   test("parseWebFetchSourcesFromResult handles builtin web_fetch JSON", () => {
     const sources = parseWebFetchSourcesFromResult({
-      url: "https://example.com/start",
-      finalUrl: "https://example.com/final",
-      status: 200,
-      contentType: "text/html",
       bytes: 1200,
       content: "# Hello",
+      contentType: "text/html",
+      finalUrl: "https://example.com/final",
+      status: 200,
+      url: "https://example.com/start",
     });
 
     expect(sources).toEqual([
       {
+        href: "https://example.com/final",
         title: "example.com/final",
         url: "https://example.com/final",
-        href: "https://example.com/final",
       },
     ]);
   });
@@ -104,12 +104,12 @@ describe("chat-stream-web-fetch", () => {
 
   test("buildWebFetchToolState uses input URLs while running", () => {
     const running: ChatListItem = {
+      content: "web_fetch",
       id: "tool_1",
       role: "tool",
-      content: "web_fetch",
       tool: "web_fetch",
-      toolStatus: "running",
       toolInput: { url: "https://example.com/page" },
+      toolStatus: "running",
     };
 
     expect(buildWebFetchToolState(running)).toMatchObject({
@@ -121,23 +121,23 @@ describe("chat-stream-web-fetch", () => {
 
   test("shouldRenderWebFetchToolRow shows running fetch and hides failed empty results", () => {
     const running: ChatListItem = {
+      content: "web_fetch",
       id: "tool_1",
       role: "tool",
-      content: "web_fetch",
       tool: "web_fetch",
-      toolStatus: "running",
       toolInput: { url: "https://example.com" },
+      toolStatus: "running",
     };
 
     expect(shouldRenderWebFetchToolRow(running)).toBe(true);
 
     const failed: ChatListItem = {
+      content: "web_fetch completed",
       id: "tool_2",
       role: "tool",
-      content: "web_fetch completed",
       tool: "exa__web_fetch_exa",
-      toolStatus: "done",
       toolResult: { error: "MCP server disconnected" },
+      toolStatus: "done",
     };
 
     expect(shouldRenderWebFetchToolRow(failed)).toBe(false);
@@ -154,9 +154,9 @@ describe("buildStreamHandlers web_fetch lifecycle", () => {
     });
 
     handlers.onToolStart?.({
-      toolCallId: "fetch_1",
-      tool: "web_fetch",
       input: { url: "https://example.com/docs" },
+      tool: "web_fetch",
+      toolCallId: "fetch_1",
     });
 
     expect(messages[0]).toMatchObject({
@@ -165,34 +165,38 @@ describe("buildStreamHandlers web_fetch lifecycle", () => {
     });
 
     handlers.onToolEnd?.({
-      toolCallId: "fetch_1",
-      tool: "web_fetch",
       result: {
-        url: "https://example.com/docs",
-        finalUrl: "https://example.com/docs",
-        status: 200,
+        bytes: 10,
         content: "# Docs",
         contentType: "text/markdown",
-        bytes: 10,
+        finalUrl: "https://example.com/docs",
+        status: 200,
+        url: "https://example.com/docs",
       },
+      tool: "web_fetch",
+      toolCallId: "fetch_1",
     });
 
-    expect(parseWebFetchSourcesFromResult(messages[0]?.toolResult)).toHaveLength(1);
+    expect(
+      parseWebFetchSourcesFromResult(messages[0]?.toolResult)
+    ).toHaveLength(1);
 
     handlers.onToolStart?.({
-      toolCallId: "fetch_2",
-      tool: "exa__web_fetch_exa",
       input: { urls: ["https://a.test", "https://b.test"] },
+      tool: "exa__web_fetch_exa",
+      toolCallId: "fetch_2",
     });
 
     handlers.onToolEnd?.({
-      toolCallId: "fetch_2",
-      tool: "exa__web_fetch_exa",
       result: {
         text: "# A\nURL: https://a.test\n\nA body\n\n# B\nURL: https://b.test\n\nB body",
       },
+      tool: "exa__web_fetch_exa",
+      toolCallId: "fetch_2",
     });
 
-    expect(parseWebFetchSourcesFromResult(messages[1]?.toolResult)).toHaveLength(2);
+    expect(
+      parseWebFetchSourcesFromResult(messages[1]?.toolResult)
+    ).toHaveLength(2);
   });
 });

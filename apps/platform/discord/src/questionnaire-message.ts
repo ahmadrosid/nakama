@@ -1,6 +1,6 @@
+import { formatAgentQuestionnaireMessage } from "@nakama/core/agent-questionnaire";
 import type { AgentQuestionnaire } from "@nakama/core/contract";
 import type { DiscordMessenger } from "./messenger";
-import { formatAgentQuestionnaireMessage } from "@nakama/core/agent-questionnaire";
 
 export class DiscordQuestionnaireMessage {
   private messageId: string | null = null;
@@ -15,7 +15,10 @@ export class DiscordQuestionnaireMessage {
   }
 
   async update(questionnaire: AgentQuestionnaire | null): Promise<void> {
-    this.active = questionnaire && questionnaire.questions.length > 0 ? questionnaire : null;
+    this.active =
+      questionnaire && questionnaire.questions.length > 0
+        ? questionnaire
+        : null;
 
     if (!this.active) {
       return;
@@ -28,7 +31,9 @@ export class DiscordQuestionnaireMessage {
     this.active = null;
   }
 
-  private async enqueueRender(questionnaire: AgentQuestionnaire): Promise<void> {
+  private async enqueueRender(
+    questionnaire: AgentQuestionnaire
+  ): Promise<void> {
     this.pending = this.pending.then(() => this.render(questionnaire));
     await this.pending;
   }

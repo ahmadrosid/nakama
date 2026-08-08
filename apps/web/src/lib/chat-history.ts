@@ -1,12 +1,17 @@
+import { parseAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import type {
   AgentChannel,
   AgentQuestionAnswer,
   ChatMessage,
   SessionMessageMeta,
 } from "@nakama/core/contract";
-import { parseAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import { extractThinkingFromAssistantMessage } from "@nakama/core/thinking-content";
-import { userContentToDisplayDocuments, userContentToDisplayImageAttachments, userContentToDisplayImages, stripImageDescriptionsFromDisplayText } from "@/lib/chat-images";
+import {
+  stripImageDescriptionsFromDisplayText,
+  userContentToDisplayDocuments,
+  userContentToDisplayImageAttachments,
+  userContentToDisplayImages,
+} from "@/lib/chat-images";
 import {
   extractWebSearchBlocksFromProviderContent,
   WEB_SEARCH_TOOL_NAME,
@@ -28,7 +33,7 @@ export function buildChatBasePath(): string {
  * query string or the remounted page falls back to the default profile.
  */
 export function buildNewChatPath(profileId?: string | null): string {
-  const params = new URLSearchParams({ new: "1", _: String(Date.now()) });
+  const params = new URLSearchParams({ _: String(Date.now()), new: "1" });
   if (profileId) {
     params.set("profile", profileId);
   }
@@ -36,7 +41,9 @@ export function buildNewChatPath(profileId?: string | null): string {
 }
 
 /** Profile id from `?new=1&profile=…` when opening a new chat (e.g. Super Bot from Tools). */
-export function readRequestedProfileFromNewChatSearch(search: string): string | null {
+export function readRequestedProfileFromNewChatSearch(
+  search: string
+): string | null {
   const params = new URLSearchParams(search);
   if (params.get("new") !== "1") {
     return null;
@@ -47,7 +54,9 @@ export function readRequestedProfileFromNewChatSearch(search: string): string | 
 }
 
 /** Draft message from `?new=1&draft=…` when opening a new chat. */
-export function readRequestedDraftFromNewChatSearch(search: string): string | null {
+export function readRequestedDraftFromNewChatSearch(
+  search: string
+): string | null {
   const params = new URLSearchParams(search);
   if (params.get("new") !== "1") {
     return null;
@@ -58,7 +67,9 @@ export function readRequestedDraftFromNewChatSearch(search: string): string | nu
 }
 
 /** Session-storage draft key from `?new=1&draftKey=…`. */
-export function readRequestedDraftKeyFromNewChatSearch(search: string): string | null {
+export function readRequestedDraftKeyFromNewChatSearch(
+  search: string
+): string | null {
   const params = new URLSearchParams(search);
   if (params.get("new") !== "1") {
     return null;
@@ -108,7 +119,9 @@ export function readStoredActiveChatProfileId(): string | null {
     return null;
   }
 
-  const profileId = localStorage.getItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY)?.trim();
+  const profileId = localStorage
+    .getItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY)
+    ?.trim();
   return profileId || null;
 }
 
@@ -161,19 +174,21 @@ export function resolveHistoryProfileId(input: {
       input.profiles,
       fromUrl,
       input.liveChatProfileId,
-      readStoredActiveChatProfileId(),
+      readStoredActiveChatProfileId()
     ) ?? resolveDefaultProfileId(input.profiles)
   );
 }
 
 export function resolveDefaultProfileId(
-  profiles: ReadonlyArray<{ id: string }>,
+  profiles: ReadonlyArray<{ id: string }>
 ): string | null {
   if (profiles.length === 0) {
     return null;
   }
 
-  return profiles.find((profile) => profile.id === "default")?.id ?? profiles[0]!.id;
+  return (
+    profiles.find((profile) => profile.id === "default")?.id ?? profiles[0]!.id
+  );
 }
 
 /** Profile id for sidebar rail highlight — URL when present, else live chat state / storage. */
@@ -192,11 +207,13 @@ export function resolveActiveProfileIdFromLocation(input: {
     historyPath = "/history",
   } = input;
 
-  const isKnownProfile = (profileId: string | null | undefined): profileId is string =>
+  const isKnownProfile = (
+    profileId: string | null | undefined
+  ): profileId is string =>
     Boolean(profileId && profiles.some((profile) => profile.id === profileId));
 
   if (pathname === historyPath) {
-    return resolveHistoryProfileId({ search, profiles, liveChatProfileId });
+    return resolveHistoryProfileId({ liveChatProfileId, profiles, search });
   }
 
   const fromSessionPath = chatProfileIdFromPath(pathname);
@@ -242,7 +259,7 @@ export function parseChatRouteParams(params: {
 }): RequestedChatSession | null {
   const { profileId, sessionId } = params;
 
-  if (!profileId || !sessionId) {
+  if (!(profileId && sessionId)) {
     return null;
   }
 
@@ -250,37 +267,48 @@ export function parseChatRouteParams(params: {
 }
 
 export interface ChatListItem {
-  id: string;
-  historyIndex?: number;
-  createdAt?: string;
-  role: "user" | "assistant" | "tool";
-  content: string;
-  thinking?: string;
-  thinkingStreaming?: boolean;
-  images?: Array<{ url: string; mediaType: string }>;
-  imageAttachments?: Array<{ url?: string; mediaType: string; description?: string | null }>;
-  documents?: Array<{ filename: string; mediaType: string }>;
-  questionnaireAnswers?: AgentQuestionAnswer[];
-  streaming?: boolean;
-  toolCallId?: string;
-  tool?: string;
-  toolStatus?: "running" | "done";
-  toolInput?: Record<string, unknown>;
-  toolInputAccumulatedJson?: string;
   artifactStreaming?: boolean;
-  toolResult?: unknown;
+  content: string;
+  createdAt?: string;
+  documents?: Array<{ filename: string; mediaType: string }>;
+  historyIndex?: number;
+  id: string;
+  imageAttachments?: Array<{
+    url?: string;
+    mediaType: string;
+    description?: string | null;
+  }>;
+  images?: Array<{ url: string; mediaType: string }>;
+  questionnaireAnswers?: AgentQuestionAnswer[];
+  role: "user" | "assistant" | "tool";
+  streaming?: boolean;
   /** Live status from a running sub-agent child loop (e.g. "Reading SOUL.md"). */
   subAgentActivity?: string;
+  thinking?: string;
+  thinkingStreaming?: boolean;
+  tool?: string;
+  toolCallId?: string;
+  toolInput?: Record<string, unknown>;
+  toolInputAccumulatedJson?: string;
+  toolResult?: unknown;
+  toolStatus?: "running" | "done";
 }
 
 export function sessionStorageKey(profileId: string): string {
   return `nakama:session:${profileId}`;
 }
 
-export const HISTORY_SESSION_CHANNELS = ["web", "telegram", "whatsapp", "discord"] as const satisfies readonly AgentChannel[];
+export const HISTORY_SESSION_CHANNELS = [
+  "web",
+  "telegram",
+  "whatsapp",
+  "discord",
+] as const satisfies readonly AgentChannel[];
 
 export function isReadOnlySessionChannel(channel: AgentChannel): boolean {
-  return channel === "telegram" || channel === "whatsapp" || channel === "discord";
+  return (
+    channel === "telegram" || channel === "whatsapp" || channel === "discord"
+  );
 }
 
 export function formatSessionChannelLabel(channel: AgentChannel): string {
@@ -308,7 +336,7 @@ function parseToolResult(content: string): unknown {
 
 export function chatMessagesToListItems(
   messages: ChatMessage[],
-  messageMeta: SessionMessageMeta[] = [],
+  messageMeta: SessionMessageMeta[] = []
 ): ChatListItem[] {
   const toolInputs = new Map<string, Record<string, unknown>>();
 
@@ -342,14 +370,16 @@ export function chatMessagesToListItems(
       const imageAttachments = userContentToDisplayImageAttachments(content);
       const documents = userContentToDisplayDocuments(content);
       const questionnaireAnswers =
-        typeof content === "string" ? parseAgentQuestionnaireAnswersMessage(content) : null;
+        typeof content === "string"
+          ? parseAgentQuestionnaireAnswersMessage(content)
+          : null;
 
       items.push({
-        id: `history-${index}`,
-        historyIndex: index,
-        createdAt: meta?.createdAt,
-        role: "user",
         content: text,
+        createdAt: meta?.createdAt,
+        historyIndex: index,
+        id: `history-${index}`,
+        role: "user",
         ...(images.length > 0 ? { images } : {}),
         ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
         ...(documents.length > 0 ? { documents } : {}),
@@ -363,7 +393,9 @@ export function chatMessagesToListItems(
         continue;
       }
 
-      for (const block of extractWebSearchBlocksFromProviderContent(message.providerContent)) {
+      for (const block of extractWebSearchBlocksFromProviderContent(
+        message.providerContent
+      )) {
         if (
           hydratedToolCallIds.has(block.toolCallId) ||
           persistedWebSearchToolIds.has(block.toolCallId)
@@ -373,27 +405,27 @@ export function chatMessagesToListItems(
 
         hydratedToolCallIds.add(block.toolCallId);
         items.push({
-          id: block.toolCallId,
-          historyIndex: index,
-          createdAt: meta?.createdAt,
-          role: "tool",
           content: `${WEB_SEARCH_TOOL_NAME} completed`,
-          toolCallId: block.toolCallId,
+          createdAt: meta?.createdAt,
+          historyIndex: index,
+          id: block.toolCallId,
+          role: "tool",
           tool: WEB_SEARCH_TOOL_NAME,
-          toolStatus: "done",
+          toolCallId: block.toolCallId,
           toolInput: block.query ? { query: block.query } : undefined,
           toolResult: block.result,
+          toolStatus: "done",
         });
       }
 
       const thinking = extractThinkingFromAssistantMessage(message);
 
       items.push({
-        id: `history-${index}`,
-        historyIndex: index,
-        createdAt: meta?.createdAt,
-        role: "assistant",
         content: message.content,
+        createdAt: meta?.createdAt,
+        historyIndex: index,
+        id: `history-${index}`,
+        role: "assistant",
         ...(thinking ? { thinking } : {}),
       });
       continue;
@@ -402,16 +434,16 @@ export function chatMessagesToListItems(
     if (message.role === "tool") {
       hydratedToolCallIds.add(message.toolCallId);
       items.push({
-        id: message.toolCallId,
-        historyIndex: index,
-        createdAt: meta?.createdAt,
-        role: "tool",
         content: `${message.name} completed`,
-        toolCallId: message.toolCallId,
+        createdAt: meta?.createdAt,
+        historyIndex: index,
+        id: message.toolCallId,
+        role: "tool",
         tool: message.name,
-        toolStatus: "done",
+        toolCallId: message.toolCallId,
         toolInput: toolInputs.get(message.toolCallId),
         toolResult: parseToolResult(message.content),
+        toolStatus: "done",
       });
     }
   }
@@ -427,10 +459,10 @@ export function formatSessionTimestamp(value: string): string {
   }
 
   return date.toLocaleString(undefined, {
-    month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    month: "short",
   });
 }
 
@@ -450,7 +482,9 @@ function formatRelativeTime(value: string, tense: "past" | "future"): string {
   }
 
   const deltaMs =
-    tense === "future" ? date.getTime() - Date.now() : Date.now() - date.getTime();
+    tense === "future"
+      ? date.getTime() - Date.now()
+      : Date.now() - date.getTime();
 
   if (tense === "future" && deltaMs <= 0) {
     return formatSessionTimestamp(value);

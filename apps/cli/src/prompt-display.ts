@@ -11,7 +11,7 @@ export function normalizePastedText(text: string): string {
 export function splitInputDisplayLines(
   display: string,
   prefixLength: number,
-  width: number,
+  width: number
 ): string[] {
   const terminalWidth = Math.max(1, width);
   const lineCapacity = Math.max(1, terminalWidth - prefixLength);

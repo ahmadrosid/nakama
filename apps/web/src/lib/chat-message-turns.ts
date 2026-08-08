@@ -6,7 +6,9 @@ export type MessageTurn =
   | { kind: "user"; message: ChatListItem; index: number }
   | { kind: "assistant"; messages: IndexedMessage[] };
 
-export function groupMessagesIntoTurns(messages: ChatListItem[]): MessageTurn[] {
+export function groupMessagesIntoTurns(
+  messages: ChatListItem[]
+): MessageTurn[] {
   const turns: MessageTurn[] = [];
   let currentAssistantTurn: IndexedMessage[] | null = null;
 
@@ -17,12 +19,12 @@ export function groupMessagesIntoTurns(messages: ChatListItem[]): MessageTurn[] 
         currentAssistantTurn = null;
       }
 
-      turns.push({ kind: "user", message, index });
+      turns.push({ index, kind: "user", message });
       continue;
     }
 
     currentAssistantTurn ??= [];
-    currentAssistantTurn.push({ message, index });
+    currentAssistantTurn.push({ index, message });
   }
 
   if (currentAssistantTurn) {

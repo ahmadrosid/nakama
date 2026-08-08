@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { LogOutIcon, SparklesIcon, UserIcon } from "lucide-react";
+import { useState } from "react";
 import { THEME_OPTIONS } from "@/components/theme-options";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { Button } from "@/components/ui/button";
@@ -39,15 +39,19 @@ export function SidebarUserMenu() {
   }
 
   const displayName = user.name?.trim() || user.email;
-  const initial = (user.name?.trim()?.[0] ?? user.email[0] ?? "?").toUpperCase();
+  const initial = (
+    user.name?.trim()?.[0] ??
+    user.email[0] ??
+    "?"
+  ).toUpperCase();
 
   const trigger = (
     <button
-      type="button"
       aria-label="Account menu"
       className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/55 hover:text-foreground"
+      type="button"
     >
-      <span className="flex size-7 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-foreground">
+      <span className="flex size-7 items-center justify-center rounded-md bg-muted font-semibold text-[11px] text-foreground">
         {initial}
       </span>
     </button>
@@ -62,14 +66,18 @@ export function SidebarUserMenu() {
               <DropdownMenu>
                 <DropdownMenuTrigger render={trigger} />
                 <DropdownMenuContent
-                  side="right"
                   align="end"
-                  sideOffset={8}
                   className="w-64 gap-0 overflow-hidden p-0"
+                  side="right"
+                  sideOffset={8}
                 >
                   <div className="space-y-0.5 px-3.5 py-3">
-                    <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                    <p className="truncate font-semibold text-foreground text-sm">
+                      {displayName}
+                    </p>
+                    <p className="truncate text-muted-foreground text-xs">
+                      {user.email}
+                    </p>
                   </div>
 
                   <div className="h-px bg-border" />
@@ -98,11 +106,11 @@ export function SidebarUserMenu() {
                   <div className="h-px bg-border" />
 
                   <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
-                    <span className="text-sm text-muted-foreground">Theme</span>
+                    <span className="text-muted-foreground text-sm">Theme</span>
                     <div
+                      aria-label="Color theme"
                       className="flex rounded-md bg-muted/60 p-0.5"
                       role="group"
-                      aria-label="Color theme"
                     >
                       {THEME_OPTIONS.map((option) => {
                         const Icon = option.icon;
@@ -110,19 +118,24 @@ export function SidebarUserMenu() {
 
                         return (
                           <button
-                            key={option.id}
-                            type="button"
                             aria-label={option.label}
                             aria-pressed={selected}
                             className={cn(
                               "rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground",
-                              selected && "bg-background text-foreground shadow-sm",
+                              selected &&
+                                "bg-background text-foreground shadow-sm"
                             )}
+                            key={option.id}
                             onClick={() => {
                               setTheme(option.id);
                             }}
+                            type="button"
                           >
-                            <Icon className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+                            <Icon
+                              aria-hidden="true"
+                              className="size-3.5"
+                              strokeWidth={1.75}
+                            />
                           </button>
                         );
                       })}
@@ -133,11 +146,11 @@ export function SidebarUserMenu() {
 
                   <div className="p-1">
                     <DropdownMenuItem
-                      variant="destructive"
                       className="px-2.5 py-2"
                       onClick={() => {
                         void logout();
                       }}
+                      variant="destructive"
                     >
                       <LogOutIcon className="size-4" />
                       Log out
@@ -154,18 +167,18 @@ export function SidebarUserMenu() {
       </Tooltip>
 
       <UserProfileDialog
-        open={profileOpen}
-        onOpenChange={setProfileOpen}
         email={user.email}
         name={user.name ?? ""}
-        phone={user.phone ?? ""}
+        onOpenChange={setProfileOpen}
         onSaved={() => void refreshSession()}
+        open={profileOpen}
+        phone={user.phone ?? ""}
       />
 
       <UserContextEditorDialog
-        open={personalisationOpen}
-        onOpenChange={setPersonalisationOpen}
         ensureExistsOnOpen
+        onOpenChange={setPersonalisationOpen}
+        open={personalisationOpen}
       />
     </>
   );
@@ -219,10 +232,10 @@ function UserProfileDialog({
     }
 
     const wantsPasswordChange = Boolean(
-      currentPassword || newPassword || confirmPassword,
+      currentPassword || newPassword || confirmPassword
     );
     if (wantsPasswordChange) {
-      if (!currentPassword || !newPassword) {
+      if (!(currentPassword && newPassword)) {
         setError("Enter your current password and a new password.");
         return;
       }
@@ -235,8 +248,8 @@ function UserProfileDialog({
     setPending(true);
     try {
       await client.updateAuthProfile({
-        name: formName,
         email: trimmedEmail,
+        name: formName,
         phone: formPhone,
       });
 
@@ -257,102 +270,133 @@ function UserProfileDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Profile</DialogTitle>
-          <DialogDescription>Update your name, email, phone, or password.</DialogDescription>
+          <DialogDescription>
+            Update your name, email, phone, or password.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => void handleSubmit(event)}
+        >
           <div>
-            <label htmlFor="profile-name" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="profile-name"
+            >
               Name
             </label>
             <Input
               id="profile-name"
-              value={formName}
               onChange={(event) => setFormName(event.target.value)}
               placeholder="Your name"
+              value={formName}
             />
           </div>
           <div>
-            <label htmlFor="profile-email" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="profile-email"
+            >
               Email
             </label>
             <Input
               id="profile-email"
-              type="email"
-              value={formEmail}
               onChange={(event) => setFormEmail(event.target.value)}
               required
+              type="email"
+              value={formEmail}
             />
           </div>
           <div>
-            <label htmlFor="profile-phone" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="profile-phone"
+            >
               Phone{" "}
-              <span className="font-normal text-muted-foreground">(optional)</span>
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
             </label>
             <Input
               id="profile-phone"
-              value={formPhone}
               onChange={(event) => setFormPhone(event.target.value)}
               placeholder="+1234567890"
+              value={formPhone}
             />
           </div>
 
-          <div className="space-y-3 border-t border-border pt-4">
+          <div className="space-y-3 border-border border-t pt-4">
             <div>
-              <p className="text-sm font-medium">Password</p>
-              <p className="text-xs text-muted-foreground">Leave blank to keep your current one.</p>
+              <p className="font-medium text-sm">Password</p>
+              <p className="text-muted-foreground text-xs">
+                Leave blank to keep your current one.
+              </p>
             </div>
             <div>
-              <label htmlFor="profile-current-password" className="mb-1 block text-sm font-medium">
+              <label
+                className="mb-1 block font-medium text-sm"
+                htmlFor="profile-current-password"
+              >
                 Current
               </label>
               <Input
-                id="profile-current-password"
-                type="password"
                 autoComplete="current-password"
-                value={currentPassword}
+                id="profile-current-password"
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 placeholder="••••••••"
+                type="password"
+                value={currentPassword}
               />
             </div>
             <div>
-              <label htmlFor="profile-new-password" className="mb-1 block text-sm font-medium">
+              <label
+                className="mb-1 block font-medium text-sm"
+                htmlFor="profile-new-password"
+              >
                 New
               </label>
               <Input
-                id="profile-new-password"
-                type="password"
                 autoComplete="new-password"
-                value={newPassword}
+                id="profile-new-password"
                 onChange={(event) => setNewPassword(event.target.value)}
                 placeholder="••••••••"
+                type="password"
+                value={newPassword}
               />
             </div>
             <div>
-              <label htmlFor="profile-confirm-password" className="mb-1 block text-sm font-medium">
+              <label
+                className="mb-1 block font-medium text-sm"
+                htmlFor="profile-confirm-password"
+              >
                 Confirm
               </label>
               <Input
-                id="profile-confirm-password"
-                type="password"
                 autoComplete="new-password"
-                value={confirmPassword}
+                id="profile-confirm-password"
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="••••••••"
+                type="password"
+                value={confirmPassword}
               />
             </div>
           </div>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button disabled={pending} type="submit">
               {pending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

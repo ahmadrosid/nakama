@@ -9,10 +9,10 @@ import {
 
 const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
-const TOOL_CONTEXT = { orgId: ORG_ID, profileId: PROFILE_ID, agentDepth: 0 };
+const TOOL_CONTEXT = { agentDepth: 0, orgId: ORG_ID, profileId: PROFILE_ID };
 
 function createMockAgentService(
-  handler: (input: unknown) => Promise<SubAgentRunResult>,
+  handler: (input: unknown) => Promise<SubAgentRunResult>
 ) {
   return {
     runSubAgentPrompt: handler,
@@ -22,13 +22,16 @@ function createMockAgentService(
 describe("sub_agent tool", () => {
   test("returns success-shaped result from runner", async () => {
     const agent = createMockAgentService(async () => ({
+      output: "Done",
       status: "success",
       summary: "Done",
-      output: "Done",
     }));
     const tool = createSubAgentTool(agent);
 
-    const result = await tool.run({ task: "Research competitors" }, TOOL_CONTEXT);
+    const result = await tool.run(
+      { task: "Research competitors" },
+      TOOL_CONTEXT
+    );
 
     expect(result.status).toBe("success");
     expect(result.summary).toBe("Done");
@@ -36,15 +39,15 @@ describe("sub_agent tool", () => {
 
   test("rejects nested sub-agent calls", async () => {
     const agent = createMockAgentService(async () => ({
+      output: "nope",
       status: "success",
       summary: "nope",
-      output: "nope",
     }));
     const tool = createSubAgentTool(agent);
 
     const result = await tool.run(
       { task: "nested" },
-      { ...TOOL_CONTEXT, agentDepth: 1 },
+      { ...TOOL_CONTEXT, agentDepth: 1 }
     );
 
     expect(result.status).toBe("fail");
@@ -53,9 +56,9 @@ describe("sub_agent tool", () => {
 
   test("rejects whitespace-only task", async () => {
     const agent = createMockAgentService(async () => ({
+      output: "nope",
       status: "success",
       summary: "nope",
-      output: "nope",
     }));
 
     const result = await runSubAgentTool({ task: "   " }, TOOL_CONTEXT, agent);
@@ -68,7 +71,7 @@ describe("sub_agent tool", () => {
     let capturedTimeout: number | undefined;
     const agent = createMockAgentService(async (input) => {
       capturedTimeout = (input as { timeoutMs?: number }).timeoutMs;
-      return { status: "success", summary: "ok", output: "ok" };
+      return { output: "ok", status: "success", summary: "ok" };
     });
     const tool = createSubAgentTool(agent);
 
@@ -82,21 +85,23 @@ describe("sub_agent tool", () => {
   });
 
   test("is parallelSafe so sibling sub-agents can run concurrently from the parent", () => {
-    const tool = createSubAgentTool(createMockAgentService(async () => ({
-      status: "success",
-      summary: "ok",
-      output: "ok",
-    })));
+    const tool = createSubAgentTool(
+      createMockAgentService(async () => ({
+        output: "ok",
+        status: "success",
+        summary: "ok",
+      }))
+    );
 
     expect(tool.parallelSafe).toBe(true);
     expect(
       canRunToolCallsInParallel(
         [tool],
         [
-          { id: "a", name: "sub_agent", arguments: { task: "first" } },
-          { id: "b", name: "sub_agent", arguments: { task: "second" } },
-        ],
-      ),
+          { arguments: { task: "first" }, id: "a", name: "sub_agent" },
+          { arguments: { task: "second" }, id: "b", name: "sub_agent" },
+        ]
+      )
     ).toBe(true);
   });
 });

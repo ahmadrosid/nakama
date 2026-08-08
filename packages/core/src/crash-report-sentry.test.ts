@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { hostname } from "node:os";
 import { buildCrashReport, type CrashReport } from "./crash-report";
+import { resetCrashReportConsentCache } from "./crash-report-config";
 import {
   createCrashReportSink,
   parseSentryDsn,
   sendSentryEvent,
   toSentryEvent,
 } from "./crash-report-sentry";
-import { resetCrashReportConsentCache } from "./crash-report-config";
 
 let previousDsn: string | undefined;
 
@@ -27,7 +27,9 @@ afterEach(() => {
 });
 
 function sampleReport(): CrashReport {
-  return buildCrashReport(new Error("tool loop exceeded"), { source: "server" });
+  return buildCrashReport(new Error("tool loop exceeded"), {
+    source: "server",
+  });
 }
 
 test("parseSentryDsn builds the store endpoint and key", () => {
@@ -39,7 +41,7 @@ test("parseSentryDsn builds the store endpoint and key", () => {
 
 test("parseSentryDsn keeps a path prefix for a subpath install", () => {
   expect(parseSentryDsn("https://k@example.com/glitchtip/12")?.endpoint).toBe(
-    "https://example.com/glitchtip/api/12/store/",
+    "https://example.com/glitchtip/api/12/store/"
   );
 });
 
@@ -70,18 +72,22 @@ test("the event never carries the hostname", () => {
 });
 
 test("an invariant is sent at a lower level than a crash", () => {
-  const crash = toSentryEvent(buildCrashReport(new Error("x"), { kind: "crash" }));
-  const invariant = toSentryEvent(buildCrashReport(new Error("x"), { kind: "invariant" }));
+  const crash = toSentryEvent(
+    buildCrashReport(new Error("x"), { kind: "crash" })
+  );
+  const invariant = toSentryEvent(
+    buildCrashReport(new Error("x"), { kind: "invariant" })
+  );
 
   expect(crash.level).toBe("error");
   expect(invariant.level).toBe("warning");
 });
 
 test("sendSentryEvent posts the event with the auth header the ingest expects", async () => {
-  let received: { auth: string | null; body: any; method: string } | null = null;
+  let received: { auth: string | null; body: any; method: string } | null =
+    null;
 
   const server = Bun.serve({
-    port: 0,
     async fetch(request) {
       received = {
         auth: request.headers.get("x-sentry-auth"),
@@ -90,14 +96,19 @@ test("sendSentryEvent posts the event with the auth header the ingest expects", 
       };
       return new Response("{}", { status: 200 });
     },
+    port: 0,
   });
 
   try {
-    const dsn = parseSentryDsn(`http://pubkey@${server.hostname}:${server.port}/42`);
+    const dsn = parseSentryDsn(
+      `http://pubkey@${server.hostname}:${server.port}/42`
+    );
     const ok = await sendSentryEvent(dsn!, toSentryEvent(sampleReport()));
 
     expect(ok).toBe(true);
-    expect(dsn?.endpoint).toBe(`http://${server.hostname}:${server.port}/api/42/store/`);
+    expect(dsn?.endpoint).toBe(
+      `http://${server.hostname}:${server.port}/api/42/store/`
+    );
     expect(received!.method).toBe("POST");
     expect(received!.auth).toContain("sentry_version=7");
     expect(received!.auth).toContain("sentry_key=pubkey");
@@ -117,18 +128,20 @@ test("the sink is a no-op when no DSN is configured", async () => {
   process.env.NAKAMA_CRASH_REPORT_DSN = "";
   resetCrashReportConsentCache();
 
-  await expect(createCrashReportSink()(sampleReport())).resolves.toBeUndefined();
+  await expect(
+    createCrashReportSink()(sampleReport())
+  ).resolves.toBeUndefined();
 });
 
 test("the sink delivers to the configured DSN", async () => {
   let hits = 0;
 
   const server = Bun.serve({
-    port: 0,
     fetch() {
       hits += 1;
       return new Response("{}", { status: 200 });
     },
+    port: 0,
   });
 
   try {

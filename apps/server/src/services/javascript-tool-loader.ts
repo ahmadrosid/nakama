@@ -1,7 +1,11 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { JsonSchema, ToolContext, ToolDefinition } from "@nakama/core";
-import { getCustomToolsDir, pathExists, permissiveObjectSchema } from "@nakama/core";
+import {
+  getCustomToolsDir,
+  pathExists,
+  permissiveObjectSchema,
+} from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 
 const moduleCache = new Map<string, JavascriptToolModule>();
@@ -12,20 +16,20 @@ export interface JavascriptToolHandlerConfig {
 }
 
 interface JavascriptToolModule {
-  parameters?: JsonSchema;
   parallelSafe?: boolean;
+  parameters?: JsonSchema;
   run: (input: unknown, context: ToolContext) => Promise<unknown>;
 }
 
 export async function loadJavascriptTool(
-  record: StoredToolRecord,
+  record: StoredToolRecord
 ): Promise<ToolDefinition | null> {
   const config = readJavascriptHandlerConfig(record.handlerConfig);
 
   if (!config?.modulePath) {
     return createErrorTool(
       record,
-      `Tool "${record.name}" is missing handlerConfig.modulePath.`,
+      `Tool "${record.name}" is missing handlerConfig.modulePath.`
     );
   }
 
@@ -36,14 +40,14 @@ export async function loadJavascriptTool(
   } catch (error) {
     return createErrorTool(
       record,
-      error instanceof Error ? error.message : String(error),
+      error instanceof Error ? error.message : String(error)
     );
   }
 
   if (!(await pathExists(modulePath))) {
     return createErrorTool(
       record,
-      `Tool module not found: ${config.modulePath}`,
+      `Tool module not found: ${config.modulePath}`
     );
   }
 
@@ -53,8 +57,8 @@ export async function loadJavascriptTool(
       module.parameters ?? config.parameters ?? permissiveObjectSchema();
 
     return {
-      name: record.name,
       description: record.description,
+      name: record.name,
       parameters,
       ...(module.parallelSafe ? { parallelSafe: true } : {}),
       async run(input, context) {
@@ -64,12 +68,14 @@ export async function loadJavascriptTool(
   } catch (error) {
     return createErrorTool(
       record,
-      error instanceof Error ? error.message : String(error),
+      error instanceof Error ? error.message : String(error)
     );
   }
 }
 
-export async function validateJavascriptToolModule(modulePath: string): Promise<void> {
+export async function validateJavascriptToolModule(
+  modulePath: string
+): Promise<void> {
   const resolvedPath = resolveJavascriptModulePath(modulePath);
 
   if (!(await pathExists(resolvedPath))) {
@@ -93,7 +99,7 @@ export function resolveJavascriptModulePath(modulePath: string): string {
 }
 
 function readJavascriptHandlerConfig(
-  handlerConfig: unknown,
+  handlerConfig: unknown
 ): JavascriptToolHandlerConfig | null {
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
     return null;
@@ -109,14 +115,15 @@ function readJavascriptHandlerConfig(
     return null;
   }
 
-  const parameters =
-    isJsonSchema(record.parameters) ? record.parameters : undefined;
+  const parameters = isJsonSchema(record.parameters)
+    ? record.parameters
+    : undefined;
 
   return { modulePath, parameters };
 }
 
 async function importJavascriptModule(
-  modulePath: string,
+  modulePath: string
 ): Promise<JavascriptToolModule> {
   const cached = moduleCache.get(modulePath);
 
@@ -157,7 +164,8 @@ function normalizeJavascriptModule(imported: unknown): JavascriptToolModule {
     : isJsonSchema(record.parameters)
       ? record.parameters
       : undefined;
-  const parallelSafe = source.parallelSafe === true || record.parallelSafe === true;
+  const parallelSafe =
+    source.parallelSafe === true || record.parallelSafe === true;
 
   return {
     parameters,
@@ -166,10 +174,13 @@ function normalizeJavascriptModule(imported: unknown): JavascriptToolModule {
   };
 }
 
-function createErrorTool(record: StoredToolRecord, message: string): ToolDefinition {
+function createErrorTool(
+  record: StoredToolRecord,
+  message: string
+): ToolDefinition {
   return {
-    name: record.name,
     description: record.description,
+    name: record.name,
     parameters: permissiveObjectSchema(),
     async run() {
       return { error: message };
@@ -177,10 +188,15 @@ function createErrorTool(record: StoredToolRecord, message: string): ToolDefinit
   };
 }
 
-function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
+function isPathInsideDirectory(
+  targetPath: string,
+  directoryPath: string
+): boolean {
   const relative = path.relative(directoryPath, targetPath);
 
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" || !(relative.startsWith("..") || path.isAbsolute(relative))
+  );
 }
 
 function isJsonSchema(value: unknown): value is JsonSchema {

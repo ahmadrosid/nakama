@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   Select,
   SelectContent,
@@ -6,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import { useModelsQuery } from "@/hooks/use-app-queries";
 import {
   useSaveTranscriptionSettings,
@@ -33,7 +33,7 @@ export function TranscriptionSettingsCard() {
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(modelsResponse?.models ?? []),
-    [modelsResponse?.models],
+    [modelsResponse?.models]
   );
 
   const transcriptionModelGroups = useMemo(() => {
@@ -83,55 +83,64 @@ export function TranscriptionSettingsCard() {
 
   return (
     <SettingsModelTile
-      title="Audio transcription model"
       footer={
         savedHint || formError ? (
           <>
             {savedHint ? (
-              <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
+              <p
+                className="text-emerald-700 text-xs dark:text-emerald-300"
+                role="status"
+              >
                 {savedHint}
               </p>
             ) : null}
             {formError ? (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-destructive text-xs" role="alert">
                 {formError}
               </p>
             ) : null}
           </>
         ) : undefined
       }
+      title="Audio transcription model"
     >
       <Select
-        value={selectionValue}
-        disabled={saveTranscriptionMutation.isPending || transcriptionUnavailable}
+        disabled={
+          saveTranscriptionMutation.isPending || transcriptionUnavailable
+        }
         onValueChange={(value) => {
           if (!value) {
             return;
           }
 
-          const model = value === CLEAR_TRANSCRIPTION_MODEL_VALUE ? null : String(value);
+          const model =
+            value === CLEAR_TRANSCRIPTION_MODEL_VALUE ? null : String(value);
 
           setFormError(null);
           setSelection(model ?? "");
           setSavedHint(null);
 
           saveTranscriptionMutation.mutate(model, {
+            onError: (error) => {
+              setSelection(transcriptionSettings?.model ?? "");
+              setFormError(formatError(error));
+            },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, transcriptionModelGroups)}`
-                  : "Cleared",
+                  : "Cleared"
               );
-            },
-            onError: (error) => {
-              setSelection(transcriptionSettings?.model ?? "");
-              setFormError(formatError(error));
             },
           });
         }}
+        value={selectionValue}
       >
-        <SelectTrigger aria-label="Audio transcription model" className="h-9 w-full">
+        <SelectTrigger
+          aria-label="Audio transcription model"
+          className="h-9 w-full"
+        >
           <SelectValue placeholder="Select transcription model">
             {selection
               ? profileModelLabel(selection, transcriptionModelGroups)
@@ -144,7 +153,9 @@ export function TranscriptionSettingsCard() {
           alignItemWithTrigger={false}
           className="w-max min-w-72 max-w-[min(24rem,92vw)]"
         >
-          <SelectItem value={CLEAR_TRANSCRIPTION_MODEL_VALUE}>Not configured</SelectItem>
+          <SelectItem value={CLEAR_TRANSCRIPTION_MODEL_VALUE}>
+            Not configured
+          </SelectItem>
           {transcriptionModelGroups.flatMap((group) =>
             group.models.map((model) => (
               <SelectItem
@@ -153,7 +164,7 @@ export function TranscriptionSettingsCard() {
               >
                 {group.providerLabel}: {model.name}
               </SelectItem>
-            )),
+            ))
           )}
         </SelectContent>
       </Select>

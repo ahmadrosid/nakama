@@ -1,25 +1,32 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import {
+  type CSSProperties,
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 
 function CodeBlockChevronIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
+      height="15"
       viewBox="0 0 24 24"
       width="15"
-      height="15"
-      aria-hidden="true"
     >
       <path
         d="m8 6-6 6 6 6M16 6l6 6-6 6"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
+        strokeWidth="1.8"
       />
     </svg>
   );
@@ -69,50 +76,51 @@ export function CodeBlock({
     }
   }
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-    };
-  }, []);
+    },
+    []
+  );
 
   return (
     <div
       className={cn(
         "overflow-hidden bg-card",
         fillHeight && "flex min-h-0 flex-1 flex-col",
-        className,
+        className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-border/70 border-b px-3 py-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
           <CodeBlockChevronIcon className="shrink-0 opacity-70" />
           <span className="truncate font-medium">{label}</span>
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {showEdit && onEdit ? (
             <button
-              type="button"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent hover:text-foreground"
               onClick={onEdit}
+              type="button"
             >
               Edit
             </button>
           ) : null}
           <button
-            type="button"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => void copy()}
             aria-label={copied ? "Copied" : "Copy code"}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => void copy()}
+            type="button"
           >
             {copied ? (
               <CheckIcon
-                className="size-3.5 text-emerald-600 dark:text-emerald-400"
                 aria-hidden
+                className="size-3.5 text-emerald-600 dark:text-emerald-400"
               />
             ) : (
-              <CopyIcon className="size-3.5" aria-hidden />
+              <CopyIcon aria-hidden className="size-3.5" />
             )}
             <span>{copied ? "Copied" : "Copy"}</span>
           </button>
@@ -121,24 +129,24 @@ export function CodeBlock({
       <div
         className={cn(
           "relative overflow-auto bg-muted/20",
-          fillHeight ? "min-h-0 flex-1" : maxScrollHeightClass,
+          fillHeight ? "min-h-0 flex-1" : maxScrollHeightClass
         )}
         style={gridStyle}
       >
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-(--code-block-gutter) border-r border-border/70 bg-muted/50"
           aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-(--code-block-gutter) border-border/70 border-r bg-muted/50"
         />
         <div className="relative grid min-w-full pb-2" style={gridStyle}>
           {lines.map((line, index) => (
             <Fragment key={index}>
               <span
-                className="py-0 pl-2 pr-3 text-right font-mono text-xs leading-6 text-muted-foreground/80 tabular-nums select-none"
                 aria-hidden="true"
+                className="select-none py-0 pr-3 pl-2 text-right font-mono text-muted-foreground/80 text-xs tabular-nums leading-6"
               >
                 {index + 1}
               </span>
-              <code className="block min-w-0 whitespace-pre-wrap break-words px-2 pl-3 font-mono text-xs leading-6 text-foreground">
+              <code className="block min-w-0 whitespace-pre-wrap break-words px-2 pl-3 font-mono text-foreground text-xs leading-6">
                 {line || "\u00A0"}
               </code>
             </Fragment>

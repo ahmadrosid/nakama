@@ -1,6 +1,6 @@
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
-import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { SkillCreateDialog } from "@/components/SkillCreateDialog";
+import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,31 +56,31 @@ export function ProfilesDialogs(state: ProfilesPageState) {
   return (
     <>
       <ProfileCreateDialog
+        onAskSuperBot={onAskSuperBot}
+        onCreated={(profileId) => setSelectedId(profileId)}
+        onOpenChange={handleCreateOpenChange}
         open={createOpen}
         tools={allTools}
-        onOpenChange={handleCreateOpenChange}
-        onCreated={(profileId) => setSelectedId(profileId)}
-        onAskSuperBot={onAskSuperBot}
       />
 
       <SkillCreateDialog
-        open={skillCreateOpen}
         busy={createSkillMutation.isPending || assignSkillMutation.isPending}
-        profileId={selectedId}
         onOpenChange={setSkillCreateOpen}
         onSubmit={handleCreateSkill}
+        open={skillCreateOpen}
+        profileId={selectedId}
       />
 
       <McpServerDialog
-        open={mcpCreateOpen}
         busy={createMcpMutation.isPending || assignMcpMutation.isPending}
         onOpenChange={(open) => {
           setMcpCreateOpen(open);
         }}
         onSubmit={handleCreateMcpServer}
+        open={mcpCreateOpen}
       />
 
-      <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
+      <Dialog onOpenChange={handleDeleteOpenChange} open={deleteOpen}>
         <DialogContent className="gap-6 p-6 sm:max-w-md">
           <DialogHeader className="gap-3">
             <DialogTitle>Delete profile?</DialogTitle>
@@ -93,32 +93,36 @@ export function ProfilesDialogs(state: ProfilesPageState) {
 
           <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
             <Button
-              type="button"
-              variant="outline"
               disabled={busy}
               onClick={() => setDeleteOpen(false)}
+              type="button"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="destructive"
               disabled={busy}
               onClick={() => void handleDeleteConfirm()}
+              type="button"
+              variant="destructive"
             >
-              {deleteMutation.isPending ? <Spinner className="size-4" /> : "Delete"}
+              {deleteMutation.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                "Delete"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog
-        open={removeConfirm !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!(open || busy)) {
             setRemoveConfirm(null);
           }
         }}
+        open={removeConfirm !== null}
       >
         <DialogContent className="gap-6 p-6 sm:max-w-md">
           <DialogHeader className="gap-3">
@@ -144,18 +148,18 @@ export function ProfilesDialogs(state: ProfilesPageState) {
 
           <DialogFooter className="mx-0 -mb-2 gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
             <Button
-              type="button"
-              variant="outline"
               disabled={busy}
               onClick={() => setRemoveConfirm(null)}
+              type="button"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="destructive"
               disabled={busy}
               onClick={() => void handleRemoveAssignmentConfirm()}
+              type="button"
+              variant="destructive"
             >
               {unassignMutation.isPending ||
               unassignMcpMutation.isPending ||
@@ -168,7 +172,6 @@ export function ProfilesDialogs(state: ProfilesPageState) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </>
   );
 }

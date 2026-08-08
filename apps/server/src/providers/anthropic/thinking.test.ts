@@ -4,8 +4,8 @@ import { parseAnthropicContent } from "./index";
 describe("parseAnthropicContent", () => {
   test("keeps thinking out of assistant content", () => {
     const result = parseAnthropicContent([
-      { type: "thinking", thinking: "Plan the answer." },
-      { type: "text", text: "Hello." },
+      { thinking: "Plan the answer.", type: "thinking" },
+      { text: "Hello.", type: "text" },
     ]);
 
     expect(result.content).toBe("Hello.");

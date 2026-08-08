@@ -4,20 +4,20 @@ const BUILTIN_LABELS: Record<
   Exclude<ProviderName, "openai_compatible">,
   string
 > = {
-  openai: "OpenAI",
   anthropic: "Anthropic",
-  openrouter: "OpenRouter",
-  gemini: "Gemini",
-  deepseek: "DeepSeek",
   cerebras: "Cerebras",
+  deepseek: "DeepSeek",
   fireworks: "Fireworks",
+  gemini: "Gemini",
   ollama: "Ollama",
+  openai: "OpenAI",
   opencode_go: "OpenCode Go",
+  openrouter: "OpenRouter",
 };
 
 export function formatConfiguredProviderLabel(
   provider: ProviderName | null | undefined,
-  displayName?: string | null,
+  displayName?: string | null
 ): string {
   if (!provider) {
     return "Provider";

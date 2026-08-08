@@ -13,7 +13,9 @@ export async function runRotateToken(): Promise<void> {
   console.log("Local auth token rotated.");
   console.log(token);
   console.log("");
-  console.log("Workers reload from disk on the next request. Restart them if anything stays disconnected.");
+  console.log(
+    "Workers reload from disk on the next request. Restart them if anything stays disconnected."
+  );
 }
 
 export function formatRotateTokenError(error: unknown): string {

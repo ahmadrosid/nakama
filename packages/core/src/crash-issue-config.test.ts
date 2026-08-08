@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import {
+  type CrashIssueConfig,
   DEFAULT_MAX_ISSUES_PER_HOUR,
   isCrashIssueConfigured,
   parseCrashIssueRepo,
   resolveCrashIssueConfig,
-  type CrashIssueConfig,
 } from "./crash-issue-config";
 
 const empty: CrashIssueConfig = {
+  maxIssuesPerHour: DEFAULT_MAX_ISSUES_PER_HOUR,
   repo: null,
   token: null,
-  maxIssuesPerHour: DEFAULT_MAX_ISSUES_PER_HOUR,
 };
 
 test("a well formed repository is accepted", () => {
@@ -60,5 +60,7 @@ test("a token without a repository is not configured", () => {
 });
 
 test("an unconfigured install is the default", () => {
-  expect(isCrashIssueConfigured(resolveCrashIssueConfig(empty, {}))).toBe(false);
+  expect(isCrashIssueConfigured(resolveCrashIssueConfig(empty, {}))).toBe(
+    false
+  );
 });

@@ -15,8 +15,8 @@ export const ORG_MEMORY_PREAMBLE = `${ORG_MEMORY_HEADER}
 ## Pinned`;
 
 export interface ParsedOrgMemory {
-  preamble: string;
   pinned: string[];
+  preamble: string;
   sections: MemorySection[];
 }
 
@@ -45,7 +45,9 @@ function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-export function parseOrgMemoryContent(content?: string | null): ParsedOrgMemory {
+export function parseOrgMemoryContent(
+  content?: string | null
+): ParsedOrgMemory {
   const lines = (content ?? "").split("\n");
   const preambleLines: string[] = [];
   const pinned: string[] = [];
@@ -56,7 +58,7 @@ export function parseOrgMemoryContent(content?: string | null): ParsedOrgMemory 
 
   const flushSection = () => {
     if (currentDate) {
-      sections.push({ date: currentDate, bullets: currentBullets });
+      sections.push({ bullets: currentBullets, date: currentDate });
     }
     currentDate = null;
     currentBullets = [];
@@ -101,8 +103,8 @@ export function parseOrgMemoryContent(content?: string | null): ParsedOrgMemory 
   }
 
   return normalizeParsedOrgMemory({
-    preamble: preambleLines.join("\n").replace(/\n+$/, ""),
     pinned,
+    preamble: preambleLines.join("\n").replace(/\n+$/, ""),
     sections,
   });
 }
@@ -117,7 +119,9 @@ function stripPinnedHeaderFromPreamble(preamble: string): string {
 }
 
 /** Normalize malformed MEMORY.md content before rebuild or merge. */
-export function normalizeParsedOrgMemory(parsed: ParsedOrgMemory): ParsedOrgMemory {
+export function normalizeParsedOrgMemory(
+  parsed: ParsedOrgMemory
+): ParsedOrgMemory {
   const preambleLines: string[] = [];
   const rescuedPinned: string[] = [];
 
@@ -130,8 +134,8 @@ export function normalizeParsedOrgMemory(parsed: ParsedOrgMemory): ParsedOrgMemo
   }
 
   return {
-    preamble: stripPinnedHeaderFromPreamble(preambleLines.join("\n")),
     pinned: [...parsed.pinned, ...rescuedPinned],
+    preamble: stripPinnedHeaderFromPreamble(preambleLines.join("\n")),
     sections: parsed.sections,
   };
 }
@@ -190,10 +194,15 @@ function significantOrgMemoryTokens(bullet: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((token) => token.length > 1 && !ORG_MEMORY_SUPERSEDE_STOP_WORDS.has(token));
+    .filter(
+      (token) => token.length > 1 && !ORG_MEMORY_SUPERSEDE_STOP_WORDS.has(token)
+    );
 }
 
-function orgMemorySupersessionScore(existingBullet: string, newBullet: string): number {
+function orgMemorySupersessionScore(
+  existingBullet: string,
+  newBullet: string
+): number {
   const existingTokens = significantOrgMemoryTokens(existingBullet);
   const newTokens = significantOrgMemoryTokens(newBullet);
   if (existingTokens.length < 2 || newTokens.length < 2) {
@@ -206,7 +215,7 @@ function orgMemorySupersessionScore(existingBullet: string, newBullet: string): 
 
 function removeOrgMemoryBullet(
   parsed: ParsedOrgMemory,
-  predicate: (bullet: string) => boolean,
+  predicate: (bullet: string) => boolean
 ): void {
   parsed.pinned = parsed.pinned.filter((bullet) => !predicate(bullet));
   for (const section of parsed.sections) {
@@ -214,7 +223,10 @@ function removeOrgMemoryBullet(
   }
 }
 
-function removeSupersededOrgMemoryBullets(parsed: ParsedOrgMemory, newBullet: string): void {
+function removeSupersededOrgMemoryBullets(
+  parsed: ParsedOrgMemory,
+  newBullet: string
+): void {
   const newKey = normalizeOrgMemoryDedupKey(newBullet);
   removeOrgMemoryBullet(parsed, (bullet) => {
     if (normalizeOrgMemoryDedupKey(bullet) === newKey) {
@@ -225,15 +237,15 @@ function removeSupersededOrgMemoryBullets(parsed: ParsedOrgMemory, newBullet: st
 }
 
 export interface ApplyApprovedOrgMemoryBulletOptions {
-  pin?: boolean;
   dateUtc?: string;
+  pin?: boolean;
 }
 
 /** Apply an approved proposal bullet to live org memory content. */
 export function applyApprovedOrgMemoryBullet(
   content: string | null | undefined,
   bullet: string,
-  options: ApplyApprovedOrgMemoryBulletOptions = {},
+  options: ApplyApprovedOrgMemoryBulletOptions = {}
 ): string {
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
@@ -241,13 +253,20 @@ export function applyApprovedOrgMemoryBullet(
   const parsed = normalizeParsedOrgMemory(parseOrgMemoryContent(content ?? ""));
   const dedupKey = normalizeOrgMemoryDedupKey(text);
 
-  removeOrgMemoryBullet(parsed, (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey);
+  removeOrgMemoryBullet(
+    parsed,
+    (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey
+  );
   removeSupersededOrgMemoryBullets(parsed, text);
 
   const alreadyPresent =
-    parsed.pinned.some((entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey) ||
+    parsed.pinned.some(
+      (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey
+    ) ||
     parsed.sections.some((section) =>
-      section.bullets.some((entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey),
+      section.bullets.some(
+        (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey
+      )
     );
 
   if (!alreadyPresent) {
@@ -256,7 +275,7 @@ export function applyApprovedOrgMemoryBullet(
     } else {
       let section = parsed.sections.find((entry) => entry.date === dateUtc);
       if (!section) {
-        section = { date: dateUtc, bullets: [] };
+        section = { bullets: [], date: dateUtc };
         parsed.sections.push(section);
         parsed.sections.sort((a, b) => a.date.localeCompare(b.date));
       }
@@ -269,7 +288,7 @@ export function applyApprovedOrgMemoryBullet(
 
 export function collectRecentLogBullets(
   sections: MemorySection[],
-  limit: number,
+  limit: number
 ): string[] {
   if (limit <= 0) {
     return [];
@@ -293,10 +312,10 @@ export function collectRecentLogBullets(
 export interface OrgMemorySummaryOptions {
   /** Hard byte cap on the rendered summary. Defaults to 2048. */
   byteCap?: number;
-  /** Most recent log bullets to include after pinned. Defaults to 20. */
-  recentLogLimit?: number;
   /** Hint shown when the summary is truncated. */
   overflowHint?: string;
+  /** Most recent log bullets to include after pinned. Defaults to 20. */
+  recentLogLimit?: number;
 }
 
 /**
@@ -308,7 +327,7 @@ export interface OrgMemorySummaryOptions {
 export function appendOrgMemorySection(
   systemPrompt: string,
   summary: string,
-  orgRole?: string | null,
+  orgRole?: string | null
 ): string {
   if (orgRole === "viewer") {
     return systemPrompt;
@@ -338,12 +357,20 @@ export interface OrgMemoryApprovePreview {
 export function previewOrgMemoryAfterApprove(
   liveContent: string | null | undefined,
   bullet: string,
-  options: { pin?: boolean; byteCap?: number; recentLogLimit?: number; dateUtc?: string } = {},
+  options: {
+    pin?: boolean;
+    byteCap?: number;
+    recentLogLimit?: number;
+    dateUtc?: string;
+  } = {}
 ): OrgMemoryApprovePreview {
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
   const text = bullet.trim().replace(/^-\s+/, "").trim();
-  const rebuilt = applyApprovedOrgMemoryBullet(liveContent, bullet, { pin, dateUtc });
+  const rebuilt = applyApprovedOrgMemoryBullet(liveContent, bullet, {
+    dateUtc,
+    pin,
+  });
   const promptInjection = composeOrgMemorySummary(rebuilt, {
     byteCap: options.byteCap ?? 2048,
     recentLogLimit: options.recentLogLimit ?? 20,
@@ -359,7 +386,7 @@ export function previewOrgMemoryAfterApprove(
 
 export function composeOrgMemorySummary(
   content?: string | null,
-  options: OrgMemorySummaryOptions = {},
+  options: OrgMemorySummaryOptions = {}
 ): string {
   const {
     byteCap = 2048,
@@ -367,7 +394,10 @@ export function composeOrgMemorySummary(
     overflowHint = "Use the org_memory_search tool for the full history.",
   } = options;
   const parsed = parseOrgMemoryContent(content);
-  const recentBullets = collectRecentLogBullets(parsed.sections, recentLogLimit);
+  const recentBullets = collectRecentLogBullets(
+    parsed.sections,
+    recentLogLimit
+  );
   const bullets = [...parsed.pinned, ...recentBullets];
 
   if (bullets.length === 0) {

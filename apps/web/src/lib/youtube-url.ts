@@ -16,8 +16,12 @@ function normalizeHost(hostname: string): string {
 }
 
 /** Extract an 11-char YouTube video id from common watch / share / embed URLs. */
-export function parseYoutubeVideoId(url: string | undefined | null): string | null {
-  if (!url) return null;
+export function parseYoutubeVideoId(
+  url: string | undefined | null
+): string | null {
+  if (!url) {
+    return null;
+  }
 
   let parsed: URL;
   try {

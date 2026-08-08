@@ -1,17 +1,18 @@
 import {
   defaultOllamaBaseUrl,
   normalizeProviderInstanceLabel,
-  resolveOllamaHostMode,
   type ProviderInstance,
   type ProviderName,
+  resolveOllamaHostMode,
   type UserConfig,
 } from "@nakama/core";
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
-import { readApiKeyForInstance } from "../providers/create";
 import { CEREBRAS_CHAT_BASE_URL } from "../providers/cerebras";
+import { readApiKeyForInstance } from "../providers/create";
 import { FIREWORKS_INFERENCE_BASE_URL } from "../providers/fireworks";
 
 const OPENCODE_GO_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1";
+
 import { resolveProfileProviderSelection } from "./provider-instance-helpers";
 
 const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
@@ -20,15 +21,15 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
 export interface CodingAgentProviderRouting {
-  configured: boolean;
-  compatible: boolean;
   active: boolean;
-  providerType: ProviderName | null;
-  providerLabel: string | null;
-  baseUrl: string | null;
   apiKey: string | null;
-  model: string | null;
+  baseUrl: string | null;
+  compatible: boolean;
+  configured: boolean;
   error: string | null;
+  model: string | null;
+  providerLabel: string | null;
+  providerType: ProviderName | null;
 }
 
 const CLAUDE_CODE_PROVIDER_TYPES = new Set<ProviderName>(["anthropic"]);
@@ -69,7 +70,7 @@ const PI_PROVIDER_TYPES = new Set<ProviderName>([
 
 export function isProviderCompatibleWithHarness(
   providerType: ProviderName,
-  harnessKind: StoredCodingAgentHarnessKind,
+  harnessKind: StoredCodingAgentHarnessKind
 ): boolean {
   // Cursor Agent uses host Cursor auth — never Nakama provider passthrough.
   if (harnessKind === "cursor_agent") {
@@ -93,7 +94,7 @@ export function isProviderCompatibleWithHarness(
 
 export function getProviderApiBaseUrl(
   instance: ProviderInstance,
-  harnessKind: StoredCodingAgentHarnessKind,
+  harnessKind: StoredCodingAgentHarnessKind
 ): string {
   const override = instance.baseUrl?.trim();
 
@@ -145,7 +146,7 @@ export function getProviderApiBaseUrl(
 
 function incompatibilityMessage(
   harnessKind: StoredCodingAgentHarnessKind,
-  providerType: ProviderName,
+  providerType: ProviderName
 ): string {
   if (harnessKind === "claude_code") {
     return `Claude Code requires an Anthropic provider (got ${providerType}). Configure an Anthropic provider in Settings → Provider.`;
@@ -169,21 +170,21 @@ export function resolveCodingAgentProviderRouting(options: {
   env?: Record<string, string | undefined>;
 }): CodingAgentProviderRouting {
   const empty: CodingAgentProviderRouting = {
-    configured: false,
-    compatible: false,
     active: false,
-    providerType: null,
-    providerLabel: null,
-    baseUrl: null,
     apiKey: null,
-    model: null,
+    baseUrl: null,
+    compatible: false,
+    configured: false,
     error: null,
+    model: null,
+    providerLabel: null,
+    providerType: null,
   };
 
   const resolved = resolveProfileProviderSelection({
-    providers: options.userConfig?.providers ?? [],
     defaultProviderId: options.userConfig?.defaultProviderId,
     profileModel: options.profileModel,
+    providers: options.userConfig?.providers ?? [],
   });
 
   if (!resolved) {
@@ -194,31 +195,42 @@ export function resolveCodingAgentProviderRouting(options: {
   }
 
   const { instance, model } = resolved;
-  const providerLabel = normalizeProviderInstanceLabel(instance.type, instance.label, []);
-  const compatible = isProviderCompatibleWithHarness(instance.type, options.harnessKind);
+  const providerLabel = normalizeProviderInstanceLabel(
+    instance.type,
+    instance.label,
+    []
+  );
+  const compatible = isProviderCompatibleWithHarness(
+    instance.type,
+    options.harnessKind
+  );
 
   if (!compatible) {
     return {
       ...empty,
       configured: true,
-      providerType: instance.type,
-      providerLabel,
-      model,
       error: incompatibilityMessage(options.harnessKind, instance.type),
+      model,
+      providerLabel,
+      providerType: instance.type,
     };
   }
 
   const apiKey = readApiKeyForInstance(instance, options.env ?? process.env);
 
-  if (!apiKey?.trim() && instance.type !== "openai_compatible" && instance.type !== "ollama") {
+  if (
+    !apiKey?.trim() &&
+    instance.type !== "openai_compatible" &&
+    instance.type !== "ollama"
+  ) {
     return {
       ...empty,
-      configured: true,
       compatible: true,
-      providerType: instance.type,
-      providerLabel,
-      model,
+      configured: true,
       error: `Provider "${providerLabel}" has no API key. Add one in Settings → Provider.`,
+      model,
+      providerLabel,
+      providerType: instance.type,
     };
   }
 
@@ -228,12 +240,12 @@ export function resolveCodingAgentProviderRouting(options: {
     if (hostMode === "cloud" && !apiKey?.trim()) {
       return {
         ...empty,
-        configured: true,
         compatible: true,
-        providerType: instance.type,
-        providerLabel,
+        configured: true,
+        error: "Ollama Cloud requires an API key in Settings → Provider.",
         model,
-        error: `Ollama Cloud requires an API key in Settings → Provider.`,
+        providerLabel,
+        providerType: instance.type,
       };
     }
   }
@@ -245,24 +257,27 @@ export function resolveCodingAgentProviderRouting(options: {
   } catch (error) {
     return {
       ...empty,
-      configured: true,
       compatible: true,
-      providerType: instance.type,
-      providerLabel,
+      configured: true,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not resolve provider base URL.",
       model,
-      error: error instanceof Error ? error.message : "Could not resolve provider base URL.",
+      providerLabel,
+      providerType: instance.type,
     };
   }
 
   return {
-    configured: true,
-    compatible: true,
     active: true,
-    providerType: instance.type,
-    providerLabel,
-    baseUrl,
     apiKey: apiKey ?? "",
-    model,
+    baseUrl,
+    compatible: true,
+    configured: true,
     error: null,
+    model,
+    providerLabel,
+    providerType: instance.type,
   };
 }

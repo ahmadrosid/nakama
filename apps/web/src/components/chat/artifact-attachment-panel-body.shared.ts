@@ -17,7 +17,7 @@ const VIDEO_ARTIFACT_PANEL_WIDTH = 420;
 
 export function artifactPanelDefaultWidth(
   filename: string,
-  mimeType: string,
+  mimeType: string
 ): number {
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isImage = isImageArtifactMimeType(mimeType);
@@ -54,8 +54,6 @@ export function artifactPanelBodyClassName({
   if (!isMarkdown) {
     return "flex flex-col overflow-hidden";
   }
-
-  return undefined;
 }
 
 export function artifactPanelSubtitle({

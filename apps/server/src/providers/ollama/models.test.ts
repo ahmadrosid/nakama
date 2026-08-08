@@ -7,7 +7,9 @@ describe("fetchOllamaModels", () => {
       const url = String(input);
 
       if (url.endsWith("/models")) {
-        return new Response(JSON.stringify({ data: [{ id: "llama3" }] }), { status: 200 });
+        return new Response(JSON.stringify({ data: [{ id: "llama3" }] }), {
+          status: 200,
+        });
       }
 
       throw new Error(`unexpected fetch: ${url}`);
@@ -33,7 +35,7 @@ describe("fetchOllamaModels", () => {
           JSON.stringify({
             models: [{ name: "gemma3:latest" }, { model: "llama3" }],
           }),
-          { status: 200 },
+          { status: 200 }
         );
       }
 
@@ -60,10 +62,15 @@ describe("fetchOllamaModels", () => {
       }
 
       if (url.endsWith("/api/tags")) {
-        seen.push(String((init?.headers as Record<string, string>)?.Authorization ?? ""));
-        return new Response(JSON.stringify({ models: [{ name: "gpt-oss:120b" }] }), {
-          status: 200,
-        });
+        seen.push(
+          String((init?.headers as Record<string, string>)?.Authorization ?? "")
+        );
+        return new Response(
+          JSON.stringify({ models: [{ name: "gpt-oss:120b" }] }),
+          {
+            status: 200,
+          }
+        );
       }
 
       throw new Error(`unexpected fetch: ${url}`);

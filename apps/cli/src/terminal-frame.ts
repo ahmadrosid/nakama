@@ -1,20 +1,20 @@
 import {
   plainLine,
+  type StyledLine,
   serializeStyledLine,
   styledLineWidth,
-  type StyledLine,
 } from "./styled-text";
 
 export interface FrameModel {
-  lines: StyledLine[];
-  topRow: number;
-  scrollTop: number;
-  scrollBottom: number;
   cursor: {
     row: number;
     col: number;
     visible: boolean;
   };
+  lines: StyledLine[];
+  scrollBottom: number;
+  scrollTop: number;
+  topRow: number;
 }
 
 export type DiffOp =
@@ -48,10 +48,13 @@ function canScrollUpOne(previous: FrameModel, next: FrameModel): boolean {
   // it's a pinned line (status line, debug line, etc.) — exclude it from
   // the scroll comparison so content above it can use the scroll_up
   // optimization.
-  const hasPinnedBottom = lineKey(next.lines[end]) === lineKey(previous.lines[end]);
+  const hasPinnedBottom =
+    lineKey(next.lines[end]) === lineKey(previous.lines[end]);
   const limit = hasPinnedBottom ? end - 1 : end;
 
-  if (limit <= start) return false;
+  if (limit <= start) {
+    return false;
+  }
 
   for (let index = start; index < limit; index += 1) {
     if (lineKey(next.lines[index]) !== lineKey(previous.lines[index + 1])) {
@@ -62,7 +65,10 @@ function canScrollUpOne(previous: FrameModel, next: FrameModel): boolean {
   return true;
 }
 
-export function diffFrames(previous: FrameModel | null, next: FrameModel): DiffOp[] {
+export function diffFrames(
+  previous: FrameModel | null,
+  next: FrameModel
+): DiffOp[] {
   const operations: DiffOp[] = [];
 
   if (
@@ -71,29 +77,33 @@ export function diffFrames(previous: FrameModel | null, next: FrameModel): DiffO
     previous.scrollBottom !== next.scrollBottom
   ) {
     operations.push({
+      bottom: next.scrollBottom,
       kind: "set_scroll_region",
       top: next.scrollTop,
-      bottom: next.scrollBottom,
     });
   }
 
   if (!previous || previous.cursor.visible !== next.cursor.visible) {
-    operations.push({ kind: "set_cursor_visibility", visible: next.cursor.visible });
+    operations.push({
+      kind: "set_cursor_visibility",
+      visible: next.cursor.visible,
+    });
   }
 
   const handledRows = new Set<number>();
 
   if (previous && canScrollUpOne(previous, next)) {
     operations.push({
-      kind: "scroll_up",
-      top: next.scrollTop,
       bottom: next.scrollBottom,
+      kind: "scroll_up",
       lines: 1,
+      top: next.scrollTop,
     });
 
     const start = next.scrollTop - next.topRow;
     const end = next.scrollBottom - next.topRow;
-    const hasPinnedBottom = lineKey(next.lines[end]) === lineKey(previous.lines[end]);
+    const hasPinnedBottom =
+      lineKey(next.lines[end]) === lineKey(previous.lines[end]);
     const limit = hasPinnedBottom ? end - 1 : end;
 
     for (let index = start; index < limit; index += 1) {
@@ -106,8 +116,8 @@ export function diffFrames(previous: FrameModel | null, next: FrameModel): DiffO
     if (hasPinnedBottom) {
       operations.push({
         kind: "write_line",
-        row: next.topRow + end,
         line: next.lines[end],
+        row: next.topRow + end,
       });
       handledRows.add(end);
     }
@@ -130,16 +140,16 @@ export function diffFrames(previous: FrameModel | null, next: FrameModel): DiffO
     if (!previousLine || lineKey(previousLine) !== lineKey(nextLine)) {
       operations.push({
         kind: "write_line",
-        row: next.topRow + index,
         line: nextLine,
+        row: next.topRow + index,
       });
     }
   }
 
   operations.push({
+    col: next.cursor.col,
     kind: "set_cursor",
     row: next.cursor.row,
-    col: next.cursor.col,
   });
 
   return operations;
@@ -168,7 +178,9 @@ export function serializeDiffOps(operations: DiffOp[]): string {
     }
 
     if (operation.kind === "write_line") {
-      chunks.push(`\x1b[${operation.row};1H\x1b[K${serializeStyledLine(operation.line)}`);
+      chunks.push(
+        `\x1b[${operation.row};1H\x1b[K${serializeStyledLine(operation.line)}`
+      );
       continue;
     }
 
@@ -180,7 +192,11 @@ export function serializeDiffOps(operations: DiffOp[]): string {
   return chunks.join("");
 }
 
-export function clampFrameCursor(frame: FrameModel, rows: number, columns: number): FrameModel {
+export function clampFrameCursor(
+  frame: FrameModel,
+  rows: number,
+  columns: number
+): FrameModel {
   const maxRow = Math.max(1, rows);
   const maxCol = Math.max(1, columns);
   const row = Math.min(maxRow, Math.max(1, frame.cursor.row));
@@ -190,8 +206,8 @@ export function clampFrameCursor(frame: FrameModel, rows: number, columns: numbe
     ...frame,
     cursor: {
       ...frame.cursor,
-      row,
       col,
+      row,
     },
   };
 }

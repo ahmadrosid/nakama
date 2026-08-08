@@ -3,7 +3,7 @@ import type { DiscoveredSkill } from "./types";
 export const AGENT_BROWSER_SKILL_NAME = "agent-browser";
 
 export function composeAgentBrowserCapabilityPrompt(
-  skills: Pick<DiscoveredSkill, "name">[],
+  skills: Pick<DiscoveredSkill, "name">[]
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
   if (!skill) {
@@ -29,7 +29,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
     "",
     ...skills.map(
       (skill) =>
-        `- **${skill.name}**: ${skill.description}${skill.hasTool ? " (includes tool)" : ""}`,
+        `- **${skill.name}**: ${skill.description}${skill.hasTool ? " (includes tool)" : ""}`
     ),
   ];
 
@@ -38,7 +38,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
 
 export function composeMatchedSkillsPrompt(
   skills: DiscoveredSkill[],
-  options: { explicitInvocation?: boolean } = {},
+  options: { explicitInvocation?: boolean } = {}
 ): string {
   if (skills.length === 0) {
     return "";

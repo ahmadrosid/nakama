@@ -1,36 +1,39 @@
 import { expect, test } from "bun:test";
-import { finalizeAgentTodosIfComplete, hasActiveAgentTodos } from "./agent-todo";
+import {
+  finalizeAgentTodosIfComplete,
+  hasActiveAgentTodos,
+} from "./agent-todo";
 
 test("hasActiveAgentTodos is true when pending or in_progress remain", () => {
   expect(
     hasActiveAgentTodos([
-      { id: "1", content: "Done", status: "completed" },
-      { id: "2", content: "Next", status: "pending" },
-    ]),
+      { content: "Done", id: "1", status: "completed" },
+      { content: "Next", id: "2", status: "pending" },
+    ])
   ).toBe(true);
 });
 
 test("hasActiveAgentTodos is false when all todos are terminal", () => {
   expect(
     hasActiveAgentTodos([
-      { id: "1", content: "Done", status: "completed" },
-      { id: "2", content: "Skip", status: "cancelled" },
-    ]),
+      { content: "Done", id: "1", status: "completed" },
+      { content: "Skip", id: "2", status: "cancelled" },
+    ])
   ).toBe(false);
 });
 
 test("finalizeAgentTodosIfComplete clears terminal-only plans", () => {
   expect(
     finalizeAgentTodosIfComplete([
-      { id: "1", content: "Done", status: "completed" },
-    ]),
+      { content: "Done", id: "1", status: "completed" },
+    ])
   ).toEqual([]);
 });
 
 test("finalizeAgentTodosIfComplete keeps active plans", () => {
   const todos = [
-    { id: "1", content: "Done", status: "completed" as const },
-    { id: "2", content: "Next", status: "pending" as const },
+    { content: "Done", id: "1", status: "completed" as const },
+    { content: "Next", id: "2", status: "pending" as const },
   ];
 
   expect(finalizeAgentTodosIfComplete(todos)).toEqual(todos);

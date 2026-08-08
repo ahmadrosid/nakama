@@ -2,11 +2,14 @@ import type { SessionSummary } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
-import { usePurgeSessionMutation, useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
-import { formatError } from "@/lib/client";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { useProfilesQuery } from "@/hooks/use-app-queries";
+import {
+  useHistorySessionsQuery,
+  usePurgeSessionMutation,
+} from "@/hooks/use-resource-mutations";
 import { resolveHistoryProfileId } from "@/lib/chat-history";
+import { formatError } from "@/lib/client";
 import { HistoryDeleteDialog } from "@/pages/history-delete-dialog";
 import { HistorySessionsPanel } from "@/pages/history-sessions-panel";
 
@@ -47,10 +50,10 @@ export function HistoryPage() {
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setLiveChatProfileId, setSearchParams],
+    [setLiveChatProfileId, setSearchParams]
   );
 
   useEffect(() => {
@@ -67,9 +70,9 @@ export function HistoryPage() {
 
     profileInitializedRef.current = true;
     const resolvedProfileId = resolveHistoryProfileId({
-      search: searchParams.toString(),
-      profiles,
       liveChatProfileId,
+      profiles,
+      search: searchParams.toString(),
     });
     if (resolvedProfileId) {
       setProfileId(resolvedProfileId);
@@ -124,7 +127,7 @@ export function HistoryPage() {
   }, [filteredSessions.length, initialLoading, isSearching, sessions.length]);
 
   async function handleDeleteConfirm() {
-    if (!deleteTarget || !profileId) {
+    if (!(deleteTarget && profileId)) {
       return;
     }
 
@@ -132,9 +135,9 @@ export function HistoryPage() {
 
     try {
       await purgeMutation.mutateAsync({
+        channel: deleteTarget.channel,
         profileId,
         sessionId: deleteTarget.id,
-        channel: deleteTarget.channel,
       });
       setDeleteTarget(null);
     } catch (err) {
@@ -152,41 +155,41 @@ export function HistoryPage() {
   return (
     <div className="space-y-4">
       {error ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {error}
         </p>
       ) : null}
 
       <section className="overflow-hidden rounded-md border border-border bg-card">
         <HistorySessionsPanel
-          profiles={profiles}
-          profileId={profileId}
-          searchQuery={searchQuery}
-          countLabel={countLabel}
-          refreshing={refreshing}
           busy={busy}
-          initialLoading={initialLoading}
-          sessions={sessions}
+          countLabel={countLabel}
           filteredSessions={filteredSessions}
-          onSearchChange={setSearchQuery}
+          initialLoading={initialLoading}
           onClearSearch={() => setSearchQuery("")}
-          onRefresh={() => void refetchSessions()}
-          onGoToProfiles={() => navigateToPage("profiles")}
-          onGoToChat={() => navigateToPage("chat")}
-          onOpenSession={handleOpen}
           onDeleteSession={setDeleteTarget}
+          onGoToChat={() => navigateToPage("chat")}
+          onGoToProfiles={() => navigateToPage("profiles")}
+          onOpenSession={handleOpen}
+          onRefresh={() => void refetchSessions()}
+          onSearchChange={setSearchQuery}
+          profileId={profileId}
+          profiles={profiles}
+          refreshing={refreshing}
+          searchQuery={searchQuery}
+          sessions={sessions}
         />
       </section>
 
       <HistoryDeleteDialog
-        deleteTarget={deleteTarget}
         busy={busy}
+        deleteTarget={deleteTarget}
+        onConfirm={() => void handleDeleteConfirm()}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!(open || busy)) {
             setDeleteTarget(null);
           }
         }}
-        onConfirm={() => void handleDeleteConfirm()}
       />
     </div>
   );

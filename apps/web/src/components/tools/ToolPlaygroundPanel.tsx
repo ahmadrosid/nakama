@@ -1,14 +1,14 @@
 import type { ToolDetail } from "@nakama/core/contract";
 import { PlayIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import { ToolSourceCodeBlock } from "@/components/tools/ToolSourceCodeBlock";
 import {
   formatToolPlaygroundResult,
   type ToolPlaygroundRunControls,
 } from "@/components/tools/use-tool-playground-run";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 
 export function ToolPlaygroundRunForm({
   tool,
@@ -22,29 +22,33 @@ export function ToolPlaygroundRunForm({
       <div>
         <h3 className="type-section-title">Run</h3>
         <p className="type-body mt-1 text-xs">
-          Real side effects. Relative paths resolve in the assigned profile workspace under{" "}
+          Real side effects. Relative paths resolve in the assigned profile
+          workspace under{" "}
           <code className="type-code">~/.nakama/orgs/…/profiles/…/</code>.
         </p>
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <label className="text-xs font-medium text-foreground" htmlFor={`${tool.id}-assist`}>
+        <label
+          className="font-medium text-foreground text-xs"
+          htmlFor={`${tool.id}-assist`}
+        >
           Describe test (optional)
         </label>
         <Input
+          disabled={run.suggesting || run.running}
           id={`${tool.id}-assist`}
-          value={run.assistPrompt}
           onChange={(event) => run.setAssistPrompt(event.target.value)}
           placeholder="e.g. convert sample.mp4 to sample.mp3"
-          disabled={run.suggesting || run.running}
+          value={run.assistPrompt}
         />
         <Button
-          type="button"
-          variant="outline"
-          size="sm"
           className="w-full"
           disabled={run.suggesting || run.running}
           onClick={() => void run.handleSuggestParams()}
+          size="sm"
+          type="button"
+          variant="outline"
         >
           {run.suggesting ? <Spinner className="size-4" /> : null}
           Suggest params
@@ -52,36 +56,45 @@ export function ToolPlaygroundRunForm({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <label className="text-xs font-medium text-foreground" htmlFor={`${tool.id}-params`}>
+        <label
+          className="font-medium text-foreground text-xs"
+          htmlFor={`${tool.id}-params`}
+        >
           Parameters (JSON)
         </label>
         <Textarea
+          className="font-mono text-xs"
+          disabled={run.running}
           id={`${tool.id}-params`}
-          value={run.parametersJson}
           onChange={(event) => {
             run.setParametersJson(event.target.value);
           }}
           rows={10}
-          className="font-mono text-xs"
           spellCheck={false}
-          disabled={run.running}
+          value={run.parametersJson}
         />
-        {run.jsonError ? <p className="text-xs text-destructive">{run.jsonError}</p> : null}
+        {run.jsonError ? (
+          <p className="text-destructive text-xs">{run.jsonError}</p>
+        ) : null}
       </div>
 
       <Button
-        type="button"
-        size="sm"
         className="w-full"
         disabled={run.running}
         onClick={() => void run.handleRun()}
+        size="sm"
+        type="button"
       >
-        {run.running ? <Spinner className="size-4" /> : <PlayIcon className="size-4" />}
+        {run.running ? (
+          <Spinner className="size-4" />
+        ) : (
+          <PlayIcon className="size-4" />
+        )}
         Run
       </Button>
 
       {run.actionError ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
           {run.actionError}
         </p>
       ) : null}
@@ -99,13 +112,13 @@ export function ToolPlaygroundOutput({
   return (
     <div className="min-h-32">
       {run.runState.status === "idle" ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Run the tool to see raw JSON output or errors here.
         </p>
       ) : null}
 
       {run.runState.status === "running" ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
           <Spinner className="size-4" />
           Executing tool…
         </div>
@@ -120,9 +133,16 @@ export function ToolPlaygroundOutput({
 
       {run.runState.status === "error" ? (
         <div className="space-y-3">
-          <pre className="text-xs leading-relaxed text-destructive">{run.runState.error}</pre>
+          <pre className="text-destructive text-xs leading-relaxed">
+            {run.runState.error}
+          </pre>
           {superBotProfileId ? (
-            <Button type="button" size="sm" variant="outline" onClick={run.handleFixWithSuperBot}>
+            <Button
+              onClick={run.handleFixWithSuperBot}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
               Fix with Super Bot
             </Button>
           ) : null}

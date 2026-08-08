@@ -5,33 +5,33 @@ export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
 export const MAX_EMAIL_MESSAGE_BYTES = 10 * 1024 * 1024;
 
 export interface MailAttachment {
-  id: string;
+  disposition: "attachment" | "inline" | null;
   filename: string;
+  id: string;
   mediaType: string;
   size: number;
-  disposition: "attachment" | "inline" | null;
 }
 
 export interface MailMessageSummary {
-  uid: number;
-  subject: string;
-  from: string;
   date: string;
   folder: string;
+  from: string;
+  subject: string;
+  uid: number;
 }
 
 export interface MailMessage extends MailMessageSummary {
-  text?: string;
-  html?: string;
-  truncated?: boolean;
   attachments?: MailAttachment[];
+  html?: string;
+  text?: string;
+  truncated?: boolean;
 }
 
 export interface MailSendInput {
-  to: string;
+  html?: string;
   subject: string;
   text: string;
-  html?: string;
+  to: string;
 }
 
 export interface MailSendResult {
@@ -42,16 +42,16 @@ export interface MailReader {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listMessages(folder: string, limit: number): Promise<MailMessageSummary[]>;
-  readMessage(folder: string, uid: number): Promise<MailMessage | null>;
   readAttachment(
     folder: string,
     uid: number,
-    attachmentId: string,
+    attachmentId: string
   ): Promise<{ metadata: MailAttachment; data: Buffer } | null>;
+  readMessage(folder: string, uid: number): Promise<MailMessage | null>;
   searchMessages(
     folder: string,
     query: string,
-    limit: number,
+    limit: number
   ): Promise<MailMessageSummary[]>;
 }
 
@@ -61,7 +61,9 @@ export interface MailSender {
 
 export type MailboxConfig = ReturnType<typeof toMailboxConfig>;
 
-export function emailConfigToMailboxConfig(config: EmailConfigFile): MailboxConfig {
+export function emailConfigToMailboxConfig(
+  config: EmailConfigFile
+): MailboxConfig {
   return toMailboxConfig(config);
 }
 
@@ -84,7 +86,10 @@ export function formatMailAddress(value: unknown): string {
   return "";
 }
 
-export function truncateMailBody(value: string, maxBytes = MAX_EMAIL_BODY_BYTES): {
+export function truncateMailBody(
+  value: string,
+  maxBytes = MAX_EMAIL_BODY_BYTES
+): {
   text: string;
   truncated: boolean;
 } {

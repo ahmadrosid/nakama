@@ -1,10 +1,10 @@
-import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { SetupWizard } from "@/components/setup-wizard/SetupWizard";
+import { Navigate } from "react-router-dom";
 import { SetupLayout } from "@/components/SetupLayout";
+import { SetupWizard } from "@/components/setup-wizard/SetupWizard";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/context/use-auth";
 import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
 import { pathForPage, SETUP_PATH } from "@/lib/navigation";
 
 export function SetupWizardPage() {
@@ -35,11 +35,11 @@ export function SetupWizardPage() {
 
   // Account/org already exist — provider setup needs an authenticated session.
   if (health?.userConfigured === true && !isAuthenticated) {
-    return <Navigate to="/login" state={{ from: SETUP_PATH }} replace />;
+    return <Navigate replace state={{ from: SETUP_PATH }} to="/login" />;
   }
 
   if (isFullyConfigured && !wizardInProgress) {
-    return <Navigate to={pathForPage("chat")} replace />;
+    return <Navigate replace to={pathForPage("chat")} />;
   }
 
   return (

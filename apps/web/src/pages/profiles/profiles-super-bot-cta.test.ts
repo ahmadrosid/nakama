@@ -3,19 +3,19 @@ import type { ProfileSummary } from "@nakama/core/contract";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 
 function profile(
-  partial: Pick<ProfileSummary, "id" | "name" | "isSuper" | "isDefault">,
+  partial: Pick<ProfileSummary, "id" | "name" | "isSuper" | "isDefault">
 ): ProfileSummary {
   return {
-    id: partial.id,
-    name: partial.name,
-    isSuper: partial.isSuper,
-    isDefault: partial.isDefault,
-    model: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     hasAvatar: false,
+    id: partial.id,
+    isDefault: partial.isDefault,
+    isSuper: partial.isSuper,
+    mcpServerCount: 0,
+    model: null,
+    name: partial.name,
     soulActive: false,
     toolCount: 0,
-    mcpServerCount: 0,
-    createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
@@ -24,18 +24,32 @@ describe("resolveSuperBotChatProfileId", () => {
   test("returns the super bot profile id when present", () => {
     expect(
       resolveSuperBotChatProfileId([
-        profile({ id: "default", name: "Default", isSuper: false, isDefault: true }),
-        profile({ id: "super_bot", name: "Super Bot", isSuper: true, isDefault: false }),
-      ]),
+        profile({
+          id: "default",
+          isDefault: true,
+          isSuper: false,
+          name: "Default",
+        }),
+        profile({
+          id: "super_bot",
+          isDefault: false,
+          isSuper: true,
+          name: "Super Bot",
+        }),
+      ])
     ).toBe("super_bot");
   });
 
   test("returns null when no super bot exists", () => {
     expect(
       resolveSuperBotChatProfileId([
-        profile({ id: "default", name: "Default", isSuper: false, isDefault: true }),
-      ]),
+        profile({
+          id: "default",
+          isDefault: true,
+          isSuper: false,
+          name: "Default",
+        }),
+      ])
     ).toBeNull();
   });
-
 });

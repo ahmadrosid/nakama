@@ -1,25 +1,31 @@
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { parseIni, pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./fs";
+import {
+  parseIni,
+  pathExists,
+  readTextOrNull,
+  removeFile,
+  writePrivateTextFile,
+} from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
 
 export interface WhatsAppConfigFile {
-  phoneNumber: string;
-  profileId: string;
-  pairingCode: string | null;
+  outboundPort?: string | null;
   pairedJid: string | null;
   pairedLid: string | null;
-  outboundPort?: string | null;
+  pairingCode: string | null;
+  phoneNumber: string;
+  profileId: string;
 }
 
 export interface WhatsAppSettingsPublic {
   configured: boolean;
-  phoneNumberMasked: string | null;
-  pairingCode: string | null;
   pairedJid: string | null;
+  pairingCode: string | null;
+  phoneNumberMasked: string | null;
   profileId: string;
 }
 
@@ -94,7 +100,7 @@ function normalizeWhatsAppUserJid(jid: string): string {
 }
 
 function isSameWhatsAppUserJid(left: string, right: string): boolean {
-  if (!left || !right) {
+  if (!(left && right)) {
     return false;
   }
 
@@ -102,7 +108,10 @@ function isSameWhatsAppUserJid(left: string, right: string): boolean {
     return true;
   }
 
-  if (whatsAppJidServer(left) !== "s.whatsapp.net" || whatsAppJidServer(right) !== "s.whatsapp.net") {
+  if (
+    whatsAppJidServer(left) !== "s.whatsapp.net" ||
+    whatsAppJidServer(right) !== "s.whatsapp.net"
+  ) {
     return false;
   }
 
@@ -113,7 +122,7 @@ function isSameWhatsAppUserJid(left: string, right: string): boolean {
 
 export function isWhatsAppUserAuthorized(
   jid: string,
-  config: Pick<WhatsAppConfigFile, "pairedJid" | "pairedLid">,
+  config: Pick<WhatsAppConfigFile, "pairedJid" | "pairedLid">
 ): boolean {
   if (!config.pairedJid) {
     return false;
@@ -145,34 +154,35 @@ export async function loadWhatsAppConfigFile(): Promise<WhatsAppConfigFile | nul
   const outboundPort = values.outbound_port?.trim() || null;
 
   return {
-    phoneNumber,
-    profileId,
-    pairingCode,
+    outboundPort,
     pairedJid,
     pairedLid,
-    outboundPort,
+    pairingCode,
+    phoneNumber,
+    profileId,
   };
 }
 
 export function toWhatsAppSettingsPublic(
-  file: WhatsAppConfigFile | null,
+  file: WhatsAppConfigFile | null
 ): WhatsAppSettingsPublic {
   if (!file) {
     return {
       configured: false,
-      phoneNumberMasked: null,
-      pairingCode: null,
       pairedJid: null,
+      pairingCode: null,
+      phoneNumberMasked: null,
       profileId: DEFAULT_WHATSAPP_PROFILE_ID,
     };
   }
 
   return {
     configured: true,
-    phoneNumberMasked:
-      maskPhoneNumber(file.phoneNumber) ?? maskPhoneNumberFromJid(file.pairedJid),
-    pairingCode: file.pairingCode,
     pairedJid: file.pairedJid,
+    pairingCode: file.pairingCode,
+    phoneNumberMasked:
+      maskPhoneNumber(file.phoneNumber) ??
+      maskPhoneNumberFromJid(file.pairedJid),
     profileId: file.profileId,
   };
 }
@@ -181,11 +191,15 @@ export async function loadWhatsAppSettingsPublic(): Promise<WhatsAppSettingsPubl
   return toWhatsAppSettingsPublic(await loadWhatsAppConfigFile());
 }
 
-async function writeWhatsAppConfigFile(config: WhatsAppConfigFile): Promise<void> {
+async function writeWhatsAppConfigFile(
+  config: WhatsAppConfigFile
+): Promise<void> {
   const lines = [
     "# Nakama WhatsApp bridge",
     `profile_id=${config.profileId}`,
-    ...(config.phoneNumber.trim() ? [`phone_number=${config.phoneNumber}`] : []),
+    ...(config.phoneNumber.trim()
+      ? [`phone_number=${config.phoneNumber}`]
+      : []),
     ...(config.pairingCode ? [`pairing_code=${config.pairingCode}`] : []),
     ...(config.pairedJid ? [`paired_jid=${config.pairedJid}`] : []),
     ...(config.pairedLid ? [`paired_lid=${config.pairedLid}`] : []),
@@ -199,23 +213,27 @@ async function writeWhatsAppConfigFile(config: WhatsAppConfigFile): Promise<void
 
 function resolvePhoneNumber(
   input: UpdateWhatsAppSettingsInput,
-  existing: WhatsAppConfigFile | null,
+  existing: WhatsAppConfigFile | null
 ): string {
-  return input.phoneNumber !== undefined
-    ? input.phoneNumber.trim()
-    : (existing?.phoneNumber ?? "");
+  return input.phoneNumber === undefined
+    ? (existing?.phoneNumber ?? "")
+    : input.phoneNumber.trim();
 }
 
 function resolveProfileId(
   input: UpdateWhatsAppSettingsInput,
-  existing: WhatsAppConfigFile | null,
+  existing: WhatsAppConfigFile | null
 ): string {
-  return input.profileId?.trim() || existing?.profileId || DEFAULT_WHATSAPP_PROFILE_ID;
+  return (
+    input.profileId?.trim() ||
+    existing?.profileId ||
+    DEFAULT_WHATSAPP_PROFILE_ID
+  );
 }
 
 function resolvePairingCode(
   existing: WhatsAppConfigFile | null,
-  pairedJid: string | null,
+  pairedJid: string | null
 ): string | null {
   if (pairedJid) {
     return null;
@@ -226,22 +244,22 @@ function resolvePairingCode(
 
 function buildSavedWhatsAppConfig(
   input: UpdateWhatsAppSettingsInput,
-  existing: WhatsAppConfigFile | null,
+  existing: WhatsAppConfigFile | null
 ): WhatsAppConfigFile {
   const phoneNumber = resolvePhoneNumber(input, existing);
   const pairedJid = existing?.pairedJid ?? null;
 
   return {
-    phoneNumber,
-    profileId: resolveProfileId(input, existing),
-    pairingCode: resolvePairingCode(existing, pairedJid),
     pairedJid,
     pairedLid: existing?.pairedLid ?? null,
+    pairingCode: resolvePairingCode(existing, pairedJid),
+    phoneNumber,
+    profileId: resolveProfileId(input, existing),
   };
 }
 
 export async function saveWhatsAppConfig(
-  input: UpdateWhatsAppSettingsInput,
+  input: UpdateWhatsAppSettingsInput
 ): Promise<WhatsAppSettingsPublic> {
   const existing = await loadWhatsAppConfigFile();
   const next = buildSavedWhatsAppConfig(input, existing);
@@ -266,7 +284,7 @@ export async function resetWhatsAppSessionForReconnect(): Promise<WhatsAppSettin
   }
 
   if (await pathExists(getWhatsAppAuthDir())) {
-    await rm(getWhatsAppAuthDir(), { recursive: true, force: true });
+    await rm(getWhatsAppAuthDir(), { force: true, recursive: true });
   }
 
   const qrPath = getWhatsAppQrCodePath();
@@ -276,9 +294,9 @@ export async function resetWhatsAppSessionForReconnect(): Promise<WhatsAppSettin
 
   const next: WhatsAppConfigFile = {
     ...existing,
-    pairingCode: null,
     pairedJid: null,
     pairedLid: null,
+    pairingCode: null,
   };
 
   await writeWhatsAppConfigFile(next);
@@ -289,7 +307,9 @@ export async function regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsP
   const existing = await loadWhatsAppConfigFile();
 
   if (!existing) {
-    throw new Error("Enable WhatsApp in Integrations before generating a pairing code.");
+    throw new Error(
+      "Enable WhatsApp in Integrations before generating a pairing code."
+    );
   }
 
   const next: WhatsAppConfigFile = {
@@ -303,32 +323,38 @@ export async function regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsP
 
 export async function verifyAndPairWhatsAppUser(
   pairingCodeInput: string,
-  jid: string,
+  jid: string
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const config = await loadWhatsAppConfigFile();
 
   if (!config) {
-    return { ok: false, message: "WhatsApp is not configured on the server yet." };
+    return {
+      message: "WhatsApp is not configured on the server yet.",
+      ok: false,
+    };
   }
 
   if (isWhatsAppUserAuthorized(jid, config)) {
-    return { ok: true, message: "This number is already linked." };
+    return { message: "This number is already linked.", ok: true };
   }
 
   const expected = config.pairingCode;
 
   if (!expected) {
     return {
-      ok: false,
       message:
         "No pairing code is active. Open Nakama Integrations \u2192 WhatsApp and generate a new code.",
+      ok: false,
     };
   }
 
-  if (normalizePairingCode(pairingCodeInput) !== normalizePairingCode(expected)) {
+  if (
+    normalizePairingCode(pairingCodeInput) !== normalizePairingCode(expected)
+  ) {
     return {
+      message:
+        "Invalid pairing code. Copy it from Integrations \u2192 WhatsApp and try again.",
       ok: false,
-      message: "Invalid pairing code. Copy it from Integrations \u2192 WhatsApp and try again.",
     };
   }
 
@@ -336,20 +362,21 @@ export async function verifyAndPairWhatsAppUser(
   const phoneFromJid = isLid ? "" : whatsAppUserDigits(jid);
   const pairedLid = isLid ? jid : config.pairedLid;
   const pairedJid = isLid
-    ? config.pairedJid ?? (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null)
+    ? (config.pairedJid ??
+      (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null))
     : jid;
 
   await writeWhatsAppConfigFile({
     ...config,
-    phoneNumber: phoneFromJid || config.phoneNumber,
     pairedJid,
     pairedLid,
     pairingCode: null,
+    phoneNumber: phoneFromJid || config.phoneNumber,
   });
 
   return {
-    ok: true,
     message: "Linked successfully. You can chat with Nakama now.",
+    ok: true,
   };
 }
 
@@ -369,12 +396,12 @@ export async function syncWhatsAppOwnerPairing(options: {
   const ownerLid = options.ownerLid?.trim() || null;
   const next: WhatsAppConfigFile = {
     ...config,
-    phoneNumber: ownerPhone || config.phoneNumber,
     pairedJid: config.pairedJid ?? options.ownerJid,
     // Preserve an existing chat LID. `me.lid` can be a device/account LID, which
     // does not always match the private self-chat JID used for inbound messages.
     pairedLid: config.pairedLid ?? ownerLid,
     pairingCode: null,
+    phoneNumber: ownerPhone || config.phoneNumber,
   };
 
   if (
@@ -395,18 +422,19 @@ export function resolveWhatsAppConfigFromSources(options: {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
 
-  if (!file && !env.WHATSAPP_PHONE_NUMBER?.trim()) {
+  if (!(file || env.WHATSAPP_PHONE_NUMBER?.trim())) {
     return null;
   }
 
   return {
-    phoneNumber: env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
+    pairedJid: file?.pairedJid ?? null,
+    pairedLid: file?.pairedLid ?? null,
+    pairingCode: file?.pairingCode ?? null,
+    phoneNumber:
+      env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
       env.nakama_WHATSAPP_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_WHATSAPP_PROFILE_ID,
-    pairingCode: file?.pairingCode ?? null,
-    pairedJid: file?.pairedJid ?? null,
-    pairedLid: file?.pairedLid ?? null,
   };
 }

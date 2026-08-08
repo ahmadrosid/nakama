@@ -8,8 +8,8 @@ import type {
 import { createId, NakamaApiError } from "@nakama/core";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import type { DatabaseAdapter, StoredTaskRecord } from "@nakama/db";
-import { isValidTaskStatus, validateTaskInput } from "./task-validate";
 import type { TaskRunner } from "./task-runner";
+import { isValidTaskStatus, validateTaskInput } from "./task-validate";
 
 /** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
 export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
@@ -41,32 +41,32 @@ export class TaskService {
     orgId: string,
     input: CreateTaskRequest,
     profileIdOverride?: string,
-    access?: ProfileAccess,
+    access?: ProfileAccess
   ): Promise<StoredTask> {
     const status = input.status ?? "backlog";
     validateTaskInput({
-      title: input.title,
       prompt: input.prompt,
       status,
+      title: input.title,
     });
 
     const profileId = await this.resolveProfileId(
       orgId,
       profileIdOverride ?? input.profileId,
-      access,
+      access
     );
 
     const now = new Date().toISOString();
     const task: StoredTaskRecord = {
-      id: createId("task"),
-      title: input.title.trim(),
-      description: input.description?.trim() ?? "",
-      prompt: input.prompt.trim(),
-      profileId,
-      orgId,
-      status,
-      position: await this.nextPosition(orgId, status),
       createdAt: now,
+      description: input.description?.trim() ?? "",
+      id: createId("task"),
+      orgId,
+      position: await this.nextPosition(orgId, status),
+      profileId,
+      prompt: input.prompt.trim(),
+      status,
+      title: input.title.trim(),
       updatedAt: now,
     };
 
@@ -78,7 +78,7 @@ export class TaskService {
     id: string,
     orgId: string,
     input: UpdateTaskRequest,
-    options?: { triggerRun?: boolean; access?: ProfileAccess },
+    options?: { triggerRun?: boolean; access?: ProfileAccess }
   ): Promise<StoredTask> {
     const existing = await this.db.getTask(id);
 
@@ -86,20 +86,26 @@ export class TaskService {
       throw new Error("Task not found.");
     }
 
-    const title = input.title !== undefined ? input.title.trim() : existing.title;
-    const prompt = input.prompt !== undefined ? input.prompt.trim() : existing.prompt;
+    const title =
+      input.title === undefined ? existing.title : input.title.trim();
+    const prompt =
+      input.prompt === undefined ? existing.prompt : input.prompt.trim();
     const status = input.status ?? existing.status;
 
     if (!isValidTaskStatus(status)) {
       throw new Error(`Invalid task status: ${status}`);
     }
 
-    validateTaskInput({ title, prompt, status });
+    validateTaskInput({ prompt, status, title });
 
     let profileId = existing.profileId;
 
     if (input.profileId !== undefined) {
-      profileId = await this.resolveProfileId(orgId, input.profileId, options?.access);
+      profileId = await this.resolveProfileId(
+        orgId,
+        input.profileId,
+        options?.access
+      );
     }
 
     const statusChanged = status !== existing.status;
@@ -113,13 +119,15 @@ export class TaskService {
 
     const updated: StoredTaskRecord = {
       ...existing,
-      title,
       description:
-        input.description !== undefined ? input.description.trim() : existing.description,
-      prompt,
-      profileId,
-      status,
+        input.description === undefined
+          ? existing.description
+          : input.description.trim(),
       position,
+      profileId,
+      prompt,
+      status,
+      title,
       updatedAt: new Date().toISOString(),
     };
 
@@ -150,13 +158,13 @@ export class TaskService {
 
   async createRun(taskId: string): Promise<TaskRunRecord> {
     const run = {
-      id: createId("task_run"),
-      taskId,
-      status: "running" as const,
-      startedAt: new Date().toISOString(),
       completedAt: null,
-      output: null,
       error: null,
+      id: createId("task_run"),
+      output: null,
+      startedAt: new Date().toISOString(),
+      status: "running" as const,
+      taskId,
     };
 
     await this.db.insertTaskRun(run);
@@ -166,7 +174,7 @@ export class TaskService {
   async completeRun(
     runId: string,
     taskId: string,
-    result: { output?: string; error?: string },
+    result: { output?: string; error?: string }
   ): Promise<void> {
     const runs = await this.db.listTaskRuns(taskId, 100);
     const existing = runs.find((run) => run.id === runId);
@@ -177,15 +185,21 @@ export class TaskService {
 
     await this.db.updateTaskRun({
       ...existing,
-      status: result.error ? "failed" : "completed",
       completedAt: new Date().toISOString(),
-      output: result.output ?? null,
       error: result.error ?? null,
+      output: result.output ?? null,
+      status: result.error ? "failed" : "completed",
     });
   }
 
-  async listRuns(taskId: string, orgId?: string, limit = 20): Promise<TaskRunRecord[]> {
-    const task = orgId ? await this.get(taskId, orgId) : await this.db.getTask(taskId);
+  async listRuns(
+    taskId: string,
+    orgId?: string,
+    limit = 20
+  ): Promise<TaskRunRecord[]> {
+    const task = orgId
+      ? await this.get(taskId, orgId)
+      : await this.db.getTask(taskId);
 
     if (!task) {
       throw new Error("Task not found.");
@@ -203,8 +217,8 @@ export class TaskService {
 
     await this.db.upsertTask({
       ...existing,
-      status,
       position: await this.nextPosition(existing.orgId, status),
+      status,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -212,7 +226,7 @@ export class TaskService {
   private async resolveProfileId(
     orgId: string,
     profileId?: string,
-    access?: ProfileAccess,
+    access?: ProfileAccess
   ): Promise<string> {
     const trimmed = profileId?.trim();
 
@@ -220,7 +234,10 @@ export class TaskService {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
       if (profile) {
         if (profile.isSuper && access && !canAccessSuperBotProfile(access)) {
-          throw new NakamaApiError("Super Bot is only available to org admins.", 403);
+          throw new NakamaApiError(
+            "Super Bot is only available to org admins.",
+            403
+          );
         }
         return profile.id;
       }
@@ -236,7 +253,10 @@ export class TaskService {
     return defaultProfile.id;
   }
 
-  private async nextPosition(orgId: string, status: TaskStatus): Promise<number> {
+  private async nextPosition(
+    orgId: string,
+    status: TaskStatus
+  ): Promise<number> {
     const tasks = await this.db.listTasksForOrg(orgId);
     const inColumn = tasks.filter((task) => task.status === status);
 
@@ -253,15 +273,15 @@ export class TaskService {
     }
 
     return {
-      id: record.id,
-      title: record.title,
-      description: record.description,
-      prompt: record.prompt,
-      profileId: record.profileId,
-      status: record.status,
-      position: record.position,
-      sessionId: record.sessionId ?? null,
       createdAt: record.createdAt,
+      description: record.description,
+      id: record.id,
+      position: record.position,
+      profileId: record.profileId,
+      prompt: record.prompt,
+      sessionId: record.sessionId ?? null,
+      status: record.status,
+      title: record.title,
       updatedAt: record.updatedAt,
     };
   }

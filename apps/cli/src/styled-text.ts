@@ -5,16 +5,16 @@ export type NamedBackgroundColor = "surface";
 export type Theme = "dark" | "light";
 
 export interface TextStyle {
-  bold?: boolean;
-  dim?: boolean;
-  blink?: boolean;
-  color?: NamedColor;
   background?: NamedBackgroundColor;
+  blink?: boolean;
+  bold?: boolean;
+  color?: NamedColor;
+  dim?: boolean;
 }
 
 export interface StyledSegment {
-  text: string;
   style?: TextStyle;
+  text: string;
 }
 
 export interface StyledLine {
@@ -22,11 +22,11 @@ export interface StyledLine {
 }
 
 const COLOR_CODES: Record<NamedColor, string> = {
-  default: "39",
   cyan: "36",
-  yellow: "33",
-  red: "31",
+  default: "39",
   green: "32",
+  red: "31",
+  yellow: "33",
 };
 
 const BACKGROUND_CODES: Record<Theme, Record<NamedBackgroundColor, string>> = {
@@ -67,14 +67,16 @@ export async function detectTheme(): Promise<Theme | null> {
   const colorFgBg = process.env.COLORFGBG;
   if (colorFgBg) {
     const parts = colorFgBg.split(";");
-    const fg = parseInt(parts[0] ?? "", 10);
-    const bg = parseInt(parts[1] ?? "", 10);
-    if (!Number.isNaN(bg) && !Number.isNaN(fg)) {
+    const fg = Number.parseInt(parts[0] ?? "", 10);
+    const bg = Number.parseInt(parts[1] ?? "", 10);
+    if (!(Number.isNaN(bg) || Number.isNaN(fg))) {
       return bg > fg ? "light" : "dark";
     }
   }
 
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return null;
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
+    return null;
+  }
 
   return new Promise((resolve) => {
     const { stdin, stdout } = process;
@@ -82,11 +84,15 @@ export async function detectTheme(): Promise<Theme | null> {
     let resolved = false;
 
     const finish = (result: Theme | null) => {
-      if (resolved) return;
+      if (resolved) {
+        return;
+      }
       resolved = true;
       clearTimeout(timer);
       stdin.off("data", onData);
-      if (!wasRaw) stdin.pause();
+      if (!wasRaw) {
+        stdin.pause();
+      }
       resolve(result);
     };
 
@@ -94,17 +100,25 @@ export async function detectTheme(): Promise<Theme | null> {
 
     function onData(chunk: Buffer | string) {
       const response = String(chunk);
-      const match = response.match(/\x1b\]1[01];(?:rgb:)?([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})/);
-      if (!match) return;
-      const r = parseInt(match[1].slice(0, 2), 16);
-      const g = parseInt(match[2].slice(0, 2), 16);
-      const b = parseInt(match[3].slice(0, 2), 16);
-      if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return;
+      const match = response.match(
+        /\x1b\]1[01];(?:rgb:)?([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})\/([0-9a-fA-F]{2,4})/
+      );
+      if (!match) {
+        return;
+      }
+      const r = Number.parseInt(match[1].slice(0, 2), 16);
+      const g = Number.parseInt(match[2].slice(0, 2), 16);
+      const b = Number.parseInt(match[3].slice(0, 2), 16);
+      if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+        return;
+      }
       const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
       finish(luminance > 128 ? "light" : "dark");
     }
 
-    if (!wasRaw) stdin.resume();
+    if (!wasRaw) {
+      stdin.resume();
+    }
     stdin.on("data", onData);
     stdout.write("\x1b]11;?\x1b\\");
   });
@@ -115,14 +129,14 @@ export function plainLine(text: string): StyledLine {
 }
 
 export function styledLine(text: string, style?: TextStyle): StyledLine {
-  return { segments: [{ text, style }] };
+  return { segments: [{ style, text }] };
 }
 
 export function cloneStyledLine(line: StyledLine): StyledLine {
   return {
     segments: line.segments.map((segment) => ({
-      text: segment.text,
       style: segment.style ? { ...segment.style } : undefined,
+      text: segment.text,
     })),
   };
 }
@@ -151,11 +165,21 @@ export function serializeStyledLine(line: StyledLine): string {
     const style = segment.style;
     const codes: string[] = [];
 
-    if (style?.bold) codes.push("1");
-    if (style?.dim) codes.push("2");
-    if (style?.blink) codes.push("5");
-    if (style?.color) codes.push(COLOR_CODES[style.color]);
-    if (style?.background) codes.push(BACKGROUND_CODES[currentTheme][style.background]);
+    if (style?.bold) {
+      codes.push("1");
+    }
+    if (style?.dim) {
+      codes.push("2");
+    }
+    if (style?.blink) {
+      codes.push("5");
+    }
+    if (style?.color) {
+      codes.push(COLOR_CODES[style.color]);
+    }
+    if (style?.background) {
+      codes.push(BACKGROUND_CODES[currentTheme][style.background]);
+    }
 
     if (codes.length > 0) {
       chunks.push(`\x1b[${codes.join(";")}m${segment.text}`);

@@ -1,9 +1,18 @@
 import type { CreateProviderResponse } from "@nakama/core/contract";
+import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useState } from "react";
+import { BrowsableModelFields } from "@/components/BrowsableModelFields";
+import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { ModelsBrowseList } from "@/components/ModelsBrowseList";
-import type { ModelsDevRow } from "@/hooks/use-models-dev";
+import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
+import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { ProviderSelect } from "@/components/ProviderSelect";
+import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
+import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { Button } from "@/components/ui/button";
+import { FormField } from "@/components/ui/form-field";
 import {
   InputGroup,
   InputGroupAddon,
@@ -17,29 +26,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
-import { BrowsableModelFields } from "@/components/BrowsableModelFields";
-import { CustomProviderFields } from "@/components/CustomProviderFields";
-import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
-import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
-import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
-import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
-import { ProviderSelect } from "@/components/ProviderSelect";
+import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import {
   apiKeyPlaceholder,
-  type SelectedProvider,
   PROVIDER_OPTIONS,
+  type SelectedProvider,
 } from "@/lib/models";
-import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 
 interface ProviderSetupFormProps {
-  submitLabel?: string;
-  showHeading?: boolean;
   density?: "default" | "compact";
   onSuccess?: (result: CreateProviderResponse) => void;
+  showHeading?: boolean;
+  submitLabel?: string;
 }
 
 export function ProviderSetupForm({
@@ -57,28 +57,36 @@ export function ProviderSetupForm({
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
-  function handleBrowseSelect(provider: SelectedProvider, modelId: string, row: ModelsDevRow) {
+  function handleBrowseSelect(
+    provider: SelectedProvider,
+    modelId: string,
+    row: ModelsDevRow
+  ) {
     form.handleBrowseSelect(provider, modelId, row);
     setIsBrowsing(false);
   }
 
   return (
-    <form className={formSpacing} onSubmit={(event) => void form.handleSubmit(event)}>
+    <form
+      className={formSpacing}
+      onSubmit={(event) => void form.handleSubmit(event)}
+    >
       {showHeading && (
         <div>
-          <h3 className="text-sm font-medium text-foreground">Connect a provider</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <h3 className="font-medium text-foreground text-sm">
+            Connect a provider
+          </h3>
+          <p className="mt-1 text-muted-foreground text-xs">
             Choose a provider, paste your API key, and pick a default model.
           </p>
         </div>
       )}
 
-      <FormField id="provider" label="Provider" density={density}>
+      <FormField density={density} id="provider" label="Provider">
         <ProviderSelect
-          id="provider"
-          value={isBrowsing ? "__browse__" : form.selectedProvider}
-          disabled={form.busy}
           configuredTypes={form.configuredTypes}
+          disabled={form.busy}
+          id="provider"
           onValueChange={(nextValue) => {
             if (nextValue === "__browse__") {
               setIsBrowsing(true);
@@ -88,55 +96,65 @@ export function ProviderSetupForm({
             setIsBrowsing(false);
             form.handleProviderSelect(nextValue);
           }}
+          value={isBrowsing ? "__browse__" : form.selectedProvider}
         />
       </FormField>
 
       {isBrowsing ? (
         <ModelsBrowseList
-          onSelect={handleBrowseSelect}
-          configuredTypes={form.configuredTypes}
-          openCodeZenConfigured={form.openCodeZenConfigured}
           className="h-72 rounded-md border border-border"
+          configuredTypes={form.configuredTypes}
+          onSelect={handleBrowseSelect}
+          openCodeZenConfigured={form.openCodeZenConfigured}
         />
       ) : (
         <>
           <FormField
-            id="api-key"
-            label={apiKeyOptional ? "API key (optional)" : "API key"}
             density={density}
             footer={
               form.apiKeyError ? (
-                <p id="api-key-error" className="text-sm text-destructive" role="alert">
+                <p
+                  className="text-destructive text-sm"
+                  id="api-key-error"
+                  role="alert"
+                >
                   {form.apiKeyError}
                 </p>
               ) : (
-                <p id="api-key-hint" className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs" id="api-key-hint">
                   Paste the API key from your{" "}
-                  {PROVIDER_OPTIONS.find((option) => option.id === form.selectedProvider)?.label ??
-                    "provider"}{" "}
+                  {PROVIDER_OPTIONS.find(
+                    (option) => option.id === form.selectedProvider
+                  )?.label ?? "provider"}{" "}
                   dashboard.
                 </p>
               )
             }
+            id="api-key"
+            label={apiKeyOptional ? "API key (optional)" : "API key"}
           >
             <InputGroup>
               <InputGroupInput
-                id="api-key"
-                type={form.showApiKey ? "text" : "password"}
-                autoComplete="off"
-                placeholder={apiKeyPlaceholder(form.selectedProvider)}
-                value={form.apiKey}
-                disabled={form.busy}
+                aria-describedby={
+                  form.apiKeyError ? "api-key-error" : "api-key-hint"
+                }
                 aria-invalid={form.apiKeyError != null}
-                aria-describedby={form.apiKeyError ? "api-key-error" : "api-key-hint"}
+                autoComplete="off"
+                disabled={form.busy}
+                id="api-key"
                 onBlur={form.handleApiKeyBlur}
-                onChange={(event) => form.handleApiKeyChange(event.target.value)}
+                onChange={(event) =>
+                  form.handleApiKeyChange(event.target.value)
+                }
+                placeholder={apiKeyPlaceholder(form.selectedProvider)}
+                type={form.showApiKey ? "text" : "password"}
+                value={form.apiKey}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
-                  size="icon-sm"
                   aria-label={form.showApiKey ? "Hide API key" : "Show API key"}
                   onClick={() => form.setShowApiKey((current) => !current)}
+                  size="icon-sm"
                 >
                   {form.showApiKey ? <EyeOffIcon /> : <EyeIcon />}
                 </InputGroupButton>
@@ -146,26 +164,26 @@ export function ProviderSetupForm({
 
           {form.selectedProvider === "openai_compatible" ? (
             <CustomProviderFields
-              displayName={form.displayName}
-              baseUrl={form.baseUrl}
               apiKey={form.apiKey}
-              customModels={form.customModels}
-              disabled={form.busy}
-              density={density}
-              displayNameError={form.displayNameError}
+              baseUrl={form.baseUrl}
               baseUrlError={form.baseUrlError}
+              customModels={form.customModels}
+              density={density}
+              disabled={form.busy}
+              displayName={form.displayName}
+              displayNameError={form.displayNameError}
               modelsError={form.modelsError}
-              onDisplayNameChange={form.setDisplayName}
               onBaseUrlChange={form.setBaseUrl}
               onCustomModelsChange={form.setCustomModels}
+              onDisplayNameChange={form.setDisplayName}
             />
           ) : null}
 
           {form.selectedProvider === "openrouter" ? (
             <OpenRouterProviderModelFields
               customModels={form.openRouterModels}
-              disabled={form.busy}
               density={density}
+              disabled={form.busy}
               modelsError={form.openRouterModelsError}
               onCustomModelsChange={form.handleOpenRouterModelsChange}
             />
@@ -174,57 +192,59 @@ export function ProviderSetupForm({
           {form.selectedProvider === "ollama" ? (
             <>
               <OllamaProviderSetupFields
-                hostMode={form.ollamaHostMode}
                 baseUrl={form.baseUrl}
-                disabled={form.busy}
-                density={density}
                 baseUrlError={form.baseUrlError}
-                onHostModeChange={form.handleOllamaHostModeChange}
+                density={density}
+                disabled={form.busy}
+                hostMode={form.ollamaHostMode}
                 onBaseUrlChange={form.setBaseUrl}
+                onHostModeChange={form.handleOllamaHostModeChange}
               />
               <BrowsableModelFields
-                fieldId="ollama-models"
-                customModels={form.customModels}
-                disabled={form.busy}
-                density={density}
-                modelsError={form.modelsError}
                 browseLabel="Browse Ollama"
-                showPricing={false}
+                customModels={form.customModels}
+                density={density}
+                disabled={form.busy}
+                fieldId="ollama-models"
                 footerHint={
                   <>
-                    Add models by ID or browse live models from your Ollama host (for example{" "}
-                    <span className="font-mono">llama3.2</span>).
+                    Add models by ID or browse live models from your Ollama host
+                    (for example <span className="font-mono">llama3.2</span>).
                   </>
                 }
+                modelsError={form.modelsError}
                 onCustomModelsChange={form.setCustomModels}
+                renderBrowse={(onSelect) => (
+                  <RemoteModelsBrowseList
+                    apiKey={form.apiKey}
+                    baseUrl={form.baseUrl}
+                    browseLabel="Ollama"
+                    className="h-72 rounded-md border border-border"
+                    hostMode={form.ollamaHostMode}
+                    onSelect={onSelect}
+                    provider="ollama"
+                  />
+                )}
+                showPricing={false}
                 toModelRow={(row: { id: string; name: string }) => ({
                   id: row.id,
                   name: row.name,
                 })}
-                renderBrowse={(onSelect) => (
-                  <RemoteModelsBrowseList
-                    onSelect={onSelect}
-                    className="h-72 rounded-md border border-border"
-                    baseUrl={form.baseUrl}
-                    apiKey={form.apiKey}
-                    provider="ollama"
-                    hostMode={form.ollamaHostMode}
-                    browseLabel="Ollama"
-                  />
-                )}
               />
             </>
           ) : null}
 
           {isShortlistBrowseProvider(form.selectedProvider) ? (
             <ShortlistBrowseProviderModelFields
-              provider={form.selectedProvider}
+              apiKey={
+                form.selectedProvider === "fireworks" ? form.apiKey : undefined
+              }
               customModels={form.shortlistModels}
-              disabled={form.busy}
               density={density}
+              disabled={form.busy}
               modelsError={form.shortlistModelsError}
-              apiKey={form.selectedProvider === "fireworks" ? form.apiKey : undefined}
               onCustomModelsChange={form.handleShortlistModelsChange}
+              provider={form.selectedProvider}
             />
           ) : null}
 
@@ -232,13 +252,15 @@ export function ProviderSetupForm({
           !isShortlistBrowseProvider(form.selectedProvider) &&
           form.selectedProvider !== "ollama" &&
           form.selectedProvider !== "openai_compatible" ? (
-            <FormField id="model" label="Model" density={density}>
+            <FormField density={density} id="model" label="Model">
               <Select
-                value={form.selectedModel}
                 disabled={form.busy || form.filteredModels.length === 0}
-                onValueChange={(value) => form.setSelectedModel(value != null ? String(value) : "")}
+                onValueChange={(value) =>
+                  form.setSelectedModel(value == null ? "" : String(value))
+                }
+                value={form.selectedModel}
               >
-                <SelectTrigger id="model" className="w-full">
+                <SelectTrigger className="w-full" id="model">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -254,18 +276,15 @@ export function ProviderSetupForm({
           ) : null}
 
           {form.formError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {form.formError}
             </p>
           ) : null}
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button
+              disabled={form.busy || !(apiKeyOptional || form.apiKey.trim())}
               type="submit"
-              disabled={
-                form.busy ||
-                (!apiKeyOptional && !form.apiKey.trim())
-              }
             >
               {form.busy ? (
                 <>

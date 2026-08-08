@@ -1,22 +1,27 @@
-import type { Context } from "grammy";
 import type { ImageAttachment } from "@nakama/core/contract";
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
-import { downloadTelegramFile, OversizedTelegramFileError } from "./attachments";
+import type { Context } from "grammy";
+import {
+  downloadTelegramFile,
+  OversizedTelegramFileError,
+} from "./attachments";
 
 export interface TelegramImageInput {
-  message: string;
   images: ImageAttachment[];
+  message: string;
 }
 
-export async function buildTelegramImageInput(ctx: Context): Promise<TelegramImageInput | null> {
+export async function buildTelegramImageInput(
+  ctx: Context
+): Promise<TelegramImageInput | null> {
   const photos = ctx.message?.photo;
 
   if (photos?.length) {
     const largest = photos[photos.length - 1]!;
 
     return {
-      message: ctx.message?.caption?.trim() ?? "",
       images: [await downloadTelegramImage(ctx, largest.file_id)],
+      message: ctx.message?.caption?.trim() ?? "",
     };
   }
 
@@ -24,8 +29,8 @@ export async function buildTelegramImageInput(ctx: Context): Promise<TelegramIma
 
   if (document?.mime_type?.startsWith("image/")) {
     return {
-      message: ctx.message?.caption?.trim() ?? "",
       images: [await downloadTelegramImage(ctx, document.file_id)],
+      message: ctx.message?.caption?.trim() ?? "",
     };
   }
 
@@ -34,16 +39,19 @@ export async function buildTelegramImageInput(ctx: Context): Promise<TelegramIma
 
 export async function downloadTelegramImage(
   ctx: Context,
-  fileId: string,
+  fileId: string
 ): Promise<ImageAttachment> {
   try {
     const downloaded = await downloadTelegramFile(ctx, fileId, MAX_IMAGE_BYTES);
-    const mediaType = inferMediaType(downloaded.filePath, downloaded.contentType);
+    const mediaType = inferMediaType(
+      downloaded.filePath,
+      downloaded.contentType
+    );
 
     // Base64 here is transport-only; the server persists bytes and stores image_ref in session history.
     return {
-      mediaType,
       data: Buffer.from(downloaded.bytes).toString("base64"),
+      mediaType,
     };
   } catch (error) {
     if (error instanceof OversizedTelegramFileError) {

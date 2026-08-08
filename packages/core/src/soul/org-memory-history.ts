@@ -1,6 +1,11 @@
 import { join } from "node:path";
 import type { OrgMemoryChangeLogEntry } from "../contract";
-import { pathExists, readDirectoryEntries, readText, writePrivateTextFile } from "../fs";
+import {
+  pathExists,
+  readDirectoryEntries,
+  readText,
+  writePrivateTextFile,
+} from "../fs";
 import { getOrgMemoryHistoryDir } from "./resolve";
 
 export const ORG_MEMORY_HISTORY_MAX_ENTRIES = 50;
@@ -9,11 +14,19 @@ export interface OrgMemoryChangeLogRecord extends OrgMemoryChangeLogEntry {
   content: string;
 }
 
-function historyMetaPath(orgId: string, id: string, configDir?: string): string {
+function historyMetaPath(
+  orgId: string,
+  id: string,
+  configDir?: string
+): string {
   return join(getOrgMemoryHistoryDir(orgId, configDir), `${id}.json`);
 }
 
-function historyContentPath(orgId: string, id: string, configDir?: string): string {
+function historyContentPath(
+  orgId: string,
+  id: string,
+  configDir?: string
+): string {
   return join(getOrgMemoryHistoryDir(orgId, configDir), `${id}.md`);
 }
 
@@ -28,7 +41,7 @@ export async function appendOrgMemoryHistory(
   orgId: string,
   entry: OrgMemoryChangeLogEntry,
   content: string,
-  configDir?: string,
+  configDir?: string
 ): Promise<void> {
   const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
   await writePrivateTextFile(
@@ -36,18 +49,22 @@ export async function appendOrgMemoryHistory(
     `${JSON.stringify(entry, null, 2)}\n`,
     {
       ensureDir: historyDir,
-    },
+    }
   );
-  await writePrivateTextFile(historyContentPath(orgId, entry.id, configDir), content, {
-    ensureDir: historyDir,
-  });
+  await writePrivateTextFile(
+    historyContentPath(orgId, entry.id, configDir),
+    content,
+    {
+      ensureDir: historyDir,
+    }
+  );
   await pruneOrgMemoryHistory(orgId, ORG_MEMORY_HISTORY_MAX_ENTRIES, configDir);
 }
 
 export async function listOrgMemoryHistory(
   orgId: string,
   limit = ORG_MEMORY_HISTORY_MAX_ENTRIES,
-  configDir?: string,
+  configDir?: string
 ): Promise<OrgMemoryChangeLogEntry[]> {
   const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
   if (!(await pathExists(historyDir))) {
@@ -82,11 +99,11 @@ export async function listOrgMemoryHistory(
 export async function getOrgMemoryHistoryEntry(
   orgId: string,
   revisionId: string,
-  configDir?: string,
+  configDir?: string
 ): Promise<OrgMemoryChangeLogRecord | null> {
   const metaPath = historyMetaPath(orgId, revisionId, configDir);
   const contentPath = historyContentPath(orgId, revisionId, configDir);
-  if (!(await pathExists(metaPath)) || !(await pathExists(contentPath))) {
+  if (!((await pathExists(metaPath)) && (await pathExists(contentPath)))) {
     return null;
   }
 
@@ -98,14 +115,18 @@ export async function getOrgMemoryHistoryEntry(
 export async function pruneOrgMemoryHistory(
   orgId: string,
   maxEntries: number,
-  configDir?: string,
+  configDir?: string
 ): Promise<void> {
   const historyDir = getOrgMemoryHistoryDir(orgId, configDir);
   if (!(await pathExists(historyDir))) {
     return;
   }
 
-  const entries = await listOrgMemoryHistory(orgId, Number.MAX_SAFE_INTEGER, configDir);
+  const entries = await listOrgMemoryHistory(
+    orgId,
+    Number.MAX_SAFE_INTEGER,
+    configDir
+  );
   const stale = entries.slice(maxEntries);
   if (stale.length === 0) {
     return;
@@ -113,7 +134,11 @@ export async function pruneOrgMemoryHistory(
 
   const { unlink } = await import("node:fs/promises");
   for (const entry of stale) {
-    await unlink(historyMetaPath(orgId, entry.id, configDir)).catch(() => undefined);
-    await unlink(historyContentPath(orgId, entry.id, configDir)).catch(() => undefined);
+    await unlink(historyMetaPath(orgId, entry.id, configDir)).catch(
+      () => undefined
+    );
+    await unlink(historyContentPath(orgId, entry.id, configDir)).catch(
+      () => undefined
+    );
   }
 }

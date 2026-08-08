@@ -1,4 +1,8 @@
-import { ThinkingLevel, type GenerateContentConfig, type Tool } from "@google/genai";
+import {
+  type GenerateContentConfig,
+  ThinkingLevel,
+  type Tool,
+} from "@google/genai";
 import type {
   GenerateChatInput,
   LlmToolDefinition,
@@ -14,10 +18,13 @@ export function buildGeminiGenerateConfig(options: {
   model: string;
   responseMimeType?: string;
 }): GenerateContentConfig {
-  const tools = buildGeminiTools(options.tools, options.providerOptions?.webSearch ?? false);
+  const tools = buildGeminiTools(
+    options.tools,
+    options.providerOptions?.webSearch ?? false
+  );
   const thinkingConfig = buildGeminiThinkingConfig(
     options.model,
-    options.providerOptions,
+    options.providerOptions
   );
 
   return {
@@ -32,7 +39,7 @@ export function buildGeminiGenerateConfig(options: {
 
 function buildGeminiTools(
   tools: LlmToolDefinition[] | undefined,
-  webSearch: boolean,
+  webSearch: boolean
 ): Tool[] | undefined {
   const result: Tool[] = [];
 
@@ -43,8 +50,8 @@ function buildGeminiTools(
   if (tools?.length) {
     result.push({
       functionDeclarations: tools.map((tool) => ({
-        name: tool.name,
         description: tool.description,
+        name: tool.name,
         parameters: tool.parameters,
       })),
     });
@@ -55,7 +62,7 @@ function buildGeminiTools(
 
 function buildGeminiThinkingConfig(
   model: string,
-  providerOptions: ProviderChatOptions | undefined,
+  providerOptions: ProviderChatOptions | undefined
 ): GenerateContentConfig["thinkingConfig"] {
   const enabled = providerOptions?.thinking?.enabled ?? false;
 
@@ -64,7 +71,7 @@ function buildGeminiThinkingConfig(
       return { thinkingBudget: 0 };
     }
 
-    return undefined;
+    return;
   }
 
   const effort = normalizeThinkingEffort(providerOptions?.thinking?.effort);
@@ -109,12 +116,12 @@ function mapEffortToThinkingBudget(effort: ThinkingEffort): number {
 export function buildGeminiChatConfig(
   input: Pick<GenerateChatInput, "tools" | "providerOptions">,
   system: string,
-  model: string,
+  model: string
 ): GenerateContentConfig {
   return buildGeminiGenerateConfig({
+    model,
+    providerOptions: input.providerOptions,
     system,
     tools: input.tools,
-    providerOptions: input.providerOptions,
-    model,
   });
 }

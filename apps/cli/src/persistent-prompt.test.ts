@@ -2,8 +2,8 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { PromptSuggestion } from "./commands";
 import { PersistentPrompt } from "./persistent-prompt";
 import type { PromptLineResult } from "./prompt";
-import type { ComposerRenderer, ComposerState } from "./terminal-renderer";
 import type { TerminalInput } from "./terminal-input";
+import type { ComposerRenderer, ComposerState } from "./terminal-renderer";
 
 class FakeRenderer implements ComposerRenderer {
   state: ComposerState | null = null;
@@ -21,7 +21,9 @@ class FakeTerminalInput {
 
 describe("PersistentPrompt", () => {
   const prompts: PersistentPrompt[] = [];
-  let stdoutWriteSpy: ReturnType<typeof spyOn<typeof process.stdout, "write">> | null = null;
+  let stdoutWriteSpy: ReturnType<
+    typeof spyOn<typeof process.stdout, "write">
+  > | null = null;
 
   afterEach(() => {
     for (const prompt of prompts) {
@@ -34,21 +36,23 @@ describe("PersistentPrompt", () => {
   });
 
   test("prefill renders suggestions for the inserted value", () => {
-    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+    stdoutWriteSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true
+    );
     const renderer = new FakeRenderer();
     const suggestions: PromptSuggestion[] = [
       {
-        label: "claude-sonnet",
         description: "Claude Sonnet [Anthropic]",
         insertValue: "/model provider-a::claude-sonnet",
+        label: "claude-sonnet",
       },
     ];
     const prompt = new PersistentPrompt({
+      getSuggestions: (input) => (input === "/model " ? suggestions : []),
+      onCancel: () => {},
+      onSubmit: (_result: PromptLineResult) => {},
       renderer,
       terminalInput: new FakeTerminalInput() as unknown as TerminalInput,
-      getSuggestions: (input) => (input === "/model " ? suggestions : []),
-      onSubmit: (_result: PromptLineResult) => {},
-      onCancel: () => {},
     });
 
     prompts.push(prompt);
@@ -56,16 +60,16 @@ describe("PersistentPrompt", () => {
     prompt.prefill("/model ");
 
     expect(renderer.state).toEqual({
-      prefix: "> ",
-      value: "/model ",
       cursorVisible: true,
+      prefix: "> ",
+      selectedIndex: 0,
       suggestions: [
         {
-          label: "claude-sonnet",
           description: "Claude Sonnet [Anthropic]",
+          label: "claude-sonnet",
         },
       ],
-      selectedIndex: 0,
+      value: "/model ",
     });
   });
 });

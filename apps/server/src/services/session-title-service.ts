@@ -11,12 +11,15 @@ export class SessionTitleService {
 
   constructor(
     private readonly db: DatabaseAdapter,
-    private readonly getUserConfig: () => UserConfig | null,
+    private readonly getUserConfig: () => UserConfig | null
   ) {}
 
   scheduleSessionTitleGeneration(sessionId: string): void {
     void this.generateSessionTitle(sessionId).catch((error) => {
-      console.error(`Failed to generate session title for ${sessionId}:`, error);
+      console.error(
+        `Failed to generate session title for ${sessionId}:`,
+        error
+      );
     });
   }
 
@@ -35,7 +38,9 @@ export class SessionTitleService {
       }
 
       const storedMessages = await this.db.listMessagesForSession(sessionId);
-      const messages = storedMessages.map((record) => record.payload as ChatMessage);
+      const messages = storedMessages.map(
+        (record) => record.payload as ChatMessage
+      );
 
       if (!hasCompletedFirstTurn(messages)) {
         return;
@@ -44,7 +49,7 @@ export class SessionTitleService {
       const userConfig = this.getUserConfig();
       const provider = await this.resolveProviderForProfile(
         session.profileId,
-        userConfig,
+        userConfig
       );
 
       if (!provider) {
@@ -52,9 +57,14 @@ export class SessionTitleService {
         return;
       }
 
-      const title = await generateSessionTitleFromMessages(messages, { provider });
+      const title = await generateSessionTitleFromMessages(messages, {
+        provider,
+      });
 
-      await this.db.updateSessionTitle(sessionId, title ?? SESSION_TITLE_FALLBACK);
+      await this.db.updateSessionTitle(
+        sessionId,
+        title ?? SESSION_TITLE_FALLBACK
+      );
     } finally {
       this.inFlight.delete(sessionId);
     }
@@ -62,7 +72,7 @@ export class SessionTitleService {
 
   private async resolveProviderForProfile(
     profileId: string,
-    userConfig: UserConfig | null,
+    userConfig: UserConfig | null
   ) {
     if (!userConfig) {
       return null;
@@ -75,23 +85,28 @@ export class SessionTitleService {
     }
 
     const selection = resolveProfileProviderSelection({
-      providers: userConfig.providers,
       defaultProviderId: userConfig.defaultProviderId,
       profileModel: profile.model,
+      providers: userConfig.providers,
     });
 
     if (!selection) {
       return null;
     }
 
-    return createProviderForInstance(selection.instance, selection.model, process.env);
+    return createProviderForInstance(
+      selection.instance,
+      selection.model,
+      process.env
+    );
   }
 }
 
 function hasCompletedFirstTurn(messages: readonly ChatMessage[]): boolean {
   const hasUser = messages.some((message) => message.role === "user");
   const hasAssistant = messages.some(
-    (message) => message.role === "assistant" && message.content.trim().length > 0,
+    (message) =>
+      message.role === "assistant" && message.content.trim().length > 0
   );
 
   return hasUser && hasAssistant;

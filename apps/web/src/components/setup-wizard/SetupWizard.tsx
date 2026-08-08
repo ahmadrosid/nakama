@@ -1,19 +1,18 @@
-import { useState, useCallback, useEffect, type ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SetupWizardStepper } from "@/components/setup-wizard/SetupWizardStepper";
-import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrganization";
 import { SetupStepAccount } from "@/components/setup-wizard/SetupStepAccount";
+import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrganization";
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
+import { SetupWizardStepper } from "@/components/setup-wizard/SetupWizardStepper";
+import type {
+  SetupAccountDraft,
+  SetupStepId,
+  SetupWizardProps,
+} from "@/components/setup-wizard/setup-wizard.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { client } from "@/lib/client";
 import { pathForPage } from "@/lib/navigation";
-
-import {
-  type SetupAccountDraft,
-  type SetupStepId,
-  type SetupWizardProps,
-} from "@/components/setup-wizard/setup-wizard.shared";
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const navigate = useNavigate();
@@ -21,7 +20,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const userAlreadyConfigured = health?.userConfigured === true;
   const firstStep: SetupStepId = userAlreadyConfigured ? 3 : 1;
   const [currentStep, setCurrentStep] = useState<SetupStepId>(firstStep);
-  const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(null);
+  const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(
+    null
+  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.location?.origin) {
@@ -126,8 +127,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         return (
           <SetupStepOrganization
             account={accountDraft}
-            onNext={handleStepAdvance}
             onBack={goBack}
+            onNext={handleStepAdvance}
           />
         );
       case 3:
@@ -135,9 +136,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       case 4:
         return (
           <SetupStepUserContext
+            onBack={goBack}
             onNext={handleStepAdvance}
             onSkip={handleSkip}
-            onBack={goBack}
           />
         );
       default:
@@ -148,8 +149,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">{heading}</h1>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <h1 className="font-semibold text-foreground text-xl">{heading}</h1>
+        <p className="text-muted-foreground text-sm">{subtitle}</p>
       </div>
 
       <SetupWizardStepper currentStep={currentStep} />

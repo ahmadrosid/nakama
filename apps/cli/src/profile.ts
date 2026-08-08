@@ -1,14 +1,16 @@
 import * as readline from "node:readline/promises";
+import type { NakamaClient } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core";
 import { pickProfileForOrg } from "@nakama/core";
-import type { NakamaClient } from "@nakama/client";
 import { loadSavedCliProfileId, saveCliProfileId } from "./cli-config";
 
 export interface CliProfileOptions {
   profileId?: string;
 }
 
-export function parseCliProfileArgs(argv = process.argv.slice(2)): CliProfileOptions {
+export function parseCliProfileArgs(
+  argv = process.argv.slice(2)
+): CliProfileOptions {
   let profileId: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -28,7 +30,9 @@ export function parseCliProfileArgs(argv = process.argv.slice(2)): CliProfileOpt
   return { profileId: profileId || undefined };
 }
 
-export function sortProfilesForPicker(profiles: ProfileSummary[]): ProfileSummary[] {
+export function sortProfilesForPicker(
+  profiles: ProfileSummary[]
+): ProfileSummary[] {
   return [...profiles].sort((left, right) => {
     if (left.isDefault && !right.isDefault) {
       return -1;
@@ -44,12 +48,12 @@ export function sortProfilesForPicker(profiles: ProfileSummary[]): ProfileSummar
 
 export function resolveProfileInput(
   profiles: ProfileSummary[],
-  input: string,
+  input: string
 ): ProfileSummary | undefined {
   const trimmed = input.trim();
 
   if (!trimmed) {
-    return undefined;
+    return;
   }
 
   const exactId = profiles.find((profile) => profile.id === trimmed);
@@ -59,7 +63,9 @@ export function resolveProfileInput(
   }
 
   const lower = trimmed.toLowerCase();
-  const exactName = profiles.filter((profile) => profile.name.toLowerCase() === lower);
+  const exactName = profiles.filter(
+    (profile) => profile.name.toLowerCase() === lower
+  );
 
   if (exactName.length === 1) {
     return exactName[0];
@@ -75,17 +81,18 @@ export function resolveProfileInput(
   const partialMatches = profiles.filter(
     (profile) =>
       profile.id.toLowerCase().includes(lower) ||
-      profile.name.toLowerCase().includes(lower),
+      profile.name.toLowerCase().includes(lower)
   );
 
   if (partialMatches.length === 1) {
     return partialMatches[0];
   }
-
-  return undefined;
 }
 
-export function formatProfileLine(profile: ProfileSummary, index: number): string {
+export function formatProfileLine(
+  profile: ProfileSummary,
+  index: number
+): string {
   const markers = [
     profile.isDefault ? "default" : null,
     profile.isSuper ? "orchestrator" : null,
@@ -99,7 +106,7 @@ export function formatProfileLine(profile: ProfileSummary, index: number): strin
 
 export function printProfiles(
   profiles: ProfileSummary[],
-  options: { currentProfileId?: string } = {},
+  options: { currentProfileId?: string } = {}
 ): void {
   const sorted = sortProfilesForPicker(profiles);
 
@@ -109,7 +116,9 @@ export function printProfiles(
   }
 
   if (options.currentProfileId) {
-    const current = sorted.find((profile) => profile.id === options.currentProfileId);
+    const current = sorted.find(
+      (profile) => profile.id === options.currentProfileId
+    );
     console.log(`Current: ${current?.name ?? options.currentProfileId}\n`);
   }
 
@@ -123,7 +132,7 @@ export function printProfiles(
 
 function findProfile(
   profiles: ProfileSummary[],
-  profileId: string,
+  profileId: string
 ): ProfileSummary | undefined {
   return (
     resolveProfileInput(profiles, profileId) ??
@@ -133,7 +142,7 @@ function findProfile(
 
 export async function resolveStartupProfile(
   client: NakamaClient,
-  options: CliProfileOptions,
+  options: CliProfileOptions
 ): Promise<{ profileId: string; profile: ProfileSummary }> {
   const { profiles } = await client.listProfiles();
 
@@ -142,7 +151,9 @@ export async function resolveStartupProfile(
   }
 
   const explicitProfileId = options.profileId?.trim();
-  const savedProfileId = explicitProfileId ? null : await loadSavedCliProfileId();
+  const savedProfileId = explicitProfileId
+    ? null
+    : await loadSavedCliProfileId();
   const candidateProfileId = explicitProfileId ?? savedProfileId ?? undefined;
 
   if (candidateProfileId) {
@@ -150,7 +161,7 @@ export async function resolveStartupProfile(
 
     if (match) {
       await saveCliProfileId(match.id);
-      return { profileId: match.id, profile: match };
+      return { profile: match, profileId: match.id };
     }
 
     if (explicitProfileId) {
@@ -158,11 +169,11 @@ export async function resolveStartupProfile(
     }
   }
 
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
     const fallback = pickProfileForOrg(profiles);
 
     await saveCliProfileId(fallback.id);
-    return { profileId: fallback.id, profile: fallback };
+    return { profile: fallback, profileId: fallback.id };
   }
 
   const selected = await promptForProfile(profiles);
@@ -171,7 +182,7 @@ export async function resolveStartupProfile(
 }
 
 async function promptForProfile(
-  profiles: ProfileSummary[],
+  profiles: ProfileSummary[]
 ): Promise<{ profileId: string; profile: ProfileSummary }> {
   const sorted = sortProfilesForPicker(profiles);
   const defaultProfile = pickProfileForOrg(sorted);
@@ -193,7 +204,7 @@ async function promptForProfile(
 
     console.log(`Using ${selected.name}.\n`);
 
-    return { profileId: selected.id, profile: selected };
+    return { profile: selected, profileId: selected.id };
   } finally {
     rl.close();
   }

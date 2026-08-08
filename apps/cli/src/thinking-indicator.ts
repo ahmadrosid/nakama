@@ -1,11 +1,27 @@
+import {
+  type StyledLine,
+  serializeStyledLine,
+  styledLine,
+} from "./styled-text";
 import type { StatusRenderer } from "./terminal-renderer";
-import { serializeStyledLine, styledLine, type StyledLine } from "./styled-text";
 
-const THINKING_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+const THINKING_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
 const FRAME_INTERVAL_MS = 80;
 
 export function formatThinkingIndicator(frameIndex: number): StyledLine {
-  const frame = THINKING_FRAMES[frameIndex % THINKING_FRAMES.length] ?? THINKING_FRAMES[0];
+  const frame =
+    THINKING_FRAMES[frameIndex % THINKING_FRAMES.length] ?? THINKING_FRAMES[0];
   return styledLine(` ${frame} Thinking `, { dim: true });
 }
 

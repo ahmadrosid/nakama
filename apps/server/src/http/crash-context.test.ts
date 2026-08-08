@@ -1,8 +1,15 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+} from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setCrashLogger, type CrashReport } from "@nakama/core/crash-report";
+import { type CrashReport, setCrashLogger } from "@nakama/core/crash-report";
 import { AuthService } from "../services/auth-service";
 import { createHonoApp } from "./app";
 
@@ -22,7 +29,7 @@ afterAll(() => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
   }
 
-  rmSync(testConfigDir, { recursive: true, force: true });
+  rmSync(testConfigDir, { force: true, recursive: true });
 });
 
 beforeEach(() => {
@@ -39,19 +46,19 @@ afterEach(() => {
 function createApp(countHumanUsers: () => Promise<number>) {
   return createHonoApp({
     agent: { providerConfigured: true } as any,
-    automationService: {} as any,
-    taskService: {} as any,
-    systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-    workerManager: {} as any,
-    mcpService: {} as any,
     authService: new AuthService(),
-    orgService: {} as any,
+    automationService: {} as any,
     databaseAdapter: {
-      countUsers: async () => 1,
       countHumanUsers,
+      countUsers: async () => 1,
       getUserByEmail: async () => null,
     } as any,
+    mcpService: {} as any,
+    orgService: {} as any,
+    systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+    taskService: {} as any,
     webDistDir: null,
+    workerManager: {} as any,
   });
 }
 
@@ -68,7 +75,7 @@ test("an inbound request id is kept so a client and server log line join up", as
   const response = await app.fetch(
     new Request("http://localhost:4310/health", {
       headers: { "x-request-id": "req-from-client" },
-    }),
+    })
   );
 
   expect(response.headers.get("x-request-id")).toBe("req-from-client");
@@ -82,7 +89,7 @@ test("a server-side failure is reported with its route and request id", async ()
   const response = await app.fetch(
     new Request("http://localhost:4310/health", {
       headers: { "x-request-id": "req-crash" },
-    }),
+    })
   );
 
   expect(response.status).toBe(500);
@@ -95,7 +102,9 @@ test("a server-side failure is reported with its route and request id", async ()
 
 test("a rejected request is not reported as a crash", async () => {
   const app = createApp(async () => 1);
-  const response = await app.fetch(new Request("http://localhost:4310/v1/system/status"));
+  const response = await app.fetch(
+    new Request("http://localhost:4310/v1/system/status")
+  );
 
   expect(response.status).toBe(401);
   expect(reports).toHaveLength(0);

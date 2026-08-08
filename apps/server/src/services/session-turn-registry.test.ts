@@ -16,8 +16,8 @@ describe("SessionTurnRegistry", () => {
   test("subscribe receives replay then live events", async () => {
     const registry = new SessionTurnRegistry();
     registry.beginTurn("session_1");
-    registry.publish("session_1", { type: "chunk", delta: "hello" });
-    registry.publish("session_1", { type: "chunk", delta: " world" });
+    registry.publish("session_1", { delta: "hello", type: "chunk" });
+    registry.publish("session_1", { delta: " world", type: "chunk" });
 
     const received: string[] = [];
     const handle = registry.subscribe("session_1", (event) => {
@@ -29,17 +29,17 @@ describe("SessionTurnRegistry", () => {
     expect(handle).not.toBeNull();
     expect(received).toEqual(["hello", " world"]);
 
-    registry.publish("session_1", { type: "chunk", delta: "!" });
+    registry.publish("session_1", { delta: "!", type: "chunk" });
     expect(received).toEqual(["hello", " world", "!"]);
 
-    registry.endTurn("session_1", { type: "done", reply: "hello world!" });
+    registry.endTurn("session_1", { reply: "hello world!", type: "done" });
     expect(registry.getStatus("session_1")).toEqual({ active: false });
   });
 
   test("multiple subscribers each receive replay and live events", () => {
     const registry = new SessionTurnRegistry();
     registry.beginTurn("session_1");
-    registry.publish("session_1", { type: "thinking", delta: "hmm" });
+    registry.publish("session_1", { delta: "hmm", type: "thinking" });
 
     const first: string[] = [];
     const second: string[] = [];
@@ -55,7 +55,7 @@ describe("SessionTurnRegistry", () => {
       }
     });
 
-    registry.publish("session_1", { type: "thinking", delta: "..." });
+    registry.publish("session_1", { delta: "...", type: "thinking" });
 
     expect(first).toEqual(["hmm", "..."]);
     expect(second).toEqual(["hmm", "..."]);
@@ -64,7 +64,7 @@ describe("SessionTurnRegistry", () => {
   test("endTurn clears state and later subscribe returns null", () => {
     const registry = new SessionTurnRegistry();
     registry.beginTurn("session_1");
-    registry.endTurn("session_1", { type: "done", reply: "ok" });
+    registry.endTurn("session_1", { reply: "ok", type: "done" });
 
     expect(registry.subscribe("session_1", () => {})).toBeNull();
     expect(registry.getStatus("session_1")).toEqual({ active: false });
@@ -76,11 +76,11 @@ describe("SessionTurnRegistry", () => {
 
     for (let index = 0; index < 12_000; index += 1) {
       registry.publish("session_1", {
-        type: "tool_input_delta",
-        toolCallId: "call_1",
-        tool: "write_file",
-        delta: "x",
         accumulatedArguments: `{"path":"a.txt","content":"${index}"}`,
+        delta: "x",
+        tool: "write_file",
+        toolCallId: "call_1",
+        type: "tool_input_delta",
       });
     }
 

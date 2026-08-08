@@ -1,5 +1,8 @@
+import type {
+  WebFetchToolState,
+  WebSearchSource,
+} from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
-import type { WebFetchToolState, WebSearchSource } from "@/components/chat/web-search.shared";
 
 function formatDisplayUrlFromHref(url: string): string {
   try {
@@ -15,7 +18,8 @@ function formatDisplayUrlFromHref(url: string): string {
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
 /** Exa MCP fetch tool: `{server}__web_fetch_exa`. */
-export const MCP_EXA_WEB_FETCH_TOOL_PATTERN = /^[a-zA-Z0-9_-]+__web_fetch_exa(?:_\d+)?$/;
+export const MCP_EXA_WEB_FETCH_TOOL_PATTERN =
+  /^[a-zA-Z0-9_-]+__web_fetch_exa(?:_\d+)?$/;
 
 export function isWebFetchTool(tool: string | undefined): boolean {
   if (!tool) {
@@ -44,7 +48,7 @@ function readString(value: unknown): string | null {
 function normalizeSourceUrl(url: string): { url: string; href: string } {
   const trimmed = url.trim();
   const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
-  return { url: trimmed, href };
+  return { href, url: trimmed };
 }
 
 function dedupeSources(sources: WebSearchSource[]): WebSearchSource[] {
@@ -67,9 +71,9 @@ function dedupeSources(sources: WebSearchSource[]): WebSearchSource[] {
 function sourceFromUrl(url: string, title?: string | null): WebSearchSource {
   const normalized = normalizeSourceUrl(url);
   return {
+    href: normalized.href,
     title: title?.trim() || formatDisplayUrlFromHref(normalized.url),
     url: normalized.url,
-    href: normalized.href,
   };
 }
 
@@ -109,7 +113,11 @@ function parseMcpTextContent(content: unknown): string | null {
 
   for (const entry of content) {
     const record = readRecord(entry);
-    if (record?.type === "text" && typeof record.text === "string" && record.text.trim()) {
+    if (
+      record?.type === "text" &&
+      typeof record.text === "string" &&
+      record.text.trim()
+    ) {
       parts.push(record.text.trim());
     }
   }
@@ -141,8 +149,7 @@ export function parseExaWebFetchTextResult(text: string): WebSearchSource[] {
     }
 
     const rawTitle = titleMatch?.[1]?.trim();
-    const title =
-      rawTitle && rawTitle !== "(no title)" ? rawTitle : undefined;
+    const title = rawTitle && rawTitle !== "(no title)" ? rawTitle : undefined;
 
     sources.push(sourceFromUrl(url, title));
   }
@@ -150,7 +157,9 @@ export function parseExaWebFetchTextResult(text: string): WebSearchSource[] {
   return dedupeSources(sources);
 }
 
-function parseBuiltinWebFetchResult(record: Record<string, unknown>): WebSearchSource[] {
+function parseBuiltinWebFetchResult(
+  record: Record<string, unknown>
+): WebSearchSource[] {
   const url = readString(record.finalUrl) ?? readString(record.url);
   if (!url) {
     return [];
@@ -177,18 +186,15 @@ function parseStructuredFetchResults(results: unknown): WebSearchSource[] {
       continue;
     }
 
-    sources.push(
-      sourceFromUrl(
-        url,
-        readString(record.title),
-      ),
-    );
+    sources.push(sourceFromUrl(url, readString(record.title)));
   }
 
   return dedupeSources(sources);
 }
 
-export function parseWebFetchSourcesFromResult(result: unknown): WebSearchSource[] {
+export function parseWebFetchSourcesFromResult(
+  result: unknown
+): WebSearchSource[] {
   if (result == null) {
     return [];
   }
@@ -217,9 +223,7 @@ export function parseWebFetchSourcesFromResult(result: unknown): WebSearchSource
   }
 
   const textResult =
-    readString(record.text) ??
-    parseMcpTextContent(record.content) ??
-    null;
+    readString(record.text) ?? parseMcpTextContent(record.content) ?? null;
 
   if (textResult) {
     const exaSources = parseExaWebFetchTextResult(textResult);

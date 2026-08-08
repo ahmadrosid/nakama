@@ -7,35 +7,37 @@ export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
 
 export function buildSetupAuthBody(
   email = "admin@example.com",
-  overrides: Partial<SetupAuthRequest> = {},
+  overrides: Partial<SetupAuthRequest> = {}
 ): SetupAuthRequest {
   return {
+    admin: {
+      email,
+      name: "Admin User",
+      password: "password123",
+      phone: "+628123456789",
+      ...overrides.admin,
+    },
     organization: {
       name: "Test Org",
       slug: "test-org",
       ...overrides.organization,
     },
-    admin: {
-      name: "Admin User",
-      email,
-      phone: "+628123456789",
-      password: "password123",
-      ...overrides.admin,
-    },
   };
 }
 
-export async function seedLocalClientUser(adapter: DatabaseAdapter): Promise<void> {
+export async function seedLocalClientUser(
+  adapter: DatabaseAdapter
+): Promise<void> {
   if (await adapter.getUserByEmail(LOCAL_CLIENT_EMAIL)) {
     return;
   }
 
   const now = new Date().toISOString();
   await adapter.createUser({
-    id: "user_local_client",
-    email: LOCAL_CLIENT_EMAIL,
-    passwordHash: "unused",
     createdAt: now,
+    email: LOCAL_CLIENT_EMAIL,
+    id: "user_local_client",
+    passwordHash: "unused",
     updatedAt: now,
   });
 }
@@ -44,7 +46,7 @@ export async function seedOrgForUser(
   adapter: DatabaseAdapter,
   email: string,
   orgId = TEST_ORG_ID,
-  role: OrgRole = "admin",
+  role: OrgRole = "admin"
 ): Promise<string> {
   const user = await adapter.getUserByEmail(email);
   if (!user) {
@@ -53,23 +55,26 @@ export async function seedOrgForUser(
 
   const now = new Date().toISOString();
   await adapter.upsertOrganization({
+    createdAt: now,
     id: orgId,
     name: "Test Org",
     slug: "test-org",
-    createdAt: now,
     updatedAt: now,
   });
   await adapter.upsertOrgMember({
-    orgId,
-    userId: user.id,
-    role,
     createdAt: now,
+    orgId,
+    role,
+    userId: user.id,
   });
 
   return orgId;
 }
 
-export function withOrgId(headers: Record<string, string>, orgId: string): Record<string, string> {
+export function withOrgId(
+  headers: Record<string, string>,
+  orgId: string
+): Record<string, string> {
   return { ...headers, "X-Org-Id": orgId };
 }
 
@@ -77,15 +82,15 @@ export async function createPlatformAdminUser(
   adapter: DatabaseAdapter,
   authService: AuthService,
   email = "platform@example.com",
-  password = "password123",
+  password = "password123"
 ): Promise<void> {
   const now = new Date().toISOString();
   await adapter.createUser({
-    id: `user_${email.replace(/[^a-z0-9]+/gi, "_")}`,
-    email,
-    passwordHash: await authService.hashPassword(password),
-    isPlatformAdmin: true,
     createdAt: now,
+    email,
+    id: `user_${email.replace(/[^a-z0-9]+/gi, "_")}`,
+    isPlatformAdmin: true,
+    passwordHash: await authService.hashPassword(password),
     updatedAt: now,
   });
 }

@@ -11,15 +11,17 @@ describe("parseSkillPostTurnReviewResponse", () => {
     const outcome = parseSkillPostTurnReviewResponse(
       JSON.stringify({
         action: "create",
+        content:
+          "---\nname: triage-support\ndescription: Triage tickets\n---\n\nSteps",
         name: "triage-support",
-        content: "---\nname: triage-support\ndescription: Triage tickets\n---\n\nSteps",
       }),
-      { catalogNames },
+      { catalogNames }
     );
     expect(outcome).toEqual({
       action: "create",
+      content:
+        "---\nname: triage-support\ndescription: Triage tickets\n---\n\nSteps",
       name: "triage-support",
-      content: "---\nname: triage-support\ndescription: Triage tickets\n---\n\nSteps",
     });
   });
 
@@ -28,19 +30,22 @@ describe("parseSkillPostTurnReviewResponse", () => {
       JSON.stringify({
         action: "patch",
         name: "deploy-checklist",
-        oldString: "step 1",
         newString: "step 1 updated",
+        oldString: "step 1",
       }),
-      { catalogNames },
+      { catalogNames }
     );
     expect(outcome.action).toBe("patch");
   });
 
   test("rejects delete", () => {
     expect(
-      parseSkillPostTurnReviewResponse(JSON.stringify({ action: "delete", name: "x" }), {
-        catalogNames,
-      }),
+      parseSkillPostTurnReviewResponse(
+        JSON.stringify({ action: "delete", name: "x" }),
+        {
+          catalogNames,
+        }
+      )
     ).toEqual({ action: "noop", reason: "delete_forbidden" });
   });
 
@@ -49,16 +54,18 @@ describe("parseSkillPostTurnReviewResponse", () => {
       parseSkillPostTurnReviewResponse(
         JSON.stringify({
           action: "create",
-          name: "manage-skills",
           content: "---\nname: manage-skills\ndescription: x\n---\n",
+          name: "manage-skills",
         }),
-        { catalogNames },
-      ),
+        { catalogNames }
+      )
     ).toEqual({ action: "noop", reason: "bundled_forbidden" });
   });
 
   test("rejects malformed json", () => {
-    expect(parseSkillPostTurnReviewResponse("not json", { catalogNames })).toEqual({
+    expect(
+      parseSkillPostTurnReviewResponse("not json", { catalogNames })
+    ).toEqual({
       action: "noop",
       reason: "malformed_json",
     });
@@ -68,15 +75,15 @@ describe("parseSkillPostTurnReviewResponse", () => {
 describe("buildSkillPostTurnReviewPrompt", () => {
   test("includes catalog and turn tools", () => {
     const prompt = buildSkillPostTurnReviewPrompt({
-      catalog: [{ name: "deploy-checklist", description: "Deploy steps" }],
+      catalog: [{ description: "Deploy steps", name: "deploy-checklist" }],
       turnMessages: [
-        { role: "user", content: "deploy staging" },
+        { content: "deploy staging", role: "user" },
         {
-          role: "assistant",
           content: "ok",
-          toolCalls: [{ id: "1", name: "bash", arguments: "{}" }],
+          role: "assistant",
+          toolCalls: [{ arguments: "{}", id: "1", name: "bash" }],
         },
-        { role: "tool", toolCallId: "1", name: "bash", content: '{"ok":true}' },
+        { content: '{"ok":true}', name: "bash", role: "tool", toolCallId: "1" },
       ],
     });
     expect(prompt).toContain("deploy-checklist");

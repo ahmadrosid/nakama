@@ -5,10 +5,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    "@nakama/core": "workspace:*"
-  },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir dist --target bun"
+  },
+  "dependencies": {
+    "@nakama/core": "workspace:*"
   }
 }

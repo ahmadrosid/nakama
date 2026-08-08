@@ -3,13 +3,13 @@ import type { AgentTodo } from "@nakama/core/contract";
 import { ChevronDownIcon, ListIcon } from "lucide-react";
 import { useState } from "react";
 import { Matrix } from "@/components/ui/matrix";
-import { snake3x2, type Frame } from "@/components/ui/matrix-frames";
+import { type Frame, snake3x2 } from "@/components/ui/matrix-frames";
 import { cn } from "@/lib/utils";
 
 interface AgentTodoPanelProps {
-  todos: AgentTodo[];
   embedded?: boolean;
   stack?: boolean;
+  todos: AgentTodo[];
 }
 
 const TODO_MATRIX_ROWS = 3;
@@ -36,11 +36,11 @@ const cancelledPattern: Frame = [
 ];
 
 const todoMatrixStaticProps = {
-  rows: TODO_MATRIX_ROWS,
-  cols: TODO_MATRIX_COLS,
-  size: TODO_MATRIX_SIZE,
-  gap: TODO_MATRIX_GAP,
   className: "inline-flex h-4 w-auto shrink-0 items-center justify-center",
+  cols: TODO_MATRIX_COLS,
+  gap: TODO_MATRIX_GAP,
+  rows: TODO_MATRIX_ROWS,
+  size: TODO_MATRIX_SIZE,
 };
 
 export function AgentTodoPanel({
@@ -54,7 +54,9 @@ export function AgentTodoPanel({
     return null;
   }
 
-  const completedCount = todos.filter((todo) => todo.status === "completed").length;
+  const completedCount = todos.filter(
+    (todo) => todo.status === "completed"
+  ).length;
   const runningTodo =
     todos.find((todo) => todo.status === "in_progress") ??
     todos.find((todo) => todo.status === "pending");
@@ -63,39 +65,39 @@ export function AgentTodoPanel({
     : (runningTodo?.content ?? `Tasks ${completedCount}/${todos.length}`);
 
   const list = (
-    <ul className={cn("space-y-1.5", stack ? "pb-2.5 pl-7 pr-3" : "mt-1")}>
+    <ul className={cn("space-y-1.5", stack ? "pr-3 pb-2.5 pl-7" : "mt-1")}>
       {todos.map((todo, index) => (
-        <TodoRow key={todo.id} todo={todo} index={index} />
+        <TodoRow index={index} key={todo.id} todo={todo} />
       ))}
     </ul>
   );
 
   const header = (
     <button
-      type="button"
+      aria-expanded={expanded}
       className={cn(
-        "flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground",
-        stack ? "px-3 py-1.5" : "mb-0.5",
+        "flex w-full items-center gap-1.5 text-left text-muted-foreground text-xs transition-colors hover:text-foreground",
+        stack ? "px-3 py-1.5" : "mb-0.5"
       )}
       onClick={() => setExpanded((current) => !current)}
-      aria-expanded={expanded}
+      type="button"
     >
       <ChevronDownIcon
+        aria-hidden="true"
         className={cn(
           "size-3.5 shrink-0 transition-transform duration-200",
-          !expanded && "-rotate-90",
+          !expanded && "-rotate-90"
         )}
-        aria-hidden="true"
       />
       {!expanded && runningTodo?.status === "in_progress" ? (
         <TodoStatusIcon status="in_progress" />
       ) : (
-        <ListIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <ListIcon aria-hidden="true" className="size-3.5 shrink-0" />
       )}
       <span
         className={cn(
           "min-w-0 flex-1 truncate transition-opacity duration-200",
-          expanded && "tabular-nums",
+          expanded && "tabular-nums"
         )}
       >
         {headerLabel}
@@ -113,8 +115,8 @@ export function AgentTodoPanel({
     return (
       <div className="px-3">
         <aside
-          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-b-0 border-border bg-card shadow-xs"
           aria-label="Agent task plan"
+          className="relative z-0 w-full shrink-0 overflow-hidden rounded-t-xl rounded-b-none border border-border border-b-0 bg-card shadow-xs"
         >
           {header}
           {expandableList}
@@ -125,12 +127,12 @@ export function AgentTodoPanel({
 
   return (
     <aside
+      aria-label="Agent task plan"
       className={cn(
         embedded
-          ? "border-b border-border/80 px-1 pb-3 pt-0.5"
-          : "mb-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm",
+          ? "border-border/80 border-b px-1 pt-0.5 pb-3"
+          : "mb-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm"
       )}
-      aria-label="Agent task plan"
     >
       {header}
       {expandableList}
@@ -152,7 +154,7 @@ function TodoRow({ todo, index }: { todo: AgentTodo; index: number }) {
             ? "text-muted-foreground"
             : todo.status === "in_progress"
               ? "todo-shimmer-text text-foreground"
-              : "text-muted-foreground/50",
+              : "text-muted-foreground/50"
         )}
       >
         {todo.content}
@@ -167,46 +169,46 @@ function TodoStatusIcon({ status }: { status: AgentTodo["status"] }) {
       return (
         <Matrix
           {...todoMatrixStaticProps}
-          frames={snake3x2}
-          fps={4}
           ariaLabel="In progress"
+          fps={4}
+          frames={snake3x2}
         />
       );
     case "completed":
       return (
         <Matrix
           {...todoMatrixStaticProps}
-          pattern={completedPattern}
           ariaLabel="Completed"
           palette={{
-            on: "hsl(142 76% 36%)",
             off: "hsl(142 76% 10%)",
+            on: "hsl(142 76% 36%)",
           }}
+          pattern={completedPattern}
         />
       );
     case "cancelled":
       return (
         <Matrix
           {...todoMatrixStaticProps}
-          pattern={cancelledPattern}
           ariaLabel="Cancelled"
           palette={{
-            on: "var(--muted-foreground)",
             off: "var(--muted-foreground)",
+            on: "var(--muted-foreground)",
           }}
+          pattern={cancelledPattern}
         />
       );
     default:
       return (
         <Matrix
           {...todoMatrixStaticProps}
-          pattern={pendingPattern}
           ariaLabel="Pending"
           brightness={0.55}
           palette={{
-            on: "var(--muted-foreground)",
             off: "var(--muted-foreground)",
+            on: "var(--muted-foreground)",
           }}
+          pattern={pendingPattern}
         />
       );
   }

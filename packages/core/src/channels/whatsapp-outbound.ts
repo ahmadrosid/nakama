@@ -7,7 +7,9 @@ export interface WhatsAppOutboundOptions {
   fetchImpl?: typeof fetch;
 }
 
-export function resolveWhatsAppOutboundPort(config: { outboundPort?: string | null } | null): number {
+export function resolveWhatsAppOutboundPort(
+  config: { outboundPort?: string | null } | null
+): number {
   const raw = config?.outboundPort?.trim();
 
   if (!raw) {
@@ -16,7 +18,7 @@ export function resolveWhatsAppOutboundPort(config: { outboundPort?: string | nu
 
   const parsed = Number(raw);
 
-  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
     return DEFAULT_OUTBOUND_PORT;
   }
 
@@ -24,7 +26,7 @@ export function resolveWhatsAppOutboundPort(config: { outboundPort?: string | nu
 }
 
 export function createWhatsAppOutboundAdapter(
-  options: WhatsAppOutboundOptions = {},
+  options: WhatsAppOutboundOptions = {}
 ): WhatsAppOutboundAdapter {
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -34,28 +36,28 @@ export function createWhatsAppOutboundAdapter(
         const config = await loadWhatsAppConfigFile();
 
         if (!config?.pairedJid) {
-          return { ok: false, error: "WhatsApp is not paired." };
+          return { error: "WhatsApp is not paired.", ok: false };
         }
 
         const port = resolveWhatsAppOutboundPort(config);
         const response = await fetchImpl(`http://127.0.0.1:${port}/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: input.text }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
         });
 
         if (!response.ok) {
           const body = await response.text();
           return {
-            ok: false,
             error: `WhatsApp worker error (${response.status}): ${body.slice(0, 200)}`,
+            ok: false,
           };
         }
 
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: message };
+        return { error: message, ok: false };
       }
     },
   };

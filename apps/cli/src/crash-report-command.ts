@@ -8,9 +8,14 @@ import {
   readLastCrashReport,
   readPendingCrashReports,
 } from "@nakama/core/crash-report-pending";
-import { parseSentryDsn, toSentryEvent } from "@nakama/core/crash-report-sentry";
+import {
+  parseSentryDsn,
+  toSentryEvent,
+} from "@nakama/core/crash-report-sentry";
 
-export function isCrashReportShowCommand(argv = process.argv.slice(2)): boolean {
+export function isCrashReportShowCommand(
+  argv = process.argv.slice(2)
+): boolean {
   return argv[0] === "report" && argv[1] === "--show";
 }
 
@@ -29,7 +34,9 @@ export async function runCrashReportShow(): Promise<void> {
   ]);
 
   console.log(`Consent:   ${consent}`);
-  console.log(`Sends to:  ${dsn ? (parseSentryDsn(dsn)?.endpoint ?? dsn) : "nowhere (no DSN)"}`);
+  console.log(
+    `Sends to:  ${dsn ? (parseSentryDsn(dsn)?.endpoint ?? dsn) : "nowhere (no DSN)"}`
+  );
   console.log(`Install id: ${config.installId ?? "not created yet"}`);
   console.log(`Held, unsent: ${pending.length}`);
   console.log(`Stored at: ${getLastCrashReportPath()}`);
@@ -49,5 +56,11 @@ export async function runCrashReportShow(): Promise<void> {
 
   console.log("");
   console.log("Posted to the ingest as:");
-  console.log(JSON.stringify(toSentryEvent(report, { installId: config.installId }), null, 2));
+  console.log(
+    JSON.stringify(
+      toSentryEvent(report, { installId: config.installId }),
+      null,
+      2
+    )
+  );
 }

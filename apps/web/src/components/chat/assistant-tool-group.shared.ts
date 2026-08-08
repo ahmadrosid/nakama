@@ -4,7 +4,9 @@ export type AssistantTurnSegment =
   | { kind: "work"; thinking?: ChatListItem; tools: ChatListItem[] }
   | { kind: "text"; message: ChatListItem; thinking?: ChatListItem };
 
-export function segmentAssistantTurn(messages: ChatListItem[]): AssistantTurnSegment[] {
+export function segmentAssistantTurn(
+  messages: ChatListItem[]
+): AssistantTurnSegment[] {
   const segments: AssistantTurnSegment[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
@@ -39,7 +41,11 @@ export function segmentAssistantTurn(messages: ChatListItem[]): AssistantTurnSeg
       }
 
       if (hasText) {
-        segments.push({ kind: "text", message, ...(hasThinking ? { thinking: message } : {}) });
+        segments.push({
+          kind: "text",
+          message,
+          ...(hasThinking ? { thinking: message } : {}),
+        });
       }
     }
   }
@@ -49,7 +55,7 @@ export function segmentAssistantTurn(messages: ChatListItem[]): AssistantTurnSeg
 
 function findThinkingForToolRun(
   messages: ChatListItem[],
-  toolIndex: number,
+  toolIndex: number
 ): ChatListItem | undefined {
   for (let index = toolIndex - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -70,8 +76,6 @@ function findThinkingForToolRun(
       break;
     }
   }
-
-  return undefined;
 }
 
 function hasThinkingContent(message: ChatListItem): boolean {

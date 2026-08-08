@@ -33,7 +33,7 @@ async function writePendingCrashReports(reports: CrashReport[]): Promise<void> {
   await writePrivateTextFile(
     getPendingCrashReportsPath(),
     `${JSON.stringify(reports, null, 2)}\n`,
-    { ensureDir: getUserConfigDir() },
+    { ensureDir: getUserConfigDir() }
   );
 }
 
@@ -41,7 +41,9 @@ async function writePendingCrashReports(reports: CrashReport[]): Promise<void> {
  * Deduplicates by fingerprint so a crash loop cannot fill the file with one bug and push
  * out the other two.
  */
-export async function appendPendingCrashReport(report: CrashReport): Promise<void> {
+export async function appendPendingCrashReport(
+  report: CrashReport
+): Promise<void> {
   const existing = await readPendingCrashReports();
 
   if (existing.some((entry) => entry.fingerprint === report.fingerprint)) {
@@ -65,11 +67,13 @@ export function getLastCrashReportPath(): string {
  * exactly what would leave the machine. Without it every claim about what is sent has to
  * be taken on trust, which is the wrong way round for something that phones home.
  */
-export async function recordLastCrashReport(report: CrashReport): Promise<void> {
+export async function recordLastCrashReport(
+  report: CrashReport
+): Promise<void> {
   await writePrivateTextFile(
     getLastCrashReportPath(),
     `${JSON.stringify(report, null, 2)}\n`,
-    { ensureDir: getUserConfigDir() },
+    { ensureDir: getUserConfigDir() }
   );
 }
 
@@ -82,7 +86,9 @@ export async function readLastCrashReport(): Promise<CrashReport | null> {
 
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as CrashReport) : null;
+    return parsed && typeof parsed === "object"
+      ? (parsed as CrashReport)
+      : null;
   } catch {
     return null;
   }

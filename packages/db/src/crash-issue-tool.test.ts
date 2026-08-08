@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { CRASH_ISSUE_TOOL_ID, isProtectedToolId } from "@nakama/core/tools/protected";
+import {
+  CRASH_ISSUE_TOOL_ID,
+  isProtectedToolId,
+} from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import {
   ensureCrashIssueToolDefinition,
@@ -29,7 +32,9 @@ test("no profile gets it automatically", async () => {
   const superBot = await seedOrgSuperBotProfile(db, "org_a");
 
   for (const profile of [defaultProfile, superBot]) {
-    const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
+    const toolIds = (await db.listToolsForProfile(profile.id)).map(
+      (tool) => tool.id
+    );
     expect(toolIds).not.toContain(CRASH_ISSUE_TOOL_ID);
   }
 });

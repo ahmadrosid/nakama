@@ -1,20 +1,20 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import {
+  type DeliverableChannelArtifact,
   extractPairedTurnArtifacts,
   formatArtifactShareFooter,
   getMostRecentDeliverableArtifact,
   isAttachIntent,
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
-  type DeliverableChannelArtifact,
 } from "@nakama/core";
 import type { TextBasedChannel } from "discord.js";
-import type { SessionStore } from "./session-store";
+import type { DiscordMessenger } from "./messenger";
 import {
   DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
   sendDiscordArtifactAttachment,
 } from "./send-artifact-attachment";
-import type { DiscordMessenger } from "./messenger";
+import type { SessionStore } from "./session-store";
 
 export async function maybeSendRequestedDiscordArtifactAttachment(input: {
   channel: TextBasedChannel;
@@ -30,15 +30,21 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
     return;
   }
 
-  const artifact = getMostRecentDeliverableArtifact(input.sessionStore.getDeliverableArtifacts(input.conversationKey));
+  const artifact = getMostRecentDeliverableArtifact(
+    input.sessionStore.getDeliverableArtifacts(input.conversationKey)
+  );
   if (!artifact) {
     return;
   }
 
-  const { data } = await input.client.readProfileArtifactContent(input.profileId, artifact.path);
+  const { data } = await input.client.readProfileArtifactContent(
+    input.profileId,
+    artifact.path
+  );
   const result = await sendDiscordArtifactAttachment(input.channel, {
-    filename: artifact.filename,
     bytes: new Uint8Array(data),
+    filename: artifact.filename,
+    mimeType: artifact.mimeType,
   });
 
   if (!result.ok && result.error) {
@@ -61,23 +67,30 @@ export async function deliverDiscordTurnArtifactShares(input: {
     return;
   }
 
-  const shareUrlCache = input.sessionStore.getArtifactShareUrls(input.conversationKey);
+  const shareUrlCache = input.sessionStore.getArtifactShareUrls(
+    input.conversationKey
+  );
   let webPublicUrlConfigured = true;
   const delivered = await mintDeliverableArtifacts({
     artifacts: paired,
-    shareUrlCache,
     publish: async (path) => {
-      const response = await input.client.publishProfileArtifactShare(input.profileId, path);
+      const response = await input.client.publishProfileArtifactShare(
+        input.profileId,
+        path
+      );
       webPublicUrlConfigured = response.webPublicUrlConfigured;
       return response;
     },
+    shareUrlCache,
   });
 
   if (delivered.length === 0) {
     return;
   }
 
-  let registry = input.sessionStore.getDeliverableArtifacts(input.conversationKey);
+  let registry = input.sessionStore.getDeliverableArtifacts(
+    input.conversationKey
+  );
   for (const artifact of delivered) {
     registry = pushDeliverableArtifact(registry, artifact);
   }
@@ -92,10 +105,10 @@ export async function deliverDiscordTurnArtifactShares(input: {
 
   for (const artifact of delivered) {
     const uploaded = await tryUploadDiscordArtifact({
+      artifact,
       channel: input.channel,
       client: input.client,
       profileId: input.profileId,
-      artifact,
     });
 
     if (!uploaded) {
@@ -123,15 +136,19 @@ async function tryUploadDiscordArtifact(input: {
   }
 
   try {
-    const { data } = await input.client.readProfileArtifactContent(input.profileId, input.artifact.path);
+    const { data } = await input.client.readProfileArtifactContent(
+      input.profileId,
+      input.artifact.path
+    );
     const bytes = new Uint8Array(data);
     if (bytes.byteLength > DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES) {
       return false;
     }
 
     const result = await sendDiscordArtifactAttachment(input.channel, {
-      filename: input.artifact.filename,
       bytes,
+      filename: input.artifact.filename,
+      mimeType: input.artifact.mimeType,
     });
 
     return result.ok;

@@ -9,8 +9,8 @@ import type { CerebrasModelRow } from "@/lib/cerebras-models";
 export type CerebrasBrowseSelectHandler = (row: CerebrasModelRow) => void;
 
 interface CerebrasModelsBrowseListProps {
-  onSelect: CerebrasBrowseSelectHandler;
   className?: string;
+  onSelect: CerebrasBrowseSelectHandler;
 }
 
 const EMPTY_ROWS: CerebrasModelRow[] = [];
@@ -23,18 +23,21 @@ export function CerebrasModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<CerebrasModelRow>
-      rows={data?.rows ?? EMPTY_ROWS}
-      onSelect={onSelect}
       className={className}
-      query={{ isLoading, error }}
-      isDeprecated={(row) => row.deprecated}
-      toDisplayRow={capabilityBrowseRowToDisplayRow}
       filterRows={(rows, search, hideDeprecated) =>
-        filterCapabilityBrowseRows(rows, { search, hideDeprecated }) as CerebrasModelRow[]
+        filterCapabilityBrowseRows(rows, {
+          hideDeprecated,
+          search,
+        }) as CerebrasModelRow[]
       }
+      isDeprecated={(row) => row.deprecated}
+      onSelect={onSelect}
+      query={{ error, isLoading }}
+      rows={data?.rows ?? EMPTY_ROWS}
       status={({ filteredCount }) =>
         `${filteredCount} models${data?.usedFallback ? " · using curated fallback catalog" : ""}`
       }
+      toDisplayRow={capabilityBrowseRowToDisplayRow}
     />
   );
 }

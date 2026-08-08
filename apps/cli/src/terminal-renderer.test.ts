@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { TerminalLayout } from "./terminal-layout";
 import type { PendingMessage } from "./message-queue";
+import { styledLine, styledLineWidth } from "./styled-text";
+import { TerminalLayout } from "./terminal-layout";
 import {
   buildComposerLines,
   type ComposerState,
   TerminalRenderer,
 } from "./terminal-renderer";
-import { plainLine, styledLine, styledLineWidth } from "./styled-text";
 
 function composerLine(text: string, width: number) {
   return styledLine(`${text}${" ".repeat(Math.max(0, width - text.length))}`, {
@@ -19,11 +19,11 @@ describe("buildComposerLines", () => {
     const lines = buildComposerLines(
       {
         composer: {
-          prefix: "> ",
-          value: "abcdefgh",
           cursorVisible: true,
-          suggestions: [{ label: "/help", description: "show help" }],
+          prefix: "> ",
           selectedIndex: 0,
+          suggestions: [{ description: "show help", label: "/help" }],
+          value: "abcdefgh",
         },
         pendingMessages: [
           {
@@ -32,7 +32,7 @@ describe("buildComposerLines", () => {
           },
         ],
       },
-      30,
+      30
     );
 
     expect(lines).toEqual([
@@ -48,18 +48,22 @@ describe("buildComposerLines", () => {
     const lines = buildComposerLines(
       {
         composer: {
-          prefix: "> ",
-          value: "",
           cursorVisible: true,
-          suggestions: [],
+          prefix: "> ",
           selectedIndex: 0,
+          suggestions: [],
+          value: "",
         },
         pendingMessages: [],
       },
-      80,
+      80
     );
 
-    expect(lines).toEqual([composerLine("", 80), composerLine("> ▌", 80), composerLine("", 80)]);
+    expect(lines).toEqual([
+      composerLine("", 80),
+      composerLine("> ▌", 80),
+      composerLine("", 80),
+    ]);
   });
 
   test("keeps visible cursor within terminal width", () => {
@@ -67,15 +71,15 @@ describe("buildComposerLines", () => {
     const lines = buildComposerLines(
       {
         composer: {
-          prefix: "> ",
-          value: "abcdefgh",
           cursorVisible: true,
-          suggestions: [],
+          prefix: "> ",
           selectedIndex: 0,
+          suggestions: [],
+          value: "abcdefgh",
         },
         pendingMessages: [],
       },
-      width,
+      width
     );
 
     expect(lines).toEqual([
@@ -89,16 +93,36 @@ describe("buildComposerLines", () => {
 });
 
 describe("TerminalRenderer", () => {
-  let setReservedRowsSpy: ReturnType<typeof spyOn<TerminalLayout, "setReservedRows">> | null = null;
-  let writeStatusLineSpy: ReturnType<typeof spyOn<TerminalLayout, "writeStatusLine">> | null = null;
-  let clearStatusLineSpy: ReturnType<typeof spyOn<TerminalLayout, "clearStatusLine">> | null = null;
-  let writeScrollSpy: ReturnType<typeof spyOn<TerminalLayout, "writeScroll">> | null = null;
-  let writelnScrollSpy: ReturnType<typeof spyOn<TerminalLayout, "writelnScroll">> | null = null;
-  let writelnBelowStatusSpy: ReturnType<typeof spyOn<TerminalLayout, "writelnBelowStatus">> | null = null;
-  let beginMessageSpy: ReturnType<typeof spyOn<TerminalLayout, "beginMessage">> | null = null;
-  let endMessageSpy: ReturnType<typeof spyOn<TerminalLayout, "endMessage">> | null = null;
-  let beginStreamSpy: ReturnType<typeof spyOn<TerminalLayout, "beginStream">> | null = null;
-  let endStreamSpy: ReturnType<typeof spyOn<TerminalLayout, "endStream">> | null = null;
+  let setReservedRowsSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "setReservedRows">
+  > | null = null;
+  let writeStatusLineSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "writeStatusLine">
+  > | null = null;
+  let clearStatusLineSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "clearStatusLine">
+  > | null = null;
+  let writeScrollSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "writeScroll">
+  > | null = null;
+  let writelnScrollSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "writelnScroll">
+  > | null = null;
+  let writelnBelowStatusSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "writelnBelowStatus">
+  > | null = null;
+  let beginMessageSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "beginMessage">
+  > | null = null;
+  let endMessageSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "endMessage">
+  > | null = null;
+  let beginStreamSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "beginStream">
+  > | null = null;
+  let endStreamSpy: ReturnType<
+    typeof spyOn<TerminalLayout, "endStream">
+  > | null = null;
   let originalColumns: number | undefined;
 
   beforeEach(() => {
@@ -135,11 +159,11 @@ describe("TerminalRenderer", () => {
     const layout = new TerminalLayout(null);
     const renderer = new TerminalRenderer(null, layout);
     const composerState: ComposerState = {
-      prefix: "> ",
-      value: "hello",
       cursorVisible: true,
-      suggestions: [],
+      prefix: "> ",
       selectedIndex: 0,
+      suggestions: [],
+      value: "hello",
     };
     const pendingMessages: PendingMessage[] = [
       {
@@ -148,7 +172,9 @@ describe("TerminalRenderer", () => {
       },
     ];
 
-    setReservedRowsSpy = spyOn(layout, "setReservedRows").mockImplementation(() => {});
+    setReservedRowsSpy = spyOn(layout, "setReservedRows").mockImplementation(
+      () => {}
+    );
 
     renderer.setComposerState(composerState);
     renderer.setPendingMessages(pendingMessages);
@@ -170,8 +196,13 @@ describe("TerminalRenderer", () => {
     beginStreamSpy = spyOn(layout, "beginStream").mockImplementation(() => {});
     writeScrollSpy = spyOn(layout, "writeScroll").mockImplementation(() => {});
     endStreamSpy = spyOn(layout, "endStream").mockImplementation(() => {});
-    writelnScrollSpy = spyOn(layout, "writelnScroll").mockImplementation(() => {});
-    writelnBelowStatusSpy = spyOn(layout, "writelnBelowStatus").mockImplementation(() => {});
+    writelnScrollSpy = spyOn(layout, "writelnScroll").mockImplementation(
+      () => {}
+    );
+    writelnBelowStatusSpy = spyOn(
+      layout,
+      "writelnBelowStatus"
+    ).mockImplementation(() => {});
 
     renderer.appendOutputLine("intro");
     renderer.beginStream();
@@ -203,8 +234,12 @@ describe("TerminalRenderer", () => {
     const renderer = new TerminalRenderer(null, layout);
     const line = styledLine(" [tool: search] ", { dim: true });
 
-    beginMessageSpy = spyOn(layout, "beginMessage").mockImplementation(() => {});
-    writelnScrollSpy = spyOn(layout, "writelnScroll").mockImplementation(() => {});
+    beginMessageSpy = spyOn(layout, "beginMessage").mockImplementation(
+      () => {}
+    );
+    writelnScrollSpy = spyOn(layout, "writelnScroll").mockImplementation(
+      () => {}
+    );
     endMessageSpy = spyOn(layout, "endMessage").mockImplementation(() => {});
 
     renderer.appendToolLine(line);
@@ -221,8 +256,12 @@ describe("TerminalRenderer", () => {
     const layout = new TerminalLayout(null);
     const renderer = new TerminalRenderer(null, layout);
 
-    writeStatusLineSpy = spyOn(layout, "writeStatusLine").mockImplementation(() => {});
-    clearStatusLineSpy = spyOn(layout, "clearStatusLine").mockImplementation(() => {});
+    writeStatusLineSpy = spyOn(layout, "writeStatusLine").mockImplementation(
+      () => {}
+    );
+    clearStatusLineSpy = spyOn(layout, "clearStatusLine").mockImplementation(
+      () => {}
+    );
     const line = styledLine("thinking", { dim: true });
 
     renderer.setStatusLine(line);

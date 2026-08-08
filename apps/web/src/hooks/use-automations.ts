@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UpdateAutomationRequest } from "@nakama/core/contract";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { automationsQueryOptions } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
@@ -26,9 +26,9 @@ export function useAutomationUnreadTotal() {
 
 export function useAutomationRunsQuery(automationId: string | null) {
   return useQuery({
-    queryKey: queryKeys.automations.runs(automationId ?? ""),
-    queryFn: () => client.listAutomationRuns(automationId!),
     enabled: Boolean(automationId),
+    queryFn: () => client.listAutomationRuns(automationId!),
+    queryKey: queryKeys.automations.runs(automationId ?? ""),
   });
 }
 
@@ -36,11 +36,14 @@ export function useMarkAutomationRunsReadMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (automationId: string) => client.markAutomationRunsRead(automationId),
+    mutationFn: (automationId: string) =>
+      client.markAutomationRunsRead(automationId),
     onSuccess: async (_readThroughAt, automationId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.runs(automationId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.automations.runs(automationId),
+        }),
       ]);
     },
   });
@@ -50,8 +53,13 @@ export function useDeleteAutomationRunMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ automationId, runId }: { automationId: string; runId: string }) =>
-      client.deleteAutomationRun(automationId, runId),
+    mutationFn: ({
+      automationId,
+      runId,
+    }: {
+      automationId: string;
+      runId: string;
+    }) => client.deleteAutomationRun(automationId, runId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
@@ -91,7 +99,9 @@ export function useDeleteAutomationMutation() {
   return useMutation({
     mutationFn: (automationId: string) => client.deleteAutomation(automationId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.automations.all });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.automations.all,
+      });
     },
   });
 }
@@ -104,7 +114,9 @@ export function useRunAutomationMutation() {
     onSuccess: async (_data, automationId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.runs(automationId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.automations.runs(automationId),
+        }),
       ]);
     },
   });

@@ -5,7 +5,7 @@ export interface SkillPostTurnReviewSources {
 
 /** Profile override wins when non-null; otherwise org default (false when unset). */
 export function resolveSkillPostTurnReviewEnabled(
-  sources: SkillPostTurnReviewSources,
+  sources: SkillPostTurnReviewSources
 ): boolean {
   if (
     sources.profileSkillsPostTurnReview !== undefined &&

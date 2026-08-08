@@ -8,7 +8,9 @@ import { SkillProposalService } from "../src/services/skill-proposal-service";
 import { SkillsService } from "../src/services/skills-service";
 
 const configDir = process.env.NAKAMA_CONFIG_DIR?.trim() || getUserConfigDir();
-const database = await createDatabase("file:data/sqlite/nakama.sqlite", { baseDir: configDir });
+const database = await createDatabase("file:data/sqlite/nakama.sqlite", {
+  baseDir: configDir,
+});
 const db = database.adapter;
 
 const organizations = await db.listOrganizations();
@@ -35,15 +37,19 @@ description: Run before every production deploy.
 `;
 
 const result = await service.stageProposal({
-  orgId: org.id,
-  profileId: profile.id,
   action: "create",
   content: sampleSkillMarkdown,
+  orgId: org.id,
+  profileId: profile.id,
 });
 
 if (result.outcome !== "created" && result.outcome !== "already_pending") {
-  throw new Error(`Failed to seed skill proposal: ${result.message ?? result.outcome}`);
+  throw new Error(
+    `Failed to seed skill proposal: ${result.message ?? result.outcome}`
+  );
 }
 
 database.close();
-console.log(`Seeded pending skill proposal for org ${org.id}, profile ${profile.id}`);
+console.log(
+  `Seeded pending skill proposal for org ${org.id}, profile ${profile.id}`
+);

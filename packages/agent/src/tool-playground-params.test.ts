@@ -7,23 +7,25 @@ import {
 describe("tool playground params", () => {
   test("parseSuggestedParams accepts plain JSON and fenced JSON", () => {
     expect(parseSuggestedParams('{"query":"hi"}')).toEqual({ query: "hi" });
-    expect(parseSuggestedParams('```json\n{"query":"hi"}\n```')).toEqual({ query: "hi" });
+    expect(parseSuggestedParams('```json\n{"query":"hi"}\n```')).toEqual({
+      query: "hi",
+    });
     expect(parseSuggestedParams("not json")).toBeNull();
   });
 
   test("suggestToolParamsFromPrompt requires prompt", async () => {
     await expect(
       suggestToolParamsFromPrompt(
-        { toolName: "echo", description: "Echo", prompt: "   " },
-        {},
-      ),
+        { description: "Echo", prompt: "   ", toolName: "echo" },
+        {}
+      )
     ).rejects.toThrow("Prompt is required.");
   });
 
   test("suggestToolParamsFromPrompt returns {} without provider", async () => {
     const result = await suggestToolParamsFromPrompt(
-      { toolName: "echo", description: "Echo", prompt: "test" },
-      {},
+      { description: "Echo", prompt: "test", toolName: "echo" },
+      {}
     );
 
     expect(result).toEqual({});
@@ -31,12 +33,12 @@ describe("tool playground params", () => {
 
   test("suggestToolParamsFromPrompt unwraps provider JSON output", async () => {
     const result = await suggestToolParamsFromPrompt(
-      { toolName: "echo", description: "Echo", prompt: "test" },
+      { description: "Echo", prompt: "test", toolName: "echo" },
       {
         provider: {
           generateText: async () => '{"query":"nakama"}',
         } as never,
-      },
+      }
     );
 
     expect(result).toEqual({ query: "nakama" });

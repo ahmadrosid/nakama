@@ -13,7 +13,7 @@ export function filterProfilesForChatAccess(
     orgRole?: OrgRole | null;
     isPlatformAdmin?: boolean;
     excludeSuperBot?: boolean;
-  } = {},
+  } = {}
 ): ProfileSummary[] {
   if (options.excludeSuperBot || !canAccessSuperBotProfile(options)) {
     return profiles.filter((profile) => !profile.isSuper);
@@ -33,7 +33,9 @@ export function slugifyProfileName(name: string): string {
   );
 }
 
-export function sortProfilesForPicker(profiles: ProfileSummary[]): ProfileSummary[] {
+export function sortProfilesForPicker(
+  profiles: ProfileSummary[]
+): ProfileSummary[] {
   return [...profiles].sort((left, right) => {
     if (left.isDefault && !right.isDefault) {
       return -1;
@@ -49,12 +51,12 @@ export function sortProfilesForPicker(profiles: ProfileSummary[]): ProfileSummar
 
 export function resolveProfileInput(
   profiles: ProfileSummary[],
-  input: string,
+  input: string
 ): ProfileSummary | undefined {
   const trimmed = input.trim();
 
   if (!trimmed) {
-    return undefined;
+    return;
   }
 
   const exactId = profiles.find((profile) => profile.id === trimmed);
@@ -64,7 +66,12 @@ export function resolveProfileInput(
   }
 
   const lower = trimmed.toLowerCase();
-  const superBotAliases = new Set(["super_bot", "super-bot", "superbot", "super bot"]);
+  const superBotAliases = new Set([
+    "super_bot",
+    "super-bot",
+    "superbot",
+    "super bot",
+  ]);
 
   if (superBotAliases.has(lower)) {
     const superBots = profiles.filter((profile) => profile.isSuper);
@@ -74,7 +81,9 @@ export function resolveProfileInput(
     }
   }
 
-  const exactName = profiles.filter((profile) => profile.name.toLowerCase() === lower);
+  const exactName = profiles.filter(
+    (profile) => profile.name.toLowerCase() === lower
+  );
 
   if (exactName.length === 1) {
     return exactName[0];
@@ -82,7 +91,8 @@ export function resolveProfileInput(
 
   const slugMatches = profiles.filter(
     (profile) =>
-      slugifyProfileName(profile.name) === lower || slugifyProfileName(profile.id) === lower,
+      slugifyProfileName(profile.name) === lower ||
+      slugifyProfileName(profile.id) === lower
   );
 
   if (slugMatches.length === 1) {
@@ -99,7 +109,7 @@ export function resolveProfileInput(
   const partialMatches = profiles.filter(
     (profile) =>
       profile.id.toLowerCase().includes(lower) ||
-      profile.name.toLowerCase().includes(lower),
+      profile.name.toLowerCase().includes(lower)
   );
 
   if (partialMatches.length === 1) {
@@ -111,7 +121,7 @@ export function resolveProfileInput(
 
 export function isProfileSelectionIndexInput(
   input: string,
-  profileCount: number,
+  profileCount: number
 ): boolean {
   const trimmed = input.trim();
 
@@ -132,8 +142,8 @@ function levenshtein(left: string, right: string): number {
   const cols = right.length + 1;
   const matrix = Array.from({ length: rows }, (_, rowIndex) =>
     Array.from({ length: cols }, (_, colIndex) =>
-      rowIndex === 0 ? colIndex : colIndex === 0 ? rowIndex : 0,
-    ),
+      rowIndex === 0 ? colIndex : colIndex === 0 ? rowIndex : 0
+    )
   );
 
   for (let rowIndex = 1; rowIndex < rows; rowIndex += 1) {
@@ -142,7 +152,7 @@ function levenshtein(left: string, right: string): number {
       matrix[rowIndex]![colIndex] = Math.min(
         matrix[rowIndex - 1]![colIndex]! + 1,
         matrix[rowIndex]![colIndex - 1]! + 1,
-        matrix[rowIndex - 1]![colIndex - 1]! + cost,
+        matrix[rowIndex - 1]![colIndex - 1]! + cost
       );
     }
   }
@@ -152,16 +162,16 @@ function levenshtein(left: string, right: string): number {
 
 function findNearSlugProfileMatch(
   profiles: ProfileSummary[],
-  input: string,
+  input: string
 ): ProfileSummary | undefined {
   const lower = input.trim().toLowerCase();
 
   if (!lower.includes("-")) {
-    return undefined;
+    return;
   }
 
   const nearMatches = profiles.filter(
-    (profile) => levenshtein(slugifyProfileName(profile.name), lower) <= 1,
+    (profile) => levenshtein(slugifyProfileName(profile.name), lower) <= 1
   );
 
   return nearMatches.length === 1 ? nearMatches[0] : undefined;
@@ -187,15 +197,18 @@ export interface ProfileScope {
 
 export function resolveProfileInScopes(
   scopes: ProfileScope[],
-  input: string,
-): { scope: ProfileScope; profile: ProfileSummary } | { ambiguous: string } | null {
+  input: string
+):
+  | { scope: ProfileScope; profile: ProfileSummary }
+  | { ambiguous: string }
+  | null {
   const matches: Array<{ scope: ProfileScope; profile: ProfileSummary }> = [];
 
   for (const scope of scopes) {
     const profile = resolveProfileInput(scope.profiles, input);
 
     if (profile) {
-      matches.push({ scope, profile });
+      matches.push({ profile, scope });
     }
   }
 
@@ -204,18 +217,20 @@ export function resolveProfileInScopes(
   }
 
   if (matches.length === 1) {
-    return { scope: matches[0]!.scope, profile: matches[0]!.profile };
+    return { profile: matches[0]!.profile, scope: matches[0]!.scope };
   }
 
   return {
-    ambiguous: matches.map(({ scope, profile }) => `${profile.name} in ${scope.orgName}`).join(", "),
+    ambiguous: matches
+      .map(({ scope, profile }) => `${profile.name} in ${scope.orgName}`)
+      .join(", "),
   };
 }
 
 export function formatProfileSelectionPrompt(
   profiles: ProfileSummary[],
   currentProfileId?: string | null,
-  orgName?: string | null,
+  orgName?: string | null
 ): string {
   const sorted = sortProfilesForPicker(profiles);
   const current = currentProfileId
@@ -242,7 +257,7 @@ export function formatProfileSwitchConfirmation(profileName: string): string {
 
 export function pickProfileForOrg(
   profiles: ProfileSummary[],
-  preferredProfileId?: string,
+  preferredProfileId?: string
 ): ProfileSummary {
   if (preferredProfileId) {
     const match = resolveProfileInput(profiles, preferredProfileId);

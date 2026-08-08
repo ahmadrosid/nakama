@@ -1,4 +1,5 @@
 import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
+import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
 import { PlayIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { useReducer } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -19,25 +20,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { useDraftTaskPromptMutation } from "@/hooks/use-tasks";
-import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
 import { formatError } from "@/lib/client";
 
 interface TaskDetailDialogProps {
-  task: StoredTask | null;
-  profiles: ProfileSummary[];
   busy: boolean;
+  onDelete: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
+  onRun: () => Promise<void>;
   onSave: (input: {
     title: string;
     description: string;
     prompt: string;
     profileId: string;
   }) => Promise<void>;
-  onDelete: () => Promise<void>;
-  onRun: () => Promise<void>;
+  profiles: ProfileSummary[];
+  task: StoredTask | null;
 }
 
 type TaskDetailFormState = {
@@ -54,17 +54,17 @@ type TaskDetailFormAction =
 
 function createFormStateFromTask(task: StoredTask): TaskDetailFormState {
   return {
-    title: task.title,
     description: task.description,
-    prompt: task.prompt,
-    profileId: task.profileId,
     generateError: null,
+    profileId: task.profileId,
+    prompt: task.prompt,
+    title: task.title,
   };
 }
 
 function taskDetailFormReducer(
   state: TaskDetailFormState,
-  action: TaskDetailFormAction,
+  action: TaskDetailFormAction
 ): TaskDetailFormState {
   switch (action.type) {
     case "sync":
@@ -90,15 +90,15 @@ export function TaskDetailDialog({
   }
 
   return (
-    <Dialog open={Boolean(task)} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={Boolean(task)}>
       <TaskDetailDialogContent
-        key={task.id}
-        task={task}
-        profiles={profiles}
         busy={busy}
-        onSave={onSave}
+        key={task.id}
         onDelete={onDelete}
         onRun={onRun}
+        onSave={onSave}
+        profiles={profiles}
+        task={task}
       />
     </Dialog>
   );
@@ -119,7 +119,11 @@ function TaskDetailDialogContent({
   onDelete: TaskDetailDialogProps["onDelete"];
   onRun: TaskDetailDialogProps["onRun"];
 }) {
-  const [form, dispatch] = useReducer(taskDetailFormReducer, task, createFormStateFromTask);
+  const [form, dispatch] = useReducer(
+    taskDetailFormReducer,
+    task,
+    createFormStateFromTask
+  );
   const draftPromptMutation = useDraftTaskPromptMutation();
   const generating = draftPromptMutation.isPending;
   const actionsBusy = busy || generating;
@@ -135,12 +139,18 @@ function TaskDetailDialogContent({
 
     try {
       const generated = await draftPromptMutation.mutateAsync({
-        title: trimmedTitle,
         description: form.description.trim() || undefined,
+        title: trimmedTitle,
       });
-      dispatch({ type: "patch", values: { prompt: normalizeTaskPrompt(generated) } });
+      dispatch({
+        type: "patch",
+        values: { prompt: normalizeTaskPrompt(generated) },
+      });
     } catch (error) {
-      dispatch({ type: "patch", values: { generateError: formatError(error) } });
+      dispatch({
+        type: "patch",
+        values: { generateError: formatError(error) },
+      });
     }
   }
 
@@ -155,79 +165,96 @@ function TaskDetailDialogContent({
 
       <div className="space-y-4">
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="detail-title">
+          <label className="block font-medium text-sm" htmlFor="detail-title">
             Title
           </label>
           <Input
             id="detail-title"
-            value={form.title}
             onChange={(event) =>
               dispatch({ type: "patch", values: { title: event.target.value } })
             }
+            value={form.title}
           />
         </div>
 
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="detail-description">
+          <label
+            className="block font-medium text-sm"
+            htmlFor="detail-description"
+          >
             Description
           </label>
           <Input
             id="detail-description"
-            value={form.description}
             onChange={(event) =>
-              dispatch({ type: "patch", values: { description: event.target.value } })
+              dispatch({
+                type: "patch",
+                values: { description: event.target.value },
+              })
             }
+            value={form.description}
           />
         </div>
 
         <div className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium" htmlFor="detail-prompt">
+            <label
+              className="block font-medium text-sm"
+              htmlFor="detail-prompt"
+            >
               Agent prompt
             </label>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
               disabled={actionsBusy || !form.title.trim()}
               onClick={() => void handleGeneratePrompt()}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               {generating ? (
                 <Spinner className="size-3.5" />
               ) : (
-                <SparklesIcon className="size-3.5" aria-hidden />
+                <SparklesIcon aria-hidden className="size-3.5" />
               )}
               Generate
             </Button>
           </div>
           <Textarea
             id="detail-prompt"
-            value={form.prompt}
             onChange={(event) =>
-              dispatch({ type: "patch", values: { prompt: event.target.value } })
+              dispatch({
+                type: "patch",
+                values: { prompt: event.target.value },
+              })
             }
             rows={5}
+            value={form.prompt}
           />
           {form.generateError ? (
-            <p className="text-sm text-red-700 dark:text-red-300">{form.generateError}</p>
+            <p className="text-red-700 text-sm dark:text-red-300">
+              {form.generateError}
+            </p>
           ) : null}
         </div>
 
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="detail-profile">
+          <label className="block font-medium text-sm" htmlFor="detail-profile">
             Profile
           </label>
           <Select
-            value={form.profileId}
             onValueChange={(value) => {
               if (value) {
                 dispatch({ type: "patch", values: { profileId: value } });
               }
             }}
+            value={form.profileId}
           >
             <SelectTrigger id="detail-profile">
               <SelectValue placeholder="Select profile">
-                {profiles.find((profile) => profile.id === form.profileId)?.name}
+                {
+                  profiles.find((profile) => profile.id === form.profileId)
+                    ?.name
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -246,31 +273,40 @@ function TaskDetailDialogContent({
 
       <DialogFooter className="gap-2 sm:justify-between">
         <Button
-          type="button"
-          variant="destructive"
           disabled={actionsBusy}
           onClick={() => void onDelete()}
+          type="button"
+          variant="destructive"
         >
-          <Trash2Icon className="size-4" aria-hidden />
+          <Trash2Icon aria-hidden className="size-4" />
           Delete
         </Button>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled={actionsBusy} onClick={() => void onRun()}>
-            {busy ? <Spinner className="size-4" /> : <PlayIcon className="size-4" aria-hidden />}
+          <Button
+            disabled={actionsBusy}
+            onClick={() => void onRun()}
+            type="button"
+            variant="outline"
+          >
+            {busy ? (
+              <Spinner className="size-4" />
+            ) : (
+              <PlayIcon aria-hidden className="size-4" />
+            )}
             Run agent
           </Button>
           <Button
-            type="button"
             disabled={actionsBusy}
             onClick={() =>
               void onSave({
-                title: form.title,
                 description: form.description,
-                prompt: form.prompt,
                 profileId: form.profileId,
+                prompt: form.prompt,
+                title: form.title,
               })
             }
+            type="button"
           >
             Save changes
           </Button>

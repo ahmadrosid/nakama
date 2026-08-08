@@ -8,14 +8,14 @@ import {
   SendIcon,
 } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
-import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
-import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
-import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
-import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
+import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
+import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
+import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
+import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { Spinner } from "@/components/ui/spinner";
+import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -23,40 +23,40 @@ const sectionClass = "rounded-md border border-border bg-card";
 
 const INTEGRATION_SECTIONS = [
   {
-    id: "telegram",
-    label: "Telegram",
     description: "Bot and pairing",
     icon: SendIcon,
+    id: "telegram",
+    label: "Telegram",
   },
   {
-    id: "whatsapp",
-    label: "WhatsApp",
     description: "Bridge and device link",
     icon: MessageCircleMoreIcon,
+    id: "whatsapp",
+    label: "WhatsApp",
   },
   {
-    id: "discord",
-    label: "Discord",
     description: "Bot and pairing",
     icon: HashIcon,
+    id: "discord",
+    label: "Discord",
   },
   {
-    id: "notifications",
-    label: "Notifications",
     description: "Telegram webhooks",
     icon: BellRingIcon,
+    id: "notifications",
+    label: "Notifications",
   },
   {
-    id: "composio",
-    label: "Composio",
     description: "SaaS app connections",
     icon: PlugIcon,
+    id: "composio",
+    label: "Composio",
   },
   {
-    id: "token",
-    label: "Local token",
     description: "CLI and bridge access",
     icon: KeyRoundIcon,
+    id: "token",
+    label: "Local token",
   },
 ] as const;
 
@@ -82,18 +82,20 @@ export function IntegrationsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
         <Spinner className="size-5" />
       </div>
     );
   }
 
   if (activeOrg?.role === "viewer") {
-    return <Navigate to="/chat" replace />;
+    return <Navigate replace to="/chat" />;
   }
 
   const isOrgAdmin = activeOrg?.role === "admin";
-  const section = resolveSection(isOrgAdmin ? searchParams.get("section") : "composio");
+  const section = resolveSection(
+    isOrgAdmin ? searchParams.get("section") : "composio"
+  );
   const visibleSections = isOrgAdmin
     ? INTEGRATION_SECTIONS
     : INTEGRATION_SECTIONS.filter((item) => item.id === "composio");
@@ -109,25 +111,30 @@ export function IntegrationsPage() {
         }
         return next;
       },
-      { replace: true },
+      { replace: true }
     );
   }
 
   return (
-    <section className={cn(sectionClass, "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden")}>
+    <section
+      className={cn(
+        sectionClass,
+        "flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden"
+      )}
+    >
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="shrink-0 border-b border-border px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
+        <aside className="shrink-0 border-border border-b px-4 sm:px-5 md:w-56 md:border-r md:border-b-0 md:p-4">
           <nav
             aria-label="Integration settings"
             className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] md:flex-col md:overflow-visible [&::-webkit-scrollbar]:hidden"
           >
             {visibleSections.map((item) => (
               <SidebarButton
-                key={item.id}
-                label={item.label}
+                active={section === item.id}
                 description={item.description}
                 icon={item.icon}
-                active={section === item.id}
+                key={item.id}
+                label={item.label}
                 onClick={() => setSection(item.id)}
               />
             ))}
@@ -140,7 +147,7 @@ export function IntegrationsPage() {
           {section === "composio" ? (
             <div className={cn(isOrgAdmin && "space-y-4")}>
               {isOrgAdmin ? <ComposioSettingsCard embedded /> : null}
-              <ComposioConnectionsCard embedded bordered />
+              <ComposioConnectionsCard bordered embedded />
             </div>
           ) : null}
 
@@ -148,7 +155,9 @@ export function IntegrationsPage() {
 
           {section === "discord" ? <DiscordSettingsCard /> : null}
 
-          {section === "notifications" ? <NotificationDestinationsCard /> : null}
+          {section === "notifications" ? (
+            <NotificationDestinationsCard />
+          ) : null}
 
           {section === "whatsapp" ? <WhatsAppSettingsCard /> : null}
         </div>
@@ -172,25 +181,28 @@ function SidebarButton({
 }) {
   return (
     <button
-      type="button"
-      onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] active:scale-[0.96] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
+        "flex shrink-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-[color,background-color,border-color,box-shadow,scale] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.96] sm:px-4 md:w-full md:shrink md:gap-3 md:rounded-md md:px-2",
         active
           ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
+      onClick={onClick}
+      type="button"
     >
       <Icon
-        className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")}
-        strokeWidth={1.75}
         aria-hidden
+        className={cn(
+          "size-4 shrink-0",
+          active ? "text-primary" : "text-muted-foreground"
+        )}
+        strokeWidth={1.75}
       />
       <span className="min-w-0 md:space-y-0.5">
-        <span className="block text-sm font-medium leading-tight whitespace-nowrap [text-wrap:balance] md:whitespace-normal">
+        <span className="block whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
           {label}
         </span>
-        <span className="hidden text-xs leading-snug text-muted-foreground [text-wrap:pretty] md:block">
+        <span className="hidden text-muted-foreground text-xs leading-snug [text-wrap:pretty] md:block">
           {description}
         </span>
       </span>

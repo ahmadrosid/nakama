@@ -1,10 +1,11 @@
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
+import { ThemeContext } from "@/context/theme-context-shared";
 import {
   applyTheme,
   getInitialTheme,
@@ -12,14 +13,13 @@ import {
   THEME_STORAGE_KEY,
   type Theme,
 } from "@/lib/theme";
-import { ThemeContext } from "@/context/theme-context-shared";
 
 const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
   const [resolvedTheme, setResolvedTheme] = useState(() =>
-    resolveTheme(getInitialTheme()),
+    resolveTheme(getInitialTheme())
   );
 
   useEffect(() => {
@@ -57,9 +57,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ theme, resolvedTheme, setTheme, toggleTheme }),
-    [theme, resolvedTheme, setTheme, toggleTheme],
+    () => ({ resolvedTheme, setTheme, theme, toggleTheme }),
+    [theme, resolvedTheme, setTheme, toggleTheme]
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }

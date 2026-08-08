@@ -1,11 +1,15 @@
 import type { NakamaClient } from "@nakama/client";
 import type { SendMessageInput } from "@nakama/core/contract";
 import type { Context } from "grammy";
-import { downloadTelegramFile, OversizedTelegramFileError } from "./attachments";
+import {
+  downloadTelegramFile,
+  OversizedTelegramFileError,
+} from "./attachments";
 
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
-export const OVERSIZED_AUDIO_REPLY = "Audio is too large. Maximum size is 25 MB.";
+export const OVERSIZED_AUDIO_REPLY =
+  "Audio is too large. Maximum size is 25 MB.";
 
 export function hasTelegramAudio(ctx: Context): boolean {
   return Boolean(ctx.message?.voice || ctx.message?.audio);
@@ -13,7 +17,7 @@ export function hasTelegramAudio(ctx: Context): boolean {
 
 export async function buildTelegramAudioInput(
   ctx: Context,
-  client: NakamaClient,
+  client: NakamaClient
 ): Promise<SendMessageInput | null> {
   const voice = ctx.message?.voice;
   const audio = ctx.message?.audio;
@@ -24,13 +28,21 @@ export async function buildTelegramAudioInput(
   }
 
   const downloaded = await downloadTelegramFile(ctx, fileId, MAX_AUDIO_BYTES);
-  const filename = inferAudioFilename(downloaded.filePath, Boolean(voice), audio?.file_name);
-  const mediaType = inferAudioMediaType(downloaded.filePath, downloaded.contentType, Boolean(voice));
+  const filename = inferAudioFilename(
+    downloaded.filePath,
+    Boolean(voice),
+    audio?.file_name
+  );
+  const mediaType = inferAudioMediaType(
+    downloaded.filePath,
+    downloaded.contentType,
+    Boolean(voice)
+  );
 
   const { text } = await client.transcribeAudio({
-    mediaType,
     data: Buffer.from(downloaded.bytes).toString("base64"),
     filename,
+    mediaType,
   });
 
   const caption = ctx.message?.caption?.trim() ?? "";
@@ -54,7 +66,7 @@ export function formatTelegramAudioError(error: unknown): string {
 function inferAudioFilename(
   filePath: string,
   isVoice: boolean,
-  originalName?: string,
+  originalName?: string
 ): string {
   if (originalName?.trim()) {
     return originalName.trim();
@@ -72,7 +84,7 @@ function inferAudioFilename(
 function inferAudioMediaType(
   filePath: string,
   headerType: string | null,
-  isVoice: boolean,
+  isVoice: boolean
 ): string {
   if (headerType?.startsWith("audio/")) {
     return headerType.split(";")[0]!.trim();

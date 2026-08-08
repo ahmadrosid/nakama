@@ -4,13 +4,13 @@ import { join, normalize, sep } from "node:path";
 const API_PREFIXES = ["/v1/", "/health", "/docs", "/openapi.json"] as const;
 
 const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
+  ".html": "text/html; charset=utf-8",
   ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
@@ -22,7 +22,7 @@ export function resolveWebDistDir(projectRoot: string): string | null {
 
 export function tryServeStaticWeb(
   request: Request,
-  distDir: string,
+  distDir: string
 ): Response | null {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return null;
@@ -35,7 +35,8 @@ export function tryServeStaticWeb(
     return null;
   }
 
-  const relativePath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const relativePath =
+    pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   const filePath = resolveDistFile(distDir, relativePath);
 
   if (!filePath) {
@@ -58,7 +59,7 @@ function isApiPath(pathname: string): boolean {
   }
 
   return API_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix),
+    (prefix) => pathname === prefix || pathname.startsWith(prefix)
   );
 }
 

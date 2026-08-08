@@ -1,31 +1,47 @@
 import { createClient } from "@nakama/client";
-import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import {
+  ChannelOrgStore,
+  getChannelOrgSelectionPath,
+} from "@nakama/core/channel-org";
+import { reportError } from "@nakama/core/crash-report";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
-import {
-  clearWhatsAppWorkerHeartbeat,
-  writeWhatsAppWorkerHeartbeat,
-  writeWhatsAppQrCode,
-  clearWhatsAppQrCode,
-} from "@nakama/core/whatsapp-worker";
 import { syncWhatsAppOwnerPairing } from "@nakama/core/whatsapp-config";
-import { reportError } from "@nakama/core/crash-report";
-import { createWhatsAppSocket } from "./socket";
+import {
+  clearWhatsAppQrCode,
+  clearWhatsAppWorkerHeartbeat,
+  writeWhatsAppQrCode,
+  writeWhatsAppWorkerHeartbeat,
+} from "@nakama/core/whatsapp-worker";
+import { WhatsAppAuthStore } from "./auth-store";
+
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
 import { SessionStore } from "./session-store";
-import { WhatsAppAuthStore } from "./auth-store";
+import { createWhatsAppSocket } from "./socket";
 
 let spawnedChild: Bun.Subprocess | null = null;
-let socketHandle: { stop: () => void; socket: { sendMessage: (jid: string, content: { text: string }) => Promise<unknown> } | null } | null = null;
+let socketHandle: {
+  stop: () => void;
+  socket: {
+    sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
+  } | null;
+} | null = null;
 let outboundServer: { port: number; stop: () => void } | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let bridgeConnected = false;
 
 function persistWorkerHeartbeat(): void {
-  void writeWhatsAppWorkerHeartbeat(process.pid, new Date().toISOString(), bridgeConnected);
+  void writeWhatsAppWorkerHeartbeat(
+    process.pid,
+    new Date().toISOString(),
+    bridgeConnected
+  );
 }
 
 registerProcessLifecycleLogging();
@@ -46,15 +62,16 @@ try {
   spawnedChild = child;
 
   const client = createClient({
+    authToken:
+      (await loadLocalAuthToken("whatsapp@nakama.internal")) ?? undefined,
     baseUrl: serverUrl,
-    authToken: (await loadLocalAuthToken("whatsapp@nakama.internal")) ?? undefined,
     clientOrigin: resolveWebPublicUrl(),
   });
   const health = await client.health();
 
   if (!health.providerConfigured) {
     console.warn(
-      "Server has no provider configured. Chat runs in offline mode until an API key is set.",
+      "Server has no provider configured. Chat runs in offline mode until an API key is set."
     );
   }
 
@@ -68,16 +85,16 @@ try {
   await authStore.reload();
 
   const handleMessage = createChatHandler({
+    authStore,
     client,
     config,
-    authStore,
-    sessionStore,
+    getSocket: () =>
+      socketHandle ? ((socketHandle as any).socket ?? null) : null,
     orgStore,
-    getSocket: () => socketHandle ? (socketHandle as any).socket ?? null : null,
+    sessionStore,
   });
 
   const socket = await createWhatsAppSocket({
-    onMessage: handleMessage,
     onConnected: (me) => {
       bridgeConnected = true;
       persistWorkerHeartbeat();
@@ -92,6 +109,7 @@ try {
       bridgeConnected = false;
       persistWorkerHeartbeat();
     },
+    onMessage: handleMessage,
     onQr: (qr) => {
       void writeWhatsAppQrCode(qr);
     },
@@ -113,18 +131,24 @@ try {
     },
   });
 
-  console.log(`WhatsApp outbound server listening on 127.0.0.1:${outboundServer.port}`);
+  console.log(
+    `WhatsApp outbound server listening on 127.0.0.1:${outboundServer.port}`
+  );
 
   const authConfig = authStore.getConfig();
   const paired = authConfig?.pairedJid ? "yes" : "no";
   const pendingCode = authConfig?.pairingCode ? "yes" : "no";
   console.log(
-    `Nakama WhatsApp bridge · ${serverUrl} · profile ${config.profileId} · paired ${paired} · pairing code ${pendingCode}`,
+    `Nakama WhatsApp bridge · ${serverUrl} · profile ${config.profileId} · paired ${paired} · pairing code ${pendingCode}`
   );
 
   await socket.start();
 
-  await writeWhatsAppWorkerHeartbeat(process.pid, new Date().toISOString(), bridgeConnected);
+  await writeWhatsAppWorkerHeartbeat(
+    process.pid,
+    new Date().toISOString(),
+    bridgeConnected
+  );
   heartbeatTimer = setInterval(() => {
     persistWorkerHeartbeat();
   }, 15_000);

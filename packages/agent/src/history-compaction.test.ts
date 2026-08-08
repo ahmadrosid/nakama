@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatCompletionResult, ChatMessage, ProviderClient } from "@nakama/core";
+import type {
+  ChatCompletionResult,
+  ChatMessage,
+  ProviderClient,
+} from "@nakama/core";
 import {
   buildCompactionPrompt,
   compactHistory,
@@ -12,7 +16,7 @@ import {
 
 const compaction = {
   contextWindow: 100_000,
-  maxOutputTokens: 8_192,
+  maxOutputTokens: 8192,
 };
 
 function repeat(char: string, count: number): string {
@@ -21,10 +25,10 @@ function repeat(char: string, count: number): string {
 
 function createToolMessage(content: string): ChatMessage {
   return {
+    content,
+    name: "read",
     role: "tool",
     toolCallId: "call_1",
-    name: "read",
-    content,
   };
 }
 
@@ -38,42 +42,46 @@ describe("history compaction", () => {
 
   test("prunes old tool outputs while protecting recent turns", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "turn 1" },
+      { content: "turn 1", role: "user" },
       createToolMessage(repeat("a", 200_000)),
-      { role: "assistant", content: "done 1" },
-      { role: "user", content: "turn 2" },
+      { content: "done 1", role: "assistant" },
+      { content: "turn 2", role: "user" },
       createToolMessage(repeat("b", 10_000)),
-      { role: "assistant", content: "done 2" },
-      { role: "user", content: "turn 3" },
+      { content: "done 2", role: "assistant" },
+      { content: "turn 3", role: "user" },
       createToolMessage(repeat("c", 10_000)),
-      { role: "assistant", content: "done 3" },
-      { role: "user", content: "turn 4" },
-      { role: "assistant", content: "done 4" },
+      { content: "done 3", role: "assistant" },
+      { content: "turn 4", role: "user" },
+      { content: "done 4", role: "assistant" },
     ];
 
     const result = pruneToolOutputs(messages);
 
     expect(result.prunedTokens).toBeGreaterThan(0);
-    expect(messages[1]?.role === "tool" && messages[1].content).toContain("truncated");
-    expect(messages[10]?.role === "assistant" && messages[10].content).toBe("done 4");
+    expect(messages[1]?.role === "tool" && messages[1].content).toContain(
+      "truncated"
+    );
+    expect(messages[10]?.role === "assistant" && messages[10].content).toBe(
+      "done 4"
+    );
   });
 
   test("selects only the head for summarization", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "one" },
-      { role: "assistant", content: "a1" },
-      { role: "user", content: "two" },
-      { role: "assistant", content: "a2" },
-      { role: "user", content: "three" },
-      { role: "assistant", content: "a3" },
+      { content: "one", role: "user" },
+      { content: "a1", role: "assistant" },
+      { content: "two", role: "user" },
+      { content: "a2", role: "assistant" },
+      { content: "three", role: "user" },
+      { content: "a3", role: "assistant" },
     ];
 
     const selected = selectCompactionRange(messages);
 
     expect(selected.tailStartIndex).toBe(2);
     expect(selected.head).toEqual([
-      { role: "user", content: "one" },
-      { role: "assistant", content: "a1" },
+      { content: "one", role: "user" },
+      { content: "a1", role: "assistant" },
     ]);
   });
 
@@ -86,28 +94,28 @@ describe("history compaction", () => {
 
   test("summarizes history and replaces the head with a summary message", async () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "Implement compaction" },
-      { role: "assistant", content: "Working on it" },
-      { role: "user", content: "Add tests" },
-      { role: "assistant", content: "Adding tests now" },
-      { role: "user", content: "Ship it" },
+      { content: "Implement compaction", role: "user" },
+      { content: "Working on it", role: "assistant" },
+      { content: "Add tests", role: "user" },
+      { content: "Adding tests now", role: "assistant" },
+      { content: "Ship it", role: "user" },
     ];
 
     const provider: ProviderClient = {
-      name: "openai",
+      generateChat() {
+        return Promise.resolve({
+          assistantMessage: {
+            content: "## Goal\n- Implement compaction",
+            role: "assistant",
+          },
+          content: "## Goal\n- Implement compaction",
+          toolCalls: [],
+        } satisfies ChatCompletionResult);
+      },
       generateText() {
         return Promise.resolve({ content: "summary" });
       },
-      generateChat() {
-        return Promise.resolve({
-          content: "## Goal\n- Implement compaction",
-          toolCalls: [],
-          assistantMessage: {
-            role: "assistant",
-            content: "## Goal\n- Implement compaction",
-          },
-        } satisfies ChatCompletionResult);
-      },
+      name: "openai",
       streamChat(_input, handlers) {
         handlers.onChunk("## Goal\n- Implement compaction");
         return this.generateChat(_input);
@@ -115,48 +123,48 @@ describe("history compaction", () => {
     };
 
     const result = await compactHistory({
+      compaction,
+      force: true,
       history: messages,
       provider,
       systemPrompt: "system",
-      compaction,
-      force: true,
     });
 
     expect(result.action).toBe("summarized");
     expect(messages).toHaveLength(4);
     expect(messages[0]).toMatchObject({
+      content: "## Goal\n- Implement compaction",
       role: "assistant",
       summary: true,
-      content: "## Goal\n- Implement compaction",
     });
-    expect(messages[3]).toEqual({ role: "user", content: "Ship it" });
+    expect(messages[3]).toEqual({ content: "Ship it", role: "user" });
   });
 
   test("returns none when history is too short to summarize", async () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "hello" },
-      { role: "assistant", content: "hi" },
+      { content: "hello", role: "user" },
+      { content: "hi", role: "assistant" },
     ];
 
     const provider: ProviderClient = {
-      name: "openai",
-      generateText() {
-        return Promise.resolve({ content: "summary" });
-      },
       generateChat() {
         throw new Error("should not summarize");
       },
+      generateText() {
+        return Promise.resolve({ content: "summary" });
+      },
+      name: "openai",
       streamChat() {
         throw new Error("should not summarize");
       },
     };
 
     const result = await compactHistory({
+      compaction,
+      force: true,
       history: messages,
       provider,
       systemPrompt: "system",
-      compaction,
-      force: true,
     });
 
     expect(result.action).toBe("none");
@@ -164,7 +172,9 @@ describe("history compaction", () => {
   });
 
   test("estimates history tokens from serialized payload", () => {
-    const messages: ChatMessage[] = [{ role: "user", content: repeat("x", 400) }];
+    const messages: ChatMessage[] = [
+      { content: repeat("x", 400), role: "user" },
+    ];
     const estimate = estimateHistoryTokens(messages, "system prompt");
 
     expect(estimate).toBeGreaterThan(100);

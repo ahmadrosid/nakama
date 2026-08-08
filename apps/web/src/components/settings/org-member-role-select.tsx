@@ -24,15 +24,15 @@ export function OrgMemberRoleSelect({
 }) {
   return (
     <Select
-      value={value}
       disabled={disabled}
       onValueChange={(next) => {
         if (next) {
           onChange(next as OrgRole);
         }
       }}
+      value={value}
     >
-      <SelectTrigger size="sm" aria-label="Member role">
+      <SelectTrigger aria-label="Member role" size="sm">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

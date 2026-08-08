@@ -1,13 +1,13 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import type { WorkerLogsResponse } from "@nakama/core";
 import type { Context } from "hono";
-import type { HonoApp, AppEnv } from "../types";
 import type { ServerOptions } from "../context";
-import { errorResponse, json } from "../shared";
 import {
   requireNotViewerFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import type { WorkerLogsResponse } from "@nakama/core";
+import { errorResponse, json } from "../shared";
+import type { AppEnv, HonoApp } from "../types";
 
 const PLATFORM_ADMIN_WORKERS = new Set(["telegram", "whatsapp", "discord"]);
 
@@ -19,64 +19,107 @@ function requireWorkerAuthorization(c: Context<AppEnv>, name: string): void {
   }
 }
 
-export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerWorkerRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { workerManager } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
-  const workerLogsSchema = z.object({
-    worker: z.string(),
-    lines: z.array(z.string()),
-  }).passthrough().openapi("WorkerLogsResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
+  const workerLogsSchema = z
+    .object({
+      lines: z.array(z.string()),
+      worker: z.string(),
+    })
+    .passthrough()
+    .openapi("WorkerLogsResponse");
   const okSchema = z.object({ ok: z.boolean() });
   const workerParam = z.object({
-    name: z.string().openapi({ param: { name: "name", in: "path" } }),
+    name: z.string().openapi({ param: { in: "path", name: "name" } }),
   });
   const workerActionParam = z.object({
-    name: z.string().openapi({ param: { name: "name", in: "path" } }),
-    action: z.enum(["start", "stop", "restart"]).openapi({ param: { name: "action", in: "path" } }),
+    action: z
+      .enum(["start", "stop", "restart"])
+      .openapi({ param: { in: "path", name: "action" } }),
+    name: z.string().openapi({ param: { in: "path", name: "name" } }),
   });
   const workerLogsQuery = z.object({
     lines: z.string().optional(),
   });
 
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/workers/{name}/{action}",
-    tags: ["Workers"],
-    summary: "Control a worker",
-    operationId: "workerAction",
-    request: { params: workerActionParam },
-    responses: {
-      200: { description: "Worker action succeeded", content: { "application/json": { schema: okSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/workers/{name}/logs",
-    tags: ["Workers"],
-    summary: "Get worker logs",
-    operationId: "getWorkerLogs",
-    request: { params: workerParam, query: workerLogsQuery },
-    responses: {
-      200: { description: "Worker logs", content: { "application/json": { schema: workerLogsSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/workers/{name}/clear-logs",
-    tags: ["Workers"],
-    summary: "Clear worker logs",
-    operationId: "clearWorkerLogs",
-    request: { params: workerParam },
-    responses: {
-      200: { description: "Worker logs cleared", content: { "application/json": { schema: okSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "workerAction",
+      path: "/v1/workers/{name}/{action}",
+      request: { params: workerActionParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: okSchema } },
+          description: "Worker action succeeded",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Control a worker",
+      tags: ["Workers"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getWorkerLogs",
+      path: "/v1/workers/{name}/logs",
+      request: { params: workerParam, query: workerLogsQuery },
+      responses: {
+        200: {
+          content: { "application/json": { schema: workerLogsSchema } },
+          description: "Worker logs",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get worker logs",
+      tags: ["Workers"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "clearWorkerLogs",
+      path: "/v1/workers/{name}/clear-logs",
+      request: { params: workerParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: okSchema } },
+          description: "Worker logs cleared",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Clear worker logs",
+      tags: ["Workers"],
+    })
+  );
 
   app.post("/v1/workers/:name/:action{start|stop|restart}", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
@@ -113,8 +156,8 @@ export function registerWorkerRoutes(app: HonoApp, options: ServerOptions): void
 
     const linesParam = c.req.query("lines");
     const lines = Math.min(
-      Math.max(1, linesParam ? parseInt(linesParam, 10) : 200),
-      2000,
+      Math.max(1, linesParam ? Number.parseInt(linesParam, 10) : 200),
+      2000
     );
 
     try {

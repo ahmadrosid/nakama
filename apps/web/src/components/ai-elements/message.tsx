@@ -1,16 +1,20 @@
 "use client";
 
-import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
-import { MarkdownA } from "@/components/ai-elements/markdown-a";
-import { cn } from "@/lib/utils";
-import { useTheme } from "@/context/use-theme";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
-import { memo, type ComponentProps, type HTMLAttributes } from "react";
-import { Streamdown, type Components, type LinkSafetyModalProps } from "streamdown";
+import { type ComponentProps, type HTMLAttributes, memo } from "react";
+import {
+  type Components,
+  type LinkSafetyModalProps,
+  Streamdown,
+} from "streamdown";
+import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
+import { MarkdownA } from "@/components/ai-elements/markdown-a";
+import { useTheme } from "@/context/use-theme";
+import { cn } from "@/lib/utils";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -82,7 +86,7 @@ const MessageResponseBody = memo(
     <Streamdown
       className={cn(
         "chat-markdown size-full text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className,
+        className
       )}
       components={mergeMarkdownComponents(userComponents)}
       controls={controls}
@@ -98,7 +102,7 @@ const MessageResponseBody = memo(
     nextProps.isAnimating === nextProps.isAnimating &&
     prevProps.shikiTheme === nextProps.shikiTheme &&
     prevProps.linkSafety === nextProps.linkSafety &&
-    prevProps.components === nextProps.components,
+    prevProps.components === nextProps.components
 );
 
 MessageResponseBody.displayName = "MessageResponseBody";

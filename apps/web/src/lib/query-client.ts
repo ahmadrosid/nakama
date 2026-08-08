@@ -1,11 +1,11 @@
-import { QueryClient, type QueryCacheNotifyEvent } from "@tanstack/react-query";
 import { NakamaApiError } from "@nakama/core/api-error";
+import { type QueryCacheNotifyEvent, QueryClient } from "@tanstack/react-query";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
       refetchOnWindowFocus: false,
+      retry: 1,
     },
   },
 });

@@ -1,196 +1,201 @@
+import { NakamaApiError, readApiErrorMessage } from "@nakama/core/api-error";
 import type {
+  AddOrgMemberRequest,
+  AddOrgMemberResponse,
+  AddOrgMemoryFactRequest,
+  AgentBrowserStatusResponse,
   AgentChannel,
-  AutomationSchedule,
-  BranchSessionRequest,
-  BranchSessionResponse,
+  ApplySkillSuggestionResponse,
+  ApproveOrgMemoryProposalRequest,
+  ArchiveOrgMemoryRequest,
+  ArchiveOrgMemoryResponse,
+  ArtifactShareStatusResponse,
   AssignMcpServerRequest,
   AssignSkillRequest,
   AssignToolRequest,
+  AuthUserResponse,
+  AutomationDefinition,
+  AutomationResponse,
+  AutomationRunRecord,
+  AutomationSchedule,
+  BranchSessionRequest,
+  BranchSessionResponse,
+  ChangePasswordRequest,
+  CompactionResponse,
+  ComposioConnectRequest,
+  ComposioConnectResponse,
+  ComposioSettingsResponse,
+  ComposioToolkitSummary,
+  ConfigureProviderRequest,
+  ConfigureProviderResponse,
+  CreateAutomationRequest,
   CreateMcpServerRequest,
-  ListMcpServersResponse,
-  McpServerResponse,
-  TestMcpServerResponse,
-  UpdateMcpServerRequest,
+  CreateNotificationDestinationRequest,
+  CreateOrganizationRequest,
+  CreateOrganizationResponse,
   CreateProfileRequest,
-  CreateSkillRequest,
-  PatchSkillRequest,
-  CreateSessionResponse,
-  CreateToolRequest,
-  DeleteArtifactResponse,
-  ArtifactShareStatusResponse,
-  PublishArtifactShareRequest,
-  PublishArtifactShareResponse,
-  RevokeArtifactShareResponse,
-  DeleteKnowledgeBaseResponse,
-  DocumentAttachment,
-  DraftAutomationResponse,
-  HealthResponse,
-  ImageAttachment,
-  InitSoulResponse,
-  ListArtifactsResponse,
-  InitUserContextResponse,
-  ListKnowledgeBaseResponse,
-  ListProfilesResponse,
-  ListSkillsResponse,
-  ListToolsResponse,
-  SkillResponse,
-  SyncSkillsResponse,
-  ToolResponse,
-  ToolSourceResponse,
-  RunToolRequest,
-  RunToolResponse,
-  SuggestToolParamsRequest,
-  SuggestToolParamsResponse,
-  ListSessionsResponse,
-  ModelsResponse,
   CreateProviderRequest,
   CreateProviderResponse,
+  CreateSessionResponse,
+  CreateSkillRequest,
+  CreateTaskRequest,
+  CreateToolRequest,
+  DataImportPreviewResponse,
+  DeleteArtifactResponse,
+  DeleteKnowledgeBaseResponse,
   DeleteProviderResponse,
+  DiscordSettingsResponse,
+  DocumentAttachment,
+  DraftAutomationResponse,
+  DraftTaskPromptRequest,
+  DraftTaskPromptResponse,
+  EmailSettingsResponse,
+  GenerateImageRequest,
+  GenerateImageResponse,
+  HealthResponse,
+  ImageAttachment,
+  ImageGenerationSettings,
+  ImageGenerationSettingsResponse,
+  InitSoulResponse,
+  InitUserContextResponse,
+  InviteOrgMemberRequest,
+  ListArtifactsResponse,
+  ListAutomationRunsResponse,
+  ListAutomationsResponse,
+  ListComposioToolkitsResponse,
+  ListKnowledgeBaseResponse,
+  ListMcpServersResponse,
+  ListNotificationDestinationsResponse,
+  ListOrganizationsResponse,
+  ListOrgMembersResponse,
+  ListOrgMemoryHistoryResponse,
+  ListOrgMemoryProposalsResponse,
+  ListProfileComposioToolkitsResponse,
+  ListProfilesResponse,
   ListProvidersResponse,
-  UpdateProviderRequest,
-  UpdateProviderResponse,
+  ListSessionsResponse,
+  ListSkillProposalsResponse,
+  ListSkillSuggestionsResponse,
+  ListSkillsResponse,
+  ListTaskRunsResponse,
+  ListTasksResponse,
+  ListTimezonesResponse,
+  ListToolsResponse,
+  ListUserOrgsResponse,
+  MarkAutomationRunsReadResponse,
+  McpServerResponse,
+  ModelsResponse,
+  NotificationDestinationSummary,
+  NotificationDestinationWithSecret,
+  OrganizationResponse,
+  OrgInviteCreatedResponse,
+  OrgMemberResponse,
+  OrgMemoryHistoryRevisionResponse,
+  OrgMemoryProposalResponse,
+  OrgMemoryResponse,
+  OrgMemorySearchRequest,
+  OrgMemorySearchResponse,
+  PatchSkillRequest,
+  PinOrgMemoryRequest,
+  PreviewDataImportRequest,
   ProfileResponse,
+  PublishArtifactShareRequest,
+  PublishArtifactShareResponse,
+  RegenerateNotificationDestinationKeyResponse,
+  RestoreDataImportRequest,
+  RestoreDataImportResponse,
+  RestoreOrgMemoryHistoryResponse,
+  RevokeArtifactShareResponse,
+  RotateLocalAuthTokenResponse,
+  RunAutomationResponse,
+  RunTaskResponse,
+  RunToolRequest,
+  RunToolResponse,
+  SendEmailTestRequest,
+  SendEmailTestResponse,
   SendMessageResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
-  ConfigureProviderRequest,
-  ConfigureProviderResponse,
-  CompactionResponse,
+  SetActiveOrgRequest,
+  SetupAuthRequest,
+  SetupRestoreDataImportResponse,
+  SkillProposalResponse,
+  SkillResponse,
   SoulStackResponse,
   SoulStatusResponse,
-  UpdateProfileRequest,
-  UpdateSoulFileRequest,
-  UpdateUserContextRequest,
-  UploadKnowledgeBaseRequest,
-  UploadKnowledgeBaseResponse,
-  UserContextStatusResponse,
-  AutomationDefinition,
-  AutomationRunRecord,
-  CreateAutomationRequest,
-  ListAutomationRunsResponse,
-  ListAutomationsResponse,
-  MarkAutomationRunsReadResponse,
-  AutomationResponse,
-  RunAutomationResponse,
   StoredAutomation,
+  StoredTask,
+  SuggestToolParamsRequest,
+  SuggestToolParamsResponse,
+  SyncSkillsResponse,
   SystemStatusResponse,
-  WebPublicUrlSettingsResponse,
+  TaskMessagesResponse,
+  TaskResponse,
+  TaskRunRecord,
   TelegramSettingsResponse,
-  DiscordSettingsResponse,
-  ComposioSettingsResponse,
-  AgentBrowserStatusResponse,
-  EmailSettingsResponse,
-  SendEmailTestRequest,
-  SendEmailTestResponse,
+  TestMcpServerResponse,
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
-  UpdateAutomationRequest,
-  UpdateThinkingRequest,
-  UpdateVisionRequest,
-  UpdateTranscriptionRequest,
+  ToolResponse,
+  ToolSourceResponse,
   TranscribeAudioRequest,
   TranscribeAudioResponse,
   TranscriptionSettings,
   TranscriptionSettingsResponse,
-  UpdateTelegramSettingsRequest,
-  UpdateDiscordSettingsRequest,
+  UnpinOrgMemoryRequest,
+  UpdateAuthProfileRequest,
+  UpdateAutomationRequest,
   UpdateComposioSettingsRequest,
+  UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
-  ComposioConnectRequest,
-  ComposioConnectResponse,
-  ComposioToolkitSummary,
-  ListComposioToolkitsResponse,
-  ListProfileComposioToolkitsResponse,
+  UpdateImageGenerationRequest,
+  UpdateMcpServerRequest,
+  UpdateNotificationDestinationRequest,
+  UpdateOrganizationRequest,
+  UpdateOrgMemberRequest,
+  UpdateOrgMemoryRequest,
   UpdateProfileComposioToolkitsRequest,
-  UpdateWhatsAppSettingsRequest,
+  UpdateProfileRequest,
+  UpdateProviderRequest,
+  UpdateProviderResponse,
+  UpdateSoulFileRequest,
+  UpdateTaskRequest,
+  UpdateTelegramSettingsRequest,
+  UpdateThinkingRequest,
   UpdateTimezoneRequest,
+  UpdateTranscriptionRequest,
+  UpdateUserContextRequest,
+  UpdateVisionRequest,
+  UpdateWebPublicUrlRequest,
+  UpdateWhatsAppSettingsRequest,
+  UploadKnowledgeBaseRequest,
+  UploadKnowledgeBaseResponse,
+  UserContextStatusResponse,
   VisionSettings,
   VisionSettingsResponse,
+  WebPublicUrlSettingsResponse,
   WhatsAppSettingsResponse,
-  ListTimezonesResponse,
-  CreateTaskRequest,
-  DraftTaskPromptRequest,
-  DraftTaskPromptResponse,
-  UpdateTaskRequest,
-  ListTasksResponse,
-  TaskResponse,
-  RunTaskResponse,
-  ListTaskRunsResponse,
-  TaskMessagesResponse,
-  AuthUserResponse,
-  SetupAuthRequest,
-  UpdateAuthProfileRequest,
-  ChangePasswordRequest,
-  UpdateWebPublicUrlRequest,
-  CreateOrganizationRequest,
-  CreateOrganizationResponse,
-  CreateNotificationDestinationRequest,
-  ListOrganizationsResponse,
-  ListNotificationDestinationsResponse,
-  ListUserOrgsResponse,
-  NotificationDestinationSummary,
-  NotificationDestinationWithSecret,
-  DataImportPreviewResponse,
-  PreviewDataImportRequest,
-  RegenerateNotificationDestinationKeyResponse,
-  RestoreDataImportRequest,
-  RestoreDataImportResponse,
-  SetupRestoreDataImportResponse,
-  SetActiveOrgRequest,
-  AddOrgMemberRequest,
-  AddOrgMemberResponse,
-  InviteOrgMemberRequest,
-  OrgInviteCreatedResponse,
-  ListOrgMembersResponse,
-  UpdateOrgMemberRequest,
-  UpdateOrganizationRequest,
-  UpdateNotificationDestinationRequest,
-  OrganizationResponse,
-  OrgMemberResponse,
-  OrgMemoryResponse,
-  UpdateOrgMemoryRequest,
-  AddOrgMemoryFactRequest,
-  OrgMemorySearchRequest,
-  OrgMemorySearchResponse,
-  ArchiveOrgMemoryRequest,
-  ArchiveOrgMemoryResponse,
-  PinOrgMemoryRequest,
-  UnpinOrgMemoryRequest,
-  ListOrgMemoryProposalsResponse,
-  ApproveOrgMemoryProposalRequest,
-  OrgMemoryProposalResponse,
-  ListSkillProposalsResponse,
-  SkillProposalResponse,
-  ListSkillSuggestionsResponse,
-  ApplySkillSuggestionResponse,
-  ListOrgMemoryHistoryResponse,
-  RestoreOrgMemoryHistoryResponse,
-  OrgMemoryHistoryRevisionResponse,
-  StoredTask,
-  TaskRunRecord,
   WorkerLogsResponse,
-  RotateLocalAuthTokenResponse,
 } from "@nakama/core/contract";
-import { readApiErrorMessage, NakamaApiError } from "@nakama/core/api-error";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
 import {
-  readAgentBrowserInstallStream,
   normalizeStreamHandlers,
+  readAgentBrowserInstallStream,
   readStreamEvents,
   resolveSendMessageBody,
 } from "./stream";
 import type {
   BinaryBufferSource,
   FetchCredentials,
+  NakamaClientOptions,
   RemoteChatSession,
   SendMessageArg,
   SendStreamOptions,
   StreamHandler,
   StreamHandlers,
-  NakamaClientOptions,
 } from "./types";
 
 export class NakamaClient {
@@ -233,13 +238,19 @@ export class NakamaClient {
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {
-    return this.request<WebPublicUrlSettingsResponse>("/v1/system/web-public-url");
+    return this.request<WebPublicUrlSettingsResponse>(
+      "/v1/system/web-public-url"
+    );
   }
 
-  async updateWebPublicUrl(webPublicUrl: string): Promise<{ webPublicUrl: string }> {
+  async updateWebPublicUrl(
+    webPublicUrl: string
+  ): Promise<{ webPublicUrl: string }> {
     return this.request<{ webPublicUrl: string }>("/v1/system/web-public-url", {
+      body: JSON.stringify({
+        webPublicUrl,
+      } satisfies UpdateWebPublicUrlRequest),
       method: "PUT",
-      body: JSON.stringify({ webPublicUrl } satisfies UpdateWebPublicUrlRequest),
     });
   }
 
@@ -249,98 +260,131 @@ export class NakamaClient {
   }> {
     const response = await this.fetchRaw("/v1/platform/data/export");
     return {
-      filename: readContentDispositionFilename(response.headers) ?? "nakama-export.zip",
       data: await response.arrayBuffer(),
+      filename:
+        readContentDispositionFilename(response.headers) ?? "nakama-export.zip",
     };
   }
 
-  async previewDataImport(data: Blob | BinaryBufferSource | string): Promise<DataImportPreviewResponse> {
+  async previewDataImport(
+    data: Blob | BinaryBufferSource | string
+  ): Promise<DataImportPreviewResponse> {
     const request: PreviewDataImportRequest = {
       data: await encodeArchiveData(data),
     };
-    return this.request<DataImportPreviewResponse>("/v1/platform/data/import/preview", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<DataImportPreviewResponse>(
+      "/v1/platform/data/import/preview",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async restoreDataImport(
     data: Blob | BinaryBufferSource | string,
-    options: { confirm: boolean },
+    options: { confirm: boolean }
   ): Promise<RestoreDataImportResponse> {
     const request: RestoreDataImportRequest = {
       confirm: options.confirm,
       data: await encodeArchiveData(data),
     };
-    return this.request<RestoreDataImportResponse>("/v1/platform/data/import/restore", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<RestoreDataImportResponse>(
+      "/v1/platform/data/import/restore",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async previewSetupDataImport(
-    data: Blob | BinaryBufferSource | string,
+    data: Blob | BinaryBufferSource | string
   ): Promise<DataImportPreviewResponse> {
     const request: PreviewDataImportRequest = {
       data: await encodeArchiveData(data),
     };
-    return this.request<DataImportPreviewResponse>("/v1/auth/setup/import/preview", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<DataImportPreviewResponse>(
+      "/v1/auth/setup/import/preview",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async restoreSetupDataImport(
     data: Blob | BinaryBufferSource | string,
-    options: { confirm: boolean },
+    options: { confirm: boolean }
   ): Promise<SetupRestoreDataImportResponse> {
     const request: RestoreDataImportRequest = {
       confirm: options.confirm,
       data: await encodeArchiveData(data),
     };
-    return this.request<SetupRestoreDataImportResponse>("/v1/auth/setup/import/restore", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<SetupRestoreDataImportResponse>(
+      "/v1/auth/setup/import/restore",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async startWorker(name: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/start`, {
-      method: "POST",
-    });
+    return this.request<{ ok: boolean }>(
+      `/v1/workers/${encodeURIComponent(name)}/start`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async stopWorker(name: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/stop`, {
-      method: "POST",
-    });
+    return this.request<{ ok: boolean }>(
+      `/v1/workers/${encodeURIComponent(name)}/stop`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async restartWorker(name: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/restart`, {
-      method: "POST",
-    });
+    return this.request<{ ok: boolean }>(
+      `/v1/workers/${encodeURIComponent(name)}/restart`,
+      {
+        method: "POST",
+      }
+    );
   }
 
-  async getWorkerLogs(name: string, lines?: number): Promise<WorkerLogsResponse> {
-    const query = lines !== undefined ? `?lines=${lines}` : "";
-    return this.request<WorkerLogsResponse>(`/v1/workers/${encodeURIComponent(name)}/logs${query}`);
+  async getWorkerLogs(
+    name: string,
+    lines?: number
+  ): Promise<WorkerLogsResponse> {
+    const query = lines === undefined ? "" : `?lines=${lines}`;
+    return this.request<WorkerLogsResponse>(
+      `/v1/workers/${encodeURIComponent(name)}/logs${query}`
+    );
   }
 
   async clearWorkerLogs(name: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`/v1/workers/${encodeURIComponent(name)}/clear-logs`, {
-      method: "POST",
-    });
+    return this.request<{ ok: boolean }>(
+      `/v1/workers/${encodeURIComponent(name)}/clear-logs`,
+      {
+        method: "POST",
+      }
+    );
   }
 
-  async getModels(options: { source?: "catalog" | "remote" } = {}): Promise<ModelsResponse> {
-    const query =
-      options.source === "remote" ? "?source=remote" : "";
+  async getModels(
+    options: { source?: "catalog" | "remote" } = {}
+  ): Promise<ModelsResponse> {
+    const query = options.source === "remote" ? "?source=remote" : "";
     return this.request<ModelsResponse>(`/v1/models${query}`);
   }
 
   async getExternalModelCatalog(
-    catalogId: "models-dev" | "openrouter" | "cerebras",
+    catalogId: "models-dev" | "openrouter" | "cerebras"
   ): Promise<unknown> {
     return this.request(`/v1/model-catalogs/${encodeURIComponent(catalogId)}`);
   }
@@ -353,8 +397,8 @@ export class NakamaClient {
     hostMode?: "local" | "cloud";
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
@@ -362,70 +406,74 @@ export class NakamaClient {
     return this.request<ListProvidersResponse>("/v1/providers");
   }
 
-  async createProvider(request: CreateProviderRequest): Promise<CreateProviderResponse> {
+  async createProvider(
+    request: CreateProviderRequest
+  ): Promise<CreateProviderResponse> {
     return this.request<CreateProviderResponse>("/v1/providers", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async updateProvider(
     providerId: string,
-    request: UpdateProviderRequest,
+    request: UpdateProviderRequest
   ): Promise<UpdateProviderResponse> {
     return this.request<UpdateProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}`,
       {
-        method: "PATCH",
         body: JSON.stringify(request),
-      },
+        method: "PATCH",
+      }
     );
   }
 
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
     return this.request<DeleteProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async configureProvider(
-    request: ConfigureProviderRequest,
+    request: ConfigureProviderRequest
   ): Promise<ConfigureProviderResponse> {
     return this.request<ConfigureProviderResponse>("/v1/settings/provider", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
 
   async createSession(
     channel: AgentChannel,
-    options: { profileId?: string } = {},
+    options: { profileId?: string } = {}
   ): Promise<RemoteChatSession> {
     const response = await this.request<CreateSessionResponse>("/v1/sessions", {
-      method: "POST",
       body: JSON.stringify({ channel, profileId: options.profileId }),
+      method: "POST",
     });
 
     return this.createChatSession(response.sessionId, channel);
   }
 
-  async getSessionMessages(sessionId: string): Promise<SessionMessagesResponse> {
+  async getSessionMessages(
+    sessionId: string
+  ): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`
     );
   }
 
   async getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
     return this.request<SessionStatusResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/status`,
+      `/v1/sessions/${encodeURIComponent(sessionId)}/status`
     );
   }
 
   async subscribeSessionStream(
     sessionId: string,
     handler: StreamHandler | StreamHandlers,
-    options?: SendStreamOptions,
+    options?: SendStreamOptions
   ): Promise<{ reconnected: boolean; reply?: string }> {
     const handlers = normalizeStreamHandlers(handler);
     const headers = this.buildHeaders("GET", {
@@ -434,11 +482,11 @@ export class NakamaClient {
     const response = await this.fetchImpl(
       `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/stream`,
       {
-        method: "GET",
-        headers,
-        signal: options?.signal,
         credentials: this.credentials,
-      },
+        headers,
+        method: "GET",
+        signal: options?.signal,
+      }
     );
 
     if (response.status === 204) {
@@ -453,29 +501,35 @@ export class NakamaClient {
       throw new Error("Server returned an empty stream.");
     }
 
-    const reply = await readStreamEvents(response.body, handlers, options?.signal);
+    const reply = await readStreamEvents(
+      response.body,
+      handlers,
+      options?.signal
+    );
     return { reconnected: true, reply };
   }
 
   async branchSession(
     sessionId: string,
-    request: BranchSessionRequest,
+    request: BranchSessionRequest
   ): Promise<BranchSessionResponse> {
     return this.request<BranchSessionResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/branch`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
   async listSessions(
     profileId: string,
-    channel: AgentChannel = "web",
+    channel: AgentChannel = "web"
   ): Promise<ListSessionsResponse> {
-    const query = new URLSearchParams({ profileId, channel });
-    return this.request<ListSessionsResponse>(`/v1/sessions?${query.toString()}`);
+    const query = new URLSearchParams({ channel, profileId });
+    return this.request<ListSessionsResponse>(
+      `/v1/sessions?${query.toString()}`
+    );
   }
 
   async listProfiles(): Promise<ListProfilesResponse> {
@@ -483,26 +537,28 @@ export class NakamaClient {
   }
 
   async getProfile(profileId: string): Promise<ProfileResponse> {
-    return this.request<ProfileResponse>(`/v1/profiles/${encodeURIComponent(profileId)}`);
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}`
+    );
   }
 
   async createProfile(request: CreateProfileRequest): Promise<ProfileResponse> {
     return this.request<ProfileResponse>("/v1/profiles", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async updateProfile(
     profileId: string,
-    request: UpdateProfileRequest,
+    request: UpdateProfileRequest
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}`,
       {
-        method: "PUT",
         body: JSON.stringify(request),
-      },
+        method: "PUT",
+      }
     );
   }
 
@@ -514,14 +570,14 @@ export class NakamaClient {
 
   async uploadProfileAvatar(
     profileId: string,
-    attachment: ImageAttachment,
+    attachment: ImageAttachment
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/avatar`,
       {
-        method: "PUT",
         body: JSON.stringify(attachment),
-      },
+        method: "PUT",
+      }
     );
   }
 
@@ -536,20 +592,25 @@ export class NakamaClient {
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {
-    return this.request<ToolResponse>(`/v1/tools/${encodeURIComponent(toolId)}`);
+    return this.request<ToolResponse>(
+      `/v1/tools/${encodeURIComponent(toolId)}`
+    );
   }
 
   async getToolSource(toolId: string): Promise<ToolSourceResponse> {
     return this.request<ToolSourceResponse>(
-      `/v1/tools/${encodeURIComponent(toolId)}/source`,
+      `/v1/tools/${encodeURIComponent(toolId)}/source`
     );
   }
 
   async createTool(request: CreateToolRequest) {
-    return this.request<{ tool: ListToolsResponse["tools"][number] }>("/v1/tools", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<{ tool: ListToolsResponse["tools"][number] }>(
+      "/v1/tools",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async deleteTool(toolId: string): Promise<void> {
@@ -558,45 +619,54 @@ export class NakamaClient {
     });
   }
 
-  async runTool(toolId: string, request: RunToolRequest): Promise<RunToolResponse> {
+  async runTool(
+    toolId: string,
+    request: RunToolRequest
+  ): Promise<RunToolResponse> {
     return this.request<RunToolResponse>(
       `/v1/tools/${encodeURIComponent(toolId)}/run`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
   async suggestToolParams(
     toolId: string,
-    request: SuggestToolParamsRequest,
+    request: SuggestToolParamsRequest
   ): Promise<SuggestToolParamsResponse> {
     return this.request<SuggestToolParamsResponse>(
       `/v1/tools/${encodeURIComponent(toolId)}/params/suggest`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
-  async assignTool(profileId: string, request: AssignToolRequest): Promise<ProfileResponse> {
+  async assignTool(
+    profileId: string,
+    request: AssignToolRequest
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
-  async unassignTool(profileId: string, toolId: string): Promise<ProfileResponse> {
+  async unassignTool(
+    profileId: string,
+    toolId: string
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/tools/${encodeURIComponent(toolId)}`,
       {
         method: "DELETE",
-      },
+      }
     );
   }
 
@@ -606,27 +676,29 @@ export class NakamaClient {
 
   async getMcpServer(serverId: string): Promise<McpServerResponse> {
     return this.request<McpServerResponse>(
-      `/v1/mcp/servers/${encodeURIComponent(serverId)}`,
+      `/v1/mcp/servers/${encodeURIComponent(serverId)}`
     );
   }
 
-  async createMcpServer(request: CreateMcpServerRequest): Promise<McpServerResponse> {
+  async createMcpServer(
+    request: CreateMcpServerRequest
+  ): Promise<McpServerResponse> {
     return this.request<McpServerResponse>("/v1/mcp/servers", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async updateMcpServer(
     serverId: string,
-    request: UpdateMcpServerRequest,
+    request: UpdateMcpServerRequest
   ): Promise<McpServerResponse> {
     return this.request<McpServerResponse>(
       `/v1/mcp/servers/${encodeURIComponent(serverId)}`,
       {
-        method: "PATCH",
         body: JSON.stringify(request),
-      },
+        method: "PATCH",
+      }
     );
   }
 
@@ -639,41 +711,46 @@ export class NakamaClient {
   async connectMcpServer(serverId: string): Promise<McpServerResponse> {
     return this.request<McpServerResponse>(
       `/v1/mcp/servers/${encodeURIComponent(serverId)}/connect`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
 
   async syncMcpServer(serverId: string): Promise<McpServerResponse> {
     return this.request<McpServerResponse>(
       `/v1/mcp/servers/${encodeURIComponent(serverId)}/sync`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
 
-  async testMcpServer(request: CreateMcpServerRequest): Promise<TestMcpServerResponse> {
+  async testMcpServer(
+    request: CreateMcpServerRequest
+  ): Promise<TestMcpServerResponse> {
     return this.request<TestMcpServerResponse>("/v1/mcp/servers/test", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async assignMcpServer(
     profileId: string,
-    request: AssignMcpServerRequest,
+    request: AssignMcpServerRequest
   ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/mcp-servers`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
-  async unassignMcpServer(profileId: string, serverId: string): Promise<ProfileResponse> {
+  async unassignMcpServer(
+    profileId: string,
+    serverId: string
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/mcp-servers/${encodeURIComponent(serverId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
@@ -683,19 +760,21 @@ export class NakamaClient {
 
   async createSkill(request: CreateSkillRequest): Promise<SkillResponse> {
     return this.request<SkillResponse>("/v1/skills", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async getSkill(skillId: string): Promise<SkillResponse> {
-    return this.request<SkillResponse>(`/v1/skills/${encodeURIComponent(skillId)}`);
+    return this.request<SkillResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}`
+    );
   }
 
   async patchSkill(
     skillId: string,
     request: PatchSkillRequest,
-    options?: { profileId?: string },
+    options?: { profileId?: string }
   ): Promise<SkillResponse> {
     const params = new URLSearchParams();
     if (options?.profileId) {
@@ -706,8 +785,8 @@ export class NakamaClient {
     const path = `/v1/skills/${encodeURIComponent(skillId)}${query ? `?${query}` : ""}`;
 
     return this.request<SkillResponse>(path, {
-      method: "PATCH",
       body: JSON.stringify(request),
+      method: "PATCH",
     });
   }
 
@@ -723,30 +802,36 @@ export class NakamaClient {
     });
   }
 
-  async assignSkill(profileId: string, request: AssignSkillRequest): Promise<ProfileResponse> {
+  async assignSkill(
+    profileId: string,
+    request: AssignSkillRequest
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
-  async unassignSkill(profileId: string, skillId: string): Promise<ProfileResponse> {
+  async unassignSkill(
+    profileId: string,
+    skillId: string
+  ): Promise<ProfileResponse> {
     return this.request<ProfileResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/skills/${encodeURIComponent(skillId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async getProfileSoulStatus(
     profileId: string,
-    options: { includeContents?: boolean } = {},
+    options: { includeContents?: boolean } = {}
   ): Promise<SoulStatusResponse> {
     const query = options.includeContents ? "?contents=true" : "";
     return this.request<SoulStatusResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/soul${query}`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul${query}`
     );
   }
 
@@ -755,84 +840,86 @@ export class NakamaClient {
       `/v1/profiles/${encodeURIComponent(profileId)}/soul/init`,
       {
         method: "POST",
-      },
+      }
     );
   }
 
   async getProfileSoulStack(profileId: string): Promise<SoulStackResponse> {
     return this.request<SoulStackResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/soul/stack`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/soul/stack`
     );
   }
 
   async writeProfileSoulFile(
     profileId: string,
     fileKey: string,
-    content: string,
+    content: string
   ): Promise<void> {
     await this.request(
       `/v1/profiles/${encodeURIComponent(profileId)}/soul/files/${encodeURIComponent(fileKey)}`,
       {
-        method: "PUT",
         body: JSON.stringify({ content } satisfies UpdateSoulFileRequest),
-      },
+        method: "PUT",
+      }
     );
   }
 
-  async listProfileArtifacts(profileId: string): Promise<ListArtifactsResponse> {
+  async listProfileArtifacts(
+    profileId: string
+  ): Promise<ListArtifactsResponse> {
     return this.request<ListArtifactsResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts`
     );
   }
 
   async deleteProfileArtifact(
     profileId: string,
-    filename: string,
+    filename: string
   ): Promise<DeleteArtifactResponse> {
     const query = new URLSearchParams({ path: filename });
     return this.request<DeleteArtifactResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts?${query.toString()}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async publishProfileArtifactShare(
     profileId: string,
-    path: string,
+    path: string
   ): Promise<PublishArtifactShareResponse> {
     return this.request<PublishArtifactShareResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares`,
       {
-        method: "POST",
         body: JSON.stringify({ path } satisfies PublishArtifactShareRequest),
-      },
+        method: "POST",
+      }
     );
   }
 
   async getProfileArtifactShareStatus(
     profileId: string,
-    path: string,
+    path: string
   ): Promise<ArtifactShareStatusResponse | null> {
     const query = new URLSearchParams({ path });
     return this.request<ArtifactShareStatusResponse | null>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/status?${query.toString()}`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/status?${query.toString()}`
     );
   }
 
   async revokeProfileArtifactShare(
     profileId: string,
-    shareId: string,
+    shareId: string
   ): Promise<RevokeArtifactShareResponse> {
     return this.request<RevokeArtifactShareResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/${encodeURIComponent(shareId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean; render?: "markdown" } = {},
+    options: { inline?: boolean; render?: "markdown" } = {}
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
@@ -843,46 +930,49 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`
     );
 
     return {
-      contentType: response.headers.get("Content-Type") ?? "application/octet-stream",
+      contentType:
+        response.headers.get("Content-Type") ?? "application/octet-stream",
       data: await response.arrayBuffer(),
     };
   }
 
-  async listKnowledgeBase(profileId: string): Promise<ListKnowledgeBaseResponse> {
+  async listKnowledgeBase(
+    profileId: string
+  ): Promise<ListKnowledgeBaseResponse> {
     return this.request<ListKnowledgeBaseResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`
     );
   }
 
   async uploadKnowledgeBaseDocument(
     profileId: string,
-    document: DocumentAttachment,
+    document: DocumentAttachment
   ): Promise<UploadKnowledgeBaseResponse> {
     return this.request<UploadKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`,
       {
-        method: "POST",
         body: JSON.stringify({ document } satisfies UploadKnowledgeBaseRequest),
-      },
+        method: "POST",
+      }
     );
   }
 
   async deleteKnowledgeBaseDocument(
     profileId: string,
-    documentId: string,
+    documentId: string
   ): Promise<DeleteKnowledgeBaseResponse> {
     return this.request<DeleteKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/${encodeURIComponent(documentId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async getUserContext(
-    options: { includeContent?: boolean } = {},
+    options: { includeContent?: boolean } = {}
   ): Promise<UserContextStatusResponse> {
     const query = options.includeContent ? "?content=true" : "";
     return this.request<UserContextStatusResponse>(`/v1/user/context${query}`);
@@ -890,8 +980,8 @@ export class NakamaClient {
 
   async writeUserContext(content: string): Promise<void> {
     await this.request("/v1/user/context", {
-      method: "PUT",
       body: JSON.stringify({ content } satisfies UpdateUserContextRequest),
+      method: "PUT",
     });
   }
 
@@ -901,17 +991,53 @@ export class NakamaClient {
     });
   }
 
-  createChatSession(sessionId: string, channel: AgentChannel): RemoteChatSession {
+  createChatSession(
+    sessionId: string,
+    channel: AgentChannel
+  ): RemoteChatSession {
     return {
+      clear: async () => {
+        await this.request(`/v1/sessions/${sessionId}`, {
+          method: "DELETE",
+        });
+      },
+      compact: async (options = {}) =>
+        this.request<CompactionResponse>(`/v1/sessions/${sessionId}/compact`, {
+          body: JSON.stringify(options),
+          method: "POST",
+        }),
+      createAutomation: async (prompt: string) => {
+        const response = await this.request<DraftAutomationResponse>(
+          "/v1/automations/draft",
+          {
+            body: JSON.stringify({ channel, prompt }),
+            method: "POST",
+          }
+        );
+
+        return response.automation;
+      },
+      getMessages: async () => {
+        const response = await this.getSessionMessages(sessionId);
+        return response.messages;
+      },
       id: sessionId,
+      purge: async () => {
+        await this.request(`/v1/sessions/${sessionId}?purge=true`, {
+          method: "DELETE",
+        });
+      },
       send: async (input: SendMessageArg) => {
-        const body = resolveSendMessageBody(input, this.clientOrigin ?? undefined);
+        const body = resolveSendMessageBody(
+          input,
+          this.clientOrigin ?? undefined
+        );
         const response = await this.request<SendMessageResponse>(
           `/v1/sessions/${sessionId}/messages`,
           {
-            method: "POST",
             body: JSON.stringify(body),
-          },
+            method: "POST",
+          }
         );
 
         return response.reply;
@@ -919,27 +1045,33 @@ export class NakamaClient {
       sendStream: async (
         input: SendMessageArg,
         handler: StreamHandler | StreamHandlers,
-        options?: SendStreamOptions,
+        options?: SendStreamOptions
       ) => {
         const handlers = normalizeStreamHandlers(handler);
-        const body = { ...resolveSendMessageBody(input, this.clientOrigin ?? undefined), stream: true };
+        const body = {
+          ...resolveSendMessageBody(input, this.clientOrigin ?? undefined),
+          stream: true,
+        };
         const headers = this.buildHeaders("POST", {
-          "Content-Type": "application/json",
           Accept: "text/event-stream",
+          "Content-Type": "application/json",
         });
         const response = await this.fetchImpl(
           `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
           {
-            method: "POST",
-            headers,
             body: JSON.stringify(body),
-            signal: options?.signal,
             credentials: this.credentials,
-          },
+            headers,
+            method: "POST",
+            signal: options?.signal,
+          }
         );
 
         if (!response.ok) {
-          throw await createApiError(response, `/v1/sessions/${sessionId}/messages`);
+          throw await createApiError(
+            response,
+            `/v1/sessions/${sessionId}/messages`
+          );
         }
 
         if (!response.body) {
@@ -948,59 +1080,23 @@ export class NakamaClient {
 
         return readStreamEvents(response.body, handlers, options?.signal);
       },
-      compact: async (options = {}) => {
-        return this.request<CompactionResponse>(
-          `/v1/sessions/${sessionId}/compact`,
-          {
-            method: "POST",
-            body: JSON.stringify(options),
-          },
-        );
-      },
-      clear: async () => {
-        await this.request(`/v1/sessions/${sessionId}`, {
-          method: "DELETE",
-        });
-      },
-      purge: async () => {
-        await this.request(`/v1/sessions/${sessionId}?purge=true`, {
-          method: "DELETE",
-        });
-      },
-      getMessages: async () => {
-        const response = await this.getSessionMessages(sessionId);
-        return response.messages;
-      },
       subscribeStream: async (
         handler: StreamHandler | StreamHandlers,
-        options?: SendStreamOptions,
-      ) => {
-        return this.subscribeSessionStream(sessionId, handler, options);
-      },
-      createAutomation: async (prompt: string) => {
-        const response = await this.request<DraftAutomationResponse>(
-          "/v1/automations/draft",
-          {
-            method: "POST",
-            body: JSON.stringify({ prompt, channel }),
-          },
-        );
-
-        return response.automation;
-      },
+        options?: SendStreamOptions
+      ) => this.subscribeSessionStream(sessionId, handler, options),
     };
   }
 
   async draftAutomation(
     prompt: string,
-    channel: AgentChannel,
+    channel: AgentChannel
   ): Promise<AutomationDefinition> {
     const response = await this.request<DraftAutomationResponse>(
       "/v1/automations/draft",
       {
+        body: JSON.stringify({ channel, prompt }),
         method: "POST",
-        body: JSON.stringify({ prompt, channel }),
-      },
+      }
     );
 
     return response.automation;
@@ -1012,29 +1108,31 @@ export class NakamaClient {
 
   async getAutomation(automationId: string): Promise<StoredAutomation> {
     const response = await this.request<AutomationResponse>(
-      `/v1/automations/${encodeURIComponent(automationId)}`,
+      `/v1/automations/${encodeURIComponent(automationId)}`
     );
     return response.automation;
   }
 
-  async createAutomation(request: CreateAutomationRequest): Promise<StoredAutomation> {
+  async createAutomation(
+    request: CreateAutomationRequest
+  ): Promise<StoredAutomation> {
     const response = await this.request<AutomationResponse>("/v1/automations", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
     return response.automation;
   }
 
   async updateAutomation(
     automationId: string,
-    request: UpdateAutomationRequest,
+    request: UpdateAutomationRequest
   ): Promise<StoredAutomation> {
     const response = await this.request<AutomationResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}`,
       {
-        method: "PUT",
         body: JSON.stringify(request),
-      },
+        method: "PUT",
+      }
     );
     return response.automation;
   }
@@ -1048,39 +1146,49 @@ export class NakamaClient {
   async runAutomation(automationId: string): Promise<AutomationRunRecord> {
     const response = await this.request<RunAutomationResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}/run`,
-      { method: "POST" },
+      { method: "POST" }
     );
     return response.run;
   }
 
   async listAutomationSchedules(): Promise<AutomationSchedule[]> {
-    return this.request<AutomationSchedule[]>("/v1/internal/automations/schedules");
+    return this.request<AutomationSchedule[]>(
+      "/v1/internal/automations/schedules"
+    );
   }
 
   async runAutomationInternal(automationId: string): Promise<void> {
-    await this.request(`/v1/internal/automations/${encodeURIComponent(automationId)}/run`, {
-      method: "POST",
-    });
+    await this.request(
+      `/v1/internal/automations/${encodeURIComponent(automationId)}/run`,
+      {
+        method: "POST",
+      }
+    );
   }
 
-  async listAutomationRuns(automationId: string): Promise<AutomationRunRecord[]> {
+  async listAutomationRuns(
+    automationId: string
+  ): Promise<AutomationRunRecord[]> {
     const response = await this.request<ListAutomationRunsResponse>(
-      `/v1/automations/${encodeURIComponent(automationId)}/runs`,
+      `/v1/automations/${encodeURIComponent(automationId)}/runs`
     );
     return response.runs;
   }
 
-  async deleteAutomationRun(automationId: string, runId: string): Promise<void> {
+  async deleteAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<void> {
     await this.request(
       `/v1/automations/${encodeURIComponent(automationId)}/runs/${encodeURIComponent(runId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async markAutomationRunsRead(automationId: string): Promise<string> {
     const response = await this.request<MarkAutomationRunsReadResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}/runs/mark-read`,
-      { method: "POST" },
+      { method: "POST" }
     );
     return response.readThroughAt;
   }
@@ -1092,34 +1200,40 @@ export class NakamaClient {
 
   async getTask(taskId: string): Promise<StoredTask> {
     const response = await this.request<TaskResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}`,
+      `/v1/tasks/${encodeURIComponent(taskId)}`
     );
     return response.task;
   }
 
   async draftTaskPrompt(request: DraftTaskPromptRequest): Promise<string> {
-    const response = await this.request<DraftTaskPromptResponse>("/v1/tasks/draft-prompt", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    const response = await this.request<DraftTaskPromptResponse>(
+      "/v1/tasks/draft-prompt",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
     return response.prompt;
   }
 
   async createTask(request: CreateTaskRequest): Promise<StoredTask> {
     const response = await this.request<TaskResponse>("/v1/tasks", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
     return response.task;
   }
 
-  async updateTask(taskId: string, request: UpdateTaskRequest): Promise<StoredTask> {
+  async updateTask(
+    taskId: string,
+    request: UpdateTaskRequest
+  ): Promise<StoredTask> {
     const response = await this.request<TaskResponse>(
       `/v1/tasks/${encodeURIComponent(taskId)}`,
       {
-        method: "PUT",
         body: JSON.stringify(request),
-      },
+        method: "PUT",
+      }
     );
     return response.task;
   }
@@ -1133,87 +1247,135 @@ export class NakamaClient {
   async runTask(taskId: string): Promise<TaskRunRecord> {
     const response = await this.request<RunTaskResponse>(
       `/v1/tasks/${encodeURIComponent(taskId)}/run`,
-      { method: "POST" },
+      { method: "POST" }
     );
     return response.run;
   }
 
   async listTaskRuns(taskId: string): Promise<TaskRunRecord[]> {
     const response = await this.request<ListTaskRunsResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}/runs`,
+      `/v1/tasks/${encodeURIComponent(taskId)}/runs`
     );
     return response.runs;
   }
 
   async getTaskMessages(taskId: string): Promise<TaskMessagesResponse> {
     return this.request<TaskMessagesResponse>(
-      `/v1/tasks/${encodeURIComponent(taskId)}/messages`,
+      `/v1/tasks/${encodeURIComponent(taskId)}/messages`
     );
   }
 
   async getTimezone(): Promise<string> {
-    const response = await this.request<TimezoneSettingsResponse>("/v1/settings/timezone");
+    const response = await this.request<TimezoneSettingsResponse>(
+      "/v1/settings/timezone"
+    );
     return response.timezone;
   }
 
   async setTimezone(timezone: string): Promise<string> {
-    const response = await this.request<TimezoneSettingsResponse>("/v1/settings/timezone", {
-      method: "PUT",
-      body: JSON.stringify({ timezone } satisfies UpdateTimezoneRequest),
-    });
+    const response = await this.request<TimezoneSettingsResponse>(
+      "/v1/settings/timezone",
+      {
+        body: JSON.stringify({ timezone } satisfies UpdateTimezoneRequest),
+        method: "PUT",
+      }
+    );
     return response.timezone;
   }
 
   async getThinkingSettings(): Promise<ThinkingSettings> {
-    const response = await this.request<ThinkingSettingsResponse>("/v1/settings/thinking");
+    const response = await this.request<ThinkingSettingsResponse>(
+      "/v1/settings/thinking"
+    );
     return response.thinking;
   }
 
   async setThinkingSettings(
-    settings: UpdateThinkingRequest,
+    settings: UpdateThinkingRequest
   ): Promise<ThinkingSettings> {
-    const response = await this.request<ThinkingSettingsResponse>("/v1/settings/thinking", {
-      method: "PUT",
-      body: JSON.stringify(settings satisfies UpdateThinkingRequest),
-    });
+    const response = await this.request<ThinkingSettingsResponse>(
+      "/v1/settings/thinking",
+      {
+        body: JSON.stringify(settings satisfies UpdateThinkingRequest),
+        method: "PUT",
+      }
+    );
     return response.thinking;
   }
 
   async getVisionSettings(): Promise<VisionSettings> {
-    const response = await this.request<VisionSettingsResponse>("/v1/settings/vision");
+    const response = await this.request<VisionSettingsResponse>(
+      "/v1/settings/vision"
+    );
     return response.vision;
   }
 
   async setVisionSettings(model: string | null): Promise<VisionSettings> {
-    const response = await this.request<VisionSettingsResponse>("/v1/settings/vision", {
-      method: "PUT",
-      body: JSON.stringify({ model } satisfies UpdateVisionRequest),
-    });
+    const response = await this.request<VisionSettingsResponse>(
+      "/v1/settings/vision",
+      {
+        body: JSON.stringify({ model } satisfies UpdateVisionRequest),
+        method: "PUT",
+      }
+    );
     return response.vision;
   }
 
   async getTranscriptionSettings(): Promise<TranscriptionSettings> {
     const response = await this.request<TranscriptionSettingsResponse>(
-      "/v1/settings/transcription",
+      "/v1/settings/transcription"
     );
     return response.transcription;
   }
 
-  async setTranscriptionSettings(model: string | null): Promise<TranscriptionSettings> {
+  async setTranscriptionSettings(
+    model: string | null
+  ): Promise<TranscriptionSettings> {
     const response = await this.request<TranscriptionSettingsResponse>(
       "/v1/settings/transcription",
       {
-        method: "PUT",
         body: JSON.stringify({ model } satisfies UpdateTranscriptionRequest),
-      },
+        method: "PUT",
+      }
     );
     return response.transcription;
   }
 
-  async transcribeAudio(input: TranscribeAudioRequest): Promise<TranscribeAudioResponse> {
+  async transcribeAudio(
+    input: TranscribeAudioRequest
+  ): Promise<TranscribeAudioResponse> {
     return this.request<TranscribeAudioResponse>("/v1/audio/transcribe", {
-      method: "POST",
       body: JSON.stringify(input satisfies TranscribeAudioRequest),
+      method: "POST",
+    });
+  }
+
+  async getImageGenerationSettings(): Promise<ImageGenerationSettings> {
+    const response = await this.request<ImageGenerationSettingsResponse>(
+      "/v1/settings/image-generation"
+    );
+    return response.imageGeneration;
+  }
+
+  async setImageGenerationSettings(
+    model: string | null
+  ): Promise<ImageGenerationSettings> {
+    const response = await this.request<ImageGenerationSettingsResponse>(
+      "/v1/settings/image-generation",
+      {
+        body: JSON.stringify({ model } satisfies UpdateImageGenerationRequest),
+        method: "PUT",
+      }
+    );
+    return response.imageGeneration;
+  }
+
+  async generateImage(
+    input: GenerateImageRequest
+  ): Promise<GenerateImageResponse> {
+    return this.request<GenerateImageResponse>("/v1/images/generate", {
+      body: JSON.stringify(input satisfies GenerateImageRequest),
+      method: "POST",
     });
   }
 
@@ -1222,18 +1384,21 @@ export class NakamaClient {
   }
 
   async setTelegramSettings(
-    request: UpdateTelegramSettingsRequest,
+    request: UpdateTelegramSettingsRequest
   ): Promise<TelegramSettingsResponse> {
     return this.request<TelegramSettingsResponse>("/v1/settings/telegram", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
 
   async regenerateTelegramHandshake(): Promise<TelegramSettingsResponse> {
-    return this.request<TelegramSettingsResponse>("/v1/settings/telegram/handshake", {
-      method: "POST",
-    });
+    return this.request<TelegramSettingsResponse>(
+      "/v1/settings/telegram/handshake",
+      {
+        method: "POST",
+      }
+    );
   }
 
   async getDiscordSettings(): Promise<DiscordSettingsResponse> {
@@ -1241,18 +1406,21 @@ export class NakamaClient {
   }
 
   async setDiscordSettings(
-    request: UpdateDiscordSettingsRequest,
+    request: UpdateDiscordSettingsRequest
   ): Promise<DiscordSettingsResponse> {
     return this.request<DiscordSettingsResponse>("/v1/settings/discord", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
 
   async regenerateDiscordHandshake(): Promise<DiscordSettingsResponse> {
-    return this.request<DiscordSettingsResponse>("/v1/settings/discord/handshake", {
-      method: "POST",
-    });
+    return this.request<DiscordSettingsResponse>(
+      "/v1/settings/discord/handshake",
+      {
+        method: "POST",
+      }
+    );
   }
 
   async getComposioSettings(): Promise<ComposioSettingsResponse> {
@@ -1260,47 +1428,52 @@ export class NakamaClient {
   }
 
   async setComposioSettings(
-    request: UpdateComposioSettingsRequest,
+    request: UpdateComposioSettingsRequest
   ): Promise<ComposioSettingsResponse> {
     return this.request<ComposioSettingsResponse>("/v1/settings/composio", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
   async listNotificationDestinations(): Promise<ListNotificationDestinationsResponse> {
-    return this.request<ListNotificationDestinationsResponse>("/v1/notification-destinations");
+    return this.request<ListNotificationDestinationsResponse>(
+      "/v1/notification-destinations"
+    );
   }
 
   async createNotificationDestination(
-    request: CreateNotificationDestinationRequest,
+    request: CreateNotificationDestinationRequest
   ): Promise<NotificationDestinationWithSecret> {
-    return this.request<NotificationDestinationWithSecret>("/v1/notification-destinations", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    return this.request<NotificationDestinationWithSecret>(
+      "/v1/notification-destinations",
+      {
+        body: JSON.stringify(request),
+        method: "POST",
+      }
+    );
   }
 
   async updateNotificationDestination(
     destinationId: string,
-    request: UpdateNotificationDestinationRequest,
+    request: UpdateNotificationDestinationRequest
   ): Promise<NotificationDestinationSummary> {
     return this.request<NotificationDestinationSummary>(
       `/v1/notification-destinations/${encodeURIComponent(destinationId)}`,
       {
-        method: "PUT",
         body: JSON.stringify(request),
-      },
+        method: "PUT",
+      }
     );
   }
 
   async regenerateNotificationDestinationKey(
-    destinationId: string,
+    destinationId: string
   ): Promise<RegenerateNotificationDestinationKeyResponse> {
     return this.request<RegenerateNotificationDestinationKeyResponse>(
       `/v1/notification-destinations/${encodeURIComponent(destinationId)}/rotate-key`,
       {
         method: "POST",
-      },
+      }
     );
   }
 
@@ -1309,7 +1482,7 @@ export class NakamaClient {
       `/v1/notification-destinations/${encodeURIComponent(destinationId)}`,
       {
         method: "DELETE",
-      },
+      }
     );
   }
 
@@ -1317,21 +1490,27 @@ export class NakamaClient {
     return this.request<ListComposioToolkitsResponse>("/v1/composio/toolkits");
   }
 
-  async enableComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+  async enableComposioToolkit(
+    toolkitSlug: string
+  ): Promise<ComposioToolkitSummary> {
     return this.request<ComposioToolkitSummary>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/enable`,
-      { method: "POST", body: JSON.stringify({ toolkitSlug }) },
+      { body: JSON.stringify({ toolkitSlug }), method: "POST" }
     );
   }
 
-  async disableComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+  async disableComposioToolkit(
+    toolkitSlug: string
+  ): Promise<ComposioToolkitSummary> {
     return this.request<ComposioToolkitSummary>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/disable`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
 
-  async connectComposioToolkit(toolkitSlug: string): Promise<ComposioConnectResponse> {
+  async connectComposioToolkit(
+    toolkitSlug: string
+  ): Promise<ComposioConnectResponse> {
     const body: ComposioConnectRequest = {};
 
     const callbackOrigin = readBrowserOrigin();
@@ -1342,44 +1521,48 @@ export class NakamaClient {
     return this.request<ComposioConnectResponse>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/connect`,
       {
-        method: "POST",
         body: JSON.stringify(body),
-      },
+        method: "POST",
+      }
     );
   }
 
-  async disconnectComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+  async disconnectComposioToolkit(
+    toolkitSlug: string
+  ): Promise<ComposioToolkitSummary> {
     return this.request<ComposioToolkitSummary>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/disconnect`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
 
-  async syncComposioToolkit(toolkitSlug: string): Promise<ComposioToolkitSummary> {
+  async syncComposioToolkit(
+    toolkitSlug: string
+  ): Promise<ComposioToolkitSummary> {
     return this.request<ComposioToolkitSummary>(
       `/v1/composio/toolkits/${encodeURIComponent(toolkitSlug)}/sync`,
-      { method: "POST" },
+      { method: "POST" }
     );
   }
 
   async listProfileComposioToolkits(
-    profileId: string,
+    profileId: string
   ): Promise<ListProfileComposioToolkitsResponse> {
     return this.request<ListProfileComposioToolkitsResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
+      `/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`
     );
   }
 
   async updateProfileComposioToolkits(
     profileId: string,
-    request: UpdateProfileComposioToolkitsRequest,
+    request: UpdateProfileComposioToolkitsRequest
   ): Promise<ListProfileComposioToolkitsResponse> {
     return this.request<ListProfileComposioToolkitsResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
       {
-        method: "PUT",
         body: JSON.stringify(request),
-      },
+        method: "PUT",
+      }
     );
   }
 
@@ -1388,25 +1571,27 @@ export class NakamaClient {
   }
 
   async setEmailSettings(
-    request: UpdateEmailSettingsRequest,
+    request: UpdateEmailSettingsRequest
   ): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>("/v1/settings/email", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
 
   async sendEmailTest(
-    request: SendEmailTestRequest = {},
+    request: SendEmailTestRequest = {}
   ): Promise<SendEmailTestResponse> {
     return this.request<SendEmailTestResponse>("/v1/settings/email/test", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
-    return this.request<AgentBrowserStatusResponse>("/v1/settings/agent-browser");
+    return this.request<AgentBrowserStatusResponse>(
+      "/v1/settings/agent-browser"
+    );
   }
 
   async installAgentBrowser(
@@ -1414,26 +1599,36 @@ export class NakamaClient {
       onProgress?: (message: string) => void;
       onDone?: (status: AgentBrowserStatusResponse) => void;
     } = {},
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal }
   ): Promise<AgentBrowserStatusResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/v1/settings/agent-browser/install`, {
-      method: "POST",
-      headers: this.buildHeaders("POST", {
-        Accept: "text/event-stream",
-      }),
-      signal: options?.signal,
-      credentials: this.credentials,
-    });
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/v1/settings/agent-browser/install`,
+      {
+        credentials: this.credentials,
+        headers: this.buildHeaders("POST", {
+          Accept: "text/event-stream",
+        }),
+        method: "POST",
+        signal: options?.signal,
+      }
+    );
 
     if (!response.ok) {
-      throw await createApiError(response, "/v1/settings/agent-browser/install");
+      throw await createApiError(
+        response,
+        "/v1/settings/agent-browser/install"
+      );
     }
 
     if (!response.body) {
       throw new Error("Server returned an empty stream.");
     }
 
-    return readAgentBrowserInstallStream(response.body, handlers, options?.signal);
+    return readAgentBrowserInstallStream(
+      response.body,
+      handlers,
+      options?.signal
+    );
   }
 
   async getWhatsAppSettings(): Promise<WhatsAppSettingsResponse> {
@@ -1441,24 +1636,30 @@ export class NakamaClient {
   }
 
   async setWhatsAppSettings(
-    request: UpdateWhatsAppSettingsRequest,
+    request: UpdateWhatsAppSettingsRequest
   ): Promise<WhatsAppSettingsResponse> {
     return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp", {
-      method: "PUT",
       body: JSON.stringify(request),
+      method: "PUT",
     });
   }
 
   async regenerateWhatsAppPairingCode(): Promise<WhatsAppSettingsResponse> {
-    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp/pairing-code", {
-      method: "POST",
-    });
+    return this.request<WhatsAppSettingsResponse>(
+      "/v1/settings/whatsapp/pairing-code",
+      {
+        method: "POST",
+      }
+    );
   }
 
   async reconnectWhatsApp(): Promise<WhatsAppSettingsResponse> {
-    return this.request<WhatsAppSettingsResponse>("/v1/settings/whatsapp/reconnect", {
-      method: "POST",
-    });
+    return this.request<WhatsAppSettingsResponse>(
+      "/v1/settings/whatsapp/reconnect",
+      {
+        method: "POST",
+      }
+    );
   }
 
   async listTimezones(): Promise<ListTimezonesResponse> {
@@ -1467,8 +1668,8 @@ export class NakamaClient {
 
   async setupUser(request: SetupAuthRequest): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/setup", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
 
     this.applyAuthUserResponse(response);
@@ -1477,8 +1678,8 @@ export class NakamaClient {
 
   async login(email: string, password: string): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
-      method: "POST",
       body: JSON.stringify({ email, password }),
+      method: "POST",
     });
 
     this.applyAuthUserResponse(response);
@@ -1491,10 +1692,12 @@ export class NakamaClient {
     return response;
   }
 
-  async updateAuthProfile(request: UpdateAuthProfileRequest): Promise<AuthUserResponse> {
+  async updateAuthProfile(
+    request: UpdateAuthProfileRequest
+  ): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/me", {
-      method: "PATCH",
       body: JSON.stringify(request),
+      method: "PATCH",
     });
     this.applyAuthUserResponse(response);
     return response;
@@ -1502,8 +1705,8 @@ export class NakamaClient {
 
   async changePassword(request: ChangePasswordRequest): Promise<void> {
     await this.request("/v1/auth/change-password", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
@@ -1512,43 +1715,49 @@ export class NakamaClient {
   }
 
   async createUserOrganization(
-    request: Pick<CreateOrganizationRequest, "name" | "slug">,
+    request: Pick<CreateOrganizationRequest, "name" | "slug">
   ): Promise<CreateOrganizationResponse> {
     return this.request<CreateOrganizationResponse>("/v1/auth/orgs", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async updateOrganization(
     orgId: string,
-    request: UpdateOrganizationRequest,
+    request: UpdateOrganizationRequest
   ): Promise<OrganizationResponse> {
-    return this.request<OrganizationResponse>(`/v1/orgs/${encodeURIComponent(orgId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(request),
-      headers: { "X-Org-Id": orgId },
-    });
+    return this.request<OrganizationResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "PATCH",
+      }
+    );
   }
 
   async updatePlatformOrganization(
     orgId: string,
-    request: UpdateOrganizationRequest,
+    request: UpdateOrganizationRequest
   ): Promise<OrganizationResponse> {
     return this.request<OrganizationResponse>(
       `/v1/platform/orgs/${encodeURIComponent(orgId)}`,
       {
-        method: "PATCH",
         body: JSON.stringify(request),
-      },
+        method: "PATCH",
+      }
     );
   }
 
   async setActiveOrg(orgId: string): Promise<AuthUserResponse> {
-    const response = await this.request<AuthUserResponse>("/v1/auth/active-org", {
-      method: "POST",
-      body: JSON.stringify({ orgId } satisfies SetActiveOrgRequest),
-    });
+    const response = await this.request<AuthUserResponse>(
+      "/v1/auth/active-org",
+      {
+        body: JSON.stringify({ orgId } satisfies SetActiveOrgRequest),
+        method: "POST",
+      }
+    );
 
     this.applyAuthUserResponse(response);
     return response;
@@ -1559,215 +1768,240 @@ export class NakamaClient {
   }
 
   async createPlatformOrganization(
-    request: CreateOrganizationRequest,
+    request: CreateOrganizationRequest
   ): Promise<CreateOrganizationResponse> {
     return this.request<CreateOrganizationResponse>("/v1/platform/orgs", {
-      method: "POST",
       body: JSON.stringify(request),
+      method: "POST",
     });
   }
 
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/members`,
+      `/v1/orgs/${encodeURIComponent(orgId)}/members`
     );
   }
 
   async addOrgMember(
     orgId: string,
-    request: AddOrgMemberRequest,
+    request: AddOrgMemberRequest
   ): Promise<AddOrgMemberResponse> {
     return this.request<AddOrgMemberResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
   async inviteOrgMember(
     orgId: string,
-    request: InviteOrgMemberRequest,
+    request: InviteOrgMemberRequest
   ): Promise<OrgInviteCreatedResponse> {
     return this.request<OrgInviteCreatedResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/invites`,
       {
-        method: "POST",
         body: JSON.stringify(request),
-      },
+        method: "POST",
+      }
     );
   }
 
   async updateOrgMember(
     orgId: string,
     userId: string,
-    request: UpdateOrgMemberRequest,
+    request: UpdateOrgMemberRequest
   ): Promise<OrgMemberResponse> {
     return this.request<OrgMemberResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
       {
-        method: "PATCH",
         body: JSON.stringify(request),
-      },
+        method: "PATCH",
+      }
     );
   }
 
   async removeOrgMember(orgId: string, userId: string): Promise<void> {
     await this.request(
       `/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
-      { method: "DELETE" },
+      { method: "DELETE" }
     );
   }
 
   async getOrgMemory(orgId: string): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory`, {
-      headers: { "X-Org-Id": orgId },
-    });
+    return this.request<OrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory`,
+      {
+        headers: { "X-Org-Id": orgId },
+      }
+    );
   }
 
-  async updateOrgMemory(orgId: string, request: UpdateOrgMemoryRequest): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory`, {
-      method: "PUT",
-      body: JSON.stringify(request),
-      headers: { "X-Org-Id": orgId },
-    });
+  async updateOrgMemory(
+    orgId: string,
+    request: UpdateOrgMemoryRequest
+  ): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "PUT",
+      }
+    );
   }
 
   async addOrgMemoryFact(
     orgId: string,
-    request: AddOrgMemoryFactRequest,
+    request: AddOrgMemoryFactRequest
   ): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/facts`, {
-      method: "POST",
-      body: JSON.stringify(request),
-      headers: { "X-Org-Id": orgId },
-    });
+    return this.request<OrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/facts`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
   }
 
   async searchOrgMemory(
     orgId: string,
-    request: OrgMemorySearchRequest,
+    request: OrgMemorySearchRequest
   ): Promise<OrgMemorySearchResponse> {
     return this.request<OrgMemorySearchResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/search`,
       {
-        method: "POST",
         body: JSON.stringify(request),
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
-  async pinOrgMemoryFact(orgId: string, request: PinOrgMemoryRequest): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/pin`, {
-      method: "POST",
-      body: JSON.stringify(request),
-      headers: { "X-Org-Id": orgId },
-    });
+  async pinOrgMemoryFact(
+    orgId: string,
+    request: PinOrgMemoryRequest
+  ): Promise<OrgMemoryResponse> {
+    return this.request<OrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/pin`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
   }
 
   async unpinOrgMemoryFact(
     orgId: string,
-    request: UnpinOrgMemoryRequest,
+    request: UnpinOrgMemoryRequest
   ): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(`/v1/orgs/${encodeURIComponent(orgId)}/memory/unpin`, {
-      method: "POST",
-      body: JSON.stringify(request),
-      headers: { "X-Org-Id": orgId },
-    });
+    return this.request<OrgMemoryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/memory/unpin`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
   }
 
   async archiveOrgMemory(
     orgId: string,
-    request: ArchiveOrgMemoryRequest,
+    request: ArchiveOrgMemoryRequest
   ): Promise<ArchiveOrgMemoryResponse> {
     return this.request<ArchiveOrgMemoryResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/archive`,
       {
-        method: "POST",
         body: JSON.stringify(request),
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
-  async listOrgMemoryHistory(orgId: string): Promise<ListOrgMemoryHistoryResponse> {
+  async listOrgMemoryHistory(
+    orgId: string
+  ): Promise<ListOrgMemoryHistoryResponse> {
     return this.request<ListOrgMemoryHistoryResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/history`,
-      { headers: { "X-Org-Id": orgId } },
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
   async getOrgMemoryHistoryRevision(
     orgId: string,
-    revisionId: string,
+    revisionId: string
   ): Promise<OrgMemoryHistoryRevisionResponse> {
     return this.request<OrgMemoryHistoryRevisionResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/${encodeURIComponent(revisionId)}`,
-      { headers: { "X-Org-Id": orgId } },
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
   async restoreOrgMemoryHistory(
     orgId: string,
-    revisionId: string,
+    revisionId: string
   ): Promise<RestoreOrgMemoryHistoryResponse> {
     return this.request<RestoreOrgMemoryHistoryResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/${encodeURIComponent(revisionId)}/restore`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
-  async undoOrgMemoryChange(orgId: string): Promise<RestoreOrgMemoryHistoryResponse> {
+  async undoOrgMemoryChange(
+    orgId: string
+  ): Promise<RestoreOrgMemoryHistoryResponse> {
     return this.request<RestoreOrgMemoryHistoryResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/history/undo`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
   async listOrgMemoryProposals(
     orgId: string,
-    status?: "pending" | "approved" | "rejected",
+    status?: "pending" | "approved" | "rejected"
   ): Promise<ListOrgMemoryProposalsResponse> {
     const query = status ? `?status=${encodeURIComponent(status)}` : "";
     return this.request<ListOrgMemoryProposalsResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals${query}`,
-      { headers: { "X-Org-Id": orgId } },
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
   async approveOrgMemoryProposal(
     orgId: string,
     proposalId: string,
-    request: ApproveOrgMemoryProposalRequest = {},
+    request: ApproveOrgMemoryProposalRequest = {}
   ): Promise<OrgMemoryProposalResponse> {
     return this.request<OrgMemoryProposalResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals/${encodeURIComponent(proposalId)}/approve`,
       {
-        method: "POST",
         body: JSON.stringify(request),
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
   async rejectOrgMemoryProposal(
     orgId: string,
-    proposalId: string,
+    proposalId: string
   ): Promise<OrgMemoryProposalResponse> {
     return this.request<OrgMemoryProposalResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/memory/proposals/${encodeURIComponent(proposalId)}/reject`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
@@ -1777,7 +2011,7 @@ export class NakamaClient {
       status?: "pending" | "approved" | "rejected";
       profileId?: string;
       sessionId?: string;
-    } = {},
+    } = {}
   ): Promise<ListSkillProposalsResponse> {
     const params = new URLSearchParams();
     if (options.status) {
@@ -1792,39 +2026,43 @@ export class NakamaClient {
     const query = params.toString();
     return this.request<ListSkillProposalsResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals${query ? `?${query}` : ""}`,
-      { headers: { "X-Org-Id": orgId } },
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
   async approveSkillProposal(
     orgId: string,
-    proposalId: string,
+    proposalId: string
   ): Promise<SkillProposalResponse> {
     return this.request<SkillProposalResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals/${encodeURIComponent(proposalId)}/approve`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
   async rejectSkillProposal(
     orgId: string,
-    proposalId: string,
+    proposalId: string
   ): Promise<SkillProposalResponse> {
     return this.request<SkillProposalResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/skill-proposals/${encodeURIComponent(proposalId)}/reject`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
   async listSkillSuggestions(
     orgId: string,
-    options: { sessionId?: string; status?: "pending" | "applied"; profileId?: string } = {},
+    options: {
+      sessionId?: string;
+      status?: "pending" | "applied";
+      profileId?: string;
+    } = {}
   ): Promise<ListSkillSuggestionsResponse> {
     const params = new URLSearchParams();
     if (options.sessionId) {
@@ -1839,20 +2077,20 @@ export class NakamaClient {
     const query = params.toString();
     return this.request<ListSkillSuggestionsResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/skill-suggestions${query ? `?${query}` : ""}`,
-      { headers: { "X-Org-Id": orgId } },
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 
   async applySkillSuggestion(
     orgId: string,
-    suggestionId: string,
+    suggestionId: string
   ): Promise<ApplySkillSuggestionResponse> {
     return this.request<ApplySkillSuggestionResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/skill-suggestions/${encodeURIComponent(suggestionId)}/apply`,
       {
-        method: "POST",
         headers: { "X-Org-Id": orgId },
-      },
+        method: "POST",
+      }
     );
   }
 
@@ -1863,23 +2101,26 @@ export class NakamaClient {
   }
 
   async rotateLocalAuthToken(): Promise<RotateLocalAuthTokenResponse> {
-    return this.request<RotateLocalAuthTokenResponse>("/v1/auth/local-token/rotate", {
-      method: "POST",
-    });
+    return this.request<RotateLocalAuthTokenResponse>(
+      "/v1/auth/local-token/rotate",
+      {
+        method: "POST",
+      }
+    );
   }
 
   private async request<T>(
     path: string,
     init?: RequestInit,
-    retried = false,
+    retried = false
   ): Promise<T> {
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = this.buildHeaders(method, init?.headers);
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
-      headers,
       credentials: this.credentials,
+      headers,
     });
 
     if (!response.ok) {
@@ -1906,15 +2147,19 @@ export class NakamaClient {
     return (await response.json()) as T;
   }
 
-  private async fetchRaw(path: string, init?: RequestInit, retried = false): Promise<Response> {
+  private async fetchRaw(
+    path: string,
+    init?: RequestInit,
+    retried = false
+  ): Promise<Response> {
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = this.buildHeaders(method, init?.headers);
     delete headers["Content-Type"];
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
-      headers,
       credentials: this.credentials,
+      headers,
     });
 
     if (!response.ok) {
@@ -1932,10 +2177,13 @@ export class NakamaClient {
     return response;
   }
 
-  private buildHeaders(method: string, headers?: HeadersInit): Record<string, string> {
+  private buildHeaders(
+    method: string,
+    headers?: HeadersInit
+  ): Record<string, string> {
     const merged: Record<string, string> = {
       "Content-Type": "application/json",
-      ...(headers as Record<string, string> ?? {}),
+      ...((headers as Record<string, string>) ?? {}),
     };
 
     if (this.authToken) {
@@ -1956,7 +2204,10 @@ export class NakamaClient {
     return merged;
   }
 }
-async function createApiError(response: Response, path: string): Promise<NakamaApiError> {
+async function createApiError(
+  response: Response,
+  path: string
+): Promise<NakamaApiError> {
   const message = await readApiErrorMessage(response);
   return new NakamaApiError(message, response.status, path);
 }
@@ -1965,7 +2216,9 @@ function isMutatingMethod(method: string): boolean {
   return method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
 }
 
-async function encodeArchiveData(data: Blob | BinaryBufferSource | string): Promise<string> {
+async function encodeArchiveData(
+  data: Blob | BinaryBufferSource | string
+): Promise<string> {
   if (typeof data === "string") {
     return data;
   }

@@ -2,8 +2,8 @@ import * as readline from "node:readline/promises";
 import type { NakamaClient } from "@nakama/client";
 import {
   getUserConfigPath,
-  promptForProviderConfig,
   type ProviderModelOption,
+  promptForProviderConfig,
   type UserProviderName,
 } from "@nakama/core";
 
@@ -65,9 +65,9 @@ function readPassword(prompt: string): Promise<string> {
 }
 
 export async function ensureUserConfiguredViaCli(
-  client: NakamaClient,
+  client: NakamaClient
 ): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
     return false;
   }
 
@@ -112,9 +112,9 @@ export async function ensureUserConfiguredViaCli(
 }
 
 export async function ensureProviderConfiguredViaCli(
-  client: NakamaClient,
+  client: NakamaClient
 ): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
     return false;
   }
 
@@ -144,16 +144,17 @@ export async function ensureProviderConfiguredViaCli(
 
     const result = await client.configureProvider({
       apiKey: instance.apiKey,
+      baseUrl: instance.baseUrl,
+      customModels: instance.customModels,
+      displayName:
+        instance.type === "openai_compatible" ? instance.label : undefined,
+      hostMode: instance.hostMode,
       model,
       provider: instance.type,
-      displayName: instance.type === "openai_compatible" ? instance.label : undefined,
-      baseUrl: instance.baseUrl,
-      hostMode: instance.hostMode,
-      customModels: instance.customModels,
     });
 
     console.log(
-      `\nProvider configured (${result.provider}, ${result.currentModel}).`,
+      `\nProvider configured (${result.provider}, ${result.currentModel}).`
     );
     console.log(`Saved to ${getUserConfigPath()}\n`);
 
@@ -165,16 +166,19 @@ export async function ensureProviderConfiguredViaCli(
 
 function createModelHelpers(models: ProviderModelOption[]) {
   return {
-    getModelsForProvider: (provider: UserProviderName) =>
-      models.filter((model) => model.provider === provider),
     getDefaultModel: (provider: UserProviderName) => {
-      const providerModels = models.filter((model) => model.provider === provider);
+      const providerModels = models.filter(
+        (model) => model.provider === provider
+      );
       return (
         providerModels.find((model) => model.default)?.id ??
         providerModels[0]?.id ??
         "gpt-5.4"
       );
     },
-    getModelById: (modelId: string) => models.find((model) => model.id === modelId),
+    getModelById: (modelId: string) =>
+      models.find((model) => model.id === modelId),
+    getModelsForProvider: (provider: UserProviderName) =>
+      models.filter((model) => model.provider === provider),
   };
 }

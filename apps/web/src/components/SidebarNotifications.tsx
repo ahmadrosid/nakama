@@ -3,7 +3,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -20,20 +24,18 @@ export function SidebarNotifications() {
 
   const trigger = (
     <button
-      type="button"
       aria-label={
-        showBadge
-          ? `Notifications, ${totalCount} unread`
-          : "Notifications"
+        showBadge ? `Notifications, ${totalCount} unread` : "Notifications"
       }
       className="relative flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/55 hover:text-foreground"
+      type="button"
     >
       <span className="relative shrink-0">
-        <BellIcon className="size-4" strokeWidth={1.75} aria-hidden />
+        <BellIcon aria-hidden className="size-4" strokeWidth={1.75} />
         {showBadge ? (
           <span
-            className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-0.5 text-[9px] font-bold leading-none tabular-nums text-primary-foreground"
             aria-hidden
+            className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-0.5 font-bold text-[9px] text-primary-foreground tabular-nums leading-none"
           >
             {badgeLabel}
           </span>
@@ -45,7 +47,7 @@ export function SidebarNotifications() {
   const isEmpty = !isLoading && items.length === 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover onOpenChange={setOpen} open={open}>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -59,33 +61,52 @@ export function SidebarNotifications() {
         </TooltipContent>
       </Tooltip>
 
-      <PopoverContent side="right" align="end" sideOffset={8} className="w-72 p-1">
+      <PopoverContent
+        align="end"
+        className="w-72 p-1"
+        side="right"
+        sideOffset={8}
+      >
         {isEmpty ? (
-          <p className="px-2 py-3 text-center text-xs text-muted-foreground">All caught up</p>
+          <p className="px-2 py-3 text-center text-muted-foreground text-xs">
+            All caught up
+          </p>
         ) : (
           <>
             <div className="px-1.5 py-1.5">
-              <p className="text-sm font-medium leading-tight text-foreground">Notifications</p>
-              <p className="text-[11px] leading-tight text-muted-foreground">
+              <p className="font-medium text-foreground text-sm leading-tight">
+                Notifications
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-tight">
                 Automation runs and org memory proposals
               </p>
             </div>
 
             <div className="max-h-72 overflow-y-auto">
               {isLoading ? (
-                <p className="px-1.5 py-2 text-xs text-muted-foreground">Loading…</p>
+                <p className="px-1.5 py-2 text-muted-foreground text-xs">
+                  Loading…
+                </p>
               ) : (
-                <NotificationList items={items} compact onNavigate={() => setOpen(false)} />
+                <NotificationList
+                  compact
+                  items={items}
+                  onNavigate={() => setOpen(false)}
+                />
               )}
             </div>
 
-            <div className="px-1.5 pb-1 pt-0.5">
+            <div className="px-1.5 pt-0.5 pb-1">
               <Button
-                type="button"
-                variant="ghost"
-                size="sm"
                 className="h-7 w-full justify-center text-xs"
-                render={<Link to={PAGE_PATHS.notifications} onClick={() => setOpen(false)} />}
+                render={
+                  <Link
+                    onClick={() => setOpen(false)}
+                    to={PAGE_PATHS.notifications}
+                  />
+                }
+                size="sm"
+                type="button"
               >
                 View all
               </Button>

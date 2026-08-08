@@ -1,4 +1,4 @@
-import { findCustomModel, type CustomModelEntry } from "@nakama/core";
+import { type CustomModelEntry, findCustomModel } from "@nakama/core";
 
 /** OpenRouter slugs known not to accept the `reasoning` request parameter. */
 const THINKING_DENY_PREFIXES = [
@@ -44,7 +44,7 @@ export function openRouterSlugSupportsThinking(model: string): boolean {
 
 export function openRouterModelSupportsThinking(
   model: string,
-  customModels?: CustomModelEntry[],
+  customModels?: CustomModelEntry[]
 ): boolean {
   const trimmed = model.trim();
   const custom = findCustomModel(customModels, trimmed);

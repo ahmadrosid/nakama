@@ -56,50 +56,54 @@ export function EmailSettingsFormFields({
   return (
     <div className="space-y-4 px-4 py-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <FormField id="email-from-name" label="From name" density="compact">
+        <FormField density="compact" id="email-from-name" label="From name">
           <Input
-            value={fromName}
             onChange={(event) => onFromNameChange(event.target.value)}
             placeholder="Acme Support"
+            value={fromName}
           />
         </FormField>
 
-        <FormField id="email-from" label="From address" density="compact">
+        <FormField density="compact" id="email-from" label="From address">
           <Input
-            value={from}
             onChange={(event) => onFromChange(event.target.value)}
             placeholder={username || "user@example.com"}
+            value={from}
           />
         </FormField>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <FormField id="email-username" label="Email" density="compact">
+        <FormField density="compact" id="email-username" label="Email">
           <Input
-            value={username}
-            onChange={(event) => onUsernameChange(event.target.value)}
             autoComplete="username"
+            onChange={(event) => onUsernameChange(event.target.value)}
+            value={username}
           />
         </FormField>
 
-        <FormField id="email-password" label="Password" density="compact">
+        <FormField density="compact" id="email-password" label="Password">
           <div className="flex gap-2">
             <Input
+              autoComplete="new-password"
               className="min-w-0 flex-1"
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder={passwordPlaceholder}
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(event) => onPasswordChange(event.target.value)}
-              autoComplete="new-password"
-              placeholder={passwordPlaceholder}
             />
             <Button
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={onShowPasswordToggle}
+              size="icon-sm"
               type="button"
               variant="ghost"
-              size="icon-sm"
-              onClick={onShowPasswordToggle}
-              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+              {showPassword ? (
+                <EyeOffIcon className="size-4" />
+              ) : (
+                <EyeIcon className="size-4" />
+              )}
             </Button>
           </div>
         </FormField>
@@ -109,15 +113,15 @@ export function EmailSettingsFormFields({
         imapHost={imapHost}
         imapPort={imapPort}
         imapSecure={imapSecure}
-        smtpHost={smtpHost}
-        smtpPort={smtpPort}
-        smtpSecure={smtpSecure}
         onImapHostChange={onImapHostChange}
         onImapPortChange={onImapPortChange}
         onImapSecureChange={onImapSecureChange}
         onSmtpHostChange={onSmtpHostChange}
         onSmtpPortChange={onSmtpPortChange}
         onSmtpSecureChange={onSmtpSecureChange}
+        smtpHost={smtpHost}
+        smtpPort={smtpPort}
+        smtpSecure={smtpSecure}
       />
     </div>
   );
@@ -153,7 +157,7 @@ function EmailImapSmtpTable({
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+        <thead className="border-border border-b bg-muted/30 text-muted-foreground text-xs">
           <tr>
             <th className="w-16 px-3 py-2 font-medium" />
             <th className="px-3 py-2 font-medium">IMAP</th>
@@ -162,61 +166,73 @@ function EmailImapSmtpTable({
         </thead>
         <tbody className="divide-y divide-border">
           <tr>
-            <th scope="row" className="px-3 py-2 text-xs font-medium text-muted-foreground">
+            <th
+              className="px-3 py-2 font-medium text-muted-foreground text-xs"
+              scope="row"
+            >
               Host
             </th>
             <td className="px-3 py-2">
               <Input
                 id="email-imap-host"
-                value={imapHost}
                 onChange={(event) => onImapHostChange(event.target.value)}
                 placeholder="imap.gmail.com"
+                value={imapHost}
               />
             </td>
             <td className="px-3 py-2">
               <Input
                 id="email-smtp-host"
-                value={smtpHost}
                 onChange={(event) => onSmtpHostChange(event.target.value)}
                 placeholder="smtp.gmail.com"
+                value={smtpHost}
               />
             </td>
           </tr>
           <tr>
-            <th scope="row" className="px-3 py-2 text-xs font-medium text-muted-foreground">
+            <th
+              className="px-3 py-2 font-medium text-muted-foreground text-xs"
+              scope="row"
+            >
               Port
             </th>
             <td className="px-3 py-2">
               <Input
-                id="email-imap-port"
                 className="w-24"
-                value={imapPort}
-                onChange={(event) => onImapPortChange(event.target.value)}
+                id="email-imap-port"
                 inputMode="numeric"
+                onChange={(event) => onImapPortChange(event.target.value)}
+                value={imapPort}
               />
             </td>
             <td className="px-3 py-2">
               <Input
-                id="email-smtp-port"
                 className="w-24"
-                value={smtpPort}
-                onChange={(event) => onSmtpPortChange(event.target.value)}
+                id="email-smtp-port"
                 inputMode="numeric"
+                onChange={(event) => onSmtpPortChange(event.target.value)}
+                value={smtpPort}
               />
             </td>
           </tr>
           <tr>
-            <th scope="row" className="px-3 py-2 text-xs font-medium text-muted-foreground">
+            <th
+              className="px-3 py-2 font-medium text-muted-foreground text-xs"
+              scope="row"
+            >
               TLS
             </th>
             <td className="px-3 py-2">
               <div className="flex items-center gap-2">
                 <Switch
-                  id="email-imap-secure"
                   checked={imapSecure}
+                  id="email-imap-secure"
                   onCheckedChange={onImapSecureChange}
                 />
-                <label htmlFor="email-imap-secure" className="text-xs text-muted-foreground">
+                <label
+                  className="text-muted-foreground text-xs"
+                  htmlFor="email-imap-secure"
+                >
                   Enabled
                 </label>
               </div>
@@ -224,11 +240,14 @@ function EmailImapSmtpTable({
             <td className="px-3 py-2">
               <div className="flex items-center gap-2">
                 <Switch
-                  id="email-smtp-secure"
                   checked={smtpSecure}
+                  id="email-smtp-secure"
                   onCheckedChange={onSmtpSecureChange}
                 />
-                <label htmlFor="email-smtp-secure" className="text-xs text-muted-foreground">
+                <label
+                  className="text-muted-foreground text-xs"
+                  htmlFor="email-smtp-secure"
+                >
                   Enabled
                 </label>
               </div>

@@ -7,7 +7,9 @@ import type {
 } from "@nakama/core";
 
 function readNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 export function buildTokenUsage(options: {
@@ -20,19 +22,27 @@ export function buildTokenUsage(options: {
   let totalTokens = readNumber(options.totalTokens);
 
   if (inputTokens === undefined && outputTokens === undefined) {
-    return undefined;
+    return;
   }
 
-  if (inputTokens === undefined && totalTokens !== undefined && outputTokens !== undefined) {
+  if (
+    inputTokens === undefined &&
+    totalTokens !== undefined &&
+    outputTokens !== undefined
+  ) {
     inputTokens = Math.max(totalTokens - outputTokens, 0);
   }
 
-  if (outputTokens === undefined && totalTokens !== undefined && inputTokens !== undefined) {
+  if (
+    outputTokens === undefined &&
+    totalTokens !== undefined &&
+    inputTokens !== undefined
+  ) {
     outputTokens = Math.max(totalTokens - inputTokens, 0);
   }
 
   if (inputTokens === undefined || outputTokens === undefined) {
-    return undefined;
+    return;
   }
 
   if (totalTokens === undefined) {
@@ -42,7 +52,9 @@ export function buildTokenUsage(options: {
   return { inputTokens, outputTokens, totalTokens };
 }
 
-export function extractOpenAITokenUsage(value: unknown): ChatCompletionResult["usage"] | undefined {
+export function extractOpenAITokenUsage(
+  value: unknown
+): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
   return buildTokenUsage({
     inputTokens: record.prompt_tokens,
@@ -52,7 +64,7 @@ export function extractOpenAITokenUsage(value: unknown): ChatCompletionResult["u
 }
 
 export function extractAnthropicTokenUsage(
-  value: unknown,
+  value: unknown
 ): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
   return buildTokenUsage({
@@ -61,7 +73,9 @@ export function extractAnthropicTokenUsage(
   });
 }
 
-export function extractGeminiTokenUsage(value: unknown): ChatCompletionResult["usage"] | undefined {
+export function extractGeminiTokenUsage(
+  value: unknown
+): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
   return buildTokenUsage({
     inputTokens: record.promptTokenCount,
@@ -73,17 +87,17 @@ export function extractGeminiTokenUsage(value: unknown): ChatCompletionResult["u
 export function notifyToolInputDelta(
   handlers: StreamChatHandlers | undefined,
   call: { id: string; name: string; arguments: string },
-  delta: string,
+  delta: string
 ): void {
-  if (!handlers?.onToolInputDelta || !call.id || !call.name || !delta) {
+  if (!(handlers?.onToolInputDelta && call.id && call.name && delta)) {
     return;
   }
 
   handlers.onToolInputDelta({
-    toolCallId: call.id,
-    tool: call.name,
-    delta,
     accumulatedArguments: call.arguments,
+    delta,
+    tool: call.name,
+    toolCallId: call.id,
   });
 }
 
@@ -96,28 +110,28 @@ export function buildChatCompletionResult(options: {
   const content = options.content?.trim() ?? "";
   const thinking = options.thinking?.trim();
   const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
-    role: "assistant",
     content,
+    role: "assistant",
     ...(thinking ? { thinking } : {}),
     ...(options.toolCalls.length > 0 ? { toolCalls: options.toolCalls } : {}),
   };
 
   return {
+    assistantMessage,
     content,
     toolCalls: options.toolCalls,
-    assistantMessage,
     ...(options.usage ? { usage: options.usage } : {}),
   };
 }
 
 export interface SseEvent {
-  event: string;
   data: string;
+  event: string;
 }
 
 export async function readSseEvents(
   body: ReadableStream<Uint8Array>,
-  onEvent: (event: SseEvent) => void | Promise<void>,
+  onEvent: (event: SseEvent) => void | Promise<void>
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -158,7 +172,7 @@ export async function readSseEvents(
 
 async function emitSseEvent(
   eventBlock: string,
-  onEvent: (event: SseEvent) => void | Promise<void>,
+  onEvent: (event: SseEvent) => void | Promise<void>
 ): Promise<void> {
   let event = "message";
   const dataLines: string[] = [];
@@ -185,11 +199,11 @@ async function emitSseEvent(
     return;
   }
 
-  await onEvent({ event, data });
+  await onEvent({ data, event });
 }
 
 function findSseBoundary(
-  buffer: string,
+  buffer: string
 ): { index: number; length: number } | null {
   const match = /\r?\n\r?\n/.exec(buffer);
 
@@ -239,7 +253,7 @@ export function readRecord(value: unknown): Record<string, unknown> {
 }
 
 export function normalizeThinkingEffort(
-  effort: ThinkingEffort | undefined,
+  effort: ThinkingEffort | undefined
 ): ThinkingEffort {
   if (effort === "low" || effort === "medium" || effort === "high") {
     return effort;
@@ -251,7 +265,7 @@ export function normalizeThinkingEffort(
 export function formatHttpErrorBody(
   label: string,
   status: number,
-  body: string,
+  body: string
 ): string {
   const trimmed = body.trim();
 
@@ -263,7 +277,11 @@ export function formatHttpErrorBody(
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     const nested = parsed.error;
 
-    if (typeof nested === "object" && nested !== null && !Array.isArray(nested)) {
+    if (
+      typeof nested === "object" &&
+      nested !== null &&
+      !Array.isArray(nested)
+    ) {
       const record = nested as Record<string, unknown>;
       const message =
         typeof record.message === "string" ? record.message.trim() : "";

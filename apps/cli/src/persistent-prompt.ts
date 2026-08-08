@@ -1,10 +1,13 @@
 import type { ImageAttachment } from "@nakama/core";
+import {
+  isClipboardImagePasteSupported,
+  readClipboardImage,
+} from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
-import { isClipboardImagePasteSupported, readClipboardImage } from "./clipboard-image";
-import { normalizePastedText } from "./prompt-display";
 import type { PromptLineResult } from "./prompt";
-import type { ComposerRenderer } from "./terminal-renderer";
+import { normalizePastedText } from "./prompt-display";
 import type { TerminalInput } from "./terminal-input";
+import type { ComposerRenderer } from "./terminal-renderer";
 
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
@@ -13,16 +16,16 @@ const BLINK_INTERVAL_MS = 530;
 const MAX_VISIBLE_SUGGESTIONS = 8;
 
 export interface PersistentPromptOptions {
+  getSuggestions?: (input: string) => PromptSuggestion[];
+  onAbortStream?: () => void;
+  onCancel: () => void;
+  onScrollHistory?: (
+    event: "line_up" | "line_down" | "page_up" | "page_down" | "home" | "end"
+  ) => void;
+  onSubmit: (result: PromptLineResult) => void | Promise<void>;
   prefix?: string;
   renderer: ComposerRenderer;
   terminalInput: TerminalInput;
-  getSuggestions?: (input: string) => PromptSuggestion[];
-  onSubmit: (result: PromptLineResult) => void | Promise<void>;
-  onCancel: () => void;
-  onAbortStream?: () => void;
-  onScrollHistory?: (
-    event: "line_up" | "line_down" | "page_up" | "page_down" | "home" | "end",
-  ) => void;
 }
 
 export class PersistentPrompt {
@@ -34,7 +37,7 @@ export class PersistentPrompt {
   private readonly onCancel: () => void;
   private readonly onAbortStream?: () => void;
   private readonly onScrollHistory?: (
-    event: "line_up" | "line_down" | "page_up" | "page_down" | "home" | "end",
+    event: "line_up" | "line_down" | "page_up" | "page_down" | "home" | "end"
   ) => void;
 
   private value = "";
@@ -122,16 +125,16 @@ export class PersistentPrompt {
     }
 
     const suggestions = this.currentSuggestions().map((suggestion) => ({
-      label: suggestion.label,
       description: suggestion.description,
+      label: suggestion.label,
     }));
 
     this.renderer.setComposerState({
-      prefix: this.prefix,
-      value: this.value,
       cursorVisible: this.cursorVisible,
-      suggestions,
+      prefix: this.prefix,
       selectedIndex: this.selectedIndex,
+      suggestions,
+      value: this.value,
     });
   }
 
@@ -146,7 +149,9 @@ export class PersistentPrompt {
   }
 
   private queueClipboardAttach(): void {
-    this.clipboardAttachTask = this.attachClipboardImage().then(() => undefined);
+    this.clipboardAttachTask = this.attachClipboardImage().then(
+      () => undefined
+    );
   }
 
   private async waitForClipboardAttach(): Promise<void> {
@@ -155,7 +160,9 @@ export class PersistentPrompt {
 
   private async attachClipboardImage(): Promise<boolean> {
     if (!this.clipboardPasteSupported) {
-      this.notifyClipboard("Clipboard images are not supported on this platform.");
+      this.notifyClipboard(
+        "Clipboard images are not supported on this platform."
+      );
       return false;
     }
 
@@ -163,18 +170,25 @@ export class PersistentPrompt {
       const image = await readClipboardImage();
 
       if (!image) {
-        this.notifyClipboard("No image on clipboard. Copy a screenshot or image first.");
+        this.notifyClipboard(
+          "No image on clipboard. Copy a screenshot or image first."
+        );
         return false;
       }
 
       this.attachedImages.push(image);
       this.resetSelection();
       this.cursorVisible = true;
-      process.stderr.write("\x1b[2mImage attached (backspace to remove)\x1b[0m\n");
+      process.stderr.write(
+        "\x1b[2mImage attached (backspace to remove)\x1b[0m\n"
+      );
       this.render();
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to read clipboard image.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to read clipboard image.";
       this.notifyClipboard(message);
       return false;
     }
@@ -198,7 +212,10 @@ export class PersistentPrompt {
     this.queueClipboardAttach();
   }
 
-  private applySuggestion(suggestion: PromptSuggestion, submitAfter = false): void {
+  private applySuggestion(
+    suggestion: PromptSuggestion,
+    submitAfter = false
+  ): void {
     this.value = suggestion.insertValue.trimEnd();
     this.selectedIndex = 0;
     this.hasNavigated = false;
@@ -216,8 +233,8 @@ export class PersistentPrompt {
 
   private submitValue(): void {
     const result: PromptLineResult = {
-      text: this.value,
       images: this.attachedImages.length > 0 ? this.attachedImages : undefined,
+      text: this.value,
     };
 
     this.value = "";
@@ -310,7 +327,8 @@ export class PersistentPrompt {
 
       if (suggestions.length > 0) {
         this.hasNavigated = true;
-        this.selectedIndex = (this.selectedIndex - 1 + suggestions.length) % suggestions.length;
+        this.selectedIndex =
+          (this.selectedIndex - 1 + suggestions.length) % suggestions.length;
         this.render();
       } else if (this.value.length === 0) {
         // Some terminals emit wheel as arrow keys; treat empty-composer arrows as history scroll.
@@ -388,7 +406,9 @@ export class PersistentPrompt {
     }
 
     if (key.length > 1) {
-      const printable = [...key].filter((char) => char >= " " && char !== "\u007f").join("");
+      const printable = [...key]
+        .filter((char) => char >= " " && char !== "\u007f")
+        .join("");
 
       if (!printable) {
         return;

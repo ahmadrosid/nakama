@@ -36,18 +36,20 @@ export function KnowledgeTabShell({
 }) {
   return (
     <section className={cn(sectionClass, "overflow-hidden")}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 lg:hidden">
+      <div className="flex flex-wrap items-center gap-3 border-border border-b p-4 lg:hidden">
         <Select
-          value={profileId ?? undefined}
           disabled={busy || refreshing || !profileId}
           onValueChange={(value) => {
             if (value) {
               onProfileSelect(String(value));
             }
           }}
+          value={profileId ?? undefined}
         >
-          <SelectTrigger className="min-w-0 flex-1" aria-label="Profile">
-            <SelectValue placeholder="Select profile">{selectedProfileName}</SelectValue>
+          <SelectTrigger aria-label="Profile" className="min-w-0 flex-1">
+            <SelectValue placeholder="Select profile">
+              {selectedProfileName}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {profiles.map((profile) => (
@@ -63,34 +65,34 @@ export function KnowledgeTabShell({
 
         <div className="flex shrink-0 items-center gap-1">
           <Button
+            aria-label="Refresh knowledge base"
+            disabled={busy || refreshing}
+            onClick={onRefresh}
+            size="icon-sm"
             type="button"
             variant="ghost"
-            size="icon-sm"
-            disabled={busy || refreshing}
-            aria-label="Refresh knowledge base"
-            onClick={onRefresh}
           >
             {refreshing ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon className="size-4" aria-hidden />
+              <RefreshCwIcon aria-hidden className="size-4" />
             )}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-0 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="hidden border-b border-border p-4 lg:block lg:border-r lg:border-b-0">
+        <aside className="hidden border-border border-b p-4 lg:block lg:border-r lg:border-b-0">
           <h2 className="type-section-title mb-4">Profiles</h2>
 
           <div className="max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-1 lg:max-h-none">
             {profiles.map((profile) => (
               <ScopeButton
-                key={profile.id}
                 active={profile.id === profileId}
-                title={profile.name}
+                key={profile.id}
                 leading={<ProfileAvatar profile={profile} size="sm" />}
                 onClick={() => onProfileSelect(profile.id)}
+                title={profile.name}
               />
             ))}
           </div>
@@ -115,18 +117,18 @@ function ScopeButton({
 }) {
   return (
     <button
-      type="button"
-      onClick={onClick}
-      data-active={active || undefined}
       className="scope-item"
+      data-active={active || undefined}
+      onClick={onClick}
+      type="button"
     >
       <div className="flex items-center gap-3">
         {leading}
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "truncate text-sm font-medium",
-              active ? "text-primary" : "text-foreground",
+              "truncate font-medium text-sm",
+              active ? "text-primary" : "text-foreground"
             )}
           >
             {title}
@@ -148,11 +150,11 @@ export function KnowledgeTabPageState({
     <div
       className={cn(
         embedded
-          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground text-sm"
           : cn(
               sectionClass,
-              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
-            ),
+              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
+            )
       )}
     >
       <Spinner className="size-5" />

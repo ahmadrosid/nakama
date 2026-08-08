@@ -7,13 +7,13 @@ async function createState() {
   const state = new AgentQuestionnaireState(db);
 
   await db.upsertSession({
-    id: "session_test",
-    profileId: "default",
+    agentQuestionnaire: null,
+    agentTodos: [],
     channel: "web",
     createdAt: new Date().toISOString(),
+    id: "session_test",
+    profileId: "default",
     title: null,
-    agentTodos: [],
-    agentQuestionnaire: null,
   });
 
   return { db, state };
@@ -24,19 +24,21 @@ test("write persists a questionnaire", async () => {
 
   const questionnaire = await state.write("session_test", {
     id: "q_1",
-    title: "Need input",
     questions: [
       {
-        id: "role",
-        prompt: "Role?",
         allowCustomAnswer: true,
         choices: [{ id: "eng", label: "Engineer" }],
+        id: "role",
+        prompt: "Role?",
       },
     ],
+    title: "Need input",
   });
 
   expect(questionnaire.title).toBe("Need input");
-  expect(await db.getSessionQuestionnaire("session_test")).toEqual(questionnaire);
+  expect(await db.getSessionQuestionnaire("session_test")).toEqual(
+    questionnaire
+  );
 });
 
 test("clear removes the questionnaire", async () => {
@@ -44,15 +46,15 @@ test("clear removes the questionnaire", async () => {
 
   await state.write("session_test", {
     id: "q_1",
-    title: "Need input",
     questions: [
       {
-        id: "role",
-        prompt: "Role?",
         allowCustomAnswer: true,
         choices: [],
+        id: "role",
+        prompt: "Role?",
       },
     ],
+    title: "Need input",
   });
 
   await state.clear("session_test");

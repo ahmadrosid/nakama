@@ -3,20 +3,20 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  normalizeEnableComposioToolkitRequest,
+  normalizeUpdateProfileComposioToolkitsRequest,
+} from "./composio";
+import {
+  composioOrgUserId,
+  composioUserId,
   getComposioConfigPath,
   isComposioConfigured,
   isComposioConfiguredAsync,
-  composioOrgUserId,
-  composioUserId,
   loadComposioConfigFile,
   loadComposioSettingsPublic,
   resolveComposioApiKey,
   saveComposioConfig,
 } from "./composio-config";
-import {
-  normalizeEnableComposioToolkitRequest,
-  normalizeUpdateProfileComposioToolkitsRequest,
-} from "./composio";
 
 describe("composio-config", () => {
   test("isComposioConfigured is false without config file", () => {
@@ -72,13 +72,13 @@ describe("composio-config", () => {
 describe("normalizeEnableComposioToolkitRequest", () => {
   test("accepts valid toolkit slug", () => {
     expect(
-      normalizeEnableComposioToolkitRequest({ toolkitSlug: "Gmail" }),
+      normalizeEnableComposioToolkitRequest({ toolkitSlug: "Gmail" })
     ).toEqual({ toolkitSlug: "gmail" });
   });
 
   test("rejects invalid toolkit slug", () => {
     expect(() =>
-      normalizeEnableComposioToolkitRequest({ toolkitSlug: "bad slug" }),
+      normalizeEnableComposioToolkitRequest({ toolkitSlug: "bad slug" })
     ).toThrow(/toolkitSlug/);
   });
 });
@@ -89,16 +89,16 @@ describe("normalizeUpdateProfileComposioToolkitsRequest", () => {
       normalizeUpdateProfileComposioToolkitsRequest({
         assignments: [
           {
-            toolkitId: "ctk_1",
             allowedActions: ["GMAIL_SEND_EMAIL"],
+            toolkitId: "ctk_1",
           },
         ],
-      }),
+      })
     ).toEqual({
       assignments: [
         {
-          toolkitId: "ctk_1",
           allowedActions: ["GMAIL_SEND_EMAIL"],
+          toolkitId: "ctk_1",
         },
       ],
     });
@@ -107,18 +107,18 @@ describe("normalizeUpdateProfileComposioToolkitsRequest", () => {
   test("treats empty allowlist as null", () => {
     expect(
       normalizeUpdateProfileComposioToolkitsRequest({
-        assignments: [{ toolkitId: "ctk_1", allowedActions: [] }],
-      }),
+        assignments: [{ allowedActions: [], toolkitId: "ctk_1" }],
+      })
     ).toEqual({
-      assignments: [{ toolkitId: "ctk_1", allowedActions: null }],
+      assignments: [{ allowedActions: null, toolkitId: "ctk_1" }],
     });
   });
 
   test("rejects invalid action slug", () => {
     expect(() =>
       normalizeUpdateProfileComposioToolkitsRequest({
-        assignments: [{ toolkitId: "ctk_1", allowedActions: ["bad-action"] }],
-      }),
+        assignments: [{ allowedActions: ["bad-action"], toolkitId: "ctk_1" }],
+      })
     ).toThrow(/allowedActions/);
   });
 });

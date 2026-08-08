@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { createHonoApp } from "../app";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { AuthService as AuthServiceType } from "../../services/auth-service";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { loginPlatformAdminSession, loginUserSession, setupFreshInstallSession } from "../test-session-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
-import type { AuthService as AuthServiceType } from "../../services/auth-service";
+import { createHonoApp } from "../app";
+import {
+  loginPlatformAdminSession,
+  loginUserSession,
+  setupFreshInstallSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
 
@@ -14,11 +18,21 @@ function createApp() {
   const authService = new AuthService();
   const readCalls: Array<{ render?: "markdown" }> = [];
   const agent = {
+    deleteProfileArtifact: async () => ({
+      deleted: true,
+      filename: "report.md",
+      profileId: "profile_1",
+    }),
+    listProfileArtifacts: async () => ({
+      artifacts: [],
+      directory: "/tmp/artifacts",
+      profileId: "profile_1",
+    }),
     readProfileArtifact: async (
       _orgId: string,
       _profileId: string,
       _filename: string,
-      options: { render?: "markdown" } = {},
+      options: { render?: "markdown" } = {}
     ) => {
       readCalls.push(options);
       return {
@@ -26,34 +40,24 @@ function createApp() {
         contentType: "text/markdown",
       };
     },
-    listProfileArtifacts: async () => ({
-      profileId: "profile_1",
-      directory: "/tmp/artifacts",
-      artifacts: [],
-    }),
-    deleteProfileArtifact: async () => ({
-      deleted: true,
-      profileId: "profile_1",
-      filename: "report.md",
-    }),
   };
 
   return {
-    databaseAdapter,
-    authService,
-    readCalls,
     app: createHonoApp({
       agent: agent as never,
-      automationService: {} as never,
-      taskService: {} as never,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      workerManager: {} as never,
-      mcpService: {} as never,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as never,
       databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
       webDistDir: null,
+      workerManager: {} as never,
     }),
+    authService,
+    databaseAdapter,
+    readCalls,
   };
 }
 
@@ -62,27 +66,31 @@ async function createOrgAdminSession(
   authService: AuthServiceType,
   databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
   slug: string,
-  email: string,
+  email: string
 ) {
-  const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
+  const platformSession = await loginPlatformAdminSession(
+    app,
+    authService,
+    databaseAdapter
+  );
 
   const createResponse = await app.fetch(
     new Request("http://localhost:4310/v1/platform/orgs", {
-      method: "POST",
+      body: JSON.stringify({
+        admin: {
+          email,
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug,
+      }),
       headers: platformSession.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": platformSession.csrfToken,
       }),
-      body: JSON.stringify({
-        name: "Acme",
-        slug,
-        admin: {
-          name: "Acme Admin",
-          email,
-          phone: "+628123456789",
-        },
-      }),
-    }),
+      method: "POST",
+    })
   );
 
   expect(createResponse.status).toBe(201);
@@ -92,28 +100,33 @@ async function createOrgAdminSession(
   };
 
   return {
-    orgId: created.organization.id,
     adminSession: await loginUserSession(
       app,
       email,
       created.adminMember.temporaryPassword,
-      created.organization.id,
+      created.organization.id
     ),
+    orgId: created.organization.id,
   };
 }
 
 describe("profile artifact content auth", () => {
   test("org member can read artifact content", async () => {
     const { app, databaseAdapter } = createApp();
-    const memberSession = await setupFreshInstallSession(app, databaseAdapter, "member@example.com", "member");
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "member@example.com",
+      "member"
+    );
 
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md&inline=1",
         {
           headers: memberSession.headers({}, memberSession.orgId),
-        },
-      ),
+        }
+      )
     );
 
     expect(response.status).toBe(200);
@@ -124,12 +137,20 @@ describe("profile artifact content auth", () => {
 
   test("org viewer can read artifact content", async () => {
     const { app, databaseAdapter } = createApp();
-    const viewerSession = await setupFreshInstallSession(app, databaseAdapter, "viewer@example.com", "viewer");
+    const viewerSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "viewer@example.com",
+      "viewer"
+    );
 
     const response = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md", {
-        headers: viewerSession.headers({}, viewerSession.orgId),
-      }),
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
+        {
+          headers: viewerSession.headers({}, viewerSession.orgId),
+        }
+      )
     );
 
     expect(response.status).toBe(200);
@@ -138,15 +159,20 @@ describe("profile artifact content auth", () => {
 
   test("forwards render=markdown so a .docx is converted for preview", async () => {
     const { app, databaseAdapter, readCalls } = createApp();
-    const memberSession = await setupFreshInstallSession(app, databaseAdapter, "render@example.com", "member");
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "render@example.com",
+      "member"
+    );
 
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=laporan.docx&inline=1&render=markdown",
         {
           headers: memberSession.headers({}, memberSession.orgId),
-        },
-      ),
+        }
+      )
     );
 
     expect(response.status).toBe(200);
@@ -155,12 +181,20 @@ describe("profile artifact content auth", () => {
 
   test("serves raw bytes when render is not requested", async () => {
     const { app, databaseAdapter, readCalls } = createApp();
-    const memberSession = await setupFreshInstallSession(app, databaseAdapter, "raw@example.com", "member");
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "raw@example.com",
+      "member"
+    );
 
     await app.fetch(
-      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=laporan.docx", {
-        headers: memberSession.headers({}, memberSession.orgId),
-      }),
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=laporan.docx",
+        {
+          headers: memberSession.headers({}, memberSession.orgId),
+        }
+      )
     );
 
     expect(readCalls.at(-1)?.render).toBeUndefined();
@@ -173,41 +207,43 @@ describe("profile artifact content auth", () => {
       authService,
       databaseAdapter,
       "acme-artifact-member",
-      "admin-artifact-member@acme.com",
+      "admin-artifact-member@acme.com"
     );
 
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        method: "POST",
+        body: JSON.stringify({
+          email: "member-artifact@acme.com",
+          name: "Member One",
+          phone: "+628111111111",
+          role: "member",
+        }),
         headers: adminSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": adminSession.csrfToken,
           },
-          orgId,
+          orgId
         ),
-        body: JSON.stringify({
-          name: "Member One",
-          email: "member-artifact@acme.com",
-          phone: "+628111111111",
-          role: "member",
-        }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(addMemberResponse.status).toBe(201);
-    const memberProvisioned = (await addMemberResponse.json()) as { temporaryPassword: string };
+    const memberProvisioned = (await addMemberResponse.json()) as {
+      temporaryPassword: string;
+    };
     const memberSession = await loginUserSession(
       app,
       "member-artifact@acme.com",
       memberProvisioned.temporaryPassword,
-      orgId,
+      orgId
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
         headers: memberSession.headers({}, orgId),
-      }),
+      })
     );
 
     expect(response.status).toBe(403);
@@ -220,7 +256,7 @@ describe("profile artifact content auth", () => {
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
         headers: adminSession.headers({}, adminSession.orgId),
-      }),
+      })
     );
 
     expect(response.status).toBe(200);

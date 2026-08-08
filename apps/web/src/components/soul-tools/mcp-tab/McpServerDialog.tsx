@@ -1,4 +1,7 @@
-import type { CreateMcpServerRequest, McpServerSummary } from "@nakama/core/contract";
+import type {
+  CreateMcpServerRequest,
+  McpServerSummary,
+} from "@nakama/core/contract";
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
@@ -26,15 +29,21 @@ export function McpServerDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
 }) {
-  const state = useMcpServerDialogState({ open, busy, server, onSubmit });
+  const state = useMcpServerDialogState({ busy, onSubmit, open, server });
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog onOpenChange={onOpenChange} open={open}>
         <DialogContent className="gap-6 p-6 sm:max-w-lg">
-          <form className="space-y-6" onSubmit={state.handleSubmit} onPaste={state.handlePaste}>
+          <form
+            className="space-y-6"
+            onPaste={state.handlePaste}
+            onSubmit={state.handleSubmit}
+          >
             <DialogHeader className="gap-2">
-              <DialogTitle>{state.isEdit ? "Edit MCP server" : "Add MCP server"}</DialogTitle>
+              <DialogTitle>
+                {state.isEdit ? "Edit MCP server" : "Add MCP server"}
+              </DialogTitle>
               <DialogDescription>
                 {state.isEdit
                   ? state.transport === "stdio"
@@ -45,39 +54,18 @@ export function McpServerDialog({
             </DialogHeader>
 
             <McpServerDialogForm
-              idPrefix={state.idPrefix}
-              isEdit={state.isEdit}
-              transport={state.transport}
-              name={state.name}
-              url={state.url}
-              headers={state.headers}
-              command={state.command}
               args={state.args}
+              canSubmit={state.canSubmit}
+              command={state.command}
               env={state.env}
               formDisabled={state.formDisabled}
+              headers={state.headers}
+              idPrefix={state.idPrefix}
+              isEdit={state.isEdit}
               loadingForm={state.loadingForm}
-              canSubmit={state.canSubmit}
-              testing={state.testing}
-              testResult={state.testResult}
-              submitError={state.submitError}
-              onTransportChange={(nextTransport) => {
-                state.setTransport(nextTransport);
-                state.clearTestResult();
-              }}
-              onOpenImport={state.openImportDialog}
-              onNameChange={(value) => {
-                state.setName(value);
-                state.clearTestResult();
-              }}
-              onUrlChange={(value) => {
-                state.setUrl(value);
-                if (value.trim()) {
-                  state.setTransport("http");
-                }
-                state.clearTestResult();
-              }}
-              onHeadersChange={(nextHeaders) => {
-                state.setHeaders(nextHeaders);
+              name={state.name}
+              onArgsChange={(nextArgs) => {
+                state.setArgs(nextArgs);
                 state.clearTestResult();
               }}
               onCommandChange={(value) => {
@@ -87,27 +75,51 @@ export function McpServerDialog({
                 }
                 state.clearTestResult();
               }}
-              onArgsChange={(nextArgs) => {
-                state.setArgs(nextArgs);
-                state.clearTestResult();
-              }}
               onEnvChange={(nextEnv) => {
                 state.setEnv(nextEnv);
                 state.clearTestResult();
               }}
+              onHeadersChange={(nextHeaders) => {
+                state.setHeaders(nextHeaders);
+                state.clearTestResult();
+              }}
+              onNameChange={(value) => {
+                state.setName(value);
+                state.clearTestResult();
+              }}
+              onOpenImport={state.openImportDialog}
               onTestConnection={() => void state.handleTestConnection()}
+              onTransportChange={(nextTransport) => {
+                state.setTransport(nextTransport);
+                state.clearTestResult();
+              }}
+              onUrlChange={(value) => {
+                state.setUrl(value);
+                if (value.trim()) {
+                  state.setTransport("http");
+                }
+                state.clearTestResult();
+              }}
+              submitError={state.submitError}
+              testing={state.testing}
+              testResult={state.testResult}
+              transport={state.transport}
+              url={state.url}
             />
 
             <DialogFooter className="gap-3 border-t-0 bg-transparent p-3 sm:justify-end">
               <Button
-                type="button"
-                variant="outline"
                 disabled={state.formDisabled}
                 onClick={() => onOpenChange(false)}
+                type="button"
+                variant="outline"
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={state.formDisabled || !state.canSubmit}>
+              <Button
+                disabled={state.formDisabled || !state.canSubmit}
+                type="submit"
+              >
                 {busy ? (
                   <Spinner className="size-4" />
                 ) : state.isEdit ? (
@@ -122,18 +134,18 @@ export function McpServerDialog({
       </Dialog>
 
       <McpImportConfigDialog
-        open={state.importOpen}
+        formDisabled={state.formDisabled}
         importDraft={state.importDraft}
         importError={state.importError}
-        formDisabled={state.formDisabled}
-        onOpenChange={state.setImportOpen}
+        onApply={state.handleImportApply}
         onImportDraftChange={(value) => {
           state.setImportDraft(value);
           if (state.importError) {
             state.setImportError(null);
           }
         }}
-        onApply={state.handleImportApply}
+        onOpenChange={state.setImportOpen}
+        open={state.importOpen}
       />
     </>
   );

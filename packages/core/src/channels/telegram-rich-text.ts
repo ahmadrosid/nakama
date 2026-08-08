@@ -6,15 +6,23 @@ export function renderTelegramRichText(text: string): string {
   return restoreProtectedBlocks(formattedText, protectedBlocks.blocks).trim();
 }
 
-function protectFencedCodeBlocks(text: string): { text: string; blocks: string[] } {
+function protectFencedCodeBlocks(text: string): {
+  text: string;
+  blocks: string[];
+} {
   const blocks: string[] = [];
-  const protectedText = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => {
-    const token = `@@TCTOKEN${blocks.length}@@`;
-    blocks.push(`<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`);
-    return token;
-  });
+  const protectedText = text.replace(
+    /```[\w]*\n?([\s\S]*?)```/g,
+    (_, code: string) => {
+      const token = `@@TCTOKEN${blocks.length}@@`;
+      blocks.push(
+        `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
+      );
+      return token;
+    }
+  );
 
-  return { text: protectedText, blocks };
+  return { blocks, text: protectedText };
 }
 
 function renderInlineTelegramFormatting(text: string): string {
@@ -49,7 +57,10 @@ function trimFenceNewlines(text: string): string {
 }
 
 function escapeTelegramHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function escapeTelegramAttribute(text: string): string {

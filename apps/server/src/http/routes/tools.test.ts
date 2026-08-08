@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { createHonoApp } from "../app";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
 import { OrgService } from "../../services/org-service";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { loginPlatformAdminSession, loginUserSession } from "../test-session-helpers";
 import { setupTestConfigDir } from "../../test-config-dir";
+import { createHonoApp } from "../app";
+import {
+  loginPlatformAdminSession,
+  loginUserSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-tools-route-test-");
 
@@ -12,66 +15,78 @@ function createApp(agentOverrides: Record<string, unknown> = {}) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const agent = {
-    listTools: async () => ({ tools: [] }),
     getTool: async (toolId: string) => ({
       tool: {
+        createdAt: new Date().toISOString(),
+        description: "Echo tool",
+        handlerConfig: { modulePath: "echo.js" },
+        handlerType: "javascript",
         id: toolId,
         name: "echo",
-        description: "Echo tool",
-        handlerType: "javascript",
-        handlerConfig: { modulePath: "echo.js" },
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
     }),
     getToolSource: async () => ({
-      path: "echo.js",
       content: "export async function run() {}",
       language: "javascript" as const,
+      path: "echo.js",
     }),
+    listTools: async () => ({ tools: [] }),
     runToolPlayground: async () => ({ ok: true, result: { echo: "hello" } }),
-    suggestToolPlaygroundParams: async () => ({ parameters: { query: "hello" } }),
+    suggestToolPlaygroundParams: async () => ({
+      parameters: { query: "hello" },
+    }),
     ...agentOverrides,
   };
 
   return {
-    databaseAdapter,
-    authService,
     app: createHonoApp({
       agent: agent as never,
-      automationService: {} as never,
-      taskService: {} as never,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      workerManager: {} as never,
-      mcpService: {} as never,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as never,
       databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
       webDistDir: null,
+      workerManager: {} as never,
     }),
+    authService,
+    databaseAdapter,
   };
 }
 
-async function createOrgAdminSession(app: ReturnType<typeof createApp>["app"], authService: AuthService, databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>, slug: string, email: string) {
-  const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
+async function createOrgAdminSession(
+  app: ReturnType<typeof createApp>["app"],
+  authService: AuthService,
+  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  slug: string,
+  email: string
+) {
+  const platformSession = await loginPlatformAdminSession(
+    app,
+    authService,
+    databaseAdapter
+  );
 
   const createResponse = await app.fetch(
     new Request("http://localhost:4310/v1/platform/orgs", {
-      method: "POST",
+      body: JSON.stringify({
+        admin: {
+          email,
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug,
+      }),
       headers: platformSession.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": platformSession.csrfToken,
       }),
-      body: JSON.stringify({
-        name: "Acme",
-        slug,
-        admin: {
-          name: "Acme Admin",
-          email,
-          phone: "+628123456789",
-        },
-      }),
-    }),
+      method: "POST",
+    })
   );
 
   expect(createResponse.status).toBe(201);
@@ -81,13 +96,13 @@ async function createOrgAdminSession(app: ReturnType<typeof createApp>["app"], a
   };
 
   return {
-    orgId: created.organization.id,
     adminSession: await loginUserSession(
       app,
       email,
       created.adminMember.temporaryPassword,
-      created.organization.id,
+      created.organization.id
     ),
+    orgId: created.organization.id,
   };
 }
 
@@ -99,13 +114,13 @@ describe("tool playground routes", () => {
       authService,
       databaseAdapter,
       "acme-read",
-      "admin-read@acme.com",
+      "admin-read@acme.com"
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tools/tool_echo", {
         headers: adminSession.headers({}, orgId),
-      }),
+      })
     );
 
     expect(response.status).toBe(200);
@@ -118,41 +133,43 @@ describe("tool playground routes", () => {
       authService,
       databaseAdapter,
       "acme-member",
-      "admin-member@acme.com",
+      "admin-member@acme.com"
     );
 
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        method: "POST",
+        body: JSON.stringify({
+          email: "member@acme.com",
+          name: "Member One",
+          phone: "+628111111111",
+          role: "member",
+        }),
         headers: adminSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": adminSession.csrfToken,
           },
-          orgId,
+          orgId
         ),
-        body: JSON.stringify({
-          name: "Member One",
-          email: "member@acme.com",
-          phone: "+628111111111",
-          role: "member",
-        }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(addMemberResponse.status).toBe(201);
-    const memberProvisioned = (await addMemberResponse.json()) as { temporaryPassword: string };
+    const memberProvisioned = (await addMemberResponse.json()) as {
+      temporaryPassword: string;
+    };
     const memberSession = await loginUserSession(
       app,
       "member@acme.com",
       memberProvisioned.temporaryPassword,
-      orgId,
+      orgId
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tools/tool_echo", {
         headers: memberSession.headers({}, orgId),
-      }),
+      })
     );
 
     expect(response.status).toBe(403);
@@ -160,25 +177,29 @@ describe("tool playground routes", () => {
 
   test("org admin can run a javascript tool", async () => {
     const { app, authService, databaseAdapter } = createApp();
-    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
-        method: "POST",
+        body: JSON.stringify({
+          admin: {
+            email: "admin-run@acme.com",
+            name: "Acme Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme",
+          slug: "acme-run",
+        }),
         headers: platformSession.headers({
           "Content-Type": "application/json",
           "X-CSRF-Token": platformSession.csrfToken,
         }),
-        body: JSON.stringify({
-          name: "Acme",
-          slug: "acme-run",
-          admin: {
-            name: "Acme Admin",
-            email: "admin-run@acme.com",
-            phone: "+628123456789",
-          },
-        }),
-      }),
+        method: "POST",
+      })
     );
 
     const created = (await createResponse.json()) as {
@@ -190,21 +211,21 @@ describe("tool playground routes", () => {
       app,
       "admin-run@acme.com",
       created.adminMember.temporaryPassword,
-      created.organization.id,
+      created.organization.id
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tools/tool_echo/run", {
-        method: "POST",
+        body: JSON.stringify({ parameters: { query: "hello" } }),
         headers: adminSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": adminSession.csrfToken,
           },
-          created.organization.id,
+          created.organization.id
         ),
-        body: JSON.stringify({ parameters: { query: "hello" } }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(response.status).toBe(200);
@@ -220,49 +241,51 @@ describe("tool playground routes", () => {
       authService,
       databaseAdapter,
       "acme-run-deny",
-      "admin-run-deny@acme.com",
+      "admin-run-deny@acme.com"
     );
 
     const addMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        method: "POST",
+        body: JSON.stringify({
+          email: "member-run@acme.com",
+          name: "Member One",
+          phone: "+628111111111",
+          role: "member",
+        }),
         headers: adminSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": adminSession.csrfToken,
           },
-          orgId,
+          orgId
         ),
-        body: JSON.stringify({
-          name: "Member One",
-          email: "member-run@acme.com",
-          phone: "+628111111111",
-          role: "member",
-        }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(addMemberResponse.status).toBe(201);
-    const memberProvisioned = (await addMemberResponse.json()) as { temporaryPassword: string };
+    const memberProvisioned = (await addMemberResponse.json()) as {
+      temporaryPassword: string;
+    };
     const memberSession = await loginUserSession(
       app,
       "member-run@acme.com",
       memberProvisioned.temporaryPassword,
-      orgId,
+      orgId
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tools/tool_echo/run", {
-        method: "POST",
+        body: JSON.stringify({ parameters: { query: "hello" } }),
         headers: memberSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": memberSession.csrfToken,
           },
-          orgId,
+          orgId
         ),
-        body: JSON.stringify({ parameters: { query: "hello" } }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(response.status).toBe(403);
@@ -271,28 +294,34 @@ describe("tool playground routes", () => {
   test("non-javascript tools return 400 on run", async () => {
     const { app, authService, databaseAdapter } = createApp({
       runToolPlayground: async () => {
-        throw new Error("Only custom JavaScript tools can be run in the playground.");
+        throw new Error(
+          "Only custom JavaScript tools can be run in the playground."
+        );
       },
     });
-    const platformSession = await loginPlatformAdminSession(app, authService, databaseAdapter);
+    const platformSession = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
 
     const createResponse = await app.fetch(
       new Request("http://localhost:4310/v1/platform/orgs", {
-        method: "POST",
+        body: JSON.stringify({
+          admin: {
+            email: "admin-builtin@acme.com",
+            name: "Acme Admin",
+            phone: "+628123456789",
+          },
+          name: "Acme",
+          slug: "acme-builtin",
+        }),
         headers: platformSession.headers({
           "Content-Type": "application/json",
           "X-CSRF-Token": platformSession.csrfToken,
         }),
-        body: JSON.stringify({
-          name: "Acme",
-          slug: "acme-builtin",
-          admin: {
-            name: "Acme Admin",
-            email: "admin-builtin@acme.com",
-            phone: "+628123456789",
-          },
-        }),
-      }),
+        method: "POST",
+      })
     );
 
     const created = (await createResponse.json()) as {
@@ -304,21 +333,21 @@ describe("tool playground routes", () => {
       app,
       "admin-builtin@acme.com",
       created.adminMember.temporaryPassword,
-      created.organization.id,
+      created.organization.id
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/tools/tool_builtin/run", {
-        method: "POST",
+        body: JSON.stringify({ parameters: {} }),
         headers: adminSession.headers(
           {
             "Content-Type": "application/json",
             "X-CSRF-Token": adminSession.csrfToken,
           },
-          created.organization.id,
+          created.organization.id
         ),
-        body: JSON.stringify({ parameters: {} }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(response.status).toBe(400);

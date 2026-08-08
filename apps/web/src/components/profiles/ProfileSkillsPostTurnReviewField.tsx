@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { ProfileDetail } from "@nakama/core/contract";
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -44,9 +44,9 @@ export function ProfileSkillsPostTurnReviewField({
 }) {
   return (
     <ProfileSkillsPostTurnReviewFieldBody
+      disabled={disabled}
       key={`${profile.id}:${String(profile.skillsPostTurnReview)}`}
       profile={profile}
-      disabled={disabled}
     />
   );
 }
@@ -61,7 +61,7 @@ function ProfileSkillsPostTurnReviewFieldBody({
   const { activeOrg } = useAuth();
   const updateMutation = useUpdateProfileMutation();
   const [value, setValue] = useState<OverrideValue>(() =>
-    toOverrideValue(profile.skillsPostTurnReview),
+    toOverrideValue(profile.skillsPostTurnReview)
   );
   const busy = updateMutation.isPending;
 
@@ -73,8 +73,8 @@ function ProfileSkillsPostTurnReviewFieldBody({
     setValue(nextValue);
     try {
       await updateMutation.mutateAsync({
-        profileId: profile.id,
         input: { skillsPostTurnReview: fromOverrideValue(nextValue) },
+        profileId: profile.id,
       });
       toast("Post-turn skill review setting saved.");
     } catch (err) {
@@ -86,14 +86,13 @@ function ProfileSkillsPostTurnReviewFieldBody({
   return (
     <div>
       <label
+        className="mb-1 block text-balance font-medium text-muted-foreground text-xs"
         htmlFor="profile-skills-post-turn-review"
-        className="mb-1 block text-xs font-medium text-balance text-muted-foreground"
       >
         Post-turn skill review
       </label>
       <div className="flex items-center gap-2">
         <Select
-          value={value}
           disabled={disabled || busy}
           onValueChange={(next) => {
             if (!next) {
@@ -101,8 +100,12 @@ function ProfileSkillsPostTurnReviewFieldBody({
             }
             void handleChange(next as OverrideValue);
           }}
+          value={value}
         >
-          <SelectTrigger id="profile-skills-post-turn-review" className="max-w-xs">
+          <SelectTrigger
+            className="max-w-xs"
+            id="profile-skills-post-turn-review"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

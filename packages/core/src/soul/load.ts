@@ -8,17 +8,17 @@ import {
 import type { LoadedSoulStack, SoulFileStatus, SoulStatus } from "./types";
 
 const SOUL_FILES = {
-  soul: "SOUL.md",
-  style: "STYLE.md",
   instructions: "INSTRUCTIONS.md",
   memory: "MEMORY.md",
+  soul: "SOUL.md",
+  style: "STYLE.md",
 } as const;
 
 async function loadExamples(directory: string): Promise<string | undefined> {
   const examplesDir = join(directory, "examples");
 
   if (!(await pathExists(examplesDir))) {
-    return undefined;
+    return;
   }
 
   const entries = await readDirectoryEntries(examplesDir);
@@ -28,7 +28,7 @@ async function loadExamples(directory: string): Promise<string | undefined> {
     .sort();
 
   if (markdownFiles.length === 0) {
-    return undefined;
+    return;
   }
 
   const sections: string[] = [];
@@ -44,7 +44,9 @@ async function loadExamples(directory: string): Promise<string | undefined> {
   return sections.length > 0 ? sections.join("\n\n") : undefined;
 }
 
-export async function loadSoulStack(directory: string): Promise<LoadedSoulStack> {
+export async function loadSoulStack(
+  directory: string
+): Promise<LoadedSoulStack> {
   const files: LoadedSoulStack["files"] = {};
   const loaded: string[] = [];
 
@@ -69,16 +71,16 @@ export async function loadSoulStack(directory: string): Promise<LoadedSoulStack>
 
 export function toSoulStatus(stack: LoadedSoulStack): SoulStatus {
   const files: SoulFileStatus = {
-    soul: Boolean(stack.files.soul),
-    style: Boolean(stack.files.style),
+    examples: Boolean(stack.files.examples),
     instructions: Boolean(stack.files.instructions),
     memory: Boolean(stack.files.memory),
-    examples: Boolean(stack.files.examples),
+    soul: Boolean(stack.files.soul),
+    style: Boolean(stack.files.style),
   };
 
   return {
-    directory: stack.directory,
     active: stack.loaded.length > 0,
+    directory: stack.directory,
     files,
   };
 }

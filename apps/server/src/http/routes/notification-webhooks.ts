@@ -7,11 +7,11 @@ import type { HonoApp } from "../types";
 
 export function registerNotificationWebhookRoutes(
   app: HonoApp,
-  options: ServerOptions,
+  options: ServerOptions
 ): void {
   const service = new NotificationWebhookService(
     options.databaseAdapter,
-    options.authService,
+    options.authService
   );
 
   app.post("/v1/notify/:destinationId", async (c) => {
@@ -24,7 +24,10 @@ export function registerNotificationWebhookRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 }

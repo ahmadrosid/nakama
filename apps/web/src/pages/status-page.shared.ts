@@ -1,11 +1,11 @@
+import type { SystemStatusResponse } from "@nakama/core/contract";
 import {
   ClockIcon,
   HashIcon,
+  type LucideIcon,
   MessageCircleIcon,
   SmartphoneIcon,
-  type LucideIcon,
 } from "lucide-react";
-import type { SystemStatusResponse } from "@nakama/core/contract";
 import { PAGE_PATHS } from "@/lib/navigation";
 
 export type StatusTone = "ok" | "warn" | "bad";
@@ -13,7 +13,8 @@ export type StatusTone = "ok" | "warn" | "bad";
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
 export function buildServiceColumns(status: SystemStatusResponse) {
-  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } = status;
+  const { automationWorker, telegramWorker, whatsappWorker, discordWorker } =
+    status;
 
   return [
     {
@@ -45,7 +46,7 @@ export function buildServiceColumns(status: SystemStatusResponse) {
 }
 
 function automationServiceStatus(
-  automationWorker: SystemStatusResponse["automationWorker"],
+  automationWorker: SystemStatusResponse["automationWorker"]
 ): { status: string; tone: ServiceStatusTone } {
   if (!automationWorker.process?.managed) {
     return { status: "PM2 unavailable", tone: "warn" };
@@ -63,7 +64,7 @@ function automationServiceStatus(
 }
 
 function telegramServiceStatus(
-  telegramWorker: SystemStatusResponse["telegramWorker"],
+  telegramWorker: SystemStatusResponse["telegramWorker"]
 ): { status: string; tone: ServiceStatusTone } {
   if (!telegramWorker.configured) {
     return { status: "Not set up", tone: "muted" };
@@ -81,7 +82,7 @@ function telegramServiceStatus(
 }
 
 function whatsappServiceStatus(
-  whatsappWorker: SystemStatusResponse["whatsappWorker"],
+  whatsappWorker: SystemStatusResponse["whatsappWorker"]
 ): { status: string; tone: ServiceStatusTone } {
   if (!whatsappWorker.configured) {
     return { status: "Not set up", tone: "muted" };
@@ -99,7 +100,7 @@ function whatsappServiceStatus(
 }
 
 function discordServiceStatus(
-  discordWorker: SystemStatusResponse["discordWorker"],
+  discordWorker: SystemStatusResponse["discordWorker"]
 ): { status: string; tone: ServiceStatusTone } {
   if (!discordWorker.configured) {
     return { status: "Not set up", tone: "muted" };
@@ -129,59 +130,67 @@ export function deriveSummary(status: SystemStatusResponse): {
 } {
   if (!status.server.ok) {
     return {
-      tone: "bad",
-      title: "Server offline",
       description: "Restart Nakama and check your connection.",
+      title: "Server offline",
+      tone: "bad",
     };
   }
 
   if (!status.automationWorker.ok) {
     return {
-      tone: "bad",
-      title: "Automation worker stopped",
       description: "Start the automation worker to resume scheduled runs.",
+      title: "Automation worker stopped",
+      tone: "bad",
     };
   }
 
   if (status.telegramWorker.configured && !status.telegramWorker.running) {
     return {
-      tone: "warn",
-      title: "Telegram bridge offline",
-      description: "Start the Telegram worker (bun run dev:telegram) to receive messages.",
       action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
+      description:
+        "Start the Telegram worker (bun run dev:telegram) to receive messages.",
+      title: "Telegram bridge offline",
+      tone: "warn",
     };
   }
 
   if (status.whatsappWorker.configured && !status.whatsappWorker.running) {
     return {
-      tone: "warn",
-      title: "WhatsApp offline",
-      description: "Start the WhatsApp worker to receive messages.",
       action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
+      description: "Start the WhatsApp worker to receive messages.",
+      title: "WhatsApp offline",
+      tone: "warn",
     };
   }
 
   if (status.discordWorker.configured && !status.discordWorker.running) {
     return {
-      tone: "warn",
-      title: "Discord bridge offline",
-      description: "Start the bridge worker from Integrations → Discord to receive messages.",
       action: { label: "Open Integrations", to: PAGE_PATHS.integrations },
+      description:
+        "Start the bridge worker from Integrations → Discord to receive messages.",
+      title: "Discord bridge offline",
+      tone: "warn",
     };
   }
 
-  if (!status.server.providerConfigured || !status.automationWorker.providerConfigured) {
+  if (
+    !(
+      status.server.providerConfigured &&
+      status.automationWorker.providerConfigured
+    )
+  ) {
     return {
-      tone: "warn",
-      title: "Running with warnings",
-      description: "Configure an LLM provider before chat or automation runs can succeed.",
       action: { label: "Open Settings", to: PAGE_PATHS.settings },
+      description:
+        "Configure an LLM provider before chat or automation runs can succeed.",
+      title: "Running with warnings",
+      tone: "warn",
     };
   }
 
   return {
-    tone: "ok",
-    title: "All systems operational",
     description: "Server, workers, and bridges are healthy.",
+    title: "All systems operational",
+    tone: "ok",
   };
 }

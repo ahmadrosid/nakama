@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  normalizeThinkingEffort,
   formatHttpErrorBody,
+  normalizeThinkingEffort,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -33,12 +33,12 @@ describe("provider shared helpers", () => {
       ]),
       (event) => {
         events.push(event);
-      },
+      }
     );
 
     expect(events).toEqual([
-      { event: "message", data: '{"chunk":1}' },
-      { event: "custom", data: '{"chunk":2}' },
+      { data: '{"chunk":1}', event: "message" },
+      { data: '{"chunk":2}', event: "custom" },
     ]);
   });
 
@@ -52,12 +52,12 @@ describe("provider shared helpers", () => {
       ]),
       (event) => {
         events.push(event);
-      },
+      }
     );
 
     expect(events).toEqual([
-      { event: "custom", data: '{"chunk":1}' },
-      { event: "message", data: '{"chunk":2}' },
+      { data: '{"chunk":1}', event: "custom" },
+      { data: '{"chunk":2}', event: "message" },
     ]);
   });
 
@@ -87,15 +87,15 @@ describe("provider shared helpers", () => {
         "OpenCode Zen",
         429,
         JSON.stringify({
-          type: "error",
           error: {
-            type: "FreeUsageLimitError",
             message: "Rate limit exceeded. Please try again later.",
+            type: "FreeUsageLimitError",
           },
-        }),
-      ),
+          type: "error",
+        })
+      )
     ).toBe(
-      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later.",
+      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
     );
   });
 });

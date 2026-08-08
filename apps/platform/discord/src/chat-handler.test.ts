@@ -1,10 +1,14 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core/contract";
 import { DiscordAuthStore } from "./auth-store";
-import { createChatHandler } from "./chat-handler";
+import {
+  chatLockOptions,
+  createChatHandler,
+  resetChatLocksForTests,
+  withChatLock,
+} from "./chat-handler";
 import { SessionStore } from "./session-store";
-import { ThreadStore } from "./thread-store";
 import {
   createDmMessage,
   createGuildChatMessage,
@@ -15,6 +19,12 @@ import {
   withTempHome,
   writeDiscordConfigIni,
 } from "./test-helpers";
+import { ThreadStore } from "./thread-store";
+
+afterEach(() => {
+  resetChatLocksForTests();
+  chatLockOptions.waitMs = 15 * 60 * 1000;
+});
 
 async function createPairedHandler(
   homeDir: string,
@@ -23,7 +33,9 @@ async function createPairedHandler(
     onSendStream?: Parameters<typeof createMockClient>[0]["onSendStream"];
     questionnaire?: Parameters<typeof createMockClient>[0]["questionnaire"];
     orgs?: Parameters<typeof createMockClient>[0]["orgs"];
-  } = {},
+    profiles?: Parameters<typeof createMockClient>[0]["profiles"];
+    configProfileId?: string;
+  } = {}
 ) {
   await writeDiscordConfigIni(homeDir, {
     botToken: "discord-bot-token",
@@ -32,27 +44,38 @@ async function createPairedHandler(
 
   const authStore = new DiscordAuthStore();
   await authStore.reload();
-  const { client, calls } = createMockClient(options);
+  const { client, calls, createdSessionProfileIds } = createMockClient(options);
   const sessionStore = new SessionStore(
-    path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+    path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
   );
   await sessionStore.load();
   const threadStore = new ThreadStore(
-    path.join(homeDir, ".nakama", "discord", "chat-threads.json"),
+    path.join(homeDir, ".nakama", "discord", "chat-threads.json")
   );
   await threadStore.load();
   const orgStore = createTestOrgStore(homeDir);
   await orgStore.load();
   const handlers = createChatHandler({
-    client,
-    config: { botToken: "discord-bot-token", profileId: "default" },
     authStore,
+    client,
+    config: {
+      botToken: "discord-bot-token",
+      profileId: options.configProfileId ?? "default",
+    },
+    orgStore,
     sessionStore,
     threadStore,
-    orgStore,
   });
 
-  return { ...handlers, client, calls, sessionStore, threadStore, orgStore };
+  return {
+    ...handlers,
+    calls,
+    client,
+    createdSessionProfileIds,
+    orgStore,
+    sessionStore,
+    threadStore,
+  };
 }
 
 describe("createChatHandler artifact delivery", () => {
@@ -63,68 +86,232 @@ describe("createChatHandler artifact delivery", () => {
   });
 
   const artifactMessages: ChatMessage[] = [
-    { role: "user", content: "save report" },
+    { content: "save report", role: "user" },
     {
-      role: "assistant",
       content: "",
+      role: "assistant",
       toolCalls: [
         {
+          arguments: { content: "# Report", path: "artifacts/report.md" },
           id: "tool_1",
           name: "write_file",
-          arguments: { path: "artifacts/report.md", content: "# Report" },
         },
         {
+          arguments: {
+            content: metaJson,
+            path: "artifacts/report.md.nakama-meta.json",
+          },
           id: "tool_2",
           name: "write_file",
-          arguments: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
         },
       ],
     },
     {
+      content: JSON.stringify({
+        bytesWritten: 8,
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md",
+      }),
+      name: "write_file",
       role: "tool",
       toolCallId: "tool_1",
-      name: "write_file",
-      content: JSON.stringify({
-        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md",
-        bytesWritten: 8,
-      }),
     },
     {
+      content: JSON.stringify({
+        bytesWritten: metaJson.length,
+        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md.nakama-meta.json",
+      }),
+      name: "write_file",
       role: "tool",
       toolCallId: "tool_2",
-      name: "write_file",
-      content: JSON.stringify({
-        path: "/home/.nakama/orgs/org/profiles/default/artifacts/report.md.nakama-meta.json",
-        bytesWritten: metaJson.length,
-      }),
     },
-    { role: "assistant", content: "Saved the report." },
+    { content: "Saved the report.", role: "assistant" },
   ];
 
   test("auto-uploads a small artifact after a paired save-artifact turn", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(homeDir, {
-        messages: artifactMessages,
-      });
+      const { handleMessage, calls, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          messages: artifactMessages,
+        }
+      );
       sessionStore.set("dm_channel_1", {
-        sessionId: "session_test",
         profileId: "default",
+        sessionId: "session_test",
         updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "thanks",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(1);
       expect(dm.fileSendCalls).toBe(1);
-      expect(dm.sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
-        false,
+      expect(
+        dm.sentMessages.some((reply) =>
+          reply.includes("https://app.example/s/tok_test")
+        )
+      ).toBe(false);
+    });
+  });
+
+  test("auto-uploads a PDF artifact after a paired save-artifact turn", async () => {
+    await withTempHome(async (homeDir) => {
+      const pdfMeta = JSON.stringify({
+        mimeType: "application/pdf",
+        savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 270_000,
+      });
+      const pdfMessages: ChatMessage[] = [
+        { content: "save pitch deck", role: "user" },
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: [
+            {
+              arguments: {
+                content: "%PDF-1.4",
+                path: "artifacts/nakama-pitch-deck.pdf",
+              },
+              id: "tool_1",
+              name: "write_file",
+            },
+            {
+              arguments: {
+                content: pdfMeta,
+                path: "artifacts/nakama-pitch-deck.pdf.nakama-meta.json",
+              },
+              id: "tool_2",
+              name: "write_file",
+            },
+          ],
+        },
+        {
+          content: JSON.stringify({
+            bytesWritten: 270_000,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/nakama-pitch-deck.pdf",
+          }),
+          name: "write_file",
+          role: "tool",
+          toolCallId: "tool_1",
+        },
+        {
+          content: JSON.stringify({
+            bytesWritten: pdfMeta.length,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/nakama-pitch-deck.pdf.nakama-meta.json",
+          }),
+          name: "write_file",
+          role: "tool",
+          toolCallId: "tool_2",
+        },
+        { content: "Saved the pitch deck.", role: "assistant" },
+      ];
+
+      const { handleMessage, calls, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          artifactContentBytes: new TextEncoder().encode("%PDF-1.4"),
+          messages: pdfMessages,
+        }
       );
+      sessionStore.set("dm_channel_1", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const dm = createDmMessage({
+        content: "thanks",
+        userId: "424242424242424242",
+      });
+      await handleMessage(dm.message);
+
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(dm.fileSendCalls).toBe(1);
+    });
+  });
+
+  test("auto-uploads a CSV artifact after a paired save-artifact turn", async () => {
+    await withTempHome(async (homeDir) => {
+      const csvMeta = JSON.stringify({
+        mimeType: "text/csv",
+        savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 24,
+      });
+      const csvMessages: ChatMessage[] = [
+        { content: "export csv", role: "user" },
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: [
+            {
+              arguments: {
+                content: "a,b\n1,2\n",
+                path: "artifacts/export.csv",
+              },
+              id: "tool_1",
+              name: "write_file",
+            },
+            {
+              arguments: {
+                content: csvMeta,
+                path: "artifacts/export.csv.nakama-meta.json",
+              },
+              id: "tool_2",
+              name: "write_file",
+            },
+          ],
+        },
+        {
+          content: JSON.stringify({
+            bytesWritten: 8,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/export.csv",
+          }),
+          name: "write_file",
+          role: "tool",
+          toolCallId: "tool_1",
+        },
+        {
+          content: JSON.stringify({
+            bytesWritten: csvMeta.length,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/export.csv.nakama-meta.json",
+          }),
+          name: "write_file",
+          role: "tool",
+          toolCallId: "tool_2",
+        },
+        { content: "Saved the CSV.", role: "assistant" },
+      ];
+
+      const { handleMessage, calls, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          artifactContentBytes: new TextEncoder().encode("a,b\n1,2\n"),
+          messages: csvMessages,
+        }
+      );
+      sessionStore.set("dm_channel_1", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const dm = createDmMessage({
+        content: "thanks",
+        userId: "424242424242424242",
+      });
+      await handleMessage(dm.message);
+
+      expect(calls.publishProfileArtifactShare).toBe(1);
+      expect(calls.readProfileArtifactContent).toBe(1);
+      expect(dm.fileSendCalls).toBe(1);
     });
   });
 
@@ -136,106 +323,117 @@ describe("createChatHandler artifact delivery", () => {
         sizeBytes: 9 * 1024 * 1024,
       });
       const oversizedMessages: ChatMessage[] = [
-        { role: "user", content: "save video" },
+        { content: "save video", role: "user" },
         {
-          role: "assistant",
           content: "",
+          role: "assistant",
           toolCalls: [
             {
+              arguments: { content: "binary", path: "artifacts/clip.mp4" },
               id: "tool_1",
               name: "write_file",
-              arguments: { path: "artifacts/clip.mp4", content: "binary" },
             },
             {
+              arguments: {
+                content: oversizedMeta,
+                path: "artifacts/clip.mp4.nakama-meta.json",
+              },
               id: "tool_2",
               name: "write_file",
-              arguments: { path: "artifacts/clip.mp4.nakama-meta.json", content: oversizedMeta },
             },
           ],
         },
         {
+          content: JSON.stringify({
+            bytesWritten: 9 * 1024 * 1024,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4",
+          }),
+          name: "write_file",
           role: "tool",
           toolCallId: "tool_1",
-          name: "write_file",
-          content: JSON.stringify({
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4",
-            bytesWritten: 9 * 1024 * 1024,
-          }),
         },
         {
+          content: JSON.stringify({
+            bytesWritten: oversizedMeta.length,
+            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4.nakama-meta.json",
+          }),
+          name: "write_file",
           role: "tool",
           toolCallId: "tool_2",
-          name: "write_file",
-          content: JSON.stringify({
-            path: "/home/.nakama/orgs/org/profiles/default/artifacts/clip.mp4.nakama-meta.json",
-            bytesWritten: oversizedMeta.length,
-          }),
         },
-        { role: "assistant", content: "Saved the clip." },
+        { content: "Saved the clip.", role: "assistant" },
       ];
 
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(homeDir, {
-        messages: oversizedMessages,
-      });
+      const { handleMessage, calls, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          messages: oversizedMessages,
+        }
+      );
       sessionStore.set("dm_channel_1", {
-        sessionId: "session_test",
         profileId: "default",
+        sessionId: "session_test",
         updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "thanks",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(0);
       expect(dm.fileSendCalls).toBe(0);
-      expect(dm.sentMessages.some((reply) => reply.includes("https://app.example/s/tok_test"))).toBe(
-        true,
-      );
+      expect(
+        dm.sentMessages.some((reply) =>
+          reply.includes("https://app.example/s/tok_test")
+        )
+      ).toBe(true);
     });
   });
 
   test("does not publish when the turn has no sidecar pair", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(homeDir, {
-        messages: [
-          { role: "user", content: "save" },
-          {
-            role: "assistant",
-            content: "",
-            toolCalls: [
-              {
-                id: "tool_1",
-                name: "write_file",
-                arguments: { path: "artifacts/draft.md", content: "draft" },
-              },
-            ],
-          },
-          {
-            role: "tool",
-            toolCallId: "tool_1",
-            name: "write_file",
-            content: JSON.stringify({
-              path: "/home/.nakama/orgs/org/profiles/default/artifacts/draft.md",
-              bytesWritten: 5,
-            }),
-          },
-        ],
-      });
+      const { handleMessage, calls, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          messages: [
+            { content: "save", role: "user" },
+            {
+              content: "",
+              role: "assistant",
+              toolCalls: [
+                {
+                  arguments: { content: "draft", path: "artifacts/draft.md" },
+                  id: "tool_1",
+                  name: "write_file",
+                },
+              ],
+            },
+            {
+              content: JSON.stringify({
+                bytesWritten: 5,
+                path: "/home/.nakama/orgs/org/profiles/default/artifacts/draft.md",
+              }),
+              name: "write_file",
+              role: "tool",
+              toolCallId: "tool_1",
+            },
+          ],
+        }
+      );
       sessionStore.set("dm_channel_1", {
-        sessionId: "session_test",
         profileId: "default",
+        sessionId: "session_test",
         updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
 
       const { message, sentMessages } = createDmMessage({
-        userId: "424242424242424242",
         content: "thanks",
+        userId: "424242424242424242",
       });
       await handleMessage(message);
 
@@ -246,32 +444,108 @@ describe("createChatHandler artifact delivery", () => {
 
   test("sends a document when the user asks to attach a saved artifact", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage, calls, sessionStore } = await createPairedHandler(homeDir);
+      const { handleMessage, sessionStore } =
+        await createPairedHandler(homeDir);
       sessionStore.set("dm_channel_1", {
-        sessionId: "session_test",
-        profileId: "default",
-        updatedAt: new Date().toISOString(),
         deliverableArtifacts: [
           {
             filename: "report.md",
-            path: "report.md",
             mimeType: "text/markdown",
-            sizeBytes: 42,
+            path: "report.md",
             savedAt: "2026-07-13T10:00:00.000Z",
-            shareUrl: "https://app.example/s/tok_test",
             sharePath: "/s/tok_test",
+            shareUrl: "https://app.example/s/tok_test",
+            sizeBytes: 42,
           },
         ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "send me the file",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
       expect(dm.fileSendCalls).toBe(1);
+    });
+  });
+
+  test("sends a PDF when the user asks to send the pdf", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          artifactContentBytes: new TextEncoder().encode("%PDF-1.4"),
+        }
+      );
+      sessionStore.set("dm_channel_1", {
+        deliverableArtifacts: [
+          {
+            filename: "nakama-pitch-deck.pdf",
+            mimeType: "application/pdf",
+            path: "nakama-pitch-deck.pdf",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_pdf",
+            shareUrl: "https://app.example/s/tok_pdf",
+            sizeBytes: 270_000,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const dm = createDmMessage({
+        content: "send the pdf",
+        userId: "424242424242424242",
+      });
+      await handleMessage(dm.message);
+
+      expect(dm.fileSendCalls).toBe(1);
+    });
+  });
+
+  test("returns a clear error when attach is requested for an unsupported type", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          artifactContentBytes: new Uint8Array([0x4d, 0x5a]),
+        }
+      );
+      sessionStore.set("dm_channel_1", {
+        deliverableArtifacts: [
+          {
+            filename: "payload.exe",
+            mimeType: "application/octet-stream",
+            path: "payload.exe",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sharePath: "/s/tok_exe",
+            shareUrl: "https://app.example/s/tok_exe",
+            sizeBytes: 2,
+          },
+        ],
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const dm = createDmMessage({
+        content: "send me the file",
+        userId: "424242424242424242",
+      });
+      await handleMessage(dm.message);
+
+      expect(dm.fileSendCalls).toBe(0);
+      expect(
+        dm.sentMessages.some((reply) => /unsupported file type/i.test(reply))
+      ).toBe(true);
     });
   });
 });
@@ -279,7 +553,9 @@ describe("createChatHandler artifact delivery", () => {
 describe("createChatHandler early ack", () => {
   async function setupAckHandler(
     homeDir: string,
-    onSendStream: NonNullable<Parameters<typeof createMockClient>[0]>["onSendStream"],
+    onSendStream: NonNullable<
+      Parameters<typeof createMockClient>[0]
+    >["onSendStream"]
   ) {
     await writeDiscordConfigIni(homeDir, {
       botToken: "discord-bot-token",
@@ -290,47 +566,50 @@ describe("createChatHandler early ack", () => {
     await authStore.reload();
     const { client } = createMockClient({ onSendStream });
     const sessionStore = new SessionStore(
-      path.join(homeDir, ".nakama", "discord", "chat-sessions.json"),
+      path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
     );
     await sessionStore.load();
     sessionStore.set("dm_channel_1", {
-      sessionId: "session_test",
       profileId: "default",
+      sessionId: "session_test",
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();
     const orgStore = createTestOrgStore(homeDir);
     await orgStore.load();
     return createChatHandler({
+      authStore,
       client,
       config: { botToken: "discord-bot-token", profileId: "default" },
-      authStore,
-      sessionStore,
       orgStore,
+      sessionStore,
     });
   }
 
   test("posts the streamed status before tools, then the final outcome", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
-        handlers?.onChunk("Checking the repo first.");
-        handlers?.onToolStart?.({
-          toolCallId: "tool_1",
-          tool: "bash",
-          input: { command: "ls" },
-        });
-        handlers?.onToolEnd?.({
-          toolCallId: "tool_1",
-          tool: "bash",
-          result: { exitCode: 0 },
-        });
-        handlers?.onChunk("Done — branch is clean.");
-        return "Done — branch is clean.";
-      });
+      const { handleMessage } = await setupAckHandler(
+        homeDir,
+        async (_input, handlers) => {
+          handlers?.onChunk("Checking the repo first.");
+          handlers?.onToolStart?.({
+            input: { command: "ls" },
+            tool: "bash",
+            toolCallId: "tool_1",
+          });
+          handlers?.onToolEnd?.({
+            result: { exitCode: 0 },
+            tool: "bash",
+            toolCallId: "tool_1",
+          });
+          handlers?.onChunk("Done — branch is clean.");
+          return "Done — branch is clean.";
+        }
+      );
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "check the repo",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
@@ -342,23 +621,26 @@ describe("createChatHandler early ack", () => {
 
   test("posts a fallback ack when tools start with no streamed text", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
-        handlers?.onToolStart?.({
-          toolCallId: "tool_1",
-          tool: "bash",
-          input: { command: "ls" },
-        });
-        handlers?.onToolEnd?.({
-          toolCallId: "tool_1",
-          tool: "bash",
-          result: { exitCode: 0 },
-        });
-        return "All set.";
-      });
+      const { handleMessage } = await setupAckHandler(
+        homeDir,
+        async (_input, handlers) => {
+          handlers?.onToolStart?.({
+            input: { command: "ls" },
+            tool: "bash",
+            toolCallId: "tool_1",
+          });
+          handlers?.onToolEnd?.({
+            result: { exitCode: 0 },
+            tool: "bash",
+            toolCallId: "tool_1",
+          });
+          return "All set.";
+        }
+      );
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "do the thing",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
@@ -369,14 +651,17 @@ describe("createChatHandler early ack", () => {
 
   test("does not post an early ack when the turn uses no tools", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage } = await setupAckHandler(homeDir, async (_input, handlers) => {
-        handlers?.onChunk("Hello.");
-        return "Hello.";
-      });
+      const { handleMessage } = await setupAckHandler(
+        homeDir,
+        async (_input, handlers) => {
+          handlers?.onChunk("Hello.");
+          return "Hello.";
+        }
+      );
 
       const dm = createDmMessage({
-        userId: "424242424242424242",
         content: "hi",
+        userId: "424242424242424242",
       });
       await handleMessage(dm.message);
 
@@ -388,18 +673,18 @@ describe("createChatHandler early ack", () => {
 describe("createChatHandler questionnaire delivery", () => {
   const questionnaire = {
     id: "qset_1",
-    title: "Need input",
     questions: [
       {
-        id: "how-to-run",
-        prompt: "How should I run this?",
+        allowCustomAnswer: true,
         choices: [
           { id: "playwright", label: "Build Playwright e2e" },
           { id: "manual", label: "Manual steps only" },
         ],
-        allowCustomAnswer: true,
+        id: "how-to-run",
+        prompt: "How should I run this?",
       },
     ],
+    title: "Need input",
   };
 
   test("posts the questionnaire when ask_user_question fires and skips empty reply", async () => {
@@ -411,43 +696,54 @@ describe("createChatHandler questionnaire delivery", () => {
         },
       });
       const { message, sentMessages } = createDmMessage({
-        userId: "424242424242424242",
         content: "help me ship this",
+        userId: "424242424242424242",
       });
       await handleMessage(message);
 
-      expect(sentMessages.some((reply) => reply.includes("Need input"))).toBe(true);
-      expect(sentMessages.some((reply) => reply.includes("a) Build Playwright e2e"))).toBe(true);
-      expect(sentMessages.some((reply) => reply.includes("(empty reply)"))).toBe(false);
+      expect(sentMessages.some((reply) => reply.includes("Need input"))).toBe(
+        true
+      );
+      expect(
+        sentMessages.some((reply) => reply.includes("a) Build Playwright e2e"))
+      ).toBe(true);
+      expect(
+        sentMessages.some((reply) => reply.includes("(empty reply)"))
+      ).toBe(false);
     });
   });
 
   test("forwards the next Discord reply to the agent without parsing questionnaire answers", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
-      const { handleMessage, sessionStore } = await createPairedHandler(homeDir, {
-        questionnaire,
-        onSendStream: async (input) => {
-          streamedInputs.push(input);
-          return "Got it.";
-        },
-      });
+      const { handleMessage, sessionStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "Got it.";
+          },
+          questionnaire,
+        }
+      );
       sessionStore.set("dm_channel_1", {
-        sessionId: "session_test",
         profileId: "default",
+        sessionId: "session_test",
         updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
 
       const { message, sentMessages } = createDmMessage({
-        userId: "424242424242424242",
         content: "a",
+        userId: "424242424242424242",
       });
       await handleMessage(message);
 
       expect(streamedInputs[0]).toEqual({ message: "a" });
       expect(sentMessages).toContain("Got it.");
-      expect(sentMessages.some((reply) => reply.includes("Couldn't parse that"))).toBe(false);
+      expect(
+        sentMessages.some((reply) => reply.includes("Couldn't parse that"))
+      ).toBe(false);
     });
   });
 });
@@ -456,12 +752,15 @@ describe("createChatHandler guild thread routing", () => {
   test("mention in a guild channel creates a thread and replies inside it", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
-      const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
-        onSendStream: async (input) => {
-          streamedInputs.push(input);
-          return "Thread reply";
-        },
-      });
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "Thread reply";
+          },
+        }
+      );
 
       const guild = createGuildChatMessage({
         content: "<@bot_id> summarize this",
@@ -478,11 +777,45 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
+  test("role mention of a role the bot holds creates a thread", async () => {
+    await withTempHome(async (homeDir) => {
+      const streamedInputs: unknown[] = [];
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "Role mention reply";
+          },
+        }
+      );
+
+      const roleId = "1525964112708894884";
+      const guild = createGuildChatMessage({
+        botHeldRoleIds: [roleId],
+        content: `<@&${roleId}> pull the latest main branch`,
+        mentionedRoleIds: [roleId],
+      });
+      await handleMessage(guild.message);
+
+      expect(guild.startThreadCalls).toBe(1);
+      expect(guild.lastThreadName).toBe("pull the latest main branch");
+      expect(guild.threadSentMessages).toContain("Role mention reply");
+      expect(threadStore.hasThreadId(guild.createdThreadId!)).toBe(true);
+      expect(streamedInputs[0]).toEqual({
+        message: "pull the latest main branch",
+      });
+    });
+  });
+
   test("second mention in the same channel creates a new thread", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
-        onSendStream: async () => "Again",
-      });
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async () => "Again",
+        }
+      );
 
       const first = createGuildChatMessage({
         content: "<@bot_id> first question",
@@ -514,12 +847,15 @@ describe("createChatHandler guild thread routing", () => {
   test("first thread stays independent after a second mention creates another thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedByThread: string[] = [];
-      const { handleMessage, threadStore, sessionStore } = await createPairedHandler(homeDir, {
-        onSendStream: async (input) => {
-          streamedByThread.push(String((input as { message?: string }).message ?? ""));
-          return "ok";
-        },
-      });
+      const { handleMessage, threadStore, sessionStore } =
+        await createPairedHandler(homeDir, {
+          onSendStream: async (input) => {
+            streamedByThread.push(
+              String((input as { message?: string }).message ?? "")
+            );
+            return "ok";
+          },
+        });
 
       const first = createGuildChatMessage({
         content: "<@bot_id> topic one",
@@ -537,15 +873,17 @@ describe("createChatHandler guild thread routing", () => {
       const followUp = createGuildChatMessage({
         content: "continue topic one",
         inThread: true,
-        threadId: firstThreadId,
         parentId: "guild_channel_1",
+        threadId: firstThreadId,
       });
       await handleMessage(followUp.message);
 
       expect(followUp.startThreadCalls).toBe(0);
       expect(followUp.threadSentMessages).toContain("ok");
       expect(threadStore.hasThreadId(firstThreadId)).toBe(true);
-      expect(sessionStore.get(`g:guild_channel_1:t:${firstThreadId}`)).toBeTruthy();
+      expect(
+        sessionStore.get(`g:guild_channel_1:t:${firstThreadId}`)
+      ).toBeTruthy();
       expect(streamedByThread).toContain("continue topic one");
     });
   });
@@ -598,12 +936,15 @@ describe("createChatHandler guild thread routing", () => {
   test("thread message without mention is answered in a bot-owned thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
-      const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
-        onSendStream: async (input) => {
-          streamedInputs.push(input);
-          return "In-thread answer";
-        },
-      });
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "In-thread answer";
+          },
+        }
+      );
 
       threadStore.add("thread_42");
       await threadStore.save();
@@ -611,8 +952,8 @@ describe("createChatHandler guild thread routing", () => {
       const guild = createGuildChatMessage({
         content: "keep going",
         inThread: true,
-        threadId: "thread_42",
         parentId: "guild_channel_1",
+        threadId: "thread_42",
       });
       await handleMessage(guild.message);
 
@@ -635,8 +976,8 @@ describe("createChatHandler guild thread routing", () => {
       const guild = createGuildChatMessage({
         content: "please join this thread",
         inThread: true,
-        threadId: "user_thread_9",
         parentId: "guild_channel_1",
+        threadId: "user_thread_9",
       });
       await handleMessage(guild.message);
 
@@ -649,18 +990,21 @@ describe("createChatHandler guild thread routing", () => {
 
   test("claims a foreign thread on @mention and replies inside it", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleMessage, threadStore } = await createPairedHandler(homeDir, {
-        onSendStream: async () => "Joined the thread",
-      });
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async () => "Joined the thread",
+        }
+      );
 
       expect(threadStore.hasThreadId("user_thread_9")).toBe(false);
 
       const guild = createGuildChatMessage({
         content: "<@bot_id> please join this thread",
-        mentionsBot: true,
         inThread: true,
-        threadId: "user_thread_9",
+        mentionsBot: true,
         parentId: "guild_channel_1",
+        threadId: "user_thread_9",
       });
       await handleMessage(guild.message);
 
@@ -672,8 +1016,8 @@ describe("createChatHandler guild thread routing", () => {
       const followUp = createGuildChatMessage({
         content: "keep going",
         inThread: true,
-        threadId: "user_thread_9",
         parentId: "guild_channel_1",
+        threadId: "user_thread_9",
       });
       await handleMessage(followUp.message);
 
@@ -684,13 +1028,14 @@ describe("createChatHandler guild thread routing", () => {
   test("thread messages reuse the parent channel org selection", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
-      const { handleMessage, orgStore, threadStore } = await createPairedHandler(homeDir, {
-        orgs: createMultiTestOrgs(),
-        onSendStream: async (input) => {
-          streamedInputs.push(input);
-          return "In-thread answer";
-        },
-      });
+      const { handleMessage, orgStore, threadStore } =
+        await createPairedHandler(homeDir, {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "In-thread answer";
+          },
+          orgs: createMultiTestOrgs(),
+        });
 
       orgStore.set("g:guild_channel_1", "org_a");
       await orgStore.save();
@@ -700,14 +1045,16 @@ describe("createChatHandler guild thread routing", () => {
       const guild = createGuildChatMessage({
         content: "keep going",
         inThread: true,
-        threadId: "thread_42",
         parentId: "guild_channel_1",
+        threadId: "thread_42",
       });
       await handleMessage(guild.message);
 
-      expect(guild.threadSentMessages.some((text) => text.includes("Choose an organization"))).toBe(
-        false,
-      );
+      expect(
+        guild.threadSentMessages.some((text) =>
+          text.includes("Choose an organization")
+        )
+      ).toBe(false);
       expect(guild.threadSentMessages).toContain("In-thread answer");
       expect(streamedInputs).toHaveLength(1);
       expect(orgStore.get("g:thread_42")).toBeUndefined();
@@ -715,11 +1062,91 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
+  test("new threads inherit the parent channel profile", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, sessionStore, createdSessionProfileIds } =
+        await createPairedHandler(homeDir, {
+          configProfileId: "default",
+          onSendStream: async () => "Thread reply",
+          profiles: [
+            { id: "default", name: "Default" },
+            { id: "support", name: "Support" },
+          ],
+        });
+
+      sessionStore.set("guild_channel_1", {
+        profileId: "support",
+        sessionId: "channel_session",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const guild = createGuildChatMessage({
+        content: "<@bot_id> help a customer",
+        mentionsBot: true,
+      });
+      await handleMessage(guild.message);
+
+      const threadId = guild.createdThreadId;
+      expect(threadId).toBeTruthy();
+      expect(createdSessionProfileIds).toContain("support");
+      expect(
+        sessionStore.get(`g:guild_channel_1:t:${threadId}`)?.profileId
+      ).toBe("support");
+      expect(sessionStore.get("guild_channel_1")?.profileId).toBe("support");
+    });
+  });
+
+  test("thread-specific profile override is kept for that thread only", async () => {
+    await withTempHome(async (homeDir) => {
+      const {
+        handleMessage,
+        sessionStore,
+        threadStore,
+        createdSessionProfileIds,
+      } = await createPairedHandler(homeDir, {
+        configProfileId: "default",
+        onSendStream: async () => "ok",
+        profiles: [
+          { id: "default", name: "Default" },
+          { id: "support", name: "Support" },
+          { id: "sales", name: "Sales" },
+        ],
+      });
+
+      sessionStore.set("guild_channel_1", {
+        profileId: "support",
+        sessionId: "channel_session",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+      threadStore.add("thread_42");
+      await threadStore.save();
+
+      const switchProfile = createGuildChatMessage({
+        content: "/profile sales",
+        inThread: true,
+        parentId: "guild_channel_1",
+        threadId: "thread_42",
+      });
+      await handleMessage(switchProfile.message);
+
+      expect(sessionStore.get("g:guild_channel_1:t:thread_42")?.profileId).toBe(
+        "sales"
+      );
+      expect(sessionStore.get("guild_channel_1")?.profileId).toBe("support");
+      expect(createdSessionProfileIds.at(-1)).toBe("sales");
+    });
+  });
+
   test("slash commands in threads reuse the parent channel org selection", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleSlashCommand, orgStore } = await createPairedHandler(homeDir, {
-        orgs: createMultiTestOrgs(),
-      });
+      const { handleSlashCommand, orgStore } = await createPairedHandler(
+        homeDir,
+        {
+          orgs: createMultiTestOrgs(),
+        }
+      );
 
       orgStore.set("g:guild_channel_1", "org_b");
       await orgStore.save();
@@ -727,12 +1154,14 @@ describe("createChatHandler guild thread routing", () => {
       const clearCmd = createSlashInteraction({
         commandName: "clear",
         inThread: true,
-        threadId: "thread_1",
         parentId: "guild_channel_1",
+        threadId: "thread_1",
       });
       await handleSlashCommand(clearCmd.interaction);
 
-      expect(clearCmd.replies.some((text) => text.includes("Choose an organization"))).toBe(false);
+      expect(
+        clearCmd.replies.some((text) => text.includes("Choose an organization"))
+      ).toBe(false);
       expect(clearCmd.replies).toContain("History cleared.");
       expect(orgStore.get("g:thread_1")).toBeUndefined();
     });
@@ -766,11 +1195,12 @@ describe("createChatHandler guild thread routing", () => {
 
   test("slash commands in threads still clear and start new sessions", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleSlashCommand, sessionStore } = await createPairedHandler(homeDir);
+      const { handleSlashCommand, sessionStore } =
+        await createPairedHandler(homeDir);
       const conversationKey = "g:guild_channel_1:t:thread_1";
       sessionStore.set(conversationKey, {
-        sessionId: "session_test",
         profileId: "default",
+        sessionId: "session_test",
         updatedAt: new Date().toISOString(),
       });
       await sessionStore.save();
@@ -778,8 +1208,8 @@ describe("createChatHandler guild thread routing", () => {
       const clearCmd = createSlashInteraction({
         commandName: "clear",
         inThread: true,
-        threadId: "thread_1",
         parentId: "guild_channel_1",
+        threadId: "thread_1",
       });
       await handleSlashCommand(clearCmd.interaction);
       expect(clearCmd.replies).toContain("History cleared.");
@@ -787,8 +1217,8 @@ describe("createChatHandler guild thread routing", () => {
       const newCmd = createSlashInteraction({
         commandName: "new",
         inThread: true,
-        threadId: "thread_1",
         parentId: "guild_channel_1",
+        threadId: "thread_1",
       });
       await handleSlashCommand(newCmd.interaction);
       expect(newCmd.replies).toContain("Started a new conversation.");
@@ -796,8 +1226,8 @@ describe("createChatHandler guild thread routing", () => {
       const stopCmd = createSlashInteraction({
         commandName: "stop",
         inThread: true,
-        threadId: "thread_1",
         parentId: "guild_channel_1",
+        threadId: "thread_1",
       });
       await handleSlashCommand(stopCmd.interaction);
       expect(stopCmd.replies).toContain("Nothing to stop.");
@@ -806,7 +1236,8 @@ describe("createChatHandler guild thread routing", () => {
 
   test("close archives a bot-owned thread and clears ownership for that thread only", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleSlashCommand, threadStore, handleMessage } = await createPairedHandler(homeDir);
+      const { handleSlashCommand, threadStore, handleMessage } =
+        await createPairedHandler(homeDir);
       threadStore.add("thread_1");
       threadStore.add("thread_sibling");
       await threadStore.save();
@@ -814,21 +1245,23 @@ describe("createChatHandler guild thread routing", () => {
       const closeCmd = createSlashInteraction({
         commandName: "close",
         inThread: true,
-        threadId: "thread_1",
         parentId: "guild_channel_1",
+        threadId: "thread_1",
       });
       await handleSlashCommand(closeCmd.interaction);
 
       expect(closeCmd.replies).toContain("Thread closed.");
-      expect((closeCmd.interaction.channel as { archived?: boolean }).archived).toBe(true);
+      expect(
+        (closeCmd.interaction.channel as { archived?: boolean }).archived
+      ).toBe(true);
       expect(threadStore.hasThreadId("thread_1")).toBe(false);
       expect(threadStore.hasThreadId("thread_sibling")).toBe(true);
 
       const sibling = createGuildChatMessage({
         content: "still here",
         inThread: true,
-        threadId: "thread_sibling",
         parentId: "guild_channel_1",
+        threadId: "thread_sibling",
       });
       await handleMessage(sibling.message);
       expect(sibling.threadSentMessages.length).toBeGreaterThan(0);
@@ -837,26 +1270,228 @@ describe("createChatHandler guild thread routing", () => {
 
   test("close rejects non-thread channels and foreign threads", async () => {
     await withTempHome(async (homeDir) => {
-      const { handleSlashCommand, threadStore } = await createPairedHandler(homeDir);
+      const { handleSlashCommand, threadStore } =
+        await createPairedHandler(homeDir);
       threadStore.add("thread_owned");
       await threadStore.save();
 
       const channelClose = createSlashInteraction({
-        commandName: "close",
         channelId: "guild_channel_1",
+        commandName: "close",
       });
       await handleSlashCommand(channelClose.interaction);
-      expect(channelClose.replies).toContain("Use /close inside a bot conversation thread.");
+      expect(channelClose.replies).toContain(
+        "Use /close inside a bot conversation thread."
+      );
 
       const foreignClose = createSlashInteraction({
         commandName: "close",
         inThread: true,
-        threadId: "user_thread_9",
         parentId: "guild_channel_1",
+        threadId: "user_thread_9",
       });
       await handleSlashCommand(foreignClose.interaction);
-      expect(foreignClose.replies).toContain("I can only close threads I started.");
+      expect(foreignClose.replies).toContain(
+        "I can only close threads I started."
+      );
       expect(threadStore.hasThreadId("thread_owned")).toBe(true);
     });
+  });
+
+  test("threadStore save failure still tracks the created Discord thread", async () => {
+    await withTempHome(async (homeDir) => {
+      const streamedInputs: unknown[] = [];
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async (input) => {
+            streamedInputs.push(input);
+            return "Tracked despite save failure";
+          },
+        }
+      );
+
+      const originalSave = threadStore.save.bind(threadStore);
+      let saveCalls = 0;
+      threadStore.save = async () => {
+        saveCalls += 1;
+        throw new Error("ENOSPC");
+      };
+
+      const mention = createGuildChatMessage({
+        content: "<@bot_id> start me",
+        mentionsBot: true,
+      });
+      await handleMessage(mention.message);
+
+      const threadId = mention.createdThreadId;
+      expect(threadId).toBeTruthy();
+      expect(saveCalls).toBeGreaterThan(0);
+      expect(threadStore.hasThreadId(threadId!)).toBe(true);
+      expect(mention.threadSentMessages).toContain(
+        "Tracked despite save failure"
+      );
+      expect(mention.channelSentMessages).not.toContain(
+        "Tracked despite save failure"
+      );
+
+      threadStore.save = originalSave;
+
+      const followUp = createGuildChatMessage({
+        content: "still here",
+        inThread: true,
+        parentId: "guild_channel_1",
+        threadId: threadId!,
+      });
+      await handleMessage(followUp.message);
+
+      expect(followUp.threadSentMessages).toContain(
+        "Tracked despite save failure"
+      );
+      expect(streamedInputs).toHaveLength(2);
+    });
+  });
+
+  test("claim-thread save failure still tracks ownership for follow-ups", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleMessage, threadStore } = await createPairedHandler(
+        homeDir,
+        {
+          onSendStream: async () => "Claimed despite save failure",
+        }
+      );
+
+      threadStore.save = async () => {
+        throw new Error("EACCES");
+      };
+
+      const claim = createGuildChatMessage({
+        content: "<@bot_id> join please",
+        inThread: true,
+        mentionsBot: true,
+        parentId: "guild_channel_1",
+        threadId: "user_thread_claim",
+      });
+      await handleMessage(claim.message);
+
+      expect(threadStore.hasThreadId("user_thread_claim")).toBe(true);
+      expect(claim.threadSentMessages).toContain(
+        "Claimed despite save failure"
+      );
+
+      const followUp = createGuildChatMessage({
+        content: "keep going",
+        inThread: true,
+        parentId: "guild_channel_1",
+        threadId: "user_thread_claim",
+      });
+      await handleMessage(followUp.message);
+
+      expect(followUp.threadSentMessages.length).toBeGreaterThan(0);
+    });
+  });
+
+  test("partial thread hydrates parentId via channel.fetch so org keys stay correct", async () => {
+    await withTempHome(async (homeDir) => {
+      const streamedByKey: string[] = [];
+      const { handleMessage, threadStore, orgStore, sessionStore } =
+        await createPairedHandler(homeDir, {
+          onSendStream: async (input) => {
+            streamedByKey.push(
+              String((input as { message?: string }).message ?? "")
+            );
+            return "Partial ok";
+          },
+          orgs: createMultiTestOrgs(),
+        });
+
+      orgStore.set("g:guild_channel_1", "org_a");
+      await orgStore.save();
+      threadStore.add("thread_partial");
+      await threadStore.save();
+
+      const followUp = createGuildChatMessage({
+        content: "hello from partial",
+        fetchParentId: "guild_channel_1",
+        inThread: true,
+        parentId: null,
+        threadId: "thread_partial",
+      });
+      await handleMessage(followUp.message);
+
+      expect(followUp.threadSentMessages).toContain("Partial ok");
+      expect(streamedByKey).toEqual(["hello from partial"]);
+      expect(orgStore.get("g:thread_partial")).toBeUndefined();
+      expect(
+        sessionStore.get("g:guild_channel_1:t:thread_partial")
+      ).toBeTruthy();
+      expect(
+        sessionStore.get("g:thread_partial:t:thread_partial")
+      ).toBeUndefined();
+    });
+  });
+
+  test("slash commands in partial threads hydrate parentId via channel.fetch", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand, orgStore, sessionStore } =
+        await createPairedHandler(homeDir, {
+          orgs: createMultiTestOrgs(),
+        });
+
+      orgStore.set("g:guild_channel_1", "org_b");
+      await orgStore.save();
+      sessionStore.set("g:guild_channel_1:t:thread_partial_slash", {
+        profileId: "default",
+        sessionId: "session_test",
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      const clearCmd = createSlashInteraction({
+        commandName: "clear",
+        fetchParentId: "guild_channel_1",
+        inThread: true,
+        parentId: null,
+        threadId: "thread_partial_slash",
+      });
+      await handleSlashCommand(clearCmd.interaction);
+
+      expect(
+        clearCmd.replies.some((text) => text.includes("Choose an organization"))
+      ).toBe(false);
+      expect(clearCmd.replies).toContain("History cleared.");
+      expect(orgStore.get("g:thread_partial_slash")).toBeUndefined();
+    });
+  });
+
+  test("wedged chat lock recovers so follow-ups are not silenced forever", async () => {
+    chatLockOptions.waitMs = 40;
+
+    let releaseHang!: () => void;
+    const hang = new Promise<void>((resolve) => {
+      releaseHang = resolve;
+    });
+
+    const order: string[] = [];
+    const first = withChatLock("g:channel:t:thread_wedge", async () => {
+      order.push("first-start");
+      await hang;
+      order.push("first-end");
+    });
+
+    await Bun.sleep(5);
+    const secondStarted = Date.now();
+    const second = withChatLock("g:channel:t:thread_wedge", async () => {
+      order.push("second");
+    });
+
+    await second;
+    const waitedMs = Date.now() - secondStarted;
+    expect(waitedMs).toBeGreaterThanOrEqual(35);
+    expect(order).toEqual(["first-start", "second"]);
+
+    releaseHang();
+    await first;
+    expect(order).toEqual(["first-start", "second", "first-end"]);
   });
 });

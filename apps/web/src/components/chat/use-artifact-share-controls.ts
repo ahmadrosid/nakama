@@ -5,12 +5,12 @@ import {
   usePublishArtifactShareMutation,
   useRevokeArtifactShareMutation,
 } from "@/hooks/use-resource-mutations";
-import { formatError } from "@/lib/client";
 import {
   clearStoredArtifactShare,
   readStoredArtifactShare,
   writeStoredArtifactShare,
 } from "@/lib/artifact-share-storage";
+import { formatError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 
 export type PublishIntent = "publish" | "refresh" | "view" | "recover";
@@ -32,21 +32,28 @@ export function useArtifactShareControls({
   const [publishWarning, setPublishWarning] = useState<string | null>(null);
   const storedShareIdRef = useRef<string | null>(null);
 
-  const statusQuery = useArtifactShareStatusQuery(profileId, artifactPath, orgId);
+  const statusQuery = useArtifactShareStatusQuery(
+    profileId,
+    artifactPath,
+    orgId
+  );
   const publishMutation = usePublishArtifactShareMutation();
   const revokeMutation = useRevokeArtifactShareMutation();
 
   const shareUrl = storedUrl;
   const isShared = Boolean(statusQuery.data?.active || storedUrl);
   const publishDialogSucceeded = publishedUrl !== null;
-  const busy = publishMutation.isPending || revokeMutation.isPending || statusQuery.isLoading;
+  const busy =
+    publishMutation.isPending ||
+    revokeMutation.isPending ||
+    statusQuery.isLoading;
 
   useEffect(() => {
     if (!orgId) {
       return;
     }
 
-    const stored = readStoredArtifactShare({ orgId, profileId, artifactPath });
+    const stored = readStoredArtifactShare({ artifactPath, orgId, profileId });
     setStoredUrl(stored?.shareUrl ?? null);
     storedShareIdRef.current = stored?.shareId ?? null;
   }, [orgId, profileId, artifactPath, statusQuery.dataUpdatedAt]);
@@ -60,7 +67,9 @@ export function useArtifactShareControls({
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  function openPublishDialog(intent: Exclude<PublishIntent, "view" | "recover">) {
+  function openPublishDialog(
+    intent: Exclude<PublishIntent, "view" | "recover">
+  ) {
     setPublishIntent(intent);
     setPublishedUrl(null);
     setPublishWarning(null);
@@ -121,9 +130,9 @@ export function useArtifactShareControls({
 
   function persistShareUrl(shareId: string, url: string) {
     writeStoredArtifactShare({
+      artifactPath,
       orgId,
       profileId,
-      artifactPath,
       shareId,
       shareUrl: url,
     });
@@ -137,7 +146,10 @@ export function useArtifactShareControls({
     }
 
     try {
-      const result = await publishMutation.mutateAsync({ profileId, path: artifactPath });
+      const result = await publishMutation.mutateAsync({
+        path: artifactPath,
+        profileId,
+      });
       let nextUrl: string | null = null;
       let warning: string | null = null;
 
@@ -159,7 +171,9 @@ export function useArtifactShareControls({
       }
 
       closePublishDialog();
-      toast(result.refreshed ? "Shared snapshot updated" : "Artifact published");
+      toast(
+        result.refreshed ? "Shared snapshot updated" : "Artifact published"
+      );
     } catch (error) {
       toast(formatError(error));
     }
@@ -181,17 +195,24 @@ export function useArtifactShareControls({
 
   async function handleRotateLink() {
     const shareId = statusQuery.data?.id ?? storedShareIdRef.current;
-    if (!orgId || !shareId) {
+    if (!(orgId && shareId)) {
       return;
     }
 
     try {
-      await revokeMutation.mutateAsync({ profileId, shareId, path: artifactPath });
-      clearStoredArtifactShare({ orgId, profileId, artifactPath });
+      await revokeMutation.mutateAsync({
+        path: artifactPath,
+        profileId,
+        shareId,
+      });
+      clearStoredArtifactShare({ artifactPath, orgId, profileId });
       setStoredUrl(null);
       storedShareIdRef.current = null;
 
-      const result = await publishMutation.mutateAsync({ profileId, path: artifactPath });
+      const result = await publishMutation.mutateAsync({
+        path: artifactPath,
+        profileId,
+      });
       let nextUrl: string | null = null;
       let warning: string | null = null;
 
@@ -220,13 +241,17 @@ export function useArtifactShareControls({
 
   async function handleRevoke() {
     const shareId = statusQuery.data?.id ?? storedShareIdRef.current;
-    if (!orgId || !shareId) {
+    if (!(orgId && shareId)) {
       return;
     }
 
     try {
-      await revokeMutation.mutateAsync({ profileId, shareId, path: artifactPath });
-      clearStoredArtifactShare({ orgId, profileId, artifactPath });
+      await revokeMutation.mutateAsync({
+        path: artifactPath,
+        profileId,
+        shareId,
+      });
+      clearStoredArtifactShare({ artifactPath, orgId, profileId });
       setStoredUrl(null);
       storedShareIdRef.current = null;
       toast("Share link revoked");
@@ -236,29 +261,31 @@ export function useArtifactShareControls({
   }
 
   return {
-    orgId,
-    copied,
     busy,
-    isShared,
-    publishDialogOpen,
-    publishIntent,
-    publishedUrl,
-    publishWarning,
-    publishDialogSucceeded,
-    publishMutation,
-    revokeMutation,
-    openPublishDialog,
-    openViewShareDialog,
-    openRefreshFromDialog,
-    handleShareClick,
-    handleRevokeFromDialog,
     closePublishDialog,
-    copyLink,
     confirmPublish,
+    copied,
+    copyLink,
     handleCopyExisting,
-    handleRotateLink,
     handleRevoke,
+    handleRevokeFromDialog,
+    handleRotateLink,
+    handleShareClick,
+    isShared,
+    openPublishDialog,
+    openRefreshFromDialog,
+    openViewShareDialog,
+    orgId,
+    publishDialogOpen,
+    publishDialogSucceeded,
+    publishedUrl,
+    publishIntent,
+    publishMutation,
+    publishWarning,
+    revokeMutation,
   };
 }
 
-export type ArtifactShareControlsState = ReturnType<typeof useArtifactShareControls>;
+export type ArtifactShareControlsState = ReturnType<
+  typeof useArtifactShareControls
+>;

@@ -1,9 +1,12 @@
-import { isWorkerSchedulable, type AutomationSchedule } from "@nakama/core";
+import { type AutomationSchedule, isWorkerSchedulable } from "@nakama/core";
+import type { ServerOptions } from "../context";
 import { errorResponse, json } from "../shared";
 import type { HonoApp } from "../types";
-import type { ServerOptions } from "../context";
 
-export function registerInternalAutomationRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerInternalAutomationRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { agent, automationService } = options;
 
   app.get("/v1/internal/automations/schedules", async (c) => {
@@ -19,24 +22,26 @@ export function registerInternalAutomationRoutes(app: HonoApp, options: ServerOp
         if (automation.trigger.type === "runAt") {
           return {
             id: automation.id,
-            runAt: automation.trigger.at,
-            timezone: automation.trigger.timezone ?? null,
             orgId: automation.orgId ?? "",
             profileId: automation.profileId,
+            runAt: automation.trigger.at,
+            timezone: automation.trigger.timezone ?? null,
           };
         }
 
         if (automation.trigger.type === "schedule") {
           return {
-            id: automation.id,
             cron: automation.trigger.cron,
-            timezone: automation.trigger.timezone ?? null,
+            id: automation.id,
             orgId: automation.orgId ?? "",
             profileId: automation.profileId,
+            timezone: automation.trigger.timezone ?? null,
           };
         }
 
-        throw new Error(`Unexpected schedulable trigger for automation ${automation.id}.`);
+        throw new Error(
+          `Unexpected schedulable trigger for automation ${automation.id}.`
+        );
       });
 
     return json(schedules);
@@ -58,7 +63,7 @@ export function registerInternalAutomationRoutes(app: HonoApp, options: ServerOp
     const result = await agent.runAutomation(automationId);
 
     console.log(
-      `[automation-worker] run automation=${automationId} org=${automation.orgId} profile=${automation.profileId} skipped=${result.skipped ?? false}`,
+      `[automation-worker] run automation=${automationId} org=${automation.orgId} profile=${automation.profileId} skipped=${result.skipped ?? false}`
     );
 
     if (result.skipped) {

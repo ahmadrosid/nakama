@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { DEFAULT_BUNDLED_SKILL_NAMES, OPT_IN_BUNDLED_SKILL_NAMES } from "../bundled-names";
+import {
+  DEFAULT_BUNDLED_SKILL_NAMES,
+  OPT_IN_BUNDLED_SKILL_NAMES,
+} from "../bundled-names";
 import { parseSkillMarkdown } from "../parse";
 import { readBundledSkillMarkdown } from "./index";
 

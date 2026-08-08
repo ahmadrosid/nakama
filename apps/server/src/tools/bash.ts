@@ -20,17 +20,17 @@ const MAX_OUTPUT_CHARS = 32_000;
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
 
 export interface BashInput {
+  codingAgent?: boolean;
   command: string;
   cwd?: string;
-  timeoutMs?: number;
-  codingAgent?: boolean;
   env?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 export interface BashOutput {
   exitCode: number | null;
-  stdout: string;
   stderr: string;
+  stdout: string;
   timedOut: boolean;
 }
 
@@ -44,35 +44,37 @@ interface ShellRunOptions {
 }
 
 export const bashTool: ToolDefinition<BashInput, BashOutput> = {
-  name: "bash",
   description:
     "Run a one-off shell command in the active profile workspace and return stdout, stderr, and exit code. Do not use this to create persistent tools, tool files, shell wrappers, or .sh scripts. If the user wants a reusable tool, translate shell examples into JavaScript instead.",
+  name: "bash",
   parameters: {
-    type: "object",
+    additionalProperties: false,
     properties: {
-      command: { type: "string", description: "Shell command to run." },
-      cwd: {
-        type: "string",
-        description:
-          "Optional working directory within the profile workspace. Defaults to the profile workspace root.",
-      },
-      timeoutMs: {
-        type: "number",
-        description: "Timeout in milliseconds. Defaults to 30000, max 1800000 (30 minutes).",
-      },
       codingAgent: {
-        type: "boolean",
         description:
           "When true, Nakama merges coding-agent spawn env (provider passthrough) for this command.",
+        type: "boolean",
+      },
+      command: { description: "Shell command to run.", type: "string" },
+      cwd: {
+        description:
+          "Optional working directory within the profile workspace. Defaults to the profile workspace root.",
+        type: "string",
       },
       env: {
-        type: "object",
-        description: "Optional environment variables to merge into the spawned shell process.",
         additionalProperties: { type: "string" },
+        description:
+          "Optional environment variables to merge into the spawned shell process.",
+        type: "object",
+      },
+      timeoutMs: {
+        description:
+          "Timeout in milliseconds. Defaults to 30000, max 1800000 (30 minutes).",
+        type: "number",
       },
     },
     required: ["command"],
-    additionalProperties: false,
+    type: "object",
   },
   run(input, context) {
     return runBash(input, context);
@@ -82,7 +84,7 @@ export const bashTool: ToolDefinition<BashInput, BashOutput> = {
 export async function runBash(
   input: unknown,
   context: ToolContext,
-  options: BashRunOptions = {},
+  options: BashRunOptions = {}
 ): Promise<BashOutput> {
   const profileId = context.profileId?.trim();
   const orgId = context.orgId?.trim();
@@ -99,7 +101,7 @@ export async function runBash(
   }
 
   const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId),
+    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
   );
   const rawCwd = readString(input, "cwd");
   const cwd = rawCwd
@@ -113,7 +115,8 @@ export async function runBash(
   const timeoutMs = readTimeout(readOptionalNumber(input, "timeoutMs"));
   const env = readStringRecord(readOptionalRecord(input, "env"));
   const codingAgentMode =
-    readOptionalBoolean(input, "codingAgent") === true || commandLooksLikeCursorAgent(command);
+    readOptionalBoolean(input, "codingAgent") === true ||
+    commandLooksLikeCursorAgent(command);
 
   return runShellCommand(command, cwd, timeoutMs, env, {
     codingAgentMode,
@@ -126,7 +129,7 @@ function runShellCommand(
   cwd: string,
   timeoutMs: number,
   envOverrides: Record<string, string> = {},
-  options: ShellRunOptions,
+  options: ShellRunOptions
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     const child = spawn("/bin/bash", ["-lc", command], {
@@ -178,13 +181,13 @@ function runShellCommand(
 
       void finalizeCodingAgentOutput({
         codingAgentMode: options.codingAgentMode,
-        workspaceRoot: options.workspaceRoot,
-        stdout,
-        stderr,
-        stdoutOverflow,
-        stderrOverflow,
         exitCode,
+        stderr,
+        stderrOverflow,
+        stdout,
+        stdoutOverflow,
         timedOut,
+        workspaceRoot: options.workspaceRoot,
       })
         .then(resolve)
         .catch(reject);
@@ -205,16 +208,20 @@ async function finalizeCodingAgentOutput(args: {
   if (!args.codingAgentMode) {
     return {
       exitCode: args.exitCode,
-      stdout: args.stdout,
       stderr: args.stderr,
+      stdout: args.stdout,
       timedOut: args.timedOut,
     };
   }
 
-  const logPath = await writeCodingAgentLog(args.workspaceRoot, args.stdout, args.stderr);
+  const logPath = await writeCodingAgentLog(
+    args.workspaceRoot,
+    args.stdout,
+    args.stderr
+  );
   let stdout = formatCodingAgentBashStdout(args.stdout, {
-    logPath,
     exitCode: args.exitCode,
+    logPath,
   });
   if (args.stdoutOverflow) {
     stdout = `${stdout}\n\n(stdout capture hit ${CODING_AGENT_MAX_CAPTURE_CHARS} char limit; see full log)`;
@@ -227,8 +234,8 @@ async function finalizeCodingAgentOutput(args: {
 
   return {
     exitCode: args.exitCode,
-    stdout,
     stderr,
+    stdout,
     timedOut: args.timedOut,
   };
 }
@@ -236,7 +243,7 @@ async function finalizeCodingAgentOutput(args: {
 async function writeCodingAgentLog(
   workspaceRoot: string,
   stdout: string,
-  stderr: string,
+  stderr: string
 ): Promise<string | null> {
   try {
     const dir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
@@ -271,20 +278,20 @@ function appendOutput(current: string, chunk: string): string {
 
 function appendCodingAgentCapture(
   current: string,
-  chunk: string,
+  chunk: string
 ): { value: string; overflowed: boolean } {
   if (current.length >= CODING_AGENT_MAX_CAPTURE_CHARS) {
-    return { value: current, overflowed: true };
+    return { overflowed: true, value: current };
   }
 
   const remaining = CODING_AGENT_MAX_CAPTURE_CHARS - current.length;
   if (chunk.length <= remaining) {
-    return { value: current + chunk, overflowed: false };
+    return { overflowed: false, value: current + chunk };
   }
 
   return {
-    value: current + chunk.slice(0, remaining),
     overflowed: true,
+    value: current + chunk.slice(0, remaining),
   };
 }
 
@@ -314,7 +321,7 @@ function readTimeout(value: unknown): number {
 
 function readOptionalNumber(input: unknown, key: string): unknown {
   if (typeof input !== "object" || input === null || !(key in input)) {
-    return undefined;
+    return;
   }
 
   return (input as Record<string, unknown>)[key];
@@ -322,7 +329,7 @@ function readOptionalNumber(input: unknown, key: string): unknown {
 
 function readOptionalBoolean(input: unknown, key: string): unknown {
   if (typeof input !== "object" || input === null || !(key in input)) {
-    return undefined;
+    return;
   }
 
   return (input as Record<string, unknown>)[key];
@@ -337,7 +344,10 @@ function readString(input: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function readOptionalRecord(input: unknown, key: string): Record<string, unknown> | null {
+function readOptionalRecord(
+  input: unknown,
+  key: string
+): Record<string, unknown> | null {
   if (typeof input !== "object" || input === null || !(key in input)) {
     return null;
   }
@@ -351,14 +361,16 @@ function readOptionalRecord(input: unknown, key: string): Record<string, unknown
   return value as Record<string, unknown>;
 }
 
-function readStringRecord(record: Record<string, unknown> | null): Record<string, string> {
+function readStringRecord(
+  record: Record<string, unknown> | null
+): Record<string, string> {
   if (!record) {
     return {};
   }
 
   return Object.fromEntries(
     Object.entries(record).flatMap(([key, value]) =>
-      typeof value === "string" ? [[key, value] as const] : [],
-    ),
+      typeof value === "string" ? [[key, value] as const] : []
+    )
   );
 }

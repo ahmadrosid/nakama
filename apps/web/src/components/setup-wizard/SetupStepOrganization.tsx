@@ -1,14 +1,14 @@
 import { useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { useAuth } from "@/context/use-auth";
 import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/context/use-auth";
 
 interface SetupStepOrganizationProps {
   account: SetupAccountDraft;
-  onNext: () => void;
   onBack: () => void;
+  onNext: () => void;
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -24,7 +24,11 @@ function slugifyOrganizationName(name: string): string {
   );
 }
 
-export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrganizationProps) {
+export function SetupStepOrganization({
+  account,
+  onNext,
+  onBack,
+}: SetupStepOrganizationProps) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const slugEditedRef = useRef(false);
@@ -51,7 +55,7 @@ export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrga
       return;
     }
 
-    if (!trimmedSlug || !SLUG_PATTERN.test(trimmedSlug)) {
+    if (!(trimmedSlug && SLUG_PATTERN.test(trimmedSlug))) {
       setError("Slug must use lowercase letters, numbers, and hyphens.");
       return;
     }
@@ -60,17 +64,19 @@ export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrga
 
     try {
       await setup({
-        organization: { name: trimmedName, slug: trimmedSlug },
         admin: {
-          name: account.name,
           email: account.email,
-          phone: account.phone,
+          name: account.name,
           password: account.password,
+          phone: account.phone,
         },
+        organization: { name: trimmedName, slug: trimmedSlug },
       });
       onNext();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create organization");
+      setError(
+        err instanceof Error ? err.message : "Failed to create organization"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -78,47 +84,59 @@ export function SetupStepOrganization({ account, onNext, onBack }: SetupStepOrga
 
   return (
     <Card className="p-6">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="setup-org-name" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-org-name"
+          >
             Organization name
           </label>
           <Input
             id="setup-org-name"
-            value={name}
             onChange={(event) => handleNameChange(event.target.value)}
             placeholder="Acme Corp"
             required
+            value={name}
           />
         </div>
         <div>
-          <label htmlFor="setup-org-slug" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-org-slug"
+          >
             Slug
           </label>
           <Input
             id="setup-org-slug"
-            value={slug}
             onChange={(event) => {
               slugEditedRef.current = true;
               setSlug(event.target.value);
             }}
             placeholder="acme-corp"
             required
+            value={slug}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Used in URLs and API context. Lowercase letters, numbers, and hyphens only.
+          <p className="mt-1 text-muted-foreground text-xs">
+            Used in URLs and API context. Lowercase letters, numbers, and
+            hyphens only.
           </p>
         </div>
         {error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
             {error}
           </div>
         )}
         <div className="flex gap-3">
-          <Button type="button" variant="outline" className="flex-1" onClick={onBack}>
+          <Button
+            className="flex-1"
+            onClick={onBack}
+            type="button"
+            variant="outline"
+          >
             Back
           </Button>
-          <Button type="submit" className="flex-1" disabled={isSubmitting}>
+          <Button className="flex-1" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Creating..." : "Create Organization"}
           </Button>
         </div>

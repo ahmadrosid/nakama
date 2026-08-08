@@ -1,28 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import {
-  AutomationScheduler,
   type AutomationSchedule,
+  AutomationScheduler,
   type AutomationSchedulerDelegate,
 } from "./automation-scheduler";
 
 function createDelegate(
-  overrides: Partial<AutomationSchedulerDelegate> = {},
+  overrides: Partial<AutomationSchedulerDelegate> = {}
 ): AutomationSchedulerDelegate {
   return {
+    getDefaultTimezone: async () => "UTC",
     listScheduledAutomations: async () => [],
     runAutomation: async () => ({ ok: true }),
-    getDefaultTimezone: async () => "UTC",
     ...overrides,
   };
 }
 
-function schedule(automation: Partial<AutomationSchedule> = {}): AutomationSchedule {
+function schedule(
+  automation: Partial<AutomationSchedule> = {}
+): AutomationSchedule {
   return {
-    id: "automation_1",
     cron: "0 * * * *",
-    timezone: "UTC",
+    id: "automation_1",
     orgId: "org_1",
     profileId: "profile_1",
+    timezone: "UTC",
     ...automation,
   };
 }
@@ -32,7 +34,7 @@ describe("AutomationScheduler", () => {
     const runs: string[] = [];
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
-        schedule({ id: "a1", cron: "* * * * *" }),
+        schedule({ cron: "* * * * *", id: "a1" }),
       ],
       runAutomation: async (id) => {
         runs.push(id);
@@ -66,10 +68,10 @@ describe("AutomationScheduler", () => {
 
   test("uses default timezone when schedule timezone is null", async () => {
     const delegate = createDelegate({
+      getDefaultTimezone: async () => "Asia/Jakarta",
       listScheduledAutomations: async () => [
         schedule({ id: "a1", timezone: null }),
       ],
-      getDefaultTimezone: async () => "Asia/Jakarta",
     });
 
     const scheduler = new AutomationScheduler(delegate);
@@ -82,7 +84,7 @@ describe("AutomationScheduler", () => {
   test("run delegate failures are logged but do not stop the scheduler", async () => {
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
-        schedule({ id: "a1", cron: "* * * * *" }),
+        schedule({ cron: "* * * * *", id: "a1" }),
       ],
       runAutomation: async () => {
         throw new Error("boom");
@@ -112,7 +114,7 @@ describe("AutomationScheduler", () => {
     const at = new Date(Date.now() + 60_000).toISOString();
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
-        schedule({ id: "a1", cron: undefined, runAt: at }),
+        schedule({ cron: undefined, id: "a1", runAt: at }),
       ],
     });
 

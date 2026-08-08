@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { TelegramTodoStatusMessage } from "./todo-status-message";
 import type { TelegramRichMessenger } from "./rich-message";
+import { TelegramTodoStatusMessage } from "./todo-status-message";
 
 function createMessenger(): TelegramRichMessenger & {
   sent: string[];
@@ -10,7 +10,9 @@ function createMessenger(): TelegramRichMessenger & {
   const edited: Array<{ messageId: number; text: string }> = [];
 
   return {
-    sent,
+    async edit(messageId: number, text: string) {
+      edited.push({ messageId, text });
+    },
     edited,
     async send(text: string) {
       sent.push(text);
@@ -24,9 +26,7 @@ function createMessenger(): TelegramRichMessenger & {
       sent.push(text);
       return { message_id: 1 };
     },
-    async edit(messageId: number, text: string) {
-      edited.push({ messageId, text });
-    },
+    sent,
   };
 }
 
@@ -35,7 +35,9 @@ describe("TelegramTodoStatusMessage", () => {
     const messenger = createMessenger();
     const status = new TelegramTodoStatusMessage(messenger);
 
-    await status.update([{ id: "todo_1", content: "Write tests", status: "in_progress" }]);
+    await status.update([
+      { content: "Write tests", id: "todo_1", status: "in_progress" },
+    ]);
     await status.complete();
 
     expect(messenger.sent).toEqual(["🛠️ Working\n🔄 [~] Write tests"]);
@@ -47,7 +49,9 @@ describe("TelegramTodoStatusMessage", () => {
   test("skips duplicate renders", async () => {
     const messenger = createMessenger();
     const status = new TelegramTodoStatusMessage(messenger);
-    const todos = [{ id: "todo_1", content: "Write tests", status: "pending" as const }];
+    const todos = [
+      { content: "Write tests", id: "todo_1", status: "pending" as const },
+    ];
 
     await status.update(todos);
     await status.update(todos);

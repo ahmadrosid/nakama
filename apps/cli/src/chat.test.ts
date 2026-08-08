@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { HealthResponse, ModelsResponse, ProfileSummary } from "@nakama/core";
+import type {
+  HealthResponse,
+  ModelsResponse,
+  ProfileSummary,
+} from "@nakama/core";
 import {
   formatErrorLines,
   formatStatusLines,
@@ -24,30 +28,30 @@ describe("needsTrailingStreamNewline", () => {
 
 describe("formatStatusLines", () => {
   const health: HealthResponse = {
-    ok: true,
     apiVersion: 1,
+    composioAvailable: false,
+    composioConfigured: false,
+    ok: true,
     providerConfigured: true,
     userConfigured: true,
-    composioConfigured: false,
-    composioAvailable: false,
   };
   const models: ModelsResponse = {
     currentProviderId: "provider-a",
-    providers: [],
+    displayName: null,
     models: [],
     provider: "anthropic",
-    displayName: null,
+    providers: [],
   };
   const profile: ProfileSummary = {
-    id: "default",
-    name: "Default",
-    model: "provider-a::claude-sonnet",
-    isSuper: false,
-    toolCount: 0,
-    mcpServerCount: 0,
-    soulActive: false,
-    hasAvatar: false,
     createdAt: "",
+    hasAvatar: false,
+    id: "default",
+    isSuper: false,
+    mcpServerCount: 0,
+    model: "provider-a::claude-sonnet",
+    name: "Default",
+    soulActive: false,
+    toolCount: 0,
     updatedAt: "",
   };
 
@@ -63,7 +67,7 @@ describe("formatStatusLines", () => {
 
   test("shows offline mode when no provider is configured", () => {
     expect(
-      formatStatusLines({ ...health, providerConfigured: false }, null, profile),
+      formatStatusLines({ ...health, providerConfigured: false }, null, profile)
     ).toEqual([
       "Server: ok",
       "Provider configured: no",
@@ -78,11 +82,9 @@ describe("formatErrorLines", () => {
   });
 
   test("splits multiline errors into separate render lines", () => {
-    expect(formatErrorLines(new Error("DeepSeek request failed\ninternal_error"))).toEqual([
-      "",
-      "DeepSeek request failed",
-      "internal_error",
-    ]);
+    expect(
+      formatErrorLines(new Error("DeepSeek request failed\ninternal_error"))
+    ).toEqual(["", "DeepSeek request failed", "internal_error"]);
   });
 });
 

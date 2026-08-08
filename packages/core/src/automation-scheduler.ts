@@ -6,9 +6,11 @@ import { DEFAULT_TIMEZONE } from "./user-config";
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 export interface AutomationSchedulerDelegate {
-  listScheduledAutomations(): Promise<AutomationSchedule[]>;
-  runAutomation(automationId: string): Promise<{ ok: boolean; skipped?: boolean; error?: string }>;
   getDefaultTimezone(): Promise<string>;
+  listScheduledAutomations(): Promise<AutomationSchedule[]>;
+  runAutomation(
+    automationId: string
+  ): Promise<{ ok: boolean; skipped?: boolean; error?: string }>;
 }
 
 export interface AutomationSchedulerStatus {
@@ -71,19 +73,23 @@ export class AutomationScheduler {
         continue;
       }
 
-      const timezone = automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
+      const timezone =
+        automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
       const job = new Cron(
         automation.cron,
         {
-          timezone,
           name: automation.id,
+          timezone,
         },
         () => {
-          void this.delegate.runAutomation(automation.id).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error(`Automation ${automation.id} run failed:`, message);
-          });
-        },
+          void this.delegate
+            .runAutomation(automation.id)
+            .catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              console.error(`Automation ${automation.id} run failed:`, message);
+            });
+        }
       );
 
       this.jobs.set(automation.id, job);
@@ -103,10 +109,13 @@ export class AutomationScheduler {
 
     const timer = setTimeout(() => {
       this.timers.delete(automation.id);
-      void this.delegate.runAutomation(automation.id).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`Automation ${automation.id} run failed:`, message);
-      });
+      void this.delegate
+        .runAutomation(automation.id)
+        .catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.error(`Automation ${automation.id} run failed:`, message);
+        });
     }, delay);
 
     this.timers.set(automation.id, timer);

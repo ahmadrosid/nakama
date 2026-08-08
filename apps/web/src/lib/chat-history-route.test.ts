@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
-  HISTORY_SESSION_CHANNELS,
   buildChatPath,
   buildNewChatPath,
   chatProfileIdFromPath,
   formatSessionChannelLabel,
+  HISTORY_SESSION_CHANNELS,
   isChatSessionPath,
   isReadOnlySessionChannel,
   parseChatRouteParams,
+  pickKnownProfileId,
+  readInitialDraftChatProfileId,
   readRequestedDraftFromNewChatSearch,
   readRequestedDraftKeyFromNewChatSearch,
   readRequestedProfileFromNewChatSearch,
-  readInitialDraftChatProfileId,
-  pickKnownProfileId,
   resolveActiveProfileIdFromLocation,
   resolveDefaultProfileId,
   resolveHistoryProfileId,
@@ -22,8 +22,12 @@ import {
 
 describe("chat history route helpers", () => {
   test("builds and parses chat routes consistently", () => {
-    expect(buildChatPath("profile 1", "session/2")).toBe("/chat/profile%201/session%2F2");
-    expect(chatProfileIdFromPath("/chat/profile%201/session%2F2")).toBe("profile 1");
+    expect(buildChatPath("profile 1", "session/2")).toBe(
+      "/chat/profile%201/session%2F2"
+    );
+    expect(chatProfileIdFromPath("/chat/profile%201/session%2F2")).toBe(
+      "profile 1"
+    );
     expect(isChatSessionPath("/chat/profile%201/session%2F2")).toBe(true);
     expect(isChatSessionPath("/chat")).toBe(false);
     expect(parseChatRouteParams({ profileId: "p", sessionId: "s" })).toEqual({
@@ -43,13 +47,21 @@ describe("chat history route helpers", () => {
   });
 
   test("reads the requested profile only for new chat links", () => {
-    expect(readRequestedProfileFromNewChatSearch("?new=1&profile=default")).toBe("default");
-    expect(readRequestedProfileFromNewChatSearch("?profile=default")).toBeNull();
+    expect(
+      readRequestedProfileFromNewChatSearch("?new=1&profile=default")
+    ).toBe("default");
+    expect(
+      readRequestedProfileFromNewChatSearch("?profile=default")
+    ).toBeNull();
   });
 
   test("reads draft params for new chat links", () => {
-    expect(readRequestedDraftFromNewChatSearch("?new=1&draft=fix%20tool")).toBe("fix tool");
-    expect(readRequestedDraftKeyFromNewChatSearch("?new=1&draftKey=abc")).toBe("abc");
+    expect(readRequestedDraftFromNewChatSearch("?new=1&draft=fix%20tool")).toBe(
+      "fix tool"
+    );
+    expect(readRequestedDraftKeyFromNewChatSearch("?new=1&draftKey=abc")).toBe(
+      "abc"
+    );
     expect(readRequestedDraftFromNewChatSearch("?draft=fix")).toBeNull();
   });
 
@@ -63,51 +75,51 @@ describe("chat history route helpers", () => {
     expect(
       resolveActiveProfileIdFromLocation({
         pathname: "/chat/default/session-1",
-        search: "",
         profiles,
-      }),
+        search: "",
+      })
     ).toBe("default");
 
     expect(
       resolveActiveProfileIdFromLocation({
-        pathname: "/chat",
-        search: "",
-        profiles,
         liveChatProfileId: "super",
-      }),
+        pathname: "/chat",
+        profiles,
+        search: "",
+      })
     ).toBe("super");
 
     expect(
       resolveActiveProfileIdFromLocation({
         pathname: "/chat",
+        profiles,
         search: "?new=1&profile=super",
-        profiles,
-      }),
+      })
     ).toBe("super");
 
     expect(
       resolveActiveProfileIdFromLocation({
         pathname: "/history",
+        profiles,
         search: "?profile=super",
-        profiles,
-      }),
+      })
     ).toBe("super");
 
     expect(
       resolveActiveProfileIdFromLocation({
         pathname: "/history",
-        search: "",
         profiles,
-      }),
+        search: "",
+      })
     ).toBe("default");
 
     expect(
       resolveActiveProfileIdFromLocation({
-        pathname: "/history",
-        search: "",
-        profiles,
         liveChatProfileId: "super",
-      }),
+        pathname: "/history",
+        profiles,
+        search: "",
+      })
     ).toBe("super");
   });
 
@@ -119,11 +131,11 @@ describe("chat history route helpers", () => {
       configurable: true,
       value: {
         getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          store.set(key, value);
-        },
         removeItem: (key: string) => {
           store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
         },
       },
     });
@@ -133,24 +145,24 @@ describe("chat history route helpers", () => {
 
       expect(
         resolveHistoryProfileId({
-          search: "",
           profiles,
-        }),
+          search: "",
+        })
       ).toBe("super");
 
       expect(
         resolveHistoryProfileId({
-          search: "?profile=default",
           profiles,
-        }),
+          search: "?profile=default",
+        })
       ).toBe("default");
 
       expect(
         resolveHistoryProfileId({
-          search: "",
-          profiles,
           liveChatProfileId: "default",
-        }),
+          profiles,
+          search: "",
+        })
       ).toBe("default");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
@@ -173,11 +185,11 @@ describe("chat history route helpers", () => {
       configurable: true,
       value: {
         getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          store.set(key, value);
-        },
         removeItem: (key: string) => {
           store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
         },
       },
     });
@@ -188,20 +200,20 @@ describe("chat history route helpers", () => {
       expect(
         readInitialDraftChatProfileId({
           search: "",
-        }),
+        })
       ).toBe("super");
 
       expect(
         readInitialDraftChatProfileId({
           search: "?new=1&profile=default",
-        }),
+        })
       ).toBe("default");
 
       expect(
         readInitialDraftChatProfileId({
-          search: "",
           routeProfileId: "session-profile",
-        }),
+          search: "",
+        })
       ).toBe("session-profile");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {

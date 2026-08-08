@@ -1,19 +1,19 @@
-import { DEFAULT_SERVER_URL, NAKAMA_API_VERSION } from "@nakama/core";
 import { OpenAPIHono } from "@hono/zod-openapi";
-import type { HonoApp } from "./types";
+import { DEFAULT_SERVER_URL, NAKAMA_API_VERSION } from "@nakama/core";
 import type { ServerOptions } from "./context";
-import { registerSystemRoutes } from "./routes/system";
 import { registerAuthRoutes } from "./routes/auth";
-import { registerWorkerRoutes } from "./routes/workers";
-import { registerModelRoutes } from "./routes/models";
-import { registerUserContextRoutes } from "./routes/user-context";
-import { registerSessionRoutes } from "./routes/sessions";
-import { registerProfileRoutes } from "./routes/profiles";
-import { registerMcpRoutes } from "./routes/mcp";
-import { registerSkillRoutes } from "./routes/skills";
-import { registerToolRoutes } from "./routes/tools";
 import { registerAutomationRoutes } from "./routes/automations";
+import { registerMcpRoutes } from "./routes/mcp";
+import { registerModelRoutes } from "./routes/models";
+import { registerProfileRoutes } from "./routes/profiles";
+import { registerSessionRoutes } from "./routes/sessions";
+import { registerSkillRoutes } from "./routes/skills";
+import { registerSystemRoutes } from "./routes/system";
 import { registerTaskRoutes } from "./routes/tasks";
+import { registerToolRoutes } from "./routes/tools";
+import { registerUserContextRoutes } from "./routes/user-context";
+import { registerWorkerRoutes } from "./routes/workers";
+import type { HonoApp } from "./types";
 
 function buildNativeOpenApiApp(): HonoApp {
   const app = new OpenAPIHono() as HonoApp;
@@ -36,16 +36,16 @@ function buildNativeOpenApiApp(): HonoApp {
 export function buildHttpOpenApiSpec(app?: HonoApp, serverUrl?: string) {
   const openApiApp = app ?? buildNativeOpenApiApp();
   return openApiApp.getOpenAPI31Document({
-    openapi: "3.1.0",
     info: {
+      description: "HTTP API for the Nakama personal AI assistant.",
       title: "Nakama API",
       version: String(NAKAMA_API_VERSION),
-      description: "HTTP API for the Nakama personal AI assistant.",
     },
+    openapi: "3.1.0",
     servers: [
       {
-        url: serverUrl ?? DEFAULT_SERVER_URL,
         description: "Local dev server",
+        url: serverUrl ?? DEFAULT_SERVER_URL,
       },
     ],
     tags: [
@@ -66,6 +66,9 @@ export function buildHttpOpenApiSpec(app?: HonoApp, serverUrl?: string) {
   });
 }
 
-export function serializeHttpOpenApiSpec(app?: HonoApp, serverUrl?: string): string {
+export function serializeHttpOpenApiSpec(
+  app?: HonoApp,
+  serverUrl?: string
+): string {
   return JSON.stringify(buildHttpOpenApiSpec(app, serverUrl), null, 2);
 }

@@ -15,7 +15,7 @@ export async function sendStreamCancellable(
   session: RemoteChatSession,
   input: SendMessageArg,
   handlers: StreamHandlers,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal }
 ): Promise<{ aborted: boolean }> {
   try {
     await session.sendStream(input, handlers, options);

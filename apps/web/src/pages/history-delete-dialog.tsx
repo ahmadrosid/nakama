@@ -23,17 +23,20 @@ export function HistoryDeleteDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open={deleteTarget !== null} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={deleteTarget !== null}>
       <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-3">
           <DialogTitle className="text-balance">Delete chat?</DialogTitle>
           <DialogDescription className="text-pretty">
             Deletes this chat and its{" "}
-            <span className="tabular-nums">{deleteTarget?.messageCount ?? 0}</span> message
+            <span className="tabular-nums">
+              {deleteTarget?.messageCount ?? 0}
+            </span>{" "}
+            message
             {(deleteTarget?.messageCount ?? 0) === 1 ? "" : "s"} permanently.
           </DialogDescription>
           {deleteTarget ? (
-            <p className="line-clamp-2 text-sm font-medium text-foreground">
+            <p className="line-clamp-2 font-medium text-foreground text-sm">
               {formatSessionTitle(deleteTarget)}
             </p>
           ) : null}
@@ -41,14 +44,19 @@ export function HistoryDeleteDialog({
 
         <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
           <Button
-            type="button"
-            variant="outline"
             disabled={busy}
             onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
           >
             Cancel
           </Button>
-          <Button type="button" variant="destructive" disabled={busy} onClick={onConfirm}>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
             {busy ? <Spinner className="size-4" /> : "Delete"}
           </Button>
         </DialogFooter>

@@ -1,9 +1,9 @@
 import {
+  type QueryClient,
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
@@ -11,14 +11,14 @@ import { queryKeys } from "@/lib/query-keys";
 const timezoneCatalogStaleTime = 1000 * 60 * 60;
 
 export const timezoneCatalogQueryOptions = queryOptions({
-  queryKey: queryKeys.timezones.catalog,
   queryFn: () => client.listTimezones(),
+  queryKey: queryKeys.timezones.catalog,
   staleTime: timezoneCatalogStaleTime,
 });
 
 export const userTimezoneQueryOptions = queryOptions({
-  queryKey: queryKeys.timezones.settings,
   queryFn: () => client.getTimezone(),
+  queryKey: queryKeys.timezones.settings,
   staleTime: timezoneCatalogStaleTime,
 });
 

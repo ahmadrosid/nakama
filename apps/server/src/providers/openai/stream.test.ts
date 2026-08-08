@@ -23,16 +23,17 @@ function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
 
 describe("OpenAI provider streaming", () => {
   test("streams chat completion chunks", async () => {
-    const fetchMock = mock(async () => {
-      return new Response(
-        streamFromChunks([
-          'data:{"choices":[{"delta":{"content":"Hel"}}]}\r\n\r\n',
-          'data:{"choices":[{"delta":{"content":"lo"}}]}\r\n\r\n',
-          "data:[DONE]\r\n\r\n",
-        ]),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
-      );
-    });
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"choices":[{"delta":{"content":"Hel"}}]}\r\n\r\n',
+            'data:{"choices":[{"delta":{"content":"lo"}}]}\r\n\r\n',
+            "data:[DONE]\r\n\r\n",
+          ]),
+          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+        )
+    );
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -44,12 +45,12 @@ describe("OpenAI provider streaming", () => {
     const chunks: string[] = [];
     const result = await provider.streamChat(
       {
+        messages: [{ content: "Say hello", role: "user" }],
         system: "You are helpful.",
-        messages: [{ role: "user", content: "Say hello" }],
       },
       {
         onChunk: (delta) => chunks.push(delta),
-      },
+      }
     );
 
     expect(result.content).toBe("Hello");
@@ -68,7 +69,7 @@ describe("OpenAI provider streaming", () => {
           'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
           "data:[DONE]\r\n\r\n",
         ]),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
       );
     });
 
@@ -83,16 +84,16 @@ describe("OpenAI provider streaming", () => {
     const thinking: string[] = [];
     const result = await provider.streamChat(
       {
-        system: "You are helpful.",
-        messages: [{ role: "user", content: "Think, then answer" }],
+        messages: [{ content: "Think, then answer", role: "user" }],
         providerOptions: {
-          thinking: { enabled: true, effort: "medium" },
+          thinking: { effort: "medium", enabled: true },
         },
+        system: "You are helpful.",
       },
       {
         onChunk: (delta) => chunks.push(delta),
         onThinking: (delta) => thinking.push(delta),
-      },
+      }
     );
 
     expect(result.content).toBe("Hi");
@@ -111,7 +112,7 @@ describe("OpenAI provider streaming", () => {
           'data:{"choices":[{"delta":{"content":"Hi"}}]}\r\n\r\n',
           "data:[DONE]\r\n\r\n",
         ]),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
       );
     });
 
@@ -124,15 +125,15 @@ describe("OpenAI provider streaming", () => {
 
     const result = await provider.streamChat(
       {
-        system: "You are helpful.",
-        messages: [{ role: "user", content: "Say hi" }],
+        messages: [{ content: "Say hi", role: "user" }],
         providerOptions: {
-          thinking: { enabled: true, effort: "medium" },
+          thinking: { effort: "medium", enabled: true },
         },
+        system: "You are helpful.",
       },
       {
         onChunk: () => {},
-      },
+      }
     );
 
     expect(result.content).toBe("Hi");
@@ -140,20 +141,22 @@ describe("OpenAI provider streaming", () => {
   });
 
   test("omits reasoning from responses api for unsupported models", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
-      const body = JSON.parse(String(init?.body)) as { reasoning?: unknown };
-      expect(body.reasoning).toBeUndefined();
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("https://api.openai.com/v1/responses");
+        const body = JSON.parse(String(init?.body)) as { reasoning?: unknown };
+        expect(body.reasoning).toBeUndefined();
 
-      return new Response(
-        streamFromChunks([
-          'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-          'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
-          "data:[DONE]\r\n\r\n",
-        ]),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
-      );
-    });
+        return new Response(
+          streamFromChunks([
+            'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+            'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
+            "data:[DONE]\r\n\r\n",
+          ]),
+          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+        );
+      }
+    );
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -164,16 +167,16 @@ describe("OpenAI provider streaming", () => {
 
     const result = await provider.streamChat(
       {
-        system: "You are helpful.",
-        messages: [{ role: "user", content: "Search the web" }],
+        messages: [{ content: "Search the web", role: "user" }],
         providerOptions: {
-          thinking: { enabled: true, effort: "medium" },
+          thinking: { effort: "medium", enabled: true },
           webSearch: true,
         },
+        system: "You are helpful.",
       },
       {
         onChunk: () => {},
-      },
+      }
     );
 
     expect(result.content).toBe("Hi");

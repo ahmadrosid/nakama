@@ -1,7 +1,7 @@
-import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   buildDiscordInviteUrl,
   generateHandshakeCode,
@@ -20,7 +20,7 @@ import {
 describe("buildDiscordInviteUrl", () => {
   test("builds an oauth invite link with bot scopes and permissions", () => {
     expect(buildDiscordInviteUrl("1525937133096013954")).toBe(
-      "https://discord.com/oauth2/authorize?client_id=1525937133096013954&permissions=68608&scope=bot+applications.commands",
+      "https://discord.com/oauth2/authorize?client_id=1525937133096013954&permissions=68608&scope=bot+applications.commands"
     );
   });
 });
@@ -35,16 +35,21 @@ describe("resolveDiscordApplicationId", () => {
   test("returns the application id from Discord", async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: "1525937133096013954" }), {
-        status: 200,
         headers: { "Content-Type": "application/json" },
+        status: 200,
       })) as typeof fetch;
 
-    await expect(resolveDiscordApplicationId("test-token")).resolves.toBe("1525937133096013954");
-    await expect(resolveDiscordApplicationId("test-token")).resolves.toBe("1525937133096013954");
+    await expect(resolveDiscordApplicationId("test-token")).resolves.toBe(
+      "1525937133096013954"
+    );
+    await expect(resolveDiscordApplicationId("test-token")).resolves.toBe(
+      "1525937133096013954"
+    );
   });
 
   test("returns null when Discord rejects the token", async () => {
-    globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 401 })) as typeof fetch;
 
     await expect(resolveDiscordApplicationId("bad-token")).resolves.toBeNull();
   });
@@ -61,36 +66,37 @@ describe("loadDiscordSettingsPublic", () => {
     homedirSpy = null;
 
     if (tempHome) {
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { force: true, recursive: true });
       tempHome = "";
     }
   });
 
   test("includes an invite URL when Discord returns the application id", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-discord-home-"));
+    tempHome = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-core-discord-home-")
+    );
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await writeDiscordConfig(tempHome, { botToken: "discord-bot-token" });
 
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: "1525937133096013954" }), {
-        status: 200,
         headers: { "Content-Type": "application/json" },
+        status: 200,
       })) as typeof fetch;
 
     const settings = await loadDiscordSettingsPublic();
 
     expect(settings.inviteUrl).toBe(
-      "https://discord.com/oauth2/authorize?client_id=1525937133096013954&permissions=68608&scope=bot+applications.commands",
+      "https://discord.com/oauth2/authorize?client_id=1525937133096013954&permissions=68608&scope=bot+applications.commands"
     );
   });
 });
 
 describe("parseAllowedUserIds", () => {
   test("parses comma-separated snowflake ids", () => {
-    expect(parseAllowedUserIds("123456789012345678, 987654321098765432")).toEqual([
-      "123456789012345678",
-      "987654321098765432",
-    ]);
+    expect(
+      parseAllowedUserIds("123456789012345678, 987654321098765432")
+    ).toEqual(["123456789012345678", "987654321098765432"]);
   });
 
   test("rejects invalid ids", () => {
@@ -118,13 +124,19 @@ describe("normalizeHandshakeInput", () => {
 describe("isDiscordUserAuthorized", () => {
   test("accepts paired or allowlisted users", () => {
     expect(
-      isDiscordUserAuthorized("1001", { pairedUserIds: ["1001"], allowedUserIds: [] }),
+      isDiscordUserAuthorized("1001", {
+        allowedUserIds: [],
+        pairedUserIds: ["1001"],
+      })
     ).toBe(true);
     expect(
-      isDiscordUserAuthorized("1002", { pairedUserIds: [], allowedUserIds: ["1002"] }),
+      isDiscordUserAuthorized("1002", {
+        allowedUserIds: ["1002"],
+        pairedUserIds: [],
+      })
     ).toBe(true);
     expect(
-      isDiscordUserAuthorized("1003", { pairedUserIds: [], allowedUserIds: [] }),
+      isDiscordUserAuthorized("1003", { allowedUserIds: [], pairedUserIds: [] })
     ).toBe(false);
   });
 });
@@ -144,16 +156,18 @@ describe("verifyAndPairDiscordUser", () => {
     homedirSpy = null;
 
     if (tempHome) {
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { force: true, recursive: true });
       tempHome = "";
     }
   });
 
   async function useTempDiscordHome(
     config: Parameters<typeof writeDiscordConfig>[1],
-    run: () => Promise<void>,
+    run: () => Promise<void>
   ): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-discord-home-"));
+    tempHome = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-core-discord-home-")
+    );
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await writeDiscordConfig(tempHome, config);
     await run();
@@ -166,17 +180,20 @@ describe("verifyAndPairDiscordUser", () => {
         handshakeCode: "AABBCCDD",
       },
       async () => {
-        const result = await verifyAndPairDiscordUser("aa bb cc dd", "900100000000000001");
+        const result = await verifyAndPairDiscordUser(
+          "aa bb cc dd",
+          "900100000000000001"
+        );
 
         expect(result).toEqual({
-          ok: true,
           message: "Linked successfully. You can chat with Nakama now.",
+          ok: true,
         });
 
         const config = await loadDiscordConfigFile();
         expect(config?.pairedUserIds).toEqual(["900100000000000001"]);
         expect(config?.handshakeCode).toBeNull();
-      },
+      }
     );
   });
 
@@ -187,29 +204,38 @@ describe("verifyAndPairDiscordUser", () => {
         handshakeCode: "AABBCCDD",
       },
       async () => {
-        const result = await verifyAndPairDiscordUser("DEADBEEF", "900100000000000001");
+        const result = await verifyAndPairDiscordUser(
+          "DEADBEEF",
+          "900100000000000001"
+        );
 
         expect(result).toEqual({
+          message:
+            "Invalid pairing code. Copy it from Integrations → Discord and try again.",
           ok: false,
-          message: "Invalid pairing code. Copy it from Integrations → Discord and try again.",
         });
 
         const config = await loadDiscordConfigFile();
         expect(config?.pairedUserIds).toEqual([]);
         expect(config?.handshakeCode).toBe("AABBCCDD");
-      },
+      }
     );
   });
 
   test("rejects pairing when discord is not configured", async () => {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-discord-home-"));
+    tempHome = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-core-discord-home-")
+    );
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
 
-    const result = await verifyAndPairDiscordUser("AABBCCDD", "900100000000000001");
+    const result = await verifyAndPairDiscordUser(
+      "AABBCCDD",
+      "900100000000000001"
+    );
 
     expect(result).toEqual({
-      ok: false,
       message: "Discord is not configured on the server yet.",
+      ok: false,
     });
   });
 });
@@ -223,13 +249,15 @@ describe("saveDiscordConfig", () => {
     homedirSpy = null;
 
     if (tempHome) {
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { force: true, recursive: true });
       tempHome = "";
     }
   });
 
   async function useTempDiscordHome(run: () => Promise<void>): Promise<void> {
-    tempHome = await mkdtemp(path.join(os.tmpdir(), "nakama-core-discord-home-"));
+    tempHome = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-core-discord-home-")
+    );
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await run();
   }
@@ -253,31 +281,31 @@ describe("resolveDiscordConfigFromSources", () => {
       resolveDiscordConfigFromSources({
         env: {},
         file: null,
-      }),
+      })
     ).toBeNull();
   });
 
   test("prefers env bot token and allowlist over file config", () => {
     const resolved = resolveDiscordConfigFromSources({
       env: {
-        DISCORD_BOT_TOKEN: "env-token",
         DISCORD_ALLOWED_USER_IDS: "123456789012345678, 987654321098765432",
+        DISCORD_BOT_TOKEN: "env-token",
       },
       file: {
+        allowedUserIds: ["999999999999999999"],
         botToken: "file-token",
-        profileId: "profile_from_file",
         handshakeCode: "ABCD1234",
         pairedUserIds: ["111111111111111111"],
-        allowedUserIds: ["999999999999999999"],
+        profileId: "profile_from_file",
       },
     });
 
     expect(resolved).toEqual({
+      allowedUserIds: ["123456789012345678", "987654321098765432"],
       botToken: "env-token",
-      profileId: "profile_from_file",
       handshakeCode: "ABCD1234",
       pairedUserIds: ["111111111111111111"],
-      allowedUserIds: ["123456789012345678", "987654321098765432"],
+      profileId: "profile_from_file",
     });
   });
 });
@@ -290,7 +318,7 @@ async function writeDiscordConfig(
     handshakeCode?: string | null;
     pairedUserIds?: string[];
     allowedUserIds?: string[];
-  },
+  }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
   await mkdir(dir, { recursive: true });

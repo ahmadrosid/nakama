@@ -45,11 +45,13 @@ export function isWorkerSchedulable(automation: {
 
 export function computeAutomationNextRunAt(
   trigger: AutomationTrigger,
-  userTimezone = DEFAULT_TIMEZONE,
+  userTimezone = DEFAULT_TIMEZONE
 ): string | null {
   if (trigger.type === "runAt") {
     const at = Date.parse(trigger.at);
-    return Number.isFinite(at) && at > Date.now() ? new Date(at).toISOString() : null;
+    return Number.isFinite(at) && at > Date.now()
+      ? new Date(at).toISOString()
+      : null;
   }
 
   if (trigger.type !== "schedule" || !trigger.cron.trim()) {
@@ -58,8 +60,8 @@ export function computeAutomationNextRunAt(
 
   const timezone = trigger.timezone ?? userTimezone;
   const next = new Cron(trigger.cron, {
-    timezone,
     paused: true,
+    timezone,
   }).nextRun();
 
   return next ? next.toISOString() : null;
@@ -100,7 +102,7 @@ export function validateAutomationInput(input: {
 
 export function resolveScheduleTimezone(
   trigger: AutomationTrigger,
-  userTimezone: string,
+  userTimezone: string
 ): AutomationTrigger {
   if (trigger.type === "schedule") {
     return {
@@ -120,4 +122,4 @@ export function resolveScheduleTimezone(
   return trigger;
 }
 
-export { validateTimezone, DEFAULT_TIMEZONE };
+export { DEFAULT_TIMEZONE, validateTimezone };

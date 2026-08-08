@@ -1,9 +1,11 @@
 import {
-  resolveMessagesForNonVisionProvider,
   type ProviderClient,
+  resolveMessagesForNonVisionProvider,
 } from "@nakama/core";
 
-export function wrapProviderForNonVision(provider: ProviderClient): ProviderClient {
+export function wrapProviderForNonVision(
+  provider: ProviderClient
+): ProviderClient {
   return {
     ...provider,
     async generateChat(input) {
@@ -18,7 +20,7 @@ export function wrapProviderForNonVision(provider: ProviderClient): ProviderClie
           ...input,
           messages: resolveMessagesForNonVisionProvider(input.messages),
         },
-        handlers,
+        handlers
       );
     },
   };

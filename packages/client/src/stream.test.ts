@@ -24,22 +24,25 @@ describe("readStreamEvents", () => {
           ": ping\n\n",
           'data: {"type":"done","reply":"ok"}\n\n',
         ]),
-        { onChunk: () => {} },
-      ),
+        { onChunk: () => {} }
+      )
     ).resolves.toBe("ok");
   });
 
   test("throws a helpful error when only keepalive comments arrive", async () => {
     await expect(
-      readStreamEvents(
-        streamFromChunks([": ping\n\n", ": ping\n\n"]),
-        { onChunk: () => {} },
-      ),
+      readStreamEvents(streamFromChunks([": ping\n\n", ": ping\n\n"]), {
+        onChunk: () => {},
+      })
     ).rejects.toThrow("Only server keepalive events were received");
   });
 
   test("dispatches tool_input_delta events", async () => {
-    const deltas: Array<{ toolCallId: string; delta: string; accumulatedArguments?: string }> = [];
+    const deltas: Array<{
+      toolCallId: string;
+      delta: string;
+      accumulatedArguments?: string;
+    }> = [];
 
     await readStreamEvents(
       streamFromChunks([
@@ -50,19 +53,19 @@ describe("readStreamEvents", () => {
         onChunk: () => {},
         onToolInputDelta: (event) => {
           deltas.push({
-            toolCallId: event.toolCallId,
-            delta: event.delta,
             accumulatedArguments: event.accumulatedArguments,
+            delta: event.delta,
+            toolCallId: event.toolCallId,
           });
         },
-      },
+      }
     );
 
     expect(deltas).toEqual([
       {
-        toolCallId: "call_1",
-        delta: '{"path"',
         accumulatedArguments: '{"path"',
+        delta: '{"path"',
+        toolCallId: "call_1",
       },
     ]);
   });
@@ -80,10 +83,12 @@ describe("readStreamEvents", () => {
         onSubAgentActivity: (event) => {
           events.push(event);
         },
-      },
+      }
     );
 
-    expect(events).toEqual([{ parentToolCallId: "call_sa", label: "Reading SOUL.md" }]);
+    expect(events).toEqual([
+      { label: "Reading SOUL.md", parentToolCallId: "call_sa" },
+    ]);
   });
 
   test("dispatches contextUsage from done events", async () => {
@@ -96,12 +101,12 @@ describe("readStreamEvents", () => {
       {
         onChunk: () => {},
         onContextUsage: (usage) => {
-          usages.push({ usedTokens: usage.usedTokens, source: usage.source });
+          usages.push({ source: usage.source, usedTokens: usage.usedTokens });
         },
-      },
+      }
     );
 
-    expect(usages).toEqual([{ usedTokens: 1200, source: "provider" }]);
+    expect(usages).toEqual([{ source: "provider", usedTokens: 1200 }]);
   });
 
   test("surfaces server error events", async () => {
@@ -110,8 +115,8 @@ describe("readStreamEvents", () => {
         streamFromChunks([
           'data: {"type":"error","error":"OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded."}\n\n',
         ]),
-        { onChunk: () => {} },
-      ),
+        { onChunk: () => {} }
+      )
     ).rejects.toThrow("Rate limit exceeded");
   });
 });

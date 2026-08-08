@@ -1,6 +1,6 @@
 export interface ChannelSendResult {
-  ok: boolean;
   error?: string;
+  ok: boolean;
 }
 
 export interface EmailOutboundAdapter {

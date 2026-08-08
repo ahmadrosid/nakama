@@ -54,41 +54,41 @@ export function ProfileCreateDialogForm({
   return (
     <div className="min-h-0 overflow-y-auto pr-1">
       {submitError ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-sm">
           {submitError}
         </p>
       ) : null}
 
       <div className="mt-4 grid min-h-0 gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-6">
         <div className="space-y-4">
-          <Field label="Name" htmlFor="create-profile-name">
+          <Field htmlFor="create-profile-name" label="Name">
             <Input
+              autoFocus
+              className="focus-visible:ring-1 focus-visible:ring-inset"
+              disabled={busy}
               id="create-profile-name"
+              onChange={(event) => onNameChange(event.target.value)}
               placeholder="Research assistant"
               value={name}
-              disabled={busy}
-              className="focus-visible:ring-1 focus-visible:ring-inset"
-              autoFocus
-              onChange={(event) => onNameChange(event.target.value)}
             />
           </Field>
 
-          <Field label="Profile id" htmlFor="create-profile-id">
+          <Field htmlFor="create-profile-id" label="Profile id">
             <Input
+              aria-invalid={profileIdHasValue && !profileIdValid}
+              className="font-mono text-sm focus-visible:ring-1 focus-visible:ring-inset aria-invalid:ring-1 aria-invalid:ring-inset"
+              disabled={busy}
               id="create-profile-id"
+              onChange={(event) => onProfileIdChange(event.target.value)}
               placeholder="research-assistant"
               value={profileId}
-              disabled={busy}
-              className="font-mono text-sm focus-visible:ring-1 focus-visible:ring-inset aria-invalid:ring-1 aria-invalid:ring-inset"
-              aria-invalid={profileIdHasValue && !profileIdValid}
-              onChange={(event) => onProfileIdChange(event.target.value)}
             />
             <p
               className={cn(
                 "text-xs",
                 profileIdHasValue && !profileIdValid
                   ? "text-destructive"
-                  : "text-muted-foreground",
+                  : "text-muted-foreground"
               )}
             >
               {profileIdHelpText}
@@ -99,38 +99,42 @@ export function ProfileCreateDialogForm({
             <div className="flex items-center gap-3">
               <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="" className="size-full object-cover" />
+                  <img
+                    alt=""
+                    className="size-full object-cover"
+                    src={avatarPreview}
+                  />
                 ) : (
-                  <span className="text-lg font-medium text-muted-foreground">
+                  <span className="font-medium text-lg text-muted-foreground">
                     {name.trim().charAt(0).toUpperCase() || "?"}
                   </span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <input
-                  ref={avatarInputRef}
-                  type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp"
                   className="hidden"
                   disabled={busy}
                   onChange={onAvatarSelected}
+                  ref={avatarInputRef}
+                  type="file"
                 />
                 <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
                   disabled={busy}
                   onClick={() => avatarInputRef.current?.click()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
                 >
                   Choose image
                 </Button>
                 {avatarPreview ? (
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
                     disabled={busy}
                     onClick={onClearAvatar}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
                   >
                     Remove
                   </Button>
@@ -143,22 +147,28 @@ export function ProfileCreateDialogForm({
         <div className="space-y-4">
           <Field label="Tools">
             {tools.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No tools available.</p>
+              <p className="text-muted-foreground text-sm">
+                No tools available.
+              </p>
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2">
                   <Select
-                    value=""
                     disabled={busy || selectableTools.length === 0}
-                    onValueChange={(value) => onToolSelect(value != null ? String(value) : "")}
+                    onValueChange={(value) =>
+                      onToolSelect(value == null ? "" : String(value))
+                    }
+                    value=""
                   >
                     <SelectTrigger
-                      className="w-full focus-visible:ring-1 focus-visible:ring-inset"
                       aria-label="Tool to assign"
+                      className="w-full focus-visible:ring-1 focus-visible:ring-inset"
                     >
                       <SelectValue
                         placeholder={
-                          selectableTools.length === 0 ? "All tools added" : "Add a tool…"
+                          selectableTools.length === 0
+                            ? "All tools added"
+                            : "Add a tool…"
                         }
                       />
                     </SelectTrigger>
@@ -170,7 +180,7 @@ export function ProfileCreateDialogForm({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     Adds on select. Remove unwanted ones below.
                   </p>
                 </div>
@@ -182,15 +192,20 @@ export function ProfileCreateDialogForm({
                         {selectedTools.map((tool) => (
                           <li key={tool.id}>
                             <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`Remove ${tool.name}`}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-foreground text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={busy}
                               onClick={() => onRemoveTool(tool.id)}
-                              aria-label={`Remove ${tool.name}`}
                               title={tool.name}
+                              type="button"
                             >
-                              <span className="max-w-52 truncate">{tool.name}</span>
-                              <XIcon className="size-3.5 text-muted-foreground" aria-hidden />
+                              <span className="max-w-52 truncate">
+                                {tool.name}
+                              </span>
+                              <XIcon
+                                aria-hidden
+                                className="size-3.5 text-muted-foreground"
+                              />
                             </button>
                           </li>
                         ))}
@@ -220,7 +235,7 @@ function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <label className="text-xs text-muted-foreground" htmlFor={htmlFor}>
+      <label className="text-muted-foreground text-xs" htmlFor={htmlFor}>
         {label}
       </label>
       {children}

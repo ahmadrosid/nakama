@@ -27,7 +27,7 @@ export class DiscordAuthStore {
 
   async tryPair(
     handshakeInput: string,
-    userId: string,
+    userId: string
   ): Promise<{ ok: boolean; message: string }> {
     const result = await verifyAndPairDiscordUser(handshakeInput, userId);
     await this.reload();

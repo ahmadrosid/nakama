@@ -1,27 +1,32 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
-import type { SendMessageInput } from "@nakama/core/contract";
-import type { WASocket } from "@whiskeysockets/baileys";
 import {
+  type ChannelOrgStore,
   findOrgBySelectionInput,
   formatOrgSelectionPrompt,
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
-  type ChannelOrgStore,
 } from "@nakama/core/channel-org";
+import type { SendMessageInput } from "@nakama/core/contract";
 import { pickProfileForOrg } from "@nakama/core/profiles";
 import { normalizePairingCode } from "@nakama/core/whatsapp-config";
+import type { WASocket } from "@whiskeysockets/baileys";
 import {
   clearActiveStream,
   isAbortError,
   registerActiveStream,
   stopActiveStream,
 } from "./active-stream";
-import type { WhatsAppBridgeConfig } from "./config";
 import type { WhatsAppAuthStore } from "./auth-store";
-import { formatError, HELP_TEXT, splitWhatsAppMessage, prepareWhatsAppReply } from "./format";
-import { createTypingLoop } from "./typing-indicator";
-import { WhatsAppTodoStatusMessage } from "./todo-status-message";
+import type { WhatsAppBridgeConfig } from "./config";
+import {
+  formatError,
+  HELP_TEXT,
+  prepareWhatsAppReply,
+  splitWhatsAppMessage,
+} from "./format";
 import type { SessionStore } from "./session-store";
+import { WhatsAppTodoStatusMessage } from "./todo-status-message";
+import { createTypingLoop } from "./typing-indicator";
 
 const chatLocks = new Map<string, Promise<void>>();
 
@@ -36,21 +41,24 @@ const NO_CODE_PROMPT =
   "then send that code here. Or scan the QR code in Integrations.";
 
 export interface ChatHandlerDeps {
+  authStore: WhatsAppAuthStore;
   client: NakamaClient;
   config: WhatsAppBridgeConfig;
-  authStore: WhatsAppAuthStore;
-  sessionStore: SessionStore;
-  orgStore: ChannelOrgStore;
   getSocket: () => WASocket | null;
+  orgStore: ChannelOrgStore;
+  sessionStore: SessionStore;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
   const { client, config, authStore, sessionStore, orgStore, getSocket } = deps;
 
-  return async function handleMessage(data: { jid: string; text: string }): Promise<void> {
+  return async function handleMessage(data: {
+    jid: string;
+    text: string;
+  }): Promise<void> {
     const { jid, text } = data;
 
-    if (!text || !text.trim()) {
+    if (!(text && text.trim())) {
       return;
     }
 
@@ -74,7 +82,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       const command = trimmed.startsWith("/") ? parseCommand(trimmed) : null;
-      const bypassOrgGate = command === "/help" || command === "/start" || command === "/org";
+      const bypassOrgGate =
+        command === "/help" || command === "/start" || command === "/org";
 
       if (!bypassOrgGate) {
         const orgReady = await ensureOrgReady(jid, trimmed);
@@ -142,7 +151,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         const result = await session.compact({ force: true });
         await sendText(
           jid,
-          `Compacted (${result.action}). Messages: ${result.messagesAfter}.`,
+          `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
         );
         return;
       }
@@ -166,10 +175,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
   }
 
-  async function ensureOrgReady(jid: string, messageText: string): Promise<boolean> {
+  async function ensureOrgReady(
+    jid: string,
+    messageText: string
+  ): Promise<boolean> {
     const orgContext = await prepareChannelOrgContext({
-      listOrgs: () => client.listUserOrgs(),
       getSelectedOrgId: () => orgStore.get(jid)?.orgId,
+      listOrgs: () => client.listUserOrgs(),
       saveSelectedOrgId: async (orgId) => {
         orgStore.set(jid, orgId);
         await orgStore.save();
@@ -207,7 +219,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
     if (!arg) {
-      await sendText(jid, formatOrgSelectionPrompt(orgs, orgStore.get(jid)?.orgId));
+      await sendText(
+        jid,
+        formatOrgSelectionPrompt(orgs, orgStore.get(jid)?.orgId)
+      );
       return;
     }
 
@@ -232,7 +247,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function handleChatMessage(
     jid: string,
-    input: SendMessageInput,
+    input: SendMessageInput
   ): Promise<void> {
     const session = await resolveSession(jid);
     const typingLoop = createTypingLoop(getSocket(), jid);
@@ -246,24 +261,24 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       reply = await session.sendStream(
         input,
         {
-          onThinking: () => {
-            typingLoop.ping();
-          },
           onChunk: (delta) => {
             reply += delta;
           },
-          onToolStart: () => {
-            typingLoop.ping();
-          },
-          onToolEnd: () => {
+          onThinking: () => {
             typingLoop.ping();
           },
           onTodosUpdated: (todos) => {
             typingLoop.ping();
             void todoStatus.update(todos);
           },
+          onToolEnd: () => {
+            typingLoop.ping();
+          },
+          onToolStart: () => {
+            typingLoop.ping();
+          },
         },
-        { signal },
+        { signal }
       );
 
       await todoStatus.complete();
@@ -315,10 +330,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         const models = await client.getModels();
         const profileId = await resolveProfileId();
         const profiles = await client.listProfiles();
-        const profile = profiles.profiles.find((entry) => entry.id === profileId);
+        const profile = profiles.profiles.find(
+          (entry) => entry.id === profileId
+        );
         const modelLabel = profile?.model?.includes("::")
           ? profile.model.slice(profile.model.indexOf("::") + 2)
-          : profile?.model ?? "none";
+          : (profile?.model ?? "none");
         lines.push(`Provider: ${models.provider ?? "unknown"}`);
         lines.push(`Model: ${modelLabel}`);
       } else {
@@ -333,7 +350,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function resolveProfileId(): Promise<string> {
     const fileConfig = authStore.getConfig();
-    const preferredProfileId = fileConfig?.profileId?.trim() || config.profileId;
+    const preferredProfileId =
+      fileConfig?.profileId?.trim() || config.profileId;
     const profiles = await client.listProfiles();
     return pickProfileForOrg(profiles.profiles, preferredProfileId).id;
   }
@@ -358,7 +376,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
   async function createAndBindSession(
     jid: string,
-    profileId?: string,
+    profileId?: string
   ): Promise<RemoteChatSession> {
     const resolvedProfileId = profileId ?? (await resolveProfileId());
     const session = await client.createSession("whatsapp", {
@@ -366,8 +384,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
 
     sessionStore.set(jid, {
-      sessionId: session.id,
       profileId: resolvedProfileId,
+      sessionId: session.id,
       updatedAt: new Date().toISOString(),
     });
     await sessionStore.save();
@@ -419,7 +437,10 @@ export function resetChatLocksForTests(): void {
   chatLocks.clear();
 }
 
-async function withChatLock(jid: string, fn: () => Promise<void>): Promise<void> {
+async function withChatLock(
+  jid: string,
+  fn: () => Promise<void>
+): Promise<void> {
   const previous = chatLocks.get(jid) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => {

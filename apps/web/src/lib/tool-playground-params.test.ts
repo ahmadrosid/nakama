@@ -1,28 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { buildExampleParametersJson, exampleParametersFromSchema } from "./tool-playground-params";
+import {
+  buildExampleParametersJson,
+  exampleParametersFromSchema,
+} from "./tool-playground-params";
 
 describe("tool playground params", () => {
   test("builds example object from schema properties", () => {
     expect(
       exampleParametersFromSchema({
-        type: "object",
         properties: {
-          query: { type: "string" },
-          limit: { type: "integer" },
           active: { type: "boolean" },
-          mode: { type: "string", enum: ["fast", "slow"] },
+          limit: { type: "integer" },
+          mode: { enum: ["fast", "slow"], type: "string" },
+          query: { type: "string" },
         },
         required: ["query"],
-      }),
+        type: "object",
+      })
     ).toEqual({
-      query: "",
-      limit: 0,
       active: false,
+      limit: 0,
       mode: "fast",
+      query: "",
     });
   });
 
   test("returns empty object without properties", () => {
-    expect(buildExampleParametersJson({ type: "object", additionalProperties: true })).toBe("{}");
+    expect(
+      buildExampleParametersJson({ additionalProperties: true, type: "object" })
+    ).toBe("{}");
   });
 });

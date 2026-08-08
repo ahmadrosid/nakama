@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   clearAutomationWorkerHeartbeat,
   saveComposioConfig,
-  writeAutomationWorkerHeartbeat,
   type WorkerProcessInfo,
+  writeAutomationWorkerHeartbeat,
 } from "@nakama/core";
 import { SystemStatusService } from "./system-status-service";
 
@@ -16,7 +16,7 @@ afterEach(async () => {
   await clearAutomationWorkerHeartbeat();
 
   if (configDir) {
-    await rm(configDir, { recursive: true, force: true });
+    await rm(configDir, { force: true, recursive: true });
     configDir = null;
   }
 
@@ -32,22 +32,26 @@ function createService(
   automationProcess: WorkerProcessInfo | null,
   extras?: {
     composioService?: { isReachable: () => Promise<boolean> } | null;
-  },
+  }
 ) {
   return new SystemStatusService(
     {
-      providerConfigured: true,
-      getModels: async () => ({ provider: "openai", models: [] }),
-      getUsageStatusFields: () => ({ currentModel: "gpt-4o", displayName: "OpenAI", costEstimated: false }),
       getLlmUsageStats: () => ({
-        requestCount: 0,
+        estimatedCostUsd: 0,
         inputTokens: 0,
         outputTokens: 0,
+        requestCount: 0,
         totalTokens: 0,
-        estimatedCostUsd: 0,
         trackedSince: new Date().toISOString(),
       }),
       getLlmUsageStatsByModel: () => [],
+      getModels: async () => ({ models: [], provider: "openai" }),
+      getUsageStatusFields: () => ({
+        costEstimated: false,
+        currentModel: "gpt-4o",
+        displayName: "OpenAI",
+      }),
+      providerConfigured: true,
     } as any,
     { getActiveRunCount: () => 2 } as any,
     { getActiveRunCount: () => 1 } as any,
@@ -59,7 +63,7 @@ function createService(
       }),
     } as any,
     null,
-    extras?.composioService as any,
+    extras?.composioService as any
   );
 }
 
@@ -69,28 +73,28 @@ describe("SystemStatusService", () => {
     await writeAutomationWorkerHeartbeat(true, 5, process.pid);
 
     const service = createService({
-      managed: true,
-      status: "online",
       cpuPercent: 1.2,
+      managed: true,
       memoryMb: 12.5,
+      status: "online",
       uptimeSeconds: 30,
     });
 
     const status = await service.getStatus();
 
     expect(status.automationWorker).toEqual({
-      ok: true,
-      running: true,
-      scheduledJobs: 5,
       activeRuns: 2,
-      providerConfigured: true,
+      ok: true,
       process: {
-        managed: true,
-        status: "online",
         cpuPercent: 1.2,
+        managed: true,
         memoryMb: 12.5,
+        status: "online",
         uptimeSeconds: 30,
       },
+      providerConfigured: true,
+      running: true,
+      scheduledJobs: 5,
     });
   });
 
@@ -100,14 +104,14 @@ describe("SystemStatusService", () => {
       true,
       5,
       process.pid,
-      new Date(Date.now() - 60_000).toISOString(),
+      new Date(Date.now() - 60_000).toISOString()
     );
 
     const service = createService({
-      managed: true,
-      status: "online",
       cpuPercent: 0,
+      managed: true,
       memoryMb: 0,
+      status: "online",
       uptimeSeconds: 30,
     });
 
@@ -122,10 +126,10 @@ describe("SystemStatusService", () => {
     await withConfigDir();
 
     const service = createService({
-      managed: false,
-      status: null,
       cpuPercent: null,
+      managed: false,
       memoryMb: null,
+      status: null,
       uptimeSeconds: null,
     });
 
@@ -153,8 +157,8 @@ describe("SystemStatusService", () => {
 
     expect(reachabilityCalls).toBe(1);
     expect(status.server).toMatchObject({
-      composioConfigured: true,
       composioAvailable: true,
+      composioConfigured: true,
     });
   });
 });

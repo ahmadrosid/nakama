@@ -20,7 +20,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@nakama/core/runtime": ["./src/shims/core-runtime.ts"],
-      "@nakama/core/thinking-content": ["../../packages/core/src/thinking-content.ts"]
+      "@nakama/core/thinking-content": [
+        "../../packages/core/src/thinking-content.ts"
+      ]
     }
   },
   "include": ["src"]

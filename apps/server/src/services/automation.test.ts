@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AutomationService } from "./automation-service";
-import { AutomationRunner } from "./automation-runner";
 import { AutomationDeliveryService } from "./automation-delivery-service";
+import { AutomationRunner } from "./automation-runner";
+import { AutomationService } from "./automation-service";
 import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
@@ -16,22 +16,22 @@ async function createTestDb() {
   const now = new Date().toISOString();
 
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Test Org",
     slug: "test-org",
-    createdAt: now,
     updatedAt: now,
   });
 
   await db.upsertProfile({
-    id: PROFILE_ID,
-    name: "Default Bot",
-    systemPrompt: "",
-    model: null,
-    isSuper: false,
-    orgId: ORG_ID,
-    isDefault: true,
     createdAt: now,
+    id: PROFILE_ID,
+    isDefault: true,
+    isSuper: false,
+    model: null,
+    name: "Default Bot",
+    orgId: ORG_ID,
+    systemPrompt: "",
     updatedAt: now,
   });
 
@@ -41,37 +41,35 @@ async function createTestDb() {
 async function assignComposeioGmailSender(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
   profileId: string,
-  inputSchema?: Record<string, unknown>,
+  inputSchema?: Record<string, unknown>
 ) {
   const now = new Date().toISOString();
   const serverId = "mcp_composeio";
 
   await db.upsertMcpServer({
-    id: serverId,
-    name: "composeio-gmail",
-    transport: "http",
-    config: { url: "https://example.com/mcp" },
-    enabled: true,
-    status: "connected",
-    lastError: null,
     cachedTools: [
       {
-        name: "send_email",
         description: "Send an email with Gmail",
-        inputSchema:
-          inputSchema ??
-          {
-            type: "object",
-            properties: {
-              to: { type: "string" },
-              subject: { type: "string" },
-              body: { type: "string" },
-            },
+        inputSchema: inputSchema ?? {
+          properties: {
+            body: { type: "string" },
+            subject: { type: "string" },
+            to: { type: "string" },
           },
+          type: "object",
+        },
+        name: "send_email",
       },
     ],
-    orgId: ORG_ID,
+    config: { url: "https://example.com/mcp" },
     createdAt: now,
+    enabled: true,
+    id: serverId,
+    lastError: null,
+    name: "composeio-gmail",
+    orgId: ORG_ID,
+    status: "connected",
+    transport: "http",
     updatedAt: now,
   });
   await db.assignMcpServerToProfile(profileId, serverId);
@@ -83,23 +81,23 @@ describe("AutomationService", () => {
     await assignComposeioGmailSender(db, PROFILE_ID);
 
     const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
       canSendEmail: (profileId) =>
         hasAutomationEmailDeliveryPath(db, profileId, {
           loadConfig: async () => null,
         }),
+      getUserTimezone: async () => "UTC",
     });
 
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Digest",
+        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
         description: "Daily digest",
+        name: "Digest",
         prompt: "Summarize news",
         trigger: { type: "manual" },
-        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     expect(automation.delivery).toEqual({
@@ -117,21 +115,21 @@ describe("AutomationService", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "HN digest",
         description: "Morning news",
+        name: "HN digest",
         prompt: "Fetch Hacker News headlines",
-        trigger: { type: "schedule", cron: "0 8 * * *" },
+        trigger: { cron: "0 8 * * *", type: "schedule" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     expect(automation.trigger).toEqual({
-      type: "schedule",
       cron: "0 8 * * *",
       timezone: "Asia/Jakarta",
+      type: "schedule",
     });
     expect(automation.nextRunAt).toBe(
-      service.computeNextRunAt(automation.trigger, "Asia/Jakarta"),
+      service.computeNextRunAt(automation.trigger, "Asia/Jakarta")
     );
   });
 
@@ -145,12 +143,12 @@ describe("AutomationService", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Reminder",
         description: "One-time",
+        name: "Reminder",
         prompt: "Send reminder",
-        trigger: { type: "runAt", at },
+        trigger: { at, type: "runAt" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     expect(automation.trigger.type).toBe("runAt");
@@ -167,49 +165,51 @@ describe("AutomationService", () => {
     const otherProfileId = "profile_other";
 
     await db.upsertOrganization({
+      createdAt: now,
       id: otherOrgId,
       name: "Other Org",
       slug: "other-org",
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertProfile({
-      id: otherProfileId,
-      name: "Other Bot",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: otherOrgId,
-      isDefault: true,
       createdAt: now,
+      id: otherProfileId,
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: otherOrgId,
+      systemPrompt: "",
       updatedAt: now,
     });
 
     const orgAutomation = await service.create(
       ORG_ID,
       {
-        name: "Org task",
         description: "Scoped",
+        name: "Org task",
         prompt: "Run",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     await service.create(
       otherOrgId,
       {
-        name: "Other org task",
         description: "Hidden",
+        name: "Other org task",
         prompt: "Run",
         trigger: { type: "manual" },
       },
-      otherProfileId,
+      otherProfileId
     );
 
     const listed = await service.listForOrg(ORG_ID);
-    expect(listed.automations.map((entry) => entry.id)).toEqual([orgAutomation.id]);
+    expect(listed.automations.map((entry) => entry.id)).toEqual([
+      orgAutomation.id,
+    ]);
 
     expect(await service.get(orgAutomation.id, ORG_ID)).not.toBeNull();
     expect(await service.get(orgAutomation.id, otherOrgId)).toBeNull();
@@ -225,29 +225,34 @@ describe("AutomationService", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Digest",
         description: "Daily digest",
+        name: "Digest",
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     await db.insertAutomationRun({
-      id: "run_unread_1",
       automationId: automation.id,
-      status: "completed",
-      startedAt: "2026-06-29T10:00:00.000Z",
       completedAt: "2026-06-29T10:01:00.000Z",
-      output: "Summary",
       error: null,
+      id: "run_unread_1",
+      output: "Summary",
+      startedAt: "2026-06-29T10:00:00.000Z",
+      status: "completed",
     });
 
     const unread = await service.getUnreadSummary(ORG_ID, userId);
     expect(unread.totalUnread).toBe(1);
     expect(unread.byAutomationId[automation.id]).toBe(1);
 
-    const runsBeforeRead = await service.listRuns(automation.id, ORG_ID, 20, userId);
+    const runsBeforeRead = await service.listRuns(
+      automation.id,
+      ORG_ID,
+      20,
+      userId
+    );
     expect(runsBeforeRead[0]?.read).toBe(false);
 
     await service.markRunsRead(automation.id, ORG_ID, userId);
@@ -255,7 +260,12 @@ describe("AutomationService", () => {
     const unreadAfter = await service.getUnreadSummary(ORG_ID, userId);
     expect(unreadAfter.totalUnread).toBe(0);
 
-    const runsAfterRead = await service.listRuns(automation.id, ORG_ID, 20, userId);
+    const runsAfterRead = await service.listRuns(
+      automation.id,
+      ORG_ID,
+      20,
+      userId
+    );
     expect(runsAfterRead[0]?.read).toBe(true);
   });
 
@@ -268,36 +278,40 @@ describe("AutomationService", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Digest",
         description: "Daily digest",
+        name: "Digest",
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     await db.insertAutomationRun({
-      id: "run_delete_me",
       automationId: automation.id,
-      status: "completed",
-      startedAt: "2026-06-29T10:00:00.000Z",
       completedAt: "2026-06-29T10:01:00.000Z",
-      output: "Summary",
       error: null,
+      id: "run_delete_me",
+      output: "Summary",
+      startedAt: "2026-06-29T10:00:00.000Z",
+      status: "completed",
     });
 
     await db.insertAutomationRun({
-      id: "run_keep_me",
       automationId: automation.id,
-      status: "completed",
-      startedAt: "2026-06-29T11:00:00.000Z",
       completedAt: "2026-06-29T11:01:00.000Z",
-      output: "Another summary",
       error: null,
+      id: "run_keep_me",
+      output: "Another summary",
+      startedAt: "2026-06-29T11:00:00.000Z",
+      status: "completed",
     });
 
-    await expect(service.deleteRun(automation.id, "run_delete_me", ORG_ID)).resolves.toBe(true);
-    await expect(service.deleteRun(automation.id, "run_missing", ORG_ID)).resolves.toBe(false);
+    await expect(
+      service.deleteRun(automation.id, "run_delete_me", ORG_ID)
+    ).resolves.toBe(true);
+    await expect(
+      service.deleteRun(automation.id, "run_missing", ORG_ID)
+    ).resolves.toBe(false);
 
     const runs = await service.listRuns(automation.id, ORG_ID);
     expect(runs.map((run) => run.id)).toEqual(["run_keep_me"]);
@@ -314,12 +328,12 @@ describe("AutomationRunner", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Manual task",
         description: "Run once",
+        name: "Manual task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const agentService = {
@@ -346,12 +360,12 @@ describe("AutomationRunner", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Scoped task",
         description: "Run with history scope",
+        name: "Scoped task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     let received:
@@ -370,9 +384,9 @@ describe("AutomationRunner", () => {
         profileId: string,
         prompt: string,
         automationId?: string,
-        automationRunId?: string,
+        automationRunId?: string
       ) => {
-        received = { orgId, profileId, prompt, automationId, automationRunId };
+        received = { automationId, automationRunId, orgId, profileId, prompt };
         return "Hello from automation";
       },
     };
@@ -382,11 +396,11 @@ describe("AutomationRunner", () => {
 
     const runs = await service.listRuns(automation.id);
     expect(received).toEqual({
+      automationId: automation.id,
+      automationRunId: runs[0]?.id,
       orgId: ORG_ID,
       profileId: PROFILE_ID,
       prompt: "Say hello",
-      automationId: automation.id,
-      automationRunId: runs[0]?.id,
     });
   });
 
@@ -399,12 +413,12 @@ describe("AutomationRunner", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Manual task",
         description: "Run once",
+        name: "Manual task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const agentService = {
@@ -433,12 +447,12 @@ describe("AutomationRunner", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Reminder",
         description: "One-time",
+        name: "Reminder",
         prompt: "Send reminder",
-        trigger: { type: "runAt", at },
+        trigger: { at, type: "runAt" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const agentService = {
@@ -463,22 +477,22 @@ describe("AutomationRunner", () => {
 
     const now = new Date().toISOString();
     await db.upsertAutomation({
-      id: "automation_delivery_test",
-      name: "Digest",
-      version: 1,
+      createdAt: now,
       definition: {
+        delivery: { channel: "telegram" },
         description: "Daily digest",
         prompt: "Summarize news",
-        trigger: { type: "manual" },
         steps: [],
+        trigger: { type: "manual" },
         version: 1,
-        delivery: { channel: "telegram" },
       },
-      profileId: PROFILE_ID,
-      orgId: ORG_ID,
       enabled: true,
-      createdAt: now,
+      id: "automation_delivery_test",
+      name: "Digest",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
       updatedAt: now,
+      version: 1,
     });
 
     const agentService = {
@@ -494,7 +508,7 @@ describe("AutomationRunner", () => {
     const runner = new AutomationRunner(
       service,
       agentService as never,
-      deliveryService,
+      deliveryService
     );
     await runner.run("automation_delivery_test");
 
@@ -513,40 +527,43 @@ describe("AutomationRunner", () => {
     const sent: Record<string, unknown>[] = [];
 
     await db.upsertAutomation({
-      id: "automation_email_delivery_test",
-      name: "Digest",
-      version: 1,
+      createdAt: now,
       definition: {
+        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
         description: "Daily digest",
         prompt: "Summarize news",
-        trigger: { type: "manual" },
         steps: [],
+        trigger: { type: "manual" },
         version: 1,
-        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
       },
-      profileId: PROFILE_ID,
-      orgId: ORG_ID,
       enabled: true,
-      createdAt: now,
+      id: "automation_email_delivery_test",
+      name: "Digest",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
       updatedAt: now,
+      version: 1,
     });
 
     const manager = {
-      isConnected: () => true,
-      connect: async () => [],
-      ensureConnected: async () => undefined,
-      callTool: async (_serverId: string, _transport: string, _toolName: string, input: unknown) => {
+      callTool: async (
+        _serverId: string,
+        _transport: string,
+        _toolName: string,
+        input: unknown
+      ) => {
         sent.push(input as Record<string, unknown>);
         return { ok: true };
       },
+      connect: async () => [],
+      ensureConnected: async () => undefined,
+      isConnected: () => true,
     };
 
     const deliveryService = new AutomationDeliveryService(service, {
-      email: createMcpAwareEmailOutboundAdapter(
-        db,
-        manager as never,
-        { loadConfig: async () => null },
-      ),
+      email: createMcpAwareEmailOutboundAdapter(db, manager as never, {
+        loadConfig: async () => null,
+      }),
     });
 
     const agentService = {
@@ -556,15 +573,15 @@ describe("AutomationRunner", () => {
     const runner = new AutomationRunner(
       service,
       agentService as never,
-      deliveryService,
+      deliveryService
     );
     await runner.run("automation_email_delivery_test");
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({
-      to: "hey@ahmadrosid.com",
-      subject: "[Nakama] Digest — completed",
       body: expect.stringContaining("News summary"),
+      subject: "[Nakama] Digest — completed",
+      to: "hey@ahmadrosid.com",
     });
 
     const runs = await service.listRuns("automation_email_delivery_test");
@@ -574,42 +591,47 @@ describe("AutomationRunner", () => {
   test("maps composeio-style schema aliases when calling MCP email tools", async () => {
     const db = await createTestDb();
     await assignComposeioGmailSender(db, PROFILE_ID, {
-      type: "object",
       properties: {
+        message_body: { type: "string" },
         recipient_email: { type: "string" },
         title: { type: "string" },
-        message_body: { type: "string" },
       },
+      type: "object",
     });
 
     const sent: Record<string, unknown>[] = [];
     const adapter = createMcpAwareEmailOutboundAdapter(
       db,
       {
-        isConnected: () => true,
-        connect: async () => [],
-        ensureConnected: async () => undefined,
-        callTool: async (_serverId: string, _transport: string, _toolName: string, input: unknown) => {
+        callTool: async (
+          _serverId: string,
+          _transport: string,
+          _toolName: string,
+          input: unknown
+        ) => {
           sent.push(input as Record<string, unknown>);
           return { ok: true };
         },
+        connect: async () => [],
+        ensureConnected: async () => undefined,
+        isConnected: () => true,
       } as never,
-      { loadConfig: async () => null },
+      { loadConfig: async () => null }
     );
 
     await adapter.send({
-      to: "hey@ahmadrosid.com",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
       subject: "Daily digest",
       text: "Hello world",
-      profileId: PROFILE_ID,
-      orgId: ORG_ID,
+      to: "hey@ahmadrosid.com",
     });
 
     expect(sent).toEqual([
       {
+        message_body: "Hello world",
         recipient_email: "hey@ahmadrosid.com",
         title: "Daily digest",
-        message_body: "Hello world",
       },
     ]);
   });

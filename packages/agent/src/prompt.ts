@@ -3,9 +3,7 @@ import type { AgentChannel, ToolDefinition } from "@nakama/core";
 export function buildAutomationSystemPrompt(tools: ToolDefinition[]): string {
   const toolCatalog =
     tools.length > 0
-      ? tools
-          .map((tool) => `- ${tool.name}: ${tool.description}`)
-          .join("\n")
+      ? tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")
       : "- No tools are available.";
 
   return [
@@ -40,11 +38,7 @@ export function buildAutomationSystemPrompt(tools: ToolDefinition[]): string {
 
 export function buildAutomationUserPrompt(
   prompt: string,
-  channel: AgentChannel,
+  channel: AgentChannel
 ): string {
-  return [
-    `Channel: ${channel}`,
-    "User request:",
-    prompt,
-  ].join("\n");
+  return [`Channel: ${channel}`, "User request:", prompt].join("\n");
 }

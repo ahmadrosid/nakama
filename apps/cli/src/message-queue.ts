@@ -2,10 +2,10 @@ import type { ImageAttachment, SendMessageInput } from "@nakama/core";
 import { splitInputDisplayLines } from "./prompt-display";
 
 export interface PendingMessage {
-  line: string;
-  images?: ImageAttachment[];
-  sendInput: SendMessageInput;
   echoed?: boolean;
+  images?: ImageAttachment[];
+  line: string;
+  sendInput: SendMessageInput;
 }
 
 const PENDING_PREFIX = "⏳ pending: ";
@@ -43,7 +43,7 @@ export function formatPendingSummary(message: PendingMessage): string {
 export function formatPendingDisplayLines(
   messages: PendingMessage[],
   width: number,
-  maxLines = MAX_PENDING_DISPLAY_LINES,
+  maxLines = MAX_PENDING_DISPLAY_LINES
 ): string[] {
   if (messages.length === 0) {
     return [];
@@ -52,7 +52,11 @@ export function formatPendingDisplayLines(
   const lines: string[] = [];
   const prefixLength = PENDING_PREFIX.length;
 
-  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+  for (
+    let messageIndex = 0;
+    messageIndex < messages.length;
+    messageIndex += 1
+  ) {
     const message = messages[messageIndex];
     const summary = formatPendingSummary(message);
     const wrapped = splitInputDisplayLines(summary, prefixLength, width);
@@ -62,7 +66,7 @@ export function formatPendingDisplayLines(
       lines.push(
         index === 0
           ? `${PENDING_PREFIX}${segment}`
-          : `${" ".repeat(prefixLength)}${segment}`,
+          : `${" ".repeat(prefixLength)}${segment}`
       );
 
       if (lines.length >= maxLines) {

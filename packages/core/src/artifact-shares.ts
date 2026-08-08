@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { getArtifactSharesDir } from "./soul/resolve";
 import { pathExists } from "./fs";
+import { getArtifactSharesDir } from "./soul/resolve";
 
 export function generateArtifactShareToken(): string {
   // No underscores: plain-text markdown strippers treat `_word_` as italic and can
@@ -24,13 +24,16 @@ export async function writeArtifactShareSnapshot(input: {
   const shareDir = path.join(sharesDir, input.shareId);
   await mkdir(shareDir, { recursive: true });
 
-  const safeName = path.basename(input.filename).replace(/[^\w.\-()+ ]+/g, "_") || "artifact";
+  const safeName =
+    path.basename(input.filename).replace(/[^\w.\-()+ ]+/g, "_") || "artifact";
   const storagePath = path.join(shareDir, safeName);
   await writeFile(storagePath, input.bytes);
   return storagePath;
 }
 
-export async function readArtifactShareSnapshot(storagePath: string): Promise<Buffer> {
+export async function readArtifactShareSnapshot(
+  storagePath: string
+): Promise<Buffer> {
   if (!(await pathExists(storagePath))) {
     throw new Error(`Artifact share snapshot not found: ${storagePath}`);
   }
@@ -38,7 +41,9 @@ export async function readArtifactShareSnapshot(storagePath: string): Promise<Bu
   return readFile(storagePath);
 }
 
-export async function deleteArtifactShareSnapshot(storagePath: string): Promise<void> {
+export async function deleteArtifactShareSnapshot(
+  storagePath: string
+): Promise<void> {
   try {
     await unlink(storagePath);
   } catch (error) {

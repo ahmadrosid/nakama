@@ -1,14 +1,16 @@
 import {
+  type Content,
   createPartFromFunctionResponse,
   createPartFromText,
-  type Content,
   type Part,
 } from "@google/genai";
 import type { ChatMessage } from "@nakama/core";
 import { resolveUserContentForProvider } from "@nakama/core";
 import { readRecord } from "../shared";
 
-export async function toGeminiContents(messages: ChatMessage[]): Promise<Content[]> {
+export async function toGeminiContents(
+  messages: ChatMessage[]
+): Promise<Content[]> {
   const contents: Content[] = [];
 
   for (const message of messages) {
@@ -16,7 +18,7 @@ export async function toGeminiContents(messages: ChatMessage[]): Promise<Content
       const parts = await toGeminiUserParts(message.content);
 
       if (parts.length > 0) {
-        contents.push({ role: "user", parts });
+        contents.push({ parts, role: "user" });
       }
 
       continue;
@@ -26,21 +28,21 @@ export async function toGeminiContents(messages: ChatMessage[]): Promise<Content
       const parts = toGeminiAssistantParts(message);
 
       if (parts.length > 0) {
-        contents.push({ role: "model", parts });
+        contents.push({ parts, role: "model" });
       }
 
       continue;
     }
 
     contents.push({
-      role: "user",
       parts: [
         createPartFromFunctionResponse(
           message.toolCallId,
           message.name,
-          parseToolResultContent(message.content),
+          parseToolResultContent(message.content)
         ),
       ],
+      role: "user",
     });
   }
 
@@ -48,7 +50,7 @@ export async function toGeminiContents(messages: ChatMessage[]): Promise<Content
 }
 
 async function toGeminiUserParts(
-  content: string | import("@nakama/core").MessageContentPart[],
+  content: string | import("@nakama/core").MessageContentPart[]
 ): Promise<Part[]> {
   const resolved = await resolveUserContentForProvider(content, "gemini");
 
@@ -72,8 +74,8 @@ async function toGeminiUserParts(
 
     parts.push({
       inlineData: {
-        mimeType: part.mediaType,
         data: part.data,
+        mimeType: part.mediaType,
       },
     });
   }
@@ -82,7 +84,7 @@ async function toGeminiUserParts(
 }
 
 function toGeminiAssistantParts(
-  message: Extract<ChatMessage, { role: "assistant" }>,
+  message: Extract<ChatMessage, { role: "assistant" }>
 ): Part[] {
   const parts: Part[] = [];
   const text = message.content.trim();
@@ -94,9 +96,9 @@ function toGeminiAssistantParts(
   for (const call of message.toolCalls ?? []) {
     parts.push({
       functionCall: {
+        args: call.arguments,
         id: call.id,
         name: call.name,
-        args: call.arguments,
       },
     });
   }
@@ -114,7 +116,11 @@ function parseToolResultContent(content: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(trimmed) as unknown;
 
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -127,7 +133,7 @@ function parseToolResultContent(content: string): Record<string, unknown> {
 export function parseGeminiFunctionCalls(
   functionCalls:
     | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
-    | undefined,
+    | undefined
 ): import("@nakama/core").ToolCall[] {
   if (!functionCalls?.length) {
     return [];
@@ -137,23 +143,24 @@ export function parseGeminiFunctionCalls(
     const id = call.id?.trim();
     const name = call.name?.trim();
 
-    if (!id || !name) {
+    if (!(id && name)) {
       return [];
     }
 
     return [
       {
+        arguments: readRecord(call.args ?? {}),
         id,
         name,
-        arguments: readRecord(call.args ?? {}),
       },
     ];
   });
 }
 
-export function extractTextAndThinkingFromParts(
-  parts: Part[] | undefined,
-): { content: string; thinking?: string } {
+export function extractTextAndThinkingFromParts(parts: Part[] | undefined): {
+  content: string;
+  thinking?: string;
+} {
   if (!parts?.length) {
     return { content: "" };
   }

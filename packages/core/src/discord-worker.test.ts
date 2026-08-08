@@ -11,21 +11,21 @@ describe("resolveDiscordWorkerStatus", () => {
     expect(
       resolveDiscordWorkerStatus(
         {
-          configured: false,
+          allowedUserIds: [],
           botTokenMasked: null,
+          configured: false,
           handshakeCode: null,
           pairedUserIds: [],
-          allowedUserIds: [],
           profileId: "default",
         },
-        false,
-      ),
+        false
+      )
     ).toEqual({
-      ok: true,
       configured: false,
+      connected: false,
+      ok: true,
       paired: false,
       running: false,
-      connected: false,
     });
   });
 
@@ -33,42 +33,42 @@ describe("resolveDiscordWorkerStatus", () => {
     expect(
       resolveDiscordWorkerStatus(
         {
-          configured: true,
+          allowedUserIds: [],
           botTokenMasked: "••••1234",
+          configured: true,
           handshakeCode: "ABCD",
           pairedUserIds: [],
-          allowedUserIds: [],
           profileId: "default",
         },
-        false,
-      ),
+        false
+      )
     ).toEqual({
-      ok: false,
       configured: true,
+      connected: false,
+      ok: false,
       paired: false,
       running: false,
-      connected: false,
     });
 
     expect(
       resolveDiscordWorkerStatus(
         {
-          configured: true,
+          allowedUserIds: [],
           botTokenMasked: "••••1234",
+          configured: true,
           handshakeCode: null,
           pairedUserIds: ["123456789012345678"],
-          allowedUserIds: [],
           profileId: "default",
         },
         true,
-        true,
-      ),
+        true
+      )
     ).toEqual({
-      ok: true,
       configured: true,
+      connected: true,
+      ok: true,
       paired: true,
       running: true,
-      connected: true,
     });
   });
 });
@@ -77,9 +77,17 @@ describe("parseDiscordWorkerHeartbeat", () => {
   test("parses valid JSON with connected flag", () => {
     expect(
       parseDiscordWorkerHeartbeat(
-        JSON.stringify({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z", connected: true }),
-      ),
-    ).toEqual({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z", connected: true });
+        JSON.stringify({
+          connected: true,
+          pid: 12,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        })
+      )
+    ).toEqual({
+      connected: true,
+      pid: 12,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
   });
 
   test("returns null for invalid payloads", () => {
@@ -94,7 +102,7 @@ describe("isHeartbeatAlive", () => {
       isHeartbeatAlive({
         pid: process.pid,
         updatedAt: new Date().toISOString(),
-      }),
+      })
     ).toBe(true);
   });
 });

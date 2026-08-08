@@ -8,7 +8,7 @@ export interface TelegramOutboundOptions {
 }
 
 export function createTelegramOutboundAdapter(
-  options: TelegramOutboundOptions = {},
+  options: TelegramOutboundOptions = {}
 ): TelegramOutboundAdapter {
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -19,46 +19,51 @@ export function createTelegramOutboundAdapter(
         const token = config?.botToken.trim();
 
         if (!token) {
-          return { ok: false, error: "Telegram bot token is not configured." };
+          return { error: "Telegram bot token is not configured.", ok: false };
         }
 
         const chatIds =
           input.chatIds && input.chatIds.length > 0
             ? input.chatIds
-            : config?.pairedUserIds ?? [];
+            : (config?.pairedUserIds ?? []);
 
         if (chatIds.length === 0) {
-          return { ok: false, error: "No Telegram chat is paired." };
+          return { error: "No Telegram chat is paired.", ok: false };
         }
 
         const chunks = splitTelegramChunks(input.text);
 
         if (chunks.length === 0) {
-          return { ok: false, error: "Message text is empty." };
+          return { error: "Message text is empty.", ok: false };
         }
 
         for (const chatId of chatIds) {
           for (const chunk of chunks) {
-            const text = input.parseMode === "HTML" ? renderTelegramRichText(chunk) : chunk;
+            const text =
+              input.parseMode === "HTML"
+                ? renderTelegramRichText(chunk)
+                : chunk;
             const response = await fetchImpl(
               `https://api.telegram.org/bot${token}/sendMessage`,
               {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   chat_id: chatId,
                   text,
                   ...(input.parseMode ? { parse_mode: input.parseMode } : {}),
-                  ...(input.topicId ? { message_thread_id: input.topicId } : {}),
+                  ...(input.topicId
+                    ? { message_thread_id: input.topicId }
+                    : {}),
                 }),
-              },
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+              }
             );
 
             if (!response.ok) {
               const body = await response.text();
               return {
-                ok: false,
                 error: `Telegram API error (${response.status}): ${body.slice(0, 200)}`,
+                ok: false,
               };
             }
           }
@@ -67,7 +72,7 @@ export function createTelegramOutboundAdapter(
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: message };
+        return { error: message, ok: false };
       }
     },
   };

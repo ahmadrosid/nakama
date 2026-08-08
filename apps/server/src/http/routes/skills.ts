@@ -8,119 +8,217 @@ import type {
   SkillResponse,
   SyncSkillsResponse,
 } from "@nakama/core";
-import { json, readJson } from "../shared";
-import { requirePlatformAdminFromContext, requireActiveOrgIdFromContext } from "../org-guards";
 import type { ServerOptions } from "../context";
+import {
+  requireActiveOrgIdFromContext,
+  requirePlatformAdminFromContext,
+} from "../org-guards";
+import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
-export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerSkillRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { agent } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const skillIdParam = z.object({
-    skillId: z.string().openapi({ param: { name: "skillId", in: "path" } }),
+    skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
   const profileIdParam = z.object({
-    profileId: z.string().openapi({ param: { name: "profileId", in: "path" } }),
+    profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
   });
   const profileSkillParams = z.object({
-    profileId: z.string().openapi({ param: { name: "profileId", in: "path" } }),
-    skillId: z.string().openapi({ param: { name: "skillId", in: "path" } }),
+    profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
+    skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
-  const listSkillsSchema = z.object({}).passthrough().openapi("ListSkillsResponse");
+  const listSkillsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListSkillsResponse");
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
-  const syncSkillsSchema = z.object({}).passthrough().openapi("SyncSkillsResponse");
-  const createSkillSchema = z.object({}).passthrough().openapi("CreateSkillRequest");
-  const patchSkillSchema = z.object({}).passthrough().openapi("PatchSkillRequest");
-  const assignSkillSchema = z.object({}).passthrough().openapi("AssignSkillRequest");
+  const syncSkillsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("SyncSkillsResponse");
+  const createSkillSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CreateSkillRequest");
+  const patchSkillSchema = z
+    .object({})
+    .passthrough()
+    .openapi("PatchSkillRequest");
+  const assignSkillSchema = z
+    .object({})
+    .passthrough()
+    .openapi("AssignSkillRequest");
   const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
 
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/skills",
-    tags: ["Skills"],
-    summary: "List discovered skills",
-    operationId: "listSkills",
-    responses: { 200: { description: "Skill list", content: { "application/json": { schema: listSkillsSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/skills",
-    tags: ["Skills"],
-    summary: "Create a skill",
-    operationId: "createSkill",
-    request: { body: { required: true, content: { "application/json": { schema: createSkillSchema } } } },
-    responses: { 200: { description: "Skill detail", content: { "application/json": { schema: skillSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/skills/sync",
-    tags: ["Skills"],
-    summary: "Sync skills from disk into the database",
-    operationId: "syncSkills",
-    responses: { 200: { description: "Skills synced", content: { "application/json": { schema: syncSkillsSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/skills/{skillId}",
-    tags: ["Skills"],
-    summary: "Get a skill",
-    operationId: "getSkill",
-    request: { params: skillIdParam },
-    responses: {
-      200: { description: "Skill detail", content: { "application/json": { schema: skillSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "patch",
-    path: "/v1/skills/{skillId}",
-    tags: ["Skills"],
-    summary: "Update a skill",
-    operationId: "patchSkill",
-    request: {
-      params: skillIdParam,
-      body: { required: true, content: { "application/json": { schema: patchSkillSchema } } },
-    },
-    responses: {
-      200: { description: "Skill detail", content: { "application/json": { schema: skillSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "delete",
-    path: "/v1/skills/{skillId}",
-    tags: ["Skills"],
-    summary: "Delete a skill",
-    operationId: "deleteSkill",
-    request: { params: skillIdParam },
-    responses: { 204: { description: "Skill deleted" } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/profiles/{profileId}/skills",
-    tags: ["Profiles", "Skills"],
-    summary: "Assign a skill to a profile",
-    operationId: "assignSkillToProfile",
-    request: { params: profileIdParam, body: { required: true, content: { "application/json": { schema: assignSkillSchema } } } },
-    responses: {
-      200: { description: "Skill assigned", content: { "application/json": { schema: profileSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "delete",
-    path: "/v1/profiles/{profileId}/skills/{skillId}",
-    tags: ["Profiles", "Skills"],
-    summary: "Unassign a skill from a profile",
-    operationId: "unassignSkillFromProfile",
-    request: { params: profileSkillParams },
-    responses: {
-      200: { description: "Skill unassigned", content: { "application/json": { schema: profileSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listSkills",
+      path: "/v1/skills",
+      responses: {
+        200: {
+          content: { "application/json": { schema: listSkillsSchema } },
+          description: "Skill list",
+        },
+      },
+      summary: "List discovered skills",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createSkill",
+      path: "/v1/skills",
+      request: {
+        body: {
+          content: { "application/json": { schema: createSkillSchema } },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: skillSchema } },
+          description: "Skill detail",
+        },
+      },
+      summary: "Create a skill",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "syncSkills",
+      path: "/v1/skills/sync",
+      responses: {
+        200: {
+          content: { "application/json": { schema: syncSkillsSchema } },
+          description: "Skills synced",
+        },
+      },
+      summary: "Sync skills from disk into the database",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getSkill",
+      path: "/v1/skills/{skillId}",
+      request: { params: skillIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: skillSchema } },
+          description: "Skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get a skill",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "patch",
+      operationId: "patchSkill",
+      path: "/v1/skills/{skillId}",
+      request: {
+        body: {
+          content: { "application/json": { schema: patchSkillSchema } },
+          required: true,
+        },
+        params: skillIdParam,
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: skillSchema } },
+          description: "Skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Update a skill",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteSkill",
+      path: "/v1/skills/{skillId}",
+      request: { params: skillIdParam },
+      responses: { 204: { description: "Skill deleted" } },
+      summary: "Delete a skill",
+      tags: ["Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "assignSkillToProfile",
+      path: "/v1/profiles/{profileId}/skills",
+      request: {
+        body: {
+          content: { "application/json": { schema: assignSkillSchema } },
+          required: true,
+        },
+        params: profileIdParam,
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: profileSchema } },
+          description: "Skill assigned",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Assign a skill to a profile",
+      tags: ["Profiles", "Skills"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "unassignSkillFromProfile",
+      path: "/v1/profiles/{profileId}/skills/{skillId}",
+      request: { params: profileSkillParams },
+      responses: {
+        200: {
+          content: { "application/json": { schema: profileSchema } },
+          description: "Skill unassigned",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Unassign a skill from a profile",
+      tags: ["Profiles", "Skills"],
+    })
+  );
 
   app.get("/v1/skills", async (c) => {
     requirePlatformAdminFromContext(c);
@@ -141,7 +239,9 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
 
   app.get("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
-    return json<SkillResponse>(await agent.getSkill(decodeURIComponent(c.req.param("skillId"))));
+    return json<SkillResponse>(
+      await agent.getSkill(decodeURIComponent(c.req.param("skillId")))
+    );
   });
 
   app.patch("/v1/skills/:skillId", async (c) => {
@@ -154,8 +254,8 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
         orgId,
         decodeURIComponent(c.req.param("skillId")),
         body,
-        profileId ? { profileId } : undefined,
-      ),
+        profileId ? { profileId } : undefined
+      )
     );
   });
 
@@ -170,7 +270,11 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<AssignSkillRequest>(c.req.raw);
     return json<ProfileResponse>(
-      await agent.assignSkill(orgId, decodeURIComponent(c.req.param("profileId")), body),
+      await agent.assignSkill(
+        orgId,
+        decodeURIComponent(c.req.param("profileId")),
+        body
+      )
     );
   });
 
@@ -181,8 +285,8 @@ export function registerSkillRoutes(app: HonoApp, options: ServerOptions): void 
       await agent.unassignSkill(
         orgId,
         decodeURIComponent(c.req.param("profileId")),
-        decodeURIComponent(c.req.param("skillId")),
-      ),
+        decodeURIComponent(c.req.param("skillId"))
+      )
     );
   });
 }

@@ -68,13 +68,15 @@ export function canRestoreDataImport(options: {
   previewReady: boolean;
   pending: boolean;
 }): boolean {
-  return Boolean(options.selectedFile) && options.previewReady && !options.pending;
+  return (
+    Boolean(options.selectedFile) && options.previewReady && !options.pending
+  );
 }
 
 /** Gate auto-preview so mutation status churn cannot re-fire the same File. */
 export function shouldStartInitialFilePreview(
   initialFile: File | null,
-  alreadyStartedFor: File | null,
+  alreadyStartedFor: File | null
 ): boolean {
   return initialFile != null && initialFile !== alreadyStartedFor;
 }

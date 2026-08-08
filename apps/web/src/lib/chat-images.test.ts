@@ -6,29 +6,30 @@ describe("chat document accept", () => {
     expect(DOCUMENT_ACCEPT).toContain(".xlsx");
     expect(DOCUMENT_ACCEPT).toContain(".xls");
     expect(DOCUMENT_ACCEPT).toContain(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
   });
 
   test("recognizes xlsx file parts", () => {
     expect(
       isDocumentFilePart({
-        type: "file",
-        mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename: "budget.xlsx",
+        mediaType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type: "file",
         url: "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,YWJj",
-      }),
+      })
     ).toBe(true);
   });
 
   test("recognizes excel from extension when media type is generic", () => {
     expect(
       isDocumentFilePart({
-        type: "file",
-        mediaType: "application/octet-stream",
         filename: "budget.xlsx",
+        mediaType: "application/octet-stream",
+        type: "file",
         url: "data:application/octet-stream;base64,YWJj",
-      }),
+      })
     ).toBe(true);
   });
 });

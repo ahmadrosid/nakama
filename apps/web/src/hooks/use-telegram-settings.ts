@@ -1,16 +1,16 @@
+import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const telegramSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.telegram.settings,
   queryFn: () => client.getTelegramSettings(),
+  queryKey: queryKeys.telegram.settings,
 });
 
 export function useTelegramSettings() {

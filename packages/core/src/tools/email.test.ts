@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EmailConfigFile } from "../email-config";
+import { builtinTools } from "./builtin";
 import {
   createFakeMailReader,
   createFakeMailSender,
@@ -7,21 +8,21 @@ import {
   emailTool,
   runEmailTool,
 } from "./email";
-import { builtinTools } from "./builtin";
 
-process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??= "test-email-attachment-secret-32-chars";
+process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
+  "test-email-attachment-secret-32-chars";
 
 const completeConfig: EmailConfigFile = {
+  from: "user@example.com",
+  fromName: "",
   imapHost: "imap.example.com",
   imapPort: 993,
   imapSecure: true,
+  password: "secret-password",
   smtpHost: "smtp.example.com",
   smtpPort: 587,
   smtpSecure: false,
   username: "user@example.com",
-  password: "secret-password",
-  from: "user@example.com",
-  fromName: "",
 };
 
 describe("email tool", () => {
@@ -33,8 +34,8 @@ describe("email tool", () => {
     expect(schema.oneOf).toBeUndefined();
     expect(schema.anyOf).toBeUndefined();
     expect(parameters.properties?.action).toEqual({
-      type: "string",
       enum: ["list", "read", "search", "send"],
+      type: "string",
     });
     expect(parameters.required).toContain("action");
     expect(emailTool.parameters).toEqual(parameters);
@@ -42,7 +43,9 @@ describe("email tool", () => {
 
   test("builtin tool schemas all declare type object for LLM providers", () => {
     for (const tool of builtinTools) {
-      expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe("object");
+      expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe(
+        "object"
+      );
       const schema = tool.parameters as Record<string, unknown> | undefined;
       expect(schema?.oneOf, `${tool.name} oneOf`).toBeUndefined();
       expect(schema?.anyOf, `${tool.name} anyOf`).toBeUndefined();
@@ -55,18 +58,18 @@ describe("email tool", () => {
     const result = await runEmailTool(
       {
         action: "send",
-        to: "recipient@example.com",
-        subject: "Hello",
-        text: "Body",
         folder: "INBOX",
         limit: 20,
-        uid: 99,
         query: "noise",
+        subject: "Hello",
+        text: "Body",
+        to: "recipient@example.com",
+        uid: 99,
       },
       {
-        loadConfig: async () => completeConfig,
         createSender: () => sender,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect("sent" in result && result.sent?.messageId).toBe("fake-message-id");
@@ -78,12 +81,12 @@ describe("email tool", () => {
     const sender = createFakeMailSender();
 
     const result = await runEmailTool(
-      { action: "send", to: "a@b.com", subject: "Hi", text: "Hello" },
+      { action: "send", subject: "Hi", text: "Hello", to: "a@b.com" },
       {
-        loadConfig: async () => null,
         createReader: () => reader,
         createSender: () => sender,
-      },
+        loadConfig: async () => null,
+      }
     );
 
     expect(result).toEqual({
@@ -96,21 +99,21 @@ describe("email tool", () => {
   test("lists messages with fake reader", async () => {
     const reader = createFakeMailReader([
       {
-        uid: 10,
-        subject: "Weekly update",
-        from: "team@example.com",
         date: "2026-06-21T00:00:00.000Z",
         folder: "INBOX",
+        from: "team@example.com",
+        subject: "Weekly update",
         text: "summary",
+        uid: 10,
       },
     ]);
 
     const result = await runEmailTool(
       { action: "list", limit: 5 },
       {
-        loadConfig: async () => completeConfig,
         createReader: () => reader,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect("messages" in result && result.messages).toHaveLength(1);
@@ -119,21 +122,21 @@ describe("email tool", () => {
   test("reads a message by uid", async () => {
     const reader = createFakeMailReader([
       {
-        uid: 42,
-        subject: "Details",
-        from: "team@example.com",
         date: "2026-06-21T00:00:00.000Z",
         folder: "INBOX",
+        from: "team@example.com",
+        subject: "Details",
         text: "full body",
+        uid: 42,
       },
     ]);
 
     const result = await runEmailTool(
       { action: "read", uid: 42 },
       {
-        loadConfig: async () => completeConfig,
         createReader: () => reader,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect("message" in result && result.message?.text).toBe("full body");
@@ -142,62 +145,72 @@ describe("email tool", () => {
   test("returns scoped references for message attachments", async () => {
     const reader = createFakeMailReader([
       {
-        uid: 43,
-        subject: "Report",
-        from: "team@example.com",
-        date: "2026-06-21T00:00:00.000Z",
-        folder: "INBOX",
         attachments: [
           {
-            id: "0",
+            disposition: "attachment",
             filename: "report.pdf",
+            id: "0",
             mediaType: "application/pdf",
             size: 123,
-            disposition: "attachment",
           },
         ],
+        date: "2026-06-21T00:00:00.000Z",
+        folder: "INBOX",
+        from: "team@example.com",
+        subject: "Report",
+        uid: 43,
       },
     ]);
 
     const result = await runEmailTool(
       { action: "read", uid: 43 },
       {
-        loadConfig: async () => completeConfig,
         createReader: () => reader,
+        loadConfig: async () => completeConfig,
       },
-      { orgId: "org_test", profileId: "profile_test", sessionId: "session_test" },
+      {
+        orgId: "org_test",
+        profileId: "profile_test",
+        sessionId: "session_test",
+      }
     );
 
-    expect("message" in result && result.message?.attachments?.[0]).toMatchObject({
+    expect(
+      "message" in result && result.message?.attachments?.[0]
+    ).toMatchObject({
+      disposition: "attachment",
       filename: "report.pdf",
       mediaType: "application/pdf",
       size: 123,
-      disposition: "attachment",
     });
-    expect("message" in result && result.message?.attachments?.[0]?.documentRef).toContain(".");
+    expect(
+      "message" in result && result.message?.attachments?.[0]?.documentRef
+    ).toContain(".");
   });
 
   test("searches messages", async () => {
     const reader = createFakeMailReader([
       {
-        uid: 1,
-        subject: "Invoice",
-        from: "billing@example.com",
         date: "2026-06-21T00:00:00.000Z",
         folder: "INBOX",
+        from: "billing@example.com",
+        subject: "Invoice",
         text: "due now",
+        uid: 1,
       },
     ]);
 
     const result = await runEmailTool(
       { action: "search", query: "invoice" },
       {
-        loadConfig: async () => completeConfig,
         createReader: () => reader,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
-    expect("messages" in result && result.messages?.[0]?.subject).toBe("Invoice");
+    expect("messages" in result && result.messages?.[0]?.subject).toBe(
+      "Invoice"
+    );
   });
 
   test("sends email with fake sender", async () => {
@@ -206,14 +219,14 @@ describe("email tool", () => {
     const result = await runEmailTool(
       {
         action: "send",
-        to: "recipient@example.com",
         subject: "Hello",
         text: "Body",
+        to: "recipient@example.com",
       },
       {
-        loadConfig: async () => completeConfig,
         createSender: () => sender,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect("sent" in result && result.sent?.messageId).toBe("fake-message-id");
@@ -226,14 +239,14 @@ describe("email tool", () => {
     const result = await runEmailTool(
       {
         action: "send",
-        to: "not-an-email",
         subject: "Hello",
         text: "Body",
+        to: "not-an-email",
       },
       {
-        loadConfig: async () => completeConfig,
         createSender: () => sender,
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect(result).toEqual({ error: "Invalid recipient email address." });
@@ -244,14 +257,14 @@ describe("email tool", () => {
       runEmailTool(
         {
           action: "send",
-          to: "recipient@example.com",
           subject: "Hello",
+          to: "recipient@example.com",
         },
         {
-          loadConfig: async () => completeConfig,
           createSender: () => createFakeMailSender(),
-        },
-      ),
+          loadConfig: async () => completeConfig,
+        }
+      )
     ).rejects.toThrow("text is required.");
   });
 
@@ -259,18 +272,18 @@ describe("email tool", () => {
     const result = await runEmailTool(
       {
         action: "send",
-        to: "recipient@example.com",
         subject: "Hello",
         text: "Body",
+        to: "recipient@example.com",
       },
       {
-        loadConfig: async () => completeConfig,
         createSender: () => ({
           async send() {
             throw new Error("SMTP auth failed password=secret-password");
           },
         }),
-      },
+        loadConfig: async () => completeConfig,
+      }
     );
 
     expect(result).toEqual({ error: "SMTP auth failed password=[REDACTED]" });

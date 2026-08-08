@@ -1,7 +1,16 @@
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
+import { convertDocxToMarkdown } from "../docx-text";
 import {
   PathGuardError,
   runDeleteFile,
@@ -11,7 +20,6 @@ import {
   runWriteFile,
   setDefaultFileGuardOptions,
 } from "./builtin";
-import { convertDocxToMarkdown } from "../docx-text";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -22,11 +30,11 @@ describe("file builtin tools", () => {
 
   afterEach(async () => {
     if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
     if (originalConfigDir === undefined) {
@@ -42,9 +50,9 @@ describe("file builtin tools", () => {
     const targetPath = path.join(tempDir, "nested", "hello.txt");
 
     const result = await runWriteFile(
-      { path: targetPath, content: "hello world" },
+      { content: "hello world", path: targetPath },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(await realpath(targetPath));
@@ -55,9 +63,9 @@ describe("file builtin tools", () => {
   test("write_file resolves relative paths from profile workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const result = await runWriteFile(
-      { path: "notes.txt", content: "relative" },
+      { content: "relative", path: "notes.txt" },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(path.join(await realpath(tempDir), "notes.txt"));
@@ -73,12 +81,14 @@ describe("file builtin tools", () => {
     const dateSuffix = new Date().toISOString().slice(0, 10);
 
     const result = await runWriteFile(
-      { path: "artifacts/report.md", content: "new report" },
+      { content: "new report", path: "artifacts/report.md" },
       { ...PROFILE_CONTEXT, sessionId: "session_suffix" },
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
-    expect(result.path).toBe(path.join(await realpath(artifactsDir), `report-${dateSuffix}.md`));
+    expect(result.path).toBe(
+      path.join(await realpath(artifactsDir), `report-${dateSuffix}.md`)
+    );
     expect(await readFile(existingPath, "utf8")).toBe("existing");
     expect(await readFile(result.path, "utf8")).toBe("new report");
   });
@@ -94,27 +104,32 @@ describe("file builtin tools", () => {
     const context = { ...PROFILE_CONTEXT, sessionId: "session_meta_suffix" };
 
     const contentResult = await runWriteFile(
-      { path: "artifacts/report.md", content: "new report" },
+      { content: "new report", path: "artifacts/report.md" },
       context,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     const metaResult = await runWriteFile(
       {
-        path: "artifacts/report.md.nakama-meta.json",
         content: JSON.stringify({
           mimeType: "text/markdown",
           savedAt: "2026-07-14T12:00:00.000Z",
           sizeBytes: 10,
         }),
+        path: "artifacts/report.md.nakama-meta.json",
       },
       context,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
-    expect(contentResult.path).toBe(path.join(await realpath(artifactsDir), `report-${dateSuffix}.md`));
+    expect(contentResult.path).toBe(
+      path.join(await realpath(artifactsDir), `report-${dateSuffix}.md`)
+    );
     expect(metaResult.path).toBe(
-      path.join(await realpath(artifactsDir), `report-${dateSuffix}.md.nakama-meta.json`),
+      path.join(
+        await realpath(artifactsDir),
+        `report-${dateSuffix}.md.nakama-meta.json`
+      )
     );
   });
 
@@ -127,13 +142,18 @@ describe("file builtin tools", () => {
 
     const targetPath = path.join(toolsDir, "echo.js");
     const result = await runWriteFile(
-      { path: targetPath, content: "export async function run() { return null; }" },
+      {
+        content: "export async function run() { return null; }",
+        path: targetPath,
+      },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(await realpath(targetPath));
-    expect(await readFile(targetPath, "utf8")).toContain("export async function run");
+    expect(await readFile(targetPath, "utf8")).toContain(
+      "export async function run"
+    );
   });
 
   test("delete_file removes a file", async () => {
@@ -143,13 +163,11 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "temp", "utf8");
     const resolvedTargetPath = await realpath(targetPath);
 
-    const result = await runDeleteFile(
-      { path: targetPath },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
-    );
+    const result = await runDeleteFile({ path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
 
-    expect(result).toEqual({ path: resolvedTargetPath, deleted: true });
+    expect(result).toEqual({ deleted: true, path: resolvedTargetPath });
     await expect(readFile(targetPath, "utf8")).rejects.toThrow();
   });
 
@@ -159,9 +177,9 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "hello old world", "utf8");
 
     const result = await runEditFile(
-      { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+      { edits: [{ newText: "new", oldText: "old" }], path: targetPath },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(await realpath(targetPath));
@@ -175,9 +193,9 @@ describe("file builtin tools", () => {
     await writeFile(path.join(tempDir, "note.txt"), "relative old", "utf8");
 
     const result = await runEditFile(
-      { path: "note.txt", edits: [{ oldText: "old", newText: "new" }] },
+      { edits: [{ newText: "new", oldText: "old" }], path: "note.txt" },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(path.join(await realpath(tempDir), "note.txt"));
@@ -191,14 +209,14 @@ describe("file builtin tools", () => {
 
     const result = await runEditFile(
       {
-        path: targetPath,
         edits: [
-          { oldText: "one", newText: "two" },
-          { oldText: "three", newText: "one" },
+          { newText: "two", oldText: "one" },
+          { newText: "one", oldText: "three" },
         ],
+        path: targetPath,
       },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.replacements).toBe(2);
@@ -212,10 +230,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runEditFile(
-        { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+        { edits: [{ newText: "new", oldText: "old" }], path: targetPath },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow("ambiguous");
     expect(await readFile(targetPath, "utf8")).toBe("old and old");
   });
@@ -228,15 +246,15 @@ describe("file builtin tools", () => {
     await expect(
       runEditFile(
         {
-          path: targetPath,
           edits: [
-            { oldText: "abc", newText: "ABC" },
-            { oldText: "bcd", newText: "BCD" },
+            { newText: "ABC", oldText: "abc" },
+            { newText: "BCD", oldText: "bcd" },
           ],
+          path: targetPath,
         },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow("overlaps");
     expect(await readFile(targetPath, "utf8")).toBe("abcdef");
   });
@@ -244,19 +262,25 @@ describe("file builtin tools", () => {
   test("edit_file fuzzy matches line endings and smart punctuation", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-edit-"));
     const targetPath = path.join(tempDir, "note.txt");
-    await writeFile(targetPath, "before\r\nsay “hello”—now\r\nafter\r\n", "utf8");
+    await writeFile(
+      targetPath,
+      "before\r\nsay “hello”—now\r\nafter\r\n",
+      "utf8"
+    );
 
     const result = await runEditFile(
       {
+        edits: [{ newText: "say goodbye", oldText: 'say "hello"-now' }],
         path: targetPath,
-        edits: [{ oldText: "say \"hello\"-now", newText: "say goodbye" }],
       },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.fuzzyMatches).toBe(1);
-    expect(await readFile(targetPath, "utf8")).toBe("before\r\nsay goodbye\r\nafter\r\n");
+    expect(await readFile(targetPath, "utf8")).toBe(
+      "before\r\nsay goodbye\r\nafter\r\n"
+    );
   });
 
   test("edit_file preserves CRLF style in replacement text", async () => {
@@ -266,14 +290,16 @@ describe("file builtin tools", () => {
 
     await runEditFile(
       {
+        edits: [{ newText: "new\nblock", oldText: "old block" }],
         path: targetPath,
-        edits: [{ oldText: "old block", newText: "new\nblock" }],
       },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
-    expect(await readFile(targetPath, "utf8")).toBe("before\r\nnew\r\nblock\r\nafter\r\n");
+    expect(await readFile(targetPath, "utf8")).toBe(
+      "before\r\nnew\r\nblock\r\nafter\r\n"
+    );
   });
 
   test("edit_file fuzzy matching ignores trailing whitespace", async () => {
@@ -283,11 +309,11 @@ describe("file builtin tools", () => {
 
     const result = await runEditFile(
       {
+        edits: [{ newText: "ALPHA\nbeta", oldText: "alpha\nbeta" }],
         path: targetPath,
-        edits: [{ oldText: "alpha\nbeta", newText: "ALPHA\nbeta" }],
       },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.fuzzyMatches).toBe(1);
@@ -300,9 +326,9 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "\uFEFFhello old", "utf8");
 
     await runEditFile(
-      { path: targetPath, edits: [{ oldText: "old", newText: "new" }] },
+      { edits: [{ newText: "new", oldText: "old" }], path: targetPath },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     const result = await readFile(targetPath);
@@ -317,10 +343,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runEditFile(
-        { path: targetPath, edits: [{ oldText: "missing", newText: "new" }] },
+        { edits: [{ newText: "new", oldText: "missing" }], path: targetPath },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow("oldText not found");
   });
 
@@ -329,11 +355,9 @@ describe("file builtin tools", () => {
     const targetPath = path.join(tempDir, "sample.txt");
     await writeFile(targetPath, "hello world", "utf8");
 
-    const result = await runReadFile(
-      { path: targetPath },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
-    );
+    const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
 
     expect(result.path).toBe(await realpath(targetPath));
     expect(result.content).toBe("hello world");
@@ -349,72 +373,99 @@ describe("file builtin tools", () => {
 
     expect(
       runWriteFile(
-        { path: path.join(tempDir, "laporan.docx"), content: "<html><body>hi</body></html>" },
+        {
+          content: "<html><body>hi</body></html>",
+          path: path.join(tempDir, "laporan.docx"),
+        },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/write_docx/);
 
     expect(
       runWriteFile(
-        { path: path.join(tempDir, "laporan.doc"), content: "<html><body>hi</body></html>" },
+        {
+          content: "<html><body>hi</body></html>",
+          path: path.join(tempDir, "laporan.doc"),
+        },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/write_docx/);
   });
 
   test("file tools refuse skills/* paths when forbidProfileSkillMarkdownWrites", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-skill-md-"));
-    await mkdir(path.join(tempDir, "skills", "notes", "docs"), { recursive: true });
+    await mkdir(path.join(tempDir, "skills", "notes", "docs"), {
+      recursive: true,
+    });
     await writeFile(
       path.join(tempDir, "skills", "notes", "SKILL.md"),
       "---\nname: notes\ndescription: Notes.\n---\n\nBody.\n",
-      "utf8",
+      "utf8"
     );
-    await writeFile(path.join(tempDir, "skills", "notes", "docs", "notes.md"), "nested\n", "utf8");
-    const context = { ...PROFILE_CONTEXT, forbidProfileSkillMarkdownWrites: true };
+    await writeFile(
+      path.join(tempDir, "skills", "notes", "docs", "notes.md"),
+      "nested\n",
+      "utf8"
+    );
+    const context = {
+      ...PROFILE_CONTEXT,
+      forbidProfileSkillMarkdownWrites: true,
+    };
 
     await expect(
       runWriteFile(
-        { path: "skills/notes/SKILL.md", content: "---\nname: notes\ndescription: x\n---\n" },
+        {
+          content: "---\nname: notes\ndescription: x\n---\n",
+          path: "skills/notes/SKILL.md",
+        },
         context,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/Use skill_manage/);
 
     await expect(
-      runWriteFile({ path: "skills/notes/docs/notes.md", content: "changed" }, context, {
-        workspaceRoot: tempDir,
-      }),
+      runWriteFile(
+        { content: "changed", path: "skills/notes/docs/notes.md" },
+        context,
+        {
+          workspaceRoot: tempDir,
+        }
+      )
     ).rejects.toThrow(/Use skill_manage/);
 
     await expect(
       runEditFile(
         {
+          edits: [{ newText: "changed", oldText: "nested" }],
           path: "skills/notes/docs/notes.md",
-          edits: [{ oldText: "nested", newText: "changed" }],
         },
         context,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/Use skill_manage/);
 
     await expect(
-      runDeleteFile({ path: "skills/notes/docs/notes.md" }, context, { workspaceRoot: tempDir }),
+      runDeleteFile({ path: "skills/notes/docs/notes.md" }, context, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(/Use skill_manage/);
 
     await expect(
       runWriteDocx(
-        { path: "skills/notes/notes.docx", markdown: "# hi" },
+        { markdown: "# hi", path: "skills/notes/notes.docx" },
         context,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/Use skill_manage/);
 
-    expect(await readFile(path.join(tempDir, "skills", "notes", "docs", "notes.md"), "utf8")).toBe(
-      "nested\n",
-    );
+    expect(
+      await readFile(
+        path.join(tempDir, "skills", "notes", "docs", "notes.md"),
+        "utf8"
+      )
+    ).toBe("nested\n");
   });
 
   test("write_file, edit_file, and delete_file refuse skills/*/tool.js and tool.ts", async () => {
@@ -423,35 +474,46 @@ describe("file builtin tools", () => {
 
     await expect(
       runWriteFile(
-        { path: "skills/notes/tool.js", content: "export default {};" },
+        { content: "export default {};", path: "skills/notes/tool.js" },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/tool\.js.*Phase 1/);
 
     await expect(
       runWriteFile(
-        { path: "skills/notes/tool.ts", content: "export default {};" },
+        { content: "export default {};", path: "skills/notes/tool.ts" },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/tool\.ts.*Phase 1/);
 
-    await writeFile(path.join(tempDir, "skills", "notes", "tool.js"), "export default {};", "utf8");
+    await writeFile(
+      path.join(tempDir, "skills", "notes", "tool.js"),
+      "export default {};",
+      "utf8"
+    );
 
     await expect(
       runEditFile(
         {
+          edits: [
+            {
+              newText: "export default { x: 1 };",
+              oldText: "export default {};",
+            },
+          ],
           path: "skills/notes/tool.js",
-          edits: [{ oldText: "export default {};", newText: "export default { x: 1 };" }],
         },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/tool\.js.*Phase 1/);
 
     await expect(
-      runDeleteFile({ path: "skills/notes/tool.js" }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runDeleteFile({ path: "skills/notes/tool.js" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(/tool\.js.*Phase 1/);
   });
 
@@ -461,11 +523,12 @@ describe("file builtin tools", () => {
 
     const result = await runWriteDocx(
       {
+        markdown:
+          "# Laporan\n\nSkor **79** dari 100.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n",
         path: targetPath,
-        markdown: "# Laporan\n\nSkor **79** dari 100.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n",
       },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     const bytes = await readFile(result.path);
@@ -483,20 +546,26 @@ describe("file builtin tools", () => {
     await mkdir(path.join(tempDir, "artifacts"), { recursive: true });
 
     const first = await runWriteDocx(
-      { path: "artifacts/laporan.docx", markdown: "# Pertama" },
+      { markdown: "# Pertama", path: "artifacts/laporan.docx" },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
     const second = await runWriteDocx(
-      { path: "artifacts/laporan.docx", markdown: "# Kedua" },
+      { markdown: "# Kedua", path: "artifacts/laporan.docx" },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(second.path).not.toBe(first.path);
-    expect(path.basename(second.path)).toMatch(/^laporan-\d{4}-\d{2}-\d{2}\.docx$/);
-    expect(await convertDocxToMarkdown(await readFile(first.path))).toContain("# Pertama");
-    expect(await convertDocxToMarkdown(await readFile(second.path))).toContain("# Kedua");
+    expect(path.basename(second.path)).toMatch(
+      /^laporan-\d{4}-\d{2}-\d{2}\.docx$/
+    );
+    expect(await convertDocxToMarkdown(await readFile(first.path))).toContain(
+      "# Pertama"
+    );
+    expect(await convertDocxToMarkdown(await readFile(second.path))).toContain(
+      "# Kedua"
+    );
   });
 
   test("write_docx rejects a non-.docx path", async () => {
@@ -504,10 +573,10 @@ describe("file builtin tools", () => {
 
     expect(
       runWriteDocx(
-        { path: path.join(tempDir, "laporan.txt"), markdown: "# Hi" },
+        { markdown: "# Hi", path: path.join(tempDir, "laporan.txt") },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(/\.docx/);
   });
 
@@ -516,7 +585,7 @@ describe("file builtin tools", () => {
     const targetPath = path.join(tempDir, "laporan.docx");
     await copyFile(
       path.join(import.meta.dir, "..", "__fixtures__", "sample.docx"),
-      targetPath,
+      targetPath
     );
 
     const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
@@ -533,7 +602,7 @@ describe("file builtin tools", () => {
     await writeFile(
       targetPath,
       "<html><head><style>body { color: #333; }</style></head><body><h1>Judul</h1></body></html>",
-      "utf8",
+      "utf8"
     );
 
     const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
@@ -548,10 +617,15 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     const targetPath = path.join(tempDir, "lama.doc");
     // OLE compound file magic: a real Word 97-2003 document.
-    await writeFile(targetPath, Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+    await writeFile(
+      targetPath,
+      Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])
+    );
 
     expect(
-      runReadFile({ path: targetPath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(/Convert the file to \.docx/);
   });
 
@@ -559,11 +633,9 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     await writeFile(path.join(tempDir, "notes.txt"), "relative", "utf8");
 
-    const result = await runReadFile(
-      { path: "notes.txt" },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
-    );
+    const result = await runReadFile({ path: "notes.txt" }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
 
     expect(result.path).toBe(path.join(await realpath(tempDir), "notes.txt"));
     expect(result.content).toBe("relative");
@@ -579,11 +651,9 @@ describe("file builtin tools", () => {
     const targetPath = path.join(toolsDir, "echo.js");
     await writeFile(targetPath, "export async function run() {}", "utf8");
 
-    const result = await runReadFile(
-      { path: targetPath },
-      PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
-    );
+    const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+      workspaceRoot: tempDir,
+    });
 
     expect(result.path).toBe(await realpath(targetPath));
     expect(result.content).toContain("export async function run");
@@ -595,9 +665,9 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "one\ntwo\nthree\nfour", "utf8");
 
     const result = await runReadFile(
-      { path: targetPath, offset: 2, limit: 2 },
+      { limit: 2, offset: 2, path: targetPath },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.content).toBe("two\nthree");
@@ -608,14 +678,17 @@ describe("file builtin tools", () => {
   });
 
   test("requires profileId", async () => {
-    await expect(runWriteFile({ path: "a.txt", content: "x" }, {})).rejects.toThrow(
-      "orgId and profileId are required.",
-    );
+    await expect(
+      runWriteFile({ content: "x", path: "a.txt" }, {})
+    ).rejects.toThrow("orgId and profileId are required.");
     await expect(runReadFile({ path: "a.txt" }, {})).rejects.toThrow(
-      "orgId and profileId are required.",
+      "orgId and profileId are required."
     );
     await expect(
-      runEditFile({ path: "a.txt", edits: [{ oldText: "x", newText: "y" }] }, {}),
+      runEditFile(
+        { edits: [{ newText: "y", oldText: "x" }], path: "a.txt" },
+        {}
+      )
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
@@ -628,11 +701,9 @@ describe("file builtin tools", () => {
     const escapePath = path.join(tempDir, "../../../etc/nakama-exploit-test");
 
     await expect(
-      runWriteFile(
-        { path: escapePath, content: "ESCAPE" },
-        PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+      runWriteFile({ content: "ESCAPE", path: escapePath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -641,10 +712,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runWriteFile(
-        { path: "/etc/nakama-should-fail", content: "NOPE" },
+        { content: "NOPE", path: "/etc/nakama-should-fail" },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -653,10 +724,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runWriteFile(
-        { path: "~/.ssh/nakama-test", content: "SSH_KEY" },
+        { content: "SSH_KEY", path: "~/.ssh/nakama-test" },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -664,9 +735,9 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     const result = await runWriteFile(
-      { path: "safe.txt", content: "OK", cwd: "/etc" },
+      { content: "OK", cwd: "/etc", path: "safe.txt" },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toStartWith(await realpath(tempDir));
@@ -677,10 +748,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runWriteFile(
-        { path: path.join(tempDir, "safe.txt\0.sh"), content: "X" },
+        { content: "X", path: path.join(tempDir, "safe.txt\0.sh") },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -690,10 +761,10 @@ describe("file builtin tools", () => {
 
     await expect(
       runWriteFile(
-        { path: path.join(tempDir, "big.txt"), content: "A".repeat(200) },
+        { content: "A".repeat(200), path: path.join(tempDir, "big.txt") },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -701,11 +772,9 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
-      runDeleteFile(
-        { path: "/etc/should-not-delete" },
-        PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+      runDeleteFile({ path: "/etc/should-not-delete" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -715,12 +784,12 @@ describe("file builtin tools", () => {
     await expect(
       runEditFile(
         {
+          edits: [{ newText: "y", oldText: "x" }],
           path: "/etc/nakama-should-fail",
-          edits: [{ oldText: "x", newText: "y" }],
         },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -732,10 +801,13 @@ describe("file builtin tools", () => {
 
     await expect(
       runEditFile(
-        { path: targetPath, edits: [{ oldText: "small", newText: "A".repeat(200) }] },
+        {
+          edits: [{ newText: "A".repeat(200), oldText: "small" }],
+          path: targetPath,
+        },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -744,9 +816,9 @@ describe("file builtin tools", () => {
 
     const nestedPath = path.join(tempDir, "deep", "nested", "file.txt");
     const result = await runWriteFile(
-      { path: nestedPath, content: "deep" },
+      { content: "deep", path: nestedPath },
       PROFILE_CONTEXT,
-      { workspaceRoot: tempDir },
+      { workspaceRoot: tempDir }
     );
 
     expect(result.path).toBe(await realpath(nestedPath));
@@ -757,11 +829,9 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-sec-"));
 
     await expect(
-      runWriteFile(
-        { path: "/dev/null", content: "test" },
-        PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+      runWriteFile({ content: "test", path: "/dev/null" }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -770,7 +840,9 @@ describe("file builtin tools", () => {
     const escapePath = path.join(tempDir, "../../../etc/nakama-exploit-test");
 
     await expect(
-      runReadFile({ path: escapePath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runReadFile({ path: escapePath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -780,7 +852,7 @@ describe("file builtin tools", () => {
     await expect(
       runReadFile({ path: "/etc/nakama-should-fail" }, PROFILE_CONTEXT, {
         workspaceRoot: tempDir,
-      }),
+      })
     ).rejects.toThrow(/relative path under the active profile workspace/i);
   });
 
@@ -791,8 +863,8 @@ describe("file builtin tools", () => {
       runReadFile(
         { path: path.join(tempDir, "safe.txt\0.sh") },
         PROFILE_CONTEXT,
-        { workspaceRoot: tempDir },
-      ),
+        { workspaceRoot: tempDir }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -800,9 +872,13 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
-      runReadFile({ path: path.join(tempDir, "missing.txt") }, PROFILE_CONTEXT, {
-        workspaceRoot: tempDir,
-      }),
+      runReadFile(
+        { path: path.join(tempDir, "missing.txt") },
+        PROFILE_CONTEXT,
+        {
+          workspaceRoot: tempDir,
+        }
+      )
     ).rejects.toThrow("File not found");
   });
 
@@ -810,7 +886,9 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-sec-"));
 
     await expect(
-      runReadFile({ path: tempDir }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runReadFile({ path: tempDir }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow("Path is not a file");
   });
 
@@ -820,7 +898,9 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "secret=value", "utf8");
 
     await expect(
-      runReadFile({ path: targetPath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -831,7 +911,9 @@ describe("file builtin tools", () => {
     await writeFile(targetPath, "A".repeat(200), "utf8");
 
     await expect(
-      runReadFile({ path: targetPath }, PROFILE_CONTEXT, { workspaceRoot: tempDir }),
+      runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
+        workspaceRoot: tempDir,
+      })
     ).rejects.toThrow(PathGuardError);
   });
 });

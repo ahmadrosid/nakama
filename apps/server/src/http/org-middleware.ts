@@ -1,9 +1,9 @@
 import type { OrgRole } from "@nakama/core";
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
-import type { AppEnv } from "./types";
-import { errorResponse, type RequestAuthContext } from "./shared";
 import { isPublicRouteRequest } from "./public-routes";
+import { errorResponse, type RequestAuthContext } from "./shared";
+import type { AppEnv } from "./types";
 
 export const ORG_ID_HEADER = "x-org-id";
 
@@ -15,7 +15,10 @@ function isAuthRoute(pathname: string): boolean {
   return pathname === "/v1/auth" || pathname.startsWith("/v1/auth/");
 }
 
-function resolveOrgId(request: Request, auth: RequestAuthContext): string | null {
+function resolveOrgId(
+  request: Request,
+  auth: RequestAuthContext
+): string | null {
   const headerOrgId = request.headers.get(ORG_ID_HEADER)?.trim();
   if (headerOrgId) {
     return headerOrgId;
@@ -25,7 +28,9 @@ function resolveOrgId(request: Request, auth: RequestAuthContext): string | null
   return sessionOrgId || null;
 }
 
-export function createOrgContextMiddleware(options: ServerOptions): MiddlewareHandler<AppEnv> {
+export function createOrgContextMiddleware(
+  options: ServerOptions
+): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const { databaseAdapter } = options;
 
@@ -52,7 +57,9 @@ export function createOrgContextMiddleware(options: ServerOptions): MiddlewareHa
 
     let orgId = resolveOrgId(c.req.raw, auth);
     if (!orgId && auth.mode === "local-token") {
-      const memberships = await databaseAdapter.listUserOrganizations(auth.user.id);
+      const memberships = await databaseAdapter.listUserOrganizations(
+        auth.user.id
+      );
       orgId = memberships[0]?.organization.id ?? null;
     }
     if (!orgId) {

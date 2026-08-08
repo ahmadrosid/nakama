@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { AutomationSchedule, AutomationSchedulerStatus } from "@nakama/core";
 import type { NakamaClient } from "@nakama/client";
+import type {
+  AutomationSchedule,
+  AutomationSchedulerStatus,
+} from "@nakama/core";
 import { AutomationWorkerScheduler } from "./scheduler";
 
 function createMockClient(
@@ -8,12 +11,12 @@ function createMockClient(
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
     runAutomationInternal: (id: string) => Promise<void>;
     getTimezone: () => Promise<string>;
-  }> = {},
+  }> = {}
 ): NakamaClient {
   return {
+    getTimezone: async () => "UTC",
     listAutomationSchedules: async () => [],
     runAutomationInternal: async () => {},
-    getTimezone: async () => "UTC",
     ...overrides,
   } as unknown as NakamaClient;
 }
@@ -21,7 +24,13 @@ function createMockClient(
 describe("AutomationWorkerScheduler", () => {
   test("starts and loads schedules from client", async () => {
     const schedules: AutomationSchedule[] = [
-      { id: "a1", cron: "0 * * * *", timezone: "UTC", orgId: "o1", profileId: "p1" },
+      {
+        cron: "0 * * * *",
+        id: "a1",
+        orgId: "o1",
+        profileId: "p1",
+        timezone: "UTC",
+      },
     ];
     const client = createMockClient({
       listAutomationSchedules: async () => schedules,
@@ -36,7 +45,13 @@ describe("AutomationWorkerScheduler", () => {
 
   test("poll reloads schedules", async () => {
     let schedules: AutomationSchedule[] = [
-      { id: "a1", cron: "0 * * * *", timezone: "UTC", orgId: "o1", profileId: "p1" },
+      {
+        cron: "0 * * * *",
+        id: "a1",
+        orgId: "o1",
+        profileId: "p1",
+        timezone: "UTC",
+      },
     ];
     const client = createMockClient({
       listAutomationSchedules: async () => schedules,
@@ -60,7 +75,13 @@ describe("AutomationWorkerScheduler", () => {
   test("runAutomationInternal reports errors without throwing", async () => {
     const client = createMockClient({
       listAutomationSchedules: async () => [
-        { id: "a1", cron: "* * * * *", timezone: "UTC", orgId: "o1", profileId: "p1" },
+        {
+          cron: "* * * * *",
+          id: "a1",
+          orgId: "o1",
+          profileId: "p1",
+          timezone: "UTC",
+        },
       ],
       runAutomationInternal: async () => {
         throw new Error("run failed");
@@ -80,7 +101,13 @@ describe("AutomationWorkerScheduler", () => {
         throw new Error("unavailable");
       },
       listAutomationSchedules: async () => [
-        { id: "a1", cron: "0 * * * *", timezone: null, orgId: "o1", profileId: "p1" },
+        {
+          cron: "0 * * * *",
+          id: "a1",
+          orgId: "o1",
+          profileId: "p1",
+          timezone: null,
+        },
       ],
     });
 

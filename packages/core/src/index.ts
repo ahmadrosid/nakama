@@ -1,90 +1,91 @@
-export * from "./agent-todo";
 export * from "./agent-questionnaire";
+export * from "./agent-todo";
 export * from "./api-error";
-export * from "./artifacts";
-export * from "./artifact-shares";
 export * from "./artifact-mime";
-export * from "./automation-validate";
+export * from "./artifact-shares";
+export * from "./artifacts";
+export * from "./attachments/content";
+export * from "./attachments/store";
 export * from "./automation-delivery";
 export * from "./automation-run-read";
-export * from "./channel-artifacts";
-export * from "./channel-artifact-delivery";
-export * from "./channels";
 export * from "./automation-scheduler";
+export * from "./automation-validate";
 export * from "./automation-worker";
+
+export * from "./bridge-api";
+export * from "./channel-artifact-delivery";
+export * from "./channel-artifacts";
+export * from "./channel-org";
+export * from "./channels";
+export * from "./compatible-provider-config";
+export * from "./composio";
+export * from "./composio-config";
 export * from "./config";
 export * from "./contract";
-export * from "./crash-report";
 export * from "./crash-issue-config";
+export * from "./crash-report";
 export * from "./crash-report-config";
 export * from "./crash-report-pending";
 export * from "./crash-report-scrub";
 export * from "./crash-report-sentry";
-export * from "./fs";
-export * from "./message-content";
-export * from "./attachments/store";
-export * from "./attachments/content";
-export * from "./document-content";
-export * from "./image-content";
-export * from "./normalize-task-prompt";
-export * from "./notification-destinations";
-export * from "./ids";
-export * from "./knowledge-base";
-export * from "./local-auth";
-export * from "./profile-avatar";
-export * from "./profiles";
-export * from "./bridge-api";
-export * from "./channel-org";
-export * from "./compatible-provider-config";
-export * from "./ollama-provider-config";
-export * from "./composio";
-export * from "./composio-config";
-export * from "./provider-label";
-export * from "./provider-setup-prompt";
-export * from "./skills";
-export * from "./soul";
-export * from "./telegram-config";
-export * from "./email-config";
-export { createSmtpSender } from "./mail/smtp-sender";
-export { createImapReader } from "./mail/imap-reader";
-export * from "./telegram-worker";
 // Explicit Discord exports — omit helpers that collide with telegram-* names
 // (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
 // isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config
 // or @nakama/core/discord-worker when the Discord-specific variant is required.
 export {
+  buildDiscordInviteUrl,
   DEFAULT_DISCORD_PROFILE_ID,
   type DiscordConfigFile,
   type DiscordSettingsPublic,
-  type UpdateDiscordSettingsInput,
   getDiscordConfigDir,
   getDiscordConfigPath,
-  buildDiscordInviteUrl,
-  resolveDiscordApplicationId,
   isDiscordUserAuthorized,
   loadDiscordConfigFile,
-  toDiscordSettingsPublic,
   loadDiscordSettingsPublic,
-  saveDiscordConfig,
   regenerateDiscordHandshake,
-  verifyAndPairDiscordUser,
+  resolveDiscordApplicationId,
   resolveDiscordConfigFromSources,
+  saveDiscordConfig,
+  toDiscordSettingsPublic,
+  type UpdateDiscordSettingsInput,
+  verifyAndPairDiscordUser,
 } from "./discord-config";
 export {
+  clearDiscordWorkerHeartbeat,
   type DiscordWorkerHeartbeat,
   getDiscordWorkerHeartbeatPath,
-  resolveDiscordWorkerStatus,
-  parseDiscordWorkerHeartbeat,
-  writeDiscordWorkerHeartbeat,
-  clearDiscordWorkerHeartbeat,
-  readDiscordWorkerHeartbeat,
-  isDiscordWorkerRunning,
   getDiscordWorkerStatus,
+  isDiscordWorkerRunning,
+  parseDiscordWorkerHeartbeat,
+  readDiscordWorkerHeartbeat,
+  resolveDiscordWorkerStatus,
+  writeDiscordWorkerHeartbeat,
 } from "./discord-worker";
-export * from "./whatsapp-config";
-export * from "./whatsapp-worker";
-export * from "./worker-desired-state";
+export * from "./document-content";
+export * from "./email-config";
+export * from "./fs";
+export * from "./ids";
+export * from "./image-content";
+export * from "./knowledge-base";
+export * from "./local-auth";
+export { createImapReader } from "./mail/imap-reader";
+export { createSmtpSender } from "./mail/smtp-sender";
+export * from "./message-content";
+export * from "./normalize-task-prompt";
+export * from "./notification-destinations";
+export * from "./ollama-provider-config";
+export * from "./profile-avatar";
+export * from "./profiles";
+export * from "./provider-label";
+export * from "./provider-setup-prompt";
+export * from "./skills";
+export * from "./soul";
+export * from "./telegram-config";
+export * from "./telegram-worker";
 export * from "./thinking-content";
 export * from "./tools";
 export * from "./user-config";
 export * from "./user-context";
+export * from "./whatsapp-config";
+export * from "./whatsapp-worker";
+export * from "./worker-desired-state";

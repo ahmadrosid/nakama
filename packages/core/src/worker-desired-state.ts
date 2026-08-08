@@ -2,20 +2,24 @@ import { join } from "node:path";
 import { readTextOrNull, writePrivateTextFile } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
-export type PlatformWorkerName = "telegram" | "whatsapp" | "discord" | "automation";
+export type PlatformWorkerName =
+  | "telegram"
+  | "whatsapp"
+  | "discord"
+  | "automation";
 
 export interface WorkerDesiredState {
+  automation: boolean;
+  discord: boolean;
   telegram: boolean;
   whatsapp: boolean;
-  discord: boolean;
-  automation: boolean;
 }
 
 const DEFAULT_STATE: WorkerDesiredState = {
+  automation: true,
+  discord: false,
   telegram: false,
   whatsapp: false,
-  discord: false,
-  automation: true,
 };
 
 function getWorkerDesiredStatePath(): string {
@@ -33,10 +37,11 @@ export function parseWorkerDesiredState(raw: string): WorkerDesiredState {
     const record = parsed as Partial<WorkerDesiredState>;
 
     return {
+      automation:
+        record.automation === undefined ? true : record.automation === true,
+      discord: record.discord === true,
       telegram: record.telegram === true,
       whatsapp: record.whatsapp === true,
-      discord: record.discord === true,
-      automation: record.automation === undefined ? true : record.automation === true,
     };
   } catch {
     return { ...DEFAULT_STATE };
@@ -55,7 +60,7 @@ export async function readWorkerDesiredState(): Promise<WorkerDesiredState> {
 
 export async function setWorkerDesiredRunning(
   name: PlatformWorkerName,
-  running: boolean,
+  running: boolean
 ): Promise<void> {
   const state = await readWorkerDesiredState();
   state[name] = running;
@@ -63,6 +68,6 @@ export async function setWorkerDesiredRunning(
   await writePrivateTextFile(
     getWorkerDesiredStatePath(),
     `${JSON.stringify(state)}\n`,
-    { ensureDir: join(getUserConfigDir(), "runtime") },
+    { ensureDir: join(getUserConfigDir(), "runtime") }
   );
 }

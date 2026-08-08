@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=production bun run dist/index.js",
-    "dev": "bun run src/dev.ts",
     "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "dev": "bun run src/dev.ts",
+    "start": "NODE_ENV=production bun run dist/index.js",
     "test": "bun test"
   },
   "dependencies": {

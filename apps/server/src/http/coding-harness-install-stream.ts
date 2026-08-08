@@ -1,5 +1,5 @@
-import { formatServerError } from "@nakama/core";
 import type { AgentBrowserInstallEvent } from "@nakama/core";
+import { formatServerError } from "@nakama/core";
 
 const INSTALL_STREAM_TIMEOUT_MS = 120_000;
 
@@ -9,10 +9,10 @@ export function streamInstallEvents<TEvent extends { type: string }>(
   executor: (send: (event: TEvent) => void) => Promise<void>,
   options: {
     timeoutMessage?: string;
-  } = {},
+  } = {}
 ): Response {
   const encoder = new TextEncoder();
-  const keepaliveIntervalMs = 4_000;
+  const keepaliveIntervalMs = 4000;
   const timeoutMessage =
     options.timeoutMessage ??
     `Install timed out after ${Math.round(INSTALL_STREAM_TIMEOUT_MS / 1000)}s waiting for the installer.`;
@@ -20,7 +20,9 @@ export function streamInstallEvents<TEvent extends { type: string }>(
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (event: TEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+        );
       };
 
       const keepalive = setInterval(() => {
@@ -33,8 +35,8 @@ export function streamInstallEvents<TEvent extends { type: string }>(
 
       const timeoutId = setTimeout(() => {
         send({
-          type: "error",
           error: timeoutMessage,
+          type: "error",
         } as Extract<TEvent, InstallStreamErrorEvent>);
         clearInterval(keepalive);
         controller.close();
@@ -44,8 +46,8 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         await executor(send);
       } catch (error) {
         send({
-          type: "error",
           error: formatServerError(error),
+          type: "error",
         } as Extract<TEvent, InstallStreamErrorEvent>);
       } finally {
         clearTimeout(timeoutId);
@@ -57,9 +59,9 @@ export function streamInstallEvents<TEvent extends { type: string }>(
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
     },
   });
 }
@@ -68,7 +70,7 @@ export function streamAgentBrowserInstall(
   executor: (send: (event: AgentBrowserInstallEvent) => void) => Promise<void>,
   options: {
     timeoutMessage?: string;
-  } = {},
+  } = {}
 ): Response {
   return streamInstallEvents<AgentBrowserInstallEvent>(executor, options);
 }

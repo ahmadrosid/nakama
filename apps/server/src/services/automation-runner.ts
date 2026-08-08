@@ -9,12 +9,14 @@ export class AutomationRunner {
   constructor(
     private readonly automationService: AutomationService,
     private readonly agentService: AgentService,
-    private readonly deliveryService?: AutomationDeliveryService,
+    private readonly deliveryService?: AutomationDeliveryService
   ) {}
 
-  async run(automationId: string): Promise<{ output?: string; error?: string; skipped?: boolean }> {
+  async run(
+    automationId: string
+  ): Promise<{ output?: string; error?: string; skipped?: boolean }> {
     if (this.running.has(automationId)) {
-      return { skipped: true, error: "Automation is already running." };
+      return { error: "Automation is already running.", skipped: true };
     }
 
     const automation = await this.automationService.get(automationId);
@@ -24,7 +26,7 @@ export class AutomationRunner {
     }
 
     if (!automation.enabled) {
-      return { skipped: true, error: "Automation is disabled." };
+      return { error: "Automation is disabled.", skipped: true };
     }
 
     const orgId = automation.orgId?.trim();
@@ -33,7 +35,9 @@ export class AutomationRunner {
     }
 
     if (automation.trigger.type === "runAt") {
-      await this.automationService.update(automationId, orgId, { enabled: false });
+      await this.automationService.update(automationId, orgId, {
+        enabled: false,
+      });
     }
 
     this.running.add(automationId);
@@ -45,17 +49,25 @@ export class AutomationRunner {
         automation.profileId,
         automation.prompt,
         automationId,
-        run.id,
+        run.id
       );
 
-      const completedRun = await this.automationService.completeRun(run.id, automationId, { output });
+      const completedRun = await this.automationService.completeRun(
+        run.id,
+        automationId,
+        { output }
+      );
       await this.tryDeliver(automation, completedRun);
       return { output };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const completedRun = await this.automationService.completeRun(run.id, automationId, {
-        error: message,
-      });
+      const completedRun = await this.automationService.completeRun(
+        run.id,
+        automationId,
+        {
+          error: message,
+        }
+      );
       await this.tryDeliver(automation, completedRun);
       return { error: message };
     } finally {
@@ -65,9 +77,9 @@ export class AutomationRunner {
 
   private async tryDeliver(
     automation: StoredAutomation,
-    run: Awaited<ReturnType<AutomationService["completeRun"]>>,
+    run: Awaited<ReturnType<AutomationService["completeRun"]>>
   ): Promise<void> {
-    if (!this.deliveryService || !automation.delivery) {
+    if (!(this.deliveryService && automation.delivery)) {
       return;
     }
 

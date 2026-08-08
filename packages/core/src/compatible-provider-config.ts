@@ -23,7 +23,9 @@ export function validateDisplayName(displayName: string): string {
   }
 
   if (trimmed.length > DISPLAY_NAME_MAX_LENGTH) {
-    throw new Error(`Provider name must be at most ${DISPLAY_NAME_MAX_LENGTH} characters.`);
+    throw new Error(
+      `Provider name must be at most ${DISPLAY_NAME_MAX_LENGTH} characters.`
+    );
   }
 
   if (/[\x00-\x1f\x7f]/.test(trimmed)) {
@@ -33,9 +35,11 @@ export function validateDisplayName(displayName: string): string {
   return trimmed;
 }
 
-export function parseCustomModelsJson(raw: string | undefined): CustomModelEntry[] | undefined {
+export function parseCustomModelsJson(
+  raw: string | undefined
+): CustomModelEntry[] | undefined {
   if (!raw?.trim()) {
-    return undefined;
+    return;
   }
 
   let parsed: unknown;
@@ -86,7 +90,9 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
           : record.supportsThinking === false
             ? false
             : (() => {
-                throw new Error(`Model "${id}" has invalid supportsThinking flag.`);
+                throw new Error(
+                  `Model "${id}" has invalid supportsThinking flag.`
+                );
               })();
     const supportsVision =
       record.supportsVision === undefined
@@ -96,7 +102,9 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
           : record.supportsVision === false
             ? false
             : (() => {
-                throw new Error(`Model "${id}" has invalid supportsVision flag.`);
+                throw new Error(
+                  `Model "${id}" has invalid supportsVision flag.`
+                );
               })();
 
     if (isDefault) {
@@ -104,14 +112,16 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
     }
 
     const inputPerMillionUsd = parseOptionalUsdRate(record.inputPerMillionUsd);
-    const outputPerMillionUsd = parseOptionalUsdRate(record.outputPerMillionUsd);
+    const outputPerMillionUsd = parseOptionalUsdRate(
+      record.outputPerMillionUsd
+    );
 
     if (
       (inputPerMillionUsd !== undefined && outputPerMillionUsd === undefined) ||
       (inputPerMillionUsd === undefined && outputPerMillionUsd !== undefined)
     ) {
       throw new Error(
-        `Model "${id}" must set both input and output $/1M rates, or leave both blank.`,
+        `Model "${id}" must set both input and output $/1M rates, or leave both blank.`
       );
     }
 
@@ -119,10 +129,10 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
       id,
       ...(name ? { name } : {}),
       ...(isDefault ? { default: true } : {}),
-      ...(supportsThinking !== undefined ? { supportsThinking } : {}),
-      ...(supportsVision !== undefined ? { supportsVision } : {}),
-      ...(inputPerMillionUsd !== undefined ? { inputPerMillionUsd } : {}),
-      ...(outputPerMillionUsd !== undefined ? { outputPerMillionUsd } : {}),
+      ...(supportsThinking === undefined ? {} : { supportsThinking }),
+      ...(supportsVision === undefined ? {} : { supportsVision }),
+      ...(inputPerMillionUsd === undefined ? {} : { inputPerMillionUsd }),
+      ...(outputPerMillionUsd === undefined ? {} : { outputPerMillionUsd }),
     });
   }
 
@@ -135,7 +145,7 @@ export function validateCustomModels(entries: unknown): CustomModelEntry[] {
 
 function parseOptionalUsdRate(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") {
-    return undefined;
+    return;
   }
 
   const numeric = typeof value === "number" ? value : Number(value);
@@ -153,7 +163,7 @@ export function serializeCustomModels(models: CustomModelEntry[]): string {
 
 export function findCustomModel(
   models: CustomModelEntry[] | undefined,
-  modelId: string,
+  modelId: string
 ): CustomModelEntry | undefined {
   return models?.find((model) => model.id === modelId.trim());
 }

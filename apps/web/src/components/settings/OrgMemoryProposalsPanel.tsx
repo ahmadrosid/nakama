@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from "react";
-import type { OrgMemoryProposal, OrgMemberSummary, ProfileSummary } from "@nakama/core/contract";
-import {
-  detectOrgMemoryInjectionWarnings,
-} from "@nakama/core/soul/org-memory";
+import type {
+  OrgMemberSummary,
+  OrgMemoryProposal,
+  ProfileSummary,
+} from "@nakama/core/contract";
+import { detectOrgMemoryInjectionWarnings } from "@nakama/core/soul/org-memory";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,13 +16,16 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import {
   useApproveOrgMemoryProposal,
   useOrgMemoryProposals,
   useRejectOrgMemoryProposal,
 } from "@/hooks/use-org-memory-proposals";
-import { useOrgMembers } from "@/hooks/use-org-members";
-import { formatSessionRelativeTime, formatSessionTimestamp } from "@/lib/chat-history";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { toast } from "@/lib/toast";
 
@@ -30,22 +35,25 @@ function shortenId(value: string): string {
 
 function resolveProfileLabel(
   profileId: string | null,
-  profiles: ProfileSummary[],
+  profiles: ProfileSummary[]
 ): string | null {
   if (!profileId) {
     return null;
   }
-  return profiles.find((profile) => profile.id === profileId)?.name ?? shortenId(profileId);
+  return (
+    profiles.find((profile) => profile.id === profileId)?.name ??
+    shortenId(profileId)
+  );
 }
 
 interface ProposerInfo {
-  name: string;
   email?: string;
+  name: string;
 }
 
 function resolveProposer(
   userId: string | null,
-  members: OrgMemberSummary[],
+  members: OrgMemberSummary[]
 ): ProposerInfo | null {
   if (!userId) {
     return null;
@@ -56,8 +64,8 @@ function resolveProposer(
   }
   const name = member.name?.trim() || member.email;
   return {
-    name,
     email: member.name?.trim() ? member.email : undefined,
+    name,
   };
 }
 
@@ -69,10 +77,10 @@ function ProposalMetadataTableRow({
   children: ReactNode;
 }) {
   return (
-    <tr className="border-b border-border last:border-b-0">
+    <tr className="border-border border-b last:border-b-0">
       <th
+        className="w-[4.5rem] border-border border-r px-2 py-1 text-left align-top font-normal text-muted-foreground"
         scope="row"
-        className="w-[4.5rem] border-r border-border px-2 py-1 align-top text-left font-normal text-muted-foreground"
       >
         {label}
       </th>
@@ -97,7 +105,7 @@ function ProposalMetadata({
 
   if (variant === "compact") {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         <time dateTime={proposal.createdAt} title={absoluteTime}>
           {relativeTime}
         </time>
@@ -116,7 +124,10 @@ function ProposalMetadata({
               <span className="min-w-0">
                 <span className="text-foreground">{proposer.name}</span>
                 {proposer.email ? (
-                  <span className="text-muted-foreground"> · {proposer.email}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {proposer.email}
+                  </span>
                 ) : null}
               </span>
             </ProposalMetadataTableRow>
@@ -127,7 +138,9 @@ function ProposalMetadata({
             </time>
           </ProposalMetadataTableRow>
           {profileLabel ? (
-            <ProposalMetadataTableRow label="Agent">{profileLabel}</ProposalMetadataTableRow>
+            <ProposalMetadataTableRow label="Agent">
+              {profileLabel}
+            </ProposalMetadataTableRow>
           ) : null}
         </tbody>
       </table>
@@ -169,7 +182,9 @@ function ProposalReviewDialog({
         proposalId: proposal.id,
         request: { pin: pinOnApprove },
       });
-      toast(pinOnApprove ? "Proposal approved and pinned." : "Proposal approved.");
+      toast(
+        pinOnApprove ? "Proposal approved and pinned." : "Proposal approved."
+      );
       handleOpenChange(false);
     } catch (err) {
       toast(formatError(err));
@@ -187,7 +202,7 @@ function ProposalReviewDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent className="gap-4 overflow-hidden p-4 sm:max-w-md sm:p-6">
         <DialogHeader className="pr-8">
           <DialogTitle>Approve for org memory?</DialogTitle>
@@ -195,43 +210,45 @@ function ProposalReviewDialog({
 
         <div className="min-w-0 space-y-4">
           <div className="min-w-0 space-y-1.5">
-            <p className="text-xs text-black dark:text-white">Content:</p>
-            <p className="max-w-full min-w-0 border-l-2 border-primary/40 bg-muted/50 px-3 py-2 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-foreground">
+            <p className="text-black text-xs dark:text-white">Content:</p>
+            <p className="min-w-0 max-w-full whitespace-pre-wrap break-all border-primary/40 border-l-2 bg-muted/50 px-3 py-2 font-mono text-foreground text-xs leading-relaxed">
               {proposal.bullet}
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-xs text-black dark:text-white">Metadata:</p>
+            <p className="text-black text-xs dark:text-white">Metadata:</p>
             <ProposalMetadata
-              proposal={proposal}
               profileLabel={profileLabel}
+              proposal={proposal}
               proposer={proposer}
               variant="detail"
             />
           </div>
 
           {warnings.length > 0 ? (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
+            <p className="text-amber-600 text-xs dark:text-amber-400">
               {warnings.join(" ")}
             </p>
           ) : null}
 
           <div className="space-y-1.5">
-            <p className="text-xs text-black dark:text-white">Pin for all agents?</p>
+            <p className="text-black text-xs dark:text-white">
+              Pin for all agents?
+            </p>
             <div className="flex items-start gap-2">
               <Switch
-                id={`pin-dialog-${proposal.id}`}
-                size="sm"
-                checked={pinOnApprove}
-                disabled={busy}
-                onCheckedChange={setPinOnApprove}
                 aria-label="Yes / No"
+                checked={pinOnApprove}
                 className="mt-0.5"
+                disabled={busy}
+                id={`pin-dialog-${proposal.id}`}
+                onCheckedChange={setPinOnApprove}
+                size="sm"
               />
               <label
+                className="pt-0.5 font-base text-foreground text-sm"
                 htmlFor={`pin-dialog-${proposal.id}`}
-                className="pt-0.5 text-sm font-base text-foreground"
               >
                 Yes / No
               </label>
@@ -240,11 +257,22 @@ function ProposalReviewDialog({
         </div>
 
         <DialogFooter className="mx-0 mb-0 gap-2 border-t-0 bg-transparent p-0 pt-2 sm:justify-end">
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void handleReject()}>
+          <Button
+            disabled={busy}
+            onClick={() => void handleReject()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             {rejectMutation.isPending ? <Spinner className="mr-2" /> : null}
             Reject
           </Button>
-          <Button type="button" size="sm" disabled={busy} onClick={() => void handleApprove()}>
+          <Button
+            disabled={busy}
+            onClick={() => void handleApprove()}
+            size="sm"
+            type="button"
+          >
             {approveMutation.isPending ? <Spinner className="mr-2" /> : null}
             Approve
           </Button>
@@ -270,34 +298,40 @@ function ProposalRow({
 
   return (
     <>
-      <div className="flex items-start gap-2 overflow-hidden py-2 pl-4 pr-4">
-        <div className="min-w-0 flex-1 overflow-hidden space-y-1">
-          <p className="max-w-full min-w-0 break-all text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+      <div className="flex items-start gap-2 overflow-hidden py-2 pr-4 pl-4">
+        <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+          <p className="min-w-0 max-w-full whitespace-pre-wrap break-all text-foreground text-sm leading-relaxed">
             {proposal.bullet}
           </p>
           {warnings.length > 0 ? (
-            <p className="break-all text-xs text-amber-600 dark:text-amber-400">
+            <p className="break-all text-amber-600 text-xs dark:text-amber-400">
               Warning: {warnings.join(" ")}
             </p>
           ) : null}
           <ProposalMetadata
-            proposal={proposal}
             profileLabel={profileLabel}
+            proposal={proposal}
             proposer={proposer}
           />
         </div>
-        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setDialogOpen(true)}>
+        <Button
+          className="shrink-0"
+          onClick={() => setDialogOpen(true)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           Review
         </Button>
       </div>
 
       <ProposalReviewDialog
-        proposal={proposal}
+        onOpenChange={setDialogOpen}
+        open={dialogOpen}
         orgId={orgId}
         profileLabel={profileLabel}
+        proposal={proposal}
         proposer={proposer}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
       />
     </>
   );
@@ -311,19 +345,27 @@ export function OrgMemoryProposalsPanel({ orgId }: { orgId: string }) {
   const members = membersData?.members ?? [];
 
   if (isLoading) {
-    return <p className="px-4 py-2 text-xs text-muted-foreground">Loading proposals…</p>;
+    return (
+      <p className="px-4 py-2 text-muted-foreground text-xs">
+        Loading proposals…
+      </p>
+    );
   }
 
   if (error) {
     return (
-      <p className="px-4 py-2 text-sm text-destructive" role="alert">
+      <p className="px-4 py-2 text-destructive text-sm" role="alert">
         {formatError(error)}
       </p>
     );
   }
 
   if (proposals.length === 0) {
-    return <p className="px-4 py-2 text-xs text-muted-foreground">No pending proposals.</p>;
+    return (
+      <p className="px-4 py-2 text-muted-foreground text-xs">
+        No pending proposals.
+      </p>
+    );
   }
 
   return (
@@ -331,9 +373,9 @@ export function OrgMemoryProposalsPanel({ orgId }: { orgId: string }) {
       {proposals.map((proposal) => (
         <ProposalRow
           key={proposal.id}
-          proposal={proposal}
           orgId={orgId}
           profileLabel={resolveProfileLabel(proposal.profileId, profiles)}
+          proposal={proposal}
           proposer={resolveProposer(proposal.proposedByUserId, members)}
         />
       ))}

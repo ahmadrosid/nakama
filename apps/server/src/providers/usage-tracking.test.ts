@@ -9,25 +9,27 @@ import {
 
 describe("usage tracking", () => {
   test("prefers provider-reported usage for chat calls", async () => {
-    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
     const provider: ProviderClient = {
-      name: "openai",
-      async generateText() {
-        return { content: "unused" };
-      },
       async generateChat() {
         return {
+          assistantMessage: { content: "Hello", role: "assistant" },
           content: "Hello",
           toolCalls: [],
-          assistantMessage: { role: "assistant", content: "Hello" },
           usage: { inputTokens: 123, outputTokens: 45, totalTokens: 168 },
         };
       },
+      async generateText() {
+        return { content: "unused" };
+      },
+      name: "openai",
       async streamChat() {
         return {
+          assistantMessage: { content: "Hello", role: "assistant" },
           content: "Hello",
           toolCalls: [],
-          assistantMessage: { role: "assistant", content: "Hello" },
           usage: { inputTokens: 123, outputTokens: 45, totalTokens: 168 },
         };
       },
@@ -35,31 +37,33 @@ describe("usage tracking", () => {
 
     const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
     await wrapped.generateChat({
+      messages: [{ content: "hi", role: "user" }],
       system: "system",
-      messages: [{ role: "user", content: "hi" }],
     });
 
     expect(tracker.getStats()).toMatchObject({
-      requestCount: 1,
       inputTokens: 123,
       outputTokens: 45,
+      requestCount: 1,
       totalTokens: 168,
     });
   });
 
   test("prefers provider-reported usage for text calls", async () => {
-    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
     const provider: ProviderClient = {
-      name: "openai",
+      async generateChat() {
+        throw new Error("unused");
+      },
       async generateText() {
         return {
           content: "Hello",
           usage: { inputTokens: 40, outputTokens: 10, totalTokens: 50 },
         };
       },
-      async generateChat() {
-        throw new Error("unused");
-      },
+      name: "openai",
       async streamChat() {
         throw new Error("unused");
       },
@@ -67,9 +71,9 @@ describe("usage tracking", () => {
 
     const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
     const result = await wrapped.generateText({
-      system: "system",
-      prompt: "hi",
       format: "text",
+      prompt: "hi",
+      system: "system",
     });
 
     expect(result).toEqual({
@@ -77,27 +81,29 @@ describe("usage tracking", () => {
       usage: { inputTokens: 40, outputTokens: 10, totalTokens: 50 },
     });
     expect(tracker.getStats()).toMatchObject({
-      requestCount: 1,
       inputTokens: 40,
       outputTokens: 10,
+      requestCount: 1,
       totalTokens: 50,
     });
   });
 
   test("stamps estimated usage onto chat results when the provider omits it", async () => {
-    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
     const provider: ProviderClient = {
-      name: "openai",
+      async generateChat() {
+        return {
+          assistantMessage: { content: "Hello", role: "assistant" },
+          content: "Hello",
+          toolCalls: [],
+        };
+      },
       async generateText() {
         return { content: "unused" };
       },
-      async generateChat() {
-        return {
-          content: "Hello",
-          toolCalls: [],
-          assistantMessage: { role: "assistant", content: "Hello" },
-        };
-      },
+      name: "openai",
       async streamChat() {
         throw new Error("unused");
       },
@@ -105,8 +111,8 @@ describe("usage tracking", () => {
 
     const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
     const result = await wrapped.generateChat({
+      messages: [{ content: "hi", role: "user" }],
       system: "system",
-      messages: [{ role: "user", content: "hi" }],
     });
 
     expect(result.usage?.estimated).toBe(true);
@@ -115,20 +121,22 @@ describe("usage tracking", () => {
   });
 
   test("leaves provider usage unmarked as estimated", async () => {
-    const tracker = await LlmUsageTracker.create(createInMemoryDatabaseAdapter());
+    const tracker = await LlmUsageTracker.create(
+      createInMemoryDatabaseAdapter()
+    );
     const provider: ProviderClient = {
-      name: "openai",
-      async generateText() {
-        return { content: "unused" };
-      },
       async generateChat() {
         return {
+          assistantMessage: { content: "Hello", role: "assistant" },
           content: "Hello",
           toolCalls: [],
-          assistantMessage: { role: "assistant", content: "Hello" },
           usage: { inputTokens: 123, outputTokens: 45, totalTokens: 168 },
         };
       },
+      async generateText() {
+        return { content: "unused" };
+      },
+      name: "openai",
       async streamChat() {
         throw new Error("unused");
       },
@@ -136,8 +144,8 @@ describe("usage tracking", () => {
 
     const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
     const result = await wrapped.generateChat({
+      messages: [{ content: "hi", role: "user" }],
       system: "system",
-      messages: [{ role: "user", content: "hi" }],
     });
 
     expect(result.usage).toEqual({
@@ -148,28 +156,34 @@ describe("usage tracking", () => {
   });
 
   test("estimateChatInputBreakdown splits system, tools, and messages", () => {
-    const system = ["You are helpful.", "", "# Identity", "a".repeat(40)].join("\n");
+    const system = ["You are helpful.", "", "# Identity", "a".repeat(40)].join(
+      "\n"
+    );
     const tools = [
       {
-        name: "heavy",
         description: "b".repeat(80),
-        parameters: { type: "object", properties: { q: { type: "string" } } },
+        name: "heavy",
+        parameters: { properties: { q: { type: "string" } }, type: "object" },
       },
       {
-        name: "light",
         description: "tiny",
-        parameters: { type: "object", properties: {} },
+        name: "light",
+        parameters: { properties: {}, type: "object" },
       },
     ];
     const toolsChars = JSON.stringify(tools).length;
 
     const breakdown = estimateChatInputBreakdown({
-      system,
       messages: [
-        { role: "user", content: "c".repeat(8) }, // 2 tokens
-        { role: "assistant", content: "ok", toolCalls: [{ id: "1", name: "demo", arguments: "{}" }] },
-        { role: "tool", toolCallId: "1", name: "demo", content: "done" },
+        { content: "c".repeat(8), role: "user" }, // 2 tokens
+        {
+          content: "ok",
+          role: "assistant",
+          toolCalls: [{ arguments: "{}", id: "1", name: "demo" }],
+        },
+        { content: "done", name: "demo", role: "tool", toolCallId: "1" },
       ],
+      system,
       tools,
     });
 
@@ -178,17 +192,20 @@ describe("usage tracking", () => {
     expect(breakdown.toolsCount).toBe(2);
     expect(breakdown.toolsChars).toBe(toolsChars);
     expect(breakdown.toolsTokens).toBe(Math.ceil(toolsChars / 4));
-    expect(breakdown.toolsBySize.map((tool) => tool.name)).toEqual(["heavy", "light"]);
+    expect(breakdown.toolsBySize.map((tool) => tool.name)).toEqual([
+      "heavy",
+      "light",
+    ]);
     expect(breakdown.toolsBySize[0]?.descriptionChars).toBe(80);
     expect(breakdown.messageCount).toBe(3);
     expect(breakdown.messagesByRole).toEqual({
-      user: 1,
       assistant: 1,
-      tool: 1,
       other: 0,
+      tool: 1,
+      user: 1,
     });
     expect(breakdown.totalEstimatedInputTokens).toBe(
-      breakdown.systemTokens + breakdown.toolsTokens + breakdown.messagesTokens,
+      breakdown.systemTokens + breakdown.toolsTokens + breakdown.messagesTokens
     );
   });
 });

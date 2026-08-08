@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   parseWorkerDesiredState,
   readWorkerDesiredState,
@@ -14,7 +14,7 @@ afterEach(async () => {
   const previous = configDirs.splice(0);
 
   for (const dir of previous) {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { force: true, recursive: true });
   }
 });
 
@@ -38,37 +38,43 @@ async function withConfigDir<T>(run: () => Promise<T>): Promise<T> {
 describe("parseWorkerDesiredState", () => {
   test("defaults missing keys to false except automation", () => {
     expect(parseWorkerDesiredState('{"telegram": true}')).toEqual({
+      automation: true,
+      discord: false,
       telegram: true,
       whatsapp: false,
-      discord: false,
-      automation: true,
     });
   });
 
   test("returns defaults for invalid json", () => {
     expect(parseWorkerDesiredState("not-json")).toEqual({
+      automation: true,
+      discord: false,
       telegram: false,
       whatsapp: false,
-      discord: false,
-      automation: true,
     });
   });
 
   test("backward compatible: missing automation key defaults to true", () => {
-    expect(parseWorkerDesiredState('{"telegram":false,"whatsapp":false}')).toEqual({
+    expect(
+      parseWorkerDesiredState('{"telegram":false,"whatsapp":false}')
+    ).toEqual({
+      automation: true,
+      discord: false,
       telegram: false,
       whatsapp: false,
-      discord: false,
-      automation: true,
     });
   });
 
   test("explicit automation false is honored", () => {
-    expect(parseWorkerDesiredState('{"telegram":false,"whatsapp":false,"automation":false}')).toEqual({
+    expect(
+      parseWorkerDesiredState(
+        '{"telegram":false,"whatsapp":false,"automation":false}'
+      )
+    ).toEqual({
+      automation: false,
+      discord: false,
       telegram: false,
       whatsapp: false,
-      discord: false,
-      automation: false,
     });
   });
 });
@@ -77,10 +83,10 @@ describe("worker desired state persistence", () => {
   test("reads defaults when file is missing", async () => {
     await withConfigDir(async () => {
       expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
         telegram: false,
         whatsapp: false,
-        discord: false,
-        automation: true,
       });
     });
   });
@@ -89,34 +95,34 @@ describe("worker desired state persistence", () => {
     await withConfigDir(async () => {
       await setWorkerDesiredRunning("telegram", true);
       expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
         telegram: true,
         whatsapp: false,
-        discord: false,
-        automation: true,
       });
 
       await setWorkerDesiredRunning("whatsapp", true);
       expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
         telegram: true,
         whatsapp: true,
-        discord: false,
-        automation: true,
       });
 
       await setWorkerDesiredRunning("automation", false);
       expect(await readWorkerDesiredState()).toEqual({
+        automation: false,
+        discord: false,
         telegram: true,
         whatsapp: true,
-        discord: false,
-        automation: false,
       });
 
       await setWorkerDesiredRunning("telegram", false);
       expect(await readWorkerDesiredState()).toEqual({
+        automation: false,
+        discord: false,
         telegram: false,
         whatsapp: true,
-        discord: false,
-        automation: false,
       });
     });
   });
@@ -127,14 +133,14 @@ describe("worker desired state persistence", () => {
       await mkdir(runtimeDir, { recursive: true });
       await writeFile(
         join(runtimeDir, "worker-desired-state.json"),
-        '{"telegram":true,"whatsapp":false}\n',
+        '{"telegram":true,"whatsapp":false}\n'
       );
 
       expect(await readWorkerDesiredState()).toEqual({
+        automation: true,
+        discord: false,
         telegram: true,
         whatsapp: false,
-        discord: false,
-        automation: true,
       });
     });
   });

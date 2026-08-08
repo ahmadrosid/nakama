@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 
-const MAX_TEXT_LENGTH = 4_000;
+const MAX_TEXT_LENGTH = 4000;
 const MAX_VALUE_LENGTH = 200;
 
 /**
@@ -94,7 +94,7 @@ export function hashId(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
 
   if (!trimmed) {
-    return undefined;
+    return;
   }
 
   return createHash("sha256").update(trimmed).digest("hex").slice(0, 12);
@@ -122,10 +122,14 @@ export function scrubText(value: string): string {
 
   out = redactQuotedPayloads(out);
 
-  return out.length > MAX_TEXT_LENGTH ? `${out.slice(0, MAX_TEXT_LENGTH)}…` : out;
+  return out.length > MAX_TEXT_LENGTH
+    ? `${out.slice(0, MAX_TEXT_LENGTH)}…`
+    : out;
 }
 
-function scrubBreadcrumbValue(value: unknown): string | number | boolean | undefined {
+function scrubBreadcrumbValue(
+  value: unknown
+): string | number | boolean | undefined {
   if (typeof value === "string") {
     const scrubbed = scrubText(value);
     return scrubbed.length > MAX_VALUE_LENGTH
@@ -141,18 +145,19 @@ function scrubBreadcrumbValue(value: unknown): string | number | boolean | undef
     return value;
   }
 
-  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+  if (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "string")
+  ) {
     return scrubBreadcrumbValue(value.join(","));
   }
-
-  return undefined;
 }
 
 export function scrubBreadcrumbData(
-  data: Record<string, unknown> | undefined,
+  data: Record<string, unknown> | undefined
 ): Record<string, string | number | boolean> | undefined {
   if (!data) {
-    return undefined;
+    return;
   }
 
   const out: Record<string, string | number | boolean> = {};

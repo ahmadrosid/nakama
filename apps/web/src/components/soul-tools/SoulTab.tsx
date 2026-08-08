@@ -14,15 +14,15 @@ import {
   useSoulStatusQuery,
   useWriteSoulFileMutation,
 } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
 import { findDefaultProfile, resolveInitialProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
-import { formatError } from "@/lib/client";
 
 const sectionClass = "rounded-md border border-border bg-card";
 
 function resolveDefaultProfileId(
   profiles: Array<{ id: string }>,
-  fromUrl: string | null,
+  fromUrl: string | null
 ): string | null {
   if (profiles.length === 0) {
     return null;
@@ -35,7 +35,11 @@ function resolveDefaultProfileId(
   return resolveInitialProfileId(profiles);
 }
 
-export function SoulTab({ profileId: controlledProfileId }: { profileId?: string | null } = {}) {
+export function SoulTab({
+  profileId: controlledProfileId,
+}: {
+  profileId?: string | null;
+} = {}) {
   const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -70,8 +74,11 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
   const loading = statusLoading && !status;
   const refreshing = profilesFetching || statusFetching;
 
-  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? null;
-  const openFileMeta = openFile ? SOUL_FILES.find((file) => file.key === openFile) : null;
+  const selectedProfile =
+    profiles.find((profile) => profile.id === profileId) ?? null;
+  const openFileMeta = openFile
+    ? SOUL_FILES.find((file) => file.key === openFile)
+    : null;
   const isDirty = editContent !== savedContent;
   const isWritable = openFileMeta?.writable ?? false;
 
@@ -98,10 +105,10 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setSearchParams, profiles],
+    [setSearchParams, profiles]
   );
 
   useEffect(() => {
@@ -176,7 +183,7 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
   }
 
   async function handleSave() {
-    if (!profileId || !openFile || !isWritable || !isDirty) {
+    if (!(profileId && openFile && isWritable && isDirty)) {
       return;
     }
 
@@ -184,9 +191,9 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
 
     try {
       await writeSoulMutation.mutateAsync({
-        profileId,
-        fileKey: openFile,
         content: editContent,
+        fileKey: openFile,
+        profileId,
       });
       setSavedContent(editContent);
     } catch (err) {
@@ -201,7 +208,7 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
 
   if (!embedded && profiles.length === 0 && !profilesFetching) {
     return (
-      <div className={cn(sectionClass, "p-8 text-sm text-muted-foreground")}>
+      <div className={cn(sectionClass, "p-8 text-muted-foreground text-sm")}>
         Create a profile first to configure prompt files.
       </div>
     );
@@ -209,31 +216,35 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
 
   if (embedded && !profileId) {
     return (
-      <p className="text-sm text-muted-foreground">Select a profile to edit prompt files.</p>
+      <p className="text-muted-foreground text-sm">
+        Select a profile to edit prompt files.
+      </p>
     );
   }
 
   if (loading && !status) {
-    return <SoulTabPageState message="Loading prompt stack…" embedded={embedded} />;
+    return (
+      <SoulTabPageState embedded={embedded} message="Loading prompt stack…" />
+    );
   }
 
   const soulPanel = (
     <SoulTabPanel
+      busy={busy}
       embedded={embedded}
+      onOpenFile={handleOpenFile}
+      onRefresh={() => void refresh()}
+      presentCount={presentCount}
+      refreshing={refreshing}
       selectedProfile={selectedProfile}
       status={status}
-      presentCount={presentCount}
-      busy={busy}
-      refreshing={refreshing}
-      onRefresh={() => void refresh()}
-      onOpenFile={handleOpenFile}
     />
   );
 
   return (
     <>
       {error ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {error}
         </p>
       ) : null}
@@ -242,30 +253,30 @@ export function SoulTab({ profileId: controlledProfileId }: { profileId?: string
         soulPanel
       ) : (
         <SoulTabShell
-          profiles={profiles}
-          profileId={profileId}
           busy={busy}
-          refreshing={refreshing}
-          panel={soulPanel}
           onProfileSelect={setProfileId}
           onRefresh={() => void refresh()}
+          panel={soulPanel}
+          profileId={profileId}
+          profiles={profiles}
+          refreshing={refreshing}
         />
       )}
 
       <SoulFileEditorDialog
-        open={openFile !== null}
-        openFileMeta={openFileMeta}
-        isWritable={isWritable}
-        dialogLoading={dialogLoading}
-        dialogError={dialogError}
-        editContent={editContent}
         busy={busy}
+        dialogError={dialogError}
+        dialogLoading={dialogLoading}
+        editContent={editContent}
         isDirty={isDirty}
-        status={status}
-        openFile={openFile}
-        onOpenChange={handleDialogOpenChange}
+        isWritable={isWritable}
         onEditContentChange={setEditContent}
+        onOpenChange={handleDialogOpenChange}
         onSave={() => void handleSave()}
+        open={openFile !== null}
+        openFile={openFile}
+        openFileMeta={openFileMeta}
+        status={status}
       />
     </>
   );

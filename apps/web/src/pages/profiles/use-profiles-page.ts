@@ -5,11 +5,6 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  useComposioToolkits,
-  useProfileComposioToolkits,
-  useUpdateProfileComposioToolkitsMutation,
-} from "@/hooks/use-composio";
-import {
   useMcpServersQuery,
   useModelsQuery,
   useProfileQuery,
@@ -17,6 +12,11 @@ import {
   useSkillsQuery,
   useToolsQuery,
 } from "@/hooks/use-app-queries";
+import {
+  useComposioToolkits,
+  useProfileComposioToolkits,
+  useUpdateProfileComposioToolkitsMutation,
+} from "@/hooks/use-composio";
 import {
   useAssignMcpServerMutation,
   useAssignSkillMutation,
@@ -32,25 +32,24 @@ import {
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
-import { fileToImageAttachment } from "@/lib/profile-images";
 import { formatError } from "@/lib/client";
 import {
   extractModelId,
   groupModelsByProvider,
   profileModelSelectionValue,
 } from "@/lib/models";
+import { fileToImageAttachment } from "@/lib/profile-images";
 import {
+  type ProfileDetailTab,
+  type ProfileSaveStatus,
   profileHasPendingEdits,
   profileModelSaveDelayMs,
   profileTextSaveDelayMs,
-  resolveProfileDetailTab,
-  type ProfileDetailTab,
-  type ProfileSaveStatus,
   type RemoveAssignmentTarget,
+  resolveProfileDetailTab,
 } from "@/pages/profiles/profiles-page.shared";
 
 export function useProfilesPage() {
-
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     data: profiles = [],
@@ -96,7 +95,8 @@ export function useProfilesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [removeConfirm, setRemoveConfirm] = useState<RemoveAssignmentTarget | null>(null);
+  const [removeConfirm, setRemoveConfirm] =
+    useState<RemoveAssignmentTarget | null>(null);
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
   const [editName, setEditName] = useState("");
@@ -113,24 +113,24 @@ export function useProfilesPage() {
   const pendingSaveRef = useRef(false);
   const performSaveRef = useRef<() => Promise<boolean>>(async () => true);
   const editStateRef = useRef({
+    detail,
+    editModel,
     editName,
     editPrompt,
-    editModel,
+    savedModel,
     savedName,
     savedPrompt,
-    savedModel,
     selectedId,
-    detail,
   });
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(modelsResponse?.models ?? []),
-    [modelsResponse?.models],
+    [modelsResponse?.models]
   );
 
   const modelSelectionValue = useMemo(
     () => profileModelSelectionValue(editModel, providerModelGroups),
-    [editModel, providerModelGroups],
+    [editModel, providerModelGroups]
   );
 
   const modelInCatalog = useMemo(() => {
@@ -141,7 +141,7 @@ export function useProfilesPage() {
     }
 
     return providerModelGroups.some((group) =>
-      group.models.some((model) => model.id === resolvedModelId),
+      group.models.some((model) => model.id === resolvedModelId)
     );
   }, [editModel, providerModelGroups]);
 
@@ -159,7 +159,8 @@ export function useProfilesPage() {
     deleteSkillMutation.isPending ||
     updateComposioMutation.isPending;
 
-  const refreshing = profilesRefreshing || (detailLoading && Boolean(selectedId));
+  const refreshing =
+    profilesRefreshing || (detailLoading && Boolean(selectedId));
   const detailTab = resolveProfileDetailTab(searchParams.get("tab"));
 
   const isDirty = useMemo(() => {
@@ -196,7 +197,7 @@ export function useProfilesPage() {
       const snapshot = editStateRef.current;
       const { selectedId: profileId, detail: profileDetail } = snapshot;
 
-      if (!profileId || !profileDetail) {
+      if (!(profileId && profileDetail)) {
         return;
       }
 
@@ -216,7 +217,7 @@ export function useProfilesPage() {
         void performSaveRef.current();
       }, delayMs);
     },
-    [clearScheduledSave],
+    [clearScheduledSave]
   );
 
   const performSave = useCallback(async (): Promise<boolean> => {
@@ -236,7 +237,7 @@ export function useProfilesPage() {
       detail: profileDetail,
     } = editStateRef.current;
 
-    if (!profileId || !profileDetail) {
+    if (!(profileId && profileDetail)) {
       return true;
     }
 
@@ -262,21 +263,21 @@ export function useProfilesPage() {
 
     try {
       await updateMutation.mutateAsync({
-        profileId,
         input: {
+          model: modelDraft,
           name,
           systemPrompt: promptDraft,
-          model: modelDraft,
         },
+        profileId,
       });
       setSavedName(name);
       setSavedPrompt(promptDraft);
       setSavedModel(modelDraft);
       editStateRef.current = {
         ...editStateRef.current,
+        savedModel: modelDraft,
         savedName: name,
         savedPrompt: promptDraft,
-        savedModel: modelDraft,
       };
       setSaveStatus("saved");
       savedSuccessfully = true;
@@ -311,14 +312,14 @@ export function useProfilesPage() {
 
   useEffect(() => {
     editStateRef.current = {
+      detail,
+      editModel,
       editName,
       editPrompt,
-      editModel,
+      savedModel,
       savedName,
       savedPrompt,
-      savedModel,
       selectedId,
-      detail,
     };
   }, [
     detail,
@@ -346,7 +347,7 @@ export function useProfilesPage() {
       editStateRef.current.editName = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave],
+    [scheduleSave]
   );
 
   const handleEditPromptChange = useCallback(
@@ -355,7 +356,7 @@ export function useProfilesPage() {
       editStateRef.current.editPrompt = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave],
+    [scheduleSave]
   );
 
   const handleEditModelChange = useCallback(
@@ -364,7 +365,7 @@ export function useProfilesPage() {
       editStateRef.current.editModel = model;
       scheduleSave(profileModelSaveDelayMs);
     },
-    [scheduleSave],
+    [scheduleSave]
   );
 
   const setSelectedId = useCallback(
@@ -380,10 +381,10 @@ export function useProfilesPage() {
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setSearchParams],
+    [setSearchParams]
   );
 
   const setDetailTab = useCallback(
@@ -398,10 +399,10 @@ export function useProfilesPage() {
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setSearchParams],
+    [setSearchParams]
   );
 
   useEffect(() => {
@@ -475,35 +476,40 @@ export function useProfilesPage() {
     pendingSaveRef.current = false;
   }, [clearScheduledSave, detailId]);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       clearScheduledSave();
 
       if (savedHintTimerRef.current) {
         clearTimeout(savedHintTimerRef.current);
       }
-    };
-  }, [clearScheduledSave]);
+    },
+    [clearScheduledSave]
+  );
 
   const availableTools = allTools.filter(
-    (tool) => !detail?.tools.some((assigned) => assigned.id === tool.id),
+    (tool) => !detail?.tools.some((assigned) => assigned.id === tool.id)
   );
 
   const availableMcpServers = allMcpServers.filter(
-    (server) => !detail?.mcpServers.some((assigned) => assigned.id === server.id),
+    (server) =>
+      !detail?.mcpServers.some((assigned) => assigned.id === server.id)
   );
 
   const assignedComposioToolkits = useMemo(() => {
-    if (!profileComposioData || !composioToolkitsData) {
+    if (!(profileComposioData && composioToolkitsData)) {
       return [];
     }
 
     const toolkitById = new Map(
-      composioToolkitsData.orgToolkits.map((toolkit) => [toolkit.id, toolkit]),
+      composioToolkitsData.orgToolkits.map((toolkit) => [toolkit.id, toolkit])
     );
 
     const userByToolkitId = new Map(
-      composioToolkitsData.userConnections.map((connection) => [connection.toolkitId, connection]),
+      composioToolkitsData.userConnections.map((connection) => [
+        connection.toolkitId,
+        connection,
+      ])
     );
 
     const assigned: Array<{
@@ -534,17 +540,19 @@ export function useProfilesPage() {
     }
 
     const assignedIds = new Set(
-      profileComposioData?.assignments.map((assignment) => assignment.toolkitId) ?? [],
+      profileComposioData?.assignments.map(
+        (assignment) => assignment.toolkitId
+      ) ?? []
     );
 
     return composioToolkitsData.orgToolkits.filter(
-      (toolkit) => toolkit.status !== "disabled" && !assignedIds.has(toolkit.id),
+      (toolkit) => toolkit.status !== "disabled" && !assignedIds.has(toolkit.id)
     );
   }, [composioToolkitsData, profileComposioData]);
 
   const assignedSkillIds = useMemo(
     () => new Set(detail?.skills.map((skill) => skill.id) ?? []),
-    [detail?.skills],
+    [detail?.skills]
   );
 
   async function handleSelectProfile(profileId: string) {
@@ -596,9 +604,11 @@ export function useProfilesPage() {
 
   async function handleDeleteConfirm() {
     const profileId = deleteTargetId;
-    const profile = profileId ? profiles.find((entry) => entry.id === profileId) : null;
+    const profile = profileId
+      ? profiles.find((entry) => entry.id === profileId)
+      : null;
 
-    if (!profileId || !profile || profile.isSuper) {
+    if (!(profileId && profile) || profile.isSuper) {
       return;
     }
 
@@ -656,7 +666,10 @@ export function useProfilesPage() {
     setError(null);
 
     try {
-      const response = await createMcpMutation.mutateAsync({ ...request, connect: true });
+      const response = await createMcpMutation.mutateAsync({
+        ...request,
+        connect: true,
+      });
       await assignMcpMutation.mutateAsync({
         profileId: selectedId,
         serverId: response.server.id,
@@ -723,7 +736,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignComposioToolkit(toolkitId: string) {
-    if (!selectedId || !profileComposioData) {
+    if (!(selectedId && profileComposioData)) {
       return;
     }
 
@@ -731,14 +744,14 @@ export function useProfilesPage() {
 
     try {
       await updateComposioMutation.mutateAsync({
-        profileId: selectedId,
         assignments: [
           ...profileComposioData.assignments.map((assignment) => ({
-            toolkitId: assignment.toolkitId,
             allowedActions: assignment.allowedActions,
+            toolkitId: assignment.toolkitId,
           })),
           { toolkitId },
         ],
+        profileId: selectedId,
       });
     } catch (err) {
       setError(formatError(err));
@@ -746,7 +759,7 @@ export function useProfilesPage() {
   }
 
   async function handleRemoveAssignmentConfirm() {
-    if (!selectedId || !removeConfirm) {
+    if (!(selectedId && removeConfirm)) {
       return;
     }
 
@@ -754,9 +767,15 @@ export function useProfilesPage() {
 
     try {
       if (removeConfirm.kind === "tool") {
-        await unassignMutation.mutateAsync({ profileId: selectedId, toolId: removeConfirm.id });
+        await unassignMutation.mutateAsync({
+          profileId: selectedId,
+          toolId: removeConfirm.id,
+        });
       } else if (removeConfirm.kind === "mcp") {
-        await unassignMcpMutation.mutateAsync({ profileId: selectedId, serverId: removeConfirm.id });
+        await unassignMcpMutation.mutateAsync({
+          profileId: selectedId,
+          serverId: removeConfirm.id,
+        });
       } else if (removeConfirm.kind === "composio") {
         if (!profileComposioData) {
           return;
@@ -770,17 +789,20 @@ export function useProfilesPage() {
           }
 
           assignments.push({
-            toolkitId: assignment.toolkitId,
             allowedActions: assignment.allowedActions,
+            toolkitId: assignment.toolkitId,
           });
         }
 
         await updateComposioMutation.mutateAsync({
-          profileId: selectedId,
           assignments,
+          profileId: selectedId,
         });
       } else {
-        await unassignSkillMutation.mutateAsync({ profileId: selectedId, skillId: removeConfirm.id });
+        await unassignSkillMutation.mutateAsync({
+          profileId: selectedId,
+          skillId: removeConfirm.id,
+        });
       }
 
       setRemoveConfirm(null);
@@ -789,12 +811,14 @@ export function useProfilesPage() {
     }
   }
 
-  async function handleAvatarSelected(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarSelected(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
     const file = event.target.files?.[0];
 
     event.target.value = "";
 
-    if (!selectedId || !file) {
+    if (!(selectedId && file)) {
       return;
     }
 
@@ -808,7 +832,10 @@ export function useProfilesPage() {
         return;
       }
 
-      await uploadAvatarMutation.mutateAsync({ profileId: selectedId, attachment });
+      await uploadAvatarMutation.mutateAsync({
+        attachment,
+        profileId: selectedId,
+      });
     } catch (err) {
       setError(formatError(err));
     }
@@ -836,83 +863,82 @@ export function useProfilesPage() {
     ? profiles.find((entry) => entry.id === deleteTargetId)
     : null;
 
-
   return {
+    allMcpServers,
+    allSkills,
+    allTools,
+    assignedComposioToolkits,
+    assignedSkillIds,
+    assignMcpMutation,
+    assignSkillMutation,
+    availableComposioToolkits,
+    availableMcpServers,
+    availableTools,
+    avatarInputRef,
+    busy,
+    composioToolkitsData,
+    createMcpMutation,
+    createOpen,
+    createSkillMutation,
+    deleteAvatarMutation,
+    deleteMutation,
+    deleteOpen,
+    deleteTarget,
+    deleteTargetId,
+    detail,
+    detailError,
+    detailLoading,
+    detailTab,
+    editModel,
+    editName,
+    editPrompt,
+    error,
+    flushSave,
+    handleAssignComposioToolkit,
+    handleAssignMcpServer,
+    handleAssignSkill,
+    handleAssignTool,
+    handleAvatarRemove,
+    handleAvatarSelected,
+    handleCreateMcpServer,
+    handleCreateOpenChange,
+    handleCreateSkill,
+    handleDeleteConfirm,
+    handleDeleteOpenChange,
+    handleDeleteSkill,
+    handleEditModelChange,
+    handleEditNameChange,
+    handleEditPromptChange,
+    handleRemoveAssignmentConfirm,
+    handleSelectProfile,
+    isDirty,
+    mcpCreateOpen,
+    modelInCatalog,
+    modelSelectionValue,
+    modelsResponse,
+    openDeleteDialog,
+    profileComposioData,
     profiles,
     profilesLoading,
     profilesRefreshing,
-    allTools,
-    allMcpServers,
-    composioToolkitsData,
-    selectedId,
-    profileComposioData,
-    allSkills,
-    modelsResponse,
-    detail,
-    detailLoading,
-    detailError,
-    refetchDetail,
-    busy,
-    error,
-    createOpen,
-    setCreateOpen,
-    deleteOpen,
-    setDeleteOpen,
-    deleteTargetId,
-    deleteTarget,
-    removeConfirm,
-    setRemoveConfirm,
-    mcpCreateOpen,
-    setMcpCreateOpen,
-    skillCreateOpen,
-    setSkillCreateOpen,
-    editName,
-    editPrompt,
-    editModel,
-    saveStatus,
-    isDirty,
-    refreshing,
-    detailTab,
     providerModelGroups,
-    modelSelectionValue,
-    modelInCatalog,
-    availableTools,
-    availableMcpServers,
-    assignedComposioToolkits,
-    availableComposioToolkits,
-    assignedSkillIds,
-    avatarInputRef,
-    uploadAvatarMutation,
-    deleteAvatarMutation,
-    createSkillMutation,
-    assignSkillMutation,
-    createMcpMutation,
-    assignMcpMutation,
-    deleteMutation,
-    unassignMutation,
-    unassignMcpMutation,
-    unassignSkillMutation,
-    handleSelectProfile,
-    openDeleteDialog,
-    handleDeleteOpenChange,
-    handleDeleteConfirm,
-    handleAssignTool,
-    handleAssignMcpServer,
-    handleCreateMcpServer,
-    handleAssignSkill,
-    handleDeleteSkill,
-    handleCreateSkill,
-    handleAssignComposioToolkit,
-    handleRemoveAssignmentConfirm,
-    handleAvatarSelected,
-    handleAvatarRemove,
-    handleCreateOpenChange,
-    handleEditNameChange,
-    handleEditPromptChange,
-    handleEditModelChange,
-    flushSave,
+    refetchDetail,
+    refreshing,
+    removeConfirm,
+    saveStatus,
+    selectedId,
+    setCreateOpen,
+    setDeleteOpen,
     setDetailTab,
+    setMcpCreateOpen,
+    setRemoveConfirm,
     setSelectedId,
+    setSkillCreateOpen,
+    skillCreateOpen,
+    unassignMcpMutation,
+    unassignMutation,
+    unassignSkillMutation,
+    uploadAvatarMutation,
   };
 }
 

@@ -3,16 +3,19 @@ import type {
   ChatMessage,
   CustomModelEntry,
   GenerateChatInput,
-  GenerateTextResult,
   GenerateTextInput,
+  GenerateTextResult,
   LlmToolDefinition,
   ProviderClient,
   ProviderName,
   StreamChatHandlers,
   ToolCall,
 } from "@nakama/core";
-import { messagesIncludeUserDocuments, messagesIncludeUserImages, toOpenAIChatUserContent } from "@nakama/core";
-import { generateOpenAIResponsesChat } from "./responses";
+import {
+  messagesIncludeUserDocuments,
+  messagesIncludeUserImages,
+  toOpenAIChatUserContent,
+} from "@nakama/core";
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
@@ -20,43 +23,67 @@ import {
   parseJsonRecord,
   readSseEvents,
 } from "../shared";
-import { openAIModelSupportsThinking, openAIModelRequiresResponsesApi, openAIModelRejectsChatToolsWithReasoning } from "./thinking";
+import { generateOpenAIResponsesChat } from "./responses";
+import {
+  openAIModelRejectsChatToolsWithReasoning,
+  openAIModelRequiresResponsesApi,
+  openAIModelSupportsThinking,
+} from "./thinking";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
 export interface OpenAIProviderOptions {
   apiKey: string;
-  model?: string;
   baseUrl?: string;
-  providerName?: ProviderName;
-  extraHeaders?: Record<string, string>;
   customModels?: CustomModelEntry[];
+  extraHeaders?: Record<string, string>;
+  model?: string;
+  providerName?: ProviderName;
 }
 
 interface OpenAIClientConfig {
   apiKey: string;
   baseUrl: string;
-  providerName: ProviderName;
   extraHeaders: Record<string, string>;
   label: string;
+  providerName: ProviderName;
 }
 
 export function createOpenAIProvider(
-  options: OpenAIProviderOptions,
+  options: OpenAIProviderOptions
 ): ProviderClient {
   const model = options.model ?? "gpt-5.4";
   const client: OpenAIClientConfig = {
     apiKey: options.apiKey,
     baseUrl: normalizeBaseUrl(options.baseUrl ?? DEFAULT_OPENAI_BASE_URL),
-    providerName: options.providerName ?? "openai",
     extraHeaders: options.extraHeaders ?? {},
     label: providerLabel(options.providerName ?? "openai"),
+    providerName: options.providerName ?? "openai",
   };
-  const useResponsesApi = client.providerName === "openai" && client.baseUrl === DEFAULT_OPENAI_BASE_URL;
+  const useResponsesApi =
+    client.providerName === "openai" &&
+    client.baseUrl === DEFAULT_OPENAI_BASE_URL;
   const customModels = options.customModels;
 
   return {
-    name: client.providerName,
+    generateChat(input: GenerateChatInput) {
+      if (useResponsesApi && usesResponsesApi(input, model, customModels)) {
+        return generateOpenAIResponsesChat({
+          apiKey: options.apiKey,
+          customModels,
+          input,
+          model,
+          stream: false,
+        });
+      }
+
+      return requestChatCompletion(client, {
+        messages: input.messages,
+        model,
+        system: input.system,
+        tools: input.tools,
+      });
+    },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -64,50 +91,33 @@ export function createOpenAIProvider(
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
 
       return requestCompletion(client, {
-        model,
         messages: [
-          { role: "system", content: system },
-          { role: "user", content: input.prompt },
+          { content: system, role: "system" },
+          { content: input.prompt, role: "user" },
         ],
+        model,
         responseFormat: useJson ? { type: "json_object" } : undefined,
       });
     },
-    generateChat(input: GenerateChatInput) {
-      if (useResponsesApi && usesResponsesApi(input, model, customModels)) {
-        return generateOpenAIResponsesChat({
-          apiKey: options.apiKey,
-          model,
-          input,
-          stream: false,
-          customModels,
-        });
-      }
-
-      return requestChatCompletion(client, {
-        model,
-        system: input.system,
-        messages: input.messages,
-        tools: input.tools,
-      });
-    },
+    name: client.providerName,
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       if (useResponsesApi && usesResponsesApi(input, model, customModels)) {
         return generateOpenAIResponsesChat({
           apiKey: options.apiKey,
-          model,
-          input,
-          stream: true,
-          handlers,
           customModels,
+          handlers,
+          input,
+          model,
+          stream: true,
         });
       }
 
       return streamChatCompletion(client, {
+        handlers,
+        messages: input.messages,
         model,
         system: input.system,
-        messages: input.messages,
         tools: input.tools,
-        handlers,
       });
     },
   };
@@ -137,7 +147,9 @@ function chatCompletionsUrl(client: OpenAIClientConfig): string {
   return `${client.baseUrl}/chat/completions`;
 }
 
-function buildRequestHeaders(client: OpenAIClientConfig): Record<string, string> {
+function buildRequestHeaders(
+  client: OpenAIClientConfig
+): Record<string, string> {
   return {
     Authorization: `Bearer ${client.apiKey}`,
     "Content-Type": "application/json",
@@ -148,7 +160,7 @@ function buildRequestHeaders(client: OpenAIClientConfig): Record<string, string>
 function usesResponsesApi(
   input: GenerateChatInput,
   model: string,
-  customModels?: CustomModelEntry[],
+  customModels?: CustomModelEntry[]
 ): boolean {
   if (openAIModelRequiresResponsesApi(model)) {
     return true;
@@ -174,7 +186,10 @@ function usesResponsesApi(
     return true;
   }
 
-  return Boolean(input.providerOptions?.webSearch) && !messagesIncludeUserImages(input.messages);
+  return (
+    Boolean(input.providerOptions?.webSearch) &&
+    !messagesIncludeUserImages(input.messages)
+  );
 }
 
 type OpenAIMessage =
@@ -194,9 +209,9 @@ type OpenAIMessage =
 export async function toOpenAIMessages(
   system: string,
   messages: ChatMessage[],
-  provider: ProviderName = "openai",
+  provider: ProviderName = "openai"
 ): Promise<OpenAIMessage[]> {
-  const result: OpenAIMessage[] = [{ role: "system", content: system }];
+  const result: OpenAIMessage[] = [{ content: system, role: "system" }];
 
   for (const message of messages) {
     result.push(await toOpenAIMessage(message, provider));
@@ -207,14 +222,14 @@ export async function toOpenAIMessages(
 
 async function toOpenAIMessage(
   message: ChatMessage,
-  provider: ProviderName,
+  provider: ProviderName
 ): Promise<OpenAIMessage> {
   if (message.role === "user") {
     return {
-      role: "user",
       content: (await toOpenAIChatUserContent(message.content, provider)) as
         | string
         | Array<Record<string, unknown>>,
+      role: "user",
     };
   }
 
@@ -223,20 +238,20 @@ async function toOpenAIMessage(
   }
 
   return {
+    content: message.content,
     role: "tool",
     tool_call_id: message.toolCallId,
-    content: message.content,
   };
 }
 
 function toOpenAIAssistantMessage(
-  message: Extract<ChatMessage, { role: "assistant" }>,
+  message: Extract<ChatMessage, { role: "assistant" }>
 ): Extract<OpenAIMessage, { role: "assistant" }> {
   const thinking = message.thinking?.trim();
 
   return {
-    role: "assistant",
     content: message.content || null,
+    role: "assistant",
     ...(thinking ? { reasoning_content: thinking } : {}),
     ...(message.toolCalls?.length
       ? { tool_calls: toOpenAIAssistantToolCalls(message.toolCalls) }
@@ -246,27 +261,27 @@ function toOpenAIAssistantMessage(
 
 function toOpenAIAssistantToolCalls(toolCalls: ToolCall[]) {
   return toolCalls.map((call) => ({
+    function: {
+      arguments: JSON.stringify(call.arguments),
+      name: call.name,
+    },
     id: call.id,
     type: "function" as const,
-    function: {
-      name: call.name,
-      arguments: JSON.stringify(call.arguments),
-    },
   }));
 }
 
 export function toOpenAITools(tools: LlmToolDefinition[] | undefined) {
   if (!tools?.length) {
-    return undefined;
+    return;
   }
 
   return tools.map((tool) => ({
-    type: "function" as const,
     function: {
-      name: tool.name,
       description: tool.description,
+      name: tool.name,
       parameters: tool.parameters,
     },
+    type: "function" as const,
   }));
 }
 
@@ -276,7 +291,7 @@ export function parseOpenAIToolCalls(
         id?: string;
         function?: { name?: string; arguments?: string };
       }>
-    | undefined,
+    | undefined
 ): ToolCall[] {
   if (!toolCalls?.length) {
     return [];
@@ -286,15 +301,15 @@ export function parseOpenAIToolCalls(
     const name = call.function?.name?.trim();
     const id = call.id?.trim();
 
-    if (!name || !id) {
+    if (!(name && id)) {
       return [];
     }
 
     return [
       {
+        arguments: parseJsonRecord(call.function?.arguments ?? "{}"),
         id,
         name,
-        arguments: parseJsonRecord(call.function?.arguments ?? "{}"),
       },
     ];
   });
@@ -314,16 +329,20 @@ async function buildChatCompletionRequestBody(options: {
   return {
     model: options.model,
     ...(options.stream ? { stream: true } : {}),
-    ...(options.streamOptions ? { stream_options: { include_usage: options.streamOptions.includeUsage } } : {}),
+    ...(options.streamOptions
+      ? {
+          stream_options: { include_usage: options.streamOptions.includeUsage },
+        }
+      : {}),
     messages: await toOpenAIMessages(
       options.system,
       options.messages,
-      options.provider ?? "openai",
+      options.provider ?? "openai"
     ),
     ...(hasTools
       ? {
-          tools: toOpenAITools(options.tools),
           tool_choice: "auto",
+          tools: toOpenAITools(options.tools),
           // Safety net if a caller still hits chat/completions for gpt-5.4+.
           ...(openAIModelRejectsChatToolsWithReasoning(options.model)
             ? { reasoning_effort: "none" }
@@ -340,19 +359,22 @@ async function requestChatCompletion(
     system: string;
     messages: ChatMessage[];
     tools?: LlmToolDefinition[];
-  },
+  }
 ): Promise<ChatCompletionResult> {
   const response = await fetch(chatCompletionsUrl(client), {
-    method: "POST",
-    headers: buildRequestHeaders(client),
     body: JSON.stringify(
-      await buildChatCompletionRequestBody({ ...options, provider: client.providerName }),
+      await buildChatCompletionRequestBody({
+        ...options,
+        provider: client.providerName,
+      })
     ),
+    headers: buildRequestHeaders(client),
+    method: "POST",
   });
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`,
+      `${client.label} request failed (${response.status}): ${await response.text()}`
     );
   }
 
@@ -394,27 +416,27 @@ async function streamChatCompletion(
     messages: ChatMessage[];
     tools?: LlmToolDefinition[];
     handlers: StreamChatHandlers;
-  },
+  }
 ): Promise<ChatCompletionResult> {
   const response = await fetch(chatCompletionsUrl(client), {
-    method: "POST",
-    headers: buildRequestHeaders(client),
     body: JSON.stringify(
       await buildChatCompletionRequestBody({
-        model: options.model,
-        system: options.system,
         messages: options.messages,
-        tools: options.tools,
+        model: options.model,
+        provider: client.providerName,
         stream: true,
         streamOptions: { includeUsage: true },
-        provider: client.providerName,
-      }),
+        system: options.system,
+        tools: options.tools,
+      })
     ),
+    headers: buildRequestHeaders(client),
+    method: "POST",
   });
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`,
+      `${client.label} request failed (${response.status}): ${await response.text()}`
     );
   }
 
@@ -431,23 +453,23 @@ async function requestCompletion(
     model: string;
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     responseFormat?: { type: "json_object" };
-  },
+  }
 ): Promise<GenerateTextResult> {
   const response = await fetch(chatCompletionsUrl(client), {
-    method: "POST",
-    headers: buildRequestHeaders(client),
     body: JSON.stringify({
-      model: options.model,
       messages: options.messages,
+      model: options.model,
       ...(options.responseFormat
         ? { response_format: options.responseFormat }
         : {}),
     }),
+    headers: buildRequestHeaders(client),
+    method: "POST",
   });
 
   if (!response.ok) {
     throw new Error(
-      `${client.label} request failed (${response.status}): ${await response.text()}`,
+      `${client.label} request failed (${response.status}): ${await response.text()}`
     );
   }
 
@@ -456,7 +478,9 @@ async function requestCompletion(
   };
 
   const content = payload.choices?.[0]?.message?.content?.trim();
-  const usage = extractOpenAITokenUsage((payload as { usage?: Record<string, unknown> }).usage);
+  const usage = extractOpenAITokenUsage(
+    (payload as { usage?: Record<string, unknown> }).usage
+  );
 
   if (!content) {
     throw new Error(`${client.label} returned an empty response.`);
@@ -469,9 +493,9 @@ async function requestCompletion(
 }
 
 interface PendingToolCall {
+  arguments: string;
   id: string;
   name: string;
-  arguments: string;
 }
 
 function mergePendingToolCall(
@@ -480,13 +504,13 @@ function mergePendingToolCall(
     index?: number;
     id?: string;
     function?: { name?: string; arguments?: string };
-  },
+  }
 ): void {
   const index = toolDelta.index ?? 0;
   const current = pending.get(index) ?? {
+    arguments: "",
     id: "",
     name: "",
-    arguments: "",
   };
 
   if (toolDelta.id) {
@@ -505,21 +529,21 @@ function mergePendingToolCall(
 }
 
 function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>,
+  pending: Map<number, PendingToolCall>
 ): ToolCall[] {
   return [...pending.entries()]
     .sort(([left], [right]) => left - right)
     .map(([, call]) => call)
     .flatMap((call) => {
-      if (!call.id || !call.name) {
+      if (!(call.id && call.name)) {
         return [];
       }
 
       return [
         {
+          arguments: parseJsonRecord(call.arguments),
           id: call.id,
           name: call.name,
-          arguments: parseJsonRecord(call.arguments),
         },
       ];
     });
@@ -528,7 +552,7 @@ function finalizePendingToolCalls(
 async function readOpenAIStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamChatHandlers,
-  label = "OpenAI",
+  label = "OpenAI"
 ): Promise<ChatCompletionResult> {
   let content = "";
   let usage: ChatCompletionResult["usage"];

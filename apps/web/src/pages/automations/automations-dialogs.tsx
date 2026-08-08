@@ -43,17 +43,17 @@ export function AutomationsDialogs({
   return (
     <>
       <Dialog
-        open={editDraft !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!(open || busy)) {
             setEditDraft(null);
           }
         }}
+        open={editDraft !== null}
       >
         <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
           {editDraft ? (
             <>
-              <DialogHeader className="gap-2 border-b border-border px-6 py-5">
+              <DialogHeader className="gap-2 border-border border-b px-6 py-5">
                 <DialogTitle>Edit automation</DialogTitle>
                 <DialogDescription>{editDraft.name}</DialogDescription>
               </DialogHeader>
@@ -66,16 +66,20 @@ export function AutomationsDialogs({
                 />
               </div>
 
-              <DialogFooter className="mx-0 mb-0 shrink-0 gap-2 border-t border-border bg-muted/30 px-6 py-5 sm:flex-row sm:justify-end">
+              <DialogFooter className="mx-0 mb-0 shrink-0 gap-2 border-border border-t bg-muted/30 px-6 py-5 sm:flex-row sm:justify-end">
                 <Button
-                  type="button"
-                  variant="outline"
                   disabled={busy}
                   onClick={() => setEditDraft(null)}
+                  type="button"
+                  variant="outline"
                 >
                   Cancel
                 </Button>
-                <Button type="button" disabled={busy} onClick={() => void handleSaveEdit()}>
+                <Button
+                  disabled={busy}
+                  onClick={() => void handleSaveEdit()}
+                  type="button"
+                >
                   {busy ? <Spinner className="size-4" /> : "Save"}
                 </Button>
               </DialogFooter>
@@ -85,36 +89,39 @@ export function AutomationsDialogs({
       </Dialog>
 
       <Dialog
-        open={deleteTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!(open || busy)) {
             setDeleteTarget(null);
           }
         }}
+        open={deleteTarget !== null}
       >
         <DialogContent className="gap-6 p-6 sm:max-w-md">
           <DialogHeader className="gap-3">
             <DialogTitle>Delete automation?</DialogTitle>
             <DialogDescription>
-              This removes <span className="font-medium text-foreground">{deleteTarget?.name}</span>{" "}
+              This removes{" "}
+              <span className="font-medium text-foreground">
+                {deleteTarget?.name}
+              </span>{" "}
               and its run history permanently.
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
             <Button
-              type="button"
-              variant="outline"
               disabled={busy}
               onClick={() => setDeleteTarget(null)}
+              type="button"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="destructive"
               disabled={busy}
               onClick={() => void handleDeleteConfirm()}
+              type="button"
+              variant="destructive"
             >
               {busy ? <Spinner className="size-4" /> : "Delete"}
             </Button>
@@ -123,12 +130,12 @@ export function AutomationsDialogs({
       </Dialog>
 
       <Dialog
-        open={deleteRunTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) {
+          if (!(open || busy)) {
             setDeleteRunTarget(null);
           }
         }}
+        open={deleteRunTarget !== null}
       >
         <DialogContent className="gap-6 p-6 sm:max-w-md">
           <DialogHeader className="gap-3">
@@ -136,7 +143,9 @@ export function AutomationsDialogs({
             <DialogDescription>
               This permanently removes the run from{" "}
               <span className="font-medium text-foreground">
-                {deleteRunTarget ? formatSessionTimestamp(deleteRunTarget.startedAt) : ""}
+                {deleteRunTarget
+                  ? formatSessionTimestamp(deleteRunTarget.startedAt)
+                  : ""}
               </span>
               .
             </DialogDescription>
@@ -144,18 +153,18 @@ export function AutomationsDialogs({
 
           <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
             <Button
-              type="button"
-              variant="outline"
               disabled={busy}
               onClick={() => setDeleteRunTarget(null)}
+              type="button"
+              variant="outline"
             >
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="destructive"
               disabled={busy}
               onClick={() => void handleDeleteRunConfirm()}
+              type="button"
+              variant="destructive"
             >
               {busy ? <Spinner className="size-4" /> : "Delete"}
             </Button>

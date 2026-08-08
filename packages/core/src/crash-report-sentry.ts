@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { setCrashSink, type CrashReport, type CrashSink } from "./crash-report";
-import { loadCachedCrashReportConfig, resolveCrashReportDsn } from "./crash-report-config";
+import { type CrashReport, type CrashSink, setCrashSink } from "./crash-report";
+import {
+  loadCachedCrashReportConfig,
+  resolveCrashReportDsn,
+} from "./crash-report-config";
 
-const SEND_TIMEOUT_MS = 3_000;
+const SEND_TIMEOUT_MS = 3000;
 const SENTRY_CLIENT = "nakama/1";
 
 export interface SentryDsn {
@@ -34,7 +37,7 @@ export function parseSentryDsn(dsn: string): SentryDsn | null {
   const segments = url.pathname.split("/").filter(Boolean);
   const projectId = segments.pop();
 
-  if (!publicKey || !projectId) {
+  if (!(publicKey && projectId)) {
     return null;
   }
 
@@ -48,43 +51,34 @@ export function parseSentryDsn(dsn: string): SentryDsn | null {
 
 export function toSentryEvent(
   report: CrashReport,
-  options: { installId: string | null } = { installId: null },
+  options: { installId: string | null } = { installId: null }
 ): Record<string, unknown> {
   return {
     event_id: randomUUID().replace(/-/g, ""),
-    timestamp: report.at,
-    platform: "node",
-    level: report.kind === "invariant" ? "warning" : "error",
-    logger: "nakama",
-    // fingerprint is ours, not the ingest's: grouping has to survive stack frames that
-    // differ between installs, and it is what PR 3 keys the GitHub issue on.
-    fingerprint: [report.fingerprint],
     exception: {
       values: [{ type: report.name, value: report.message }],
     },
+    // fingerprint is ours, not the ingest's: grouping has to survive stack frames that
+    // differ between installs, and it is what PR 3 keys the GitHub issue on.
+    fingerprint: [report.fingerprint],
+    level: report.kind === "invariant" ? "warning" : "error",
+    logger: "nakama",
+    platform: "node",
+    timestamp: report.at,
     // Sentry counts distinct users per issue, which is the "how many installs hit this"
     // signal the auto-filing threshold needs. It is the random install id, nothing else.
     ...(options.installId ? { user: { id: options.installId } } : {}),
-    tags: {
-      kind: report.kind,
-      source: report.source,
-      api_version: String(report.runtime.apiVersion),
-      bun: report.runtime.bun,
-      os: report.runtime.platform,
-      arch: report.runtime.arch,
-      ...(report.route ? { route: report.route } : {}),
-    },
-    contexts: {
-      runtime: { name: "bun", version: report.runtime.bun },
-      os: { name: report.runtime.platform },
-    },
     breadcrumbs: {
       values: report.breadcrumbs.map((entry) => ({
-        timestamp: entry.at / 1_000,
         category: entry.kind,
         level: "info",
+        timestamp: entry.at / 1000,
         ...(entry.data ? { data: entry.data } : {}),
       })),
+    },
+    contexts: {
+      os: { name: report.runtime.platform },
+      runtime: { name: "bun", version: report.runtime.bun },
     },
     extra: {
       ...(report.stack ? { stack: report.stack } : {}),
@@ -92,6 +86,15 @@ export function toSentryEvent(
       ...(report.orgIdHash ? { org: report.orgIdHash } : {}),
       ...(report.userIdHash ? { user_hash: report.userIdHash } : {}),
       ...(report.sessionIdHash ? { session: report.sessionIdHash } : {}),
+    },
+    tags: {
+      api_version: String(report.runtime.apiVersion),
+      arch: report.runtime.arch,
+      bun: report.runtime.bun,
+      kind: report.kind,
+      os: report.runtime.platform,
+      source: report.source,
+      ...(report.route ? { route: report.route } : {}),
     },
     // server_name is deliberately absent. Sentry defaults it to the hostname, which on a
     // self-hosted install is often the customer's own machine or cluster name.
@@ -101,16 +104,16 @@ export function toSentryEvent(
 export async function sendSentryEvent(
   dsn: SentryDsn,
   event: Record<string, unknown>,
-  timeoutMs = SEND_TIMEOUT_MS,
+  timeoutMs = SEND_TIMEOUT_MS
 ): Promise<boolean> {
   try {
     const response = await fetch(dsn.endpoint, {
-      method: "POST",
+      body: JSON.stringify(event),
       headers: {
         "Content-Type": "application/json",
         "X-Sentry-Auth": `Sentry sentry_version=7, sentry_client=${SENTRY_CLIENT}, sentry_key=${dsn.publicKey}`,
       },
-      body: JSON.stringify(event),
+      method: "POST",
       signal: AbortSignal.timeout(timeoutMs),
     });
 
@@ -133,7 +136,10 @@ export function createCrashReportSink(): CrashSink {
       return;
     }
 
-    await sendSentryEvent(dsn, toSentryEvent(report, { installId: config.installId }));
+    await sendSentryEvent(
+      dsn,
+      toSentryEvent(report, { installId: config.installId })
+    );
   };
 }
 

@@ -1,7 +1,10 @@
 import type { McpServerSummary } from "@nakama/core/contract";
 import { useState } from "react";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
-import { McpPageState, McpServersSection } from "@/components/soul-tools/mcp-tab/McpServersSection";
+import {
+  McpPageState,
+  McpServersSection,
+} from "@/components/soul-tools/mcp-tab/McpServersSection";
 import { McpServerToolsDialog } from "@/components/soul-tools/mcp-tab/McpServerToolsDialog";
 import { useMcpServersQuery } from "@/hooks/use-app-queries";
 import {
@@ -24,8 +27,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
   const [detailServerId, setDetailServerId] = useState<string | null>(null);
-  const editServer = servers.find((server) => server.id === editServerId) ?? null;
-  const detailServer = servers.find((server) => server.id === detailServerId) ?? null;
+  const editServer =
+    servers.find((server) => server.id === editServerId) ?? null;
+  const detailServer =
+    servers.find((server) => server.id === detailServerId) ?? null;
 
   const loading = isLoading && servers.length === 0;
   const busy =
@@ -41,7 +46,11 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
       return;
     }
 
-    if (!window.confirm(`Delete MCP server "${server.name}"? This cannot be undone.`)) {
+    if (
+      !window.confirm(
+        `Delete MCP server "${server.name}"? This cannot be undone.`
+      )
+    ) {
       return;
     }
 
@@ -78,41 +87,40 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   if (loading) {
-    return <McpPageState message="Loading MCP servers…" embedded={embedded} />;
+    return <McpPageState embedded={embedded} message="Loading MCP servers…" />;
   }
 
   return (
     <>
       {errorMessage ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {errorMessage}
         </p>
       ) : null}
 
       <McpServersSection
-        servers={servers}
         busy={busy}
         embedded={embedded}
         onAddServer={() => setCreateOpen(true)}
-        onViewTools={setDetailServerId}
-        onEdit={setEditServerId}
         onConnect={(serverId) => void handleConnect(serverId)}
-        onSync={(serverId) => void handleSync(serverId)}
         onDelete={(server) => void handleDelete(server)}
+        onEdit={setEditServerId}
+        onSync={(serverId) => void handleSync(serverId)}
+        onViewTools={setDetailServerId}
+        servers={servers}
       />
 
       <McpServerToolsDialog
-        server={detailServer}
-        open={detailServerId !== null}
         onOpenChange={(open) => {
           if (!open) {
             setDetailServerId(null);
           }
         }}
+        open={detailServerId !== null}
+        server={detailServer}
       />
 
       <McpServerDialog
-        open={createOpen}
         busy={createMutation.isPending}
         onOpenChange={(open) => {
           setCreateOpen(open);
@@ -124,7 +132,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
           setActionError(null);
 
           try {
-            const response = await createMutation.mutateAsync({ ...request, connect: true });
+            const response = await createMutation.mutateAsync({
+              ...request,
+              connect: true,
+            });
             setCreateOpen(false);
             setDetailServerId(response.server.id);
           } catch (err) {
@@ -133,11 +144,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
             throw new Error(message);
           }
         }}
+        open={createOpen}
       />
 
       <McpServerDialog
-        server={editServer}
-        open={editServerId !== null}
         busy={updateMutation.isPending || connectMutation.isPending}
         onOpenChange={(open) => {
           if (!open) {
@@ -156,8 +166,8 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
             const wasConnected = editServer.status === "connected";
             const { connect: _connect, ...updateRequest } = request;
             await updateMutation.mutateAsync({
-              serverId: editServer.id,
               request: updateRequest,
+              serverId: editServer.id,
             });
             setEditServerId(null);
 
@@ -170,6 +180,8 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
             throw new Error(message);
           }
         }}
+        open={editServerId !== null}
+        server={editServer}
       />
     </>
   );

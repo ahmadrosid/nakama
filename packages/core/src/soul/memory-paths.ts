@@ -10,7 +10,7 @@ export function getMemoryArchiveDir(orgId: string, profileId: string): string {
 export function getMemoryArchiveFilePath(
   orgId: string,
   profileId: string,
-  yearMonth: string,
+  yearMonth: string
 ): string {
   return join(getMemoryArchiveDir(orgId, profileId), `${yearMonth}.md`);
 }

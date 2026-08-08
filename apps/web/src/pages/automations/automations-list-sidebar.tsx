@@ -1,5 +1,4 @@
-import { SearchIcon } from "lucide-react";
-import { RefreshCwIcon } from "lucide-react";
+import { RefreshCwIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -45,37 +44,37 @@ export function AutomationsListSidebar(state: ListState) {
   } = state;
 
   return (
-    <aside className="hidden min-h-0 min-w-0 flex-col border-b border-border lg:flex lg:border-r lg:border-b-0">
-      <div className="shrink-0 space-y-3 border-b border-border px-3 py-3">
+    <aside className="hidden min-h-0 min-w-0 flex-col border-border border-b lg:flex lg:border-r lg:border-b-0">
+      <div className="shrink-0 space-y-3 border-border border-b px-3 py-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             {filteredAutomations.length} shown
-            {filteredAutomations.length !== automations.length
-              ? ` of ${automations.length}`
-              : ""}
+            {filteredAutomations.length === automations.length
+              ? ""
+              : ` of ${automations.length}`}
           </p>
           <Button
+            aria-label="Refresh automations"
+            disabled={busy || automationsRefreshing}
+            onClick={() => void refresh()}
+            size="icon-sm"
             type="button"
             variant="ghost"
-            size="icon-sm"
-            disabled={busy || automationsRefreshing}
-            aria-label="Refresh automations"
-            onClick={() => void refresh()}
           >
             {automationsRefreshing ? (
               <Spinner className="size-3.5" />
             ) : (
-              <RefreshCwIcon className="size-3.5" aria-hidden />
+              <RefreshCwIcon aria-hidden className="size-3.5" />
             )}
           </Button>
         </div>
 
         <AutomationSearch
-          value={searchQuery}
           disabled={initialLoading || automations.length === 0 || busy}
           isSearching={isSearching}
           onChange={setSearchQuery}
           onClear={() => setSearchQuery("")}
+          value={searchQuery}
         />
       </div>
 
@@ -88,21 +87,25 @@ export function AutomationsListSidebar(state: ListState) {
           </div>
         ) : filteredAutomations.length === 0 ? (
           <div className="flex min-h-[12rem] flex-col items-center justify-center px-2 py-10 text-center">
-            <SearchIcon className="size-5 text-muted-foreground" aria-hidden />
-            <p className="mt-3 text-sm font-medium text-foreground">No matching automations</p>
-            <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+            <SearchIcon aria-hidden className="size-5 text-muted-foreground" />
+            <p className="mt-3 font-medium text-foreground text-sm">
+              No matching automations
+            </p>
+            <p className="mt-1 text-muted-foreground text-sm">
+              Try a different search term.
+            </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border border-b border-border">
+          <ul className="divide-y divide-border border-border border-b">
             {filteredAutomations.map((automation) => (
               <li key={automation.id}>
                 <AutomationListItem
                   automation={automation}
+                  busy={busy}
+                  onDelete={setDeleteTarget}
+                  onSelect={() => setSelectedId(automation.id)}
                   selected={selectedId === automation.id}
                   unreadCount={unreadByAutomationId[automation.id] ?? 0}
-                  busy={busy}
-                  onSelect={() => setSelectedId(automation.id)}
-                  onDelete={setDeleteTarget}
                 />
               </li>
             ))}

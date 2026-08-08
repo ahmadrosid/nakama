@@ -1,36 +1,41 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { setCrashLogger, type CrashReport } from "@nakama/core/crash-report";
 import type { ProviderClient, ToolDefinition } from "@nakama/core";
+import { type CrashReport, setCrashLogger } from "@nakama/core/crash-report";
 import { createAgentHarness } from "./index";
 
 const sampleTool: ToolDefinition = {
-  name: "sample",
   description: "Sample tool for tests",
-  parameters: { type: "object", properties: {}, additionalProperties: false },
+  name: "sample",
+  parameters: { additionalProperties: false, properties: {}, type: "object" },
   run() {
     return Promise.resolve({ ok: true });
   },
 };
 
 function toolCallResponse() {
-  const toolCalls = [{ id: `call_${Math.random()}`, name: "sample", arguments: {} }];
+  const toolCalls = [
+    { arguments: {}, id: `call_${Math.random()}`, name: "sample" },
+  ];
   return {
+    assistantMessage: { content: "", role: "assistant" as const, toolCalls },
     content: "",
     toolCalls,
-    assistantMessage: { role: "assistant" as const, content: "", toolCalls },
   };
 }
 
 function textResponse(content: string) {
   return {
+    assistantMessage: { content, role: "assistant" as const },
     content,
     toolCalls: [],
-    assistantMessage: { role: "assistant" as const, content },
   };
 }
 
 /** Keeps asking for tools until `stopAfter` calls, then answers with `finalContent`. */
-function createLoopingProvider(stopAfter: number, finalContent: string): ProviderClient {
+function createLoopingProvider(
+  stopAfter: number,
+  finalContent: string
+): ProviderClient {
   let calls = 0;
 
   const next = () => {
@@ -39,9 +44,9 @@ function createLoopingProvider(stopAfter: number, finalContent: string): Provide
   };
 
   return {
-    name: "openai",
-    generateText: () => Promise.resolve({ content: "{}" }),
     generateChat: () => Promise.resolve(next()),
+    generateText: () => Promise.resolve({ content: "{}" }),
+    name: "openai",
     streamChat: (_input, handlers) => {
       const result = next();
 
@@ -77,7 +82,9 @@ test("a turn that finishes normally reports nothing", async () => {
     tools: [sampleTool],
   });
 
-  const reply = await harness.createChatSession({ tools: [sampleTool] }).send("go");
+  const reply = await harness
+    .createChatSession({ tools: [sampleTool] })
+    .send("go");
 
   expect(reply).toBe("Done");
   expect(invariants()).toHaveLength(0);

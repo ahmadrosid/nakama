@@ -17,14 +17,18 @@ const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 
 export interface PathGuardOptions {
   allowedDirs?: string[];
-  maxFileBytes?: number;
   cwd?: string;
+  maxFileBytes?: number;
 }
 
 export class PathGuardError extends Error {
   constructor(
     message: string,
-    public readonly code: "TRAVERSAL" | "SPECIAL_FILE" | "NULL_BYTE" | "TOO_LARGE",
+    public readonly code:
+      | "TRAVERSAL"
+      | "SPECIAL_FILE"
+      | "NULL_BYTE"
+      | "TOO_LARGE"
   ) {
     super(message);
     this.name = "PathGuardError";
@@ -38,7 +42,7 @@ export async function guardFilePath(
   rawPath: string,
   rawCwd: string | undefined | null,
   rawContentLength: number | undefined,
-  options: PathGuardOptions = {},
+  options: PathGuardOptions = {}
 ): Promise<{ resolved: string; allowed: true }> {
   const rawAllowedDirs = options.allowedDirs ?? [options.cwd ?? process.cwd()];
   const allowedDirs = await resolveAllowedDirs(rawAllowedDirs);
@@ -46,13 +50,13 @@ export async function guardFilePath(
   const defaultCwd = await resolveDirectoryPath(options.cwd ?? process.cwd());
 
   if (rawPath.includes("\0")) {
-    throw new PathGuardError(`Path contains null byte`, "NULL_BYTE");
+    throw new PathGuardError("Path contains null byte", "NULL_BYTE");
   }
 
   if (rawContentLength != null && rawContentLength > maxBytes) {
     throw new PathGuardError(
       `File content exceeds max ${maxBytes} bytes (got ${rawContentLength})`,
-      "TOO_LARGE",
+      "TOO_LARGE"
     );
   }
 
@@ -62,7 +66,10 @@ export async function guardFilePath(
 
   for (const prefix of SPECIAL_PATH_PREFIXES) {
     if (absolute === prefix.slice(0, -1) || absolute.startsWith(prefix)) {
-      throw new PathGuardError(`Special filesystem path: ${absolute}`, "SPECIAL_FILE");
+      throw new PathGuardError(
+        `Special filesystem path: ${absolute}`,
+        "SPECIAL_FILE"
+      );
     }
   }
 
@@ -77,10 +84,12 @@ export async function guardFilePath(
     throw new PathGuardError(WORKSPACE_TRAVERSAL_MESSAGE, "TRAVERSAL");
   }
 
-  return { resolved: realPath, allowed: true };
+  return { allowed: true, resolved: realPath };
 }
 
-async function resolvePathThroughExistingParent(filePath: string): Promise<string> {
+async function resolvePathThroughExistingParent(
+  filePath: string
+): Promise<string> {
   const resolvedFilePath = path.resolve(filePath);
   let dir = path.dirname(resolvedFilePath);
   const root = path.parse(dir).root;
@@ -89,7 +98,11 @@ async function resolvePathThroughExistingParent(filePath: string): Promise<strin
     try {
       const resolvedDir = await realpath(dir);
       const relativeDir = path.relative(dir, path.dirname(resolvedFilePath));
-      return path.resolve(resolvedDir, relativeDir, path.basename(resolvedFilePath));
+      return path.resolve(
+        resolvedDir,
+        relativeDir,
+        path.basename(resolvedFilePath)
+      );
     } catch {
       if (dir === root) {
         return resolvedFilePath;
@@ -112,8 +125,12 @@ async function resolveDirectoryPath(dir: string): Promise<string> {
 }
 
 function expandHome(filePath: string): string {
-  if (filePath === "~") return getUserHome();
-  if (filePath.startsWith("~/")) return path.join(getUserHome(), filePath.slice(2));
+  if (filePath === "~") {
+    return getUserHome();
+  }
+  if (filePath.startsWith("~/")) {
+    return path.join(getUserHome(), filePath.slice(2));
+  }
   return filePath;
 }
 
@@ -125,7 +142,9 @@ function isWithinDirs(target: string, dirs: string[]): boolean {
   const normalized = target.endsWith(path.sep) ? target : target + path.sep;
   for (const dir of dirs) {
     const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
-    if (normalized === dirEnd || normalized.startsWith(dirEnd)) return true;
+    if (normalized === dirEnd || normalized.startsWith(dirEnd)) {
+      return true;
+    }
   }
   return false;
 }
@@ -133,9 +152,11 @@ function isWithinDirs(target: string, dirs: string[]): boolean {
 function resolveSafeCwd(
   rawCwd: string | undefined | null,
   allowedDirs: string[],
-  defaultCwd: string,
+  defaultCwd: string
 ): string {
-  if (rawCwd == null || rawCwd.trim() === "") return defaultCwd;
+  if (rawCwd == null || rawCwd.trim() === "") {
+    return defaultCwd;
+  }
   const expanded = expandHome(rawCwd.trim());
   const absolute = path.resolve(expanded);
   return isWithinDirs(absolute, allowedDirs) ? absolute : defaultCwd;

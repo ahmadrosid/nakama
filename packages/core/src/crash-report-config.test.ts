@@ -36,14 +36,14 @@ afterEach(async () => {
   delete process.env.NAKAMA_CRASH_REPORTS;
   delete process.env.DO_NOT_TRACK;
   resetCrashReportConsentCache();
-  await rm(configDir, { recursive: true, force: true });
+  await rm(configDir, { force: true, recursive: true });
 });
 
 test("a fresh install has never been asked and sends nothing", async () => {
   expect(await loadCrashReportConfig()).toEqual({
     consent: "unset",
-    installId: null,
     dsn: null,
+    installId: null,
   });
   expect(await isCrashReportingAllowed()).toBe(false);
 });
@@ -89,36 +89,49 @@ test("DO_NOT_TRACK overrides a stored grant", async () => {
 test("NAKAMA_CRASH_REPORTS settles the answer for a headless install", () => {
   const unset = { consent: "unset", installId: null } as const;
 
-  expect(resolveCrashReportConsent(unset, { NAKAMA_CRASH_REPORTS: "1" })).toBe("granted");
-  expect(resolveCrashReportConsent(unset, { NAKAMA_CRASH_REPORTS: "off" })).toBe("denied");
+  expect(resolveCrashReportConsent(unset, { NAKAMA_CRASH_REPORTS: "1" })).toBe(
+    "granted"
+  );
+  expect(
+    resolveCrashReportConsent(unset, { NAKAMA_CRASH_REPORTS: "off" })
+  ).toBe("denied");
   expect(resolveCrashReportConsent(unset, {})).toBe("unset");
 });
 
 test("DO_NOT_TRACK beats NAKAMA_CRASH_REPORTS", () => {
   expect(
-    readCrashReportEnvOverride({ DO_NOT_TRACK: "1", NAKAMA_CRASH_REPORTS: "1" }),
+    readCrashReportEnvOverride({ DO_NOT_TRACK: "1", NAKAMA_CRASH_REPORTS: "1" })
   ).toBe("denied");
 });
 
 test("an empty NAKAMA_CRASH_REPORT_DSN turns delivery off rather than falling back", () => {
-  const file = { consent: "unset", installId: null, dsn: null } as const;
+  const file = { consent: "unset", dsn: null, installId: null } as const;
 
-  expect(resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "" })).toBeNull();
-  expect(resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "https://k@h/1" })).toBe(
-    "https://k@h/1",
-  );
+  expect(
+    resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "" })
+  ).toBeNull();
+  expect(
+    resolveCrashReportDsn(file, { NAKAMA_CRASH_REPORT_DSN: "https://k@h/1" })
+  ).toBe("https://k@h/1");
 });
 
 test("the built-in ingest is used when nothing overrides it", () => {
-  const resolved = resolveCrashReportDsn({ consent: "unset", installId: null, dsn: null }, {});
+  const resolved = resolveCrashReportDsn(
+    { consent: "unset", dsn: null, installId: null },
+    {}
+  );
 
   expect(resolved).toBe(DEFAULT_CRASH_REPORT_DSN);
 });
 
 test("a dsn in the config file beats the built-in default", () => {
   const resolved = resolveCrashReportDsn(
-    { consent: "unset", installId: null, dsn: "https://own@ingest.example.com/9" },
-    {},
+    {
+      consent: "unset",
+      dsn: "https://own@ingest.example.com/9",
+      installId: null,
+    },
+    {}
   );
 
   expect(resolved).toBe("https://own@ingest.example.com/9");

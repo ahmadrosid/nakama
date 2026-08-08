@@ -10,26 +10,26 @@ async function createTool() {
   const state = new AgentQuestionnaireState(db);
 
   await db.upsertSession({
-    id: "session_test",
-    profileId: "default",
+    agentQuestionnaire: null,
+    agentTodos: [],
     channel: "web",
     createdAt: new Date().toISOString(),
+    id: "session_test",
+    profileId: "default",
     title: null,
-    agentTodos: [],
-    agentQuestionnaire: null,
   });
 
   const tool = createAskUserQuestionTools(state).find(
-    (entry) => entry.name === "ask_user_question",
+    (entry) => entry.name === "ask_user_question"
   );
-  return { tool: tool!, state };
+  return { state, tool: tool! };
 }
 
 test("ask_user_question requires sessionId", async () => {
   const { tool } = await createTool();
 
   await expect(
-    tool.run({ title: "Need input", questions: [] }, {}),
+    tool.run({ questions: [], title: "Need input" }, {})
   ).rejects.toThrow("requires an active chat session");
 });
 
@@ -38,29 +38,29 @@ test("ask_user_question stores the questionnaire with generated ids", async () =
 
   const result = await tool.run(
     {
-      title: "Need input",
       questions: [
         {
-          prompt: "What timezone?",
-          choices: ["Pacific Time", "Eastern Time"],
           allowCustomAnswer: true,
+          choices: ["Pacific Time", "Eastern Time"],
+          prompt: "What timezone?",
         },
       ],
+      title: "Need input",
     },
-    { sessionId: "session_test" },
+    { sessionId: "session_test" }
   );
 
   const stored = await state.get("session_test");
   expect(result).toEqual({ questionnaire: stored });
   expect(stored?.questions).toEqual([
     {
-      id: "what-timezone",
-      prompt: "What timezone?",
       allowCustomAnswer: true,
       choices: [
         { id: "pacific-time", label: "Pacific Time" },
         { id: "eastern-time", label: "Eastern Time" },
       ],
+      id: "what-timezone",
+      prompt: "What timezone?",
     },
   ]);
 });
@@ -70,25 +70,25 @@ test("ask_user_question accepts legacy choice objects", async () => {
 
   await tool.run(
     {
-      title: "Need input",
       questions: [
         {
-          id: "timezone",
-          prompt: "What timezone?",
           allowCustomAnswer: true,
           choices: [{ id: "pst", label: "Pacific Time" }],
+          id: "timezone",
+          prompt: "What timezone?",
         },
       ],
+      title: "Need input",
     },
-    { sessionId: "session_test" },
+    { sessionId: "session_test" }
   );
 
   const stored = await state.get("session_test");
   expect(stored?.questions[0]).toMatchObject({
-    id: "timezone",
-    prompt: "What timezone?",
     allowCustomAnswer: true,
     choices: [{ id: "pst", label: "Pacific Time" }],
+    id: "timezone",
+    prompt: "What timezone?",
   });
 });
 

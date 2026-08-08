@@ -1,18 +1,22 @@
 import nodemailer from "nodemailer";
-import type { MailboxConfig } from "./types";
-import type { MailSendInput, MailSender, MailSendResult } from "./types";
 import { sanitizeMailError } from "./sanitize";
+import type {
+  MailboxConfig,
+  MailSender,
+  MailSendInput,
+  MailSendResult,
+} from "./types";
 
 export function createSmtpSender(config: MailboxConfig): MailSender {
   const transporter = nodemailer.createTransport({
+    auth: {
+      pass: config.auth.pass,
+      user: config.auth.user,
+    },
     host: config.smtp.host,
     port: config.smtp.port,
-    secure: config.smtp.secure,
-    auth: {
-      user: config.auth.user,
-      pass: config.auth.pass,
-    },
     requireTLS: !config.smtp.secure,
+    secure: config.smtp.secure,
     tls: {
       minVersion: "TLSv1.2",
       rejectUnauthorized: true,
@@ -24,9 +28,9 @@ export function createSmtpSender(config: MailboxConfig): MailSender {
       try {
         const info = await transporter.sendMail({
           from: config.from,
-          to: input.to,
           subject: input.subject,
           text: input.text,
+          to: input.to,
           ...(input.html ? { html: input.html } : {}),
         });
 

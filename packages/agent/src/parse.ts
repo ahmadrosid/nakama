@@ -1,24 +1,24 @@
 import {
-  createId,
-  normalizeAutomationDelivery,
   type AutomationDefinition,
   type AutomationDelivery,
   type AutomationStep,
   type AutomationTrigger,
+  createId,
+  normalizeAutomationDelivery,
   type ToolDefinition,
 } from "@nakama/core";
 
 interface GeneratedAutomationPayload {
-  name?: unknown;
-  description?: unknown;
-  trigger?: unknown;
-  steps?: unknown;
   delivery?: unknown;
+  description?: unknown;
+  name?: unknown;
+  steps?: unknown;
+  trigger?: unknown;
 }
 
 export function parseAutomationResponse(
   raw: string,
-  request: { prompt: string; tools: ToolDefinition[] },
+  request: { prompt: string; tools: ToolDefinition[] }
 ): AutomationDefinition {
   const payload = extractJsonObject(raw) as GeneratedAutomationPayload;
   const allowedTools = new Set(request.tools.map((tool) => tool.name));
@@ -30,12 +30,12 @@ export function parseAutomationResponse(
   const delivery = parseDelivery(payload.delivery);
 
   return {
+    description,
     id: createId("automation"),
     name,
-    description,
     prompt: request.prompt,
-    trigger,
     steps,
+    trigger,
     version: 1,
     ...(delivery ? { delivery } : {}),
   };
@@ -86,19 +86,23 @@ function parseTrigger(value: unknown): AutomationTrigger {
 
   if (trigger.type === "schedule" && typeof trigger.cron === "string") {
     return {
-      type: "schedule",
       cron: trigger.cron.trim(),
       timezone:
-        typeof trigger.timezone === "string" ? trigger.timezone.trim() : undefined,
+        typeof trigger.timezone === "string"
+          ? trigger.timezone.trim()
+          : undefined,
+      type: "schedule",
     };
   }
 
   if (trigger.type === "runAt" && typeof trigger.at === "string") {
     return {
-      type: "runAt",
       at: trigger.at.trim(),
       timezone:
-        typeof trigger.timezone === "string" ? trigger.timezone.trim() : undefined,
+        typeof trigger.timezone === "string"
+          ? trigger.timezone.trim()
+          : undefined,
+      type: "runAt",
     };
   }
 
@@ -107,7 +111,7 @@ function parseTrigger(value: unknown): AutomationTrigger {
 
 function parseSteps(
   value: unknown,
-  allowedTools: Set<string>,
+  allowedTools: Set<string>
 ): AutomationStep[] {
   if (!Array.isArray(value)) {
     return [];
@@ -123,17 +127,19 @@ function parseSteps(
     const step = item as Record<string, unknown>;
     const tool = typeof step.tool === "string" ? step.tool.trim() : "";
 
-    if (!tool || !allowedTools.has(tool)) {
+    if (!(tool && allowedTools.has(tool))) {
       continue;
     }
 
     steps.push({
       id: createId("step"),
-      tool,
       input:
-        step.input && typeof step.input === "object" && !Array.isArray(step.input)
+        step.input &&
+        typeof step.input === "object" &&
+        !Array.isArray(step.input)
           ? (step.input as Record<string, unknown>)
           : {},
+      tool,
     });
   }
 

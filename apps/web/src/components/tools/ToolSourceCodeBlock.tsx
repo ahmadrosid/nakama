@@ -21,13 +21,13 @@ export function ToolSourceCodeBlock({
 }) {
   const markdown = useMemo(
     () => buildFencedCode(content, languageFromSourcePath(path ?? "")),
-    [content, path],
+    [content, path]
   );
 
   return (
     <MessageResponse
-      lineNumbers
       className="max-w-none [&_[data-streamdown=code-block-body]]:max-h-[min(60vh,32rem)] [&_[data-streamdown=code-block-body]]:overflow-auto"
+      lineNumbers
     >
       {markdown}
     </MessageResponse>

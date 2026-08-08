@@ -1,19 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import { nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
-import { createInMemoryDatabaseAdapter, ensurePreinstalledMcpServers } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  ensurePreinstalledMcpServers,
+} from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 
-async function seedProfile(db: ReturnType<typeof createInMemoryDatabaseAdapter>) {
+async function seedProfile(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+) {
   const now = new Date().toISOString();
   const profile = {
+    createdAt: now,
     id: nanoid(),
+    isSuper: false,
+    model: null,
     name: "Test Bot",
     systemPrompt: "You are helpful.",
-    model: null,
-    isSuper: false,
-    createdAt: now,
     updatedAt: now,
   };
 
@@ -28,10 +33,10 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     await service.createServer({
-      name: "demo",
-      transport: "http",
       config: { url: "https://example.com/mcp" },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     const listed = await service.listServers();
@@ -46,10 +51,10 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "demo",
-      transport: "http",
       config: { url: "https://example.com/mcp" },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     const profileId = await seedProfile(db);
@@ -67,25 +72,25 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "demo",
-      transport: "http",
       config: {
-        url: "https://example.com/mcp",
         headers: {
           Authorization: "secret-token",
           "X-Custom": "keep-me",
         },
+        url: "https://example.com/mcp",
       },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     const updated = await service.updateServer(created.server.id, {
       config: {
-        url: "https://example.com/mcp",
         headers: {
           Authorization: "",
           "X-Custom": "updated-value",
         },
+        url: "https://example.com/mcp",
       },
     });
 
@@ -96,11 +101,11 @@ describe("McpService", () => {
       "X-Custom": "••••••••",
     });
     expect(stored?.config).toEqual({
-      url: "https://example.com/mcp",
       headers: {
         Authorization: "secret-token",
         "X-Custom": "updated-value",
       },
+      url: "https://example.com/mcp",
     });
   });
 
@@ -109,13 +114,13 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     await service.createServer({
-      name: "filesystem",
-      transport: "stdio",
       config: {
-        command: "npx",
         args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        command: "npx",
       },
       connect: false,
+      name: "filesystem",
+      transport: "stdio",
     });
 
     const listed = await service.listServers();
@@ -131,11 +136,11 @@ describe("McpService", () => {
 
     await expect(
       service.createServer({
-        name: "broken",
-        transport: "stdio",
         config: { command: "" },
         connect: false,
-      }),
+        name: "broken",
+        transport: "stdio",
+      })
     ).rejects.toThrow("stdio MCP servers require config.command.");
   });
 
@@ -144,23 +149,23 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "filesystem",
-      transport: "stdio",
       config: {
-        command: "npx",
         args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        command: "npx",
         env: {
           API_KEY: "secret-token",
           NODE_ENV: "production",
         },
       },
       connect: false,
+      name: "filesystem",
+      transport: "stdio",
     });
 
     const updated = await service.updateServer(created.server.id, {
       config: {
-        command: "npx",
         args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        command: "npx",
         env: {
           API_KEY: "",
           NODE_ENV: "development",
@@ -171,16 +176,16 @@ describe("McpService", () => {
     const stored = await db.getMcpServer(created.server.id);
 
     expect(updated.server.config).toEqual({
-      command: "npx",
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      command: "npx",
       env: {
         API_KEY: "••••••••",
         NODE_ENV: "••••••••",
       },
     });
     expect(stored?.config).toEqual({
-      command: "npx",
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      command: "npx",
       env: {
         API_KEY: "secret-token",
         NODE_ENV: "development",
@@ -193,13 +198,13 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     await service.createServer({
-      name: "filesystem",
-      transport: "command" as "stdio",
       config: {
-        command: "npx",
         args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        command: "npx",
       },
       connect: false,
+      name: "filesystem",
+      transport: "command" as "stdio",
     });
 
     const listed = await service.listServers();
@@ -213,11 +218,11 @@ describe("McpService", () => {
 
     await expect(
       service.createServer({
-        name: "broken",
-        transport: "http",
         config: { command: "npx" },
         connect: false,
-      }),
+        name: "broken",
+        transport: "http",
+      })
     ).rejects.toThrow("HTTP MCP servers require config.url.");
   });
 
@@ -227,11 +232,11 @@ describe("McpService", () => {
 
     await expect(
       service.createServer({
-        name: "broken",
-        transport: "stdio",
         config: { url: "https://example.com/mcp" },
         connect: false,
-      }),
+        name: "broken",
+        transport: "stdio",
+      })
     ).rejects.toThrow("stdio MCP servers require config.command.");
   });
 
@@ -240,19 +245,21 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "demo",
-      transport: "http",
       config: { url: "https://example.com/mcp" },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     const profileId = await seedProfile(db);
     await service.assignServerToProfile(profileId, created.server.id);
 
-    await expect(service.deleteServer(created.server.id)).rejects.toMatchObject({
-      status: 409,
-      profiles: [{ id: profileId, name: "Test Bot" }],
-    });
+    await expect(service.deleteServer(created.server.id)).rejects.toMatchObject(
+      {
+        profiles: [{ id: profileId, name: "Test Bot" }],
+        status: 409,
+      }
+    );
 
     expect(await db.getMcpServer(created.server.id)).not.toBeNull();
   });
@@ -262,10 +269,10 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "demo",
-      transport: "http",
       config: { url: "https://example.com/mcp" },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     await service.deleteServer(created.server.id);
@@ -279,11 +286,13 @@ describe("McpService", () => {
 
     await ensurePreinstalledMcpServers(db);
 
-    await expect(service.deleteServer(PREINSTALLED_MCP_SERVER_IDS.exa)).rejects.toThrow(
-      'Preinstalled MCP server "exa" cannot be deleted.',
-    );
+    await expect(
+      service.deleteServer(PREINSTALLED_MCP_SERVER_IDS.exa)
+    ).rejects.toThrow('Preinstalled MCP server "exa" cannot be deleted.');
 
-    expect(await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa)).not.toBeNull();
+    expect(
+      await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa)
+    ).not.toBeNull();
   });
 
   test("lists assigned profile counts on MCP servers", async () => {
@@ -291,10 +300,10 @@ describe("McpService", () => {
     const service = new McpService(db, new McpClientManager());
 
     const created = await service.createServer({
-      name: "demo",
-      transport: "http",
       config: { url: "https://example.com/mcp" },
       connect: false,
+      name: "demo",
+      transport: "http",
     });
 
     const profileId = await seedProfile(db);

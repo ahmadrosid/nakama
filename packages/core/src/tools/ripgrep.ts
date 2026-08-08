@@ -20,8 +20,8 @@ export interface RipgrepSearchResult {
 let rgCommandPromise: Promise<string> | null = null;
 
 interface MatchParseResult {
-  match: RipgrepMatch | null;
   chars: number;
+  match: RipgrepMatch | null;
 }
 
 export function buildRipgrepArgs(options: {
@@ -54,14 +54,14 @@ export function buildRipgrepArgs(options: {
 
 export async function runRipgrep(
   args: string[],
-  options: { workspaceRoot: string; searchRoot: string; maxResults: number },
+  options: { workspaceRoot: string; searchRoot: string; maxResults: number }
 ): Promise<RipgrepSearchResult> {
   const command = await resolveRipgrepCommand();
 
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     let stderr = "";
@@ -92,7 +92,11 @@ export async function runRipgrep(
           continue;
         }
 
-        const parsed = parseMatchLine(line, options.workspaceRoot, options.searchRoot);
+        const parsed = parseMatchLine(
+          line,
+          options.workspaceRoot,
+          options.searchRoot
+        );
         if (!parsed.match) {
           continue;
         }
@@ -102,7 +106,10 @@ export async function runRipgrep(
           collectedChars += parsed.chars;
         }
 
-        if (matches.length >= options.maxResults || collectedChars >= MAX_OUTPUT_CHARS) {
+        if (
+          matches.length >= options.maxResults ||
+          collectedChars >= MAX_OUTPUT_CHARS
+        ) {
           truncated = true;
           maybeStopForLimits();
           break;
@@ -122,8 +129,8 @@ export async function runRipgrep(
       if ("code" in error && error.code === "ENOENT") {
         reject(
           new Error(
-            'ripgrep binary not found. Install the optional "@vscode/ripgrep" package for this platform or make `rg` available on PATH.',
-          ),
+            'ripgrep binary not found. Install the optional "@vscode/ripgrep" package for this platform or make `rg` available on PATH.'
+          )
         );
         return;
       }
@@ -134,12 +141,18 @@ export async function runRipgrep(
       clearTimeout(timeoutId);
 
       if (timedOut) {
-        reject(new Error(`ripgrep search timed out after ${DEFAULT_TIMEOUT_MS}ms.`));
+        reject(
+          new Error(`ripgrep search timed out after ${DEFAULT_TIMEOUT_MS}ms.`)
+        );
         return;
       }
 
       if (stdoutBuffer.trim()) {
-        const parsed = parseMatchLine(stdoutBuffer.trim(), options.workspaceRoot, options.searchRoot);
+        const parsed = parseMatchLine(
+          stdoutBuffer.trim(),
+          options.workspaceRoot,
+          options.searchRoot
+        );
         if (
           parsed.match &&
           matches.length < options.maxResults &&
@@ -162,8 +175,8 @@ export async function runRipgrep(
         new Error(
           stderrExcerpt
             ? `ripgrep search failed with exit code ${code}: ${stderrExcerpt}`
-            : `ripgrep search failed with exit code ${code}.`,
-        ),
+            : `ripgrep search failed with exit code ${code}.`
+        )
       );
     });
   });
@@ -193,27 +206,29 @@ async function loadRipgrepCommand(): Promise<string> {
 function parseMatchLine(
   line: string,
   workspaceRoot: string,
-  searchRoot: string,
+  searchRoot: string
 ): MatchParseResult {
   const payload = parseJsonRecord(line);
   if (!payload || payload.type !== "match") {
-    return { match: null, chars: 0 };
+    return { chars: 0, match: null };
   }
 
   const data = readRecord(payload, "data");
   if (!data) {
-    return { match: null, chars: 0 };
+    return { chars: 0, match: null };
   }
 
   const rawPath = readNestedString(data, "path", "text");
   const rawText = readNestedString(data, "lines", "text");
   const lineNumber = readNumber(data, "line_number");
 
-  if (!rawPath || !rawText || !lineNumber) {
-    return { match: null, chars: 0 };
+  if (!(rawPath && rawText && lineNumber)) {
+    return { chars: 0, match: null };
   }
 
-  const absolutePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(searchRoot, rawPath);
+  const absolutePath = path.isAbsolute(rawPath)
+    ? rawPath
+    : path.resolve(searchRoot, rawPath);
   const relativePath = path.relative(workspaceRoot, absolutePath) || ".";
   const trimmedText = rawText.trim();
   const match = {
@@ -223,8 +238,8 @@ function parseMatchLine(
   } satisfies RipgrepMatch;
 
   return {
-    match,
     chars: relativePath.length + trimmedText.length + String(lineNumber).length,
+    match,
   };
 }
 
@@ -239,7 +254,7 @@ function parseJsonRecord(line: string): Record<string, unknown> | null {
 
 function readRecord(
   input: Record<string, unknown>,
-  key: string,
+  key: string
 ): Record<string, unknown> | null {
   const value = input[key];
   if (typeof value !== "object" || value === null) {
@@ -251,7 +266,7 @@ function readRecord(
 function readNestedString(
   input: Record<string, unknown>,
   parentKey: string,
-  childKey: string,
+  childKey: string
 ): string | null {
   const parent = readRecord(input, parentKey);
   if (!parent) {
@@ -261,8 +276,10 @@ function readNestedString(
   return typeof value === "string" ? value : null;
 }
 
-function readNumber(input: Record<string, unknown>, key: string): number | null {
+function readNumber(
+  input: Record<string, unknown>,
+  key: string
+): number | null {
   const value = input[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-

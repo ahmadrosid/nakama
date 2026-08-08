@@ -1,11 +1,16 @@
 import { join } from "node:path";
 import type { TelegramWorkerStatus } from "./contract";
 import {
+  pathExists,
+  readTextOrNull,
+  removeFile,
+  writePrivateTextFile,
+} from "./fs";
+import {
   getTelegramConfigDir,
   loadTelegramSettingsPublic,
   type TelegramSettingsPublic,
 } from "./telegram-config";
-import { pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./fs";
 
 export interface TelegramWorkerHeartbeat {
   pid: number;
@@ -21,13 +26,13 @@ export function getTelegramWorkerHeartbeatPath(): string {
 
 export function resolveTelegramWorkerStatus(
   settings: TelegramSettingsPublic,
-  running: boolean,
+  running: boolean
 ): TelegramWorkerStatus {
   const configured = settings.configured;
   const paired = settings.pairedUserIds.length > 0;
   const ok = !configured || running;
 
-  return { configured, paired, running, ok };
+  return { configured, ok, paired, running };
 }
 
 export function isProcessAlive(pid: number): boolean {
@@ -45,7 +50,7 @@ export function isProcessAlive(pid: number): boolean {
 
 export function isHeartbeatAlive(
   heartbeat: TelegramWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): boolean {
   if (!heartbeat) {
     return false;
@@ -64,7 +69,9 @@ export function isHeartbeatAlive(
   return isProcessAlive(heartbeat.pid);
 }
 
-export function parseTelegramWorkerHeartbeat(raw: string): TelegramWorkerHeartbeat | null {
+export function parseTelegramWorkerHeartbeat(
+  raw: string
+): TelegramWorkerHeartbeat | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
 
@@ -85,14 +92,14 @@ export function parseTelegramWorkerHeartbeat(raw: string): TelegramWorkerHeartbe
 
 export async function writeTelegramWorkerHeartbeat(
   pid = process.pid,
-  updatedAt = new Date().toISOString(),
+  updatedAt = new Date().toISOString()
 ): Promise<void> {
   const payload: TelegramWorkerHeartbeat = { pid, updatedAt };
 
   await writePrivateTextFile(
     getTelegramWorkerHeartbeatPath(),
     `${JSON.stringify(payload)}\n`,
-    { ensureDir: getTelegramConfigDir() },
+    { ensureDir: getTelegramConfigDir() }
   );
 }
 
@@ -115,7 +122,7 @@ export async function readTelegramWorkerHeartbeat(): Promise<TelegramWorkerHeart
 }
 
 export async function isTelegramWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): Promise<boolean> {
   return isHeartbeatAlive(await readTelegramWorkerHeartbeat(), maxAgeMs);
 }

@@ -9,13 +9,19 @@ export function getGlobalSkillsDir(): string {
 }
 
 export function getProfileSkillsDir(orgId: string, profileId: string): string {
-  return path.join(getUserConfigDir(), "orgs", orgId, "profiles", profileId, "skills");
+  return path.join(
+    getUserConfigDir(),
+    "orgs",
+    orgId,
+    "profiles",
+    profileId,
+    "skills"
+  );
 }
 
-export async function resolveSkillDiscoveryDirs(options: {
-  orgId?: string;
-  profileId?: string;
-} = {}): Promise<string[]> {
+export async function resolveSkillDiscoveryDirs(
+  options: { orgId?: string; profileId?: string } = {}
+): Promise<string[]> {
   const dirs = [getGlobalSkillsDir()];
 
   if (options.orgId && options.profileId) {

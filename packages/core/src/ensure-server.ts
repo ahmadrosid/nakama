@@ -22,10 +22,10 @@ export async function ensureServerRunning(): Promise<EnsureServerResult> {
   const serverEntry = join(projectRoot, "apps/server/src/index.ts");
   const child = Bun.spawn(["bun", "run", serverEntry], {
     cwd: projectRoot,
-    stdout: "inherit",
+    env: process.env,
     stderr: "inherit",
     stdin: "ignore",
-    env: process.env,
+    stdout: "inherit",
   });
 
   console.warn("Starting Nakama server...");
@@ -34,7 +34,9 @@ export async function ensureServerRunning(): Promise<EnsureServerResult> {
 
   if (!readyUrl) {
     stopSpawnedServer(child);
-    throw new Error(`Server failed to start within ${STARTUP_TIMEOUT_MS / 1000}s (${serverUrl})`);
+    throw new Error(
+      `Server failed to start within ${STARTUP_TIMEOUT_MS / 1000}s (${serverUrl})`
+    );
   }
 
   if (child.exitCode !== null) {
@@ -63,12 +65,15 @@ const REQUIRED_BUILTIN_TOOLS = [
 
 export async function serverHasTaskChat(
   serverUrl: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${serverUrl}/v1/tasks/__capability_probe__/messages`, {
-      signal,
-    });
+    const response = await fetch(
+      `${serverUrl}/v1/tasks/__capability_probe__/messages`,
+      {
+        signal,
+      }
+    );
 
     if (response.status !== 404) {
       return false;
@@ -121,7 +126,7 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
     const toolNames = new Set(
       (toolsPayload.tools ?? [])
         .map((tool) => tool.name)
-        .filter((name): name is string => typeof name === "string"),
+        .filter((name): name is string => typeof name === "string")
     );
 
     return REQUIRED_BUILTIN_TOOLS.every((name) => toolNames.has(name));

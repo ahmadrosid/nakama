@@ -2,13 +2,24 @@ import { expect } from "bun:test";
 import type { OrgRole } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import type { AuthService } from "../services/auth-service";
-import { buildSetupAuthBody, createPlatformAdminUser, withOrgId } from "./test-org-helpers";
+import {
+  buildSetupAuthBody,
+  createPlatformAdminUser,
+  withOrgId,
+} from "./test-org-helpers";
 
 export type AppFetch = { fetch: typeof fetch };
 
 export function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  return headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  return (
+    headers.getSetCookie?.() ??
+    (response.headers.get("set-cookie")
+      ? [response.headers.get("set-cookie")!]
+      : [])
+  );
 }
 
 export function cookieValue(setCookies: string[], name: string): string {
@@ -33,25 +44,31 @@ export type TestBrowserSession = {
   cookieHeader: string;
   csrfToken: string;
   orgId?: string;
-  headers(extra?: Record<string, string>, orgIdOverride?: string): Record<string, string>;
+  headers(
+    extra?: Record<string, string>,
+    orgIdOverride?: string
+  ): Record<string, string>;
 };
 
-export function browserSessionFromResponse(response: Response, orgId?: string): TestBrowserSession {
+export function browserSessionFromResponse(
+  response: Response,
+  orgId?: string
+): TestBrowserSession {
   const setCookies = extractSetCookies(response);
   const cookieHeader = cookieHeaderFromSetCookies(setCookies);
   const csrfToken = cookieValue(setCookies, "nakama_csrf");
 
   return {
-    response,
-    setCookies,
     cookieHeader,
     csrfToken,
-    orgId,
     headers(extra = {}, orgIdOverride?: string) {
       const base = { Cookie: cookieHeader, ...extra };
       const resolvedOrgId = orgIdOverride ?? orgId;
       return resolvedOrgId ? withOrgId(base, resolvedOrgId) : base;
     },
+    orgId,
+    response,
+    setCookies,
   };
 }
 
@@ -59,13 +76,13 @@ export async function setupFreshInstallSession(
   app: AppFetch,
   databaseAdapter: DatabaseAdapter,
   email = "admin@example.com",
-  role: OrgRole = "admin",
+  role: OrgRole = "admin"
 ): Promise<TestBrowserSession> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/setup", {
-      method: "POST",
       body: JSON.stringify(buildSetupAuthBody(email)),
-    }),
+      method: "POST",
+    })
   );
 
   if (response.status !== 201) {
@@ -82,10 +99,10 @@ export async function setupFreshInstallSession(
     }
 
     await databaseAdapter.upsertOrgMember({
-      orgId,
-      userId: user.id,
-      role,
       createdAt: new Date().toISOString(),
+      orgId,
+      role,
+      userId: user.id,
     });
   }
 
@@ -97,15 +114,15 @@ export async function loginPlatformAdminSession(
   authService: AuthService,
   databaseAdapter: DatabaseAdapter,
   email = "platform@example.com",
-  password = "password123",
+  password = "password123"
 ): Promise<TestBrowserSession> {
   await createPlatformAdminUser(databaseAdapter, authService, email, password);
 
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
       body: JSON.stringify({ email, password }),
-    }),
+      method: "POST",
+    })
   );
 
   expect(response.status).toBe(200);
@@ -116,13 +133,13 @@ export async function loginUserSession(
   app: AppFetch,
   email: string,
   password: string,
-  orgId?: string,
+  orgId?: string
 ): Promise<TestBrowserSession> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
-      method: "POST",
       body: JSON.stringify({ email, password }),
-    }),
+      method: "POST",
+    })
   );
 
   expect(response.status).toBe(200);

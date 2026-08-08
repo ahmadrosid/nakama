@@ -7,29 +7,11 @@ export function wrapPersistedSession(
   sessionId: string,
   session: AgentChatSession,
   db: DatabaseAdapter,
-  options: { onBeginTurn?: (sessionId: string) => void } = {},
+  options: { onBeginTurn?: (sessionId: string) => void } = {}
 ): AgentChatSession {
   let lastPersistedRevision = session.getHistoryRevision();
 
   return {
-    async send(message) {
-      options.onBeginTurn?.(sessionId);
-      const before = session.getHistory().length;
-      const revisionBefore = session.getHistoryRevision();
-      const reply = await session.send(message);
-      await persistSessionHistory(db, sessionId, session, before, revisionBefore, lastPersistedRevision);
-      lastPersistedRevision = session.getHistoryRevision();
-      return reply;
-    },
-    async sendStream(message, handlers) {
-      options.onBeginTurn?.(sessionId);
-      const before = session.getHistory().length;
-      const revisionBefore = session.getHistoryRevision();
-      const reply = await session.sendStream(message, handlers);
-      await persistSessionHistory(db, sessionId, session, before, revisionBefore, lastPersistedRevision);
-      lastPersistedRevision = session.getHistoryRevision();
-      return reply;
-    },
     clear() {
       session.clear();
       lastPersistedRevision = session.getHistoryRevision();
@@ -44,16 +26,48 @@ export function wrapPersistedSession(
       }
       return result;
     },
+    createAutomation: (prompt) => session.createAutomation(prompt),
+    getContextUsage: () => session.getContextUsage(),
     getHistory: () => session.getHistory(),
     getHistoryRevision: () => session.getHistoryRevision(),
-    getContextUsage: () => session.getContextUsage(),
-    createAutomation: (prompt) => session.createAutomation(prompt),
+    async send(message) {
+      options.onBeginTurn?.(sessionId);
+      const before = session.getHistory().length;
+      const revisionBefore = session.getHistoryRevision();
+      const reply = await session.send(message);
+      await persistSessionHistory(
+        db,
+        sessionId,
+        session,
+        before,
+        revisionBefore,
+        lastPersistedRevision
+      );
+      lastPersistedRevision = session.getHistoryRevision();
+      return reply;
+    },
+    async sendStream(message, handlers) {
+      options.onBeginTurn?.(sessionId);
+      const before = session.getHistory().length;
+      const revisionBefore = session.getHistoryRevision();
+      const reply = await session.sendStream(message, handlers);
+      await persistSessionHistory(
+        db,
+        sessionId,
+        session,
+        before,
+        revisionBefore,
+        lastPersistedRevision
+      );
+      lastPersistedRevision = session.getHistoryRevision();
+      return reply;
+    },
   };
 }
 
 export async function loadSessionHistory(
   db: DatabaseAdapter,
-  sessionId: string,
+  sessionId: string
 ): Promise<ChatMessage[]> {
   const storedMessages = await db.listMessagesForSession(sessionId);
 
@@ -63,15 +77,15 @@ export async function loadSessionHistory(
 export async function replaceSessionHistory(
   db: DatabaseAdapter,
   sessionId: string,
-  history: readonly ChatMessage[],
+  history: readonly ChatMessage[]
 ): Promise<void> {
   const now = new Date().toISOString();
   const messages = history.map((payload, index) => ({
-    id: createId("msg"),
-    sessionId,
-    seq: index,
-    payload,
     createdAt: now,
+    id: createId("msg"),
+    payload,
+    seq: index,
+    sessionId,
   }));
 
   await db.replaceMessagesForSession(sessionId, messages);
@@ -83,11 +97,14 @@ async function persistSessionHistory(
   session: AgentChatSession,
   previousLength: number,
   revisionBefore: number,
-  lastPersistedRevision: number,
+  lastPersistedRevision: number
 ): Promise<void> {
   const history = session.getHistory();
 
-  if (session.getHistoryRevision() > revisionBefore || session.getHistoryRevision() > lastPersistedRevision) {
+  if (
+    session.getHistoryRevision() > revisionBefore ||
+    session.getHistoryRevision() > lastPersistedRevision
+  ) {
     await replaceSessionHistory(db, sessionId, history);
     return;
   }
@@ -99,7 +116,7 @@ async function persistHistoryDelta(
   db: DatabaseAdapter,
   sessionId: string,
   history: readonly ChatMessage[],
-  previousLength: number,
+  previousLength: number
 ): Promise<void> {
   if (history.length <= previousLength) {
     return;
@@ -112,11 +129,11 @@ async function persistHistoryDelta(
       : 0;
   const now = new Date().toISOString();
   const newMessages = history.slice(previousLength).map((payload, index) => ({
-    id: createId("msg"),
-    sessionId,
-    seq: nextSeq + index,
-    payload,
     createdAt: now,
+    id: createId("msg"),
+    payload,
+    seq: nextSeq + index,
+    sessionId,
   }));
 
   await db.appendMessagesForSession(sessionId, newMessages);

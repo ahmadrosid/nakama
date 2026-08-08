@@ -4,10 +4,10 @@ export type ChatProfileSwitchHandler = (profileId: string) => void;
 
 export interface ActiveChatProfileContextValue {
   profileId: string | null;
-  setProfileId: (profileId: string) => void;
   registerChatProfileSwitchHandler: (
-    handler: ChatProfileSwitchHandler | null,
+    handler: ChatProfileSwitchHandler | null
   ) => () => void;
+  setProfileId: (profileId: string) => void;
   switchChatProfile: (profileId: string) => void;
 }
 

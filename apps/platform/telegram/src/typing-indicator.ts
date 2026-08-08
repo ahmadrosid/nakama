@@ -1,10 +1,10 @@
 import type { Context } from "grammy";
 
-const TYPING_REFRESH_MS = 4_000;
+const TYPING_REFRESH_MS = 4000;
 
 export interface TypingLoop {
-  start(): void;
   ping(): void;
+  start(): void;
   stop(): void;
 }
 
@@ -20,14 +20,14 @@ export function createTypingLoop(ctx: Context): TypingLoop {
   }
 
   return {
+    ping() {
+      void sendTyping();
+    },
     start() {
       void sendTyping();
       interval = setInterval(() => {
         void sendTyping();
       }, TYPING_REFRESH_MS);
-    },
-    ping() {
-      void sendTyping();
     },
     stop() {
       if (interval) {

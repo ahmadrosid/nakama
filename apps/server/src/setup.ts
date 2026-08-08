@@ -5,10 +5,10 @@ import {
   ensureUserConfigDir,
   isProviderConfigured,
   loadUserConfig,
+  type ProviderClient,
   readEnvValue,
   resolveProvider,
   saveUserConfig,
-  type ProviderClient,
   type UserConfig,
 } from "@nakama/core";
 import { createProviderFromSources } from "./providers";
@@ -19,7 +19,7 @@ export interface ProviderBootstrap {
 }
 
 async function bootstrapProviderFromEnv(
-  env: Record<string, string | undefined>,
+  env: Record<string, string | undefined>
 ): Promise<UserConfig | null> {
   const providerType = resolveProvider({ env });
 
@@ -35,11 +35,11 @@ async function bootstrapProviderFromEnv(
   }
 
   const instance = {
-    id: createProviderInstanceId(),
-    type: providerType,
-    label: defaultProviderLabel(providerType, []),
     apiKey: "",
     createdAt: new Date().toISOString(),
+    id: createProviderInstanceId(),
+    label: defaultProviderLabel(providerType, []),
+    type: providerType,
   };
 
   const config: UserConfig = {

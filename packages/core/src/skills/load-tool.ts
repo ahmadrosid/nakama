@@ -7,14 +7,14 @@ import type { DiscoveredSkill } from "./types";
 const moduleCache = new Map<string, SkillToolModule>();
 
 interface SkillToolModule {
-  name?: string;
   description?: string;
+  name?: string;
   parameters?: JsonSchema;
   run: (input: unknown, context: ToolContext) => Promise<unknown>;
 }
 
 export async function loadSkillTool(
-  skill: DiscoveredSkill,
+  skill: DiscoveredSkill
 ): Promise<ToolDefinition | null> {
   if (!skill.toolPath) {
     return null;
@@ -24,8 +24,8 @@ export async function loadSkillTool(
     const module = await importSkillToolModule(skill.toolPath);
 
     return {
-      name: module.name?.trim() || skill.name,
       description: module.description?.trim() || skill.description,
+      name: module.name?.trim() || skill.name,
       parameters: module.parameters ?? permissiveObjectSchema(),
       async run(input, context) {
         return module.run(input, context);
@@ -35,8 +35,8 @@ export async function loadSkillTool(
     const message = error instanceof Error ? error.message : String(error);
 
     return {
-      name: skill.name,
       description: skill.description,
+      name: skill.name,
       parameters: permissiveObjectSchema(),
       async run() {
         return { error: `Skill tool failed to load: ${message}` };
@@ -46,7 +46,7 @@ export async function loadSkillTool(
 }
 
 export async function loadSkillTools(
-  skills: DiscoveredSkill[],
+  skills: DiscoveredSkill[]
 ): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = [];
 
@@ -65,7 +65,10 @@ export async function loadSkillTools(
   return tools;
 }
 
-function resolveSkillToolPath(toolPath: string, skillDirectory: string): string {
+function resolveSkillToolPath(
+  toolPath: string,
+  skillDirectory: string
+): string {
   const resolved = path.isAbsolute(toolPath)
     ? path.resolve(toolPath)
     : path.resolve(skillDirectory, toolPath);
@@ -77,7 +80,9 @@ function resolveSkillToolPath(toolPath: string, skillDirectory: string): string 
   return resolved;
 }
 
-async function importSkillToolModule(modulePath: string): Promise<SkillToolModule> {
+async function importSkillToolModule(
+  modulePath: string
+): Promise<SkillToolModule> {
   const cached = moduleCache.get(modulePath);
 
   if (cached) {
@@ -108,16 +113,22 @@ function normalizeSkillToolModule(imported: unknown): SkillToolModule {
   }
 
   return {
+    description:
+      typeof source.description === "string" ? source.description : undefined,
     name: typeof source.name === "string" ? source.name : undefined,
-    description: typeof source.description === "string" ? source.description : undefined,
     parameters: isJsonSchema(source.parameters) ? source.parameters : undefined,
     run: (input, context) => Promise.resolve(run(input, context)),
   };
 }
 
-function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
+function isPathInsideDirectory(
+  targetPath: string,
+  directoryPath: string
+): boolean {
   const relative = path.relative(directoryPath, targetPath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" || !(relative.startsWith("..") || path.isAbsolute(relative))
+  );
 }
 
 function isJsonSchema(value: unknown): value is JsonSchema {

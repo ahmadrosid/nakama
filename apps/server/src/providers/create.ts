@@ -1,40 +1,40 @@
-import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
-import { createAnthropicProvider } from "./anthropic";
-import { createGeminiProvider } from "./gemini";
 import {
   apiKeyEnvVarForProvider,
   getActiveProviderInstance,
   isOllamaCloudInstance,
-  readEnvValue,
   type ProviderClient,
   type ProviderInstance,
   type ProviderName,
+  readEnvValue,
   type UserConfig,
 } from "@nakama/core";
-import { resolveModel } from "./models";
+import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
+import { createAnthropicProvider } from "./anthropic";
 import { createCerebrasProvider } from "./cerebras";
+import { compatibleModelSupportsThinking } from "./compatible-models";
 import { createFireworksProvider } from "./fireworks";
+import { createGeminiProvider } from "./gemini";
+import { resolveModel } from "./models";
 import { createOllamaProvider } from "./ollama";
-import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenAIProvider } from "./openai";
+import { createOpenAICompatibleProvider } from "./openai-compatible";
 import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
-import { compatibleModelSupportsThinking } from "./compatible-models";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
 export interface CreateProviderOptions {
-  provider: ProviderName;
   apiKey: string;
-  model?: string;
   instance?: ProviderInstance | null;
+  model?: string;
+  provider: ProviderName;
 }
 
 function createProvider(options: CreateProviderOptions): ProviderClient {
   const model = resolveModel(
     options.provider,
     options.model,
-    options.instance?.customModels,
+    options.instance?.customModels
   );
 
   const baseUrlOverride = options.instance?.baseUrl?.trim();
@@ -56,8 +56,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "openrouter":
       return createOpenRouterProvider({
         apiKey: options.apiKey,
-        model,
         customModels: options.instance?.customModels,
+        model,
       });
     case "gemini":
       return createGeminiProvider({
@@ -68,8 +68,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "deepseek":
       return createOpenAIProvider({
         apiKey: options.apiKey,
-        model,
         baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
+        model,
         providerName: "deepseek",
       });
     case "opencode_go":
@@ -80,34 +80,39 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "cerebras":
       return createCerebrasProvider({
         apiKey: options.apiKey,
-        model,
         customModels: options.instance?.customModels,
+        model,
       });
     case "fireworks":
       return createFireworksProvider({
         apiKey: options.apiKey,
-        model,
         customModels: options.instance?.customModels,
+        model,
       });
     case "ollama":
       return createOllamaProvider({
         apiKey: options.apiKey,
-        model,
         instance: options.instance,
+        model,
       });
     case "openai_compatible": {
       const displayName = options.instance?.label?.trim();
 
-      if (!baseUrlOverride || !displayName) {
-        throw new Error("OpenAI-compatible provider requires baseUrl and label.");
+      if (!(baseUrlOverride && displayName)) {
+        throw new Error(
+          "OpenAI-compatible provider requires baseUrl and label."
+        );
       }
 
       return createOpenAICompatibleProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride,
-        model,
         displayName,
-        supportsThinking: compatibleModelSupportsThinking(model, options.instance?.customModels),
+        model,
+        supportsThinking: compatibleModelSupportsThinking(
+          model,
+          options.instance?.customModels
+        ),
       });
     }
   }
@@ -115,7 +120,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
 
 export function readApiKeyForInstance(
   instance: ProviderInstance,
-  env: Record<string, string | undefined>,
+  env: Record<string, string | undefined>
 ): string | undefined {
   if (instance.apiKey.trim()) {
     return instance.apiKey;
@@ -123,7 +128,7 @@ export function readApiKeyForInstance(
 
   const envVar = apiKeyEnvVarForProvider(instance.type);
   if (!envVar) {
-    return undefined;
+    return;
   }
 
   return readEnvValue(env, envVar);
@@ -132,29 +137,37 @@ export function readApiKeyForInstance(
 export function createProviderForInstance(
   instance: ProviderInstance,
   model: string,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): ProviderClient | null {
   const apiKey = readApiKeyForInstance(instance, env);
 
-  if (!apiKey?.trim() && instance.type !== "openai_compatible" && instance.type !== "ollama") {
+  if (
+    !apiKey?.trim() &&
+    instance.type !== "openai_compatible" &&
+    instance.type !== "ollama"
+  ) {
     return null;
   }
 
-  if (instance.type === "ollama" && isOllamaCloudInstance(instance) && !apiKey?.trim()) {
+  if (
+    instance.type === "ollama" &&
+    isOllamaCloudInstance(instance) &&
+    !apiKey?.trim()
+  ) {
     return null;
   }
 
   return createProvider({
-    provider: instance.type,
     apiKey: apiKey ?? "",
-    model,
     instance,
+    model,
+    provider: instance.type,
   });
 }
 
 export function createProviderFromActiveConfig(
   userConfig: UserConfig | null | undefined,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): ProviderClient | null {
   const instance = getActiveProviderInstance(userConfig);
 
@@ -173,7 +186,7 @@ export function createProviderFromActiveConfig(
 
 export function createProviderFromSources(
   env: Record<string, string | undefined> = process.env,
-  userConfig?: UserConfig | null,
+  userConfig?: UserConfig | null
 ): ProviderClient | null {
   return createProviderFromActiveConfig(userConfig, env);
 }

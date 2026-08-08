@@ -6,72 +6,78 @@ import { queryKeys } from "@/lib/query-keys";
 
 export const FIREWORKS_FALLBACK_ROWS: CapabilityBrowseRow[] = [
   {
-    id: "accounts/fireworks/models/kimi-k2p6",
-    name: "Kimi K2.6",
+    contextLength: 262_144,
     description: "Reasoning-focused Kimi model on Fireworks serverless.",
-    contextLength: 262_144,
-    vision: false,
-    tools: true,
-    reasoning: true,
+    id: "accounts/fireworks/models/kimi-k2p6",
     inputPerMillionUsd: 0.6,
+    name: "Kimi K2.6",
     outputPerMillionUsd: 2.5,
+    reasoning: true,
+    tools: true,
+    vision: false,
   },
   {
-    id: "accounts/fireworks/models/glm-5p2",
-    name: "GLM 5.2",
+    contextLength: 131_072,
     description: "Strong coding and reasoning on Fireworks serverless.",
-    contextLength: 131_072,
-    vision: false,
-    tools: true,
-    reasoning: true,
+    id: "accounts/fireworks/models/glm-5p2",
     inputPerMillionUsd: 0.55,
+    name: "GLM 5.2",
     outputPerMillionUsd: 2.19,
-  },
-  {
-    id: "accounts/fireworks/models/gpt-oss-120b",
-    name: "GPT OSS 120B",
-    description: "Open-weight reasoning model on Fireworks serverless.",
-    contextLength: 131_072,
+    reasoning: true,
+    tools: true,
     vision: false,
-    tools: true,
-    reasoning: true,
-    inputPerMillionUsd: 0.15,
-    outputPerMillionUsd: 0.6,
   },
   {
-    id: "accounts/fireworks/models/kimi-k2p5",
-    name: "Kimi K2.5",
-    description: "Multimodal Kimi model with vision on Fireworks serverless.",
-    contextLength: 262_144,
-    vision: true,
-    tools: true,
+    contextLength: 131_072,
+    description: "Open-weight reasoning model on Fireworks serverless.",
+    id: "accounts/fireworks/models/gpt-oss-120b",
+    inputPerMillionUsd: 0.15,
+    name: "GPT OSS 120B",
+    outputPerMillionUsd: 0.6,
     reasoning: true,
+    tools: true,
+    vision: false,
+  },
+  {
+    contextLength: 262_144,
+    description: "Multimodal Kimi model with vision on Fireworks serverless.",
+    id: "accounts/fireworks/models/kimi-k2p5",
     inputPerMillionUsd: 0.6,
+    name: "Kimi K2.5",
     outputPerMillionUsd: 2.5,
+    reasoning: true,
+    tools: true,
+    vision: true,
   },
 ];
 
-function fireworksEntryToCapabilityRow(entry: CustomModelEntry): CapabilityBrowseRow {
+function fireworksEntryToCapabilityRow(
+  entry: CustomModelEntry
+): CapabilityBrowseRow {
   const fallback = FIREWORKS_FALLBACK_ROWS.find((row) => row.id === entry.id);
 
   return {
-    id: entry.id,
-    name: entry.name?.trim() || fallback?.name || entry.id.split("/").pop() || entry.id,
-    description: fallback?.description,
     contextLength: fallback?.contextLength,
-    vision: entry.supportsVision === true || fallback?.vision === true,
-    tools: fallback?.tools ?? true,
+    description: fallback?.description,
+    id: entry.id,
+    name:
+      entry.name?.trim() ||
+      fallback?.name ||
+      entry.id.split("/").pop() ||
+      entry.id,
     reasoning: entry.supportsThinking === true || fallback?.reasoning === true,
-    ...(entry.inputPerMillionUsd !== undefined
-      ? { inputPerMillionUsd: entry.inputPerMillionUsd }
-      : fallback?.inputPerMillionUsd !== undefined
-        ? { inputPerMillionUsd: fallback.inputPerMillionUsd }
-        : {}),
-    ...(entry.outputPerMillionUsd !== undefined
-      ? { outputPerMillionUsd: entry.outputPerMillionUsd }
-      : fallback?.outputPerMillionUsd !== undefined
-        ? { outputPerMillionUsd: fallback.outputPerMillionUsd }
-        : {}),
+    tools: fallback?.tools ?? true,
+    vision: entry.supportsVision === true || fallback?.vision === true,
+    ...(entry.inputPerMillionUsd === undefined
+      ? fallback?.inputPerMillionUsd === undefined
+        ? {}
+        : { inputPerMillionUsd: fallback.inputPerMillionUsd }
+      : { inputPerMillionUsd: entry.inputPerMillionUsd }),
+    ...(entry.outputPerMillionUsd === undefined
+      ? fallback?.outputPerMillionUsd === undefined
+        ? {}
+        : { outputPerMillionUsd: fallback.outputPerMillionUsd }
+      : { outputPerMillionUsd: entry.outputPerMillionUsd }),
   };
 }
 
@@ -87,9 +93,9 @@ async function fetchFireworksDiscoverRows(options: {
       providerId
         ? { providerId }
         : {
-            provider: "fireworks",
             apiKey,
-          },
+            provider: "fireworks",
+          }
     );
 
     const rows = (response.customModels ?? [])
@@ -114,13 +120,13 @@ export function fireworksDiscoverQueryOptions(options: {
   const apiKey = options.apiKey?.trim() ?? "";
 
   return queryOptions({
-    queryKey: queryKeys.remoteModelDiscovery({
-      providerId,
-      provider: "fireworks",
-      apiKey: apiKey ? "set" : "",
-    }),
-    queryFn: () => fetchFireworksDiscoverRows(options),
     enabled: Boolean(providerId || apiKey),
+    queryFn: () => fetchFireworksDiscoverRows(options),
+    queryKey: queryKeys.remoteModelDiscovery({
+      apiKey: apiKey ? "set" : "",
+      provider: "fireworks",
+      providerId,
+    }),
     staleTime: 1000 * 60 * 30,
   });
 }

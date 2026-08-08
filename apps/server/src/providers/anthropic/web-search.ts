@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlock,
   ContentBlockParam,
@@ -31,15 +31,15 @@ const WEB_SEARCH_MAX_USES = 5;
 
 export function buildAnthropicTools(
   tools: LlmToolDefinition[] | undefined,
-  webSearch: boolean,
+  webSearch: boolean
 ): ToolUnion[] | undefined {
   const customTools = tools?.length ? tools.map(toAnthropicCustomTool) : [];
   const hostedTools: ToolUnion[] = webSearch
     ? [
         {
-          type: "web_search_20250305",
-          name: WEB_SEARCH_TOOL_NAME,
           max_uses: WEB_SEARCH_MAX_USES,
+          name: WEB_SEARCH_TOOL_NAME,
+          type: "web_search_20250305",
         },
       ]
     : [];
@@ -51,15 +51,18 @@ export function buildAnthropicTools(
 
 export async function toAnthropicMessages(
   messages: ChatMessage[],
-  provider: ProviderName = "anthropic",
+  provider: ProviderName = "anthropic"
 ): Promise<MessageParam[]> {
   const result: MessageParam[] = [];
 
   for (const message of messages) {
     if (message.role === "user") {
       result.push({
+        content: (await toAnthropicUserContent(
+          message.content,
+          provider
+        )) as MessageParam["content"],
         role: "user",
-        content: (await toAnthropicUserContent(message.content, provider)) as MessageParam["content"],
       });
       continue;
     }
@@ -67,8 +70,8 @@ export async function toAnthropicMessages(
     if (message.role === "assistant") {
       if (message.providerContent?.length) {
         result.push({
-          role: "assistant",
           content: message.providerContent as ContentBlockParam[],
+          role: "assistant",
         });
         continue;
       }
@@ -76,30 +79,30 @@ export async function toAnthropicMessages(
       const blocks: ContentBlockParam[] = [];
 
       if (message.content.trim()) {
-        blocks.push({ type: "text", text: message.content });
+        blocks.push({ text: message.content, type: "text" });
       }
 
       for (const call of message.toolCalls ?? []) {
         blocks.push({
-          type: "tool_use",
           id: call.id,
-          name: call.name,
           input: call.arguments,
+          name: call.name,
+          type: "tool_use",
         });
       }
 
       result.push({
-        role: "assistant",
         content: blocks.length > 0 ? blocks : message.content,
+        role: "assistant",
       });
       continue;
     }
 
     const last = result[result.length - 1];
     const toolResult: ToolResultBlockParam = {
-      type: "tool_result",
-      tool_use_id: message.toolCallId,
       content: message.content,
+      tool_use_id: message.toolCallId,
+      type: "tool_result",
     };
 
     if (last?.role === "user" && Array.isArray(last.content)) {
@@ -108,8 +111,8 @@ export async function toAnthropicMessages(
     }
 
     result.push({
-      role: "user",
       content: [toolResult],
+      role: "user",
     });
   }
 
@@ -117,7 +120,7 @@ export async function toAnthropicMessages(
 }
 
 export function parseAnthropicContent(
-  content: ContentBlock[] | undefined,
+  content: ContentBlock[] | undefined
 ): ChatCompletionResult {
   const textParts: string[] = [];
   const thinkingParts: string[] = [];
@@ -136,9 +139,9 @@ export function parseAnthropicContent(
 
     if (block.type === "tool_use") {
       toolCalls.push({
+        arguments: readRecord(block.input),
         id: block.id,
         name: block.name,
-        arguments: readRecord(block.input),
       });
     }
   }
@@ -148,45 +151,48 @@ export function parseAnthropicContent(
   const providerContent = content?.length ? content : undefined;
 
   return {
-    content: contentText,
-    toolCalls,
     assistantMessage: {
-      role: "assistant",
       content: contentText,
+      role: "assistant",
       ...(thinkingText ? { thinking: thinkingText } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(providerContent ? { providerContent } : {}),
     },
+    content: contentText,
+    toolCalls,
   };
 }
 
 export interface ContinueAnthropicUntilDoneOptions {
   client: Anthropic;
-  model: string;
-  system: string;
+  handlers?: StreamChatHandlers;
   messages: ChatMessage[];
+  model: string;
+  provider?: ProviderName;
+  stream: boolean;
+  system: string;
+  thinking?: GenerateChatInput["providerOptions"];
   tools?: LlmToolDefinition[];
   webSearch: boolean;
-  thinking?: GenerateChatInput["providerOptions"];
-  stream: boolean;
-  handlers?: StreamChatHandlers;
-  provider?: ProviderName;
 }
 
 export async function continueAnthropicUntilDone(
-  options: ContinueAnthropicUntilDoneOptions,
+  options: ContinueAnthropicUntilDoneOptions
 ): Promise<ChatCompletionResult> {
-  let apiMessages = await toAnthropicMessages(options.messages, options.provider);
-  let combinedContent: ContentBlock[] = [];
+  let apiMessages = await toAnthropicMessages(
+    options.messages,
+    options.provider
+  );
+  const combinedContent: ContentBlock[] = [];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const tools = buildAnthropicTools(options.tools, options.webSearch);
   const thinkingRequest = buildAnthropicThinkingRequest(options.thinking);
   const requestBase = {
-    model: options.model,
     max_tokens: 4096,
-    system: options.system,
     messages: apiMessages,
+    model: options.model,
+    system: options.system,
     ...(tools ? { tools } : {}),
     ...thinkingRequest,
   };
@@ -206,8 +212,8 @@ export async function continueAnthropicUntilDone(
 
       if (streamed.stopReason !== "pause_turn") {
         return finalizeAnthropicResult({
-          parsed: parseAnthropicContent(combinedContent),
           content: streamed.content,
+          parsed: parseAnthropicContent(combinedContent),
           toolCalls: streamed.toolCalls,
           usage: buildTokenUsage({
             inputTokens: totalInputTokens,
@@ -216,7 +222,10 @@ export async function continueAnthropicUntilDone(
         });
       }
 
-      apiMessages = appendAnthropicAssistantMessage(apiMessages, combinedContent);
+      apiMessages = appendAnthropicAssistantMessage(
+        apiMessages,
+        combinedContent
+      );
       continue;
     }
 
@@ -254,19 +263,22 @@ export async function continueAnthropicUntilDone(
 }
 
 interface StreamedAnthropicResult extends ChatCompletionResult {
-  stopReason?: string;
   contentBlocks: ContentBlock[];
+  stopReason?: string;
 }
 
 async function readAnthropicStream(
   stream: AsyncIterable<RawMessageStreamEvent>,
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): Promise<StreamedAnthropicResult> {
   let content = "";
   let stopReason: string | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
-  const pending = new Map<number, { id: string; name: string; inputJson: string }>();
+  const pending = new Map<
+    number,
+    { id: string; name: string; inputJson: string }
+  >();
   const providerContent: ContentBlock[] = [];
   const contentBlocks = new Map<number, ContentBlock>();
 
@@ -298,16 +310,16 @@ async function readAnthropicStream(
       if (block.type === "tool_use") {
         pending.set(index, {
           id: block.id,
-          name: block.name,
           inputJson: "",
+          name: block.name,
         });
       }
 
       if (block.type === "server_tool_use") {
         handlers?.onToolStart?.({
-          toolCallId: block.id,
-          tool: block.name,
           input: readRecord(block.input),
+          tool: block.name,
+          toolCallId: block.id,
         });
       }
     }
@@ -323,7 +335,7 @@ async function readAnthropicStream(
         const block: ContentBlock =
           prev?.type === "thinking"
             ? { ...prev, thinking: `${prev.thinking}${delta.thinking}` }
-            : { type: "thinking", thinking: delta.thinking, signature: "" };
+            : { signature: "", thinking: delta.thinking, type: "thinking" };
         contentBlocks.set(index, block);
         providerContent[index] = block;
       }
@@ -346,21 +358,29 @@ async function readAnthropicStream(
         const block: ContentBlock =
           prev?.type === "text"
             ? { ...prev, text: `${prev.text}${delta.text}` }
-            : { type: "text", text: delta.text, citations: null };
+            : { citations: null, text: delta.text, type: "text" };
         contentBlocks.set(index, block);
         providerContent[index] = block;
       }
 
       if (delta.type === "input_json_delta") {
-        const current = pending.get(index) ?? { id: "", name: "", inputJson: "" };
+        const current = pending.get(index) ?? {
+          id: "",
+          inputJson: "",
+          name: "",
+        };
         const partial = delta.partial_json;
         current.inputJson += partial;
         pending.set(index, current);
-        notifyToolInputDelta(handlers, {
-          id: current.id,
-          name: current.name,
-          arguments: current.inputJson,
-        }, partial);
+        notifyToolInputDelta(
+          handlers,
+          {
+            arguments: current.inputJson,
+            id: current.id,
+            name: current.name,
+          },
+          partial
+        );
       }
     }
 
@@ -370,9 +390,9 @@ async function readAnthropicStream(
 
       if (block?.type === "web_search_tool_result") {
         handlers?.onToolEnd?.({
-          toolCallId: block.tool_use_id,
-          tool: WEB_SEARCH_TOOL_NAME,
           result: block.content ?? block,
+          tool: WEB_SEARCH_TOOL_NAME,
+          toolCallId: block.tool_use_id,
         });
       }
     }
@@ -384,18 +404,18 @@ async function readAnthropicStream(
 
   return {
     ...finalizeAnthropicResult({
-      parsed,
       content,
+      parsed,
       toolCalls,
       usage: buildTokenUsage({ inputTokens, outputTokens }),
     }),
-    stopReason,
     contentBlocks: normalizedContent,
+    stopReason,
   };
 }
 
 function buildAnthropicThinkingRequest(
-  providerOptions: GenerateChatInput["providerOptions"],
+  providerOptions: GenerateChatInput["providerOptions"]
 ): Pick<MessageCreateParams, "thinking" | "output_config"> {
   if (!providerOptions?.thinking?.enabled) {
     return {};
@@ -404,33 +424,33 @@ function buildAnthropicThinkingRequest(
   const effort = normalizeThinkingEffort(providerOptions.thinking.effort);
 
   return {
-    thinking: { type: "adaptive" },
     output_config: { effort },
+    thinking: { type: "adaptive" },
   };
 }
 
 function emitHostedToolEvents(
   content: ContentBlock[] | undefined,
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): void {
-  if (!content?.length || !handlers) {
+  if (!(content?.length && handlers)) {
     return;
   }
 
   for (const block of content) {
     if (block.type === "server_tool_use") {
       handlers.onToolStart?.({
-        toolCallId: block.id,
-        tool: block.name,
         input: readRecord(block.input),
+        tool: block.name,
+        toolCallId: block.id,
       });
     }
 
     if (block.type === "web_search_tool_result") {
       handlers.onToolEnd?.({
-        toolCallId: block.tool_use_id,
-        tool: WEB_SEARCH_TOOL_NAME,
         result: block.content ?? block,
+        tool: WEB_SEARCH_TOOL_NAME,
+        toolCallId: block.tool_use_id,
       });
     }
   }
@@ -438,39 +458,39 @@ function emitHostedToolEvents(
 
 function toAnthropicCustomTool(tool: LlmToolDefinition): ToolUnion {
   return {
-    name: tool.name,
     description: tool.description,
     input_schema: tool.parameters as never,
+    name: tool.name,
   };
 }
 
 function appendAnthropicAssistantMessage(
   messages: MessageParam[],
-  content: ContentBlock[],
+  content: ContentBlock[]
 ): MessageParam[] {
   // Response ContentBlock values are echoed back on pause_turn continuations.
   return [
     ...messages,
-    { role: "assistant", content: content as ContentBlockParam[] },
+    { content: content as ContentBlockParam[], role: "assistant" },
   ];
 }
 
 function finalizeAnthropicToolCalls(
-  pending: Map<number, { id: string; name: string; inputJson: string }>,
+  pending: Map<number, { id: string; name: string; inputJson: string }>
 ): ToolCall[] {
   return [...pending.entries()]
     .sort(([left], [right]) => left - right)
     .map(([, call]) => call)
     .flatMap((call) => {
-      if (!call.id || !call.name) {
+      if (!(call.id && call.name)) {
         return [];
       }
 
       return [
         {
+          arguments: parseJsonRecord(call.inputJson),
           id: call.id,
           name: call.name,
-          arguments: parseJsonRecord(call.inputJson),
         },
       ];
     });

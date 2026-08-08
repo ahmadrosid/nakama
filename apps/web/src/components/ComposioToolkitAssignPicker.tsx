@@ -20,11 +20,11 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ComposioToolkitAssignPickerProps {
-  toolkits: ComposioToolkitSummary[];
-  disabled?: boolean;
   buttonLabel?: string;
-  onAssign: (toolkitId: string) => void | Promise<void>;
   className?: string;
+  disabled?: boolean;
+  onAssign: (toolkitId: string) => void | Promise<void>;
+  toolkits: ComposioToolkitSummary[];
 }
 
 function toolkitStatusLabel(status: ComposioToolkitSummary["status"]): string {
@@ -47,25 +47,25 @@ export function ComposioToolkitAssignPicker({
   return (
     <>
       <Button
+        className={cn("w-full sm:w-auto", className)}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        size="sm"
         type="button"
         variant="outline"
-        size="sm"
-        disabled={disabled}
-        className={cn("w-full sm:w-auto", className)}
-        onClick={() => setOpen(true)}
       >
-        <PlusIcon className="size-4" aria-hidden />
+        <PlusIcon aria-hidden className="size-4" />
         {buttonLabel}
       </Button>
 
       <Dialog
-        open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
         }}
+        open={open}
       >
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
+          <DialogHeader className="gap-1 border-border border-b px-6 py-4 text-left">
             <DialogTitle>Assign Composio toolkit</DialogTitle>
             <DialogDescription>
               Choose an org-enabled toolkit to allow for this profile.
@@ -73,7 +73,7 @@ export function ComposioToolkitAssignPicker({
           </DialogHeader>
 
           <Command className="rounded-none bg-transparent">
-            <div className="border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+            <div className="border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
               <CommandInput placeholder="Search toolkits…" />
             </div>
             <CommandList className="max-h-72 p-1">
@@ -82,17 +82,17 @@ export function ComposioToolkitAssignPicker({
                 {toolkits.map((toolkit) => (
                   <CommandItem
                     key={toolkit.id}
-                    value={`${toolkit.displayName} ${toolkit.toolkitSlug}`}
                     onSelect={() => {
                       void onAssign(toolkit.id);
                       setOpen(false);
                     }}
+                    value={`${toolkit.displayName} ${toolkit.toolkitSlug}`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium leading-tight text-foreground">
+                      <p className="truncate font-medium text-foreground text-sm leading-tight">
                         {toolkit.displayName}
                       </p>
-                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                      <p className="mt-0.5 text-muted-foreground text-xs leading-snug">
                         {toolkitStatusLabel(toolkit.status)}
                         {toolkit.cachedTools.length > 0
                           ? ` · ${toolkit.cachedTools.length} tool${toolkit.cachedTools.length === 1 ? "" : "s"}`

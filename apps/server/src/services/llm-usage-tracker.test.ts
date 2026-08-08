@@ -9,23 +9,23 @@ describe("LlmUsageTracker", () => {
 
     await db.incrementLlmUsageStats(
       {
-        requestCount: 3,
+        estimatedCostUsd: 0.12,
         inputTokens: 900,
         outputTokens: 300,
-        estimatedCostUsd: 0.12,
+        requestCount: 3,
       },
-      trackedSince,
+      trackedSince
     );
 
     const tracker = await LlmUsageTracker.create(db);
     tracker.record("gpt-4o", 100, 50);
 
     expect(tracker.getStats()).toEqual({
-      requestCount: 4,
+      estimatedCostUsd: expect.any(Number),
       inputTokens: 1000,
       outputTokens: 350,
+      requestCount: 4,
       totalTokens: 1350,
-      estimatedCostUsd: expect.any(Number),
       trackedSince,
     });
 
@@ -37,22 +37,22 @@ describe("LlmUsageTracker", () => {
     expect(persisted?.trackedSince).toBe(trackedSince);
     expect(tracker.getStatsByModel()).toEqual([
       {
-        modelId: "gpt-4o",
-        requestCount: 1,
-        inputTokens: 100,
-        outputTokens: 50,
-        totalTokens: 150,
         estimatedCostUsd: expect.any(Number),
+        inputTokens: 100,
+        modelId: "gpt-4o",
+        outputTokens: 50,
+        requestCount: 1,
+        totalTokens: 150,
         trackedSince: expect.any(String),
       },
     ]);
     expect(persistedByModel).toEqual([
       {
-        modelId: "gpt-4o",
-        requestCount: 1,
-        inputTokens: 100,
-        outputTokens: 50,
         estimatedCostUsd: expect.any(Number),
+        inputTokens: 100,
+        modelId: "gpt-4o",
+        outputTokens: 50,
+        requestCount: 1,
         trackedSince: expect.any(String),
         updatedAt: expect.any(String),
       },

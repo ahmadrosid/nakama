@@ -1,6 +1,10 @@
 import type { ProfileSummary } from "@nakama/core/contract";
+import {
+  IntegrationSettingsFooter,
+  IntegrationStatusHeader,
+  SettingsRow,
+} from "@/components/integration-settings.shared";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { WorkerActionBar } from "@/components/WorkerActionBar";
 import {
   Select,
   SelectContent,
@@ -8,11 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  IntegrationSettingsFooter,
-  IntegrationStatusHeader,
-  SettingsRow,
-} from "@/components/integration-settings.shared";
+import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { WhatsAppSettingsLinkingSection } from "@/components/whatsapp-settings-linking-section";
 import { cn } from "@/lib/utils";
 
@@ -85,42 +85,45 @@ export function WhatsAppSettingsCardContent({
 
   return (
     <div className={cn(!embedded && "space-y-4 py-4")}>
-      {!embedded ? (
+      {embedded ? null : (
         <IntegrationStatusHeader
-          title="WhatsApp"
-          subtitle={headerSubtitle}
-          statusBadge={statusBadge}
+          className={paneItemClass}
           configured={configured}
           connected={paired && running && !showQr}
-          className={paneItemClass}
+          statusBadge={statusBadge}
+          subtitle={headerSubtitle}
+          title="WhatsApp"
         />
-      ) : null}
+      )}
 
       {linkedNumber ? (
         <SettingsRow
-          label="Linked account"
-          description="From your WhatsApp session"
           className={paneItemClass}
+          description="From your WhatsApp session"
+          label="Linked account"
         >
-          <span className="text-sm text-foreground">{linkedNumber}</span>
+          <span className="text-foreground text-sm">{linkedNumber}</span>
         </SettingsRow>
       ) : null}
 
       <SettingsRow
-        label="Reply as"
-        description="Which agent answers on WhatsApp"
         className={paneItemClass}
+        description="Which agent answers on WhatsApp"
+        label="Reply as"
       >
         <Select
-          value={profileId}
           disabled={savePending || profiles.length === 0}
           onValueChange={(value) => {
             if (value) {
               onProfileChange(String(value));
             }
           }}
+          value={profileId}
         >
-          <SelectTrigger id="whatsapp-profile" className="w-[11rem] sm:w-[13rem]">
+          <SelectTrigger
+            className="w-[11rem] sm:w-[13rem]"
+            id="whatsapp-profile"
+          >
             <SelectValue placeholder="Profile">
               {profiles.find((profile) => profile.id === profileId)?.name}
             </SelectValue>
@@ -140,49 +143,49 @@ export function WhatsAppSettingsCardContent({
 
       {configured ? (
         <WhatsAppSettingsLinkingSection
+          awaitingQr={awaitingQr}
+          bridgeStarting={bridgeStarting}
+          compact={!embedded}
+          copied={copied}
+          linkingAfterScan={linkingAfterScan}
+          onCopyPairingCode={onCopyPairingCode}
+          onReconnect={onReconnect}
+          onRegeneratePairingCode={onRegeneratePairingCode}
           paired={paired}
           pairingCode={pairingCode}
-          copied={copied}
-          savePending={savePending}
-          regeneratePending={regeneratePending}
-          onCopyPairingCode={onCopyPairingCode}
-          onRegeneratePairingCode={onRegeneratePairingCode}
-          showQr={showQr}
           qrCode={qrCode}
-          linkingAfterScan={linkingAfterScan}
-          bridgeStarting={bridgeStarting}
-          awaitingQr={awaitingQr}
-          showReconnect={showReconnect}
           reconnectPending={reconnectPending}
-          onReconnect={onReconnect}
+          regeneratePending={regeneratePending}
           rowClassName={paneItemClass}
-          compact={!embedded}
+          savePending={savePending}
+          showQr={showQr}
+          showReconnect={showReconnect}
         />
       ) : null}
 
       {configured ? (
         <SettingsRow
-          label="Bridge worker"
-          description={running ? "Running" : "Stopped"}
           className={paneItemClass}
+          description={running ? "Running" : "Stopped"}
+          label="Bridge worker"
         >
           <WorkerActionBar
-            workerName="whatsapp"
-            running={running}
             pm2Managed={worker?.process?.managed ?? false}
+            running={running}
+            workerName="whatsapp"
           />
         </SettingsRow>
       ) : null}
 
       <IntegrationSettingsFooter
-        statusLine={statusLine}
+        canSave={canSave}
+        className={paneItemClass}
         formError={formError}
         loadError={loadError}
-        savePending={savePending}
-        canSave={canSave}
-        submitLabel={actionLabel}
         onSave={onSave}
-        className={paneItemClass}
+        savePending={savePending}
+        statusLine={statusLine}
+        submitLabel={actionLabel}
       />
     </div>
   );

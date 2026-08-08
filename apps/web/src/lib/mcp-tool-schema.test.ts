@@ -11,31 +11,31 @@ describe("parseMcpToolParameters", () => {
   it("extracts parameter metadata from JSON schema objects", () => {
     expect(
       parseMcpToolParameters({
-        type: "object",
-        required: ["path"],
         properties: {
-          path: {
-            type: "string",
-            description: "File path to read",
-          },
           encoding: {
-            type: ["string", "null"],
             description: "Optional text encoding",
+            type: ["string", "null"],
+          },
+          path: {
+            description: "File path to read",
+            type: "string",
           },
         },
-      }),
+        required: ["path"],
+        type: "object",
+      })
     ).toEqual([
       {
-        name: "path",
-        type: "string",
         description: "File path to read",
+        name: "path",
         required: true,
+        type: "string",
       },
       {
-        name: "encoding",
-        type: "string | null",
         description: "Optional text encoding",
+        name: "encoding",
         required: false,
+        type: "string | null",
       },
     ]);
   });

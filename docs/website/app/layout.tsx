@@ -1,64 +1,64 @@
-import { RootProvider } from 'fumadocs-ui/provider/next'
-import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google'
-import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
+import { RootProvider } from "fumadocs-ui/provider/next";
+import type { Metadata } from "next";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import type { ReactNode } from "react";
+import { withBasePath } from "@/lib/base-path";
 import {
   OG_IMAGE_URL,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_URL,
-} from '@/lib/site-meta'
-import { withBasePath } from '@/lib/base-path'
-import './global.css'
+} from "@/lib/site-meta";
+import "./global.css";
 
 const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-jakarta',
-})
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+});
 
 const jetbrains = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-jetbrains',
-})
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: SITE_NAME,
   description: SITE_DESCRIPTION,
   icons: {
     icon: [
       {
-        url: withBasePath('/favicon-light.png'),
-        media: '(prefers-color-scheme: light)',
+        media: "(prefers-color-scheme: light)",
+        url: withBasePath("/favicon-light.png"),
       },
       {
-        url: withBasePath('/favicon.png'),
-        media: '(prefers-color-scheme: dark)',
+        media: "(prefers-color-scheme: dark)",
+        url: withBasePath("/favicon.png"),
       },
-      { url: withBasePath('/favicon.png') },
+      { url: withBasePath("/favicon.png") },
     ],
   },
+  metadataBase: new URL(SITE_URL),
   openGraph: {
-    title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    url: SITE_URL,
     images: [{ url: OG_IMAGE_URL }],
+    title: SITE_NAME,
+    url: SITE_URL,
   },
-}
+  title: SITE_NAME,
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
-      lang="en"
       className={`${jakarta.variable} ${jetbrains.variable}`}
+      lang="en"
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col font-sans">
         <RootProvider
           search={{
             options: {
-              type: 'static',
-              api: withBasePath('/api/search'),
+              api: withBasePath("/api/search"),
+              type: "static",
             },
           }}
         >
@@ -66,5 +66,5 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </RootProvider>
       </body>
     </html>
-  )
+  );
 }

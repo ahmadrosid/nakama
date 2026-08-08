@@ -27,7 +27,7 @@ export class TelegramAuthStore {
 
   async tryPair(
     handshakeInput: string,
-    userId: number,
+    userId: number
   ): Promise<{ ok: boolean; message: string }> {
     const result = await verifyAndPairTelegramUser(handshakeInput, userId);
     await this.reload();

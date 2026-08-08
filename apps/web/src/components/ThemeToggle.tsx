@@ -1,10 +1,10 @@
+import { THEME_OPTIONS } from "@/components/theme-options";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { THEME_OPTIONS } from "@/components/theme-options";
 import { useTheme } from "@/context/use-theme";
 import { isTheme } from "@/lib/theme";
 
@@ -16,19 +16,19 @@ export function ThemeToggle() {
 
   return (
     <Select
-      value={theme}
       onValueChange={(value) => {
         if (value != null && isTheme(value)) {
           setTheme(value);
         }
       }}
+      value={theme}
     >
-      <SelectTrigger className="w-[8.25rem]" aria-label="Color theme">
+      <SelectTrigger aria-label="Color theme" className="w-[8.25rem]">
         <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <SelectedIcon
+            aria-hidden="true"
             className="size-3.5 shrink-0 text-muted-foreground"
             strokeWidth={1.75}
-            aria-hidden="true"
           />
           <span className="truncate">{selected.label}</span>
         </span>
@@ -40,7 +40,11 @@ export function ThemeToggle() {
           return (
             <SelectItem key={option.id} value={option.id}>
               <span className="flex items-center gap-2">
-                <Icon className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                <Icon
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0"
+                  strokeWidth={1.75}
+                />
                 {option.label}
               </span>
             </SelectItem>

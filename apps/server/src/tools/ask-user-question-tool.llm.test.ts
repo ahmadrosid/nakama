@@ -10,20 +10,29 @@
  *   bun test src/tools/ask-user-question-tool.llm.test.ts
  */
 import { expect, test } from "bun:test";
-import { loadUserConfig, toLlmToolDefinition, type ProviderInstance } from "@nakama/core";
+import {
+  loadUserConfig,
+  type ProviderInstance,
+  toLlmToolDefinition,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
+import {
+  cassetteFilePath,
+  loadCassette,
+  withMswCassette,
+} from "../testing/llm-msw-cassette";
 import { createAskUserQuestionTools } from "./ask-user-question-tool";
-import { cassetteFilePath, loadCassette, withMswCassette } from "../testing/llm-msw-cassette";
 
 const cassetteName = "ask-user-question-tool-call";
 
 async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
   const configured =
-    config?.providers.find((provider) => provider.type === "openai" && provider.apiKey.trim()) ??
-    null;
+    config?.providers.find(
+      (provider) => provider.type === "openai" && provider.apiKey.trim()
+    ) ?? null;
 
   if (configured) {
     return configured;
@@ -35,11 +44,11 @@ async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   }
 
   return {
-    id: "env-openai",
-    type: "openai",
-    label: "OpenAI",
     apiKey,
     createdAt: new Date().toISOString(),
+    id: "env-openai",
+    label: "OpenAI",
+    type: "openai",
   };
 }
 
@@ -51,20 +60,20 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
 
   if (!existing && mode !== "record" && !instance) {
     throw new Error(
-      "Missing OpenAI credentials to record ask_user_question cassette. Set OPENAI_API_KEY or configure an OpenAI provider, then run with LLM_VCR_MODE=record.",
+      "Missing OpenAI credentials to record ask_user_question cassette. Set OPENAI_API_KEY or configure an OpenAI provider, then run with LLM_VCR_MODE=record."
     );
   }
 
   await withMswCassette(cassetteName, async () => {
     const liveProvider = createProviderForInstance(
       instance ?? {
-        id: "replay-openai",
-        type: "openai",
-        label: "OpenAI",
         apiKey: "sk-replay-placeholder",
         createdAt: new Date().toISOString(),
+        id: "replay-openai",
+        label: "OpenAI",
+        type: "openai",
       },
-      "gpt-4o-mini",
+      "gpt-4o-mini"
     );
 
     if (!liveProvider) {
@@ -74,32 +83,32 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
     const db = createInMemoryDatabaseAdapter();
     const state = new AgentQuestionnaireState(db);
     await db.upsertSession({
-      id: "session_llm",
-      profileId: "default",
+      agentQuestionnaire: null,
+      agentTodos: [],
       channel: "web",
       createdAt: new Date().toISOString(),
+      id: "session_llm",
+      profileId: "default",
       title: null,
-      agentTodos: [],
-      agentQuestionnaire: null,
     });
 
     const tool = createAskUserQuestionTools(state).find(
-      (entry) => entry.name === "ask_user_question",
+      (entry) => entry.name === "ask_user_question"
     );
     if (!tool) {
       throw new Error("ask_user_question tool missing");
     }
 
     const result = await liveProvider.generateChat({
-      system:
-        "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
       messages: [
         {
-          role: "user",
           content:
             "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices.",
+          role: "user",
         },
       ],
+      system:
+        "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
       tools: [toLlmToolDefinition(tool)],
     });
 
@@ -113,7 +122,7 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
     const questions = args.questions;
     if (!Array.isArray(questions) || questions.length === 0) {
       throw new Error(
-        `expected ask_user_question questions array, got ${JSON.stringify(args)}`,
+        `expected ask_user_question questions array, got ${JSON.stringify(args)}`
       );
     }
     const first = questions[0];

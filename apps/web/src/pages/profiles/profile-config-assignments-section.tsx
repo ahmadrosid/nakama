@@ -1,12 +1,16 @@
-import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { ProfileComposioSection } from "@/pages/profiles/profile-composio-section";
 import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
 import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import { ProfileToolsSection } from "@/pages/profiles/profile-tools-section";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
+import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
-export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPageState }) {
+export function ProfileConfigAssignmentsSection({
+  state,
+}: {
+  state: ProfilesPageState;
+}) {
   const {
     detail,
     busy,
@@ -37,42 +41,44 @@ export function ProfileConfigAssignmentsSection({ state }: { state: ProfilesPage
   return (
     <>
       <ProfileToolsSection
-        detail={detail}
-        busy={busy}
         availableTools={availableTools}
+        busy={busy}
+        detail={detail}
         onAssign={handleAssignTool}
         onRemove={setRemoveConfirm}
       />
       <ProfileMcpSection
-        detail={detail}
-        busy={busy}
         allMcpServers={allMcpServers}
         availableMcpServers={availableMcpServers}
-        onCreateOpen={() => setMcpCreateOpen(true)}
+        busy={busy}
+        detail={detail}
         onAssign={handleAssignMcpServer}
+        onCreateOpen={() => setMcpCreateOpen(true)}
         onRemove={setRemoveConfirm}
       />
       <ProfileComposioSection
-        busy={busy}
-        composioToolkitsData={composioToolkitsData}
         assignedComposioToolkits={assignedComposioToolkits}
         availableComposioToolkits={availableComposioToolkits}
+        busy={busy}
+        composioToolkitsData={composioToolkitsData}
         onAssign={handleAssignComposioToolkit}
         onRemove={setRemoveConfirm}
       />
       <ProfileSkillsSection
-        detail={detail}
-        busy={busy}
         allSkills={allSkills}
         assignedSkillIds={assignedSkillIds}
-        onCreateOpen={() => setSkillCreateOpen(true)}
+        busy={busy}
+        detail={detail}
         onAssign={handleAssignSkill}
-        onDelete={handleDeleteSkill}
-        onViewDetail={(skillId) => {
-          navigateToSkillDetail(skillId, { profileId: selectedId ?? undefined });
-        }}
-        onRemove={setRemoveConfirm}
         onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
+        onCreateOpen={() => setSkillCreateOpen(true)}
+        onDelete={handleDeleteSkill}
+        onRemove={setRemoveConfirm}
+        onViewDetail={(skillId) => {
+          navigateToSkillDetail(skillId, {
+            profileId: selectedId ?? undefined,
+          });
+        }}
       />
     </>
   );

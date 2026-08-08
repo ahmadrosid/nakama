@@ -10,8 +10,17 @@ import type { Token, Tokens } from "marked";
  * the tool that closes that gap.
  */
 export async function markdownToDocx(markdown: string): Promise<Buffer> {
-  const { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType } =
-    await import("docx");
+  const {
+    Document,
+    Packer,
+    Paragraph,
+    HeadingLevel,
+    TextRun,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+  } = await import("docx");
   const { marked } = await import("marked");
 
   const HEADING_BY_DEPTH = [
@@ -24,37 +33,63 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
   ];
 
   /** Flatten inline Markdown (bold, italic, code, links) into styled runs. */
-  function toRuns(tokens: Token[] | undefined, inherited: Partial<IRunOptions> = {}): InstanceType<typeof TextRun>[] {
+  function toRuns(
+    tokens: Token[] | undefined,
+    inherited: Partial<IRunOptions> = {}
+  ): InstanceType<typeof TextRun>[] {
     const runs: InstanceType<typeof TextRun>[] = [];
 
     for (const token of tokens ?? []) {
       switch (token.type) {
         case "strong":
-          runs.push(...toRuns((token as Tokens.Strong).tokens, { ...inherited, bold: true }));
+          runs.push(
+            ...toRuns((token as Tokens.Strong).tokens, {
+              ...inherited,
+              bold: true,
+            })
+          );
           break;
         case "em":
-          runs.push(...toRuns((token as Tokens.Em).tokens, { ...inherited, italics: true }));
+          runs.push(
+            ...toRuns((token as Tokens.Em).tokens, {
+              ...inherited,
+              italics: true,
+            })
+          );
           break;
         case "del":
-          runs.push(...toRuns((token as Tokens.Del).tokens, { ...inherited, strike: true }));
+          runs.push(
+            ...toRuns((token as Tokens.Del).tokens, {
+              ...inherited,
+              strike: true,
+            })
+          );
           break;
         case "link":
-          runs.push(...toRuns((token as Tokens.Link).tokens, { ...inherited, style: "Hyperlink" }));
+          runs.push(
+            ...toRuns((token as Tokens.Link).tokens, {
+              ...inherited,
+              style: "Hyperlink",
+            })
+          );
           break;
         case "codespan":
           runs.push(
             new TextRun({
               ...inherited,
-              text: (token as Tokens.Codespan).text,
               font: "Courier New",
-            }),
+              text: (token as Tokens.Codespan).text,
+            })
           );
           break;
         case "br":
-          runs.push(new TextRun({ ...inherited, text: "", break: 1 }));
+          runs.push(new TextRun({ ...inherited, break: 1, text: "" }));
           break;
         default: {
-          const text = "text" in token ? String((token as { text: unknown }).text ?? "") : "";
+          const text =
+            "text" in token
+              ? String((token as { text: unknown }).text ?? "")
+              : "";
           if (text) {
             runs.push(new TextRun({ ...inherited, text }));
           }
@@ -65,23 +100,33 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     return runs;
   }
 
-  function paragraph(tokens: Token[] | undefined, options: IParagraphOptions = {}) {
+  function paragraph(
+    tokens: Token[] | undefined,
+    options: IParagraphOptions = {}
+  ) {
     const children = toRuns(tokens);
-    return new Paragraph({ ...options, children: children.length > 0 ? children : undefined });
+    return new Paragraph({
+      ...options,
+      children: children.length > 0 ? children : undefined,
+    });
   }
 
   function tableCell(text: string, header: boolean) {
     return new TableCell({
       children: [
         new Paragraph({
-          children: [new TextRun({ text, bold: header })],
+          children: [new TextRun({ bold: header, text })],
         }),
       ],
     });
   }
 
-  function blocksFrom(tokens: Token[]): Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> {
-    const blocks: Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> = [];
+  function blocksFrom(
+    tokens: Token[]
+  ): Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> {
+    const blocks: Array<
+      InstanceType<typeof Paragraph> | InstanceType<typeof Table>
+    > = [];
 
     for (const token of tokens) {
       switch (token.type) {
@@ -90,7 +135,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           blocks.push(
             paragraph(heading.tokens, {
               heading: HEADING_BY_DEPTH[Math.min(heading.depth, 6) - 1],
-            }),
+            })
           );
           break;
         }
@@ -100,8 +145,8 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
         case "blockquote":
           blocks.push(
             ...blocksFrom((token as Tokens.Blockquote).tokens).map((block) =>
-              block instanceof Paragraph ? block : block,
-            ),
+              block instanceof Paragraph ? block : block
+            )
           );
           break;
         case "list": {
@@ -110,8 +155,10 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
             blocks.push(
               paragraph(item.tokens, {
                 bullet: list.ordered ? undefined : { level: 0 },
-                numbering: list.ordered ? { reference: "ordered", level: 0 } : undefined,
-              }),
+                numbering: list.ordered
+                  ? { level: 0, reference: "ordered" }
+                  : undefined,
+              })
             );
           });
           break;
@@ -120,19 +167,21 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           const table = token as Tokens.Table;
           blocks.push(
             new Table({
-              width: { size: 100, type: WidthType.PERCENTAGE },
               rows: [
                 new TableRow({
-                  children: table.header.map((cell) => tableCell(cell.text, true)),
+                  children: table.header.map((cell) =>
+                    tableCell(cell.text, true)
+                  ),
                 }),
                 ...table.rows.map(
                   (row) =>
                     new TableRow({
                       children: row.map((cell) => tableCell(cell.text, false)),
-                    }),
+                    })
                 ),
               ],
-            }),
+              width: { size: 100, type: WidthType.PERCENTAGE },
+            })
           );
           break;
         }
@@ -140,13 +189,18 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           for (const line of (token as Tokens.Code).text.split("\n")) {
             blocks.push(
               new Paragraph({
-                children: [new TextRun({ text: line, font: "Courier New" })],
-              }),
+                children: [new TextRun({ font: "Courier New", text: line })],
+              })
             );
           }
           break;
         case "hr":
-          blocks.push(new Paragraph({ text: "", border: { bottom: { style: "single", size: 6 } } }));
+          blocks.push(
+            new Paragraph({
+              border: { bottom: { size: 6, style: "single" } },
+              text: "",
+            })
+          );
           break;
         default:
           break;
@@ -162,8 +216,10 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     numbering: {
       config: [
         {
+          levels: [
+            { alignment: "start", format: "decimal", level: 0, text: "%1." },
+          ],
           reference: "ordered",
-          levels: [{ level: 0, format: "decimal", text: "%1.", alignment: "start" }],
         },
       ],
     },

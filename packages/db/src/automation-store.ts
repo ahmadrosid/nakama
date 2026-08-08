@@ -2,11 +2,11 @@ import type { AutomationDefinition, StoredAutomation } from "@nakama/core";
 import type { DatabaseAdapter, StoredAutomationRecord } from "./types";
 
 export interface AutomationStore {
+  delete(id: string): Promise<boolean>;
+  get(id: string): Promise<StoredAutomation | null>;
   list(): Promise<StoredAutomation[]>;
   listForOrg(orgId: string): Promise<StoredAutomation[]>;
-  get(id: string): Promise<StoredAutomation | null>;
   save(definition: StoredAutomation): Promise<void>;
-  delete(id: string): Promise<boolean>;
 }
 
 export class DatabaseAutomationStore implements AutomationStore {
@@ -37,22 +37,24 @@ export class DatabaseAutomationStore implements AutomationStore {
 }
 
 function fromRecord(record: StoredAutomationRecord): StoredAutomation {
-  const definition = record.definition as Partial<AutomationDefinition> | undefined;
+  const definition = record.definition as
+    | Partial<AutomationDefinition>
+    | undefined;
 
   return {
+    createdAt: record.createdAt,
+    delivery: definition?.delivery,
+    description: definition?.description ?? "",
+    enabled: record.enabled,
     id: record.id,
     name: record.name,
-    description: definition?.description ?? "",
-    prompt: definition?.prompt ?? "",
-    trigger: definition?.trigger ?? { type: "manual" },
-    steps: definition?.steps ?? [],
-    version: definition?.version ?? record.version,
-    delivery: definition?.delivery,
-    profileId: record.profileId,
     orgId: record.orgId ?? null,
-    enabled: record.enabled,
-    createdAt: record.createdAt,
+    profileId: record.profileId,
+    prompt: definition?.prompt ?? "",
+    steps: definition?.steps ?? [],
+    trigger: definition?.trigger ?? { type: "manual" },
     updatedAt: record.updatedAt,
+    version: definition?.version ?? record.version,
   };
 }
 
@@ -60,21 +62,21 @@ function toRecord(definition: StoredAutomation): StoredAutomationRecord {
   const now = new Date().toISOString();
 
   return {
-    id: definition.id,
-    name: definition.name,
-    version: definition.version,
+    createdAt: definition.createdAt ?? now,
     definition: {
       description: definition.description,
       prompt: definition.prompt,
-      trigger: definition.trigger,
       steps: definition.steps,
+      trigger: definition.trigger,
       version: definition.version,
       ...(definition.delivery ? { delivery: definition.delivery } : {}),
     },
-    profileId: definition.profileId,
-    orgId: definition.orgId ?? null,
     enabled: definition.enabled,
-    createdAt: definition.createdAt ?? now,
+    id: definition.id,
+    name: definition.name,
+    orgId: definition.orgId ?? null,
+    profileId: definition.profileId,
     updatedAt: now,
+    version: definition.version,
   };
 }

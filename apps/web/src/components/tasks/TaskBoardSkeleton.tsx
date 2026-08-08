@@ -4,18 +4,18 @@ import { cn } from "@/lib/utils";
 export function TaskBoardSkeleton() {
   return (
     <div
-      className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory"
       aria-busy="true"
       aria-label="Loading agent swarm board"
+      className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4"
     >
       {TASK_COLUMN_META.map((column) => (
         <div
-          key={column.id}
           className={cn(
-            "flex min-h-[24rem] w-72 shrink-0 snap-start flex-col rounded-lg border border-border bg-muted/20",
+            "flex min-h-[24rem] w-72 shrink-0 snap-start flex-col rounded-lg border border-border bg-muted/20"
           )}
+          key={column.id}
         >
-          <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+          <div className="flex items-center justify-between border-border border-b px-3 py-2.5">
             <div className="h-4 w-24 animate-pulse rounded bg-muted motion-reduce:animate-none" />
             <div className="h-5 w-8 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
           </div>

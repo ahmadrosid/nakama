@@ -18,16 +18,32 @@ describe("canRestoreDataImport", () => {
 
   test("requires a selected file, successful preview, and idle restore state", () => {
     expect(
-      canRestoreDataImport({ selectedFile: file, previewReady: true, pending: false }),
+      canRestoreDataImport({
+        pending: false,
+        previewReady: true,
+        selectedFile: file,
+      })
     ).toBe(true);
     expect(
-      canRestoreDataImport({ selectedFile: null, previewReady: true, pending: false }),
+      canRestoreDataImport({
+        pending: false,
+        previewReady: true,
+        selectedFile: null,
+      })
     ).toBe(false);
     expect(
-      canRestoreDataImport({ selectedFile: file, previewReady: false, pending: false }),
+      canRestoreDataImport({
+        pending: false,
+        previewReady: false,
+        selectedFile: file,
+      })
     ).toBe(false);
     expect(
-      canRestoreDataImport({ selectedFile: file, previewReady: true, pending: true }),
+      canRestoreDataImport({
+        pending: true,
+        previewReady: true,
+        selectedFile: file,
+      })
     ).toBe(false);
   });
 });

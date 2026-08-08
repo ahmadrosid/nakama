@@ -3,9 +3,13 @@
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
 import { ChevronDownIcon } from "lucide-react";
-import styles from "./WebSearch.module.css";
-import type { WebSearchSiteState, WebSearchSource, WebSourceCardMode } from "./web-search.shared";
 import { cn } from "@/lib/utils";
+import styles from "./WebSearch.module.css";
+import type {
+  WebSearchSiteState,
+  WebSearchSource,
+  WebSourceCardMode,
+} from "./web-search.shared";
 
 const GLOBE_MERIDIANS = {
   L: "M6.057 11.565 C2.081 11.565 0.371 8.159 0.371 5.964 C0.371 3.642 2.152 0.329 6.05 0.329",
@@ -25,37 +29,37 @@ function Globe() {
 
   return (
     <svg
+      aria-hidden
+      fill="none"
+      height="12"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="0.85"
+      style={{ overflow: "visible" }}
       viewBox="0 0 12 12"
       width="12"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="0.85"
-      strokeLinecap="round"
-      style={{ overflow: "visible" }}
-      aria-hidden
     >
-      <circle cx="6" cy="6" r="5.7" opacity="0.9" />
-      <line x1="0.3" y1="6" x2="11.7" y2="6" opacity="0.9" />
+      <circle cx="6" cy="6" opacity="0.9" r="5.7" />
+      <line opacity="0.9" x1="0.3" x2="11.7" y1="6" y2="6" />
       {["0s", "-1.2s", "-2.4s", "-3.6s", "-4.8s", "-6s"].map((begin) => (
-        <path key={begin} d={GLOBE_MERIDIANS.L} opacity="0">
+        <path d={GLOBE_MERIDIANS.L} key={begin} opacity="0">
           <animate
             attributeName="d"
-            dur="7.2s"
             begin={begin}
-            repeatCount="indefinite"
             calcMode="spline"
-            keyTimes="0;0.25;0.5;0.75;1"
+            dur="7.2s"
             keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"
+            keyTimes="0;0.25;0.5;0.75;1"
+            repeatCount="indefinite"
             values={values}
           />
           <animate
             attributeName="opacity"
-            dur="7.2s"
             begin={begin}
-            repeatCount="indefinite"
             calcMode="linear"
+            dur="7.2s"
             keyTimes="0;0.05;0.7;0.75;1"
+            repeatCount="indefinite"
             values="0;0.9;0.9;0;0"
           />
         </path>
@@ -67,15 +71,15 @@ function Globe() {
 function SearchIcon() {
   return (
     <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
+      aria-hidden
       fill="none"
+      height="14"
       stroke="currentColor"
-      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="14"
     >
       <path d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
     </svg>
@@ -85,15 +89,15 @@ function SearchIcon() {
 function ArrowUpIcon() {
   return (
     <svg
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
+      aria-hidden
       fill="none"
+      height="10"
       stroke="currentColor"
-      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="10"
     >
       <path d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
     </svg>
@@ -102,8 +106,22 @@ function ArrowUpIcon() {
 
 function DotsIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" aria-hidden>
-      <circle cx="12" cy="12" r="9" strokeWidth="1.8" strokeDasharray="1.8 3.6" strokeLinecap="round" />
+    <svg
+      aria-hidden
+      fill="none"
+      height="16"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      width="16"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        strokeDasharray="1.8 3.6"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }
@@ -111,15 +129,15 @@ function DotsIcon() {
 function CheckIcon() {
   return (
     <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
+      aria-hidden
       fill="none"
+      height="16"
       stroke="currentColor"
-      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      strokeWidth="1.6"
+      viewBox="0 0 24 24"
+      width="16"
     >
       <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
     </svg>
@@ -129,15 +147,15 @@ function CheckIcon() {
 function LinkIcon() {
   return (
     <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
+      aria-hidden
       fill="none"
+      height="14"
       stroke="currentColor"
-      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="14"
     >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
@@ -146,14 +164,14 @@ function LinkIcon() {
 }
 
 export interface WebSourceCardProps {
-  mode: WebSourceCardMode;
-  headerText: string;
-  sources: WebSearchSource[];
-  siteStates: WebSearchSiteState[];
-  isComplete: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   formatDisplayUrl?: (source: WebSearchSource) => string;
+  headerText: string;
+  isComplete: boolean;
+  mode: WebSourceCardMode;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  siteStates: WebSearchSiteState[];
+  sources: WebSearchSource[];
 }
 
 function formatWebSearchDisplayUrl(source: WebSearchSource): string {
@@ -199,7 +217,9 @@ export function WebSourceCard({
     <>
       {leadingIcon}
       <span className={styles.wsLabel}>
-        <span className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}>
+        <span
+          className={`${styles.wsShimmer}${isComplete ? ` ${styles.isDone}` : ""}`}
+        >
           {headerLabel}{" "}
           {quoteHeader ? (
             <span className={styles.wsQuote}>&ldquo;{headerText}&rdquo;</span>
@@ -210,8 +230,11 @@ export function WebSourceCard({
       </span>
       {canExpand ? (
         <ChevronDownIcon
-          className={cn(styles.wsChevronIcon, !open && styles.wsChevronCollapsed)}
           aria-hidden
+          className={cn(
+            styles.wsChevronIcon,
+            !open && styles.wsChevronCollapsed
+          )}
         />
       ) : null}
     </>
@@ -221,11 +244,11 @@ export function WebSourceCard({
     <div className={styles.ws} data-state={isComplete ? "done" : "loading"}>
       {canExpand ? (
         <button
-          type="button"
-          className={styles.wsRowButton}
           aria-expanded={open}
           aria-label="Toggle results"
+          className={styles.wsRowButton}
           onClick={() => onOpenChange(!open)}
+          type="button"
         >
           {headerContent}
         </button>
@@ -234,7 +257,9 @@ export function WebSourceCard({
       )}
 
       {canExpand ? (
-        <div className={`${styles.wsCollapsible}${open ? "" : ` ${styles.isCollapsed}`}`}>
+        <div
+          className={`${styles.wsCollapsible}${open ? "" : ` ${styles.isCollapsed}`}`}
+        >
           <div className={styles.wsCollapsibleInner}>
             <div className={styles.wsResults}>
               <ul className={styles.wsList}>
@@ -267,17 +292,19 @@ export function WebSourceCard({
 
                   return (
                     <li
-                      key={source.url}
                       className={styles.wsSite}
                       data-state={state}
+                      key={source.url}
                       style={{ animationDelay: `${index * 40}ms` }}
                     >
                       {state === "done" && href ? (
                         <a
-                          href={href.startsWith("http") ? href : `https://${href}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className={styles.wsSiteLink}
+                          href={
+                            href.startsWith("http") ? href : `https://${href}`
+                          }
+                          rel="noopener noreferrer"
+                          target="_blank"
                         >
                           {row}
                         </a>

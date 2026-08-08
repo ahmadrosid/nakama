@@ -5,13 +5,13 @@ import { messagesIncludeUserImages } from "./message-content";
 describe("messagesIncludeUserImages", () => {
   test("detects image parts in user messages", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "hello" },
+      { content: "hello", role: "user" },
       {
-        role: "user",
         content: [
-          { type: "text", text: "see this" },
-          { type: "image", mediaType: "image/png", data: "abc" },
+          { text: "see this", type: "text" },
+          { data: "abc", mediaType: "image/png", type: "image" },
         ],
+        role: "user",
       },
     ];
 
@@ -20,8 +20,8 @@ describe("messagesIncludeUserImages", () => {
 
   test("returns false for text-only history", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "hello" },
-      { role: "assistant", content: "hi" },
+      { content: "hello", role: "user" },
+      { content: "hi", role: "assistant" },
     ];
 
     expect(messagesIncludeUserImages(messages)).toBe(false);

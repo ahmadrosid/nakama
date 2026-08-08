@@ -1,25 +1,28 @@
 import { createContext, type ReactNode } from "react";
 
 export interface ChatAttachmentPanelConfig {
-  id: string;
-  title: string;
-  subtitle?: string | null;
-  content: ReactNode;
-  headerActions?: ReactNode;
   bodyClassName?: string;
+  content: ReactNode;
   defaultWidth?: number;
-  resizable?: boolean;
   fullscreen?: boolean;
+  headerActions?: ReactNode;
+  id: string;
   onClose?: () => void;
+  resizable?: boolean;
+  subtitle?: string | null;
+  title: string;
 }
 
 export interface ChatAttachmentPanelContextValue {
-  isOpen: boolean;
   activeId: string | null;
-  isFullscreen: boolean;
-  show: (config: ChatAttachmentPanelConfig) => void;
-  update: (id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => void;
   hide: (id?: string) => void;
+  isFullscreen: boolean;
+  isOpen: boolean;
+  show: (config: ChatAttachmentPanelConfig) => void;
+  update: (
+    id: string,
+    patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>
+  ) => void;
 }
 
 export const ChatAttachmentPanelContext =

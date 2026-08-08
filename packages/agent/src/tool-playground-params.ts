@@ -1,10 +1,10 @@
 import type { JsonSchema, ProviderClient } from "@nakama/core";
 
 export interface SuggestToolParamsInput {
-  toolName: string;
   description: string;
   parameters?: JsonSchema;
   prompt: string;
+  toolName: string;
 }
 
 const SUGGEST_PARAMS_SYSTEM = [
@@ -13,7 +13,9 @@ const SUGGEST_PARAMS_SYSTEM = [
   "Do not use markdown fences, labels, or surrounding prose.",
 ].join("\n");
 
-export function buildSuggestParamsUserPrompt(input: SuggestToolParamsInput): string {
+export function buildSuggestParamsUserPrompt(
+  input: SuggestToolParamsInput
+): string {
   const lines = [
     `Tool: ${input.toolName}`,
     `Description: ${input.description}`,
@@ -27,7 +29,9 @@ export function buildSuggestParamsUserPrompt(input: SuggestToolParamsInput): str
   return lines.join("\n");
 }
 
-export function parseSuggestedParams(raw: string): Record<string, unknown> | null {
+export function parseSuggestedParams(
+  raw: string
+): Record<string, unknown> | null {
   const trimmed = raw.trim();
   const unfenced = trimmed
     .replace(/^```(?:json)?\s*/i, "")
@@ -37,7 +41,11 @@ export function parseSuggestedParams(raw: string): Record<string, unknown> | nul
   try {
     const parsed: unknown = JSON.parse(unfenced);
 
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -53,7 +61,7 @@ function readGenerateTextContent(result: { content: string } | string): string {
 
 export async function suggestToolParamsFromPrompt(
   input: SuggestToolParamsInput,
-  options: { provider?: ProviderClient },
+  options: { provider?: ProviderClient }
 ): Promise<Record<string, unknown>> {
   const prompt = input.prompt.trim();
 
@@ -67,9 +75,9 @@ export async function suggestToolParamsFromPrompt(
 
   try {
     const result = await options.provider.generateText({
-      system: SUGGEST_PARAMS_SYSTEM,
-      prompt: buildSuggestParamsUserPrompt(input),
       format: "text",
+      prompt: buildSuggestParamsUserPrompt(input),
+      system: SUGGEST_PARAMS_SYSTEM,
     });
 
     return parseSuggestedParams(readGenerateTextContent(result)) ?? {};

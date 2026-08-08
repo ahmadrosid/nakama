@@ -1,21 +1,21 @@
+import type {
+  AddOrgMemberRequest,
+  InviteOrgMemberRequest,
+  UpdateOrgMemberRequest,
+} from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  AddOrgMemberRequest,
-  InviteOrgMemberRequest,
-  UpdateOrgMemberRequest,
-} from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function orgMembersQueryOptions(orgId: string) {
   return queryOptions({
-    queryKey: queryKeys.orgMembers(orgId),
     queryFn: () => client.listOrgMembers(orgId),
+    queryKey: queryKeys.orgMembers(orgId),
   });
 }
 
@@ -26,15 +26,21 @@ export function useOrgMembers(orgId: string | null) {
   });
 }
 
-function invalidateOrgMembers(queryClient: ReturnType<typeof useQueryClient>, orgId: string) {
-  return queryClient.invalidateQueries({ queryKey: queryKeys.orgMembers(orgId) });
+function invalidateOrgMembers(
+  queryClient: ReturnType<typeof useQueryClient>,
+  orgId: string
+) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.orgMembers(orgId),
+  });
 }
 
 export function useInviteOrgMember(orgId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: InviteOrgMemberRequest) => client.inviteOrgMember(orgId, request),
+    mutationFn: (request: InviteOrgMemberRequest) =>
+      client.inviteOrgMember(orgId, request),
     onSuccess: () => invalidateOrgMembers(queryClient, orgId),
   });
 }
@@ -43,7 +49,8 @@ export function useAddOrgMember(orgId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: AddOrgMemberRequest) => client.addOrgMember(orgId, request),
+    mutationFn: (request: AddOrgMemberRequest) =>
+      client.addOrgMember(orgId, request),
     onSuccess: () => invalidateOrgMembers(queryClient, orgId),
   });
 }

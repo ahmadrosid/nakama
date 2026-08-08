@@ -20,7 +20,7 @@ export function setupTestConfigDir(prefix = "nakama-server-test-"): void {
     }
 
     if (testConfigDir) {
-      rmSync(testConfigDir, { recursive: true, force: true });
+      rmSync(testConfigDir, { force: true, recursive: true });
       testConfigDir = "";
     }
   });

@@ -1,11 +1,15 @@
-import type { CreateProviderResponse, OllamaHostMode, ProviderModelOption } from "@nakama/core/contract";
+import type {
+  CreateProviderResponse,
+  OllamaHostMode,
+  ProviderModelOption,
+} from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
-import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
+import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { formatError } from "@/lib/client";
 import {
   appendOpenRouterModelRow,
@@ -18,17 +22,17 @@ import {
   hasOpenCodeZenProvider,
   isProviderTypeAlreadyConfigured,
   isShortlistCapabilityProvider,
-  modelsFromShortlistRows,
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
-  type SelectedProvider,
+  modelsFromShortlistRows,
   resolveOpenRouterSetupModel,
+  type SelectedProvider,
   validateApiKeyForProvider,
   validateBaseUrlInput,
-  validateShortlistCapabilityModelsInput,
   validateCustomModelsInput,
   validateDisplayNameInput,
   validateOpenRouterModelsInput,
+  validateShortlistCapabilityModelsInput,
 } from "@/lib/models";
 
 interface UseProviderSetupFormOptions {
@@ -37,7 +41,9 @@ interface UseProviderSetupFormOptions {
 
 const EMPTY_CATALOG: ProviderModelOption[] = [];
 
-export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) {
+export function useProviderSetupForm(
+  options: UseProviderSetupFormOptions = {}
+) {
   const { createProvider } = useAppContext();
   const { isAuthenticated } = useAuth();
   const { data: catalogResponse, error: catalogQueryError } = useModelsQuery({
@@ -46,7 +52,8 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   const { data: providersResponse } = useProvidersQuery({
     enabled: isAuthenticated,
   });
-  const catalog = catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
+  const catalog =
+    catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
 
   const configuredTypes = useMemo(() => {
     const types = new Set<string>();
@@ -58,23 +65,30 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const openCodeZenConfigured = useMemo(
     () => hasOpenCodeZenProvider(providersResponse?.providers ?? []),
-    [providersResponse?.providers],
+    [providersResponse?.providers]
   );
 
-  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>("openai");
+  const [selectedProvider, setSelectedProvider] =
+    useState<SelectedProvider>("openai");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
-  const [openRouterModelsError, setOpenRouterModelsError] = useState<string | null>(null);
+  const [openRouterModelsError, setOpenRouterModelsError] = useState<
+    string | null
+  >(null);
   const [shortlistModels, setShortlistModels] = useState<ModelListRow[]>([]);
-  const [shortlistModelsError, setShortlistModelsError] = useState<string | null>(null);
+  const [shortlistModelsError, setShortlistModelsError] = useState<
+    string | null
+  >(null);
   const [ollamaHostMode, setOllamaHostMode] = useState<OllamaHostMode>("local");
   const [displayName, setDisplayName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [customModels, setCustomModels] = useState<ModelListRow[]>([{ id: "", name: "" }]);
+  const [customModels, setCustomModels] = useState<ModelListRow[]>([
+    { id: "", name: "" },
+  ]);
   const [extraModels, setExtraModels] = useState<ProviderModelOption[]>([]);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
@@ -99,9 +113,14 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
   }, [configuredTypes]);
 
   const filteredModels = useMemo(() => {
-    if (selectedProvider === "openai_compatible" || selectedProvider === "ollama") {
+    if (
+      selectedProvider === "openai_compatible" ||
+      selectedProvider === "ollama"
+    ) {
       return modelsFromCustomRows(customModels).map((model) =>
-        selectedProvider === "ollama" ? { ...model, provider: "ollama" as const } : model,
+        selectedProvider === "ollama"
+          ? { ...model, provider: "ollama" as const }
+          : model
       );
     }
 
@@ -116,14 +135,22 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
     const catalogModels = filterModelsByProvider(catalog, selectedProvider);
     const catalogIds = new Set(catalogModels.map((model) => model.id));
     const extras = extraModels.filter(
-      (model) => model.provider === selectedProvider && !catalogIds.has(model.id),
+      (model) =>
+        model.provider === selectedProvider && !catalogIds.has(model.id)
     );
     return [...catalogModels, ...extras];
-  }, [catalog, selectedProvider, customModels, openRouterModels, shortlistModels, extraModels]);
+  }, [
+    catalog,
+    selectedProvider,
+    customModels,
+    openRouterModels,
+    shortlistModels,
+    extraModels,
+  ]);
 
   const ollamaApiKeyOptions = useMemo(
     () => ({ ollamaHostMode }),
-    [ollamaHostMode],
+    [ollamaHostMode]
   );
 
   useEffect(() => {
@@ -142,7 +169,9 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
 
   const handleApiKeyBlur = useCallback(() => {
     setApiKeyTouched(true);
-    setApiKeyError(validateApiKeyForProvider(apiKey, selectedProvider, ollamaApiKeyOptions));
+    setApiKeyError(
+      validateApiKeyForProvider(apiKey, selectedProvider, ollamaApiKeyOptions)
+    );
   }, [apiKey, selectedProvider, ollamaApiKeyOptions]);
 
   const handleApiKeyChange = useCallback(
@@ -154,12 +183,24 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       }
 
       if (apiKeyTouched) {
-        setApiKeyError(validateApiKeyForProvider(value, selectedProvider, ollamaApiKeyOptions));
+        setApiKeyError(
+          validateApiKeyForProvider(
+            value,
+            selectedProvider,
+            ollamaApiKeyOptions
+          )
+        );
       } else if (apiKeyError) {
         setApiKeyError(null);
       }
     },
-    [apiKeyTouched, apiKeyError, formError, selectedProvider, ollamaApiKeyOptions],
+    [
+      apiKeyTouched,
+      apiKeyError,
+      formError,
+      selectedProvider,
+      ollamaApiKeyOptions,
+    ]
   );
 
   const handleProviderSelect = useCallback(
@@ -174,7 +215,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setOpenRouterModels([{ id: "", name: "" }]);
       }
 
-      if (isShortlistCapabilityProvider(provider) && shortlistModels.length === 0) {
+      if (
+        isShortlistCapabilityProvider(provider) &&
+        shortlistModels.length === 0
+      ) {
         setShortlistModels([{ id: "", name: "" }]);
       }
 
@@ -206,22 +250,22 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setCustomModels([{ id: "", name: "" }]);
       }
     },
-    [configuredTypes, openRouterModels.length, shortlistModels.length],
+    [configuredTypes, openRouterModels.length, shortlistModels.length]
   );
 
   const selectOpenRouterModel = useCallback(
     (
       modelId: string,
       modelName: string,
-      pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number },
+      pricing?: { inputPerMillionUsd?: number; outputPerMillionUsd?: number }
     ) => {
       setOpenRouterModels((current) =>
-        appendOpenRouterModelRow(current, modelId, modelName, pricing),
+        appendOpenRouterModelRow(current, modelId, modelName, pricing)
       );
       setSelectedModel(modelId);
       setOpenRouterModelsError(null);
     },
-    [],
+    []
   );
 
   const handleBrowseSelect = useCallback(
@@ -249,7 +293,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setExtraModels((current) => {
           if (
             current.some(
-              (model) => model.provider === provider && model.id === modelId,
+              (model) => model.provider === provider && model.id === modelId
             )
           ) {
             return current;
@@ -269,7 +313,7 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setExtraModels((current) => {
           if (
             current.some(
-              (model) => model.provider === provider && model.id === modelId,
+              (model) => model.provider === provider && model.id === modelId
             )
           ) {
             return current;
@@ -288,7 +332,12 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         setBaseUrl(row.apiUrl.replace(/\/$/, ""));
       }
     },
-    [configuredTypes, openCodeZenConfigured, handleProviderSelect, selectOpenRouterModel],
+    [
+      configuredTypes,
+      openCodeZenConfigured,
+      handleProviderSelect,
+      selectOpenRouterModel,
+    ]
   );
 
   const { onSuccess } = options;
@@ -303,13 +352,15 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       setOllamaHostMode(hostMode);
       if (apiKeyTouched) {
         setApiKeyError(
-          validateApiKeyForProvider(apiKey, "ollama", { ollamaHostMode: hostMode }),
+          validateApiKeyForProvider(apiKey, "ollama", {
+            ollamaHostMode: hostMode,
+          })
         );
       } else {
         setApiKeyError(null);
       }
     },
-    [apiKey, apiKeyTouched],
+    [apiKey, apiKeyTouched]
   );
 
   const handleOpenRouterModelsChange = useCallback((rows: ModelListRow[]) => {
@@ -325,13 +376,15 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       const nextApiKeyError = validateApiKeyForProvider(
         trimmedKey,
         selectedProvider,
-        ollamaApiKeyOptions,
+        ollamaApiKeyOptions
       );
       const nextOpenRouterModelsError =
         selectedProvider === "openrouter"
           ? validateOpenRouterModelsInput(openRouterModels)
           : null;
-      const nextShortlistModelsError = isShortlistCapabilityProvider(selectedProvider)
+      const nextShortlistModelsError = isShortlistCapabilityProvider(
+        selectedProvider
+      )
         ? validateShortlistCapabilityModelsInput(shortlistModels)
         : null;
       const nextDisplayNameError =
@@ -339,11 +392,13 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
           ? validateDisplayNameInput(displayName)
           : null;
       const nextBaseUrlError =
-        selectedProvider === "openai_compatible" || selectedProvider === "ollama"
+        selectedProvider === "openai_compatible" ||
+        selectedProvider === "ollama"
           ? validateBaseUrlInput(baseUrl)
           : null;
       const nextModelsError =
-        selectedProvider === "openai_compatible" || selectedProvider === "ollama"
+        selectedProvider === "openai_compatible" ||
+        selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
           : null;
 
@@ -374,9 +429,13 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       }
 
       if (nextBaseUrlError) {
-        document.getElementById(
-          selectedProvider === "ollama" ? "ollama-base-url" : "provider-base-url",
-        )?.focus();
+        document
+          .getElementById(
+            selectedProvider === "ollama"
+              ? "ollama-base-url"
+              : "provider-base-url"
+          )
+          ?.focus();
         return;
       }
 
@@ -405,13 +464,10 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
         const result = await createProvider(
           buildCreateProviderRequest({
             apiKey: trimmedKey,
-            provider: selectedProvider,
-            model: modelToSave || undefined,
-            displayName,
             baseUrl,
-            hostMode: selectedProvider === "ollama" ? ollamaHostMode : undefined,
             customModels:
-              selectedProvider === "openai_compatible" || selectedProvider === "ollama"
+              selectedProvider === "openai_compatible" ||
+              selectedProvider === "ollama"
                 ? normalizeModelListRows(customModels)
                 : selectedProvider === "openrouter"
                   ? normalizeModelListRows(openRouterModels)
@@ -420,13 +476,21 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
                     : selectedProvider === "opencode_go" && modelToSave
                       ? normalizeModelListRows([
                           {
-                            id: modelToSave,
-                            name: getModelDisplayName(filteredModels, modelToSave),
                             default: true,
+                            id: modelToSave,
+                            name: getModelDisplayName(
+                              filteredModels,
+                              modelToSave
+                            ),
                           },
                         ])
                       : undefined,
-          }),
+            displayName,
+            hostMode:
+              selectedProvider === "ollama" ? ollamaHostMode : undefined,
+            model: modelToSave || undefined,
+            provider: selectedProvider,
+          })
         );
         setApiKey("");
         setApiKeyTouched(false);
@@ -457,46 +521,46 @@ export function useProviderSetupForm(options: UseProviderSetupFormOptions = {}) 
       createProvider,
       onSuccess,
       filteredModels,
-    ],
+    ]
   );
 
   return {
+    apiKey,
+    apiKeyError,
+    baseUrl,
+    baseUrlError,
+    busy,
     catalog,
     configuredTypes,
-    openCodeZenConfigured,
-    selectedProvider,
-    apiKey,
-    showApiKey,
-    apiKeyError,
-    selectedModel,
-    openRouterModels,
-    openRouterModelsError,
-    shortlistModels,
-    shortlistModelsError,
-    ollamaHostMode,
-    displayName,
-    baseUrl,
     customModels,
+    displayName,
     displayNameError,
-    baseUrlError,
-    modelsError,
-    busy,
-    formError,
     filteredModels,
-    setSelectedModel,
-    setShowApiKey,
-    setDisplayName,
-    setBaseUrl,
-    setCustomModels,
-    handleOpenRouterModelsChange,
-    handleShortlistModelsChange,
-    handleOllamaHostModeChange,
-    handleApiKeyBlur,
-    handleApiKeyChange,
-    handleProviderSelect,
-    handleBrowseSelect,
-    handleSubmit,
     formatSuccessMessage: (result: CreateProviderResponse) =>
       `${result.provider.label} connected with ${getModelDisplayName(catalog, result.initialModel)}.`,
+    formError,
+    handleApiKeyBlur,
+    handleApiKeyChange,
+    handleBrowseSelect,
+    handleOllamaHostModeChange,
+    handleOpenRouterModelsChange,
+    handleProviderSelect,
+    handleShortlistModelsChange,
+    handleSubmit,
+    modelsError,
+    ollamaHostMode,
+    openCodeZenConfigured,
+    openRouterModels,
+    openRouterModelsError,
+    selectedModel,
+    selectedProvider,
+    setBaseUrl,
+    setCustomModels,
+    setDisplayName,
+    setSelectedModel,
+    setShowApiKey,
+    shortlistModels,
+    shortlistModelsError,
+    showApiKey,
   };
 }

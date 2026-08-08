@@ -1,16 +1,16 @@
+import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const whatsappSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.whatsapp.settings,
   queryFn: () => client.getWhatsAppSettings(),
+  queryKey: queryKeys.whatsapp.settings,
 });
 
 export function useWhatsAppSettings() {

@@ -11,18 +11,18 @@ describe("resolveTelegramWorkerStatus", () => {
     expect(
       resolveTelegramWorkerStatus(
         {
-          configured: false,
+          allowedUserIds: [],
           botTokenMasked: null,
+          configured: false,
           handshakeCode: null,
           pairedUserIds: [],
-          allowedUserIds: [],
           profileId: "default",
         },
-        false,
-      ),
+        false
+      )
     ).toEqual({
-      ok: true,
       configured: false,
+      ok: true,
       paired: false,
       running: false,
     });
@@ -32,18 +32,18 @@ describe("resolveTelegramWorkerStatus", () => {
     expect(
       resolveTelegramWorkerStatus(
         {
-          configured: true,
+          allowedUserIds: [],
           botTokenMasked: "••••1234",
+          configured: true,
           handshakeCode: "ABCD",
           pairedUserIds: [],
-          allowedUserIds: [],
           profileId: "default",
         },
-        false,
-      ),
+        false
+      )
     ).toEqual({
-      ok: false,
       configured: true,
+      ok: false,
       paired: false,
       running: false,
     });
@@ -51,18 +51,18 @@ describe("resolveTelegramWorkerStatus", () => {
     expect(
       resolveTelegramWorkerStatus(
         {
-          configured: true,
+          allowedUserIds: [],
           botTokenMasked: "••••1234",
+          configured: true,
           handshakeCode: null,
           pairedUserIds: [42],
-          allowedUserIds: [],
           profileId: "default",
         },
-        true,
-      ),
+        true
+      )
     ).toEqual({
-      ok: true,
       configured: true,
+      ok: true,
       paired: true,
       running: true,
     });
@@ -76,13 +76,13 @@ describe("isHeartbeatAlive", () => {
       isHeartbeatAlive({
         pid: process.pid,
         updatedAt: new Date(Date.now() - 60_000).toISOString(),
-      }),
+      })
     ).toBe(false);
     expect(
       isHeartbeatAlive({
         pid: process.pid,
         updatedAt: "not-a-date",
-      }),
+      })
     ).toBe(false);
   });
 
@@ -91,7 +91,7 @@ describe("isHeartbeatAlive", () => {
       isHeartbeatAlive({
         pid: process.pid,
         updatedAt: new Date().toISOString(),
-      }),
+      })
     ).toBe(true);
   });
 });
@@ -100,8 +100,8 @@ describe("parseTelegramWorkerHeartbeat", () => {
   test("parses valid JSON", () => {
     expect(
       parseTelegramWorkerHeartbeat(
-        JSON.stringify({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z" }),
-      ),
+        JSON.stringify({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z" })
+      )
     ).toEqual({ pid: 12, updatedAt: "2026-01-01T00:00:00.000Z" });
   });
 

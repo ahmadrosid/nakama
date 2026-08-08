@@ -13,7 +13,7 @@ export function isPrivateWhatsAppChat(jid: string): boolean {
 
 export function isSelfWhatsAppChat(
   remoteJid: string,
-  me: { id: string; lid?: string | null } | undefined,
+  me: { id: string; lid?: string | null } | undefined
 ): boolean {
   if (!me) {
     return false;
@@ -26,7 +26,9 @@ export function isSelfWhatsAppChat(
   return Boolean(me.lid && areJidsSameUser(remoteJid, me.lid));
 }
 
-export function extractInboundText(message: proto.IMessage | null | undefined): string {
+export function extractInboundText(
+  message: proto.IMessage | null | undefined
+): string {
   if (!message) {
     return "";
   }
@@ -42,7 +44,9 @@ export function extractInboundText(message: proto.IMessage | null | undefined): 
   return readTextContent(materialized);
 }
 
-function readTextContent(message: Partial<proto.IMessage> | null | undefined): string {
+function readTextContent(
+  message: Partial<proto.IMessage> | null | undefined
+): string {
   return (
     message?.conversation ??
     message?.extendedTextMessage?.text ??
@@ -53,7 +57,7 @@ function readTextContent(message: Partial<proto.IMessage> | null | undefined): s
 }
 
 function materializeMessage(
-  message: Partial<proto.IMessage> | null | undefined,
+  message: Partial<proto.IMessage> | null | undefined
 ): Partial<proto.IMessage> | null {
   if (!message) {
     return null;
@@ -67,12 +71,19 @@ function materializeMessage(
 }
 
 export function shouldHandleInboundMessage(
-  msg: { key: { fromMe?: boolean | null; remoteJid?: string | null }; message?: proto.IMessage | null },
-  me: { id: string; lid?: string | null } | undefined,
+  msg: {
+    key: { fromMe?: boolean | null; remoteJid?: string | null };
+    message?: proto.IMessage | null;
+  },
+  me: { id: string; lid?: string | null } | undefined
 ): boolean {
   const remoteJid = msg.key.remoteJid;
 
-  if (!remoteJid || isJidGroup(remoteJid) || !isPrivateWhatsAppChat(remoteJid)) {
+  if (
+    !remoteJid ||
+    isJidGroup(remoteJid) ||
+    !isPrivateWhatsAppChat(remoteJid)
+  ) {
     return false;
   }
 

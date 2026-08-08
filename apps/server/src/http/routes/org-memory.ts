@@ -11,25 +11,38 @@ import type {
   UnpinOrgMemoryRequest,
   UpdateOrgMemoryRequest,
 } from "@nakama/core/contract";
-import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
+import {
+  requireNotViewerFromContext,
+  requireOrgAdminFromContext,
+} from "../org-guards";
 import { json, readJson } from "../shared";
-import { requireOrgAdminFromContext, requireNotViewerFromContext } from "../org-guards";
+import type { HonoApp } from "../types";
 
-export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerOrgMemoryRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const orgMemoryService = options.orgMemoryService;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const orgIdParam = z.object({
-    orgId: z.string().openapi({ param: { name: "orgId", in: "path" } }),
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
-  const orgMemoryResponseSchema = z.object({}).passthrough().openapi("OrgMemoryResponse");
+  const orgMemoryResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("OrgMemoryResponse");
   const updateOrgMemorySchema = z
     .object({ content: z.string() })
     .openapi("UpdateOrgMemoryRequest");
   const addOrgMemoryFactSchema = z
     .object({ bullet: z.string(), pin: z.boolean().optional() })
     .openapi("AddOrgMemoryFactRequest");
-  const orgMemorySearchSchema = z.object({ query: z.string() }).openapi("OrgMemorySearchRequest");
+  const orgMemorySearchSchema = z
+    .object({ query: z.string() })
+    .openapi("OrgMemorySearchRequest");
   const orgMemorySearchResponseSchema = z
     .object({})
     .passthrough()
@@ -41,10 +54,17 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     .object({})
     .passthrough()
     .openapi("ArchiveOrgMemoryResponse");
-  const pinOrgMemorySchema = z.object({ bullet: z.string() }).openapi("PinOrgMemoryRequest");
-  const unpinOrgMemorySchema = z.object({ bullet: z.string() }).openapi("UnpinOrgMemoryRequest");
+  const pinOrgMemorySchema = z
+    .object({ bullet: z.string() })
+    .openapi("PinOrgMemoryRequest");
+  const unpinOrgMemorySchema = z
+    .object({ bullet: z.string() })
+    .openapi("UnpinOrgMemoryRequest");
 
-  function resolveOrgId(c: { req: { param: (n: string) => string } }, authOrgId: string): string {
+  function resolveOrgId(
+    c: { req: { param: (n: string) => string } },
+    authOrgId: string
+  ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
@@ -63,21 +83,30 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/memory",
-      tags: ["Organizations"],
-      summary: "Get live org memory",
       operationId: "getOrgMemory",
+      path: "/v1/orgs/{orgId}/memory",
       request: { params: orgIdParam },
       responses: {
         200: {
-          description: "Live org memory",
           content: { "application/json": { schema: orgMemoryResponseSchema } },
+          description: "Live org memory",
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Get live org memory",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/memory", async (c) => {
@@ -92,28 +121,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "put",
-      path: "/v1/orgs/{orgId}/memory",
-      tags: ["Organizations"],
-      summary: "Replace live org memory content",
       operationId: "updateOrgMemory",
+      path: "/v1/orgs/{orgId}/memory",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: updateOrgMemorySchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         200: {
-          description: "Memory updated",
           content: { "application/json": { schema: orgMemoryResponseSchema } },
+          description: "Memory updated",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Replace live org memory content",
+      tags: ["Organizations"],
+    })
   );
 
   app.put("/v1/orgs/:orgId/memory", async (c) => {
@@ -122,8 +163,8 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const service = requireService();
     const body = await readJson<UpdateOrgMemoryRequest>(c.req.raw);
     await service.setMemory(orgId, body.content, {
-      actorUserId: auth.user.id,
       action: "edit",
+      actorUserId: auth.user.id,
       label: "Manual edit",
     });
     const content = await service.getMemory(orgId);
@@ -134,28 +175,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/facts",
-      tags: ["Organizations"],
-      summary: "Add an org memory fact (admin direct, bypass queue)",
       operationId: "addOrgMemoryFact",
+      path: "/v1/orgs/{orgId}/memory/facts",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: addOrgMemoryFactSchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         200: {
-          description: "Fact added",
           content: { "application/json": { schema: orgMemoryResponseSchema } },
+          description: "Fact added",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Add an org memory fact (admin direct, bypass queue)",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/facts", async (c) => {
@@ -164,12 +217,12 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const service = requireService();
     const body = await readJson<AddOrgMemoryFactRequest>(c.req.raw);
     await service.addFact(orgId, body.bullet, {
-      pin: body.pin ?? true,
       change: {
-        actorUserId: auth.user.id,
         action: "add_fact",
+        actorUserId: auth.user.id,
         label: `Added fact: ${body.bullet.trim()}`,
       },
+      pin: body.pin ?? true,
     });
     const content = await service.getMemory(orgId);
     return json<OrgMemoryResponse>({ content });
@@ -179,27 +232,38 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/search",
-      tags: ["Organizations"],
-      summary: "Search org memory (live + archive)",
       operationId: "searchOrgMemory",
+      path: "/v1/orgs/{orgId}/memory/search",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: orgMemorySearchSchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: orgMemorySearchResponseSchema },
+          },
           description: "Search results",
-          content: { "application/json": { schema: orgMemorySearchResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Search org memory (live + archive)",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/search", async (c) => {
@@ -215,25 +279,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/pin",
-      tags: ["Organizations"],
-      summary: "Pin an org memory bullet",
       operationId: "pinOrgMemoryFact",
+      path: "/v1/orgs/{orgId}/memory/pin",
       request: {
+        body: {
+          content: { "application/json": { schema: pinOrgMemorySchema } },
+          required: true,
+        },
         params: orgIdParam,
-        body: { required: true, content: { "application/json": { schema: pinOrgMemorySchema } } },
       },
       responses: {
         200: {
-          description: "Pinned",
           content: { "application/json": { schema: orgMemoryResponseSchema } },
+          description: "Pinned",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Pin an org memory bullet",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/pin", async (c) => {
@@ -242,8 +321,8 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const service = requireService();
     const body = await readJson<PinOrgMemoryRequest>(c.req.raw);
     await service.pinFact(orgId, body.bullet, {
-      actorUserId: auth.user.id,
       action: "pin",
+      actorUserId: auth.user.id,
       label: `Pinned fact: ${body.bullet.trim()}`,
     });
     const content = await service.getMemory(orgId);
@@ -254,25 +333,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/unpin",
-      tags: ["Organizations"],
-      summary: "Unpin an org memory bullet",
       operationId: "unpinOrgMemoryFact",
+      path: "/v1/orgs/{orgId}/memory/unpin",
       request: {
+        body: {
+          content: { "application/json": { schema: unpinOrgMemorySchema } },
+          required: true,
+        },
         params: orgIdParam,
-        body: { required: true, content: { "application/json": { schema: unpinOrgMemorySchema } } },
       },
       responses: {
         200: {
-          description: "Unpinned",
           content: { "application/json": { schema: orgMemoryResponseSchema } },
+          description: "Unpinned",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Unpin an org memory bullet",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/unpin", async (c) => {
@@ -281,8 +375,8 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const service = requireService();
     const body = await readJson<UnpinOrgMemoryRequest>(c.req.raw);
     await service.unpinFact(orgId, body.bullet, {
-      actorUserId: auth.user.id,
       action: "unpin",
+      actorUserId: auth.user.id,
       label: `Unpinned fact: ${body.bullet.trim()}`,
     });
     const content = await service.getMemory(orgId);
@@ -293,28 +387,42 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/archive",
-      tags: ["Organizations"],
-      summary: "Archive org memory bullets",
       operationId: "archiveOrgMemory",
+      path: "/v1/orgs/{orgId}/memory/archive",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: archiveOrgMemorySchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: archiveOrgMemoryResponseSchema },
+          },
           description: "Archived",
-          content: { "application/json": { schema: archiveOrgMemoryResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Archive org memory bullets",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/archive", async (c) => {
@@ -323,12 +431,12 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const service = requireService();
     const body = await readJson<ArchiveOrgMemoryRequest>(c.req.raw);
     const result = await service.archiveEntries(orgId, body.entries, {
-      reason: body.reason,
       change: {
-        actorUserId: auth.user.id,
         action: "archive",
+        actorUserId: auth.user.id,
         label: `Archived ${body.entries.length} ${body.entries.length === 1 ? "fact" : "facts"}`,
       },
+      reason: body.reason,
     });
     return json<ArchiveOrgMemoryResponse>(result);
   });
@@ -350,21 +458,32 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/memory/history",
-      tags: ["Organizations"],
-      summary: "List org memory change history",
       operationId: "listOrgMemoryHistory",
+      path: "/v1/orgs/{orgId}/memory/history",
       request: { params: orgIdParam },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: listOrgMemoryHistoryResponseSchema },
+          },
           description: "Change history",
-          content: { "application/json": { schema: listOrgMemoryHistoryResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "List org memory change history",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/memory/history", async (c) => {
@@ -379,25 +498,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/memory/history/{revisionId}",
-      tags: ["Organizations"],
-      summary: "Get an org memory history revision",
       operationId: "getOrgMemoryHistoryRevision",
+      path: "/v1/orgs/{orgId}/memory/history/{revisionId}",
       request: {
         params: orgIdParam.extend({
-          revisionId: z.string().openapi({ param: { name: "revisionId", in: "path" } }),
+          revisionId: z
+            .string()
+            .openapi({ param: { in: "path", name: "revisionId" } }),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": {
+              schema: orgMemoryHistoryRevisionResponseSchema,
+            },
+          },
           description: "History revision",
-          content: { "application/json": { schema: orgMemoryHistoryRevisionResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Get an org memory history revision",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/memory/history/:revisionId", async (c) => {
@@ -413,21 +547,34 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/history/undo",
-      tags: ["Organizations"],
-      summary: "Undo the latest org memory change",
       operationId: "undoOrgMemoryChange",
+      path: "/v1/orgs/{orgId}/memory/history/undo",
       request: { params: orgIdParam },
       responses: {
         200: {
+          content: {
+            "application/json": {
+              schema: restoreOrgMemoryHistoryResponseSchema,
+            },
+          },
           description: "Restored previous revision",
-          content: { "application/json": { schema: restoreOrgMemoryHistoryResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Undo the latest org memory change",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/history/undo", async (c) => {
@@ -442,25 +589,40 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/history/{revisionId}/restore",
-      tags: ["Organizations"],
-      summary: "Restore org memory to a previous revision",
       operationId: "restoreOrgMemoryHistory",
+      path: "/v1/orgs/{orgId}/memory/history/{revisionId}/restore",
       request: {
         params: orgIdParam.extend({
-          revisionId: z.string().openapi({ param: { name: "revisionId", in: "path" } }),
+          revisionId: z
+            .string()
+            .openapi({ param: { in: "path", name: "revisionId" } }),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": {
+              schema: restoreOrgMemoryHistoryResponseSchema,
+            },
+          },
           description: "Restored revision",
-          content: { "application/json": { schema: restoreOrgMemoryHistoryResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Restore org memory to a previous revision",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/history/:revisionId/restore", async (c) => {
@@ -468,7 +630,11 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const revisionId = decodeURIComponent(c.req.param("revisionId"));
     const service = requireService();
-    const content = await service.restoreHistoryRevision(orgId, revisionId, auth.user.id);
+    const content = await service.restoreHistoryRevision(
+      orgId,
+      revisionId,
+      auth.user.id
+    );
     return json({ content });
   });
 
@@ -488,10 +654,8 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/memory/proposals",
-      tags: ["Organizations"],
-      summary: "List org memory proposals",
       operationId: "listOrgMemoryProposals",
+      path: "/v1/orgs/{orgId}/memory/proposals",
       request: {
         params: orgIdParam,
         query: z.object({
@@ -500,93 +664,156 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
       },
       responses: {
         200: {
+          content: {
+            "application/json": {
+              schema: listOrgMemoryProposalsResponseSchema,
+            },
+          },
           description: "Proposals",
-          content: { "application/json": { schema: listOrgMemoryProposalsResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "List org memory proposals",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/memory/proposals", async (c) => {
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const status = c.req.query("status") as "pending" | "approved" | "rejected" | undefined;
+    const status = c.req.query("status") as
+      | "pending"
+      | "approved"
+      | "rejected"
+      | undefined;
     const proposals = await service.listProposals(orgId, status);
     const pendingCount = await service.countPendingProposals(orgId);
-    return json({ proposals, pendingCount });
+    return json({ pendingCount, proposals });
   });
 
   // POST /v1/orgs/{orgId}/memory/proposals/{proposalId}/approve — admin only
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/proposals/{proposalId}/approve",
-      tags: ["Organizations"],
-      summary: "Approve an org memory proposal",
       operationId: "approveOrgMemoryProposal",
+      path: "/v1/orgs/{orgId}/memory/proposals/{proposalId}/approve",
       request: {
-        params: orgIdParam.extend({
-          proposalId: z.string().openapi({ param: { name: "proposalId", in: "path" } }),
-        }),
         body: {
+          content: {
+            "application/json": { schema: approveOrgMemoryProposalSchema },
+          },
           required: false,
-          content: { "application/json": { schema: approveOrgMemoryProposalSchema } },
         },
+        params: orgIdParam.extend({
+          proposalId: z
+            .string()
+            .openapi({ param: { in: "path", name: "proposalId" } }),
+        }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: orgMemoryProposalResponseSchema },
+          },
           description: "Approved",
-          content: { "application/json": { schema: orgMemoryProposalResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Approve an org memory proposal",
+      tags: ["Organizations"],
+    })
   );
 
-  app.post("/v1/orgs/:orgId/memory/proposals/:proposalId/approve", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
-    const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
-    const proposalId = decodeURIComponent(c.req.param("proposalId"));
-    const service = requireService();
-    const body = await readJson<{ pin?: boolean }>(c.req.raw).catch(() => ({}));
-    const proposal = await service.approveProposal(orgId, proposalId, auth.user.id, {
-      pin: body.pin,
-    });
-    const content = await service.getMemory(orgId);
-    return json({ proposal, content });
-  });
+  app.post(
+    "/v1/orgs/:orgId/memory/proposals/:proposalId/approve",
+    async (c) => {
+      const auth = requireOrgAdminFromContext(c);
+      const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
+      const proposalId = decodeURIComponent(c.req.param("proposalId"));
+      const service = requireService();
+      const body = await readJson<{ pin?: boolean }>(c.req.raw).catch(
+        () => ({})
+      );
+      const proposal = await service.approveProposal(
+        orgId,
+        proposalId,
+        auth.user.id,
+        {
+          pin: body.pin,
+        }
+      );
+      const content = await service.getMemory(orgId);
+      return json({ content, proposal });
+    }
+  );
 
   // POST /v1/orgs/{orgId}/memory/proposals/{proposalId}/reject — admin only
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/memory/proposals/{proposalId}/reject",
-      tags: ["Organizations"],
-      summary: "Reject an org memory proposal",
       operationId: "rejectOrgMemoryProposal",
+      path: "/v1/orgs/{orgId}/memory/proposals/{proposalId}/reject",
       request: {
         params: orgIdParam.extend({
-          proposalId: z.string().openapi({ param: { name: "proposalId", in: "path" } }),
+          proposalId: z
+            .string()
+            .openapi({ param: { in: "path", name: "proposalId" } }),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: orgMemoryProposalResponseSchema },
+          },
           description: "Rejected",
-          content: { "application/json": { schema: orgMemoryProposalResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Reject an org memory proposal",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/memory/proposals/:proposalId/reject", async (c) => {
@@ -594,7 +821,11 @@ export function registerOrgMemoryRoutes(app: HonoApp, options: ServerOptions): v
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
-    const proposal = await service.rejectProposal(orgId, proposalId, auth.user.id);
+    const proposal = await service.rejectProposal(
+      orgId,
+      proposalId,
+      auth.user.id
+    );
     return json({ proposal });
   });
 }

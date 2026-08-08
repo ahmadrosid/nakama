@@ -11,7 +11,9 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "coding-backend-cursor",
 ]);
 
-const RENAMED_BUNDLED_SKILL_DIRS = [["coding-delegation", "coding-agent"]] as const;
+const RENAMED_BUNDLED_SKILL_DIRS = [
+  ["coding-delegation", "coding-agent"],
+] as const;
 
 async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
   const skillsRoot = getGlobalSkillsDir();
@@ -36,10 +38,10 @@ async function migrateRenamedBundledSkillDirectories(): Promise<string[]> {
       // new directory missing
     }
 
-    if (!newExists) {
-      await rename(oldDir, newDir);
+    if (newExists) {
+      await rm(oldDir, { force: true, recursive: true });
     } else {
-      await rm(oldDir, { recursive: true, force: true });
+      await rename(oldDir, newDir);
     }
 
     refreshed.push(newName);
@@ -59,7 +61,10 @@ export async function ensureBundledSkillFiles(): Promise<string[]> {
     const skillFilePath = `${directory}/${SKILL_FILE_NAME}`;
     const content = await readBundledSkillMarkdown(name);
 
-    if (refreshed.includes(name) || FORCE_REFRESH_BUNDLED_SKILL_NAMES.has(name)) {
+    if (
+      refreshed.includes(name) ||
+      FORCE_REFRESH_BUNDLED_SKILL_NAMES.has(name)
+    ) {
       await writePrivateTextFile(skillFilePath, content);
       created.push(name);
       continue;

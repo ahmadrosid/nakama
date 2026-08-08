@@ -1,4 +1,7 @@
-import type { KnowledgeBaseDocument, KnowledgeBaseSource } from "@nakama/core/contract";
+import type {
+  KnowledgeBaseDocument,
+  KnowledgeBaseSource,
+} from "@nakama/core/contract";
 import {
   ExternalLinkIcon,
   FileTextIcon,
@@ -9,10 +12,7 @@ import {
 import type { RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  formatBytes,
-  KNOWLEDGE_BASE_ACCEPT,
-} from "@/lib/knowledge-base-files";
+import { formatBytes, KNOWLEDGE_BASE_ACCEPT } from "@/lib/knowledge-base-files";
 import { cn } from "@/lib/utils";
 
 /** Extend icon-sm (28px) to a 40px hit target without overlapping neighbors at gap-3. */
@@ -85,40 +85,47 @@ export function KnowledgeTabPanel({
 
       {sources.length > 0 ? (
         <div className="rounded-md border border-border">
-          <div className="border-b border-border px-4 py-3">
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {sources.length === 1 ? "1 inherited source" : `${sources.length} inherited sources`}
+          <div className="border-border border-b px-4 py-3">
+            <p className="text-muted-foreground text-xs tabular-nums">
+              {sources.length === 1
+                ? "1 inherited source"
+                : `${sources.length} inherited sources`}
             </p>
           </div>
           <ul className="divide-y divide-border">
             {sources.map((source) => (
               <li
-                key={source.id}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
+                key={source.id}
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <LinkIcon
-                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                     aria-hidden
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{source.title}</p>
-                    <p className="line-clamp-2 text-xs text-pretty text-muted-foreground">
+                    <p className="truncate font-medium text-foreground text-sm">
+                      {source.title}
+                    </p>
+                    <p className="line-clamp-2 text-pretty text-muted-foreground text-xs">
                       {source.description}
                     </p>
                     <a
+                      className="mt-1 inline-flex max-w-full items-center gap-1 text-primary text-xs hover:underline"
                       href={source.url}
-                      target="_blank"
                       rel="noreferrer"
-                      className="mt-1 inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
+                      target="_blank"
                     >
                       <span className="truncate">{source.url}</span>
-                      <ExternalLinkIcon className="size-3 shrink-0" aria-hidden />
+                      <ExternalLinkIcon
+                        aria-hidden
+                        className="size-3 shrink-0"
+                      />
                     </a>
                   </div>
                 </div>
 
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
                   inherited
                 </span>
               </li>
@@ -128,59 +135,69 @@ export function KnowledgeTabPanel({
       ) : null}
 
       <div className="rounded-md border border-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <p className="text-xs text-muted-foreground tabular-nums">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-border border-b px-4 py-3">
+          <p className="text-muted-foreground text-xs tabular-nums">
             {formatDocumentCount(documents.length)}
-            {readyCount !== documents.length ? ` · ${readyCount} ready` : ""}
+            {readyCount === documents.length ? "" : ` · ${readyCount} ready`}
             {" · "}txt, md, csv, pdf · 5 MB max
           </p>
 
           <div>
             <input
+              accept={KNOWLEDGE_BASE_ACCEPT}
+              className="hidden"
+              multiple
+              onChange={(event) => onUpload(event.target.files)}
               ref={fileInputRef}
               type="file"
-              accept={KNOWLEDGE_BASE_ACCEPT}
-              multiple
-              className="hidden"
-              onChange={(event) => onUpload(event.target.files)}
             />
             <Button
-              type="button"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
               disabled={!profileId || busy}
+              onClick={() => fileInputRef.current?.click()}
+              size="sm"
+              type="button"
             >
-              {uploadPending ? <Spinner className="size-3.5" /> : <UploadIcon className="size-3.5" aria-hidden />}
+              {uploadPending ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <UploadIcon aria-hidden className="size-3.5" />
+              )}
               Upload
             </Button>
           </div>
         </div>
 
         {documents.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+          <div className="px-4 py-10 text-center text-muted-foreground text-sm">
             No documents yet.
           </div>
         ) : (
           <ul className="divide-y divide-border">
             {documents.map((document) => (
               <li
-                key={document.id}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-100 ease-out hover:bg-muted/40"
+                key={document.id}
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <FileTextIcon
-                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                     aria-hidden
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{document.filename}</p>
-                    <p className="text-xs text-pretty text-muted-foreground">
-                      <span className="tabular-nums">{formatBytes(document.sizeBytes)}</span>
+                    <p className="truncate font-medium text-foreground text-sm">
+                      {document.filename}
+                    </p>
+                    <p className="text-pretty text-muted-foreground text-xs">
+                      <span className="tabular-nums">
+                        {formatBytes(document.sizeBytes)}
+                      </span>
                       {" · "}
                       {formatUploadedAt(document.uploadedAt)}
                     </p>
                     {document.status === "failed" && document.error ? (
-                      <p className="mt-1 text-xs text-pretty text-destructive">{document.error}</p>
+                      <p className="mt-1 text-pretty text-destructive text-xs">
+                        {document.error}
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -188,24 +205,24 @@ export function KnowledgeTabPanel({
                 <div className="flex items-center gap-3">
                   <span
                     className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                      "rounded-full px-2 py-0.5 font-medium text-xs",
                       document.status === "ready"
                         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "bg-destructive/10 text-destructive",
+                        : "bg-destructive/10 text-destructive"
                     )}
                   >
                     {document.status}
                   </span>
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
                     aria-label={`Delete ${document.filename}`}
                     className={iconActionHitArea}
-                    onClick={() => onDeleteDocument(document)}
                     disabled={busy}
+                    onClick={() => onDeleteDocument(document)}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
                   >
-                    <Trash2Icon className="size-4" aria-hidden />
+                    <Trash2Icon aria-hidden className="size-4" />
                   </Button>
                 </div>
               </li>

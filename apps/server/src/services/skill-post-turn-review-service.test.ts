@@ -7,20 +7,20 @@ import {
 } from "./skill-post-turn-review-service";
 
 function toolCall(id: string, name = "read_file") {
-  return { id, name, arguments: "{}" };
+  return { arguments: "{}", id, name };
 }
 
 function assistantWithTools(count: number, names?: string[]): ChatMessage {
   const toolCalls = Array.from({ length: count }, (_, index) =>
-    toolCall(`call_${index}`, names?.[index] ?? "read_file"),
+    toolCall(`call_${index}`, names?.[index] ?? "read_file")
   );
-  return { role: "assistant", content: "working", toolCalls };
+  return { content: "working", role: "assistant", toolCalls };
 }
 
 describe("evaluatePostTurnReviewTurnEligibility", () => {
   test("eligible when turn has 5+ tool calls", () => {
     const result = evaluatePostTurnReviewTurnEligibility([
-      { role: "user", content: "do the thing" },
+      { content: "do the thing", role: "user" },
       assistantWithTools(5),
     ]);
     expect(result.eligible).toBe(true);
@@ -29,7 +29,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
 
   test("skips when fewer than 5 tools and no errors", () => {
     const result = evaluatePostTurnReviewTurnEligibility([
-      { role: "user", content: "simple" },
+      { content: "simple", role: "user" },
       assistantWithTools(4),
     ]);
     expect(result.eligible).toBe(false);
@@ -38,13 +38,13 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
 
   test("eligible when tool error present even with fewer than 5 tools", () => {
     const result = evaluatePostTurnReviewTurnEligibility([
-      { role: "user", content: "fix it" },
+      { content: "fix it", role: "user" },
       assistantWithTools(1),
       {
+        content: JSON.stringify({ error: "not found" }),
+        name: "read_file",
         role: "tool",
         toolCallId: "call_0",
-        name: "read_file",
-        content: JSON.stringify({ error: "not found" }),
       },
     ]);
     expect(result.eligible).toBe(true);
@@ -53,7 +53,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
 
   test("skips when skill_manage already used this turn", () => {
     const result = evaluatePostTurnReviewTurnEligibility([
-      { role: "user", content: "save skill" },
+      { content: "save skill", role: "user" },
       assistantWithTools(5, [
         "read_file",
         "read_file",
@@ -72,73 +72,77 @@ describe("SkillPostTurnReviewService", () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_1",
       name: "Org",
-      slug: "org",
       skillsPostTurnReview: true,
-      createdAt: now,
+      slug: "org",
       updatedAt: now,
     });
     await db.upsertProfile({
-      id: "profile_1",
-      name: "Bot",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: "org_1",
       createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: null,
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
       updatedAt: now,
     });
     await db.upsertSkill({
-      id: "skill_manage_skills",
-      name: "manage-skills",
+      createdAt: now,
+      createdBy: "bundled",
       description: "Manage skills",
-      sourcePath: "/tmp/manage-skills/SKILL.md",
-      hasTool: false,
       disableModelInvocation: false,
       enabled: true,
-      createdBy: "bundled",
-      createdAt: now,
+      hasTool: false,
+      id: "skill_manage_skills",
+      name: "manage-skills",
+      sourcePath: "/tmp/manage-skills/SKILL.md",
       updatedAt: now,
     });
     await db.assignSkillToProfile("profile_1", "skill_manage_skills");
     await db.upsertSession({
-      id: "session_1",
-      profileId: "profile_1",
-      channel: "web",
-      orgId: "org_1",
-      userId: "user_1",
-      createdAt: now,
-      title: null,
-      agentTodos: [],
       agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_1",
+      orgId: "org_1",
+      profileId: "profile_1",
+      title: null,
+      userId: "user_1",
     });
 
     const turn: ChatMessage[] = [
-      { role: "user", content: "complex" },
+      { content: "complex", role: "user" },
       assistantWithTools(5),
       ...Array.from({ length: 5 }, (_, index) => ({
+        content: "{}",
+        name: "read_file",
         role: "tool" as const,
         toolCallId: `call_${index}`,
-        name: "read_file",
-        content: "{}",
       })),
     ];
     await db.appendMessagesForSession(
       "session_1",
       turn.map((message, index) => ({
-        id: `msg_${index}`,
-        sessionId: "session_1",
-        seq: index,
-        payload: message,
         createdAt: now,
-      })),
+        id: `msg_${index}`,
+        payload: message,
+        seq: index,
+        sessionId: "session_1",
+      }))
     );
 
     let ran = 0;
-    const service = new SkillPostTurnReviewService(db, () => null, async () => {
-      ran += 1;
-    });
+    const service = new SkillPostTurnReviewService(
+      db,
+      () => null,
+      async () => {
+        ran += 1;
+      }
+    );
 
     expect(await service.runPostTurnSkillReview("session_1")).toBe("ran");
     expect(ran).toBe(1);
@@ -148,40 +152,46 @@ describe("SkillPostTurnReviewService", () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_1",
       name: "Org",
-      slug: "org",
       skillsPostTurnReview: false,
-      createdAt: now,
+      slug: "org",
       updatedAt: now,
     });
     await db.upsertProfile({
-      id: "profile_1",
-      name: "Bot",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: "org_1",
       createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: null,
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
       updatedAt: now,
     });
     await db.upsertSession({
-      id: "session_1",
-      profileId: "profile_1",
-      channel: "web",
-      orgId: "org_1",
-      userId: "user_1",
-      createdAt: now,
-      title: null,
-      agentTodos: [],
       agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "session_1",
+      orgId: "org_1",
+      profileId: "profile_1",
+      title: null,
+      userId: "user_1",
     });
 
     let ran = 0;
-    const service = new SkillPostTurnReviewService(db, () => null, async () => {
-      ran += 1;
-    });
-    expect(await service.runPostTurnSkillReview("session_1")).toBe("flag_disabled");
+    const service = new SkillPostTurnReviewService(
+      db,
+      () => null,
+      async () => {
+        ran += 1;
+      }
+    );
+    expect(await service.runPostTurnSkillReview("session_1")).toBe(
+      "flag_disabled"
+    );
     expect(ran).toBe(0);
   });
 
@@ -189,61 +199,61 @@ describe("SkillPostTurnReviewService", () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_1",
       name: "Org",
-      slug: "org",
       skillsPostTurnReview: true,
-      createdAt: now,
+      slug: "org",
       updatedAt: now,
     });
     await db.upsertProfile({
-      id: "profile_1",
-      name: "Bot",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: "org_1",
       createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: null,
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
       updatedAt: now,
     });
     await db.upsertSkill({
-      id: "skill_manage_skills",
-      name: "manage-skills",
+      createdAt: now,
+      createdBy: "bundled",
       description: "Manage skills",
-      sourcePath: "/tmp/manage-skills/SKILL.md",
-      hasTool: false,
       disableModelInvocation: false,
       enabled: true,
-      createdBy: "bundled",
-      createdAt: now,
+      hasTool: false,
+      id: "skill_manage_skills",
+      name: "manage-skills",
+      sourcePath: "/tmp/manage-skills/SKILL.md",
       updatedAt: now,
     });
     await db.assignSkillToProfile("profile_1", "skill_manage_skills");
     await db.upsertSession({
-      id: "session_1",
-      profileId: "profile_1",
-      channel: "cli",
-      orgId: "org_1",
-      userId: "user_1",
-      createdAt: now,
-      title: null,
-      agentTodos: [],
       agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "cli",
+      createdAt: now,
+      id: "session_1",
+      orgId: "org_1",
+      profileId: "profile_1",
+      title: null,
+      userId: "user_1",
     });
     await db.appendMessagesForSession("session_1", [
       {
-        id: "msg_0",
-        sessionId: "session_1",
-        seq: 0,
-        payload: { role: "user", content: "go" },
         createdAt: now,
+        id: "msg_0",
+        payload: { content: "go", role: "user" },
+        seq: 0,
+        sessionId: "session_1",
       },
       {
-        id: "msg_1",
-        sessionId: "session_1",
-        seq: 1,
-        payload: assistantWithTools(5),
         createdAt: now,
+        id: "msg_1",
+        payload: assistantWithTools(5),
+        seq: 1,
+        sessionId: "session_1",
       },
     ]);
 
@@ -252,10 +262,14 @@ describe("SkillPostTurnReviewService", () => {
       release = resolve;
     });
     let ran = 0;
-    const service = new SkillPostTurnReviewService(db, () => null, async () => {
-      ran += 1;
-      await gate;
-    });
+    const service = new SkillPostTurnReviewService(
+      db,
+      () => null,
+      async () => {
+        ran += 1;
+        await gate;
+      }
+    );
 
     const first = service.runPostTurnSkillReview("session_1");
     await Promise.resolve();
@@ -269,13 +283,13 @@ describe("SkillPostTurnReviewService", () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertProfile({
-      id: "profile_1",
-      name: "Bot",
-      systemPrompt: "",
-      model: "openai-1::gpt-5.4",
-      isSuper: false,
-      orgId: "org_1",
       createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: "openai-1::gpt-5.4",
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
       updatedAt: now,
     });
 
@@ -283,11 +297,11 @@ describe("SkillPostTurnReviewService", () => {
       defaultProviderId: "openai-1",
       providers: [
         {
-          id: "openai-1",
-          type: "openai",
-          label: "OpenAI",
           apiKey: "sk-test",
           createdAt: now,
+          id: "openai-1",
+          label: "OpenAI",
+          type: "openai",
         },
       ],
     };

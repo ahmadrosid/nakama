@@ -6,23 +6,25 @@ import {
   sortProfilesForPicker,
 } from "./profile";
 
-function profile(overrides: Partial<ProfileSummary> & Pick<ProfileSummary, "id" | "name">): ProfileSummary {
+function profile(
+  overrides: Partial<ProfileSummary> & Pick<ProfileSummary, "id" | "name">
+): ProfileSummary {
   return {
-    model: null,
-    isSuper: false,
-    toolCount: 0,
-    mcpServerCount: 0,
-    soulActive: false,
-    hasAvatar: false,
     createdAt: "",
+    hasAvatar: false,
+    isSuper: false,
+    mcpServerCount: 0,
+    model: null,
+    soulActive: false,
+    toolCount: 0,
     updatedAt: "",
     ...overrides,
   };
 }
 
 const sampleProfiles = [
-  profile({ id: "super_bot", name: "Super Bot", isSuper: true }),
-  profile({ id: "profile_default", name: "Default Bot", isDefault: true }),
+  profile({ id: "super_bot", isSuper: true, name: "Super Bot" }),
+  profile({ id: "profile_default", isDefault: true, name: "Default Bot" }),
   profile({ id: "profile_custom", name: "Research Bot" }),
 ];
 
@@ -52,9 +54,15 @@ describe("sortProfilesForPicker", () => {
 
 describe("resolveProfileInput", () => {
   test("resolves id, name, and index", () => {
-    expect(resolveProfileInput(sampleProfiles, "profile_custom")?.name).toBe("Research Bot");
-    expect(resolveProfileInput(sampleProfiles, "Super Bot")?.id).toBe("super_bot");
-    expect(resolveProfileInput(sampleProfiles, "1")?.id).toBe("profile_default");
+    expect(resolveProfileInput(sampleProfiles, "profile_custom")?.name).toBe(
+      "Research Bot"
+    );
+    expect(resolveProfileInput(sampleProfiles, "Super Bot")?.id).toBe(
+      "super_bot"
+    );
+    expect(resolveProfileInput(sampleProfiles, "1")?.id).toBe(
+      "profile_default"
+    );
   });
 
   test("returns undefined for unknown input", () => {

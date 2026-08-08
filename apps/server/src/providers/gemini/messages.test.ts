@@ -12,19 +12,19 @@ const tinyPngBase64 =
 describe("toGeminiContents", () => {
   test("maps user text and assistant tool calls", async () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "Hello" },
+      { content: "Hello", role: "user" },
       {
-        role: "assistant",
         content: "",
+        role: "assistant",
         toolCalls: [
-          { id: "call_1", name: "write_file", arguments: { path: "a.txt" } },
+          { arguments: { path: "a.txt" }, id: "call_1", name: "write_file" },
         ],
       },
       {
+        content: '{"ok":true}',
+        name: "write_file",
         role: "tool",
         toolCallId: "call_1",
-        name: "write_file",
-        content: '{"ok":true}',
       },
     ];
 
@@ -35,9 +35,9 @@ describe("toGeminiContents", () => {
     expect(contents[0]?.parts?.[0]?.text).toBe("Hello");
     expect(contents[1]?.role).toBe("model");
     expect(contents[1]?.parts?.[0]?.functionCall).toEqual({
+      args: { path: "a.txt" },
       id: "call_1",
       name: "write_file",
-      args: { path: "a.txt" },
     });
     expect(contents[2]?.parts?.[0]?.functionResponse?.name).toBe("write_file");
     expect(contents[2]?.parts?.[0]?.functionResponse?.id).toBe("call_1");
@@ -46,11 +46,11 @@ describe("toGeminiContents", () => {
   test("maps image parts to inlineData", async () => {
     const messages: ChatMessage[] = [
       {
-        role: "user",
         content: [
-          { type: "text", text: "What is this?" },
-          { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+          { text: "What is this?", type: "text" },
+          { data: tinyPngBase64, mediaType: "image/png", type: "image" },
         ],
+        role: "user",
       },
     ];
 
@@ -58,8 +58,8 @@ describe("toGeminiContents", () => {
 
     expect(contents[0]?.parts?.[0]?.text).toBe("What is this?");
     expect(contents[0]?.parts?.[1]?.inlineData).toEqual({
-      mimeType: "image/png",
       data: tinyPngBase64,
+      mimeType: "image/png",
     });
   });
 });
@@ -68,10 +68,10 @@ describe("parseGeminiFunctionCalls", () => {
   test("parses function calls with ids", () => {
     expect(
       parseGeminiFunctionCalls([
-        { id: "fc1", name: "write_file", args: { path: "a.txt" } },
-      ]),
+        { args: { path: "a.txt" }, id: "fc1", name: "write_file" },
+      ])
     ).toEqual([
-      { id: "fc1", name: "write_file", arguments: { path: "a.txt" } },
+      { arguments: { path: "a.txt" }, id: "fc1", name: "write_file" },
     ]);
   });
 });
@@ -82,7 +82,7 @@ describe("extractTextAndThinkingFromParts", () => {
       extractTextAndThinkingFromParts([
         { text: "Plan", thought: true },
         { text: "Answer" },
-      ]),
+      ])
     ).toEqual({ content: "Answer", thinking: "Plan" });
   });
 });

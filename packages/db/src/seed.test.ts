@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
+import {
+  BUILTIN_TOOL_IDS,
+  GENERATE_IMAGE_TOOL_ID,
+} from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+import { ensureGenerateImageToolDefinition } from "./org-profiles";
 import {
   ensureBuiltinToolDefinitions,
   ensurePreinstalledMcpServers,
@@ -16,22 +20,22 @@ describe("seed cleanup", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_test",
+      isSuper: false,
+      model: null,
       name: "Test",
       systemPrompt: "test",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Old unsupported tool",
+      handlerConfig: {},
+      handlerType: "custom",
       id: "tool_custom",
       name: "legacy-custom",
-      description: "Old unsupported tool",
-      handlerType: "custom",
-      handlerConfig: {},
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -48,22 +52,22 @@ describe("seed cleanup", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_test",
+      isSuper: false,
+      model: null,
       name: "Test",
       systemPrompt: "test",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Deprecated archive tool",
+      handlerConfig: { name: "archive_profile_memory" },
+      handlerType: "builtin",
       id: "tool_archive_profile_memory",
       name: "archive_profile_memory",
-      description: "Deprecated archive tool",
-      handlerType: "builtin",
-      handlerConfig: { name: "archive_profile_memory" },
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -80,22 +84,22 @@ describe("seed cleanup", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_test",
+      isSuper: false,
+      model: null,
       name: "Test",
       systemPrompt: "test",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Deprecated memory tool",
+      handlerConfig: { name: "update_profile_memory" },
+      handlerType: "builtin",
       id: "tool_update_profile_memory",
       name: "update_profile_memory",
-      description: "Deprecated memory tool",
-      handlerType: "builtin",
-      handlerConfig: { name: "update_profile_memory" },
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -112,22 +116,22 @@ describe("seed cleanup", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_test",
+      isSuper: false,
+      model: null,
       name: "Test",
       systemPrompt: "test",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Deprecated skill creation tool",
+      handlerConfig: { name: "create_skill" },
+      handlerType: "builtin",
       id: "tool_create_skill",
       name: "create_skill",
-      description: "Deprecated skill creation tool",
-      handlerType: "builtin",
-      handlerConfig: { name: "create_skill" },
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -144,22 +148,22 @@ describe("seed cleanup", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_test",
+      isSuper: false,
+      model: null,
       name: "Test",
       systemPrompt: "test",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Deprecated artifact tool",
+      handlerConfig: { name: "save_artifact" },
+      handlerType: "builtin",
       id: "tool_save_artifact",
       name: "save_artifact",
-      description: "Deprecated artifact tool",
-      handlerType: "builtin",
-      handlerConfig: { name: "save_artifact" },
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -178,12 +182,12 @@ describe("seed built-in tools", () => {
     const now = new Date().toISOString();
 
     await db.upsertProfile({
+      createdAt: now,
       id: "profile_custom",
+      isSuper: false,
+      model: null,
       name: "Custom Bot",
       systemPrompt: "custom",
-      model: null,
-      isSuper: false,
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -193,6 +197,18 @@ describe("seed built-in tools", () => {
 
     expect(profiles.map((profile) => profile.id)).toEqual(["profile_custom"]);
     expect(await db.getTool(BUILTIN_TOOL_IDS.web_search)).not.toBeNull();
+    expect(await db.getTool(GENERATE_IMAGE_TOOL_ID)).not.toBeNull();
+  });
+
+  test("retains generate_image through unsupported-handler cleanup", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    await ensureGenerateImageToolDefinition(db);
+    await removeUnsupportedTools(db);
+
+    const tool = await db.getTool(GENERATE_IMAGE_TOOL_ID);
+    expect(tool).not.toBeNull();
+    expect(tool?.handlerType).toBe("generate_image");
   });
 
   test("ensureBuiltinToolDefinitions upserts built-in tools idempotently", async () => {
@@ -213,23 +229,23 @@ describe("seed built-in tools", () => {
     const now = new Date().toISOString();
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Delegate coding",
+      handlerConfig: {},
+      handlerType: "bash",
       id: "tool_delegate_coding_task",
       name: "delegate_coding_task",
-      description: "Delegate coding",
-      handlerType: "bash",
-      handlerConfig: {},
-      createdAt: now,
       updatedAt: now,
     });
     await db.upsertProfile({
-      id: "profile_test",
-      name: "Test",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: "org_test",
-      isDefault: true,
       createdAt: now,
+      id: "profile_test",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Test",
+      orgId: "org_test",
+      systemPrompt: "",
       updatedAt: now,
     });
     await db.assignToolToProfile("profile_test", "tool_delegate_coding_task");
@@ -237,9 +253,9 @@ describe("seed built-in tools", () => {
     await removeDeprecatedServerTools(db);
 
     expect(await db.getTool("tool_delegate_coding_task")).toBeNull();
-    expect((await db.listToolsForProfile("profile_test")).map((tool) => tool.id)).not.toContain(
-      "tool_delegate_coding_task",
-    );
+    expect(
+      (await db.listToolsForProfile("profile_test")).map((tool) => tool.id)
+    ).not.toContain("tool_delegate_coding_task");
   });
 });
 

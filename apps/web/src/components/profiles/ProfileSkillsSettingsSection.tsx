@@ -19,10 +19,16 @@ export function ProfileSkillsSettingsSection({
   return (
     <div className="mb-3 grid grid-cols-1 divide-y divide-border rounded-md border border-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
       <div className="p-3 sm:p-4">
-        <ProfileSkillsWriteApprovalField profile={profile} disabled={disabled} />
+        <ProfileSkillsWriteApprovalField
+          disabled={disabled}
+          profile={profile}
+        />
       </div>
       <div className="p-3 sm:p-4">
-        <ProfileSkillsPostTurnReviewField profile={profile} disabled={disabled} />
+        <ProfileSkillsPostTurnReviewField
+          disabled={disabled}
+          profile={profile}
+        />
       </div>
     </div>
   );

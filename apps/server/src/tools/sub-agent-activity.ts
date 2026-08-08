@@ -14,7 +14,10 @@ function basename(value: string): string {
   return parts[parts.length - 1] || normalized;
 }
 
-function readString(input: Record<string, unknown> | undefined, key: string): string | null {
+function readString(
+  input: Record<string, unknown> | undefined,
+  key: string
+): string | null {
   const value = input?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -22,7 +25,7 @@ function readString(input: Record<string, unknown> | undefined, key: string): st
 /** Short status line for sub-agent child tool activity shown in the parent chat UI. */
 export function formatToolActivityLabel(
   tool: string | undefined,
-  input?: Record<string, unknown>,
+  input?: Record<string, unknown>
 ): string {
   if (tool === "read_file") {
     const path = readString(input, "path");

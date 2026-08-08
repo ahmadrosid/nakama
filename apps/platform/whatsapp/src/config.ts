@@ -11,7 +11,7 @@ export interface WhatsAppBridgeConfig {
 }
 
 export async function loadConfig(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): Promise<WhatsAppBridgeConfig> {
   const file = await loadWhatsAppConfigFile();
   const resolved = resolveWhatsAppConfigFromSources({ env, file });

@@ -7,8 +7,8 @@ export type AutomationTrigger =
 
 export interface AutomationStep {
   id: string;
-  tool: string;
   input: Record<string, unknown>;
+  tool: string;
 }
 
 export type AutomationDeliveryChannel = "telegram" | "whatsapp" | "email";
@@ -17,32 +17,32 @@ export type AutomationDeliveryNotifyOn = "success" | "failure" | "both";
 
 export interface AutomationDelivery {
   channel: AutomationDeliveryChannel;
-  /** Required when channel is email. */
-  to?: string;
   /** Optional Telegram chat override; defaults to all paired users. */
   chatId?: number;
   notifyOn?: AutomationDeliveryNotifyOn;
+  /** Required when channel is email. */
+  to?: string;
 }
 
 export interface AutomationDefinition {
+  delivery?: AutomationDelivery;
+  description: string;
   id: string;
   name: string;
-  description: string;
   prompt: string;
-  trigger: AutomationTrigger;
   steps: AutomationStep[];
+  trigger: AutomationTrigger;
   version: number;
-  delivery?: AutomationDelivery;
 }
 
 export interface StoredAutomation extends AutomationDefinition {
-  profileId: string;
-  orgId?: string | null;
-  enabled: boolean;
   createdAt: string;
-  updatedAt: string;
-  nextRunAt?: string | null;
+  enabled: boolean;
   lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  orgId?: string | null;
+  profileId: string;
+  updatedAt: string;
 }
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
@@ -50,115 +50,123 @@ export type AutomationRunStatus = "running" | "completed" | "failed";
 export type AutomationDeliveryStatus = "sent" | "failed" | "skipped";
 
 export interface AutomationRunRecord {
-  id: string;
   automationId: string;
-  status: AutomationRunStatus;
-  startedAt: string;
   completedAt: string | null;
-  output: string | null;
-  error: string | null;
-  deliveryStatus?: AutomationDeliveryStatus | null;
   deliveryError?: string | null;
+  deliveryStatus?: AutomationDeliveryStatus | null;
+  error: string | null;
+  id: string;
+  output: string | null;
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
+  startedAt: string;
+  status: AutomationRunStatus;
 }
 
 export interface AutomationUnreadSummary {
-  totalUnread: number;
   byAutomationId: Record<string, number>;
+  totalUnread: number;
 }
 
-export type AgentChannel = "web" | "cli" | "telegram" | "whatsapp" | "discord" | "automation" | "task" | "subagent";
+export type AgentChannel =
+  | "web"
+  | "cli"
+  | "telegram"
+  | "whatsapp"
+  | "discord"
+  | "automation"
+  | "task"
+  | "subagent";
 
 export const NAKAMA_API_VERSION = 1;
 
 export interface HealthResponse {
-  ok: true;
   apiVersion: typeof NAKAMA_API_VERSION;
-  providerConfigured: boolean;
-  userConfigured: boolean;
-  /** A Composio project API key is saved on this server. */
-  composioConfigured: boolean;
   /**
    * Whether Nakama can reach the Composio API with the saved key.
    * Probed only on `GET /v1/system/status` (`server.composioAvailable`).
    * `GET /health` always returns `false` so liveness stays local and fast.
    */
   composioAvailable: boolean;
+  /** A Composio project API key is saved on this server. */
+  composioConfigured: boolean;
+  ok: true;
+  providerConfigured: boolean;
+  userConfigured: boolean;
 }
 
 export interface AutomationSchedule {
-  id: string;
   /** Recurring cron trigger — mutually exclusive with runAt. */
   cron?: string;
+  id: string;
+  orgId: string;
+  profileId: string;
   /** One-shot ISO-8601 datetime — mutually exclusive with cron. */
   runAt?: string;
   timezone: string | null;
-  orgId: string;
-  profileId: string;
 }
 
 export interface AutomationWorkerStatus {
+  activeRuns: number;
   ok: boolean;
+  process?: WorkerProcessInfo;
+  providerConfigured: boolean;
   running: boolean;
   scheduledJobs: number;
-  activeRuns: number;
-  providerConfigured: boolean;
-  process?: WorkerProcessInfo;
 }
 
 export interface TaskWorkerStatus {
-  ok: boolean;
   activeRuns: number;
+  ok: boolean;
   providerConfigured: boolean;
 }
 
 export interface WorkerProcessInfo {
-  managed: boolean;
-  status: "online" | "stopped" | "errored" | null;
   cpuPercent: number | null;
+  managed: boolean;
   memoryMb: number | null;
+  status: "online" | "stopped" | "errored" | null;
   uptimeSeconds: number | null;
 }
 
 export interface TelegramWorkerStatus {
-  ok: boolean;
   configured: boolean;
+  ok: boolean;
   paired: boolean;
-  running: boolean;
   process?: WorkerProcessInfo;
+  running: boolean;
 }
 
 export interface DiscordWorkerStatus {
-  ok: boolean;
   configured: boolean;
-  paired: boolean;
-  running: boolean;
   connected: boolean;
+  ok: boolean;
+  paired: boolean;
   process?: WorkerProcessInfo;
+  running: boolean;
 }
 
 export interface WhatsAppWorkerStatus {
-  ok: boolean;
   configured: boolean;
-  paired: boolean;
-  running: boolean;
   connected: boolean;
-  qrCode: string | null;
+  ok: boolean;
+  paired: boolean;
   process?: WorkerProcessInfo;
+  qrCode: string | null;
+  running: boolean;
 }
 
 export interface WorkerLogsResponse {
-  stdout: string;
   stderr: string;
+  stdout: string;
 }
 
 export interface LlmUsageStats {
-  requestCount: number;
+  estimatedCostUsd: number;
   inputTokens: number;
   outputTokens: number;
+  requestCount: number;
   totalTokens: number;
-  estimatedCostUsd: number;
   trackedSince: string;
 }
 
@@ -167,30 +175,30 @@ export interface LlmUsageModelStats extends LlmUsageStats {
 }
 
 export interface LlmUsageStatus extends LlmUsageStats {
-  provider: ProviderName | null;
-  currentModel: string | null;
-  providerConfigured: boolean;
-  displayName: string | null;
   costEstimated: boolean;
+  currentModel: string | null;
+  displayName: string | null;
   models: LlmUsageModelStats[];
+  provider: ProviderName | null;
+  providerConfigured: boolean;
 }
 
 export interface McpStatus {
-  serverCount: number;
-  connectedCount: number;
   assignedProfileCount: number;
+  connectedCount: number;
+  serverCount: number;
 }
 
 export interface SystemStatusResponse {
-  server: HealthResponse;
   automationWorker: AutomationWorkerStatus;
-  taskWorker: TaskWorkerStatus;
-  telegramWorker: TelegramWorkerStatus;
-  whatsappWorker: WhatsAppWorkerStatus;
+  checkedAt: string;
   discordWorker: DiscordWorkerStatus;
   llmUsage: LlmUsageStatus;
   mcp: McpStatus;
-  checkedAt: string;
+  server: HealthResponse;
+  taskWorker: TaskWorkerStatus;
+  telegramWorker: TelegramWorkerStatus;
+  whatsappWorker: WhatsAppWorkerStatus;
 }
 
 export interface DataExportSkippedItem {
@@ -199,21 +207,21 @@ export interface DataExportSkippedItem {
 }
 
 export interface DataExportManifest {
-  kind: "nakama-export";
-  version: number;
   apiVersion: typeof NAKAMA_API_VERSION;
   createdAt: string;
+  fileCount: number;
+  kind: "nakama-export";
+  skipped: DataExportSkippedItem[];
   sourceRootName: string;
   topLevelPaths: string[];
-  fileCount: number;
   totalBytes: number;
-  skipped: DataExportSkippedItem[];
+  version: number;
 }
 
 export interface DataImportPreviewResponse {
-  manifest: DataExportManifest;
   archiveFileCount: number;
   archiveTotalBytes: number;
+  manifest: DataExportManifest;
   topLevelPaths: string[];
   willReplaceRoot: boolean;
 }
@@ -229,11 +237,12 @@ export interface PreviewDataImportRequest {
 
 export interface RestoreDataImportResponse {
   manifest: DataExportManifest;
-  restoredRoot: string;
   restoredFileCount: number;
+  restoredRoot: string;
 }
 
-export interface SetupRestoreDataImportResponse extends RestoreDataImportResponse {
+export interface SetupRestoreDataImportResponse
+  extends RestoreDataImportResponse {
   requiresRestart: boolean;
 }
 
@@ -243,15 +252,15 @@ export interface AuthCredentialsRequest {
 }
 
 export interface SetupAuthRequest {
-  organization: {
-    name: string;
-    slug: string;
-  };
   admin: {
     name: string;
     email: string;
     phone?: string;
     password: string;
+  };
+  organization: {
+    name: string;
+    slug: string;
   };
   /** Public web app origin (e.g. window.location.origin) for OAuth callbacks. */
   webPublicUrl?: string;
@@ -262,23 +271,23 @@ export interface UpdateWebPublicUrlRequest {
 }
 
 export interface WebPublicUrlSettingsResponse {
-  webPublicUrl: string | null;
   /** Set when NAKAMA_WEB_PUBLIC_URL / NAKAMA_PUBLIC_URL overrides the saved value. */
   envOverride: string | null;
+  webPublicUrl: string | null;
 }
 
 export interface AuthUserResponse {
-  email: string;
-  name?: string | null;
-  phone?: string | null;
-  isPlatformAdmin?: boolean;
   activeOrgId?: string | null;
+  email: string;
+  isPlatformAdmin?: boolean;
+  name?: string | null;
   orgId?: string | null;
+  phone?: string | null;
 }
 
 export interface UpdateAuthProfileRequest {
-  name?: string | null;
   email?: string;
+  name?: string | null;
   phone?: string | null;
 }
 
@@ -286,29 +295,29 @@ export type OrgRole = "admin" | "member" | "viewer";
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
+  createdAt: string;
   id: string;
   name: string;
-  slug: string;
-  skillsWriteApproval?: boolean;
   skillsPostTurnReview?: boolean;
-  createdAt: string;
+  skillsWriteApproval?: boolean;
+  slug: string;
   updatedAt: string;
 }
 
 export interface CreateOrganizationRequest {
-  name: string;
-  slug: string;
   admin?: {
     name: string;
     email: string;
     phone: string;
   };
+  name: string;
+  slug: string;
 }
 
 export interface UpdateOrganizationRequest {
   name?: string;
-  skillsWriteApproval?: boolean;
   skillsPostTurnReview?: boolean;
+  skillsWriteApproval?: boolean;
 }
 
 export interface ListOrganizationsResponse {
@@ -330,8 +339,8 @@ export interface AddOrgMemberResponse {
 }
 
 export interface CreateOrganizationResponse {
-  organization: OrganizationSummary;
   adminMember?: AddOrgMemberResponse;
+  organization: OrganizationSummary;
 }
 
 export interface UserOrgSummary extends OrganizationSummary {
@@ -347,12 +356,12 @@ export interface SetActiveOrgRequest {
 }
 
 export interface OrgMemberSummary {
-  userId: string;
-  name: string | null;
+  createdAt: string;
   email: string;
+  name: string | null;
   phone: string | null;
   role: OrgRole;
-  createdAt: string;
+  userId: string;
 }
 
 export interface ListOrgMembersResponse {
@@ -360,8 +369,8 @@ export interface ListOrgMembersResponse {
 }
 
 export interface AddOrgMemberRequest {
-  name: string;
   email: string;
+  name: string;
   phone?: string;
   role: OrgRole;
 }
@@ -394,15 +403,15 @@ export interface OrgMemorySearchRequest {
 }
 
 export interface OrgMemorySearchMatchEntry {
-  source: string;
   bullet: string;
-  tier?: "pinned" | "recent-log" | "archive";
   date?: string;
+  source: string;
+  tier?: "pinned" | "recent-log" | "archive";
 }
 
 export interface OrgMemorySearchResponse {
-  query: string;
   matches: OrgMemorySearchMatchEntry[];
+  query: string;
 }
 
 export interface ArchiveOrgMemoryRequest {
@@ -411,8 +420,8 @@ export interface ArchiveOrgMemoryRequest {
 }
 
 export interface ArchiveOrgMemoryResponse {
-  archived: number;
   activeBytes: number;
+  archived: number;
   archivePath: string;
 }
 
@@ -434,12 +443,12 @@ export type OrgMemoryChangeAction =
   | "restore";
 
 export interface OrgMemoryChangeLogEntry {
-  id: string;
-  orgId: string;
-  createdAt: string;
-  actorUserId: string | null;
   action: OrgMemoryChangeAction;
+  actorUserId: string | null;
+  createdAt: string;
+  id: string;
   label: string;
+  orgId: string;
   restoredFromId?: string | null;
 }
 
@@ -459,22 +468,22 @@ export interface OrgMemoryHistoryRevisionResponse {
 export type OrgMemoryProposalStatus = "pending" | "approved" | "rejected";
 
 export interface OrgMemoryProposal {
+  bullet: string;
+  createdAt: string;
   id: string;
   orgId: string;
-  profileId: string | null;
-  sessionId: string | null;
-  proposedByUserId: string | null;
-  bullet: string;
-  status: OrgMemoryProposalStatus;
   pinned: boolean;
-  reviewerUserId: string | null;
+  profileId: string | null;
+  proposedByUserId: string | null;
   reviewedAt: string | null;
-  createdAt: string;
+  reviewerUserId: string | null;
+  sessionId: string | null;
+  status: OrgMemoryProposalStatus;
 }
 
 export interface ListOrgMemoryProposalsResponse {
-  proposals: OrgMemoryProposal[];
   pendingCount: number;
+  proposals: OrgMemoryProposal[];
 }
 
 export interface ApproveOrgMemoryProposalRequest {
@@ -482,8 +491,8 @@ export interface ApproveOrgMemoryProposalRequest {
 }
 
 export interface OrgMemoryProposalResponse {
-  proposal: OrgMemoryProposal;
   content?: string;
+  proposal: OrgMemoryProposal;
 }
 
 export type SkillProposalStatus = "pending" | "approved" | "rejected";
@@ -496,27 +505,27 @@ export type SkillProposalAction =
   | "remove_file";
 
 export interface SkillProposal {
+  action: SkillProposalAction;
+  content: string | null;
+  createdAt: string;
   id: string;
   orgId: string;
-  profileId: string;
-  sessionId: string | null;
-  proposedByUserId: string | null;
-  action: SkillProposalAction;
-  skillName: string;
-  content: string | null;
-  patchOldString: string | null;
   patchNewString: string | null;
+  patchOldString: string | null;
+  profileId: string;
+  proposedByUserId: string | null;
   relativePath: string | null;
-  status: SkillProposalStatus;
-  reviewerUserId: string | null;
   reviewedAt: string | null;
-  createdAt: string;
+  reviewerUserId: string | null;
+  sessionId: string | null;
+  skillName: string;
+  status: SkillProposalStatus;
   warnings?: string[];
 }
 
 export interface ListSkillProposalsResponse {
-  proposals: SkillProposal[];
   pendingCount: number;
+  proposals: SkillProposal[];
 }
 
 export interface SkillProposalResponse {
@@ -528,33 +537,36 @@ export type SkillSuggestionAction = "create" | "patch";
 export type SkillSuggestionSource = "post_turn_review";
 
 export interface SkillSuggestion {
+  action: SkillSuggestionAction;
+  appliedAt: string | null;
+  content: string | null;
+  createdAt: string;
   id: string;
   orgId: string;
-  profileId: string;
-  sessionId: string | null;
-  proposedByUserId: string | null;
-  action: SkillSuggestionAction;
-  skillName: string;
-  content: string | null;
-  patchOldString: string | null;
   patchNewString: string | null;
-  status: SkillSuggestionStatus;
+  patchOldString: string | null;
+  profileId: string;
+  proposedByUserId: string | null;
+  sessionId: string | null;
+  skillName: string;
   source: SkillSuggestionSource;
+  status: SkillSuggestionStatus;
   warnings?: string[];
-  createdAt: string;
-  appliedAt: string | null;
 }
 
 export interface ListSkillSuggestionsResponse {
   suggestions: SkillSuggestion[];
 }
 
-export type ApplySkillSuggestionOutcome = "applied" | "already_applied" | "staged_as_proposal";
+export type ApplySkillSuggestionOutcome =
+  | "applied"
+  | "already_applied"
+  | "staged_as_proposal";
 
 export interface ApplySkillSuggestionResponse {
   outcome: ApplySkillSuggestionOutcome;
-  suggestion: SkillSuggestion;
   proposalId?: string;
+  suggestion: SkillSuggestion;
 }
 
 export interface InviteOrgMemberRequest {
@@ -563,17 +575,17 @@ export interface InviteOrgMemberRequest {
 }
 
 export interface OrgInviteSummary {
+  createdAt: string;
+  email: string;
+  expiresAt: string;
   id: string;
   orgId: string;
-  email: string;
   role: OrgRole;
-  expiresAt: string;
-  createdAt: string;
 }
 
 export interface AcceptOrgInviteRequest {
-  token: string;
   password?: string;
+  token: string;
 }
 
 export interface AcceptOrgInviteResponse {
@@ -590,9 +602,9 @@ export interface ChangePasswordRequest {
 export interface ChannelOrgMappingSummary {
   channel: ChannelType;
   channelUserId: string;
-  userId: string;
-  orgId: string;
   createdAt: string;
+  orgId: string;
+  userId: string;
 }
 
 export interface CreateChannelOrgMappingRequest {
@@ -622,11 +634,15 @@ export interface BranchSessionResponse {
   sessionId: string;
 }
 
-export type AgentTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type AgentTodoStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
 
 export interface AgentTodo {
-  id: string;
   content: string;
+  id: string;
   status: AgentTodoStatus;
 }
 
@@ -636,49 +652,49 @@ export interface AgentQuestionChoice {
 }
 
 export interface AgentQuestionItem {
-  id: string;
-  prompt: string;
-  choices: AgentQuestionChoice[];
   allowCustomAnswer: boolean;
+  choices: AgentQuestionChoice[];
+  id: string;
   placeholder?: string;
+  prompt: string;
 }
 
 export interface AgentQuestionnaire {
   id: string;
-  title: string;
   questions: AgentQuestionItem[];
+  title: string;
 }
 
 export interface AgentQuestionAnswer {
-  questionId: string;
-  prompt: string;
   answer: string;
+  prompt: string;
+  questionId: string;
 }
 
 export interface SessionMessageMeta {
+  createdAt: string;
   id: string;
   seq: number;
-  createdAt: string;
 }
 
 /** How full the model context window is for the current chat session. */
 export type ChatContextUsageSource = "provider" | "estimate";
 
 export interface ChatContextUsage {
-  usedTokens: number;
-  /** Denominator matching compaction usable context (window minus reserved output). */
-  usableContextTokens: number;
   contextWindow: number;
   source: ChatContextUsageSource;
+  /** Denominator matching compaction usable context (window minus reserved output). */
+  usableContextTokens: number;
+  usedTokens: number;
 }
 
 export interface SessionMessagesResponse {
   channel: AgentChannel;
-  messages: ChatMessage[];
-  messageMeta: SessionMessageMeta[];
-  todos: AgentTodo[];
-  questionnaire: AgentQuestionnaire | null;
   contextUsage?: ChatContextUsage | null;
+  messageMeta: SessionMessageMeta[];
+  messages: ChatMessage[];
+  questionnaire: AgentQuestionnaire | null;
+  todos: AgentTodo[];
 }
 
 export interface SessionStatusResponse {
@@ -687,14 +703,14 @@ export interface SessionStatusResponse {
 }
 
 export interface SessionSummary {
-  id: string;
-  profileId: string;
   channel: AgentChannel;
   createdAt: string;
-  updatedAt: string;
+  id: string;
   messageCount: number;
-  title: string | null;
   preview: string | null;
+  profileId: string;
+  title: string | null;
+  updatedAt: string;
 }
 
 export interface ListSessionsResponse {
@@ -707,9 +723,9 @@ export interface CompactSessionRequest {
 
 export interface CompactionResponse {
   action: "none" | "pruned" | "summarized";
-  prunedTokens?: number;
-  messagesBefore: number;
   messagesAfter: number;
+  messagesBefore: number;
+  prunedTokens?: number;
 }
 
 export type MessageContentPart =
@@ -726,35 +742,35 @@ export type MessageContentPart =
     };
 
 export interface ImageAttachment {
-  mediaType: string;
   data: string;
+  mediaType: string;
 }
 
 export interface DocumentAttachment {
+  data: string;
   filename: string;
   mediaType: string;
-  data: string;
 }
 
 export interface SendMessageInput {
-  message: string;
-  images?: ImageAttachment[];
-  documents?: DocumentAttachment[];
   /** Browser origin for OAuth callbacks (e.g. window.location.origin). */
   clientOrigin?: string;
+  documents?: DocumentAttachment[];
+  images?: ImageAttachment[];
+  message: string;
 }
 
 export interface SendMessageRequest {
-  message: string;
-  images?: ImageAttachment[];
-  documents?: DocumentAttachment[];
-  stream?: boolean;
   clientOrigin?: string;
+  documents?: DocumentAttachment[];
+  images?: ImageAttachment[];
+  message: string;
+  stream?: boolean;
 }
 
 export interface SendMessageResponse {
-  reply: string;
   contextUsage?: ChatContextUsage;
+  reply: string;
 }
 
 export type StreamEvent =
@@ -790,8 +806,8 @@ export type StreamEvent =
   | { type: "error"; error: string };
 
 export interface DraftAutomationRequest {
-  prompt: string;
   channel: AgentChannel;
+  prompt: string;
 }
 
 export interface DraftAutomationResponse {
@@ -808,22 +824,22 @@ export interface AutomationResponse {
 }
 
 export interface CreateAutomationRequest {
-  name: string;
+  delivery?: AutomationDelivery;
   description: string;
+  enabled?: boolean;
+  name: string;
+  profileId?: string;
   prompt: string;
   trigger: AutomationTrigger;
-  profileId?: string;
-  enabled?: boolean;
-  delivery?: AutomationDelivery;
 }
 
 export interface UpdateAutomationRequest {
-  name?: string;
+  delivery?: AutomationDelivery | null;
   description?: string;
+  enabled?: boolean;
+  name?: string;
   prompt?: string;
   trigger?: AutomationTrigger;
-  enabled?: boolean;
-  delivery?: AutomationDelivery | null;
 }
 
 export interface RunAutomationResponse {
@@ -849,21 +865,21 @@ export const TASK_STATUSES = [
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export interface StoredTask {
-  id: string;
-  title: string;
-  description: string;
-  prompt: string;
-  profileId: string;
-  status: TaskStatus;
-  position: number;
-  sessionId: string | null;
   createdAt: string;
+  description: string;
+  id: string;
+  position: number;
+  profileId: string;
+  prompt: string;
+  sessionId: string | null;
+  status: TaskStatus;
+  title: string;
   updatedAt: string;
 }
 
 export interface DraftTaskPromptRequest {
-  title: string;
   description?: string;
+  title: string;
 }
 
 export interface DraftTaskPromptResponse {
@@ -871,20 +887,20 @@ export interface DraftTaskPromptResponse {
 }
 
 export interface CreateTaskRequest {
-  title: string;
   description?: string;
-  prompt: string;
   profileId?: string;
+  prompt: string;
   status?: TaskStatus;
+  title: string;
 }
 
 export interface UpdateTaskRequest {
-  title?: string;
   description?: string;
-  prompt?: string;
-  profileId?: string;
-  status?: TaskStatus;
   position?: number;
+  profileId?: string;
+  prompt?: string;
+  status?: TaskStatus;
+  title?: string;
 }
 
 export interface ListTasksResponse {
@@ -898,13 +914,13 @@ export interface TaskResponse {
 export type TaskRunStatus = "running" | "completed" | "failed";
 
 export interface TaskRunRecord {
-  id: string;
-  taskId: string;
-  status: TaskRunStatus;
-  startedAt: string;
   completedAt: string | null;
-  output: string | null;
   error: string | null;
+  id: string;
+  output: string | null;
+  startedAt: string;
+  status: TaskRunStatus;
+  taskId: string;
 }
 
 export interface RunTaskResponse {
@@ -916,8 +932,8 @@ export interface ListTaskRunsResponse {
 }
 
 export interface TaskMessagesResponse {
-  sessionId: string;
   messages: ChatMessage[];
+  sessionId: string;
 }
 
 export interface TimezoneSettingsResponse {
@@ -931,8 +947,8 @@ export interface UpdateTimezoneRequest {
 export type ThinkingEffort = "low" | "medium" | "high";
 
 export interface ThinkingSettings {
-  enabled: boolean;
   effort: ThinkingEffort;
+  enabled: boolean;
 }
 
 export interface ThinkingSettingsResponse {
@@ -940,8 +956,8 @@ export interface ThinkingSettingsResponse {
 }
 
 export interface UpdateThinkingRequest {
-  enabled: boolean;
   effort?: ThinkingEffort;
+  enabled: boolean;
 }
 
 export interface VisionSettings {
@@ -969,13 +985,39 @@ export interface UpdateTranscriptionRequest {
 }
 
 export interface TranscribeAudioRequest {
-  mediaType: string;
   data: string;
   filename?: string;
+  mediaType: string;
 }
 
 export interface TranscribeAudioResponse {
   text: string;
+}
+
+export interface ImageGenerationSettings {
+  model: string | null;
+}
+
+export interface ImageGenerationSettingsResponse {
+  imageGeneration: ImageGenerationSettings;
+}
+
+export interface UpdateImageGenerationRequest {
+  model: string | null;
+}
+
+export interface GenerateImageRequest {
+  prompt: string;
+  size?: string;
+}
+
+export interface GenerateImageResponse {
+  data: string;
+  mediaType: string;
+  model: string;
+  revisedPrompt?: string;
+  size: string;
+  sizeBytes: number;
 }
 
 export interface RotateLocalAuthTokenResponse {
@@ -983,40 +1025,40 @@ export interface RotateLocalAuthTokenResponse {
 }
 
 export interface TelegramSettingsResponse {
-  configured: boolean;
+  allowedUserIds: number[];
   botTokenMasked: string | null;
+  configured: boolean;
   handshakeCode: string | null;
   pairedUserIds: number[];
-  allowedUserIds: number[];
   profileId: string;
 }
 
 export interface UpdateTelegramSettingsRequest {
-  botToken?: string;
   allowedUserIds?: string;
+  botToken?: string;
   profileId?: string;
 }
 
 export interface DiscordSettingsResponse {
-  configured: boolean;
-  botTokenMasked: string | null;
-  handshakeCode: string | null;
-  pairedUserIds: string[];
   allowedUserIds: string[];
-  profileId: string;
+  botTokenMasked: string | null;
+  configured: boolean;
+  handshakeCode: string | null;
   inviteUrl: string | null;
+  pairedUserIds: string[];
+  profileId: string;
 }
 
 export interface UpdateDiscordSettingsRequest {
-  botToken?: string;
   allowedUserIds?: string;
+  botToken?: string;
   profileId?: string;
 }
 
 export interface ComposioSettingsResponse {
-  configured: boolean;
   apiKeyMasked: string | null;
   composioReachable: boolean;
+  configured: boolean;
 }
 
 export interface UpdateComposioSettingsRequest {
@@ -1033,18 +1075,18 @@ export interface TelegramNotificationDestinationConfig {
 }
 
 export interface NotificationDestinationSummary {
+  channel: NotificationDestinationChannel;
+  createdAt: string;
   id: string;
   name: string;
-  channel: NotificationDestinationChannel;
   telegram: TelegramNotificationDestinationConfig;
-  webhookPath: string;
-  createdAt: string;
   updatedAt: string;
+  webhookPath: string;
 }
 
 export interface NotificationDestinationWithSecret {
-  destination: NotificationDestinationSummary;
   apiKey: string;
+  destination: NotificationDestinationSummary;
 }
 
 export interface ListNotificationDestinationsResponse {
@@ -1052,8 +1094,8 @@ export interface ListNotificationDestinationsResponse {
 }
 
 export interface CreateNotificationDestinationRequest {
-  name: string;
   channel: NotificationDestinationChannel;
+  name: string;
   telegram: TelegramNotificationDestinationConfig;
 }
 
@@ -1063,41 +1105,41 @@ export interface UpdateNotificationDestinationRequest {
 }
 
 export interface RegenerateNotificationDestinationKeyResponse {
-  destination: NotificationDestinationSummary;
   apiKey: string;
+  destination: NotificationDestinationSummary;
 }
 
 export interface NotificationWebhookRequest {
   body: string;
-  title?: string;
   level?: NotificationWebhookLevel;
+  title?: string;
 }
 
 export interface EmailSettingsResponse {
   configured: boolean;
+  from: string | null;
+  fromName: string | null;
   imapHost: string | null;
   imapPort: number | null;
   imapSecure: boolean | null;
+  passwordMasked: string | null;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpSecure: boolean | null;
   username: string | null;
-  from: string | null;
-  fromName: string | null;
-  passwordMasked: string | null;
 }
 
 export interface UpdateEmailSettingsRequest {
+  from?: string;
+  fromName?: string;
   imapHost?: string;
   imapPort?: number;
   imapSecure?: boolean;
+  password?: string;
   smtpHost?: string;
   smtpPort?: number;
   smtpSecure?: boolean;
   username?: string;
-  password?: string;
-  from?: string;
-  fromName?: string;
 }
 
 export interface SendEmailTestRequest {
@@ -1105,9 +1147,9 @@ export interface SendEmailTestRequest {
 }
 
 export interface SendEmailTestResponse {
+  messageId: string;
   ok: true;
   to: string;
-  messageId: string;
 }
 
 export type CodingAgentProviderPassthroughSummary = {
@@ -1120,12 +1162,12 @@ export type CodingAgentProviderPassthroughSummary = {
 };
 
 export interface AgentBrowserStatusResponse {
-  installed: boolean;
-  version: string | null;
-  ready: boolean;
   installCommand: string;
-  statusMessage: string | null;
+  installed: boolean;
   nextStep: "install" | null;
+  ready: boolean;
+  statusMessage: string | null;
+  version: string | null;
 }
 
 export type AgentBrowserInstallEvent =
@@ -1142,12 +1184,11 @@ export type AgentBrowserInstallEvent =
       error: string;
     };
 
-
 export interface WhatsAppSettingsResponse {
   configured: boolean;
-  phoneNumberMasked: string | null;
-  pairingCode: string | null;
   pairedJid: string | null;
+  pairingCode: string | null;
+  phoneNumberMasked: string | null;
   profileId: string;
 }
 
@@ -1157,16 +1198,16 @@ export interface UpdateWhatsAppSettingsRequest {
 }
 
 export interface TimezoneCatalogEntry {
-  id: string;
-  countryCode: string;
-  countryName: string;
-  city: string;
-  label: string;
-  offset: string;
   abbreviation: string;
-  tzName: string;
   /** Extra searchable city names (e.g. San Francisco → America/Los_Angeles). */
   aliases?: string[];
+  city: string;
+  countryCode: string;
+  countryName: string;
+  id: string;
+  label: string;
+  offset: string;
+  tzName: string;
 }
 
 export interface TimezoneCatalogGroup {
@@ -1190,69 +1231,69 @@ export interface ApiErrorResponse {
 }
 
 export interface CustomModelEntry {
-  id: string;
-  name?: string;
   default?: boolean;
+  id: string;
+  inputPerMillionUsd?: number;
+  name?: string;
+  outputPerMillionUsd?: number;
   supportsThinking?: boolean;
   supportsVision?: boolean;
-  inputPerMillionUsd?: number;
-  outputPerMillionUsd?: number;
 }
 
 export interface ProviderModelOption {
+  contextWindow?: number;
+  default?: boolean;
   id: string;
+  inputPerMillionUsd?: number;
+  maxOutputTokens?: number;
   name: string;
+  outputPerMillionUsd?: number;
   provider: ProviderName;
   providerId?: string;
   providerLabel?: string;
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  default?: boolean;
   supportsThinking?: boolean;
   supportsVision?: boolean;
-  inputPerMillionUsd?: number;
-  outputPerMillionUsd?: number;
 }
 
 export interface ProviderInstanceSummary {
-  id: string;
-  type: ProviderName;
-  label: string;
-  hasApiKey: boolean;
   baseUrl?: string | null;
-  hostMode?: OllamaHostMode | null;
-  customModels?: CustomModelEntry[];
-  modelCount: number;
   createdAt: string;
+  customModels?: CustomModelEntry[];
+  hasApiKey: boolean;
+  hostMode?: OllamaHostMode | null;
+  id: string;
+  label: string;
+  modelCount: number;
+  type: ProviderName;
 }
 
 export interface ListProvidersResponse {
-  providers: ProviderInstanceSummary[];
   defaultProviderId: string | null;
+  providers: ProviderInstanceSummary[];
 }
 
 export interface CreateProviderRequest {
-  type: ProviderName;
-  label?: string;
   apiKey: string;
-  model?: string;
   baseUrl?: string;
-  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
+  hostMode?: OllamaHostMode;
+  label?: string;
+  model?: string;
+  type: ProviderName;
 }
 
 export interface CreateProviderResponse {
-  provider: ProviderInstanceSummary;
   defaultProviderId: string;
   initialModel: string;
+  provider: ProviderInstanceSummary;
 }
 
 export interface UpdateProviderRequest {
-  label?: string;
   apiKey?: string;
   baseUrl?: string;
-  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
+  hostMode?: OllamaHostMode;
+  label?: string;
 }
 
 export interface UpdateProviderResponse {
@@ -1264,90 +1305,90 @@ export interface DeleteProviderResponse {
 }
 
 export interface ModelsResponse {
-  currentProviderId: string | null;
-  providers: ProviderInstanceSummary[];
-  models: ProviderModelOption[];
+  baseUrl?: string | null;
   /** Full static model catalog for provider setup and management UIs. */
   catalog?: ProviderModelOption[];
-  provider: ProviderName | null;
-  displayName: string | null;
-  baseUrl?: string | null;
+  currentProviderId: string | null;
   customModels?: CustomModelEntry[];
+  displayName: string | null;
+  models: ProviderModelOption[];
+  provider: ProviderName | null;
+  providers: ProviderInstanceSummary[];
 }
 
 export interface DiscoverModelsRequest {
-  baseUrl?: string;
   apiKey?: string;
-  providerId?: string;
+  baseUrl?: string;
+  hostMode?: OllamaHostMode;
   /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
   provider?: "ollama" | "openai_compatible" | "fireworks";
-  hostMode?: OllamaHostMode;
+  providerId?: string;
 }
 
 export interface ConfigureProviderRequest {
   apiKey: string;
-  provider: ProviderName;
-  model?: string;
-  displayName?: string;
   baseUrl?: string;
-  hostMode?: OllamaHostMode;
   customModels?: CustomModelEntry[];
+  displayName?: string;
+  hostMode?: OllamaHostMode;
+  model?: string;
+  provider: ProviderName;
 }
 
 export interface ConfigureProviderResponse {
-  provider: ProviderName;
   currentModel: string;
   displayName: string | null;
+  provider: ProviderName;
 }
 
 export interface ProfileSummary {
+  createdAt: string;
+  hasAvatar: boolean;
   id: string;
-  name: string;
-  model: string | null;
-  isSuper: boolean;
   isDefault?: boolean;
-  /** null = inherit org default; true/false = force gate on/off for this profile */
-  skillsWriteApproval?: boolean | null;
+  isSuper: boolean;
+  mcpServerCount: number;
+  model: string | null;
+  name: string;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */
   skillsPostTurnReview?: boolean | null;
-  toolCount: number;
-  mcpServerCount: number;
+  /** null = inherit org default; true/false = force gate on/off for this profile */
+  skillsWriteApproval?: boolean | null;
   soulActive: boolean;
-  hasAvatar: boolean;
-  createdAt: string;
+  toolCount: number;
   updatedAt: string;
 }
 
 export interface ProfileDetail extends ProfileSummary {
-  systemPrompt: string;
-  tools: ToolSummary[];
   mcpServers: McpServerSummary[];
   skills: SkillSummary[];
+  systemPrompt: string;
+  tools: ToolSummary[];
 }
 
 export interface SkillUsageSummary {
-  viewCount: number;
-  useCount: number;
-  patchCount: number;
-  lastViewedAt: string | null;
-  lastUsedAt: string | null;
   lastPatchedAt: string | null;
+  lastUsedAt: string | null;
+  lastViewedAt: string | null;
+  patchCount: number;
+  useCount: number;
+  viewCount: number;
 }
 
 export type SkillCreatedBy = "agent" | "human" | "bundled";
 
 export interface SkillSummary {
-  id: string;
-  name: string;
+  createdAt: string;
+  createdBy: SkillCreatedBy;
   description: string;
-  sourcePath: string;
-  hasTool: boolean;
   disableModelInvocation: boolean;
   enabled: boolean;
-  createdBy: SkillCreatedBy;
-  usage?: SkillUsageSummary;
-  createdAt: string;
+  hasTool: boolean;
+  id: string;
+  name: string;
+  sourcePath: string;
   updatedAt: string;
+  usage?: SkillUsageSummary;
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -1367,22 +1408,22 @@ export interface AssignSkillRequest {
 }
 
 export interface CreateSkillRequest {
-  name: string;
-  description: string;
   body?: string;
+  description: string;
   disableModelInvocation?: boolean;
+  name: string;
   profileId?: string;
 }
 
 export interface PatchSkillRequest {
-  description?: string;
   body?: string;
+  description?: string;
   disableModelInvocation?: boolean;
 }
 
 export interface SyncSkillsResponse {
-  discovered: number;
   created: number;
+  discovered: number;
   updated: number;
 }
 
@@ -1390,40 +1431,40 @@ export type McpServerStatus = "connected" | "disconnected" | "error";
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
-  url: string;
   headers?: Record<string, string>;
+  url: string;
 }
 
 export interface McpStdioConfig {
-  command: string;
   args?: string[];
+  command: string;
   env?: Record<string, string>;
 }
 
 export type McpServerConfig = McpHttpConfig | McpStdioConfig;
 
 export interface CachedMcpToolSummary {
-  name: string;
   description: string;
   inputSchema?: unknown;
+  name: string;
 }
 
 export interface McpServerSummary {
-  id: string;
-  name: string;
-  transport: McpTransport;
+  assignedProfileCount?: number;
+  createdAt: string;
   enabled: boolean;
+  id: string;
+  lastError: string | null;
+  name: string;
   status: McpServerStatus;
   toolCount: number;
-  assignedProfileCount?: number;
-  lastError: string | null;
-  createdAt: string;
+  transport: McpTransport;
   updatedAt: string;
 }
 
 export interface McpServerDetail extends McpServerSummary {
-  config: McpServerConfig;
   cachedTools: CachedMcpToolSummary[];
+  config: McpServerConfig;
 }
 
 export interface ListMcpServersResponse {
@@ -1435,20 +1476,20 @@ export interface McpServerResponse {
 }
 
 export interface CreateMcpServerRequest {
-  name: string;
-  transport: McpTransport;
   config: McpServerConfig;
-  enabled?: boolean;
   connect?: boolean;
+  enabled?: boolean;
+  name: string;
   /** When testing an existing server, merges blank header/env values with stored secrets. */
   serverId?: string;
+  transport: McpTransport;
 }
 
 export interface UpdateMcpServerRequest {
-  name?: string;
-  transport?: McpTransport;
   config?: McpServerConfig;
   enabled?: boolean;
+  name?: string;
+  transport?: McpTransport;
 }
 
 export interface AssignMcpServerRequest {
@@ -1456,24 +1497,24 @@ export interface AssignMcpServerRequest {
 }
 
 export interface TestMcpServerResponse {
+  error?: string;
   ok: boolean;
   toolCount: number;
   tools: CachedMcpToolSummary[];
-  error?: string;
 }
 
 export interface ToolSummary {
-  id: string;
-  name: string;
   description: string;
   handlerType: string;
+  id: string;
+  name: string;
 }
 
 export interface ToolDetail extends ToolSummary {
+  createdAt: string;
   handlerConfig: unknown;
   /** Resolved JSON Schema for javascript tools (module export or handlerConfig). */
   parameters?: JsonSchema;
-  createdAt: string;
   updatedAt: string;
 }
 
@@ -1482,9 +1523,9 @@ export interface ToolResponse {
 }
 
 export interface ToolSourceResponse {
-  path: string;
   content: string;
   language: "javascript" | "typescript";
+  path: string;
 }
 
 export interface ListProfilesResponse {
@@ -1497,31 +1538,31 @@ export interface ProfileResponse {
 
 export interface CreateProfileRequest {
   id?: string;
-  name: string;
-  systemPrompt?: string;
-  model?: string | null;
   isSuper?: boolean;
+  model?: string | null;
+  name: string;
   soulFiles?: {
     "SOUL.md"?: string;
     "STYLE.md"?: string;
     "INSTRUCTIONS.md"?: string;
     "MEMORY.md"?: string;
   };
+  systemPrompt?: string;
 }
 
 export interface UpdateProfileRequest {
-  name?: string;
-  systemPrompt?: string;
   model?: string | null;
-  skillsWriteApproval?: boolean | null;
+  name?: string;
   skillsPostTurnReview?: boolean | null;
+  skillsWriteApproval?: boolean | null;
+  systemPrompt?: string;
 }
 
 export interface CreateToolRequest {
-  name: string;
   description: string;
-  handlerType?: string;
   handlerConfig?: unknown;
+  handlerType?: string;
+  name: string;
 }
 
 export interface ListToolsResponse {
@@ -1537,9 +1578,9 @@ export interface RunToolRequest {
 }
 
 export interface RunToolResponse {
+  error?: string;
   ok: boolean;
   result?: unknown;
-  error?: string;
 }
 
 export interface SuggestToolParamsRequest {
@@ -1555,16 +1596,16 @@ import type { SoulFileStatus, SoulStackFiles } from "./soul/types";
 export type { SoulFileStatus, SoulStackFiles } from "./soul/types";
 
 export interface SoulStatusResponse {
-  directory: string;
   active: boolean;
-  files: SoulFileStatus;
   contents?: SoulStackFiles;
+  directory: string;
+  files: SoulFileStatus;
   profileId?: string;
 }
 
 export interface InitSoulResponse {
-  directory: string;
   created: string[];
+  directory: string;
   profileId?: string;
 }
 
@@ -1581,22 +1622,22 @@ export interface UpdateSoulFileRequest {
 
 export interface ArtifactFile {
   filename: string;
-  path: string;
   mimeType: string;
+  path: string;
   sizeBytes: number;
   updatedAt: string;
 }
 
 export interface ListArtifactsResponse {
-  profileId: string;
-  directory: string;
   artifacts: ArtifactFile[];
+  directory: string;
+  profileId: string;
 }
 
 export interface DeleteArtifactResponse {
   deleted: boolean;
-  profileId: string;
   filename: string;
+  profileId: string;
 }
 
 export interface PublishArtifactShareRequest {
@@ -1605,60 +1646,60 @@ export interface PublishArtifactShareRequest {
 
 export interface PublishArtifactShareResponse {
   id: string;
-  token: string;
-  shareUrl: string | null;
-  sharePath: string;
-  webPublicUrlConfigured: boolean;
   refreshed: boolean;
+  sharePath: string;
+  shareUrl: string | null;
+  token: string;
+  webPublicUrlConfigured: boolean;
 }
 
 export interface ArtifactShareStatusResponse {
-  id: string;
   active: boolean;
+  createdAt: string;
+  id: string;
   sharePath: string;
   shareUrl: string | null;
   webPublicUrlConfigured: boolean;
-  createdAt: string;
 }
 
 export interface RevokeArtifactShareResponse {
-  revoked: boolean;
   id: string;
+  revoked: boolean;
 }
 
 export interface PublicArtifactShareResponse {
   filename: string;
+  inlineAllowed: boolean;
   mimeType: string;
   sizeBytes: number;
-  inlineAllowed: boolean;
 }
 
 export type KnowledgeBaseDocumentStatus = "ready" | "failed";
 
 export interface KnowledgeBaseDocument {
-  id: string;
+  error?: string;
   filename: string;
+  id: string;
   mediaType: string;
   sizeBytes: number;
-  uploadedAt: string;
   status: KnowledgeBaseDocumentStatus;
-  error?: string;
+  uploadedAt: string;
 }
 
 export interface KnowledgeBaseSource {
+  description: string;
+  enabled: boolean;
   id: string;
+  inherited: boolean;
+  kind: "url";
   title: string;
   url: string;
-  description: string;
-  kind: "url";
-  inherited: boolean;
-  enabled: boolean;
 }
 
 export interface ListKnowledgeBaseResponse {
   documents: KnowledgeBaseDocument[];
-  sources: KnowledgeBaseSource[];
   profileId: string;
+  sources: KnowledgeBaseSource[];
 }
 
 export interface UploadKnowledgeBaseRequest {
@@ -1672,8 +1713,8 @@ export interface UploadKnowledgeBaseResponse {
 
 export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
-  profileId: string;
   documentId: string;
+  profileId: string;
 }
 
 export interface UserContextStatusResponse {
@@ -1706,32 +1747,32 @@ export type OllamaHostMode = "local" | "cloud";
 export type GenerateTextFormat = "json" | "text";
 
 export interface GenerateTextInput {
-  system: string;
-  prompt: string;
   /** Defaults to `json` for structured automation drafts. Use `text` for plain prose. */
   format?: GenerateTextFormat;
+  prompt: string;
+  system: string;
 }
 
 export interface JsonSchema {
-  type?: string;
-  description?: string;
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
   additionalProperties?: boolean | JsonSchema;
+  description?: string;
   enum?: Array<string | number | boolean>;
   items?: JsonSchema;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  type?: string;
 }
 
 export interface LlmToolDefinition {
-  name: string;
   description: string;
+  name: string;
   parameters: JsonSchema;
 }
 
 export interface ToolCall {
+  arguments: Record<string, unknown>;
   id: string;
   name: string;
-  arguments: Record<string, unknown>;
 }
 
 export type ChatMessage =
@@ -1749,9 +1790,9 @@ export type ChatMessage =
   | { role: "tool"; toolCallId: string; name: string; content: string };
 
 export interface ChatCompletionResult {
+  assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
   content: string;
   toolCalls: ToolCall[];
-  assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -1771,24 +1812,29 @@ export interface GenerateTextResult {
 }
 
 export interface ProviderChatOptions {
-  /** Use the active provider's hosted web search instead of executing web_search locally. */
-  webSearch?: boolean;
   thinking?: {
     enabled: boolean;
     effort?: ThinkingEffort;
   };
+  /** Use the active provider's hosted web search instead of executing web_search locally. */
+  webSearch?: boolean;
 }
 
 export interface GenerateChatInput {
-  system: string;
   messages: ChatMessage[];
-  tools?: LlmToolDefinition[];
   providerOptions?: ProviderChatOptions;
+  system: string;
+  tools?: LlmToolDefinition[];
 }
 
 export interface StreamChatHandlers {
   onChunk: (delta: string) => void;
   onThinking?: (delta: string) => void;
+  onToolEnd?: (event: {
+    toolCallId: string;
+    tool: string;
+    result: unknown;
+  }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;
     tool: string;
@@ -1800,40 +1846,29 @@ export interface StreamChatHandlers {
     tool: string;
     input: Record<string, unknown>;
   }) => void;
-  onToolEnd?: (event: {
-    toolCallId: string;
-    tool: string;
-    result: unknown;
-  }) => void;
 }
 
 export interface ProviderClient {
-  name: ProviderName;
-  generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
   generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
+  generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
+  name: ProviderName;
   streamChat(
     input: GenerateChatInput,
-    handlers: StreamChatHandlers,
+    handlers: StreamChatHandlers
   ): Promise<ChatCompletionResult>;
 }
 
 export interface ToolContext {
-  automationId?: string;
-  automationRunId?: string;
-  userId?: string;
-  orgId?: string;
-  profileId?: string;
-  sessionId?: string;
-  /** Session channel when known (used for interactive-only tool gates). */
-  channel?: AgentChannel;
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
+  automationId?: string;
+  automationRunId?: string;
+  /** Session channel when known (used for interactive-only tool gates). */
+  channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */
   clientOrigin?: string;
-  /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
-  workspaceRoot?: string;
-  /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
-  orgRole?: OrgRole;
+  /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
+  emitSubAgentActivity?: (label: string) => void;
   /**
    * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
@@ -1841,16 +1876,22 @@ export interface ToolContext {
   forbidProfileSkillMarkdownWrites?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
-  /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
-  emitSubAgentActivity?: (label: string) => void;
+  orgId?: string;
+  /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
+  orgRole?: OrgRole;
+  profileId?: string;
+  sessionId?: string;
+  userId?: string;
+  /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
+  workspaceRoot?: string;
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
-  name: string;
   description: string;
-  parameters?: JsonSchema;
+  name: string;
   /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
   parallelSafe?: boolean;
+  parameters?: JsonSchema;
   run(input: Input, context: ToolContext): Promise<Output>;
 }
 
@@ -1858,59 +1899,65 @@ export const COMPOSIO_TOOLKIT_SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
 export type ComposioOrgToolkitStatus = "disabled" | "enabled";
 
-export type ComposioUserConnectionStatus = "oauth_in_progress" | "connected" | "error";
+export type ComposioUserConnectionStatus =
+  | "oauth_in_progress"
+  | "connected"
+  | "error";
 
 /** @deprecated Org catalog uses ComposioOrgToolkitStatus; user rows use ComposioUserConnectionStatus. */
 export type ComposioToolkitStatus =
   | ComposioOrgToolkitStatus
   | ComposioUserConnectionStatus;
 
-export type ComposioToolErrorCode = "COMPOSIO_NOT_CONNECTED" | "COMPOSIO_TRANSIENT" | "COMPOSIO_POLICY";
+export type ComposioToolErrorCode =
+  | "COMPOSIO_NOT_CONNECTED"
+  | "COMPOSIO_TRANSIENT"
+  | "COMPOSIO_POLICY";
 
 export interface ComposioCachedToolSummary {
-  slug: string;
-  name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  name: string;
+  slug: string;
 }
 
 export interface ComposioToolkitSummary {
-  id: string;
-  toolkitSlug: string;
-  displayName: string;
-  status: ComposioOrgToolkitStatus;
   cachedTools: ComposioCachedToolSummary[];
+  displayName: string;
+  id: string;
   lastError: string | null;
+  status: ComposioOrgToolkitStatus;
+  toolkitSlug: string;
   updatedAt: string;
 }
 
 export interface ComposioUserConnectionSummary {
   id: string;
+  lastError: string | null;
+  status: ComposioUserConnectionStatus;
   toolkitId: string;
   toolkitSlug: string;
-  status: ComposioUserConnectionStatus;
-  lastError: string | null;
   updatedAt: string;
 }
 
 export interface ComposioCatalogToolkitSummary {
-  slug: string;
-  name: string;
   description: string | null;
   logoUrl: string | null;
+  name: string;
+  slug: string;
 }
 
 export interface ListComposioToolkitsResponse {
-  /** A Composio project API key is saved on this server. */
-  configured: boolean;
-  /** Nakama can reach the Composio API with the saved key. */
-  composioReachable: boolean;
+  catalog: ComposioCatalogToolkitSummary[];
+  catalogError: string | null;
   /** @deprecated Use composioReachable. */
   composioAvailable: boolean;
-  catalog: ComposioCatalogToolkitSummary[];
+  /** Nakama can reach the Composio API with the saved key. */
+  composioReachable: boolean;
+  /** A Composio project API key is saved on this server. */
+  configured: boolean;
   orgToolkits: ComposioToolkitSummary[];
   userConnections: ComposioUserConnectionSummary[];
-  catalogError: string | null;
 }
 
 export interface EnableComposioToolkitRequest {
@@ -1927,9 +1974,9 @@ export interface ComposioConnectResponse {
 }
 
 export interface ProfileComposioToolkitAssignment {
+  allowedActions: string[] | null;
   toolkitId: string;
   toolkitSlug: string;
-  allowedActions: string[] | null;
 }
 
 export interface ListProfileComposioToolkitsResponse {
@@ -1944,7 +1991,7 @@ export interface UpdateProfileComposioToolkitsRequest {
 }
 
 export interface ComposioToolErrorResult {
-  error: string;
   code: ComposioToolErrorCode;
+  error: string;
   toolkitSlug?: string;
 }

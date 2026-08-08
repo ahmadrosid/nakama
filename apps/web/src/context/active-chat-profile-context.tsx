@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
   ActiveChatProfileContext,
   type ActiveChatProfileContextValue,
@@ -9,9 +9,13 @@ import {
   writeStoredActiveChatProfileId,
 } from "@/lib/chat-history";
 
-export function ActiveChatProfileProvider({ children }: { children: ReactNode }) {
+export function ActiveChatProfileProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const [profileId, setProfileIdState] = useState<string | null>(() =>
-    readStoredActiveChatProfileId(),
+    readStoredActiveChatProfileId()
   );
   const switchHandlerRef = useRef<ChatProfileSwitchHandler | null>(null);
 
@@ -29,7 +33,7 @@ export function ActiveChatProfileProvider({ children }: { children: ReactNode })
         }
       };
     },
-    [],
+    []
   );
 
   const switchChatProfile = useCallback(
@@ -37,17 +41,22 @@ export function ActiveChatProfileProvider({ children }: { children: ReactNode })
       setProfileId(nextProfileId);
       switchHandlerRef.current?.(nextProfileId);
     },
-    [setProfileId],
+    [setProfileId]
   );
 
   const value = useMemo<ActiveChatProfileContextValue>(
     () => ({
       profileId,
+      registerChatProfileSwitchHandler,
+      setProfileId,
+      switchChatProfile,
+    }),
+    [
+      profileId,
       setProfileId,
       registerChatProfileSwitchHandler,
       switchChatProfile,
-    }),
-    [profileId, setProfileId, registerChatProfileSwitchHandler, switchChatProfile],
+    ]
   );
 
   return (

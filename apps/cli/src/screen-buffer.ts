@@ -4,19 +4,19 @@ import {
   encodeSgr,
   isSgrSequence,
   parseSgrParams,
-  tokenizeText,
   type SgrState,
   type TextToken,
+  tokenizeText,
 } from "./text-measure";
 
 export function appendStreamText(
   lines: string[],
   activeLine: string,
   text: string,
-  width: number,
+  width: number
 ): { lines: string[]; activeLine: string } {
   if (width <= 0) {
-    return { lines: [...lines, activeLine], activeLine: text };
+    return { activeLine: text, lines: [...lines, activeLine] };
   }
 
   const nextLines = [...lines];
@@ -76,7 +76,7 @@ export function appendStreamText(
     current = activePrefix();
   }
 
-  return { lines: nextLines, activeLine: current };
+  return { activeLine: current, lines: nextLines };
 }
 
 function visibleWidth(text: string): number {
@@ -99,7 +99,10 @@ function activeSgrState(text: string): SgrState {
   return state;
 }
 
-export function finalizeStreamLine(lines: string[], activeLine: string): string[] {
+export function finalizeStreamLine(
+  lines: string[],
+  activeLine: string
+): string[] {
   if (!activeLine) {
     return lines;
   }
@@ -119,7 +122,12 @@ export class ScreenBuffer {
   }
 
   appendStream(text: string, width: number): void {
-    const merged = appendStreamText(this.contentLines, this.streamLine, text, width);
+    const merged = appendStreamText(
+      this.contentLines,
+      this.streamLine,
+      text,
+      width
+    );
     this.contentLines = merged.lines;
     this.streamLine = merged.activeLine;
   }
@@ -131,7 +139,7 @@ export class ScreenBuffer {
 
     const activePrefix = activeAnsiPrefix(this.streamLine);
     this.contentLines.push(
-      activePrefix ? `${this.streamLine}\x1b[0m` : this.streamLine,
+      activePrefix ? `${this.streamLine}\x1b[0m` : this.streamLine
     );
     this.streamLine = "";
   }

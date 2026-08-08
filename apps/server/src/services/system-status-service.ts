@@ -1,9 +1,14 @@
-import type { HealthResponse, LlmUsageStatus, SystemStatusResponse, WorkerProcessInfo } from "@nakama/core";
+import type {
+  HealthResponse,
+  LlmUsageStatus,
+  SystemStatusResponse,
+  WorkerProcessInfo,
+} from "@nakama/core";
 import {
   getAutomationWorkerHeartbeatStatus,
+  getDiscordWorkerStatus,
   getTelegramWorkerStatus,
   getWhatsAppWorkerStatus,
-  getDiscordWorkerStatus,
   isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
 } from "@nakama/core";
@@ -23,7 +28,7 @@ export class SystemStatusService {
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
     private readonly composioService: ComposioService | null = null,
-    private readonly databaseAdapter: DatabaseAdapter | null = null,
+    private readonly databaseAdapter: DatabaseAdapter | null = null
   ) {}
 
   async getStatus(): Promise<SystemStatusResponse> {
@@ -36,7 +41,8 @@ export class SystemStatusService {
     const automationHeartbeat = await getAutomationWorkerHeartbeatStatus();
     const automationRunning = automationHeartbeat.running;
     const automationManagedOnline =
-      automationProcess?.managed === true && automationProcess.status === "online";
+      automationProcess?.managed === true &&
+      automationProcess.status === "online";
 
     const [telegramStatus, whatsappStatus, discordStatus] = await Promise.all([
       this.resolveWorkerStatus("telegram", statuses.telegram),
@@ -45,40 +51,42 @@ export class SystemStatusService {
     ]);
 
     return {
-      server: await this.getServerStatus(),
       automationWorker: {
-        ok: automationManagedOnline && automationRunning,
-        running: automationRunning,
-        scheduledJobs: automationRunning ? automationHeartbeat.scheduledJobs : 0,
         activeRuns: this.automationRunner.getActiveRunCount(),
-        providerConfigured,
+        ok: automationManagedOnline && automationRunning,
         process: automationProcess ?? undefined,
-      },
-      taskWorker: {
-        ok: true,
-        activeRuns: this.taskRunner.getActiveRunCount(),
         providerConfigured,
+        running: automationRunning,
+        scheduledJobs: automationRunning
+          ? automationHeartbeat.scheduledJobs
+          : 0,
       },
-      telegramWorker: telegramStatus,
-      whatsappWorker: whatsappStatus,
+      checkedAt: new Date().toISOString(),
       discordWorker: discordStatus,
       llmUsage: this.getLlmUsage(
         models.provider,
         usageFields.currentModel,
         providerConfigured,
         usageFields,
-        this.agent.getLlmUsageStatsByModel(),
+        this.agent.getLlmUsageStatsByModel()
       ),
       mcp: this.mcpService
         ? await this.mcpService.getStatusSummary()
-        : { serverCount: 0, connectedCount: 0, assignedProfileCount: 0 },
-      checkedAt: new Date().toISOString(),
+        : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
+      server: await this.getServerStatus(),
+      taskWorker: {
+        activeRuns: this.taskRunner.getActiveRunCount(),
+        ok: true,
+        providerConfigured,
+      },
+      telegramWorker: telegramStatus,
+      whatsappWorker: whatsappStatus,
     };
   }
 
   private async resolveWorkerStatus(
     name: "telegram" | "whatsapp" | "discord",
-    pm2Status: WorkerProcessInfo | null,
+    pm2Status: WorkerProcessInfo | null
   ) {
     if (pm2Status?.managed) {
       const running = pm2Status.status === "online";
@@ -87,8 +95,8 @@ export class SystemStatusService {
         const heartbeat = await getTelegramWorkerStatus();
         return {
           ...heartbeat,
-          running,
           process: pm2Status,
+          running,
         };
       }
 
@@ -96,16 +104,16 @@ export class SystemStatusService {
         const heartbeat = await getDiscordWorkerStatus();
         return {
           ...heartbeat,
-          running,
           process: pm2Status,
+          running,
         };
       }
 
       const heartbeat = await getWhatsAppWorkerStatus();
       return {
         ...heartbeat,
-        running,
         process: pm2Status,
+        running,
       };
     }
 
@@ -125,16 +133,16 @@ export class SystemStatusService {
     currentModel: string | null,
     providerConfigured: boolean,
     usageFields: { displayName: string | null; costEstimated: boolean },
-    models: LlmUsageStatus["models"],
+    models: LlmUsageStatus["models"]
   ): LlmUsageStatus {
     return {
       ...this.agent.getLlmUsageStats(),
-      provider,
-      currentModel,
-      providerConfigured,
-      displayName: usageFields.displayName,
       costEstimated: usageFields.costEstimated,
+      currentModel,
+      displayName: usageFields.displayName,
       models,
+      provider,
+      providerConfigured,
     };
   }
 
@@ -143,15 +151,15 @@ export class SystemStatusService {
     const humanUserCount = (await this.databaseAdapter?.countHumanUsers()) ?? 0;
 
     return {
-      ok: true,
       apiVersion: NAKAMA_API_VERSION,
-      providerConfigured: this.agent.providerConfigured,
-      userConfigured: humanUserCount > 0,
-      composioConfigured,
       // Live probe — intentional here; /health skips this to stay fast.
       composioAvailable: composioConfigured
         ? await (this.composioService?.isReachable() ?? false)
         : false,
+      composioConfigured,
+      ok: true,
+      providerConfigured: this.agent.providerConfigured,
+      userConfigured: humanUserCount > 0,
     };
   }
 }

@@ -11,22 +11,22 @@ describe("llm usage stats persistence", () => {
     try {
       await db.incrementLlmUsageStats(
         {
-          requestCount: 2,
+          estimatedCostUsd: 0.05,
           inputTokens: 400,
           outputTokens: 100,
-          estimatedCostUsd: 0.05,
+          requestCount: 2,
         },
-        trackedSince,
+        trackedSince
       );
 
       const stats = await db.getLlmUsageStats();
       const byModel = await db.listLlmUsageStatsByModel();
       expect(stats).toEqual({
+        estimatedCostUsd: 0.05,
         id: LLM_USAGE_STATS_ID,
-        requestCount: 2,
         inputTokens: 400,
         outputTokens: 100,
-        estimatedCostUsd: 0.05,
+        requestCount: 2,
         trackedSince,
         updatedAt: expect.any(String),
       });
@@ -45,50 +45,50 @@ describe("llm usage stats persistence", () => {
       await db.incrementLlmUsageStatsByModel(
         "gpt-4o",
         {
-          requestCount: 1,
+          estimatedCostUsd: 0.01,
           inputTokens: 100,
           outputTokens: 50,
-          estimatedCostUsd: 0.01,
+          requestCount: 1,
         },
-        trackedSince,
+        trackedSince
       );
       await db.incrementLlmUsageStatsByModel(
         "gpt-4o-mini",
         {
-          requestCount: 2,
+          estimatedCostUsd: 0.005,
           inputTokens: 120,
           outputTokens: 30,
-          estimatedCostUsd: 0.005,
+          requestCount: 2,
         },
-        trackedSince,
+        trackedSince
       );
       await db.incrementLlmUsageStatsByModel(
         "gpt-4o",
         {
-          requestCount: 1,
+          estimatedCostUsd: 0.008,
           inputTokens: 80,
           outputTokens: 20,
-          estimatedCostUsd: 0.008,
+          requestCount: 1,
         },
-        trackedSince,
+        trackedSince
       );
 
       expect(await db.listLlmUsageStatsByModel()).toEqual([
         {
-          modelId: "gpt-4o",
-          requestCount: 2,
+          estimatedCostUsd: 0.018_000_000_000_000_002,
           inputTokens: 180,
+          modelId: "gpt-4o",
           outputTokens: 70,
-          estimatedCostUsd: 0.018000000000000002,
+          requestCount: 2,
           trackedSince,
           updatedAt: expect.any(String),
         },
         {
-          modelId: "gpt-4o-mini",
-          requestCount: 2,
-          inputTokens: 120,
-          outputTokens: 30,
           estimatedCostUsd: 0.005,
+          inputTokens: 120,
+          modelId: "gpt-4o-mini",
+          outputTokens: 30,
+          requestCount: 2,
           trackedSince,
           updatedAt: expect.any(String),
         },

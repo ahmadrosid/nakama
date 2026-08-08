@@ -1,7 +1,12 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 import { CopyIcon, EyeIcon, EyeOffIcon, RefreshCwIcon } from "lucide-react";
+import {
+  IntegrationSettingsFooter,
+  IntegrationStatusHeader,
+  PairingStepTile,
+  SettingsRow,
+} from "@/components/integration-settings.shared";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -17,76 +22,71 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  IntegrationSettingsFooter,
-  IntegrationStatusHeader,
-  PairingStepTile,
-  SettingsRow,
-} from "@/components/integration-settings.shared";
+import { WorkerActionBar } from "@/components/WorkerActionBar";
 import { cn } from "@/lib/utils";
 
 function TelegramPairingGuide() {
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium text-foreground">Link in Telegram</p>
+      <p className="font-medium text-foreground text-xs">Link in Telegram</p>
       <div className="overflow-hidden rounded-md border border-border">
         <div className="grid grid-cols-1 sm:grid-cols-2">
           <PairingStepTile
+            className="border-border border-b sm:border-r sm:border-b-0"
+            description="Start a private chat with your bot."
             step={1}
             title="Open the bot"
-            className="border-b border-border sm:border-b-0 sm:border-r"
-            description="Start a private chat with your bot."
           />
           <PairingStepTile
+            description="Paste the pairing code and send it."
             step={2}
             title="Send the code"
-            description="Paste the pairing code and send it."
           />
         </div>
       </div>
 
       <details className="group">
-        <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
+        <summary className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground">
           Using the bot in a group?
         </summary>
         <div className="mt-3 overflow-hidden rounded-md border border-border">
           <PairingStepTile
+            className="border-border border-b"
+            description="Link your account in a private chat before using groups."
             step={1}
             title="Pair privately first"
-            className="border-b border-border"
-            description="Link your account in a private chat before using groups."
           />
           <div className="grid grid-cols-1 sm:grid-cols-2">
             <PairingStepTile
-              step={2}
-              title="Disable Group Privacy"
-              className="border-b border-border sm:border-b-0 sm:border-r"
+              className="border-border border-b sm:border-r sm:border-b-0"
               description={
                 <>
                   Turn it off in{" "}
                   <a
-                    href="https://t.me/BotFather"
-                    target="_blank"
-                    rel="noreferrer"
                     className="font-medium text-primary underline-offset-2 hover:underline"
+                    href="https://t.me/BotFather"
+                    rel="noreferrer"
+                    target="_blank"
                   >
                     @BotFather
                   </a>{" "}
                   so @mentions work.
                 </>
               }
+              step={2}
+              title="Disable Group Privacy"
             />
             <PairingStepTile
+              className="border-border border-b"
+              description="Remove and re-add the bot after changing Group Privacy."
               step={3}
               title="Re-add the bot"
-              className="border-b border-border"
-              description="Remove and re-add the bot after changing Group Privacy."
             />
           </div>
           <PairingStepTile
+            description="@mention the bot, reply to it, or use a slash command."
             step={4}
             title="Trigger in the group"
-            description="@mention the bot, reply to it, or use a slash command."
           />
         </div>
       </details>
@@ -167,44 +167,48 @@ export function TelegramSettingsCardContent({
 
   return (
     <div className={cn(!embedded && "space-y-4 py-4")}>
-      {!embedded ? (
+      {embedded ? null : (
         <IntegrationStatusHeader
-          title="Telegram"
-          subtitle={headerSubtitle}
-          statusBadge={statusBadge}
+          className={paneItemClass}
           configured={configured}
           connected={hasLinkedUsers && running}
-          className={paneItemClass}
+          statusBadge={statusBadge}
+          subtitle={headerSubtitle}
+          title="Telegram"
         />
-      ) : null}
+      )}
 
       <SettingsRow
-        label="Bot token"
-        description="From @BotFather"
         className={paneItemClass}
+        description="From @BotFather"
+        label="Bot token"
       >
         <InputGroup className="w-full min-w-[12rem] sm:w-[16rem]">
           <InputGroupInput
-            id="telegram-bot-token"
-            type={showBotToken ? "text" : "password"}
             autoComplete="off"
+            disabled={savePending}
+            id="telegram-bot-token"
+            onChange={(event) => onBotTokenChange(event.target.value)}
             placeholder={
               configured && settings?.botTokenMasked
                 ? `Saved (${settings.botTokenMasked})`
                 : "Paste token"
             }
+            type={showBotToken ? "text" : "password"}
             value={botToken}
-            disabled={savePending}
-            onChange={(event) => onBotTokenChange(event.target.value)}
           />
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              type="button"
-              size="icon-xs"
               aria-label={showBotToken ? "Hide token" : "Show token"}
               onClick={onToggleShowBotToken}
+              size="icon-xs"
+              type="button"
             >
-              {showBotToken ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+              {showBotToken ? (
+                <EyeOffIcon className="size-4" />
+              ) : (
+                <EyeIcon className="size-4" />
+              )}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -213,7 +217,6 @@ export function TelegramSettingsCardContent({
       {configured ? (
         <div className={cn("space-y-4", !isPaired && "bg-muted/20")}>
           <SettingsRow
-            label="Pairing code"
             className={paneItemClass}
             description={
               pairingCode
@@ -224,28 +227,34 @@ export function TelegramSettingsCardContent({
                   ? "Linked. Generate a new code to add another account."
                   : "Generate a code, then message it to your bot once."
             }
+            label="Pairing code"
           >
             {pairingCode ? (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
                   {pairingCode}
                 </code>
-                <Button type="button" size="sm" variant="outline" onClick={onCopyHandshakeCode}>
+                <Button
+                  onClick={onCopyHandshakeCode}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
                   <CopyIcon className="size-4" />
                   Copy
                 </Button>
                 <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
                   disabled={regeneratePending || savePending}
                   onClick={onRegenerateHandshake}
+                  size="sm"
+                  type="button"
+                  variant="outline"
                 >
                   {regeneratePending ? (
                     <Spinner />
                   ) : (
                     <>
-                      <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+                      <RefreshCwIcon aria-hidden="true" className="size-3.5" />
                       New code
                     </>
                   )}
@@ -253,27 +262,27 @@ export function TelegramSettingsCardContent({
               </div>
             ) : isPaired ? (
               <Button
-                type="button"
-                size="sm"
-                variant="outline"
                 disabled={regeneratePending || savePending}
                 onClick={onRegenerateHandshake}
+                size="sm"
+                type="button"
+                variant="outline"
               >
                 {regeneratePending ? (
                   <Spinner />
                 ) : (
                   <>
-                    <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+                    <RefreshCwIcon aria-hidden="true" className="size-3.5" />
                     New code
                   </>
                 )}
               </Button>
             ) : (
               <Button
-                type="button"
-                size="sm"
                 disabled={regeneratePending || savePending}
                 onClick={onRegenerateHandshake}
+                size="sm"
+                type="button"
               >
                 {regeneratePending ? (
                   <>
@@ -293,18 +302,20 @@ export function TelegramSettingsCardContent({
 
       {configured ? (
         <SettingsRow
-          label="Allowed users"
-          description="Telegram user IDs that can use this bot"
           className={paneItemClass}
+          description="Telegram user IDs that can use this bot"
+          label="Allowed users"
         >
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="text-xs text-muted-foreground">{allowedUserSummary}</span>
+            <span className="text-muted-foreground text-xs">
+              {allowedUserSummary}
+            </span>
             <Button
-              type="button"
-              size="sm"
-              variant="outline"
               disabled={savePending}
               onClick={onManageAllowedUsers}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               Manage
             </Button>
@@ -314,20 +325,23 @@ export function TelegramSettingsCardContent({
 
       {configured ? (
         <SettingsRow
-          label="Reply as"
-          description="Which agent answers on Telegram"
           className={paneItemClass}
+          description="Which agent answers on Telegram"
+          label="Reply as"
         >
           <Select
-            value={profileId}
             disabled={savePending || profiles.length === 0}
             onValueChange={(value) => {
               if (value) {
                 onProfileChange(String(value));
               }
             }}
+            value={profileId}
           >
-            <SelectTrigger id="telegram-profile" className="w-[11rem] sm:w-[13rem]">
+            <SelectTrigger
+              className="w-[11rem] sm:w-[13rem]"
+              id="telegram-profile"
+            >
               <SelectValue placeholder="Profile">
                 {profiles.find((profile) => profile.id === profileId)?.name}
               </SelectValue>
@@ -348,27 +362,27 @@ export function TelegramSettingsCardContent({
 
       {configured ? (
         <SettingsRow
-          label="Bridge worker"
-          description={running ? "Running" : "Stopped"}
           className={paneItemClass}
+          description={running ? "Running" : "Stopped"}
+          label="Bridge worker"
         >
           <WorkerActionBar
-            workerName="telegram"
-            running={running}
             pm2Managed={worker?.process?.managed ?? false}
+            running={running}
+            workerName="telegram"
           />
         </SettingsRow>
       ) : null}
 
       <IntegrationSettingsFooter
-        statusLine={statusLine}
+        canSave={canSave}
+        className={paneItemClass}
         formError={formError}
         loadError={loadError}
-        savePending={savePending}
-        canSave={canSave}
-        submitLabel={submitLabel}
         onSave={onSave}
-        className={paneItemClass}
+        savePending={savePending}
+        statusLine={statusLine}
+        submitLabel={submitLabel}
       />
     </div>
   );

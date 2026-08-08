@@ -1,10 +1,10 @@
-import { describe, expect, test, mock, afterEach } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { createOpenAIProvider } from "./index";
 import {
   openAIModelRejectsChatToolsWithReasoning,
   openAIModelRequiresResponsesApi,
   openAIModelSupportsThinking,
 } from "./thinking";
-import { createOpenAIProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -30,7 +30,7 @@ describe("openAIModelSupportsThinking", () => {
     expect(
       openAIModelSupportsThinking("gpt-4o-mini", [
         { id: "gpt-4o-mini", supportsThinking: true },
-      ]),
+      ])
     ).toBe(true);
   });
 });
@@ -62,12 +62,14 @@ describe("OpenAI codex vision routing", () => {
         JSON.stringify({
           output: [
             {
+              content: [
+                { text: "A screenshot of settings.", type: "output_text" },
+              ],
               type: "message",
-              content: [{ type: "output_text", text: "A screenshot of settings." }],
             },
           ],
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
+        { headers: { "Content-Type": "application/json" }, status: 200 }
       );
     });
 
@@ -79,19 +81,19 @@ describe("OpenAI codex vision routing", () => {
     });
 
     const result = await provider.generateChat({
-      system: "Describe the image.",
       messages: [
         {
-          role: "user",
           content: [
             {
-              type: "image",
-              mediaType: "image/png",
               data: "abc",
+              mediaType: "image/png",
+              type: "image",
             },
           ],
+          role: "user",
         },
       ],
+      system: "Describe the image.",
     });
 
     expect(result.content).toBe("A screenshot of settings.");
@@ -101,29 +103,33 @@ describe("OpenAI codex vision routing", () => {
 
 describe("OpenAI tools + reasoning routing", () => {
   test("routes gpt-5.6-luna tool calls through responses even without thinking", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
-      const body = JSON.parse(String(init?.body ?? "{}")) as {
-        tools?: Array<{ type?: string; name?: string }>;
-        reasoning?: unknown;
-        reasoning_effort?: unknown;
-      };
-      expect(body.tools?.some((tool) => tool.name === "search_files")).toBe(true);
-      expect(body.reasoning).toBeUndefined();
-      expect(body.reasoning_effort).toBeUndefined();
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("https://api.openai.com/v1/responses");
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          tools?: Array<{ type?: string; name?: string }>;
+          reasoning?: unknown;
+          reasoning_effort?: unknown;
+        };
+        expect(body.tools?.some((tool) => tool.name === "search_files")).toBe(
+          true
+        );
+        expect(body.reasoning).toBeUndefined();
+        expect(body.reasoning_effort).toBeUndefined();
 
-      return new Response(
-        JSON.stringify({
-          output: [
-            {
-              type: "message",
-              content: [{ type: "output_text", text: "Done." }],
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    });
+        return new Response(
+          JSON.stringify({
+            output: [
+              {
+                content: [{ text: "Done.", type: "output_text" }],
+                type: "message",
+              },
+            ],
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+    );
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -133,13 +139,13 @@ describe("OpenAI tools + reasoning routing", () => {
     });
 
     const result = await provider.generateChat({
+      messages: [{ content: "Search for readme", role: "user" }],
       system: "You are helpful.",
-      messages: [{ role: "user", content: "Search for readme" }],
       tools: [
         {
-          name: "search_files",
           description: "Search files",
-          parameters: { type: "object", properties: {} },
+          name: "search_files",
+          parameters: { properties: {}, type: "object" },
         },
       ],
     });
@@ -149,27 +155,29 @@ describe("OpenAI tools + reasoning routing", () => {
   });
 
   test("routes thinking + tools for gpt-5.4 through responses with reasoning", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
-      const body = JSON.parse(String(init?.body ?? "{}")) as {
-        tools?: unknown[];
-        reasoning?: { effort?: string };
-      };
-      expect(body.tools?.length).toBe(1);
-      expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("https://api.openai.com/v1/responses");
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          tools?: unknown[];
+          reasoning?: { effort?: string };
+        };
+        expect(body.tools?.length).toBe(1);
+        expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
 
-      return new Response(
-        JSON.stringify({
-          output: [
-            {
-              type: "message",
-              content: [{ type: "output_text", text: "Done." }],
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    });
+        return new Response(
+          JSON.stringify({
+            output: [
+              {
+                content: [{ text: "Done.", type: "output_text" }],
+                type: "message",
+              },
+            ],
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+    );
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -179,16 +187,16 @@ describe("OpenAI tools + reasoning routing", () => {
     });
 
     const result = await provider.generateChat({
+      messages: [{ content: "Search", role: "user" }],
+      providerOptions: { thinking: { effort: "high", enabled: true } },
       system: "You are helpful.",
-      messages: [{ role: "user", content: "Search" }],
       tools: [
         {
-          name: "search_files",
           description: "Search files",
-          parameters: { type: "object", properties: {} },
+          name: "search_files",
+          parameters: { properties: {}, type: "object" },
         },
       ],
-      providerOptions: { thinking: { enabled: true, effort: "high" } },
     });
 
     expect(result.content).toBe("Done.");

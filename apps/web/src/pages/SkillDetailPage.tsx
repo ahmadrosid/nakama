@@ -1,13 +1,22 @@
 import { ChevronLeftIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { RemoveSkillFromProfileDialog } from "@/components/RemoveSkillFromProfileDialog";
 import { SkillDetailContent } from "@/components/SkillDetailContent";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { useProfileQuery, useSkillQuery } from "@/hooks/use-app-queries";
-import { usePatchSkillMutation, useUnassignSkillMutation } from "@/hooks/use-resource-mutations";
+import {
+  usePatchSkillMutation,
+  useUnassignSkillMutation,
+} from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
@@ -35,11 +44,11 @@ export function SkillDetailPage() {
   }
 
   if (!canAccess) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate replace to="/chat" />;
   }
 
   if (!skillId) {
-    return <Navigate to={back.href} replace />;
+    return <Navigate replace to={back.href} />;
   }
 
   if (skillLoading && !skill) {
@@ -50,7 +59,7 @@ export function SkillDetailPage() {
     return (
       <div className="space-y-4 px-6 py-4">
         <BackLink />
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {formatError(skillError)}
         </p>
       </div>
@@ -58,7 +67,7 @@ export function SkillDetailPage() {
   }
 
   if (!skill) {
-    return <Navigate to={back.href} replace />;
+    return <Navigate replace to={back.href} />;
   }
 
   const profileSkill = profile?.skills.find((entry) => entry.id === skill.id);
@@ -66,12 +75,12 @@ export function SkillDetailPage() {
 
   return (
     <SkillDetailPageContent
+      back={back}
+      canRemoveFromProfile={canRemoveFromProfile}
+      createdBy={profileSkill?.createdBy}
+      profileId={profileId}
       skill={skill}
       usageSummary={profileSkill?.usage}
-      createdBy={profileSkill?.createdBy}
-      back={back}
-      profileId={profileId}
-      canRemoveFromProfile={canRemoveFromProfile}
     />
   );
 }
@@ -85,8 +94,12 @@ function SkillDetailPageContent({
   canRemoveFromProfile,
 }: {
   skill: NonNullable<ReturnType<typeof useSkillQuery>["data"]>;
-  usageSummary?: NonNullable<ReturnType<typeof useProfileQuery>["data"]>["skills"][number]["usage"];
-  createdBy?: NonNullable<ReturnType<typeof useProfileQuery>["data"]>["skills"][number]["createdBy"];
+  usageSummary?: NonNullable<
+    ReturnType<typeof useProfileQuery>["data"]
+  >["skills"][number]["usage"];
+  createdBy?: NonNullable<
+    ReturnType<typeof useProfileQuery>["data"]
+  >["skills"][number]["createdBy"];
   back: { href: string; label: string };
   profileId: string | null;
   canRemoveFromProfile: boolean;
@@ -143,9 +156,9 @@ function SkillDetailPageContent({
 
     try {
       await patchSkillMutation.mutateAsync({
-        skillId: skill.id,
         input: { body: editBody },
         profileId: profileId ?? undefined,
+        skillId: skill.id,
       });
       setEditing(false);
     } catch (error) {
@@ -159,39 +172,39 @@ function SkillDetailPageContent({
         <BackLink />
         {canRemoveFromProfile ? (
           <Button
+            aria-haspopup="dialog"
+            disabled={busy}
+            onClick={() => setRemoveOpen(true)}
+            size="sm"
             type="button"
             variant="destructive"
-            size="sm"
-            disabled={busy}
-            aria-haspopup="dialog"
-            onClick={() => setRemoveOpen(true)}
           >
-            <Trash2Icon className="size-4" aria-hidden />
+            <Trash2Icon aria-hidden className="size-4" />
             Remove from profile
           </Button>
         ) : null}
       </div>
 
       <SkillDetailContent
-        skill={skill}
-        usageSummary={usageSummary}
         createdBy={createdBy}
-        editing={editing}
         editBody={editBody}
-        onEditBodyChange={setEditBody}
-        onStartEdit={handleStartEdit}
+        editing={editing}
         onCancelEdit={handleCancelEdit}
+        onEditBodyChange={setEditBody}
         onSaveEdit={() => void handleSaveEdit()}
+        onStartEdit={handleStartEdit}
         saveBusy={patchSkillMutation.isPending}
         saveError={saveError}
+        skill={skill}
+        usageSummary={usageSummary}
       />
 
       <RemoveSkillFromProfileDialog
+        busy={busy}
+        onConfirm={() => void handleRemoveConfirm()}
+        onOpenChange={handleRemoveOpenChange}
         open={removeOpen}
         skillName={skill.name}
-        busy={busy}
-        onOpenChange={handleRemoveOpenChange}
-        onConfirm={() => void handleRemoveConfirm()}
       />
     </div>
   );
@@ -203,13 +216,13 @@ function BackLink() {
 
   return (
     <Button
-      type="button"
-      variant="ghost"
-      size="sm"
       className="-ml-2 w-fit"
       render={<Link to={href} />}
+      size="sm"
+      type="button"
+      variant="ghost"
     >
-      <ChevronLeftIcon className="size-4" aria-hidden />
+      <ChevronLeftIcon aria-hidden className="size-4" />
       {label}
     </Button>
   );
@@ -221,7 +234,7 @@ function PageState({ message }: { message: string }) {
       <div
         className={cn(
           sectionClass,
-          "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+          "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
         )}
       >
         <Spinner className="size-5" />

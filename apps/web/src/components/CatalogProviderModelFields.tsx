@@ -1,11 +1,12 @@
+import type { ProviderModelOption } from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import {
   ModelListEditor,
   type ModelListRow,
 } from "@/components/ModelListEditor";
 import { OpenCodeGoModelsBrowseList } from "@/components/OpenCodeGoModelsBrowseList";
-import type { ProviderModelOption } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Spinner } from "@/components/ui/spinner";
@@ -14,14 +15,10 @@ import { client } from "@/lib/client";
 import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
-import {
-  type CatalogShortlistProvider,
-} from "@/components/catalog-provider-model-fields.shared";
-
 function mergeBrowseModels(
   staticCatalog: ProviderModelOption[],
   remoteModels: ProviderModelOption[],
-  provider: CatalogShortlistProvider,
+  provider: CatalogShortlistProvider
 ): ProviderModelOption[] {
   const byId = new Map<string, ProviderModelOption>();
 
@@ -40,18 +37,20 @@ function mergeBrowseModels(
     });
   }
 
-  return [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
+  return [...byId.values()].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
 }
 
 interface CatalogProviderModelFieldsProps {
-  provider: CatalogShortlistProvider;
-  providerInstanceId?: string;
-  customModels: ModelListRow[];
   catalogModels?: ProviderModelOption[];
-  disabled?: boolean;
+  customModels: ModelListRow[];
   density?: "default" | "compact";
+  disabled?: boolean;
   modelsError?: string | null;
   onCustomModelsChange: (models: ModelListRow[]) => void;
+  provider: CatalogShortlistProvider;
+  providerInstanceId?: string;
 }
 
 export function CatalogProviderModelFields({
@@ -67,28 +66,34 @@ export function CatalogProviderModelFields({
   const [isBrowsing, setIsBrowsing] = useState(false);
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
-  const canDiscoverRemote = provider === "openai" && Boolean(providerInstanceId);
+  const canDiscoverRemote =
+    provider === "openai" && Boolean(providerInstanceId);
 
   const staticCatalog = useMemo(() => {
     const fromApi = filterModelsByProvider(
       modelsResponse?.catalog ?? modelsResponse?.models ?? [],
-      provider,
+      provider
     );
     if (fromApi.length > 0) {
       return fromApi;
     }
 
     return filterModelsByProvider(catalogModelsProp ?? [], provider);
-  }, [catalogModelsProp, modelsResponse?.catalog, modelsResponse?.models, provider]);
+  }, [
+    catalogModelsProp,
+    modelsResponse?.catalog,
+    modelsResponse?.models,
+    provider,
+  ]);
 
   const {
     data: remoteResponse,
     isLoading: remoteLoading,
     error: remoteError,
   } = useQuery({
-    queryKey: queryKeys.providerModelDiscovery(providerInstanceId ?? ""),
-    queryFn: () => client.discoverModels({ providerId: providerInstanceId! }),
     enabled: isBrowsing && canDiscoverRemote,
+    queryFn: () => client.discoverModels({ providerId: providerInstanceId! }),
+    queryKey: queryKeys.providerModelDiscovery(providerInstanceId ?? ""),
     staleTime: 1000 * 60,
   });
 
@@ -97,7 +102,11 @@ export function CatalogProviderModelFields({
       return staticCatalog;
     }
 
-    return mergeBrowseModels(staticCatalog, remoteResponse?.models ?? [], provider);
+    return mergeBrowseModels(
+      staticCatalog,
+      remoteResponse?.models ?? [],
+      provider
+    );
   }, [canDiscoverRemote, provider, remoteResponse?.models, staticCatalog]);
 
   const usedIds = useMemo(
@@ -106,9 +115,9 @@ export function CatalogProviderModelFields({
         customModels.flatMap((model) => {
           const id = model.id.trim();
           return id ? [id] : [];
-        }),
+        })
       ),
-    [customModels],
+    [customModels]
   );
 
   const addCatalogModel = (model: ProviderModelOption) => {
@@ -123,15 +132,15 @@ export function CatalogProviderModelFields({
         id: model.id,
         name: model.name,
         ...(model.default ? { default: true } : {}),
-        ...(model.inputPerMillionUsd !== undefined
-          ? { inputPerMillionUsd: model.inputPerMillionUsd }
-          : {}),
-        ...(model.outputPerMillionUsd !== undefined
-          ? { outputPerMillionUsd: model.outputPerMillionUsd }
-          : {}),
-        ...(model.supportsThinking !== undefined
-          ? { supportsThinking: model.supportsThinking }
-          : {}),
+        ...(model.inputPerMillionUsd === undefined
+          ? {}
+          : { inputPerMillionUsd: model.inputPerMillionUsd }),
+        ...(model.outputPerMillionUsd === undefined
+          ? {}
+          : { outputPerMillionUsd: model.outputPerMillionUsd }),
+        ...(model.supportsThinking === undefined
+          ? {}
+          : { supportsThinking: model.supportsThinking }),
       },
     ]);
     setIsBrowsing(false);
@@ -145,18 +154,18 @@ export function CatalogProviderModelFields({
 
   return (
     <FormField
-      id={`${provider}-provider-models`}
-      label="Models"
       density={density}
       footer={
         modelsError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">{browseFooter}</p>
+          <p className="text-muted-foreground text-xs">{browseFooter}</p>
         )
       }
+      id={`${provider}-provider-models`}
+      label="Models"
     >
       {isBrowsing ? (
         <div className="space-y-2">
@@ -166,44 +175,44 @@ export function CatalogProviderModelFields({
             </div>
           ) : (
             <OpenCodeGoModelsBrowseList
+              className="h-72 rounded-md border border-border"
               models={browseModels}
               onSelect={addCatalogModel}
-              className="h-72 rounded-md border border-border"
             />
           )}
           <div className="flex flex-wrap justify-end gap-2">
             <Button
-              type="button"
-              size="sm"
-              variant="outline"
               disabled={disabled || remoteLoading || browseModels.length === 0}
               onClick={() =>
                 onCustomModelsChange(
                   browseModels.map((model) => ({
+                    default: model.default,
                     id: model.id,
                     name: model.name,
-                    default: model.default,
-                    ...(model.inputPerMillionUsd !== undefined
-                      ? { inputPerMillionUsd: model.inputPerMillionUsd }
-                      : {}),
-                    ...(model.outputPerMillionUsd !== undefined
-                      ? { outputPerMillionUsd: model.outputPerMillionUsd }
-                      : {}),
-                    ...(model.supportsThinking !== undefined
-                      ? { supportsThinking: model.supportsThinking }
-                      : {}),
-                  })),
+                    ...(model.inputPerMillionUsd === undefined
+                      ? {}
+                      : { inputPerMillionUsd: model.inputPerMillionUsd }),
+                    ...(model.outputPerMillionUsd === undefined
+                      ? {}
+                      : { outputPerMillionUsd: model.outputPerMillionUsd }),
+                    ...(model.supportsThinking === undefined
+                      ? {}
+                      : { supportsThinking: model.supportsThinking }),
+                  }))
                 )
               }
+              size="sm"
+              type="button"
+              variant="outline"
             >
               Add all
             </Button>
             <Button
-              type="button"
-              size="sm"
-              variant="outline"
               disabled={disabled}
               onClick={() => setIsBrowsing(false)}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               Back
             </Button>
@@ -211,12 +220,12 @@ export function CatalogProviderModelFields({
         </div>
       ) : (
         <ModelListEditor
-          models={customModels}
-          disabled={disabled}
-          showPricing
           browseLabel={`Browse ${providerLabel}`}
+          disabled={disabled}
+          models={customModels}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
+          showPricing
         />
       )}
     </FormField>

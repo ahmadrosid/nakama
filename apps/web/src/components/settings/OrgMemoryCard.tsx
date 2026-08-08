@@ -1,9 +1,9 @@
-import { PencilIcon, PinIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
 import { parseOrgMemoryContent } from "@nakama/core/soul/org-memory";
-import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
+import { PencilIcon, PinIcon } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
+import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAuth } from "@/context/use-auth";
 import { useOrgMemory, useUpdateOrgMemory } from "@/hooks/use-org-memory";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
@@ -64,14 +68,14 @@ function OrgMemoryTabButton({
 }) {
   return (
     <button
-      type="button"
-      onClick={onClick}
       className={cn(
         "-mb-px border-b-2 px-0 py-2.5 text-sm transition-colors",
         active
           ? "border-foreground font-semibold text-foreground"
-          : "border-transparent font-normal text-muted-foreground hover:text-foreground",
+          : "border-transparent font-normal text-muted-foreground hover:text-foreground"
       )}
+      onClick={onClick}
+      type="button"
     >
       {children}
     </button>
@@ -80,7 +84,9 @@ function OrgMemoryTabButton({
 
 function OrgMemoryPinnedContent({ pinned }: { pinned: string[] }) {
   if (pinned.length === 0) {
-    return <p className="text-sm text-muted-foreground">No pinned facts yet.</p>;
+    return (
+      <p className="text-muted-foreground text-sm">No pinned facts yet.</p>
+    );
   }
 
   const [lead, ...details] = pinned;
@@ -89,8 +95,8 @@ function OrgMemoryPinnedContent({ pinned }: { pinned: string[] }) {
     <div className="flex gap-3">
       <div className="flex flex-col items-center self-stretch">
         <div
-          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
           aria-hidden
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
         >
           <PinIcon className="size-3.5" strokeWidth={2.25} />
         </div>
@@ -98,26 +104,28 @@ function OrgMemoryPinnedContent({ pinned }: { pinned: string[] }) {
       </div>
 
       <div className="min-w-0 flex-1 space-y-3 pb-1">
-        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <p className="font-semibold text-[0.65rem] text-muted-foreground uppercase tracking-[0.08em]">
           PINNED
         </p>
 
         <div className="space-y-3">
-          <p className="text-sm leading-relaxed text-foreground">{lead}</p>
+          <p className="text-foreground text-sm leading-relaxed">{lead}</p>
 
           {details.length > 0 ? (
             <ul className="space-y-1.5">
               {details.map((detail, index) => (
                 <li
-                  key={detail}
                   className={cn(
                     "text-sm leading-relaxed",
                     index === details.length - 1
-                      ? "font-mono text-xs text-muted-foreground/80"
-                      : "text-muted-foreground",
+                      ? "font-mono text-muted-foreground/80 text-xs"
+                      : "text-muted-foreground"
                   )}
+                  key={detail}
                 >
-                  <span className="mr-1.5 select-none" aria-hidden>→</span>
+                  <span aria-hidden className="mr-1.5 select-none">
+                    →
+                  </span>
                   {detail}
                 </li>
               ))}
@@ -135,8 +143,16 @@ export function OrgMemoryCard() {
   const orgId = activeOrg?.id ?? null;
   const isAdmin = activeOrg?.role === "admin";
 
-  const { data, isLoading, error: loadError, dataUpdatedAt } = useOrgMemory(isAdmin ? orgId : null);
-  const { data: proposalsData } = useOrgMemoryProposals(isAdmin ? orgId : null, "pending");
+  const {
+    data,
+    isLoading,
+    error: loadError,
+    dataUpdatedAt,
+  } = useOrgMemory(isAdmin ? orgId : null);
+  const { data: proposalsData } = useOrgMemoryProposals(
+    isAdmin ? orgId : null,
+    "pending"
+  );
   const updateMutation = useUpdateOrgMemory(orgId ?? "");
 
   const [activeTab, setActiveTab] = useState<OrgMemoryTab>("live");
@@ -170,7 +186,9 @@ export function OrgMemoryCard() {
   async function handleSave() {
     setFormError(null);
     if (draftBytes > MAX_BODY_BYTES) {
-      setFormError(`Content is too large (${draftBytes} bytes; limit ${MAX_BODY_BYTES}).`);
+      setFormError(
+        `Content is too large (${draftBytes} bytes; limit ${MAX_BODY_BYTES}).`
+      );
       return;
     }
     try {
@@ -185,31 +203,33 @@ export function OrgMemoryCard() {
   const statusLine = formError ?? (loadError ? formatError(loadError) : null);
   const busy = updateMutation.isPending;
   const dirty = draft !== liveContent;
-  const showPinnedFooter = activeTab === "live" && !isLoading && pinnedFacts.length > 0;
+  const showPinnedFooter =
+    activeTab === "live" && !isLoading && pinnedFacts.length > 0;
 
   return (
     <>
       <Card className="w-full overflow-hidden shadow-none">
-        <div className="border-b border-border px-4 py-3">
+        <div className="border-border border-b px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-sm font-medium text-foreground">Org Memory</p>
-              <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-                Shared facts for every agent. Review proposals before they go live.
+              <p className="font-medium text-foreground text-sm">Org Memory</p>
+              <p className="max-w-prose text-muted-foreground text-xs leading-relaxed">
+                Shared facts for every agent. Review proposals before they go
+                live.
               </p>
             </div>
             <Tooltip>
               <TooltipTrigger
                 render={
                   <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    className="shrink-0"
                     aria-label="Edit org memory"
+                    className="shrink-0"
                     onClick={openEdit}
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
                   >
-                    <PencilIcon className="size-3.5" aria-hidden />
+                    <PencilIcon aria-hidden className="size-3.5" />
                   </Button>
                 }
               />
@@ -220,9 +240,12 @@ export function OrgMemoryCard() {
           </div>
         </div>
 
-        <div className="border-b border-border px-4">
+        <div className="border-border border-b px-4">
           <div className="flex gap-5">
-            <OrgMemoryTabButton active={activeTab === "live"} onClick={() => setActiveTab("live")}>
+            <OrgMemoryTabButton
+              active={activeTab === "live"}
+              onClick={() => setActiveTab("live")}
+            >
               Live memory
             </OrgMemoryTabButton>
             <OrgMemoryTabButton
@@ -231,25 +254,32 @@ export function OrgMemoryCard() {
             >
               Proposals
               {pendingCount > 0 ? (
-                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                <span className="ml-1 font-normal text-muted-foreground text-xs">
                   ({pendingCount > 99 ? "99+" : pendingCount})
                 </span>
               ) : null}
             </OrgMemoryTabButton>
-            <OrgMemoryTabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
+            <OrgMemoryTabButton
+              active={activeTab === "history"}
+              onClick={() => setActiveTab("history")}
+            >
               History
             </OrgMemoryTabButton>
           </div>
         </div>
 
         {activeTab === "proposals" ? (
-          orgId ? <OrgMemoryProposalsPanel orgId={orgId} /> : null
+          orgId ? (
+            <OrgMemoryProposalsPanel orgId={orgId} />
+          ) : null
         ) : activeTab === "history" ? (
-          orgId ? <OrgMemoryHistoryPanel orgId={orgId} /> : null
+          orgId ? (
+            <OrgMemoryHistoryPanel orgId={orgId} />
+          ) : null
         ) : (
           <div className="px-4 py-3">
             {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <p className="text-muted-foreground text-sm">Loading…</p>
             ) : (
               <OrgMemoryPinnedContent pinned={pinnedFacts} />
             )}
@@ -257,15 +287,15 @@ export function OrgMemoryCard() {
         )}
 
         {showPinnedFooter ? (
-          <div className="flex items-center justify-between border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between border-border border-t px-4 py-2 text-muted-foreground text-xs">
             <span>Pinned</span>
             <span>Updated {formatUpdatedLabel(dataUpdatedAt)}</span>
           </div>
         ) : null}
 
         {statusLine ? (
-          <div className="border-t border-border px-4 py-2">
-            <p className="text-sm text-destructive" role="alert">
+          <div className="border-border border-t px-4 py-2">
+            <p className="text-destructive text-sm" role="alert">
               {statusLine}
             </p>
           </div>
@@ -273,7 +303,6 @@ export function OrgMemoryCard() {
       </Card>
 
       <Dialog
-        open={editOpen}
         onOpenChange={(open) => {
           setEditOpen(open);
           if (!open) {
@@ -281,6 +310,7 @@ export function OrgMemoryCard() {
             setFormError(null);
           }
         }}
+        open={editOpen}
       >
         <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
           <DialogHeader className="pr-8">
@@ -290,27 +320,33 @@ export function OrgMemoryCard() {
             </DialogDescription>
           </DialogHeader>
           <form
+            className="flex min-h-0 flex-1 flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
               void handleSave();
             }}
-            className="flex min-h-0 flex-1 flex-col gap-4"
           >
             <Textarea
-              value={draft}
+              autoFocus
+              className="field-sizing-fixed min-h-[min(52dvh,22rem)] flex-1 resize-none overflow-y-auto font-mono text-xs leading-relaxed sm:min-h-[min(58dvh,26rem)]"
               disabled={busy}
               onChange={(e) => setDraft(e.target.value)}
-              rows={12}
-              className="field-sizing-fixed min-h-[min(52dvh,22rem)] flex-1 resize-none overflow-y-auto font-mono text-xs leading-relaxed sm:min-h-[min(58dvh,26rem)]"
               placeholder={"## Org Memory\n\n## Pinned\n- ..."}
-              autoFocus
+              rows={12}
+              value={draft}
             />
-            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-            <DialogFooter className="mx-0 mb-0 shrink-0 border-t border-border bg-transparent p-0 pt-4">
+            {formError ? (
+              <p className="text-destructive text-sm">{formError}</p>
+            ) : null}
+            <DialogFooter className="mx-0 mb-0 shrink-0 border-border border-t bg-transparent p-0 pt-4">
               <div className="flex w-full items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">{draftBytes} bytes</span>
-                <Button type="submit" size="sm" disabled={busy || !dirty}>
-                  {updateMutation.isPending ? <Spinner className="mr-2" /> : null}
+                <span className="text-muted-foreground text-xs">
+                  {draftBytes} bytes
+                </span>
+                <Button disabled={busy || !dirty} size="sm" type="submit">
+                  {updateMutation.isPending ? (
+                    <Spinner className="mr-2" />
+                  ) : null}
                   Save
                 </Button>
               </div>

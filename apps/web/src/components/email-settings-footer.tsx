@@ -29,12 +29,12 @@ export function EmailSettingsFooter({
       {hint || formError ? (
         <div className="space-y-1">
           {hint ? (
-            <p className="text-xs text-emerald-200" role="status">
+            <p className="text-emerald-200 text-xs" role="status">
               {hint}
             </p>
           ) : null}
           {formError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {formError}
             </p>
           ) : null}
@@ -44,18 +44,18 @@ export function EmailSettingsFooter({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 gap-2">
           <Input
-            id="email-test-recipient"
             className="min-w-0 flex-1"
-            value={testRecipient}
+            id="email-test-recipient"
             onChange={(event) => onTestRecipientChange(event.target.value)}
             placeholder="Test recipient"
+            value={testRecipient}
           />
           <Button
-            type="button"
-            variant="secondary"
             className="shrink-0"
             disabled={testPending || !configured}
             onClick={onTestSend}
+            type="button"
+            variant="secondary"
           >
             {testPending ? (
               <>
@@ -68,7 +68,12 @@ export function EmailSettingsFooter({
           </Button>
         </div>
 
-        <Button type="button" className="shrink-0 sm:ml-3" disabled={savePending} onClick={onSave}>
+        <Button
+          className="shrink-0 sm:ml-3"
+          disabled={savePending}
+          onClick={onSave}
+          type="button"
+        >
           {savePending ? (
             <>
               <Spinner className="mr-2" />

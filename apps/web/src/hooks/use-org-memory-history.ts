@@ -4,34 +4,40 @@ import { queryKeys } from "@/lib/query-keys";
 
 function invalidateOrgMemoryQueries(
   queryClient: ReturnType<typeof useQueryClient>,
-  orgId: string,
+  orgId: string
 ) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.orgMemory(orgId) }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.orgMemoryHistory(orgId) }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.orgMemoryHistory(orgId),
+    }),
   ]);
 }
 
 export function useOrgMemoryHistory(orgId: string | null) {
   return useQuery({
-    queryKey: queryKeys.orgMemoryHistory(orgId ?? ""),
-    queryFn: () => client.listOrgMemoryHistory(orgId ?? ""),
     enabled: Boolean(orgId),
+    queryFn: () => client.listOrgMemoryHistory(orgId ?? ""),
+    queryKey: queryKeys.orgMemoryHistory(orgId ?? ""),
   });
 }
 
-export function useOrgMemoryHistoryRevision(orgId: string, revisionId: string | null) {
+export function useOrgMemoryHistoryRevision(
+  orgId: string,
+  revisionId: string | null
+) {
   return useQuery({
-    queryKey: queryKeys.orgMemoryHistoryRevision(orgId, revisionId ?? ""),
-    queryFn: () => client.getOrgMemoryHistoryRevision(orgId, revisionId!),
     enabled: Boolean(orgId && revisionId),
+    queryFn: () => client.getOrgMemoryHistoryRevision(orgId, revisionId!),
+    queryKey: queryKeys.orgMemoryHistoryRevision(orgId, revisionId ?? ""),
   });
 }
 
 export function useRestoreOrgMemoryHistory(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (revisionId: string) => client.restoreOrgMemoryHistory(orgId, revisionId),
+    mutationFn: (revisionId: string) =>
+      client.restoreOrgMemoryHistory(orgId, revisionId),
     onSuccess: () => invalidateOrgMemoryQueries(queryClient, orgId),
   });
 }

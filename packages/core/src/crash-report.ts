@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { NAKAMA_API_VERSION } from "./contract";
-import { currentCrashReportConsent, isCrashReportingAllowed } from "./crash-report-config";
+import {
+  currentCrashReportConsent,
+  isCrashReportingAllowed,
+} from "./crash-report-config";
 import {
   appendPendingCrashReport,
   clearPendingCrashReports,
@@ -23,35 +26,35 @@ export const MAX_BREADCRUMBS = 50;
 
 export interface Breadcrumb {
   at: number;
-  kind: string;
   data?: Record<string, string | number | boolean>;
+  kind: string;
 }
 
 export interface CrashContext {
-  requestId: string;
-  source: string;
-  route?: string;
-  orgIdHash?: string;
-  userIdHash?: string;
-  sessionIdHash?: string;
   breadcrumbs: Breadcrumb[];
+  orgIdHash?: string;
+  requestId: string;
+  route?: string;
+  sessionIdHash?: string;
+  source: string;
+  userIdHash?: string;
 }
 
 export interface CrashReport {
-  kind: CrashReportKind;
+  at: string;
+  breadcrumbs: Breadcrumb[];
   fingerprint: string;
-  name: string;
+  kind: CrashReportKind;
   message: string;
-  stack?: string;
-  source: string;
+  name: string;
+  orgIdHash?: string;
   requestId?: string;
   route?: string;
-  orgIdHash?: string;
-  userIdHash?: string;
-  sessionIdHash?: string;
-  breadcrumbs: Breadcrumb[];
   runtime: { apiVersion: number; bun: string; platform: string; arch: string };
-  at: string;
+  sessionIdHash?: string;
+  source: string;
+  stack?: string;
+  userIdHash?: string;
 }
 
 export type CrashSink = (report: CrashReport) => void | Promise<void>;
@@ -136,14 +139,17 @@ export function breadcrumb(kind: string, data?: Record<string, unknown>): void {
 function normalizeMessage(message: string): string {
   return (
     message
-      .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>")
+      .replace(
+        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+        "<uuid>"
+      )
       // Mixed letter-and-digit runs are nakama ids (prof_01J..., nanoid). Leaving them in
       // gives every occurrence its own fingerprint, which is the one failure mode that
       // makes deduplication useless. Over-merging is the safer direction: name and top
       // frame still keep genuinely different bugs apart.
       .replace(
         /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{8,}\b/g,
-        "<id>",
+        "<id>"
       )
       .replace(/'[^']*'|"[^"]*"/g, "<str>")
       // Not \b\d+\b: there is no word boundary inside "30000ms", and timeout messages
@@ -183,51 +189,61 @@ function topApplicationFrame(stack: string | undefined): string {
 export function fingerprintError(
   name: string,
   message: string,
-  stack: string | undefined,
+  stack: string | undefined
 ): string {
   const parts = [name, normalizeMessage(message), topApplicationFrame(stack)];
-  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
+  return createHash("sha256")
+    .update(parts.join("|"))
+    .digest("hex")
+    .slice(0, 16);
 }
 
-function errorToParts(error: unknown): { name: string; message: string; stack?: string } {
+function errorToParts(error: unknown): {
+  name: string;
+  message: string;
+  stack?: string;
+} {
   if (error instanceof Error) {
     return {
-      name: error.name || "Error",
       message: error.message || String(error),
+      name: error.name || "Error",
       ...(error.stack ? { stack: error.stack } : {}),
     };
   }
 
   if (typeof error === "string") {
-    return { name: "NonError", message: error };
+    return { message: error, name: "NonError" };
   }
 
   try {
-    return { name: "NonError", message: JSON.stringify(error) ?? String(error) };
+    return {
+      message: JSON.stringify(error) ?? String(error),
+      name: "NonError",
+    };
   } catch {
-    return { name: "NonError", message: String(error) };
+    return { message: String(error), name: "NonError" };
   }
 }
 
 export interface ReportErrorOptions {
+  context?: CrashContext;
   kind?: CrashReportKind;
   source?: string;
-  context?: CrashContext;
 }
 
 export function buildCrashReport(
   error: unknown,
-  options: ReportErrorOptions = {},
+  options: ReportErrorOptions = {}
 ): CrashReport {
   const context = options.context ?? storage.getStore();
   const parts = errorToParts(error);
   const stack = parts.stack ? scrubText(parts.stack) : undefined;
 
   return {
-    kind: options.kind ?? "crash",
     fingerprint: fingerprintError(parts.name, parts.message, parts.stack),
-    name: parts.name,
+    kind: options.kind ?? "crash",
     message: scrubText(parts.message),
+    name: parts.name,
     ...(stack ? { stack } : {}),
     source: options.source ?? context?.source ?? "unknown",
     ...(context?.requestId ? { requestId: context.requestId } : {}),
@@ -235,14 +251,14 @@ export function buildCrashReport(
     ...(context?.orgIdHash ? { orgIdHash: context.orgIdHash } : {}),
     ...(context?.userIdHash ? { userIdHash: context.userIdHash } : {}),
     ...(context?.sessionIdHash ? { sessionIdHash: context.sessionIdHash } : {}),
+    at: new Date().toISOString(),
     breadcrumbs: context?.breadcrumbs ? [...context.breadcrumbs] : [],
     runtime: {
       apiVersion: NAKAMA_API_VERSION,
+      arch: process.arch,
       bun: Bun.version,
       platform: process.platform,
-      arch: process.arch,
     },
-    at: new Date().toISOString(),
   };
 }
 
@@ -253,7 +269,7 @@ function defaultLogger(report: CrashReport, error: unknown): void {
     `[nakama:${report.kind}] ${report.source} ${report.fingerprint}` +
       `${report.requestId ? ` req=${report.requestId}` : ""}` +
       `${report.route ? ` route=${report.route}` : ""}`,
-    error,
+    error
   );
 }
 
@@ -274,7 +290,7 @@ export function setCrashSink(next: CrashSink | null): void {
  */
 export async function reportError(
   error: unknown,
-  options: ReportErrorOptions = {},
+  options: ReportErrorOptions = {}
 ): Promise<CrashReport> {
   const report = buildCrashReport(error, options);
 
@@ -326,7 +342,7 @@ export async function reportError(
 export async function flushPendingCrashReports(): Promise<number> {
   const currentSink = sink;
 
-  if (!currentSink || !(await isCrashReportingAllowed())) {
+  if (!(currentSink && (await isCrashReportingAllowed()))) {
     return 0;
   }
 
@@ -350,7 +366,7 @@ export async function flushPendingCrashReports(): Promise<number> {
 
 export async function reportInvariant(
   message: string,
-  options: Omit<ReportErrorOptions, "kind"> = {},
+  options: Omit<ReportErrorOptions, "kind"> = {}
 ): Promise<CrashReport> {
   return reportError(new Error(message), { ...options, kind: "invariant" });
 }

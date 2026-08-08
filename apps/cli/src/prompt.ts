@@ -1,7 +1,10 @@
 import * as readline from "node:readline/promises";
 import type { ImageAttachment } from "@nakama/core";
+import {
+  isClipboardImagePasteSupported,
+  readClipboardImage,
+} from "./clipboard-image";
 import type { PromptSuggestion } from "./commands";
-import { isClipboardImagePasteSupported, readClipboardImage } from "./clipboard-image";
 import {
   formatInputForDisplay,
   normalizePastedText,
@@ -28,15 +31,15 @@ export interface PromptLineOptions {
 }
 
 export interface PromptLineResult {
-  text: string;
   images?: ImageAttachment[];
+  text: string;
 }
 
 export async function promptLine(
   prefix = "> ",
-  options: PromptLineOptions = {},
+  options: PromptLineOptions = {}
 ): Promise<PromptLineResult> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!(process.stdin.isTTY && process.stdout.isTTY)) {
     return promptLineFallback(prefix);
   }
 
@@ -46,7 +49,7 @@ export async function promptLine(
     const stdin = process.stdin;
     const stdout = process.stdout;
     let value = "";
-    let attachedImages: ImageAttachment[] = [];
+    const attachedImages: ImageAttachment[] = [];
     let cursorVisible = true;
     let closed = false;
     let selectedIndex = 0;
@@ -104,7 +107,10 @@ export async function promptLine(
       const display = formatInputForDisplay(value);
       const width = stdout.columns ?? 80;
       const inputLines = splitInputDisplayLines(display, prefix.length, width);
-      const suggestionLines = Math.max(suggestions.length, previousRenderedLines);
+      const suggestionLines = Math.max(
+        suggestions.length,
+        previousRenderedLines
+      );
       const continuationPrefix = " ".repeat(prefix.length);
       const totalLines = inputLines.length + suggestionLines;
 
@@ -160,7 +166,9 @@ export async function promptLine(
         stdout.write(`\x1b[${rowsUpFromBottom}A`);
       }
 
-      stdout.write(`\r\x1b[${visibleLength(lastLinePrefix) + visibleLength(lastLine)}C`);
+      stdout.write(
+        `\r\x1b[${visibleLength(lastLinePrefix) + visibleLength(lastLine)}C`
+      );
       writeCursorCell();
 
       previousBlockHeight = Math.max(totalLines, 1);
@@ -168,7 +176,10 @@ export async function promptLine(
       previousRenderedLines = suggestions.length;
     }
 
-    function applySuggestion(suggestion: PromptSuggestion, submitAfter = false) {
+    function applySuggestion(
+      suggestion: PromptSuggestion,
+      submitAfter = false
+    ) {
       value = suggestion.insertValue.trimEnd();
       selectedIndex = 0;
       hasNavigated = false;
@@ -178,8 +189,8 @@ export async function promptLine(
         void waitForClipboardAttach().then(() => {
           cleanup();
           resolve({
-            text: value,
             images: attachedImages.length > 0 ? attachedImages : undefined,
+            text: value,
           });
         });
         return;
@@ -253,18 +264,25 @@ export async function promptLine(
         const image = await readClipboardImage();
 
         if (!image) {
-          notifyClipboard("No image on clipboard. Copy a screenshot or image first.");
+          notifyClipboard(
+            "No image on clipboard. Copy a screenshot or image first."
+          );
           return false;
         }
 
         attachedImages.push(image);
         resetSelection();
         cursorVisible = true;
-        process.stderr.write("\x1b[2mImage attached (backspace to remove)\x1b[0m\n");
+        process.stderr.write(
+          "\x1b[2mImage attached (backspace to remove)\x1b[0m\n"
+        );
         render();
         return true;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to read clipboard image.";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to read clipboard image.";
         notifyClipboard(message);
         return false;
       }
@@ -304,8 +322,8 @@ export async function promptLine(
 
       cleanup();
       resolve({
-        text: value,
         images: attachedImages.length > 0 ? attachedImages : undefined,
+        text: value,
       });
     }
 
@@ -372,7 +390,8 @@ export async function promptLine(
 
         if (suggestions.length > 0) {
           hasNavigated = true;
-          selectedIndex = (selectedIndex - 1 + suggestions.length) % suggestions.length;
+          selectedIndex =
+            (selectedIndex - 1 + suggestions.length) % suggestions.length;
           render();
         }
 
@@ -425,7 +444,9 @@ export async function promptLine(
       }
 
       if (key.length > 1) {
-        const printable = [...key].filter((char) => char >= " " && char !== "\u007f").join("");
+        const printable = [...key]
+          .filter((char) => char >= " " && char !== "\u007f")
+          .join("");
 
         if (!printable) {
           return;

@@ -1,11 +1,11 @@
-import { describe, expect, test, spyOn, afterEach } from "bun:test";
-import type { Context } from "grammy";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { MAX_DOCUMENT_BYTES } from "@nakama/core/message-content";
+import type { Context } from "grammy";
 import {
   buildTelegramDocumentInput,
+  downloadTelegramFile,
   OVERSIZED_FILE_REPLY,
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
-  downloadTelegramFile,
 } from "./attachments";
 
 function createDocumentContext(options: {
@@ -16,21 +16,21 @@ function createDocumentContext(options: {
   fileSize?: number;
 }): Context {
   return {
+    api: {
+      getFile: async () => ({
+        file_path: "documents/report.pdf",
+        file_size: options.fileSize,
+      }),
+      token: "test-token",
+    },
     message: {
       caption: options.caption,
       document: {
         file_id: options.fileId ?? "file-1",
         file_name: options.fileName,
+        file_size: options.fileSize,
         mime_type: options.mimeType,
-        file_size: options.fileSize,
       },
-    },
-    api: {
-      token: "test-token",
-      getFile: async () => ({
-        file_path: "documents/report.pdf",
-        file_size: options.fileSize,
-      }),
     },
   } as unknown as Context;
 }
@@ -46,29 +46,29 @@ describe("buildTelegramDocumentInput", () => {
     fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("pdf-bytes", {
         headers: { "content-type": "application/pdf" },
-      }),
+      })
     );
 
     const result = await buildTelegramDocumentInput(
       createDocumentContext({
+        caption: "Summarize this",
         fileName: "report.pdf",
         mimeType: "application/pdf",
-        caption: "Summarize this",
-      }),
+      })
     );
 
     expect(result).toEqual({
-      kind: "input",
       input: {
-        message: "Summarize this",
         documents: [
           expect.objectContaining({
+            data: Buffer.from("pdf-bytes").toString("base64"),
             filename: "report.pdf",
             mediaType: "application/pdf",
-            data: Buffer.from("pdf-bytes").toString("base64"),
           }),
         ],
+        message: "Summarize this",
       },
+      kind: "input",
     });
   });
 
@@ -76,14 +76,14 @@ describe("buildTelegramDocumentInput", () => {
     fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("hello", {
         headers: { "content-type": "application/octet-stream" },
-      }),
+      })
     );
 
     const result = await buildTelegramDocumentInput(
       createDocumentContext({
         fileName: "notes.txt",
         mimeType: "application/octet-stream",
-      }),
+      })
     );
 
     expect(result?.kind).toBe("input");
@@ -99,14 +99,15 @@ describe("buildTelegramDocumentInput", () => {
           "content-type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         },
-      }),
+      })
     );
 
     const result = await buildTelegramDocumentInput(
       createDocumentContext({
         fileName: "sheet.xlsx",
-        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
     );
 
     expect(result).toEqual({
@@ -122,9 +123,9 @@ describe("buildTelegramDocumentInput", () => {
     const result = await buildTelegramDocumentInput(
       createDocumentContext({
         fileName: "big.pdf",
-        mimeType: "application/pdf",
         fileSize: MAX_DOCUMENT_BYTES + 1,
-      }),
+        mimeType: "application/pdf",
+      })
     );
 
     expect(result).toEqual({ kind: "reject", message: OVERSIZED_FILE_REPLY });
@@ -136,7 +137,7 @@ describe("buildTelegramDocumentInput", () => {
       createDocumentContext({
         fileName: "photo.png",
         mimeType: "image/png",
-      }),
+      })
     );
 
     expect(result).toBeNull();
@@ -147,15 +148,15 @@ describe("downloadTelegramFile", () => {
   test("surfaces download failures to caller", async () => {
     const ctx = {
       api: {
-        token: "test-token",
         getFile: async () => {
           throw new Error("network down");
         },
+        token: "test-token",
       },
     } as unknown as Context;
 
-    await expect(downloadTelegramFile(ctx, "file-1", MAX_DOCUMENT_BYTES)).rejects.toThrow(
-      "network down",
-    );
+    await expect(
+      downloadTelegramFile(ctx, "file-1", MAX_DOCUMENT_BYTES)
+    ).rejects.toThrow("network down");
   });
 });

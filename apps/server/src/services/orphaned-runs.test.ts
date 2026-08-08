@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { setCrashLogger, type CrashReport } from "@nakama/core/crash-report";
+import { type CrashReport, setCrashLogger } from "@nakama/core/crash-report";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { reconcileOrphanedAutomationRuns } from "./orphaned-runs";
 
@@ -18,19 +18,19 @@ afterEach(() => {
 
 async function seedAutomation(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
-  id: string,
+  id: string
 ): Promise<void> {
   const now = new Date().toISOString();
 
   await db.upsertAutomation({
+    createdAt: now,
+    enabled: true,
     id,
+    name: id,
     orgId: "org_a",
     profileId: "prof_a",
-    name: id,
     prompt: "do the thing",
     trigger: { type: "manual" },
-    enabled: true,
-    createdAt: now,
     updatedAt: now,
   } as any);
 }
@@ -40,16 +40,16 @@ async function seedRun(
   automationId: string,
   runId: string,
   startedAt: string,
-  status: "running" | "completed" = "running",
+  status: "running" | "completed" = "running"
 ): Promise<void> {
   await db.insertAutomationRun({
-    id: runId,
     automationId,
-    status,
-    startedAt,
     completedAt: status === "completed" ? startedAt : null,
-    output: null,
     error: null,
+    id: runId,
+    output: null,
+    startedAt,
+    status,
   });
 }
 
@@ -87,7 +87,13 @@ test("a run started by this process is left alone", async () => {
 test("a clean install reports nothing", async () => {
   const db = createInMemoryDatabaseAdapter();
   await seedAutomation(db, "auto_a");
-  await seedRun(db, "auto_a", "run_done", "2026-08-07T00:00:00.000Z", "completed");
+  await seedRun(
+    db,
+    "auto_a",
+    "run_done",
+    "2026-08-07T00:00:00.000Z",
+    "completed"
+  );
 
   expect(await reconcileOrphanedAutomationRuns(db, Date.now())).toHaveLength(0);
   expect(reports).toHaveLength(0);
@@ -115,7 +121,7 @@ test("orphans across several automations are reported once, not once each", asyn
 
   const orphaned = await reconcileOrphanedAutomationRuns(
     db,
-    Date.parse("2026-08-07T01:00:00.000Z"),
+    Date.parse("2026-08-07T01:00:00.000Z")
   );
 
   expect(orphaned).toHaveLength(2);

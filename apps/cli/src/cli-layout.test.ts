@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
-  TerminalLayout,
-} from "./terminal-layout";
-import {
   formatPendingDisplayLines,
   formatPendingSummary,
   MessageQueue,
 } from "./message-queue";
 import { plainLine, styledLine, styledLineText } from "./styled-text";
+import { TerminalLayout } from "./terminal-layout";
 import { VirtualMessageList } from "./virtual-message-list";
 
 describe("MessageQueue", () => {
@@ -33,10 +31,13 @@ describe("formatPendingSummary", () => {
   test("uses image placeholder when only images are attached", () => {
     expect(
       formatPendingSummary({
+        images: [{ data: "abc", mediaType: "image/png" }],
         line: "",
-        images: [{ mediaType: "image/png", data: "abc" }],
-        sendInput: { message: "", images: [{ mediaType: "image/png", data: "abc" }] },
-      }),
+        sendInput: {
+          images: [{ data: "abc", mediaType: "image/png" }],
+          message: "",
+        },
+      })
     ).toBe("[image]");
   });
 });
@@ -50,7 +51,7 @@ describe("formatPendingDisplayLines", () => {
           sendInput: { message: "follow up" },
         },
       ],
-      80,
+      80
     );
 
     expect(lines[0]).toContain("⏳ pending:");
@@ -69,11 +70,9 @@ describe("VirtualMessageList", () => {
     messages.appendLine("second");
     messages.sealMessage();
 
-    expect(messages.getLines(0, messages.totalLines(20), 20).map(styledLineText)).toEqual([
-      " first ",
-      "",
-      " second ",
-    ]);
+    expect(
+      messages.getLines(0, messages.totalLines(20), 20).map(styledLineText)
+    ).toEqual([" first ", "", " second "]);
   });
 
   test("keeps output entries compact without blank separators", () => {
@@ -86,10 +85,9 @@ describe("VirtualMessageList", () => {
     messages.appendLine("second");
     messages.sealMessage();
 
-    expect(messages.getLines(0, messages.totalLines(20), 20).map(styledLineText)).toEqual([
-      " first ",
-      " second ",
-    ]);
+    expect(
+      messages.getLines(0, messages.totalLines(20), 20).map(styledLineText)
+    ).toEqual([" first ", " second "]);
   });
 
   test("adds a blank line before tool message blocks", () => {
@@ -102,7 +100,9 @@ describe("VirtualMessageList", () => {
     messages.appendLine(" [tool: search] ");
     messages.sealMessage();
 
-    expect(messages.getLines(0, messages.totalLines(30), 30).map(styledLineText)).toEqual([
+    expect(
+      messages.getLines(0, messages.totalLines(30), 30).map(styledLineText)
+    ).toEqual([
       "                              ",
       "> hello                       ",
       "                              ",
@@ -118,7 +118,9 @@ describe("VirtualMessageList", () => {
     messages.appendLine("1234567890 1234567890 1234567890");
     messages.sealMessage();
 
-    const lines = messages.getLines(0, messages.totalLines(12), 12).map(styledLineText);
+    const lines = messages
+      .getLines(0, messages.totalLines(12), 12)
+      .map(styledLineText);
     expect(lines.length).toBeGreaterThan(1);
     for (const line of lines) {
       expect(line.startsWith(" ")).toBe(true);
@@ -128,7 +130,9 @@ describe("VirtualMessageList", () => {
 });
 
 describe("TerminalLayout frame pipeline", () => {
-  let writeSpy: ReturnType<typeof spyOn<typeof process.stdout, "write">> | null = null;
+  let writeSpy: ReturnType<
+    typeof spyOn<typeof process.stdout, "write">
+  > | null = null;
   let originalColumns: number | undefined;
   let originalRows: number | undefined;
   let writes: string[] = [];
@@ -188,8 +192,8 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
@@ -212,8 +216,8 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
@@ -230,9 +234,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 4,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> hi▌")]);
@@ -251,9 +255,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 1,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
@@ -274,9 +278,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
@@ -296,9 +300,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 1,
+      enabled: true,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
@@ -325,9 +329,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 2,
+      enabled: true,
     });
 
     layout.setDebugOverlay(true);
@@ -345,21 +349,31 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
-    layout.writeScroll("this is a long streaming line that wraps across many rows in viewport");
-    const grownTop = ((layout as Record<string, unknown>).previousFrame as { topRow: number } | null)
-      ?.topRow ?? 8;
+    layout.writeScroll(
+      "this is a long streaming line that wraps across many rows in viewport"
+    );
+    const grownTop =
+      (
+        (layout as Record<string, unknown>).previousFrame as {
+          topRow: number;
+        } | null
+      )?.topRow ?? 8;
 
     // Starting a new stream clears transient stream buffer; viewport should not shrink downward.
     layout.beginStream();
-    const afterResetTop = ((layout as Record<string, unknown>).previousFrame as { topRow: number } | null)
-      ?.topRow ?? 8;
+    const afterResetTop =
+      (
+        (layout as Record<string, unknown>).previousFrame as {
+          topRow: number;
+        } | null
+      )?.topRow ?? 8;
 
     expect(afterResetTop).toBeLessThanOrEqual(grownTop);
   });
@@ -370,9 +384,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
@@ -380,7 +394,9 @@ describe("TerminalLayout frame pipeline", () => {
     layout.beginMessage("assistant");
     layout.writeScroll("1234567890 1234567890 1234567890");
 
-    const frame = (layout as Record<string, unknown>).previousFrame as { lines: Array<{ segments: Array<{ text: string }> }> } | null;
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      lines: Array<{ segments: Array<{ text: string }> }>;
+    } | null;
     const transcriptLines =
       frame?.lines
         .map((line) => line.segments.map((segment) => segment.text).join(""))
@@ -399,9 +415,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
@@ -416,12 +432,16 @@ describe("TerminalLayout frame pipeline", () => {
       lines: Array<{ segments: Array<{ text: string }> }>;
     } | null;
     const renderedLines =
-      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+      frame?.lines.map((line) =>
+        line.segments.map((segment) => segment.text).join("")
+      ) ?? [];
 
     expect(renderedLines).toContain("> hello             ");
     expect(renderedLines).toContain("");
     expect(renderedLines).toContain(" response ");
-    expect(renderedLines.indexOf("")).toBeLessThan(renderedLines.indexOf(" response "));
+    expect(renderedLines.indexOf("")).toBeLessThan(
+      renderedLines.indexOf(" response ")
+    );
   });
 
   test("adds a blank row between submitted input and thinking status", () => {
@@ -430,9 +450,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
@@ -446,7 +466,9 @@ describe("TerminalLayout frame pipeline", () => {
       lines: Array<{ segments: Array<{ text: string }> }>;
     } | null;
     const renderedLines =
-      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+      frame?.lines.map((line) =>
+        line.segments.map((segment) => segment.text).join("")
+      ) ?? [];
 
     expect(renderedLines).toEqual([
       "                    ",
@@ -465,9 +487,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
@@ -484,7 +506,9 @@ describe("TerminalLayout frame pipeline", () => {
       lines: Array<{ segments: Array<{ text: string }> }>;
     } | null;
     const renderedLines =
-      frame?.lines.map((line) => line.segments.map((segment) => segment.text).join("")) ?? [];
+      frame?.lines.map((line) =>
+        line.segments.map((segment) => segment.text).join("")
+      ) ?? [];
 
     expect(renderedLines).toEqual([
       "                    ",
@@ -505,9 +529,9 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
@@ -515,24 +539,30 @@ describe("TerminalLayout frame pipeline", () => {
     layout.beginMessage("assistant");
     layout.writeScroll("1234567890 1234567890 1234567890");
 
-    const frameBeforeSeal = (layout as Record<string, unknown>).previousFrame as {
+    const frameBeforeSeal = (layout as Record<string, unknown>)
+      .previousFrame as {
       lines: Array<{ segments: Array<{ text: string }> }>;
     } | null;
     const streamedLines =
       frameBeforeSeal?.lines
         .map((line) => line.segments.map((segment) => segment.text).join(""))
-        .filter((line) => line.includes("1234567890") || line.includes("890 ")) ?? [];
+        .filter(
+          (line) => line.includes("1234567890") || line.includes("890 ")
+        ) ?? [];
 
     layout.endStream();
     layout.endMessage();
 
-    const frameAfterSeal = (layout as Record<string, unknown>).previousFrame as {
+    const frameAfterSeal = (layout as Record<string, unknown>)
+      .previousFrame as {
       lines: Array<{ segments: Array<{ text: string }> }>;
     } | null;
     const sealedLines =
       frameAfterSeal?.lines
         .map((line) => line.segments.map((segment) => segment.text).join(""))
-        .filter((line) => line.includes("1234567890") || line.includes("890 ")) ?? [];
+        .filter(
+          (line) => line.includes("1234567890") || line.includes("890 ")
+        ) ?? [];
 
     expect(sealedLines).toEqual(streamedLines);
   });
@@ -543,15 +573,17 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
     // initial viewport rows = 5 (rows 8..12)
-    let frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
+    let frame = (layout as Record<string, unknown>).previousFrame as {
+      topRow: number;
+    } | null;
     expect(frame?.topRow).toBe(8);
 
     layout.writelnScroll("line-1");
@@ -560,11 +592,15 @@ describe("TerminalLayout frame pipeline", () => {
     layout.writelnScroll("line-4");
     layout.writelnScroll("line-5");
     // Implicit output writes stay compact: 5 messages occupy 5 transcript rows.
-    frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
+    frame = (layout as Record<string, unknown>).previousFrame as {
+      topRow: number;
+    } | null;
     expect(frame?.topRow).toBe(6);
 
     layout.writelnScroll("line-6");
-    frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
+    frame = (layout as Record<string, unknown>).previousFrame as {
+      topRow: number;
+    } | null;
     expect(frame?.topRow).toBe(5);
   });
 
@@ -574,19 +610,21 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
     // This single logical line wraps into multiple terminal rows at width=20.
     layout.writelnScroll(
-      "1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+      "1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890"
     );
 
-    const frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      topRow: number;
+    } | null;
     expect(frame?.topRow).toBeLessThan(8);
   });
 
@@ -596,19 +634,21 @@ describe("TerminalLayout frame pipeline", () => {
     const layout = new TerminalLayout(null);
 
     Object.assign(layout as Record<string, unknown>, {
-      enabled: true,
       anchored: true,
       anchorRow: 8,
+      enabled: true,
       viewportTopRow: 8,
     });
 
     layout.setReservedRows(1, [plainLine("> ")]);
     layout.beginMessage("assistant");
     layout.writelnScroll(
-      "1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+      "1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890"
     );
 
-    const frame = (layout as Record<string, unknown>).previousFrame as { topRow: number } | null;
+    const frame = (layout as Record<string, unknown>).previousFrame as {
+      topRow: number;
+    } | null;
     expect(frame?.topRow).toBeLessThan(8);
   });
 });

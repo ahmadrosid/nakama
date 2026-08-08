@@ -9,9 +9,9 @@ describe("formatAutomationDeliveryMessage", () => {
   test("includes automation name and body", () => {
     const formatted = formatAutomationDeliveryMessage({
       automationName: "AI news",
-      status: "completed",
-      completedAt: "2026-06-29T08:00:00.000Z",
       body: "Summary text",
+      completedAt: "2026-06-29T08:00:00.000Z",
+      status: "completed",
     });
 
     expect(formatted.subject).toBe("[Nakama] AI news — completed");

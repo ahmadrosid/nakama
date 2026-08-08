@@ -1,5 +1,8 @@
-import { LEGACY_DOC_UNSUPPORTED_MESSAGE, looksLikeUtf8Text } from "./artifact-mime";
 import { convertDocumentBytes } from "./anydoc-text";
+import {
+  LEGACY_DOC_UNSUPPORTED_MESSAGE,
+  looksLikeUtf8Text,
+} from "./artifact-mime";
 import { convertHtmlToMarkdown } from "./tools/web-fetch";
 
 /**
@@ -7,12 +10,22 @@ import { convertHtmlToMarkdown } from "./tools/web-fetch";
  * magic `PK\x03\x04`.
  */
 export function looksLikeZipArchive(bytes: Uint8Array): boolean {
-  return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  return (
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04
+  );
 }
 
 /** A genuine legacy `.doc` is an OLE compound file: `D0 CF 11 E0`. */
 export function looksLikeOleDocument(bytes: Uint8Array): boolean {
-  return bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  return (
+    bytes[0] === 0xd0 &&
+    bytes[1] === 0xcf &&
+    bytes[2] === 0x11 &&
+    bytes[3] === 0xe0
+  );
 }
 
 function looksLikeWordprocessingXml(text: string): boolean {
@@ -20,7 +33,9 @@ function looksLikeWordprocessingXml(text: string): boolean {
 }
 
 function looksLikeHtml(text: string): boolean {
-  return /<!doctype html|<html[\s>]|<body[\s>]|<div[\s>]|<p[\s>]|<h[1-6][\s>]/i.test(text);
+  return /<!doctype html|<html[\s>]|<body[\s>]|<div[\s>]|<p[\s>]|<h[1-6][\s>]/i.test(
+    text
+  );
 }
 
 function decodeXmlEntities(value: string): string {
@@ -40,7 +55,8 @@ function decodeXmlEntities(value: string): string {
 export function convertWordprocessingXmlToMarkdown(xml: string): string {
   const blocks: string[] = [];
 
-  for (const match of xml.match(/<w:p[\s>][\s\S]*?<\/w:p>|<w:p\s*\/>/gi) ?? []) {
+  for (const match of xml.match(/<w:p[\s>][\s\S]*?<\/w:p>|<w:p\s*\/>/gi) ??
+    []) {
     const text = [...match.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/gi)]
       .map((run) => decodeXmlEntities(run[1] ?? ""))
       .join("")
@@ -52,7 +68,9 @@ export function convertWordprocessingXmlToMarkdown(xml: string): string {
 
     const styleMatch = match.match(/<w:pStyle\s+w:val="Heading(\d)"/i);
     const level = styleMatch ? Number(styleMatch[1]) : 0;
-    blocks.push(level >= 1 && level <= 6 ? `${"#".repeat(level)} ${text}` : text);
+    blocks.push(
+      level >= 1 && level <= 6 ? `${"#".repeat(level)} ${text}` : text
+    );
   }
 
   return blocks.join("\n\n").trim();
@@ -78,7 +96,7 @@ export async function convertDocxToMarkdown(bytes: Buffer): Promise<string> {
 
   if (!looksLikeUtf8Text(bytes)) {
     throw new Error(
-      "This file is neither a valid .docx archive nor readable text, so it cannot be previewed.",
+      "This file is neither a valid .docx archive nor readable text, so it cannot be previewed."
     );
   }
 

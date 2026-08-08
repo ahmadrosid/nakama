@@ -1,12 +1,16 @@
 import type { AgentBrowserStatusResponse } from "@nakama/core";
-import { ensureBunGlobalInstallDirs, ensureProcessPath, getToolExecutionEnv } from "../lib/ensure-process-path";
+import {
+  ensureBunGlobalInstallDirs,
+  ensureProcessPath,
+  getToolExecutionEnv,
+} from "../lib/ensure-process-path";
 
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 const AGENT_BROWSER_COMMAND = "agent-browser";
 
 interface AgentBrowserInstallPlan {
-  command: string;
   args: string[];
+  command: string;
   displayCommand: string;
 }
 
@@ -23,19 +27,19 @@ function detectPackageManager(): "npm" | "bun" {
 }
 
 function buildAgentBrowserCliInstallPlan(
-  packageManager: "npm" | "bun" = detectPackageManager(),
+  packageManager: "npm" | "bun" = detectPackageManager()
 ): AgentBrowserInstallPlan {
   if (packageManager === "bun") {
     return {
-      command: "bun",
       args: ["install", "-g", "--trust", AGENT_BROWSER_PACKAGE],
+      command: "bun",
       displayCommand: `bun install -g --trust ${AGENT_BROWSER_PACKAGE}`,
     };
   }
 
   return {
-    command: "npm",
     args: ["install", "-g", AGENT_BROWSER_PACKAGE],
+    command: "npm",
     displayCommand: `npm install -g ${AGENT_BROWSER_PACKAGE}`,
   };
 }
@@ -78,21 +82,23 @@ async function probeAgentBrowserVersion(): Promise<{
     child.once("error", (error) =>
       resolve({
         installed: false,
-        version: null,
         missing: (error as NodeJS.ErrnoException).code === "ENOENT",
-      }),
+        version: null,
+      })
     );
     child.once("close", (code) =>
       resolve({
         installed: code === 0,
-        version: code === 0 ? extractVersion(stdout, stderr) : null,
         missing: false,
-      }),
+        version: code === 0 ? extractVersion(stdout, stderr) : null,
+      })
     );
   });
 }
 
-async function getAgentBrowserRuntimeStatus(): Promise<Pick<AgentBrowserStatusResponse, "installed" | "version">> {
+async function getAgentBrowserRuntimeStatus(): Promise<
+  Pick<AgentBrowserStatusResponse, "installed" | "version">
+> {
   const initial = await probeAgentBrowserVersion();
 
   if (initial.installed || !initial.missing) {
@@ -112,19 +118,19 @@ async function getAgentBrowserRuntimeStatus(): Promise<Pick<AgentBrowserStatusRe
 }
 
 function toAgentBrowserStatusResponse(
-  runtime: Pick<AgentBrowserStatusResponse, "installed" | "version">,
+  runtime: Pick<AgentBrowserStatusResponse, "installed" | "version">
 ): AgentBrowserStatusResponse {
   const ready = runtime.installed && runtime.version !== null;
 
   return {
-    installed: runtime.installed,
-    version: runtime.version,
-    ready,
     installCommand: getAgentBrowserInstallCommand(),
+    installed: runtime.installed,
     nextStep: ready ? null : "install",
+    ready,
     statusMessage: ready
       ? "agent-browser is installed and ready."
       : "Install the agent-browser CLI and Chrome on this machine.",
+    version: runtime.version,
   };
 }
 
@@ -139,7 +145,7 @@ export interface AgentBrowserInstallProgress {
 
 async function runInstallCommand(
   plan: AgentBrowserInstallPlan,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string) => void
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -216,8 +222,8 @@ async function runInstallCommand(
 
       resolve({
         exitCode: null,
-        stdout,
         stderr: `${stderr}\n${String(error)}`.trim(),
+        stdout,
         timedOut,
       });
     });
@@ -234,8 +240,8 @@ async function runInstallCommand(
 
       resolve({
         exitCode,
-        stdout: stdout.trim(),
         stderr: stderr.trim(),
+        stdout: stdout.trim(),
         timedOut,
       });
     });
@@ -249,16 +255,20 @@ function summarizeInstallOutput(output: string): string {
     .filter(Boolean);
   const meaningful =
     lines.find((line) => /^error:/i.test(line)) ??
-    lines.find((line) => /(?:EACCES|ENOENT|EPERM|failed|permission denied)/i.test(line)) ??
+    lines.find((line) =>
+      /(?:EACCES|ENOENT|EPERM|failed|permission denied)/i.test(line)
+    ) ??
     lines.find((line) => !/^bun (?:add|install) v/i.test(line)) ??
     lines[0] ??
     output.trim();
-  return meaningful.length > 180 ? `${meaningful.slice(0, 177)}...` : meaningful;
+  return meaningful.length > 180
+    ? `${meaningful.slice(0, 177)}...`
+    : meaningful;
 }
 
 async function runAgentBrowserCommand(
   args: string[],
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string) => void
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -267,16 +277,16 @@ async function runAgentBrowserCommand(
 }> {
   return runInstallCommand(
     {
-      command: AGENT_BROWSER_COMMAND,
       args,
+      command: AGENT_BROWSER_COMMAND,
       displayCommand: `${AGENT_BROWSER_COMMAND} ${args.join(" ")}`,
     },
-    onProgress,
+    onProgress
   );
 }
 
 export async function installAgentBrowser(
-  onProgress?: (progress: AgentBrowserInstallProgress) => void,
+  onProgress?: (progress: AgentBrowserInstallProgress) => void
 ): Promise<AgentBrowserStatusResponse> {
   const emitProgress = (message: string) => {
     onProgress?.({ message });
@@ -291,17 +301,22 @@ export async function installAgentBrowser(
   emitProgress(cliPlan.displayCommand);
 
   const cliResult = await runInstallCommand(cliPlan, emitProgress);
-  const cliOutput = [cliResult.stdout, cliResult.stderr].filter(Boolean).join("\n").trim();
+  const cliOutput = [cliResult.stdout, cliResult.stderr]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
   if (cliResult.timedOut) {
-    throw new Error("Install timed out while installing the agent-browser CLI.");
+    throw new Error(
+      "Install timed out while installing the agent-browser CLI."
+    );
   }
 
   if (cliResult.exitCode !== 0) {
     throw new Error(
       cliOutput
         ? `agent-browser CLI install failed: ${summarizeInstallOutput(cliOutput)}`
-        : "agent-browser CLI install failed.",
+        : "agent-browser CLI install failed."
     );
   }
 
@@ -309,17 +324,22 @@ export async function installAgentBrowser(
   emitProgress(`${AGENT_BROWSER_COMMAND} install`);
 
   const browserResult = await runAgentBrowserCommand(["install"], emitProgress);
-  const browserOutput = [browserResult.stdout, browserResult.stderr].filter(Boolean).join("\n").trim();
+  const browserOutput = [browserResult.stdout, browserResult.stderr]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
   if (browserResult.timedOut) {
-    throw new Error("Install timed out while downloading Chrome for agent-browser.");
+    throw new Error(
+      "Install timed out while downloading Chrome for agent-browser."
+    );
   }
 
   if (browserResult.exitCode !== 0) {
     throw new Error(
       browserOutput
         ? `agent-browser browser install failed: ${summarizeInstallOutput(browserOutput)}`
-        : "agent-browser browser install failed.",
+        : "agent-browser browser install failed."
     );
   }
 

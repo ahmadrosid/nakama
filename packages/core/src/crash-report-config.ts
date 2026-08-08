@@ -11,8 +11,8 @@ export type CrashReportConsent = "granted" | "denied" | "unset";
 
 export interface CrashReportConfig {
   consent: CrashReportConsent;
-  installId: string | null;
   dsn: string | null;
+  installId: string | null;
 }
 
 /**
@@ -47,7 +47,7 @@ function parseConsent(value: string | undefined): CrashReportConsent {
  * everything, including a stored "granted".
  */
 export function readCrashReportEnvOverride(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): CrashReportConsent | null {
   if (TRUTHY.has(env.DO_NOT_TRACK?.trim().toLowerCase() ?? "")) {
     return "denied";
@@ -74,28 +74,28 @@ export async function loadCrashReportConfig(): Promise<CrashReportConfig> {
   const raw = await readTextOrNull(getCrashReportConfigPath());
 
   if (raw === null) {
-    return { consent: "unset", installId: null, dsn: null };
+    return { consent: "unset", dsn: null, installId: null };
   }
 
   const values = parseIni(raw);
 
   return {
     consent: parseConsent(values.consent),
-    installId: values.install_id?.trim() || null,
     dsn: values.dsn?.trim() || null,
+    installId: values.install_id?.trim() || null,
   };
 }
 
 export function resolveCrashReportConsent(
   file: CrashReportConfig,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): CrashReportConsent {
   return readCrashReportEnvOverride(env) ?? file.consent;
 }
 
 export function resolveCrashReportDsn(
   file: CrashReportConfig,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): string | null {
   // Set but empty means off. Falling through to the built-in default there would make
   // NAKAMA_CRASH_REPORT_DSN="" silently start delivering to the project's own ingest,
@@ -109,7 +109,9 @@ export function resolveCrashReportDsn(
   return file.dsn || DEFAULT_CRASH_REPORT_DSN || null;
 }
 
-async function writeCrashReportConfig(config: CrashReportConfig): Promise<void> {
+async function writeCrashReportConfig(
+  config: CrashReportConfig
+): Promise<void> {
   const lines = [
     "# Nakama crash reports",
     "# consent=granted sends scrubbed crash reports so bugs get fixed.",
@@ -131,13 +133,14 @@ async function writeCrashReportConfig(config: CrashReportConfig): Promise<void> 
  * be a fingerprint the user never agreed to.
  */
 export async function saveCrashReportConsent(
-  consent: Exclude<CrashReportConsent, "unset">,
+  consent: Exclude<CrashReportConsent, "unset">
 ): Promise<CrashReportConfig> {
   const existing = await loadCrashReportConfig();
   const next: CrashReportConfig = {
     consent,
-    installId: consent === "granted" ? (existing.installId ?? randomUUID()) : null,
     dsn: existing.dsn,
+    installId:
+      consent === "granted" ? (existing.installId ?? randomUUID()) : null,
   };
 
   await writeCrashReportConfig(next);

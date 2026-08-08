@@ -1,14 +1,19 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateNotificationDestinationRequest,
   UpdateNotificationDestinationRequest,
 } from "@nakama/core/contract";
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const notificationDestinationsQueryOptions = queryOptions({
-  queryKey: queryKeys.notificationDestinations.all,
   queryFn: () => client.listNotificationDestinations(),
+  queryKey: queryKeys.notificationDestinations.all,
 });
 
 export function useNotificationDestinations() {
@@ -22,7 +27,9 @@ export function useCreateNotificationDestination() {
     mutationFn: (request: CreateNotificationDestinationRequest) =>
       client.createNotificationDestination(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.notificationDestinations.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notificationDestinations.all,
+      });
     },
   });
 }
@@ -39,7 +46,9 @@ export function useUpdateNotificationDestination() {
       request: UpdateNotificationDestinationRequest;
     }) => client.updateNotificationDestination(destinationId, request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.notificationDestinations.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notificationDestinations.all,
+      });
     },
   });
 }
@@ -51,7 +60,9 @@ export function useRegenerateNotificationDestinationKey() {
     mutationFn: (destinationId: string) =>
       client.regenerateNotificationDestinationKey(destinationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.notificationDestinations.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notificationDestinations.all,
+      });
     },
   });
 }
@@ -60,9 +71,12 @@ export function useDeleteNotificationDestination() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (destinationId: string) => client.deleteNotificationDestination(destinationId),
+    mutationFn: (destinationId: string) =>
+      client.deleteNotificationDestination(destinationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.notificationDestinations.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notificationDestinations.all,
+      });
     },
   });
 }

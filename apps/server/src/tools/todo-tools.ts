@@ -4,41 +4,42 @@ import type { AgentTodoState } from "../services/agent-todo-state";
 export function createTodoTools(todoState: AgentTodoState): ToolDefinition[] {
   return [
     {
-      name: "todo_write",
       description:
         "Create or update the internal task plan for complex multi-step work. Use when a request has 3+ distinct steps. Initialize at the start, keep one task in_progress, and mark tasks completed as you finish them.",
+      name: "todo_write",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
           merge: {
-            type: "boolean",
             description:
               "If true, update todos by id. If false, replace the entire task plan.",
+            type: "boolean",
           },
           todos: {
-            type: "array",
             description: "Todo items to create or update.",
             items: {
-              type: "object",
+              additionalProperties: false,
               properties: {
-                id: { type: "string", description: "Stable todo identifier." },
                 content: {
+                  description:
+                    "Todo description. Required when creating a new todo.",
                   type: "string",
-                  description: "Todo description. Required when creating a new todo.",
                 },
+                id: { description: "Stable todo identifier.", type: "string" },
                 status: {
-                  type: "string",
-                  enum: ["pending", "in_progress", "completed", "cancelled"],
                   description: "Current todo status.",
+                  enum: ["pending", "in_progress", "completed", "cancelled"],
+                  type: "string",
                 },
               },
               required: ["id", "status"],
-              additionalProperties: false,
+              type: "object",
             },
+            type: "array",
           },
         },
         required: ["merge", "todos"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context) {
         const sessionId = context.sessionId;
@@ -72,7 +73,7 @@ function readBoolean(input: unknown, key: string): boolean | null {
 
 function readTodoUpdates(
   input: unknown,
-  key: string,
+  key: string
 ): Array<{ id: string; content?: string; status: AgentTodoStatus }> | null {
   if (typeof input !== "object" || input === null || !(key in input)) {
     return null;
@@ -84,7 +85,11 @@ function readTodoUpdates(
     return null;
   }
 
-  const todos: Array<{ id: string; content?: string; status: AgentTodoStatus }> = [];
+  const todos: Array<{
+    id: string;
+    content?: string;
+    status: AgentTodoStatus;
+  }> = [];
 
   for (const item of value) {
     if (typeof item !== "object" || item === null) {
@@ -113,7 +118,7 @@ function readTodoUpdates(
         ? record.content.trim()
         : undefined;
 
-    todos.push({ id, content, status });
+    todos.push({ content, id, status });
   }
 
   return todos;

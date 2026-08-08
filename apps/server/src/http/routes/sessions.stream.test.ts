@@ -11,7 +11,7 @@ describe("streamTurnSubscribe", () => {
     const sessionId = `session_stream_test_${Date.now()}`;
 
     sessionTurnRegistry.beginTurn(sessionId);
-    sessionTurnRegistry.publish(sessionId, { type: "chunk", delta: "hello" });
+    sessionTurnRegistry.publish(sessionId, { delta: "hello", type: "chunk" });
 
     const response = streamTurnSubscribe(sessionId);
     expect(response).not.toBeNull();
@@ -35,6 +35,6 @@ describe("streamTurnSubscribe", () => {
 
     expect(buffer).toContain('"delta":"hello"');
 
-    sessionTurnRegistry.endTurn(sessionId, { type: "done", reply: "hello" });
+    sessionTurnRegistry.endTurn(sessionId, { reply: "hello", type: "done" });
   });
 });

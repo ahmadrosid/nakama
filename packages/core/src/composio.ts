@@ -12,13 +12,18 @@ function normalizeToolkitSlug(value: unknown, fieldName: string): string {
   const slug = value.trim().toLowerCase();
 
   if (!COMPOSIO_TOOLKIT_SLUG_PATTERN.test(slug)) {
-    throw new Error(`${fieldName} must use lowercase letters, numbers, underscores, or hyphens.`);
+    throw new Error(
+      `${fieldName} must use lowercase letters, numbers, underscores, or hyphens.`
+    );
   }
 
   return slug;
 }
 
-function normalizeActionSlugList(value: unknown, fieldName: string): string[] | null {
+function normalizeActionSlugList(
+  value: unknown,
+  fieldName: string
+): string[] | null {
   if (value === undefined || value === null) {
     return null;
   }
@@ -36,7 +41,9 @@ function normalizeActionSlugList(value: unknown, fieldName: string): string[] | 
 
     const slug = entry.trim().toUpperCase();
     if (!/^[A-Z0-9_]+$/.test(slug)) {
-      throw new Error(`${fieldName} entries must use uppercase letters, numbers, or underscores.`);
+      throw new Error(
+        `${fieldName} entries must use uppercase letters, numbers, or underscores.`
+      );
     }
 
     slugs.push(slug);
@@ -46,7 +53,7 @@ function normalizeActionSlugList(value: unknown, fieldName: string): string[] | 
 }
 
 export function normalizeEnableComposioToolkitRequest(
-  value: unknown,
+  value: unknown
 ): EnableComposioToolkitRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("toolkit request must be an object.");
@@ -60,7 +67,7 @@ export function normalizeEnableComposioToolkitRequest(
 }
 
 export function normalizeUpdateProfileComposioToolkitsRequest(
-  value: unknown,
+  value: unknown
 ): UpdateProfileComposioToolkitsRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("profile composio assignment request must be an object.");
@@ -83,15 +90,17 @@ export function normalizeUpdateProfileComposioToolkitsRequest(
       const toolkitId = assignment.toolkitId;
 
       if (typeof toolkitId !== "string" || !toolkitId.trim()) {
-        throw new Error(`assignments[${index}].toolkitId must be a non-empty string.`);
+        throw new Error(
+          `assignments[${index}].toolkitId must be a non-empty string.`
+        );
       }
 
       return {
-        toolkitId: toolkitId.trim(),
         allowedActions: normalizeActionSlugList(
           assignment.allowedActions,
-          `assignments[${index}].allowedActions`,
+          `assignments[${index}].allowedActions`
         ),
+        toolkitId: toolkitId.trim(),
       };
     }),
   };

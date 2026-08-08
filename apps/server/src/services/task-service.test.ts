@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { TaskService } from "./task-service";
 import { TaskRunner } from "./task-runner";
+import { TaskService } from "./task-service";
 
 const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
@@ -11,22 +11,22 @@ async function createTestDb() {
   const now = new Date().toISOString();
 
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Test Org",
     slug: "test-org",
-    createdAt: now,
     updatedAt: now,
   });
 
   await db.upsertProfile({
-    id: PROFILE_ID,
-    name: "Default Bot",
-    systemPrompt: "",
-    model: null,
-    isSuper: false,
-    orgId: ORG_ID,
-    isDefault: true,
     createdAt: now,
+    id: PROFILE_ID,
+    isDefault: true,
+    isSuper: false,
+    model: null,
+    name: "Default Bot",
+    orgId: ORG_ID,
+    systemPrompt: "",
     updatedAt: now,
   });
 
@@ -39,8 +39,8 @@ describe("TaskService", () => {
     const service = new TaskService(db);
 
     const task = await service.create(ORG_ID, {
-      title: "Research competitors",
       prompt: "Find top 5 competitors",
+      title: "Research competitors",
     });
 
     expect(task.status).toBe("backlog");
@@ -52,8 +52,11 @@ describe("TaskService", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    await service.create(ORG_ID, { title: "First", prompt: "Do first" });
-    const second = await service.create(ORG_ID, { title: "Second", prompt: "Do second" });
+    await service.create(ORG_ID, { prompt: "Do first", title: "First" });
+    const second = await service.create(ORG_ID, {
+      prompt: "Do second",
+      title: "Second",
+    });
 
     expect(second.position).toBe(1);
   });
@@ -63,7 +66,7 @@ describe("TaskService", () => {
     const service = new TaskService(db);
 
     await expect(
-      service.create(ORG_ID, { title: "  ", prompt: "Do work" }),
+      service.create(ORG_ID, { prompt: "Do work", title: "  " })
     ).rejects.toThrow("Task title is required.");
   });
 
@@ -72,7 +75,11 @@ describe("TaskService", () => {
     const service = new TaskService(db);
 
     await expect(
-      service.create(ORG_ID, { title: "Task", prompt: "Do work" }, "profile_missing"),
+      service.create(
+        ORG_ID,
+        { prompt: "Do work", title: "Task" },
+        "profile_missing"
+      )
     ).rejects.toThrow("Profile not found.");
   });
 
@@ -80,8 +87,11 @@ describe("TaskService", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    const first = await service.create(ORG_ID, { title: "Backlog B", prompt: "b" });
-    await service.create(ORG_ID, { title: "Backlog A", prompt: "a" });
+    const first = await service.create(ORG_ID, {
+      prompt: "b",
+      title: "Backlog B",
+    });
+    await service.create(ORG_ID, { prompt: "a", title: "Backlog A" });
     await service.update(first.id, ORG_ID, { status: "todo" });
 
     const tasks = await service.listForOrg(ORG_ID);
@@ -96,33 +106,33 @@ describe("TaskService", () => {
     const otherProfileId = "profile_other";
 
     await db.upsertOrganization({
+      createdAt: now,
       id: otherOrgId,
       name: "Other Org",
       slug: "other-org",
-      createdAt: now,
       updatedAt: now,
     });
 
     await db.upsertProfile({
-      id: otherProfileId,
-      name: "Other Bot",
-      systemPrompt: "",
-      model: null,
-      isSuper: false,
-      orgId: otherOrgId,
-      isDefault: true,
       createdAt: now,
+      id: otherProfileId,
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: otherOrgId,
+      systemPrompt: "",
       updatedAt: now,
     });
 
     const orgTask = await service.create(ORG_ID, {
-      title: "Org task",
       prompt: "Run",
+      title: "Org task",
     });
 
     await service.create(otherOrgId, {
-      title: "Other org task",
       prompt: "Run",
+      title: "Other org task",
     });
 
     const listed = await service.listForOrg(ORG_ID);
@@ -136,7 +146,10 @@ describe("TaskService", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    const task = await service.create(ORG_ID, { title: "Move me", prompt: "work" });
+    const task = await service.create(ORG_ID, {
+      prompt: "work",
+      title: "Move me",
+    });
     const updated = await service.update(task.id, ORG_ID, { status: "todo" });
 
     expect(updated.status).toBe("todo");
@@ -147,7 +160,10 @@ describe("TaskService", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    const task = await service.create(ORG_ID, { title: "Reorder", prompt: "work" });
+    const task = await service.create(ORG_ID, {
+      prompt: "work",
+      title: "Reorder",
+    });
     const updated = await service.update(task.id, ORG_ID, { position: 5 });
 
     expect(updated.position).toBe(5);
@@ -157,16 +173,19 @@ describe("TaskService", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    await expect(service.update("task_missing", ORG_ID, { title: "Nope" })).rejects.toThrow(
-      "Task not found.",
-    );
+    await expect(
+      service.update("task_missing", ORG_ID, { title: "Nope" })
+    ).rejects.toThrow("Task not found.");
   });
 
   test("delete existing task returns true", async () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    const task = await service.create(ORG_ID, { title: "Delete me", prompt: "work" });
+    const task = await service.create(ORG_ID, {
+      prompt: "work",
+      title: "Delete me",
+    });
     const deleted = await service.delete(task.id, ORG_ID);
 
     expect(deleted).toBe(true);
@@ -187,8 +206,8 @@ describe("TaskRunner", () => {
     const service = new TaskService(db);
 
     const task = await service.create(ORG_ID, {
-      title: "Run task",
       prompt: "Say hello",
+      title: "Run task",
     });
 
     const agentService = {
@@ -214,8 +233,8 @@ describe("TaskRunner", () => {
     const service = new TaskService(db);
 
     const task = await service.create(ORG_ID, {
-      title: "Failing task",
       prompt: "Fail please",
+      title: "Failing task",
     });
 
     const agentService = {
@@ -241,8 +260,8 @@ describe("TaskRunner", () => {
     const service = new TaskService(db);
 
     const task = await service.create(ORG_ID, {
-      title: "Concurrent task",
       prompt: "Run once",
+      title: "Concurrent task",
     });
 
     let releasePrompt!: () => void;
@@ -269,8 +288,8 @@ describe("TaskRunner", () => {
     const db = await createTestDb();
     const service = new TaskService(db);
 
-    const taskA = await service.create(ORG_ID, { title: "A", prompt: "a" });
-    const taskB = await service.create(ORG_ID, { title: "B", prompt: "b" });
+    const taskA = await service.create(ORG_ID, { prompt: "a", title: "A" });
+    const taskB = await service.create(ORG_ID, { prompt: "b", title: "B" });
 
     const active = new Set<string>();
     let releaseGate!: () => void;
@@ -279,7 +298,11 @@ describe("TaskRunner", () => {
     });
 
     const agentService = {
-      runTaskPrompt: async (_taskId: string, _profileId: string, _prompt: string) => {
+      runTaskPrompt: async (
+        _taskId: string,
+        _profileId: string,
+        _prompt: string
+      ) => {
         active.add(_prompt);
         await gate;
         active.delete(_prompt);

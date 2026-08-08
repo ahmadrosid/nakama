@@ -8,9 +8,9 @@ import {
   pushDeliverableArtifact,
 } from "@nakama/core";
 import type { Context } from "grammy";
-import type { SessionStore } from "./session-store";
-import { sendTelegramArtifactDocument } from "./send-artifact-document";
 import type { TelegramRichMessenger } from "./rich-message";
+import { sendTelegramArtifactDocument } from "./send-artifact-document";
+import type { SessionStore } from "./session-store";
 
 export async function maybeSendRequestedTelegramArtifactAttachment(input: {
   ctx: Context;
@@ -26,15 +26,20 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
     return;
   }
 
-  const artifact = getMostRecentDeliverableArtifact(input.sessionStore.getDeliverableArtifacts(input.conversationKey));
+  const artifact = getMostRecentDeliverableArtifact(
+    input.sessionStore.getDeliverableArtifacts(input.conversationKey)
+  );
   if (!artifact) {
     return;
   }
 
-  const { data } = await input.client.readProfileArtifactContent(input.profileId, artifact.path);
+  const { data } = await input.client.readProfileArtifactContent(
+    input.profileId,
+    artifact.path
+  );
   const result = await sendTelegramArtifactDocument(input.ctx, {
-    filename: artifact.filename,
     bytes: new Uint8Array(data),
+    filename: artifact.filename,
   });
 
   if (!result.ok && result.error) {
@@ -56,23 +61,30 @@ export async function deliverTelegramTurnArtifactShares(input: {
     return;
   }
 
-  const shareUrlCache = input.sessionStore.getArtifactShareUrls(input.conversationKey);
+  const shareUrlCache = input.sessionStore.getArtifactShareUrls(
+    input.conversationKey
+  );
   let webPublicUrlConfigured = true;
   const delivered = await mintDeliverableArtifacts({
     artifacts: paired,
-    shareUrlCache,
     publish: async (path) => {
-      const response = await input.client.publishProfileArtifactShare(input.profileId, path);
+      const response = await input.client.publishProfileArtifactShare(
+        input.profileId,
+        path
+      );
       webPublicUrlConfigured = response.webPublicUrlConfigured;
       return response;
     },
+    shareUrlCache,
   });
 
   if (delivered.length === 0) {
     return;
   }
 
-  let registry = input.sessionStore.getDeliverableArtifacts(input.conversationKey);
+  let registry = input.sessionStore.getDeliverableArtifacts(
+    input.conversationKey
+  );
   for (const artifact of delivered) {
     registry = pushDeliverableArtifact(registry, artifact);
   }

@@ -1,7 +1,9 @@
 import type { ImageAttachment } from "@nakama/core/contract";
 import { parseDataUrl } from "@nakama/core/message-content";
 
-export function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
+export function fileToImageAttachment(
+  file: File
+): Promise<ImageAttachment | null> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onloadend = () => {

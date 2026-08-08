@@ -1,11 +1,11 @@
 import {
   BUNDLED_SKILL_NAMES,
-  getUserMessageText,
   type ChatMessage,
+  getUserMessageText,
   type ProviderClient,
 } from "@nakama/core";
 
-const TURN_SNIPPET_MAX = 4_000;
+const TURN_SNIPPET_MAX = 4000;
 const TOOL_RESULT_MAX = 400;
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
@@ -15,8 +15,8 @@ export type SkillPostTurnReviewOutcome =
   | { action: "patch"; name: string; oldString: string; newString: string };
 
 export interface SkillCatalogEntry {
-  name: string;
   description: string;
+  name: string;
 }
 
 const REVIEW_SYSTEM = [
@@ -66,14 +66,17 @@ export function buildSkillPostTurnReviewPrompt(input: {
       continue;
     }
     if (message.role === "assistant") {
-      const tools = message.toolCalls?.map((call) => call.name).join(", ") ?? "";
+      const tools =
+        message.toolCalls?.map((call) => call.name).join(", ") ?? "";
       lines.push(
-        `Assistant: ${truncate(message.content || "(tool calls)", 800)}${tools ? ` [tools: ${tools}]` : ""}`,
+        `Assistant: ${truncate(message.content || "(tool calls)", 800)}${tools ? ` [tools: ${tools}]` : ""}`
       );
       continue;
     }
     if (message.role === "tool") {
-      lines.push(`Tool ${message.name}: ${truncate(message.content, TOOL_RESULT_MAX)}`);
+      lines.push(
+        `Tool ${message.name}: ${truncate(message.content, TOOL_RESULT_MAX)}`
+      );
     }
   }
 
@@ -108,7 +111,7 @@ function isValidSkillName(name: string): boolean {
 
 export function parseSkillPostTurnReviewResponse(
   raw: string,
-  options: { catalogNames: Set<string> },
+  options: { catalogNames: Set<string> }
 ): SkillPostTurnReviewOutcome {
   const parsed = extractJsonObject(raw);
   if (typeof parsed !== "object" || parsed === null) {
@@ -132,7 +135,7 @@ export function parseSkillPostTurnReviewResponse(
   if (action === "create") {
     const name = typeof record.name === "string" ? record.name.trim() : "";
     const content = typeof record.content === "string" ? record.content : "";
-    if (!isValidSkillName(name) || !content.trim()) {
+    if (!(isValidSkillName(name) && content.trim())) {
       return { action: "noop", reason: "invalid_create" };
     }
     if (bundledNames.has(name)) {
@@ -141,14 +144,16 @@ export function parseSkillPostTurnReviewResponse(
     if (options.catalogNames.has(name)) {
       return { action: "noop", reason: "create_collides_with_existing" };
     }
-    return { action: "create", name, content };
+    return { action: "create", content, name };
   }
 
   if (action === "patch") {
     const name = typeof record.name === "string" ? record.name.trim() : "";
-    const oldString = typeof record.oldString === "string" ? record.oldString : "";
-    const newString = typeof record.newString === "string" ? record.newString : "";
-    if (!isValidSkillName(name) || !oldString || newString === undefined) {
+    const oldString =
+      typeof record.oldString === "string" ? record.oldString : "";
+    const newString =
+      typeof record.newString === "string" ? record.newString : "";
+    if (!(isValidSkillName(name) && oldString) || newString === undefined) {
       return { action: "noop", reason: "invalid_patch" };
     }
     if (bundledNames.has(name)) {
@@ -157,7 +162,7 @@ export function parseSkillPostTurnReviewResponse(
     if (!options.catalogNames.has(name)) {
       return { action: "noop", reason: "patch_unknown_skill" };
     }
-    return { action: "patch", name, oldString, newString };
+    return { action: "patch", name, newString, oldString };
   }
 
   return { action: "noop", reason: "unknown_action" };
@@ -169,16 +174,16 @@ export async function generateSkillPostTurnReview(input: {
   provider: ProviderClient;
 }): Promise<SkillPostTurnReviewOutcome> {
   const prompt = buildSkillPostTurnReviewPrompt({
-    turnMessages: input.turnMessages,
     catalog: input.catalog,
+    turnMessages: input.turnMessages,
   });
   const catalogNames = new Set(input.catalog.map((skill) => skill.name));
 
   try {
     const result = await input.provider.generateText({
-      system: REVIEW_SYSTEM,
-      prompt,
       format: "text",
+      prompt,
+      system: REVIEW_SYSTEM,
     });
     return parseSkillPostTurnReviewResponse(result.content, { catalogNames });
   } catch (error) {

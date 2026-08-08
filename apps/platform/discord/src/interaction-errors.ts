@@ -1,7 +1,7 @@
 /** Discord: Unknown interaction (expired or already handled). */
-const UNKNOWN_INTERACTION = 10062;
+const UNKNOWN_INTERACTION = 10_062;
 /** Discord: Interaction has already been acknowledged. */
-const ALREADY_ACKNOWLEDGED = 40060;
+const ALREADY_ACKNOWLEDGED = 40_060;
 
 export function getDiscordErrorCode(error: unknown): number | null {
   if (

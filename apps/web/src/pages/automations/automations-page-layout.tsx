@@ -44,7 +44,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
       {error ? (
         <p
-          className="shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
           role="alert"
         >
           {error}
@@ -52,20 +52,26 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
       ) : null}
 
       <section
-        className={cn(sectionClass, "flex min-h-0 flex-1 flex-col overflow-hidden")}
+        className={cn(
+          sectionClass,
+          "flex min-h-0 flex-1 flex-col overflow-hidden"
+        )}
       >
-        <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 lg:hidden">
+        <div className="flex shrink-0 flex-col gap-3 border-border border-b p-4 lg:hidden">
           <div className="flex flex-wrap items-center gap-3">
             <Select
-              value={selectedId ?? undefined}
               disabled={busy || refreshing || automations.length === 0}
               onValueChange={(value) => {
                 if (value) {
                   setSelectedId(String(value));
                 }
               }}
+              value={selectedId ?? undefined}
             >
-              <SelectTrigger className="min-w-0 flex-1" aria-label="Selected automation">
+              <SelectTrigger
+                aria-label="Selected automation"
+                className="min-w-0 flex-1"
+              >
                 <SelectValue placeholder="Select automation" />
               </SelectTrigger>
               <SelectContent>
@@ -82,32 +88,32 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
 
             <div className="flex shrink-0 items-center gap-1">
               <Button
+                aria-label="Refresh automations"
+                disabled={busy || refreshing}
+                onClick={() => void refresh()}
+                size="icon-sm"
                 type="button"
                 variant="ghost"
-                size="icon-sm"
-                disabled={busy || refreshing}
-                aria-label="Refresh automations"
-                onClick={() => void refresh()}
               >
                 {refreshing ? (
                   <Spinner className="size-4" />
                 ) : (
-                  <RefreshCwIcon className="size-4" aria-hidden />
+                  <RefreshCwIcon aria-hidden className="size-4" />
                 )}
               </Button>
-              <Button type="button" size="sm" onClick={goToCreateAutomation}>
-                <MessageSquareIcon className="size-4" aria-hidden />
+              <Button onClick={goToCreateAutomation} size="sm" type="button">
+                <MessageSquareIcon aria-hidden className="size-4" />
                 Create automation
               </Button>
             </div>
           </div>
 
           <AutomationSearch
-            value={searchQuery}
             disabled={initialLoading || automations.length === 0 || busy}
             isSearching={isSearching}
             onChange={setSearchQuery}
             onClear={() => setSearchQuery("")}
+            value={searchQuery}
           />
         </div>
 
@@ -120,16 +126,16 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
             ) : automations.length === 0 ? (
               <AutomationPanelPlaceholder>
                 <AutomationsEmptyState />
-                <Button type="button" size="sm" onClick={goToCreateAutomation}>
+                <Button onClick={goToCreateAutomation} size="sm" type="button">
                   Create automation
                 </Button>
               </AutomationPanelPlaceholder>
-            ) : !selected ? (
+            ) : selected ? (
+              <AutomationDetailPanel {...state} />
+            ) : (
               <AutomationPanelPlaceholder>
                 Select an automation to view runs.
               </AutomationPanelPlaceholder>
-            ) : (
-              <AutomationDetailPanel {...state} />
             )}
           </div>
         </div>

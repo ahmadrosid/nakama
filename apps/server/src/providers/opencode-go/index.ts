@@ -26,7 +26,7 @@ export interface OpenCodeGoProviderOptions {
 }
 
 export function createOpenCodeGoProvider(
-  options: OpenCodeGoProviderOptions,
+  options: OpenCodeGoProviderOptions
 ): ProviderClient {
   const model = options.model ?? "opencode-go/kimi-k2.7-code";
   const useMessages = MESSAGES_MODELS.has(model);
@@ -34,26 +34,29 @@ export function createOpenCodeGoProvider(
   if (useMessages) {
     const anthropic = createAnthropicProvider({
       apiKey: options.apiKey,
-      model,
       baseUrl: OPENCODE_GO_MESSAGES_BASE_URL,
-      providerName: "opencode_go",
+      model,
       providerLabel: "OpenCode Go",
+      providerName: "opencode_go",
     });
 
     return {
-      name: "opencode_go",
-      generateText: (input: GenerateTextInput) => anthropic.generateText(input),
       generateChat: (input: GenerateChatInput) =>
         anthropic.generateChat({ ...input, providerOptions: undefined }),
+      generateText: (input: GenerateTextInput) => anthropic.generateText(input),
+      name: "opencode_go",
       streamChat: (input: GenerateChatInput, handlers: StreamChatHandlers) =>
-        anthropic.streamChat({ ...input, providerOptions: undefined }, handlers),
+        anthropic.streamChat(
+          { ...input, providerOptions: undefined },
+          handlers
+        ),
     };
   }
 
   return createOpenAIProvider({
     apiKey: options.apiKey,
-    model,
     baseUrl: OPENCODE_GO_CHAT_BASE_URL,
+    model,
     providerName: "opencode_go",
   });
 }

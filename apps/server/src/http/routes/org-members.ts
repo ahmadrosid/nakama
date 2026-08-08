@@ -8,21 +8,26 @@ import type {
   OrgMemberResponse,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
-import type { HonoApp } from "../types";
 import type { ServerOptions } from "../context";
-import { errorResponse, json, readJson } from "../shared";
 import { requireOrgAdminFromContext } from "../org-guards";
+import { errorResponse, json, readJson } from "../shared";
+import type { HonoApp } from "../types";
 
-export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerOrgMemberRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { orgService } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const orgIdParam = z.object({
-    orgId: z.string().openapi({ param: { name: "orgId", in: "path" } }),
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
   const addOrgMemberSchema = z
     .object({
-      name: z.string(),
       email: z.string(),
+      name: z.string(),
       phone: z.string().optional(),
       role: z.enum(["admin", "member", "viewer"]),
     })
@@ -33,13 +38,22 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
       role: z.enum(["admin", "member", "viewer"]),
     })
     .openapi("InviteOrgMemberRequest");
-  const addOrgMemberResponseSchema = z.object({}).passthrough().openapi("AddOrgMemberResponse");
-  const orgInviteCreatedSchema = z.object({}).passthrough().openapi("OrgInviteCreatedResponse");
+  const addOrgMemberResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("AddOrgMemberResponse");
+  const orgInviteCreatedSchema = z
+    .object({})
+    .passthrough()
+    .openapi("OrgInviteCreatedResponse");
   const listOrgMembersResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ListOrgMembersResponse");
-  const orgMemberResponseSchema = z.object({}).passthrough().openapi("OrgMemberResponse");
+  const orgMemberResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("OrgMemberResponse");
   const updateOrgMemberSchema = z
     .object({
       name: z.string().nullable().optional(),
@@ -48,35 +62,52 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
     })
     .openapi("UpdateOrgMemberRequest");
   const orgMemberParams = orgIdParam.extend({
-    userId: z.string().openapi({ param: { name: "userId", in: "path" } }),
+    userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
   });
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/members",
-      tags: ["Organizations"],
-      summary: "Add a member with a generated temporary password",
       operationId: "addOrgMember",
+      path: "/v1/orgs/{orgId}/members",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: addOrgMemberSchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         201: {
+          content: {
+            "application/json": { schema: addOrgMemberResponseSchema },
+          },
           description: "Member added",
-          content: { "application/json": { schema: addOrgMemberResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Add a member with a generated temporary password",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/members", async (c) => {
@@ -93,9 +124,9 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
 
     const body = await readJson<AddOrgMemberRequest>(c.req.raw);
     const member = await orgService.addMember({
-      orgId,
-      name: body.name,
       email: body.email,
+      name: body.name,
+      orgId,
       phone: body.phone ?? "",
       role: body.role,
     });
@@ -106,29 +137,44 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/invites",
-      tags: ["Organizations"],
-      summary: "Invite a user to an organization",
       operationId: "inviteOrgMember",
+      path: "/v1/orgs/{orgId}/invites",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: { "application/json": { schema: inviteOrgMemberSchema } },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         201: {
-          description: "Invite created",
           content: { "application/json": { schema: orgInviteCreatedSchema } },
+          description: "Invite created",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Invite a user to an organization",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/invites", async (c) => {
@@ -145,10 +191,10 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
 
     const body = await readJson<InviteOrgMemberRequest>(c.req.raw);
     const invite = await orgService.createInvite({
-      orgId,
       email: body.email,
-      role: body.role,
       invitedByUserId: auth.user.id,
+      orgId,
+      role: body.role,
     });
 
     return json<OrgInviteCreatedResponse>(invite, 201);
@@ -157,21 +203,32 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/members",
-      tags: ["Organizations"],
-      summary: "List organization members",
       operationId: "listOrgMembers",
+      path: "/v1/orgs/{orgId}/members",
       request: { params: orgIdParam },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: listOrgMembersResponseSchema },
+          },
           description: "Members listed",
-          content: { "application/json": { schema: listOrgMembersResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "List organization members",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/members", async (c) => {
@@ -192,29 +249,44 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "patch",
-      path: "/v1/orgs/{orgId}/members/{userId}",
-      tags: ["Organizations"],
-      summary: "Update a member profile or role",
       operationId: "updateOrgMember",
+      path: "/v1/orgs/{orgId}/members/{userId}",
       request: {
-        params: orgMemberParams,
         body: {
-          required: true,
           content: { "application/json": { schema: updateOrgMemberSchema } },
+          required: true,
         },
+        params: orgMemberParams,
       },
       responses: {
         200: {
-          description: "Member updated",
           content: { "application/json": { schema: orgMemberResponseSchema } },
+          description: "Member updated",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Update a member profile or role",
+      tags: ["Organizations"],
+    })
   );
 
   app.patch("/v1/orgs/:orgId/members/:userId", async (c) => {
@@ -238,19 +310,31 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "delete",
-      path: "/v1/orgs/{orgId}/members/{userId}",
-      tags: ["Organizations"],
-      summary: "Remove a member from an organization",
       operationId: "removeOrgMember",
+      path: "/v1/orgs/{orgId}/members/{userId}",
       request: { params: orgMemberParams },
       responses: {
         204: { description: "Member removed" },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Remove a member from an organization",
+      tags: ["Organizations"],
+    })
   );
 
   app.delete("/v1/orgs/:orgId/members/:userId", async (c) => {
@@ -273,36 +357,53 @@ export function registerOrgMemberRoutes(app: HonoApp, options: ServerOptions): v
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "patch",
-      path: "/v1/orgs/{orgId}",
-      tags: ["Organizations"],
-      summary: "Update an organization",
       operationId: "updateOrganization",
+      path: "/v1/orgs/{orgId}",
       request: {
-        params: orgIdParam,
         body: {
-          required: true,
           content: {
             "application/json": {
-              schema: z.object({ name: z.string() }).openapi("UpdateOrganizationRequest"),
+              schema: z
+                .object({ name: z.string() })
+                .openapi("UpdateOrganizationRequest"),
             },
           },
+          required: true,
         },
+        params: orgIdParam,
       },
       responses: {
         200: {
-          description: "Organization updated",
           content: {
             "application/json": {
-              schema: z.object({}).passthrough().openapi("OrganizationResponse"),
+              schema: z
+                .object({})
+                .passthrough()
+                .openapi("OrganizationResponse"),
             },
           },
+          description: "Organization updated",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Update an organization",
+      tags: ["Organizations"],
+    })
   );
 
   app.patch("/v1/orgs/:orgId", async (c) => {

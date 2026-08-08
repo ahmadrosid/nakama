@@ -14,7 +14,7 @@ export function PlatformAdminGuard() {
   }
 
   if (!user?.isPlatformAdmin) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate replace to="/chat" />;
   }
 
   return <Outlet />;

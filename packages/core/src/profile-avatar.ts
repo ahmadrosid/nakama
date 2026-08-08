@@ -13,29 +13,29 @@ import { getProfileSoulDir } from "./soul/resolve";
 const AVATAR_BASENAME = "avatar";
 
 const MEDIA_TYPE_TO_EXTENSION: Record<string, string> = {
+  "image/gif": "gif",
   "image/jpeg": "jpg",
   "image/png": "png",
-  "image/gif": "gif",
   "image/webp": "webp",
 };
 
 const EXTENSION_TO_MEDIA_TYPE: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
   gif: "image/gif",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
   webp: "image/webp",
 };
 
 export interface ProfileAvatarData {
-  mediaType: string;
   bytes: Buffer;
+  mediaType: string;
 }
 
 export function getProfileAvatarPath(
   orgId: string,
   profileId: string,
-  mediaType?: string,
+  mediaType?: string
 ): string {
   const directory = getProfileSoulDir(orgId, profileId);
 
@@ -52,14 +52,17 @@ export function getProfileAvatarPath(
   return join(directory, `${AVATAR_BASENAME}.${extension}`);
 }
 
-export async function hasProfileAvatar(orgId: string, profileId: string): Promise<boolean> {
+export async function hasProfileAvatar(
+  orgId: string,
+  profileId: string
+): Promise<boolean> {
   return (await findProfileAvatarFile(orgId, profileId)) !== null;
 }
 
 export async function saveProfileAvatar(
   orgId: string,
   profileId: string,
-  attachment: ImageAttachment,
+  attachment: ImageAttachment
 ): Promise<void> {
   validateImageAttachments([attachment]);
 
@@ -78,7 +81,7 @@ export async function saveProfileAvatar(
 
 export async function readProfileAvatar(
   orgId: string,
-  profileId: string,
+  profileId: string
 ): Promise<ProfileAvatarData | null> {
   const filePath = await findProfileAvatarFile(orgId, profileId);
 
@@ -95,10 +98,13 @@ export async function readProfileAvatar(
 
   const bytes = await readBytes(filePath);
 
-  return { mediaType, bytes };
+  return { bytes, mediaType };
 }
 
-export async function deleteProfileAvatar(orgId: string, profileId: string): Promise<boolean> {
+export async function deleteProfileAvatar(
+  orgId: string,
+  profileId: string
+): Promise<boolean> {
   const directory = getProfileSoulDir(orgId, profileId);
   const entries = await readDirectoryOrEmpty(directory);
   let removed = false;
@@ -115,7 +121,10 @@ export async function deleteProfileAvatar(orgId: string, profileId: string): Pro
   return removed;
 }
 
-async function findProfileAvatarFile(orgId: string, profileId: string): Promise<string | null> {
+async function findProfileAvatarFile(
+  orgId: string,
+  profileId: string
+): Promise<string | null> {
   const directory = getProfileSoulDir(orgId, profileId);
   const entries = await readDirectoryOrEmpty(directory);
 

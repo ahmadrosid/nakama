@@ -42,11 +42,11 @@ export class LlmUsageTracker {
     const byModel = await this.db.listLlmUsageStatsByModel();
     for (const entry of byModel) {
       this.usageByModel.set(entry.modelId, {
-        modelId: entry.modelId,
-        requestCount: entry.requestCount,
-        inputTokens: entry.inputTokens,
-        outputTokens: entry.outputTokens,
         estimatedCostUsd: entry.estimatedCostUsd,
+        inputTokens: entry.inputTokens,
+        modelId: entry.modelId,
+        outputTokens: entry.outputTokens,
+        requestCount: entry.requestCount,
         trackedSince: entry.trackedSince,
       });
     }
@@ -71,7 +71,7 @@ export class LlmUsageTracker {
       modelId,
       inputTokens,
       outputTokens,
-      this.pricingContext,
+      this.pricingContext
     );
 
     this.requestCount += 1;
@@ -81,35 +81,45 @@ export class LlmUsageTracker {
 
     const existing = this.usageByModel.get(modelId);
     this.usageByModel.set(modelId, {
-      modelId,
-      requestCount: (existing?.requestCount ?? 0) + 1,
-      inputTokens: (existing?.inputTokens ?? 0) + inputTokens,
-      outputTokens: (existing?.outputTokens ?? 0) + outputTokens,
       estimatedCostUsd: (existing?.estimatedCostUsd ?? 0) + costDelta,
+      inputTokens: (existing?.inputTokens ?? 0) + inputTokens,
+      modelId,
+      outputTokens: (existing?.outputTokens ?? 0) + outputTokens,
+      requestCount: (existing?.requestCount ?? 0) + 1,
       trackedSince: existing?.trackedSince ?? new Date().toISOString(),
     });
 
-    void this.persist({
-      requestCount: 1,
-      inputTokens,
-      outputTokens,
-      estimatedCostUsd: costDelta,
-    }, modelId);
+    void this.persist(
+      {
+        estimatedCostUsd: costDelta,
+        inputTokens,
+        outputTokens,
+        requestCount: 1,
+      },
+      modelId
+    );
   }
 
-  private async persist(delta: {
-    requestCount: number;
-    inputTokens: number;
-    outputTokens: number;
-    estimatedCostUsd: number;
-  }, modelId: string): Promise<void> {
+  private async persist(
+    delta: {
+      requestCount: number;
+      inputTokens: number;
+      outputTokens: number;
+      estimatedCostUsd: number;
+    },
+    modelId: string
+  ): Promise<void> {
     if (!this.db) {
       return;
     }
 
     try {
       await this.db.incrementLlmUsageStats(delta, this.trackedSince);
-      await this.db.incrementLlmUsageStatsByModel(modelId, delta, this.usageByModel.get(modelId)?.trackedSince ?? this.trackedSince);
+      await this.db.incrementLlmUsageStatsByModel(
+        modelId,
+        delta,
+        this.usageByModel.get(modelId)?.trackedSince ?? this.trackedSince
+      );
     } catch (error) {
       console.warn("Failed to persist LLM usage stats:", error);
     }
@@ -117,11 +127,11 @@ export class LlmUsageTracker {
 
   getStats(): LlmUsageStats {
     return {
-      requestCount: this.requestCount,
+      estimatedCostUsd: this.estimatedCostUsd,
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
+      requestCount: this.requestCount,
       totalTokens: this.inputTokens + this.outputTokens,
-      estimatedCostUsd: this.estimatedCostUsd,
       trackedSince: this.trackedSince,
     };
   }

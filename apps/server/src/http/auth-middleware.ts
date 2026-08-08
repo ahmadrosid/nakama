@@ -1,13 +1,12 @@
 import type { MiddlewareHandler } from "hono";
-import type { AppEnv } from "./types";
 import type { ServerOptions } from "./context";
-import {
-  assertBrowserCsrf,
-  authenticateRequest,
-} from "./shared";
 import { isPublicRouteRequest } from "./public-routes";
+import { assertBrowserCsrf, authenticateRequest } from "./shared";
+import type { AppEnv } from "./types";
 
-export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler<AppEnv> {
+export function createAuthMiddleware(
+  options: ServerOptions
+): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const { authService, databaseAdapter } = options;
 
@@ -17,13 +16,23 @@ export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler<
     }
 
     if (!databaseAdapter) {
-      c.res = Response.json({ error: "Authentication not configured" }, { status: 500 });
+      c.res = Response.json(
+        { error: "Authentication not configured" },
+        { status: 500 }
+      );
       return;
     }
 
-    const auth = await authenticateRequest(c.req.raw, authService, databaseAdapter);
+    const auth = await authenticateRequest(
+      c.req.raw,
+      authService,
+      databaseAdapter
+    );
     if (!auth) {
-      c.res = Response.json({ error: "Authentication required" }, { status: 401 });
+      c.res = Response.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
       return;
     }
 
@@ -38,7 +47,7 @@ export function createAuthMiddleware(options: ServerOptions): MiddlewareHandler<
       ) {
         c.res = Response.json(
           { error: String(error.message) },
-          { status: Number(error.status) },
+          { status: Number(error.status) }
         );
         return;
       }

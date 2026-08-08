@@ -1,31 +1,31 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
 import type {
   GenerateChatInput,
-  GenerateTextResult,
   GenerateTextInput,
+  GenerateTextResult,
   ProviderClient,
   ProviderName,
   StreamChatHandlers,
 } from "@nakama/core";
-import { continueAnthropicUntilDone } from "./web-search";
 import { buildTokenUsage } from "../shared";
+import { continueAnthropicUntilDone } from "./web-search";
 
 const DEFAULT_PROVIDER_LABEL = "Anthropic";
 
 export interface AnthropicProviderOptions {
   apiKey: string;
-  model?: string;
   baseUrl?: string;
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetch?: typeof fetch;
-  providerName?: ProviderName;
+  model?: string;
   providerLabel?: string;
+  providerName?: ProviderName;
 }
 
 function createAnthropicClient(
   apiKey: string,
   baseUrl?: string,
-  fetchImpl?: typeof fetch,
+  fetchImpl?: typeof fetch
 ): Anthropic {
   return new Anthropic({
     apiKey,
@@ -37,7 +37,7 @@ function createAnthropicClient(
 function formatAnthropicError(error: unknown, label: string): Error {
   if (error instanceof APIError) {
     return new Error(
-      `${label} request failed (${error.status}): ${error.message}`,
+      `${label} request failed (${error.status}): ${error.message}`
     );
   }
 
@@ -50,7 +50,7 @@ function formatAnthropicError(error: unknown, label: string): Error {
 
 async function withAnthropicError<T>(
   run: () => Promise<T>,
-  label: string,
+  label: string
 ): Promise<T> {
   try {
     return await run();
@@ -60,15 +60,35 @@ async function withAnthropicError<T>(
 }
 
 export function createAnthropicProvider(
-  options: AnthropicProviderOptions,
+  options: AnthropicProviderOptions
 ): ProviderClient {
   const model = options.model ?? "claude-sonnet-4-6";
-  const client = createAnthropicClient(options.apiKey, options.baseUrl, options.fetch);
+  const client = createAnthropicClient(
+    options.apiKey,
+    options.baseUrl,
+    options.fetch
+  );
   const name: ProviderName = options.providerName ?? "anthropic";
   const label = options.providerLabel ?? DEFAULT_PROVIDER_LABEL;
 
   return {
-    name,
+    generateChat(input: GenerateChatInput) {
+      return withAnthropicError(
+        () =>
+          continueAnthropicUntilDone({
+            client,
+            messages: input.messages,
+            model,
+            provider: name,
+            stream: false,
+            system: input.system,
+            thinking: input.providerOptions,
+            tools: input.tools,
+            webSearch: input.providerOptions?.webSearch ?? false,
+          }),
+        label
+      );
+    },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -77,10 +97,10 @@ export function createAnthropicProvider(
 
       return withAnthropicError(async () => {
         const message = await client.messages.create({
-          model,
           max_tokens: 2048,
+          messages: [{ content: input.prompt, role: "user" }],
+          model,
           system,
-          messages: [{ role: "user", content: input.prompt }],
         });
 
         const content = message.content
@@ -104,39 +124,23 @@ export function createAnthropicProvider(
         } satisfies GenerateTextResult;
       }, label);
     },
-    generateChat(input: GenerateChatInput) {
-      return withAnthropicError(
-        () =>
-          continueAnthropicUntilDone({
-            client,
-            model,
-            system: input.system,
-            messages: input.messages,
-            tools: input.tools,
-            webSearch: input.providerOptions?.webSearch ?? false,
-            thinking: input.providerOptions,
-            stream: false,
-            provider: name,
-          }),
-        label,
-      );
-    },
+    name,
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withAnthropicError(
         () =>
           continueAnthropicUntilDone({
             client,
-            model,
-            system: input.system,
+            handlers,
             messages: input.messages,
+            model,
+            provider: name,
+            stream: true,
+            system: input.system,
+            thinking: input.providerOptions,
             tools: input.tools,
             webSearch: input.providerOptions?.webSearch ?? false,
-            thinking: input.providerOptions,
-            stream: true,
-            handlers,
-            provider: name,
           }),
-        label,
+        label
       );
     },
   };

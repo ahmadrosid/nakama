@@ -1,13 +1,17 @@
-import { readFile, readdir, realpath, stat, unlink } from "node:fs/promises";
+import { readdir, readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { inferArtifactMimeType, isDocxFile, isLegacyDocFile } from "./artifact-mime";
-import { convertDocxToMarkdown } from "./docx-text";
+import {
+  inferArtifactMimeType,
+  isDocxFile,
+  isLegacyDocFile,
+} from "./artifact-mime";
 import type {
   ArtifactFile,
   DeleteArtifactResponse,
   ListArtifactsResponse,
 } from "./contract";
+import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
 import { getProfileArtifactsDir } from "./soul/resolve";
 import { guardFilePath } from "./tools/paths";
@@ -32,22 +36,27 @@ function isArtifactMetaFile(filename: string): boolean {
 
 export async function listArtifacts(
   orgId: string,
-  profileId: string,
+  profileId: string
 ): Promise<ListArtifactsResponse> {
   const directory = getProfileArtifactsDir(orgId, profileId);
 
   if (!(await pathExists(directory))) {
-    return { profileId, directory, artifacts: [] };
+    return { artifacts: [], directory, profileId };
   }
 
   const resolvedDirectory = await realpath(directory);
   const artifacts = await walkArtifacts(resolvedDirectory, resolvedDirectory);
-  artifacts.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  artifacts.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
 
-  return { profileId, directory: resolvedDirectory, artifacts };
+  return { artifacts, directory: resolvedDirectory, profileId };
 }
 
-async function walkArtifacts(rootDir: string, currentDir: string): Promise<ArtifactFile[]> {
+async function walkArtifacts(
+  rootDir: string,
+  currentDir: string
+): Promise<ArtifactFile[]> {
   const entries = await readdir(currentDir, { withFileTypes: true });
   const files: ArtifactFile[] = [];
 
@@ -55,7 +64,7 @@ async function walkArtifacts(rootDir: string, currentDir: string): Promise<Artif
     const absolutePath = path.join(currentDir, entry.name);
 
     if (entry.isDirectory()) {
-      files.push(...await walkArtifacts(rootDir, absolutePath));
+      files.push(...(await walkArtifacts(rootDir, absolutePath)));
       continue;
     }
 
@@ -64,11 +73,15 @@ async function walkArtifacts(rootDir: string, currentDir: string): Promise<Artif
     }
 
     const fileStat = await stat(absolutePath);
-    const metadata = await readArtifactMeta(absolutePath, fileStat.size, fileStat.mtime.toISOString());
+    const metadata = await readArtifactMeta(
+      absolutePath,
+      fileStat.size,
+      fileStat.mtime.toISOString()
+    );
     files.push({
       filename: path.relative(rootDir, absolutePath),
-      path: absolutePath,
       mimeType: metadata.mimeType,
+      path: absolutePath,
       sizeBytes: metadata.sizeBytes,
       updatedAt: metadata.savedAt,
     });
@@ -80,7 +93,7 @@ async function walkArtifacts(rootDir: string, currentDir: string): Promise<Artif
 async function readArtifactMeta(
   filePath: string,
   fallbackSizeBytes: number,
-  fallbackSavedAt: string,
+  fallbackSavedAt: string
 ): Promise<ArtifactMeta> {
   const metaPath = getArtifactMetaPath(filePath);
 
@@ -121,12 +134,17 @@ export async function readArtifactFile(input: {
     throw new Error(`Artifact not found: ${input.filename}`);
   }
 
-  const metadata = await readArtifactMeta(filePath, fileStat.size, fileStat.mtime.toISOString());
+  const metadata = await readArtifactMeta(
+    filePath,
+    fileStat.size,
+    fileStat.mtime.toISOString()
+  );
   const bytes = await readFile(filePath);
   const filename = path.basename(filePath);
 
   const isWordLike =
-    isDocxFile(filename, metadata.mimeType) || isLegacyDocFile(filename, metadata.mimeType);
+    isDocxFile(filename, metadata.mimeType) ||
+    isLegacyDocFile(filename, metadata.mimeType);
 
   if (input.render === "markdown" && isWordLike) {
     const markdown = await convertDocxToMarkdown(bytes);
@@ -171,7 +189,7 @@ export async function deleteArtifactFile(input: {
 
   return {
     deleted: true,
-    profileId: input.profileId,
     filename: path.relative(resolvedArtifactsDir, filePath),
+    profileId: input.profileId,
   };
 }

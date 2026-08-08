@@ -4,13 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildCrashReport,
+  type CrashReport,
   flushPendingCrashReports,
   reportError,
   setCrashLogger,
   setCrashSink,
-  type CrashReport,
 } from "./crash-report";
-import { resetCrashReportConsentCache, saveCrashReportConsent } from "./crash-report-config";
+import {
+  resetCrashReportConsentCache,
+  saveCrashReportConsent,
+} from "./crash-report-config";
 import {
   appendPendingCrashReport,
   clearPendingCrashReports,
@@ -43,7 +46,7 @@ afterEach(async () => {
   resetCrashReportConsentCache();
   setCrashLogger(null);
   setCrashSink(null);
-  await rm(configDir, { recursive: true, force: true });
+  await rm(configDir, { force: true, recursive: true });
 });
 
 function reportWithMessage(message: string): CrashReport {
@@ -63,13 +66,21 @@ test("a crash loop does not push the other bugs out of the pending file", async 
 test("the pending file is bounded", async () => {
   // Distinct wording, not a counter: the fingerprint normalizes numbers away, so
   // "bug 1" and "bug 2" are correctly one bug and would be deduplicated instead.
-  const distinctBugs = ["alpha broke", "beta broke", "gamma broke", "delta broke", "epsilon broke"];
+  const distinctBugs = [
+    "alpha broke",
+    "beta broke",
+    "gamma broke",
+    "delta broke",
+    "epsilon broke",
+  ];
 
   for (const message of distinctBugs) {
     await appendPendingCrashReport(reportWithMessage(message));
   }
 
-  expect(await readPendingCrashReports()).toHaveLength(MAX_PENDING_CRASH_REPORTS);
+  expect(await readPendingCrashReports()).toHaveLength(
+    MAX_PENDING_CRASH_REPORTS
+  );
 });
 
 test("a corrupt pending file reads as empty rather than throwing", async () => {

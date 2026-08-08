@@ -47,9 +47,9 @@ Flags:
 
 ## Commits and pull requests
 
-Cursor Agent can create branches, commit, push, and open GitHub PRs with `git` + `gh` on the host (same capabilities as a local checkout). Include that in the `-p` brief when the user wants an issue resolved, a fix shipped, or a PR opened — do not stop at uncommitted edits on `main`.
+Cursor Agent can create branches, commit, push, and open GitHub PRs with `git` + `gh` on the host (same capabilities as a local checkout). For implementation runs (feature / fix / repo change), include that in the `-p` brief by default — do not stop at uncommitted edits on `main`. Skip commit/push/PR only when the user explicitly asked for local-only work (exploration, draft, "just look", "don't push").
 
-When shipping / opening a PR, put this in the agent prompt (adapt issue number, title, and scope):
+For implementation runs, put this in the agent prompt (adapt issue number, title, and scope):
 
 ```bash
 agent -p 'Fix issue #175: <short problem + required changes>.
@@ -65,7 +65,7 @@ Do not force-push. Do not skip hooks.' --output-format text --yolo
 
 Rules:
 
-- Only require commit/push/PR when user intent includes shipping (fix an issue, open a PR, ship, create a PR). For local-only exploration or “just look”, skip git publish steps.
+- Require commit/push/PR by default for implementation runs. Skip git publish steps only when the user explicitly asked for local-only work (exploration, draft, "just look", "don't push").
 - Prefer one coding-agent run that implements **and** opens the PR. If the first run left uncommitted work, follow up with another `agent -p` (or bash `gh`/`git`) in the same repo `cwd` to finish ship — verify with `git status` / `gh pr view` first.
 - Host needs `gh` authenticated for the target remote. If push/PR fails on auth, tell the user to fix host `gh auth` / git credentials, then retry.
 - Never invent a PR URL. Confirm from agent stdout or `gh pr list` / `gh pr view`.

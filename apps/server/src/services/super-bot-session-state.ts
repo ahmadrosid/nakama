@@ -1,6 +1,6 @@
 interface TurnState {
-  createdToolIds: Set<string>;
   assignedToolIds: Set<string>;
+  createdToolIds: Set<string>;
 }
 
 export class SuperBotSessionState {
@@ -8,8 +8,8 @@ export class SuperBotSessionState {
 
   beginTurn(sessionId: string): void {
     this.turns.set(sessionId, {
-      createdToolIds: new Set(),
       assignedToolIds: new Set(),
+      createdToolIds: new Set(),
     });
   }
 
@@ -52,8 +52,8 @@ export class SuperBotSessionState {
 
     if (!turn) {
       turn = {
-        createdToolIds: new Set(),
         assignedToolIds: new Set(),
+        createdToolIds: new Set(),
       };
       this.turns.set(sessionId, turn);
     }

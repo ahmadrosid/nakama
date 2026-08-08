@@ -13,15 +13,15 @@ const catalog: ListTimezonesResponse = {
       countryName: "Indonesia",
       timezones: [
         {
-          id: "Asia/Jakarta",
+          abbreviation: "WIB",
+          aliases: ["Jakarta Raya"],
+          city: "Jakarta",
           countryCode: "ID",
           countryName: "Indonesia",
-          city: "Jakarta",
+          id: "Asia/Jakarta",
           label: "Jakarta · UTC+07:00",
           offset: "UTC+07:00",
-          abbreviation: "WIB",
           tzName: "Western Indonesia Time",
-          aliases: ["Jakarta Raya"],
         },
       ],
     },
@@ -30,9 +30,11 @@ const catalog: ListTimezonesResponse = {
 
 describe("timezone helpers", () => {
   test("finds and displays a timezone entry", () => {
-    expect(findTimezoneEntry("Asia/Jakarta", catalog)?.label).toBe("Jakarta · UTC+07:00");
+    expect(findTimezoneEntry("Asia/Jakarta", catalog)?.label).toBe(
+      "Jakarta · UTC+07:00"
+    );
     expect(getTimezoneDisplay("Asia/Jakarta", "Select timezone", catalog)).toBe(
-      "Jakarta · UTC+07:00",
+      "Jakarta · UTC+07:00"
     );
   });
 

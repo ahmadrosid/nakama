@@ -15,7 +15,7 @@ export class RafValueCoalescer<T> {
 
   constructor(
     initial: T,
-    private readonly onFlush: (value: T) => void,
+    private readonly onFlush: (value: T) => void
   ) {
     this.pending = initial;
   }

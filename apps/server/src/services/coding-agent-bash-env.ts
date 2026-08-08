@@ -1,17 +1,19 @@
-import type { DatabaseAdapter } from "@nakama/db";
 import type { ToolContext, UserConfig } from "@nakama/core";
-import { mergeCodingAgentSpawnEnv } from "./coding-agent-spawn-env";
+import type { DatabaseAdapter } from "@nakama/db";
 import {
   inferCodingAgentHarnessKind,
   isCodingAgentCommand,
   loadCodingAgentWorkspaceSettings,
   resolveCodingAgentHarness,
 } from "./coding-agent-harness-service";
-import { resolveCodingAgentSpawnBundle } from "./coding-agent-spawn-env";
+import {
+  mergeCodingAgentSpawnEnv,
+  resolveCodingAgentSpawnBundle,
+} from "./coding-agent-spawn-env";
 
 export async function resolveProfileModelId(
   db: DatabaseAdapter,
-  profileId: string,
+  profileId: string
 ): Promise<string | null> {
   const profile = await db.getProfile(profileId);
 
@@ -22,14 +24,15 @@ export async function enrichCodingAgentBashInput(
   db: DatabaseAdapter,
   input: unknown,
   context: ToolContext,
-  userConfig: UserConfig | null | undefined,
+  userConfig: UserConfig | null | undefined
 ): Promise<unknown> {
   if (typeof input !== "object" || input === null) {
     return input;
   }
 
   const record = input as Record<string, unknown>;
-  const command = typeof record.command === "string" ? record.command.trim() : "";
+  const command =
+    typeof record.command === "string" ? record.command.trim() : "";
 
   if (!command) {
     return input;
@@ -38,15 +41,18 @@ export async function enrichCodingAgentBashInput(
   const workspace = await loadCodingAgentWorkspaceSettings(db);
   const codingAgentRequested = record.codingAgent === true;
   const matchesHarness = isCodingAgentCommand(command, workspace.harnesses);
-  const inferredKind = inferCodingAgentHarnessKind(command, workspace.harnesses);
+  const inferredKind = inferCodingAgentHarnessKind(
+    command,
+    workspace.harnesses
+  );
 
-  if (!codingAgentRequested && !matchesHarness) {
+  if (!(codingAgentRequested || matchesHarness)) {
     return input;
   }
 
   if (codingAgentRequested && !inferredKind) {
     throw new Error(
-      "codingAgent was set but the bash command does not start with a known coding-agent CLI (codex, claude, opencode, pi, or agent). Use the harness binary as argv0 so Nakama can merge the correct provider passthrough env.",
+      "codingAgent was set but the bash command does not start with a known coding-agent CLI (codex, claude, opencode, pi, or agent). Use the harness binary as argv0 so Nakama can merge the correct provider passthrough env."
     );
   }
 
@@ -55,18 +61,18 @@ export async function enrichCodingAgentBashInput(
       ? await resolveProfileModelId(db, context.profileId)
       : null;
   const harness = await resolveCodingAgentHarness(db, inferredKind, {
-    userConfig,
     profileModel,
+    userConfig,
   });
   const { spawn } = await resolveCodingAgentSpawnBundle({
-    userConfig,
-    profileModel,
     harnessKind: harness.kind,
+    profileModel,
+    userConfig,
   });
   const explicitEnv = readStringRecord(record.env);
   const mergedEnv = mergeCodingAgentSpawnEnv(process.env, spawn.env, {
-    protectCredentialKeys: spawn.env && Object.keys(spawn.env).length > 0,
     callerEnv: explicitEnv,
+    protectCredentialKeys: spawn.env && Object.keys(spawn.env).length > 0,
   });
 
   if (Object.keys(mergedEnv).length === 0 && !codingAgentRequested) {
@@ -74,7 +80,9 @@ export async function enrichCodingAgentBashInput(
   }
 
   const envRecord = Object.fromEntries(
-    Object.entries(mergedEnv).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(mergedEnv).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string"
+    )
   );
 
   return {
@@ -89,13 +97,15 @@ function readStringRecord(value: unknown): Record<string, string> {
     return {};
   }
 
-  const entries = Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
-    if (typeof entry !== "string") {
-      return [];
-    }
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([key, entry]) => {
+      if (typeof entry !== "string") {
+        return [];
+      }
 
-    return [[key, entry] as const];
-  });
+      return [[key, entry] as const];
+    }
+  );
 
   return Object.fromEntries(entries);
 }

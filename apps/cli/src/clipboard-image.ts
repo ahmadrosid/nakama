@@ -18,8 +18,8 @@ export async function readClipboardImage(): Promise<ImageAttachment | null> {
   }
 
   const attachment: ImageAttachment = {
-    mediaType: "image/png",
     data: Buffer.from(bytes).toString("base64"),
+    mediaType: "image/png",
   };
 
   validateImageAttachments([attachment]);

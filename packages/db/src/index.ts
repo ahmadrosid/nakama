@@ -1,21 +1,20 @@
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
 import { createSqliteDatabase, type SqliteDatabase } from "./adapters/sqlite";
 import {
-  resolveDatabasePath,
   type ResolveDatabasePathOptions,
+  resolveDatabasePath,
 } from "./database-url";
 import type { DatabaseAdapter } from "./types";
 
-export type { ResolveDatabasePathOptions } from "./database-url";
-
+export { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
+export { createSqliteDatabase } from "./adapters/sqlite";
 export * from "./automation-store";
 export * from "./constants";
+export type { ResolveDatabasePathOptions } from "./database-url";
 export * from "./local-client";
 export * from "./org-profiles";
 export * from "./seed";
 export * from "./types";
-export { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-export { createSqliteDatabase } from "./adapters/sqlite";
 
 export interface Database {
   adapter: DatabaseAdapter;
@@ -26,7 +25,7 @@ export interface Database {
 
 export async function createDatabase(
   databaseUrl: string,
-  options: ResolveDatabasePathOptions = {},
+  options: ResolveDatabasePathOptions = {}
 ): Promise<Database> {
   const databasePath = resolveDatabasePath(databaseUrl, options);
 

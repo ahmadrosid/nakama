@@ -8,24 +8,24 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const multimodalUserMessage: ChatMessage = {
-  role: "user",
   content: [
-    { type: "text", text: "What is this?" },
-    { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+    { text: "What is this?", type: "text" },
+    { data: tinyPngBase64, mediaType: "image/png", type: "image" },
   ],
+  role: "user",
 };
 
 const documentUserMessage: ChatMessage = {
-  role: "user",
   content: [
-    { type: "text", text: "Summarize this file" },
+    { text: "Summarize this file", type: "text" },
     {
-      type: "document",
+      data: "JVBERi0=",
       filename: "report.pdf",
       mediaType: "application/pdf",
-      data: "JVBERi0=",
+      type: "document",
     },
   ],
+  role: "user",
 };
 
 describe("provider user content mapping", () => {
@@ -37,14 +37,14 @@ describe("provider user content mapping", () => {
     expect(Array.isArray(user?.content)).toBe(true);
 
     const blocks = user?.content as Array<Record<string, unknown>>;
-    expect(blocks[0]).toEqual({ type: "text", text: "What is this?" });
+    expect(blocks[0]).toEqual({ text: "What is this?", type: "text" });
     expect(blocks[1]).toEqual({
-      type: "image",
       source: {
-        type: "base64",
-        media_type: "image/png",
         data: tinyPngBase64,
+        media_type: "image/png",
+        type: "base64",
       },
+      type: "image",
     });
   });
 
@@ -54,12 +54,12 @@ describe("provider user content mapping", () => {
     const blocks = user?.content as Array<Record<string, unknown>>;
 
     expect(blocks[1]).toEqual({
-      type: "document",
       source: {
-        type: "base64",
-        media_type: "application/pdf",
         data: "JVBERi0=",
+        media_type: "application/pdf",
+        type: "base64",
       },
+      type: "document",
     });
   });
 
@@ -67,26 +67,26 @@ describe("provider user content mapping", () => {
     const text = "alpha beta gamma";
     const data = Buffer.from(text, "utf8").toString("base64");
     const message: ChatMessage = {
-      role: "user",
       content: [
-        { type: "text", text: "Summarize" },
+        { text: "Summarize", type: "text" },
         {
-          type: "document",
+          data,
           filename: "Pasted text (3 words).txt",
           mediaType: "text/plain",
-          data,
+          type: "document",
         },
       ],
+      role: "user",
     };
 
     const result = await toAnthropicMessages([message], "opencode_go");
     const user = result[0];
     const blocks = user?.content as Array<Record<string, unknown>>;
 
-    expect(blocks[0]).toEqual({ type: "text", text: "Summarize" });
+    expect(blocks[0]).toEqual({ text: "Summarize", type: "text" });
     expect(blocks[1]).toEqual({
-      type: "text",
       text: "[File: Pasted text (3 words).txt]\nalpha beta gamma",
+      type: "text",
     });
   });
 
@@ -94,14 +94,14 @@ describe("provider user content mapping", () => {
     const imageResult = await toGeminiContents([multimodalUserMessage]);
     expect(imageResult[0]?.parts?.[0]?.text).toBe("What is this?");
     expect(imageResult[0]?.parts?.[1]?.inlineData).toEqual({
-      mimeType: "image/png",
       data: tinyPngBase64,
+      mimeType: "image/png",
     });
 
     const docResult = await toGeminiContents([documentUserMessage]);
     expect(docResult[0]?.parts?.[1]?.inlineData).toEqual({
-      mimeType: "application/pdf",
       data: "JVBERi0=",
+      mimeType: "application/pdf",
     });
   });
 
@@ -112,11 +112,12 @@ describe("provider user content mapping", () => {
     expect(Array.isArray(user?.content)).toBe(true);
 
     const parts = user?.content as Array<Record<string, unknown>>;
-    expect(parts[0]).toEqual({ type: "text", text: "What is this?" });
-    expect(parts[1]?.type).toBe("image_url");
-    expect((parts[1]?.image_url as { url: string }).url).toStartWith(
-      "data:image/png;base64,",
-    );
+    const imagePart = parts[1];
+    expect(parts[0]).toEqual({ text: "What is this?", type: "text" });
+    expect(imagePart?.type).toBe("image_url");
+    expect(
+      (imagePart?.image_url as { url: string } | undefined)?.url
+    ).toStartWith("data:image/png;base64,");
   });
 
   test("toResponsesInput maps image parts", async () => {
@@ -129,7 +130,10 @@ describe("provider user content mapping", () => {
 
     expect(user.type).toBe("message");
     expect(user.role).toBe("user");
-    expect(user.content[0]).toEqual({ type: "input_text", text: "What is this?" });
+    expect(user.content[0]).toEqual({
+      text: "What is this?",
+      type: "input_text",
+    });
     expect(user.content[1]?.type).toBe("input_image");
     expect(user.content[1]?.image_url).toStartWith("data:image/png;base64,");
   });
@@ -140,9 +144,9 @@ describe("provider user content mapping", () => {
     const parts = user?.content as Array<Record<string, unknown>>;
 
     expect(parts[1]).toEqual({
-      type: "input_file",
-      filename: "report.pdf",
       file_data: "data:application/pdf;base64,JVBERi0=",
+      filename: "report.pdf",
+      type: "input_file",
     });
   });
 
@@ -150,26 +154,26 @@ describe("provider user content mapping", () => {
     const text = "alpha beta gamma";
     const data = Buffer.from(text, "utf8").toString("base64");
     const message: ChatMessage = {
-      role: "user",
       content: [
-        { type: "text", text: "Summarize" },
+        { text: "Summarize", type: "text" },
         {
-          type: "document",
+          data,
           filename: "Pasted text (3 words).txt",
           mediaType: "text/plain",
-          data,
+          type: "document",
         },
       ],
+      role: "user",
     };
 
     const result = await toOpenAIMessages("system", [message], "opencode_go");
     const user = result.find((entry) => entry.role === "user");
     const parts = user?.content as Array<Record<string, unknown>>;
 
-    expect(parts[0]).toEqual({ type: "text", text: "Summarize" });
+    expect(parts[0]).toEqual({ text: "Summarize", type: "text" });
     expect(parts[1]).toEqual({
-      type: "text",
       text: "[File: Pasted text (3 words).txt]\nalpha beta gamma",
+      type: "text",
     });
   });
 
@@ -182,55 +186,55 @@ describe("provider user content mapping", () => {
     };
 
     expect(user.content[1]).toEqual({
-      type: "input_file",
-      filename: "report.pdf",
       file_data: "data:application/pdf;base64,JVBERi0=",
+      filename: "report.pdf",
+      type: "input_file",
     });
   });
 
   test("toResponsesInput aligns function_call ids with tool outputs", async () => {
     const result = (await toResponsesInput([
-      { role: "user", content: "run my digest" },
+      { content: "run my digest", role: "user" },
       {
-        role: "assistant",
         content: "",
-        toolCalls: [
-          {
-            id: "call_tool_id",
-            name: "run_automation",
-            arguments: { automationId: "automation_1" },
-          },
-        ],
         providerContent: [
           {
-            type: "function_call",
-            id: "fc_internal_id",
-            call_id: "fc_internal_id",
-            name: "run_automation",
             arguments: '{"automationId":"automation_1"}',
+            call_id: "fc_internal_id",
+            id: "fc_internal_id",
+            name: "run_automation",
+            type: "function_call",
+          },
+        ],
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { automationId: "automation_1" },
+            id: "call_tool_id",
+            name: "run_automation",
           },
         ],
       },
       {
+        content: '{"status":"completed","output":"done"}',
+        name: "run_automation",
         role: "tool",
         toolCallId: "call_tool_id",
-        name: "run_automation",
-        content: '{"status":"completed","output":"done"}',
       },
     ])) as Array<Record<string, unknown>>;
 
     expect(result).toEqual([
-      { role: "user", content: "run my digest" },
+      { content: "run my digest", role: "user" },
       {
-        type: "function_call",
+        arguments: '{"automationId":"automation_1"}',
         call_id: "call_tool_id",
         name: "run_automation",
-        arguments: '{"automationId":"automation_1"}',
+        type: "function_call",
       },
       {
-        type: "function_call_output",
         call_id: "call_tool_id",
         output: '{"status":"completed","output":"done"}',
+        type: "function_call_output",
       },
     ]);
   });

@@ -1,5 +1,9 @@
 import { join } from "node:path";
-import { getUserConfigDir, readTextOrNull, writePrivateTextFile } from "@nakama/core";
+import {
+  getUserConfigDir,
+  readTextOrNull,
+  writePrivateTextFile,
+} from "@nakama/core";
 
 export function getCliConfigPath(): string {
   return join(getUserConfigDir(), "cli.ini");

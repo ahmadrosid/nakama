@@ -8,26 +8,26 @@ export const DEFAULT_DISCORD_PROFILE_ID = "default";
 const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 
 export interface DiscordConfigFile {
+  allowedUserIds: string[];
   botToken: string;
-  profileId: string;
   handshakeCode: string | null;
   pairedUserIds: string[];
-  allowedUserIds: string[];
+  profileId: string;
 }
 
 export interface DiscordSettingsPublic {
-  configured: boolean;
-  botTokenMasked: string | null;
-  handshakeCode: string | null;
-  pairedUserIds: string[];
   allowedUserIds: string[];
-  profileId: string;
+  botTokenMasked: string | null;
+  configured: boolean;
+  handshakeCode: string | null;
   inviteUrl: string | null;
+  pairedUserIds: string[];
+  profileId: string;
 }
 
 export interface UpdateDiscordSettingsInput {
-  botToken?: string;
   allowedUserIds?: string;
+  botToken?: string;
   profileId?: string;
 }
 
@@ -40,7 +40,7 @@ export function getDiscordConfigPath(): string {
 }
 
 const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
-const DISCORD_INVITE_PERMISSIONS = 68608;
+const DISCORD_INVITE_PERMISSIONS = 68_608;
 const DISCORD_INVITE_SCOPES = "bot applications.commands";
 
 const discordApplicationIdCache = new Map<string, string>();
@@ -59,7 +59,9 @@ function clearDiscordApplicationIdCache(botToken: string): void {
   discordApplicationIdCache.delete(botToken.trim());
 }
 
-export async function resolveDiscordApplicationId(botToken: string): Promise<string | null> {
+export async function resolveDiscordApplicationId(
+  botToken: string
+): Promise<string | null> {
   const token = botToken.trim();
 
   if (!token) {
@@ -73,10 +75,13 @@ export async function resolveDiscordApplicationId(botToken: string): Promise<str
   }
 
   try {
-    const response = await fetch(`${DISCORD_API_BASE_URL}/oauth2/applications/@me`, {
-      headers: { Authorization: `Bot ${token}` },
-      signal: AbortSignal.timeout(5_000),
-    });
+    const response = await fetch(
+      `${DISCORD_API_BASE_URL}/oauth2/applications/@me`,
+      {
+        headers: { Authorization: `Bot ${token}` },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
 
     if (!response.ok) {
       return null;
@@ -85,7 +90,7 @@ export async function resolveDiscordApplicationId(botToken: string): Promise<str
     const payload = (await response.json()) as { id?: string };
     const applicationId = payload.id?.trim();
 
-    if (!applicationId || !SNOWFLAKE_PATTERN.test(applicationId)) {
+    if (!(applicationId && SNOWFLAKE_PATTERN.test(applicationId))) {
       return null;
     }
 
@@ -98,9 +103,9 @@ export async function resolveDiscordApplicationId(botToken: string): Promise<str
 
 async function withDiscordInviteUrl(
   settings: DiscordSettingsPublic,
-  botToken: string | null,
+  botToken: string | null
 ): Promise<DiscordSettingsPublic> {
-  if (!settings.configured || !botToken?.trim()) {
+  if (!(settings.configured && botToken?.trim())) {
     return settings;
   }
 
@@ -156,9 +161,12 @@ export function parseAllowedUserIds(raw: string): string[] {
 
 export function isDiscordUserAuthorized(
   userId: string,
-  config: Pick<DiscordConfigFile, "pairedUserIds" | "allowedUserIds">,
+  config: Pick<DiscordConfigFile, "pairedUserIds" | "allowedUserIds">
 ): boolean {
-  return config.pairedUserIds.includes(userId) || config.allowedUserIds.includes(userId);
+  return (
+    config.pairedUserIds.includes(userId) ||
+    config.allowedUserIds.includes(userId)
+  );
 }
 
 async function loadDiscordConfigFile(): Promise<DiscordConfigFile | null> {
@@ -180,37 +188,39 @@ async function loadDiscordConfigFile(): Promise<DiscordConfigFile | null> {
   }
 
   return {
+    allowedUserIds: allowlistRaw ? parseAllowedUserIds(allowlistRaw) : [],
     botToken,
-    profileId,
     handshakeCode,
     pairedUserIds: pairedRaw ? parseAllowedUserIds(pairedRaw) : [],
-    allowedUserIds: allowlistRaw ? parseAllowedUserIds(allowlistRaw) : [],
+    profileId,
   };
 }
 
 export { loadDiscordConfigFile };
 
-export function toDiscordSettingsPublic(file: DiscordConfigFile | null): DiscordSettingsPublic {
+export function toDiscordSettingsPublic(
+  file: DiscordConfigFile | null
+): DiscordSettingsPublic {
   if (!file) {
     return {
-      configured: false,
-      botTokenMasked: null,
-      handshakeCode: null,
-      pairedUserIds: [],
       allowedUserIds: [],
-      profileId: DEFAULT_DISCORD_PROFILE_ID,
+      botTokenMasked: null,
+      configured: false,
+      handshakeCode: null,
       inviteUrl: null,
+      pairedUserIds: [],
+      profileId: DEFAULT_DISCORD_PROFILE_ID,
     };
   }
 
   return {
-    configured: Boolean(file.botToken.trim()),
-    botTokenMasked: maskBotToken(file.botToken),
-    handshakeCode: file.handshakeCode,
-    pairedUserIds: file.pairedUserIds,
     allowedUserIds: file.allowedUserIds,
-    profileId: file.profileId,
+    botTokenMasked: maskBotToken(file.botToken),
+    configured: Boolean(file.botToken.trim()),
+    handshakeCode: file.handshakeCode,
     inviteUrl: null,
+    pairedUserIds: file.pairedUserIds,
+    profileId: file.profileId,
   };
 }
 
@@ -220,7 +230,9 @@ export async function loadDiscordSettingsPublic(): Promise<DiscordSettingsPublic
   return withDiscordInviteUrl(base, file?.botToken ?? null);
 }
 
-async function writeDiscordConfigFile(config: DiscordConfigFile): Promise<void> {
+async function writeDiscordConfigFile(
+  config: DiscordConfigFile
+): Promise<void> {
   const lines = [
     "# Nakama Discord bridge",
     `bot_token=${config.botToken}`,
@@ -242,33 +254,37 @@ async function writeDiscordConfigFile(config: DiscordConfigFile): Promise<void> 
 
 function resolveDiscordBotToken(
   input: UpdateDiscordSettingsInput,
-  existing: DiscordConfigFile | null,
+  existing: DiscordConfigFile | null
 ): string {
-  return input.botToken !== undefined ? input.botToken.trim() : (existing?.botToken ?? "");
+  return input.botToken === undefined
+    ? (existing?.botToken ?? "")
+    : input.botToken.trim();
 }
 
 function resolveDiscordProfileId(
   input: UpdateDiscordSettingsInput,
-  existing: DiscordConfigFile | null,
+  existing: DiscordConfigFile | null
 ): string {
-  return input.profileId?.trim() || existing?.profileId || DEFAULT_DISCORD_PROFILE_ID;
+  return (
+    input.profileId?.trim() || existing?.profileId || DEFAULT_DISCORD_PROFILE_ID
+  );
 }
 
 function resolveAllowedUserIdsInput(
   input: UpdateDiscordSettingsInput,
-  existing: DiscordConfigFile | null,
+  existing: DiscordConfigFile | null
 ): string[] {
   const raw =
-    input.allowedUserIds !== undefined
-      ? input.allowedUserIds.trim()
-      : (existing?.allowedUserIds.join(",") ?? "");
+    input.allowedUserIds === undefined
+      ? (existing?.allowedUserIds.join(",") ?? "")
+      : input.allowedUserIds.trim();
 
   return raw ? parseAllowedUserIds(raw) : [];
 }
 
 function resolveHandshakeCode(
   existing: DiscordConfigFile | null,
-  allowedUserIds: string[],
+  allowedUserIds: string[]
 ): string | null {
   const pairedUserIds = existing?.pairedUserIds ?? [];
   const handshakeCode = existing?.handshakeCode ?? null;
@@ -282,7 +298,7 @@ function resolveHandshakeCode(
 
 function buildSavedDiscordConfig(
   input: UpdateDiscordSettingsInput,
-  existing: DiscordConfigFile | null,
+  existing: DiscordConfigFile | null
 ): DiscordConfigFile {
   const botToken = resolveDiscordBotToken(input, existing);
 
@@ -293,21 +309,24 @@ function buildSavedDiscordConfig(
   const allowedUserIds = resolveAllowedUserIdsInput(input, existing);
 
   return {
+    allowedUserIds,
     botToken,
-    profileId: resolveDiscordProfileId(input, existing),
     handshakeCode: resolveHandshakeCode(existing, allowedUserIds),
     pairedUserIds: existing?.pairedUserIds ?? [],
-    allowedUserIds,
+    profileId: resolveDiscordProfileId(input, existing),
   };
 }
 
 export async function saveDiscordConfig(
-  input: UpdateDiscordSettingsInput,
+  input: UpdateDiscordSettingsInput
 ): Promise<DiscordSettingsPublic> {
   const existing = await loadDiscordConfigFile();
   const next = buildSavedDiscordConfig(input, existing);
 
-  if (existing?.botToken.trim() && existing.botToken.trim() !== next.botToken.trim()) {
+  if (
+    existing?.botToken.trim() &&
+    existing.botToken.trim() !== next.botToken.trim()
+  ) {
     clearDiscordApplicationIdCache(existing.botToken);
   }
 
@@ -333,32 +352,39 @@ export async function regenerateDiscordHandshake(): Promise<DiscordSettingsPubli
 
 export async function verifyAndPairDiscordUser(
   handshakeInput: string,
-  userId: string,
+  userId: string
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const config = await loadDiscordConfigFile();
 
   if (!config) {
-    return { ok: false, message: "Discord is not configured on the server yet." };
+    return {
+      message: "Discord is not configured on the server yet.",
+      ok: false,
+    };
   }
 
   if (isDiscordUserAuthorized(userId, config)) {
-    return { ok: true, message: "This chat is already linked." };
+    return { message: "This chat is already linked.", ok: true };
   }
 
   const expected = config.handshakeCode;
 
   if (!expected) {
     return {
-      ok: false,
       message:
         "No pairing code is active. Open Nakama Integrations → Discord and generate a new code.",
+      ok: false,
     };
   }
 
-  if (normalizeHandshakeInput(handshakeInput) !== normalizeHandshakeInput(expected)) {
+  if (
+    normalizeHandshakeInput(handshakeInput) !==
+    normalizeHandshakeInput(expected)
+  ) {
     return {
+      message:
+        "Invalid pairing code. Copy it from Integrations → Discord and try again.",
       ok: false,
-      message: "Invalid pairing code. Copy it from Integrations → Discord and try again.",
     };
   }
 
@@ -366,13 +392,13 @@ export async function verifyAndPairDiscordUser(
 
   await writeDiscordConfigFile({
     ...config,
-    pairedUserIds,
     handshakeCode: null,
+    pairedUserIds,
   });
 
   return {
-    ok: true,
     message: "Linked successfully. You can chat with Nakama now.",
+    ok: true,
   };
 }
 
@@ -382,7 +408,8 @@ export function resolveDiscordConfigFromSources(options: {
 }): DiscordConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
-  const botToken = env.DISCORD_BOT_TOKEN?.trim() || file?.botToken?.trim() || "";
+  const botToken =
+    env.DISCORD_BOT_TOKEN?.trim() || file?.botToken?.trim() || "";
 
   if (!botToken) {
     return null;
@@ -391,15 +418,15 @@ export function resolveDiscordConfigFromSources(options: {
   const envAllowlist = env.DISCORD_ALLOWED_USER_IDS?.trim();
 
   return {
+    allowedUserIds: envAllowlist
+      ? parseAllowedUserIds(envAllowlist)
+      : (file?.allowedUserIds ?? []),
     botToken,
+    handshakeCode: file?.handshakeCode ?? null,
+    pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
       env.nakama_DISCORD_PROFILE_ID?.trim() ||
       file?.profileId?.trim() ||
       DEFAULT_DISCORD_PROFILE_ID,
-    handshakeCode: file?.handshakeCode ?? null,
-    pairedUserIds: file?.pairedUserIds ?? [],
-    allowedUserIds: envAllowlist
-      ? parseAllowedUserIds(envAllowlist)
-      : (file?.allowedUserIds ?? []),
   };
 }

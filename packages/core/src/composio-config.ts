@@ -8,8 +8,8 @@ export interface ComposioConfigFile {
 }
 
 export interface ComposioSettingsPublic {
-  configured: boolean;
   apiKeyMasked: string | null;
+  configured: boolean;
 }
 
 export interface UpdateComposioSettingsInput {
@@ -32,11 +32,15 @@ export function composioUserId(userId: string): string {
   return `nakama:user:${userId}`;
 }
 
-export function resolveComposioApiKey(file: ComposioConfigFile | null | undefined): string {
+export function resolveComposioApiKey(
+  file: ComposioConfigFile | null | undefined
+): string {
   return file?.apiKey?.trim() || "";
 }
 
-export function isComposioConfigured(file?: ComposioConfigFile | null): boolean {
+export function isComposioConfigured(
+  file?: ComposioConfigFile | null
+): boolean {
   return Boolean(resolveComposioApiKey(file));
 }
 
@@ -61,17 +65,19 @@ export async function loadComposioConfigFile(): Promise<ComposioConfigFile | nul
   return { apiKey };
 }
 
-export function toComposioSettingsPublic(file: ComposioConfigFile | null): ComposioSettingsPublic {
+export function toComposioSettingsPublic(
+  file: ComposioConfigFile | null
+): ComposioSettingsPublic {
   if (!file) {
     return {
-      configured: false,
       apiKeyMasked: null,
+      configured: false,
     };
   }
 
   return {
-    configured: Boolean(file.apiKey.trim()),
     apiKeyMasked: maskSecret(file.apiKey),
+    configured: Boolean(file.apiKey.trim()),
   };
 }
 
@@ -79,8 +85,14 @@ export async function loadComposioSettingsPublic(): Promise<ComposioSettingsPubl
   return toComposioSettingsPublic(await loadComposioConfigFile());
 }
 
-async function writeComposioConfigFile(config: ComposioConfigFile): Promise<void> {
-  const lines = ["# Nakama Composio integration", `api_key=${config.apiKey}`, ""];
+async function writeComposioConfigFile(
+  config: ComposioConfigFile
+): Promise<void> {
+  const lines = [
+    "# Nakama Composio integration",
+    `api_key=${config.apiKey}`,
+    "",
+  ];
 
   await writePrivateTextFile(getComposioConfigPath(), lines.join("\n"), {
     ensureDir: getComposioConfigDir(),
@@ -88,11 +100,11 @@ async function writeComposioConfigFile(config: ComposioConfigFile): Promise<void
 }
 
 export async function saveComposioConfig(
-  input: UpdateComposioSettingsInput,
+  input: UpdateComposioSettingsInput
 ): Promise<ComposioSettingsPublic> {
   const existing = await loadComposioConfigFile();
   const apiKey =
-    input.apiKey !== undefined ? input.apiKey.trim() : (existing?.apiKey ?? "");
+    input.apiKey === undefined ? (existing?.apiKey ?? "") : input.apiKey.trim();
 
   if (!apiKey) {
     throw new Error("Composio API key is required.");

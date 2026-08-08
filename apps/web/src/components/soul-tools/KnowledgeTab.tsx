@@ -1,6 +1,11 @@
 import type { KnowledgeBaseDocument } from "@nakama/core/contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
+import {
+  KnowledgeTabPageState,
+  KnowledgeTabShell,
+} from "@/components/soul-tools/knowledge-tab-shell";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,11 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { KnowledgeTabPanel } from "@/components/soul-tools/knowledge-tab-panel";
-import {
-  KnowledgeTabPageState,
-  KnowledgeTabShell,
-} from "@/components/soul-tools/knowledge-tab-shell";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useDeleteKnowledgeBaseDocumentMutation,
@@ -23,20 +23,20 @@ import {
   useSoulStatusQuery,
   useUploadKnowledgeBaseDocumentMutation,
 } from "@/hooks/use-resource-mutations";
+import { formatError } from "@/lib/client";
 import {
   fileToDocumentAttachment,
   isKnowledgeBaseFile,
 } from "@/lib/knowledge-base-files";
 import { findDefaultProfile, resolveInitialProfileId } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
-import { formatError } from "@/lib/client";
 
 const sectionClass = "rounded-md border border-border bg-card";
 const KNOWLEDGE_BASE_SUBDIR = "knowledge-base";
 
 function resolveDefaultProfileId(
   profiles: Array<{ id: string }>,
-  fromUrl: string | null,
+  fromUrl: string | null
 ): string | null {
   if (profiles.length === 0) {
     return null;
@@ -49,7 +49,11 @@ function resolveDefaultProfileId(
   return resolveInitialProfileId(profiles);
 }
 
-export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: string | null } = {}) {
+export function KnowledgeTab({
+  profileId: controlledProfileId,
+}: {
+  profileId?: string | null;
+} = {}) {
   const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -77,14 +81,19 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<KnowledgeBaseDocument | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<KnowledgeBaseDocument | null>(null);
 
-  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? null;
+  const selectedProfile =
+    profiles.find((profile) => profile.id === profileId) ?? null;
   const documents = knowledgeBase?.documents ?? [];
   const sources = knowledgeBase?.sources ?? [];
-  const readyCount = documents.filter((document) => document.status === "ready").length;
+  const readyCount = documents.filter(
+    (document) => document.status === "ready"
+  ).length;
   const loading = knowledgeLoading && !knowledgeBase;
-  const refreshing = profilesFetching || knowledgeFetching || soulStatusFetching;
+  const refreshing =
+    profilesFetching || knowledgeFetching || soulStatusFetching;
   const busy = uploadMutation.isPending || deleteMutation.isPending;
   const knowledgeBaseDirectory = soulStatus
     ? `${soulStatus.directory}/${KNOWLEDGE_BASE_SUBDIR}`
@@ -104,10 +113,10 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setSearchParams, profiles],
+    [setSearchParams, profiles]
   );
 
   useEffect(() => {
@@ -154,11 +163,15 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
 
   async function refresh() {
     setError(null);
-    await Promise.all([refetchProfiles(), refetchKnowledgeBase(), refetchSoulStatus()]);
+    await Promise.all([
+      refetchProfiles(),
+      refetchKnowledgeBase(),
+      refetchSoulStatus(),
+    ]);
   }
 
   async function handleUpload(files: FileList | null) {
-    if (!profileId || !files?.length) {
+    if (!(profileId && files?.length)) {
       return;
     }
 
@@ -167,7 +180,9 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
     await Promise.all(
       Array.from(files).map(async (file) => {
         if (!isKnowledgeBaseFile(file)) {
-          setError(`Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`);
+          setError(
+            `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
+          );
           return;
         }
 
@@ -178,11 +193,11 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
             return;
           }
 
-          await uploadMutation.mutateAsync({ profileId, document });
+          await uploadMutation.mutateAsync({ document, profileId });
         } catch (err) {
           setError(formatError(err));
         }
-      }),
+      })
     );
 
     if (fileInputRef.current) {
@@ -191,7 +206,7 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
   }
 
   async function handleDelete() {
-    if (!profileId || !deleteTarget) {
+    if (!(profileId && deleteTarget)) {
       return;
     }
 
@@ -199,8 +214,8 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
 
     try {
       await deleteMutation.mutateAsync({
-        profileId,
         documentId: deleteTarget.id,
+        profileId,
       });
       setDeleteTarget(null);
     } catch (err) {
@@ -210,7 +225,7 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
 
   if (!embedded && profiles.length === 0 && !profilesFetching) {
     return (
-      <div className={cn(sectionClass, "p-8 text-sm text-muted-foreground")}>
+      <div className={cn(sectionClass, "p-8 text-muted-foreground text-sm")}>
         Create a profile first to add knowledge base documents.
       </div>
     );
@@ -218,28 +233,35 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
 
   if (embedded && !profileId) {
     return (
-      <p className="text-sm text-muted-foreground">Select a profile to manage knowledge base documents.</p>
+      <p className="text-muted-foreground text-sm">
+        Select a profile to manage knowledge base documents.
+      </p>
     );
   }
 
   if (loading && !knowledgeBase) {
-    return <KnowledgeTabPageState message="Loading knowledge base…" embedded={embedded} />;
+    return (
+      <KnowledgeTabPageState
+        embedded={embedded}
+        message="Loading knowledge base…"
+      />
+    );
   }
 
   const knowledgePanel = (
     <KnowledgeTabPanel
-      embedded={embedded}
-      selectedProfileName={selectedProfile?.name}
-      knowledgeBaseDirectory={knowledgeBaseDirectory}
-      sources={sources}
-      documents={documents}
-      readyCount={readyCount}
-      profileId={profileId}
       busy={busy}
-      uploadPending={uploadMutation.isPending}
+      documents={documents}
+      embedded={embedded}
       fileInputRef={fileInputRef}
-      onUpload={(files) => void handleUpload(files)}
+      knowledgeBaseDirectory={knowledgeBaseDirectory}
       onDeleteDocument={setDeleteTarget}
+      onUpload={(files) => void handleUpload(files)}
+      profileId={profileId}
+      readyCount={readyCount}
+      selectedProfileName={selectedProfile?.name}
+      sources={sources}
+      uploadPending={uploadMutation.isPending}
     />
   );
 
@@ -248,8 +270,8 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
       {error ? (
         <p
           className={cn(
-            "rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive",
-            !embedded && "mb-4",
+            "rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm",
+            !embedded && "mb-4"
           )}
         >
           {error}
@@ -260,34 +282,42 @@ export function KnowledgeTab({ profileId: controlledProfileId }: { profileId?: s
         knowledgePanel
       ) : (
         <KnowledgeTabShell
-          profiles={profiles}
-          profileId={profileId}
-          selectedProfileName={selectedProfile?.name}
           busy={busy}
-          refreshing={refreshing}
-          panel={knowledgePanel}
           onProfileSelect={setProfileId}
           onRefresh={() => void refresh()}
+          panel={knowledgePanel}
+          profileId={profileId}
+          profiles={profiles}
+          refreshing={refreshing}
+          selectedProfileName={selectedProfile?.name}
         />
       )}
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        open={deleteTarget !== null}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete document</DialogTitle>
             <DialogDescription>
-              Remove {deleteTarget?.filename} from {selectedProfile?.name ?? "this profile"}?
+              Remove {deleteTarget?.filename} from{" "}
+              {selectedProfile?.name ?? "this profile"}?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+            <Button
+              onClick={() => setDeleteTarget(null)}
+              type="button"
+              variant="outline"
+            >
               Cancel
             </Button>
             <Button
+              disabled={deleteMutation.isPending}
+              onClick={() => void handleDelete()}
               type="button"
               variant="destructive"
-              onClick={() => void handleDelete()}
-              disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? <Spinner className="size-4" /> : null}
               Delete

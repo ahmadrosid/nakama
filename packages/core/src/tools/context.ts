@@ -9,7 +9,7 @@ export function buildToolExecutionContext(context: ToolContext): ToolContext {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
 
-  if (!orgId || !profileId) {
+  if (!(orgId && profileId)) {
     return context;
   }
 

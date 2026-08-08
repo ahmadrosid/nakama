@@ -4,43 +4,26 @@ import {
   effectiveModelState,
   formatSlashCommands,
   parseModelCommandArg,
-  resolveSuggestions,
   resolveModelSwitchTarget,
+  resolveSuggestions,
 } from "./commands";
 
 const profile: ProfileSummary = {
-  id: "default",
-  name: "Default",
-  model: "gpt-4o",
-  isSuper: false,
-  toolCount: 0,
-  mcpServerCount: 0,
-  soulActive: false,
-  hasAvatar: false,
   createdAt: "",
+  hasAvatar: false,
+  id: "default",
+  isSuper: false,
+  mcpServerCount: 0,
+  model: "gpt-4o",
+  name: "Default",
+  soulActive: false,
+  toolCount: 0,
   updatedAt: "",
 };
 
 const modelsCache: ModelsResponse = {
   currentProviderId: "provider-a",
-  providers: [
-    {
-      id: "provider-a",
-      type: "anthropic",
-      label: "Anthropic",
-      hasApiKey: true,
-      modelCount: 1,
-      createdAt: "",
-    },
-    {
-      id: "provider-b",
-      type: "openai",
-      label: "OpenAI",
-      hasApiKey: true,
-      modelCount: 1,
-      createdAt: "",
-    },
-  ],
+  displayName: null,
   models: [
     {
       id: "claude-sonnet-4-20250514",
@@ -68,37 +51,56 @@ const modelsCache: ModelsResponse = {
     },
   ],
   provider: "anthropic",
-  displayName: null,
+  providers: [
+    {
+      createdAt: "",
+      hasApiKey: true,
+      id: "provider-a",
+      label: "Anthropic",
+      modelCount: 1,
+      type: "anthropic",
+    },
+    {
+      createdAt: "",
+      hasApiKey: true,
+      id: "provider-b",
+      label: "OpenAI",
+      modelCount: 1,
+      type: "openai",
+    },
+  ],
 };
 
 describe("parseModelCommandArg", () => {
   test("parses provider-qualified model ids", () => {
     expect(parseModelCommandArg("provider-b::gpt-4o")).toEqual({
-      providerId: "provider-b",
       modelId: "gpt-4o",
+      providerId: "provider-b",
     });
   });
 
   test("keeps plain model ids intact", () => {
     expect(parseModelCommandArg("anthropic/claude-sonnet-4-6")).toEqual({
-      providerId: null,
       modelId: "anthropic/claude-sonnet-4-6",
+      providerId: null,
     });
   });
 });
 
 describe("resolveModelSwitchTarget", () => {
   test("uses explicit provider ids", () => {
-    expect(resolveModelSwitchTarget(modelsCache, "provider-b::gpt-4o")).toEqual({
-      providerId: "provider-b",
-      modelId: "gpt-4o",
-    });
+    expect(resolveModelSwitchTarget(modelsCache, "provider-b::gpt-4o")).toEqual(
+      {
+        modelId: "gpt-4o",
+        providerId: "provider-b",
+      }
+    );
   });
 
   test("falls back to the current provider for duplicate ids", () => {
     expect(resolveModelSwitchTarget(modelsCache, "shared-model")).toEqual({
-      providerId: "provider-a",
       modelId: "shared-model",
+      providerId: "provider-a",
     });
   });
 
@@ -106,8 +108,8 @@ describe("resolveModelSwitchTarget", () => {
     expect(
       resolveModelSwitchTarget(
         { ...modelsCache, currentProviderId: null },
-        "shared-model",
-      ),
+        "shared-model"
+      )
     ).toBe("ambiguous");
   });
 });
@@ -122,7 +124,7 @@ describe("effectiveModelState", () => {
 
   test("returns null model when profile has no model", () => {
     expect(
-      effectiveModelState({ ...profile, model: null }, modelsCache),
+      effectiveModelState({ ...profile, model: null }, modelsCache)
     ).toEqual({
       modelId: null,
       providerId: "provider-a",
@@ -134,9 +136,9 @@ describe("status command", () => {
   test("is included in help and suggestions", () => {
     expect(formatSlashCommands()).toContain("/status");
     expect(resolveSuggestions({ input: "/sta" })).toContainEqual({
-      label: "/status",
       description: "show server and model status",
       insertValue: "/status",
+      label: "/status",
     });
   });
 });

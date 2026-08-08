@@ -1,5 +1,5 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { PlusIcon, UsersRoundIcon, CameraIcon, Trash2Icon } from "lucide-react";
+import { CameraIcon, PlusIcon, Trash2Icon, UsersRoundIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,10 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
+  type ProfileSaveStatus,
   profileSidebarDescription,
   profilesTagline,
   sectionClass,
-  type ProfileSaveStatus,
 } from "@/pages/profiles/profiles-page.shared";
 
 export function ProfileDetailTabButton({
@@ -33,19 +33,19 @@ export function ProfileDetailTabButton({
 }) {
   return (
     <button
-      type="button"
-      id={id}
-      role="tab"
-      aria-selected={active}
       aria-controls={controls}
-      data-active={active || undefined}
+      aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm font-medium transition-colors sm:gap-2 sm:px-4",
+        "relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 font-medium text-sm transition-colors sm:gap-2 sm:px-4",
         active
           ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          : "border-transparent text-muted-foreground hover:text-foreground"
       )}
+      data-active={active || undefined}
+      id={id}
       onClick={onSelect}
+      role="tab"
+      type="button"
     >
       {children}
     </button>
@@ -67,7 +67,9 @@ export function ProfileSaveIndicator({
 
   if (nameMissing) {
     content = (
-      <span className="font-medium text-amber-700 dark:text-amber-300">Name is required</span>
+      <span className="font-medium text-amber-700 dark:text-amber-300">
+        Name is required
+      </span>
     );
   } else if (saveStatus === "pending" || saveStatus === "saving") {
     content = (
@@ -95,7 +97,7 @@ export function ProfileSaveIndicator({
     );
   }
 
-  return <p className="mt-2 text-xs text-muted-foreground">{content}</p>;
+  return <p className="mt-2 text-muted-foreground text-xs">{content}</p>;
 }
 
 function ProfileAvatarOverlay({
@@ -112,7 +114,10 @@ function ProfileAvatarOverlay({
       {uploading ? (
         <Spinner className={cn(overlayIconClass, "text-primary-foreground")} />
       ) : (
-        <CameraIcon className={cn(overlayIconClass, "text-primary-foreground")} aria-hidden />
+        <CameraIcon
+          aria-hidden
+          className={cn(overlayIconClass, "text-primary-foreground")}
+        />
       )}
     </span>
   );
@@ -142,10 +147,10 @@ export function EditableProfileAvatar({
         <DropdownMenuTrigger
           render={
             <button
-              type="button"
-              disabled={disabled}
               aria-label="Change or remove profile image"
               className={triggerClassName}
+              disabled={disabled}
+              type="button"
             />
           }
         >
@@ -154,15 +159,15 @@ export function EditableProfileAvatar({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-40">
           <DropdownMenuItem className="cursor-pointer" onClick={onPick}>
-            <CameraIcon className="size-4" aria-hidden />
+            <CameraIcon aria-hidden className="size-4" />
             Change image
           </DropdownMenuItem>
           <DropdownMenuItem
-            variant="destructive"
             className="cursor-pointer"
             onClick={onRemove}
+            variant="destructive"
           >
-            <Trash2Icon className="size-4" aria-hidden />
+            <Trash2Icon aria-hidden className="size-4" />
             Remove image
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -172,11 +177,11 @@ export function EditableProfileAvatar({
 
   return (
     <button
-      type="button"
-      disabled={disabled}
-      onClick={onPick}
       aria-label="Change profile image"
       className={triggerClassName}
+      disabled={disabled}
+      onClick={onPick}
+      type="button"
     >
       <ProfileAvatar profile={profile} size={size} />
       <ProfileAvatarOverlay size={size} uploading={uploading} />
@@ -197,21 +202,23 @@ export function ProfileScopeButton({
 }) {
   return (
     <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:cursor-not-allowed",
         disabled && "opacity-50",
         active
           ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
     >
-      <ProfileAvatar profile={profile} size="sm" active={active} />
+      <ProfileAvatar active={active} profile={profile} size="sm" />
       <span className="min-w-0 space-y-0.5">
-        <span className="block truncate text-sm font-medium leading-tight">{profile.name}</span>
-        <span className="block truncate text-xs leading-snug text-muted-foreground">
+        <span className="block truncate font-medium text-sm leading-tight">
+          {profile.name}
+        </span>
+        <span className="block truncate text-muted-foreground text-xs leading-snug">
           {profileSidebarDescription(profile)}
         </span>
       </span>
@@ -221,16 +228,16 @@ export function ProfileScopeButton({
 
 const profileEmptySteps = [
   {
-    title: "Create a profile",
     description: "Give it a name, avatar, and system prompt.",
+    title: "Create a profile",
   },
   {
-    title: "Assign tools",
     description: "Control which capabilities this bot can use.",
+    title: "Assign tools",
   },
   {
-    title: "Customize soul & knowledge",
     description: "Set voice, identity, and documents per profile.",
+    title: "Customize soul & knowledge",
   },
 ] as const;
 
@@ -251,96 +258,114 @@ export function ProfilesEmptyState({
 
   return (
     <div
-      role="status"
       aria-labelledby="profiles-empty-title"
       className={cn(
         "text-center",
         isCompact
-          ? "flex flex-col items-center gap-3 rounded-md border border-dashed border-border/80 bg-muted/20 px-3 py-6"
-          : "flex min-h-[min(20rem,50dvh)] flex-col items-center justify-center gap-6 px-4 py-10 sm:px-6",
+          ? "flex flex-col items-center gap-3 rounded-md border border-border/80 border-dashed bg-muted/20 px-3 py-6"
+          : "flex min-h-[min(20rem,50dvh)] flex-col items-center justify-center gap-6 px-4 py-10 sm:px-6"
       )}
+      role="status"
     >
       <div
         className={cn(
           "flex shrink-0 items-center justify-center border border-border bg-muted/40",
-          isCompact ? "size-10 rounded-full" : "size-14 rounded-2xl",
+          isCompact ? "size-10 rounded-full" : "size-14 rounded-2xl"
         )}
       >
         <UsersRoundIcon
-          className={cn("text-muted-foreground", isCompact ? "size-4" : "size-6")}
           aria-hidden
+          className={cn(
+            "text-muted-foreground",
+            isCompact ? "size-4" : "size-6"
+          )}
         />
       </div>
 
       <div className={cn("space-y-1.5", !isCompact && "max-w-sm")}>
         <p
-          id="profiles-empty-title"
           className={cn(
             "font-medium text-foreground",
-            isCompact ? "text-sm" : "type-section-title",
+            isCompact ? "text-sm" : "type-section-title"
           )}
+          id="profiles-empty-title"
         >
           {isCompact ? "No profiles yet" : "Create your first profile"}
         </p>
-        {!isCompact ? (
-          <p className="type-body text-sm text-muted-foreground">{profilesTagline}</p>
-        ) : null}
+        {isCompact ? null : (
+          <p className="type-body text-muted-foreground text-sm">
+            {profilesTagline}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-2">
         {canCreate ? (
-          <Button type="button" size={isCompact ? "sm" : "default"} disabled={disabled} onClick={onCreate}>
-            <PlusIcon className="size-4" aria-hidden />
+          <Button
+            disabled={disabled}
+            onClick={onCreate}
+            size={isCompact ? "sm" : "default"}
+            type="button"
+          >
+            <PlusIcon aria-hidden className="size-4" />
             {isCompact ? "Create profile" : "New profile"}
           </Button>
         ) : null}
         {onAskSuperBot ? (
           <Button
-            type="button"
-            variant="ghost"
-            size="sm"
             disabled={disabled}
             onClick={onAskSuperBot}
+            size="sm"
+            type="button"
+            variant="ghost"
           >
             Ask Super Bot
           </Button>
         ) : null}
       </div>
 
-      {!isCompact ? (
-        <ol className="w-full max-w-md space-y-3 border-t border-border pt-6 text-left">
+      {isCompact ? null : (
+        <ol className="w-full max-w-md space-y-3 border-border border-t pt-6 text-left">
           {profileEmptySteps.map((step, index) => (
-            <li key={step.title} className="flex gap-3">
+            <li className="flex gap-3" key={step.title}>
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground"
                 aria-hidden
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums"
               >
                 {index + 1}
               </span>
               <div className="min-w-0 pt-0.5">
-                <p className="text-sm font-medium text-foreground">{step.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                <p className="font-medium text-foreground text-sm">
+                  {step.title}
+                </p>
+                <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
                   {step.description}
                 </p>
               </div>
             </li>
           ))}
         </ol>
-      ) : null}
+      )}
     </div>
   );
 }
 
-export function PageState({ message, embedded = false }: { message: string; embedded?: boolean }) {
+export function PageState({
+  message,
+  embedded = false,
+}: {
+  message: string;
+  embedded?: boolean;
+}) {
   return (
     <div
       className={cn(
         embedded
-          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+          ? "flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground text-sm"
           : cn(
               sectionClass,
-              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
-            ),
+              "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
+            )
       )}
     >
       <Spinner className="size-5" />
@@ -362,7 +387,7 @@ export function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <label className="text-xs text-muted-foreground" htmlFor={htmlFor}>
+      <label className="text-muted-foreground text-xs" htmlFor={htmlFor}>
         {label}
       </label>
       {children}

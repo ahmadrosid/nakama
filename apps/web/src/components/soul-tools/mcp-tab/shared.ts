@@ -12,7 +12,9 @@ export function emptyHeaderRow(): McpHeaderRow {
   return { key: "", value: "" };
 }
 
-export function recordToHeaderRows(headers?: Record<string, string>): McpHeaderRow[] {
+export function recordToHeaderRows(
+  headers?: Record<string, string>
+): McpHeaderRow[] {
   if (!headers || Object.keys(headers).length === 0) {
     return [emptyHeaderRow()];
   }
@@ -26,7 +28,7 @@ export function recordToHeaderRows(headers?: Record<string, string>): McpHeaderR
 export function resolveFormTransport(
   transport: McpTransport,
   command: string,
-  url: string,
+  url: string
 ): McpTransport {
   if (command.trim()) {
     return "stdio";
@@ -49,7 +51,7 @@ export function argsToArray(values: string[]): string[] | undefined {
 
 export function headersToRecord(
   rows: McpHeaderRow[],
-  forUpdate = false,
+  forUpdate = false
 ): Record<string, string> | undefined {
   const headers: Record<string, string> = {};
 

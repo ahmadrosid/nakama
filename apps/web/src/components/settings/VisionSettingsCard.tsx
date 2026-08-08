@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   Select,
   SelectContent,
@@ -6,9 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import { useModelsQuery } from "@/hooks/use-app-queries";
-import { useSaveVisionSettings, useVisionSettings } from "@/hooks/use-vision-settings";
+import {
+  useSaveVisionSettings,
+  useVisionSettings,
+} from "@/hooks/use-vision-settings";
 import { formatError } from "@/lib/client";
 import {
   encodeModelSelection,
@@ -30,7 +33,7 @@ export function VisionSettingsCard() {
 
   const providerModelGroups = useMemo(
     () => groupModelsByProvider(modelsResponse?.models ?? []),
-    [modelsResponse?.models],
+    [modelsResponse?.models]
   );
 
   const visionModelGroups = useMemo(() => {
@@ -41,8 +44,8 @@ export function VisionSettingsCard() {
         (model) =>
           resolveModelVisionSupport(
             encodeModelSelection(group.providerId, model.id),
-            providerModelGroups,
-          ) === true,
+            providerModelGroups
+          ) === true
       );
 
       if (models.length > 0) {
@@ -60,7 +63,10 @@ export function VisionSettingsCard() {
       return CLEAR_VISION_MODEL_VALUE;
     }
 
-    return profileModelSelectionValue(selection, visionModelGroups) || CLEAR_VISION_MODEL_VALUE;
+    return (
+      profileModelSelectionValue(selection, visionModelGroups) ||
+      CLEAR_VISION_MODEL_VALUE
+    );
   }, [selection, visionModelGroups]);
 
   useEffect(() => {
@@ -78,35 +84,41 @@ export function VisionSettingsCard() {
 
   return (
     <SettingsModelTile
-      title="Image parsing model"
       footer={
         savedHint || formError ? (
           <>
             {savedHint ? (
-              <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
+              <p
+                className="text-emerald-700 text-xs dark:text-emerald-300"
+                role="status"
+              >
                 {savedHint}
               </p>
             ) : null}
             {formError ? (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-destructive text-xs" role="alert">
                 {formError}
               </p>
             ) : null}
           </>
         ) : undefined
       }
+      title="Image parsing model"
     >
       <Select
-        value={selectionValue}
         disabled={saveVisionMutation.isPending || visionUnavailable}
         onValueChange={(value) => {
           if (!value) {
             return;
           }
 
-          const model = value === CLEAR_VISION_MODEL_VALUE ? null : String(value);
+          const model =
+            value === CLEAR_VISION_MODEL_VALUE ? null : String(value);
 
-          if (model && resolveModelVisionSupport(model, providerModelGroups) !== true) {
+          if (
+            model &&
+            resolveModelVisionSupport(model, providerModelGroups) !== true
+          ) {
             setFormError("Choose a vision-capable model.");
             return;
           }
@@ -116,20 +128,21 @@ export function VisionSettingsCard() {
           setSavedHint(null);
 
           saveVisionMutation.mutate(model, {
+            onError: (error) => {
+              setSelection(visionSettings?.model ?? "");
+              setFormError(formatError(error));
+            },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, visionModelGroups)}`
-                  : "Cleared",
+                  : "Cleared"
               );
-            },
-            onError: (error) => {
-              setSelection(visionSettings?.model ?? "");
-              setFormError(formatError(error));
             },
           });
         }}
+        value={selectionValue}
       >
         <SelectTrigger aria-label="Image parsing model" className="h-9 w-full">
           <SelectValue placeholder="Select vision model">
@@ -144,7 +157,9 @@ export function VisionSettingsCard() {
           alignItemWithTrigger={false}
           className="w-max min-w-72 max-w-[min(24rem,92vw)]"
         >
-          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>Not configured</SelectItem>
+          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>
+            Not configured
+          </SelectItem>
           {visionModelGroups.flatMap((group) =>
             group.models.map((model) => (
               <SelectItem
@@ -153,7 +168,7 @@ export function VisionSettingsCard() {
               >
                 {group.providerLabel}: {model.name}
               </SelectItem>
-            )),
+            ))
           )}
         </SelectContent>
       </Select>

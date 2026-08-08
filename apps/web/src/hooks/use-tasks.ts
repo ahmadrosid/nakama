@@ -1,14 +1,17 @@
+import type {
+  CreateTaskRequest,
+  UpdateTaskRequest,
+} from "@nakama/core/contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateTaskRequest, UpdateTaskRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 import { TASK_COLUMN_META } from "@/lib/task-board";
 import { loadTaskMessages } from "@/lib/task-messages";
-import { queryKeys } from "@/lib/query-keys";
 
 export function useTasksQuery() {
   return useQuery({
-    queryKey: queryKeys.tasks.all,
     queryFn: () => client.listTasks(),
+    queryKey: queryKeys.tasks.all,
     refetchInterval: (query) => {
       const tasks = query.state.data ?? [];
       return tasks.some((task) => task.status === "in_progress") ? 3000 : false;
@@ -18,9 +21,9 @@ export function useTasksQuery() {
 
 export function useTaskMessagesQuery(taskId: string | null) {
   return useQuery({
-    queryKey: queryKeys.tasks.messages(taskId ?? ""),
-    queryFn: () => loadTaskMessages(taskId!),
     enabled: Boolean(taskId),
+    queryFn: () => loadTaskMessages(taskId!),
+    queryKey: queryKeys.tasks.messages(taskId ?? ""),
   });
 }
 
@@ -28,8 +31,10 @@ export function useDraftTaskPromptMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { title: string; description?: string }) => client.draftTaskPrompt(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
+    mutationFn: (input: { title: string; description?: string }) =>
+      client.draftTaskPrompt(input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
   });
 }
 
@@ -80,7 +85,9 @@ export function useRunTaskMutation() {
     onSuccess: async (_data, taskId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.messages(taskId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.messages(taskId),
+        }),
       ]);
     },
   });

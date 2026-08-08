@@ -9,12 +9,18 @@ import { hashId, scrubBreadcrumbData, scrubText } from "./crash-report-scrub";
  */
 describe("scrubText removes credentials", () => {
   const cases: Array<[string, string]> = [
-    ["anthropic key", "failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345"],
+    [
+      "anthropic key",
+      "failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
+    ],
     ["openai key", "Authorization header sk-proj-AAAABBBBCCCCDDDDEEEEFFFF"],
     ["github token", "clone failed ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"],
     ["slack token", "post failed xoxb-1234567890-ABCDEFGHIJKL"],
     ["aws key id", "denied for AKIAIOSFODNN7EXAMPLE"],
-    ["bearer header", "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"],
+    [
+      "bearer header",
+      "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    ],
     ["assignment", 'connect({ apiKey: "hunter2secretvalue" })'],
     ["env style", "ANTHROPIC_TOKEN=abcd1234efgh5678"],
   ];
@@ -23,9 +29,13 @@ describe("scrubText removes credentials", () => {
     test(name, () => {
       const scrubbed = scrubText(input);
 
-      expect(scrubbed).not.toContain("sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345");
+      expect(scrubbed).not.toContain(
+        "sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345"
+      );
       expect(scrubbed).not.toContain("sk-proj-AAAABBBBCCCCDDDDEEEEFFFF");
-      expect(scrubbed).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+      expect(scrubbed).not.toContain(
+        "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+      );
       expect(scrubbed).not.toContain("xoxb-1234567890-ABCDEFGHIJKL");
       expect(scrubbed).not.toContain("AKIAIOSFODNN7EXAMPLE");
       expect(scrubbed).not.toContain("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
@@ -50,14 +60,18 @@ test("scrubText replaces the home directory with a tilde", () => {
 });
 
 test("scrubText replaces home paths belonging to another user", () => {
-  const scrubbed = scrubText("read failed: /Users/someoneelse/.nakama/orgs/a.db");
+  const scrubbed = scrubText(
+    "read failed: /Users/someoneelse/.nakama/orgs/a.db"
+  );
 
   expect(scrubbed).not.toContain("someoneelse");
   expect(scrubbed).toContain("~/.nakama/orgs/a.db");
 });
 
 test("scrubText keeps the diagnostic parts of a stack frame", () => {
-  const scrubbed = scrubText("TypeError: cannot read tools at resolveTools (~/src/a.ts:12:3)");
+  const scrubbed = scrubText(
+    "TypeError: cannot read tools at resolveTools (~/src/a.ts:12:3)"
+  );
 
   expect(scrubbed).toContain("TypeError");
   expect(scrubbed).toContain("resolveTools");
@@ -67,7 +81,7 @@ test("scrubText keeps the diagnostic parts of a stack frame", () => {
 describe("scrubText removes the data an error message quotes back", () => {
   test("a printed JSON payload does not survive", () => {
     const scrubbed = scrubText(
-      'Unexpected token in {"name":"Budi","email":"budi@klinik.example","age":34}',
+      'Unexpected token in {"name":"Budi","email":"budi@klinik.example","age":34}'
     );
 
     expect(scrubbed).not.toContain("Budi");
@@ -76,7 +90,9 @@ describe("scrubText removes the data an error message quotes back", () => {
   });
 
   test("a nested payload does not survive either", () => {
-    const scrubbed = scrubText('failed on {"patient":{"name":"Budi","room":"A1"}}');
+    const scrubbed = scrubText(
+      'failed on {"patient":{"name":"Budi","room":"A1"}}'
+    );
 
     expect(scrubbed).not.toContain("Budi");
     expect(scrubbed).not.toContain("A1");
@@ -97,10 +113,12 @@ describe("scrubText removes the data an error message quotes back", () => {
   });
 
   test("single-quoted identifiers stay readable, which is the whole trade", () => {
-    expect(scrubText("Cannot find module 'crash-report'")).toContain("'crash-report'");
-    expect(scrubText("Cannot read property 'sessionId' of undefined")).toContain(
-      "'sessionId'",
+    expect(scrubText("Cannot find module 'crash-report'")).toContain(
+      "'crash-report'"
     );
+    expect(
+      scrubText("Cannot read property 'sessionId' of undefined")
+    ).toContain("'sessionId'");
   });
 
   test("an apostrophe in prose is not treated as a quote", () => {
@@ -113,20 +131,20 @@ describe("scrubText removes the data an error message quotes back", () => {
 test("scrubText truncates runaway text", () => {
   const scrubbed = scrubText("x".repeat(10_000));
 
-  expect(scrubbed.length).toBeLessThanOrEqual(4_001);
+  expect(scrubbed.length).toBeLessThanOrEqual(4001);
 });
 
 describe("scrubBreadcrumbData", () => {
   test("drops every key that is not allowlisted", () => {
     const scrubbed = scrubBreadcrumbData({
-      tool: "bash",
-      prompt: "summarise the patient record for Budi",
-      toolArgs: { command: "cat ~/.ssh/id_rsa" },
-      orgName: "orgx",
       messages: ["hello"],
+      orgName: "orgx",
+      prompt: "summarise the patient record for Budi",
+      tool: "bash",
+      toolArgs: { command: "cat ~/.ssh/id_rsa" },
     });
 
-    expect(scrubbed).toEqual({ tool: "bash", droppedKeys: 4 });
+    expect(scrubbed).toEqual({ droppedKeys: 4, tool: "bash" });
   });
 
   test("scrubs secrets inside an allowlisted value", () => {
@@ -138,15 +156,19 @@ describe("scrubBreadcrumbData", () => {
   });
 
   test("keeps numbers and booleans on allowlisted keys", () => {
-    expect(scrubBreadcrumbData({ status: 500, durationMs: 12, count: 3 })).toEqual({
-      status: 500,
-      durationMs: 12,
+    expect(
+      scrubBreadcrumbData({ count: 3, durationMs: 12, status: 500 })
+    ).toEqual({
       count: 3,
+      durationMs: 12,
+      status: 500,
     });
   });
 
   test("drops an allowlisted key holding a nested object", () => {
-    expect(scrubBreadcrumbData({ tool: { name: "bash" } })).toEqual({ droppedKeys: 1 });
+    expect(scrubBreadcrumbData({ tool: { name: "bash" } })).toEqual({
+      droppedKeys: 1,
+    });
   });
 
   test("returns undefined when nothing survives", () => {

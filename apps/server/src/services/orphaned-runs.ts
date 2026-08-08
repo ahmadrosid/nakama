@@ -10,7 +10,7 @@ import type { DatabaseAdapter, StoredAutomationRunRecord } from "@nakama/db";
  */
 export async function reconcileOrphanedAutomationRuns(
   databaseAdapter: DatabaseAdapter,
-  processStartedAtMs: number,
+  processStartedAtMs: number
 ): Promise<StoredAutomationRunRecord[]> {
   const automations = await databaseAdapter.listAutomations();
   const orphaned: StoredAutomationRunRecord[] = [];
@@ -44,15 +44,15 @@ export async function reconcileOrphanedAutomationRuns(
   for (const run of orphaned) {
     await databaseAdapter.updateAutomationRun({
       ...run,
-      status: "failed",
       completedAt,
       error: "The server stopped before this run finished.",
+      status: "failed",
     });
   }
 
   void reportInvariant(
     `${orphaned.length} automation runs were left unfinished by a previous server process`,
-    { source: "server" },
+    { source: "server" }
   );
 
   return orphaned;

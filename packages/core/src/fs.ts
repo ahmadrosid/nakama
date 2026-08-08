@@ -1,3 +1,4 @@
+import type { Dirent, Mode } from "node:fs";
 import {
   access,
   chmod,
@@ -7,7 +8,6 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import type { Dirent, Mode } from "node:fs";
 import { dirname } from "node:path";
 
 export const PRIVATE_DIR_MODE = 0o700;
@@ -24,18 +24,20 @@ export async function pathExists(path: string): Promise<boolean> {
 
 export async function ensureDir(
   path: string,
-  mode: Mode = PRIVATE_DIR_MODE,
+  mode: Mode = PRIVATE_DIR_MODE
 ): Promise<void> {
-  await mkdir(path, { recursive: true, mode });
+  await mkdir(path, { mode, recursive: true });
 }
 
 export async function readText(path: string): Promise<string> {
   return readFile(path, "utf8");
 }
 
-export async function readTextIfExists(path: string): Promise<string | undefined> {
+export async function readTextIfExists(
+  path: string
+): Promise<string | undefined> {
   if (!(await pathExists(path))) {
-    return undefined;
+    return;
   }
 
   const content = (await readFile(path, "utf8")).trim();
@@ -62,7 +64,7 @@ export async function writeTextFile(
     ensureDir?: string;
     ensureDirMode?: Mode;
     chmod?: boolean;
-  } = {},
+  } = {}
 ): Promise<void> {
   const mode = options.mode ?? PRIVATE_FILE_MODE;
   const directory = options.ensureDir ?? dirname(path);
@@ -77,14 +79,14 @@ export async function writeTextFile(
 export async function writePrivateTextFile(
   path: string,
   content: string,
-  options: { ensureDir?: string } = {},
+  options: { ensureDir?: string } = {}
 ): Promise<void> {
   await writeTextFile(path, content, options);
 }
 
 export async function writePrivateTextFileIfMissing(
   path: string,
-  content: string,
+  content: string
 ): Promise<boolean> {
   if (await pathExists(path)) {
     return false;
@@ -94,7 +96,10 @@ export async function writePrivateTextFileIfMissing(
   return true;
 }
 
-export async function writePrivateBytesFile(path: string, content: Buffer): Promise<void> {
+export async function writePrivateBytesFile(
+  path: string,
+  content: Buffer
+): Promise<void> {
   await ensureDir(dirname(path));
   await writeFile(path, content, { mode: PRIVATE_FILE_MODE });
 }

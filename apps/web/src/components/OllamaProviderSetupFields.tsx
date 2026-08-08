@@ -14,14 +14,14 @@ import {
 } from "@/components/ui/select";
 
 interface OllamaProviderSetupFieldsProps {
-  hostMode: OllamaHostMode;
   baseUrl: string;
-  disabled?: boolean;
-  density?: "default" | "compact";
   baseUrlError?: string | null;
+  density?: "default" | "compact";
+  disabled?: boolean;
   fieldIdPrefix?: string;
-  onHostModeChange: (hostMode: OllamaHostMode) => void;
+  hostMode: OllamaHostMode;
   onBaseUrlChange: (baseUrl: string) => void;
+  onHostModeChange: (hostMode: OllamaHostMode) => void;
 }
 
 export function OllamaProviderSetupFields({
@@ -39,9 +39,8 @@ export function OllamaProviderSetupFields({
 
   return (
     <div className="space-y-4">
-      <FormField id={hostModeId} label="Host" density={density}>
+      <FormField density={density} id={hostModeId} label="Host">
         <Select
-          value={hostMode}
           disabled={disabled}
           onValueChange={(value) => {
             const nextMode = value === "cloud" ? "cloud" : "local";
@@ -49,11 +48,12 @@ export function OllamaProviderSetupFields({
             onBaseUrlChange(
               nextMode === "cloud"
                 ? OLLAMA_CLOUD_DEFAULT_BASE_URL
-                : OLLAMA_LOCAL_DEFAULT_BASE_URL,
+                : OLLAMA_LOCAL_DEFAULT_BASE_URL
             );
           }}
+          value={hostMode}
         >
-          <SelectTrigger id={hostModeId} className="w-full">
+          <SelectTrigger className="w-full" id={hostModeId}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -64,29 +64,30 @@ export function OllamaProviderSetupFields({
       </FormField>
 
       <FormField
-        id={baseUrlId}
-        label="Base URL"
         density={density}
         footer={
           baseUrlError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {baseUrlError}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               OpenAI-compatible endpoint. Local defaults to{" "}
-              <span className="font-mono">{OLLAMA_LOCAL_DEFAULT_BASE_URL}</span>.
+              <span className="font-mono">{OLLAMA_LOCAL_DEFAULT_BASE_URL}</span>
+              .
             </p>
           )
         }
+        id={baseUrlId}
+        label="Base URL"
       >
         <InputGroup>
           <InputGroupInput
-            id={baseUrlId}
-            value={baseUrl}
-            disabled={disabled}
             aria-invalid={baseUrlError != null}
+            disabled={disabled}
+            id={baseUrlId}
             onChange={(event) => onBaseUrlChange(event.target.value)}
+            value={baseUrl}
           />
         </InputGroup>
       </FormField>

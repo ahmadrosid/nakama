@@ -9,24 +9,27 @@ export function scaleImageDimensions(
   width: number,
   height: number,
   maxDimension: number,
-  scale = 1,
+  scale = 1
 ): { width: number; height: number } {
   const scaledWidth = Math.max(1, Math.round(width * scale));
   const scaledHeight = Math.max(1, Math.round(height * scale));
   const longestEdge = Math.max(scaledWidth, scaledHeight);
 
   if (longestEdge <= maxDimension) {
-    return { width: scaledWidth, height: scaledHeight };
+    return { height: scaledHeight, width: scaledWidth };
   }
 
   const fitScale = maxDimension / longestEdge;
   return {
-    width: Math.max(1, Math.round(scaledWidth * fitScale)),
     height: Math.max(1, Math.round(scaledHeight * fitScale)),
+    width: Math.max(1, Math.round(scaledWidth * fitScale)),
   };
 }
 
-function extensionForMediaType(mediaType: string, fallbackName: string): string {
+function extensionForMediaType(
+  mediaType: string,
+  fallbackName: string
+): string {
   switch (mediaType) {
     case "image/jpeg":
       return ".jpg";
@@ -37,7 +40,9 @@ function extensionForMediaType(mediaType: string, fallbackName: string): string 
     case "image/gif":
       return ".gif";
     default:
-      return fallbackName.includes(".") ? (fallbackName.slice(fallbackName.lastIndexOf(".")) || ".jpg") : ".jpg";
+      return fallbackName.includes(".")
+        ? fallbackName.slice(fallbackName.lastIndexOf(".")) || ".jpg"
+        : ".jpg";
   }
 }
 
@@ -69,7 +74,7 @@ async function loadImageBitmap(file: File): Promise<ImageBitmap> {
 async function canvasToBlob(
   canvas: HTMLCanvasElement,
   mediaType: string,
-  quality?: number,
+  quality?: number
 ): Promise<Blob | null> {
   return new Promise((resolve) => {
     canvas.toBlob(resolve, mediaType, quality);
@@ -83,13 +88,13 @@ async function renderCompressedFile(
     maxBytes: number;
     maxDimension: number;
     scale: number;
-  },
+  }
 ): Promise<File | null> {
   const { width, height } = scaleImageDimensions(
     bitmap.width,
     bitmap.height,
     options.maxDimension,
-    options.scale,
+    options.scale
   );
 
   const canvas = document.createElement("canvas");
@@ -118,8 +123,8 @@ async function renderCompressedFile(
       }
 
       return new File([blob], renameForMediaType(options.filename, mediaType), {
-        type: mediaType,
         lastModified: Date.now(),
+        type: mediaType,
       });
     }
   }
@@ -129,7 +134,7 @@ async function renderCompressedFile(
 
 export async function compressImageFileForUpload(
   file: File,
-  maxBytes = MAX_IMAGE_BYTES,
+  maxBytes = MAX_IMAGE_BYTES
 ): Promise<File> {
   if (!file.type.startsWith("image/") || file.size <= maxBytes) {
     return file;
@@ -178,11 +183,11 @@ export async function prepareChatUploadFiles(files: File[]): Promise<File[]> {
         throw new Error(
           file.type === "image/gif"
             ? "GIF images must be at most 5 MB."
-            : `Could not compress "${file.name}" below 5 MB. Try a smaller image.`,
+            : `Could not compress "${file.name}" below 5 MB. Try a smaller image.`
         );
       }
 
       return compressed;
-    }),
+    })
   );
 }

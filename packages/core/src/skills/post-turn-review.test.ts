@@ -11,7 +11,7 @@ describe("resolveSkillPostTurnReviewEnabled", () => {
       resolveSkillPostTurnReviewEnabled({
         orgSkillsPostTurnReview: true,
         profileSkillsPostTurnReview: null,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -20,7 +20,7 @@ describe("resolveSkillPostTurnReviewEnabled", () => {
       resolveSkillPostTurnReviewEnabled({
         orgSkillsPostTurnReview: true,
         profileSkillsPostTurnReview: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -29,7 +29,7 @@ describe("resolveSkillPostTurnReviewEnabled", () => {
       resolveSkillPostTurnReviewEnabled({
         orgSkillsPostTurnReview: false,
         profileSkillsPostTurnReview: true,
-      }),
+      })
     ).toBe(true);
   });
 });

@@ -7,9 +7,9 @@ import { getUserConfigDir } from "./user-config";
  * keeps the issue-filing tool absent from every other install.
  */
 export interface CrashIssueConfig {
+  maxIssuesPerHour: number;
   repo: string | null;
   token: string | null;
-  maxIssuesPerHour: number;
 }
 
 export const DEFAULT_MAX_ISSUES_PER_HOUR = 5;
@@ -25,10 +25,12 @@ export function getCrashIssueConfigPath(): string {
  * GitHub API path, so a slash or a traversal segment here would reach a different
  * endpoint than the one configured.
  */
-export function parseCrashIssueRepo(value: string | null | undefined): string | null {
+export function parseCrashIssueRepo(
+  value: string | null | undefined
+): string | null {
   const trimmed = value?.trim();
 
-  if (!trimmed || !REPO_PATTERN.test(trimmed)) {
+  if (!(trimmed && REPO_PATTERN.test(trimmed))) {
     return null;
   }
 
@@ -38,33 +40,39 @@ export function parseCrashIssueRepo(value: string | null | undefined): string | 
 function parseMaxIssuesPerHour(value: string | undefined): number {
   const parsed = Number.parseInt(value?.trim() ?? "", 10);
 
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_ISSUES_PER_HOUR;
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_ISSUES_PER_HOUR;
 }
 
 export async function loadCrashIssueConfigFile(): Promise<CrashIssueConfig> {
   const raw = await readTextOrNull(getCrashIssueConfigPath());
 
   if (raw === null) {
-    return { repo: null, token: null, maxIssuesPerHour: DEFAULT_MAX_ISSUES_PER_HOUR };
+    return {
+      maxIssuesPerHour: DEFAULT_MAX_ISSUES_PER_HOUR,
+      repo: null,
+      token: null,
+    };
   }
 
   const values = parseIni(raw);
 
   return {
+    maxIssuesPerHour: parseMaxIssuesPerHour(values.max_issues_per_hour),
     repo: parseCrashIssueRepo(values.repo),
     token: values.token?.trim() || null,
-    maxIssuesPerHour: parseMaxIssuesPerHour(values.max_issues_per_hour),
   };
 }
 
 export function resolveCrashIssueConfig(
   file: CrashIssueConfig,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): CrashIssueConfig {
   return {
+    maxIssuesPerHour: file.maxIssuesPerHour,
     repo: parseCrashIssueRepo(env.NAKAMA_CRASH_ISSUE_REPO) ?? file.repo,
     token: env.NAKAMA_CRASH_ISSUE_TOKEN?.trim() || file.token,
-    maxIssuesPerHour: file.maxIssuesPerHour,
   };
 }
 

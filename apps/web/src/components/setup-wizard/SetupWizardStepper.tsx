@@ -1,4 +1,7 @@
-import { SETUP_STEPS, type SetupStepId } from "@/components/setup-wizard/setup-wizard.shared";
+import {
+  SETUP_STEPS,
+  type SetupStepId,
+} from "@/components/setup-wizard/setup-wizard.shared";
 import { cn } from "@/lib/utils";
 
 interface SetupWizardStepperProps {
@@ -24,17 +27,17 @@ export function SetupWizardStepper({ currentStep }: SetupWizardStepperProps) {
 
           return (
             <li
-              key={step.id}
               aria-current={isCurrent ? "step" : undefined}
               className={cn(
                 "flex flex-1 items-center gap-1",
-                index === 3 && "ml-1.5",
+                index === 3 && "ml-1.5"
               )}
+              key={step.id}
             >
               <div
                 className={cn(
                   "h-1 w-full rounded-full transition-colors",
-                  isCompleted || isCurrent ? "bg-primary" : "bg-border",
+                  isCompleted || isCurrent ? "bg-primary" : "bg-border"
                 )}
               />
               <span className="sr-only">

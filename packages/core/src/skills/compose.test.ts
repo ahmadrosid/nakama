@@ -7,14 +7,14 @@ import {
 import type { DiscoveredSkill } from "./types";
 
 const baseSkill: DiscoveredSkill = {
-  name: "weather",
-  description: "Get weather forecasts.",
-  disableModelInvocation: false,
-  includeBodyOnMatch: false,
-  directory: "/tmp/weather",
-  skillFilePath: "/tmp/weather/SKILL.md",
   body: "Call the weather tool with a city name.",
+  description: "Get weather forecasts.",
+  directory: "/tmp/weather",
+  disableModelInvocation: false,
   hasTool: true,
+  includeBodyOnMatch: false,
+  name: "weather",
+  skillFilePath: "/tmp/weather/SKILL.md",
   toolPath: "/tmp/weather/tool.ts",
 };
 

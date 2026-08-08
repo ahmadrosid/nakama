@@ -9,59 +9,59 @@ import {
 } from "lucide-react";
 
 export interface TaskColumnMeta {
-  id: TaskStatus;
-  label: string;
+  countBadge: string;
   description: string;
   emptyMessage: string;
-  countBadge: string;
   icon: LucideIcon;
+  id: TaskStatus;
+  label: string;
 }
 
 export const TASK_COLUMN_META: TaskColumnMeta[] = [
   {
-    id: "backlog",
-    label: "Backlog",
+    countBadge: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
     description: "Ideas waiting to be picked up",
     emptyMessage: "Drag tasks here or create one to get started.",
-    countBadge: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
     icon: CircleDashedIcon,
+    id: "backlog",
+    label: "Backlog",
   },
   {
-    id: "todo",
-    label: "To Do",
+    countBadge: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
     description: "Ready to run — press play on a card",
     emptyMessage: "Move a task here, then start it with the play button.",
-    countBadge: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
     icon: ListTodoIcon,
+    id: "todo",
+    label: "To Do",
   },
   {
-    id: "in_progress",
-    label: "In Progress",
+    countBadge: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
     description: "Agents actively working",
     emptyMessage: "No agents running. Start a task from To Do.",
-    countBadge: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
     icon: LoaderIcon,
+    id: "in_progress",
+    label: "In Progress",
   },
   {
-    id: "done",
-    label: "Done",
+    countBadge: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
     description: "Completed — click to open task chat",
     emptyMessage: "Finished tasks appear here. Click one to review the run.",
-    countBadge: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
     icon: CheckCircle2Icon,
+    id: "done",
+    label: "Done",
   },
   {
-    id: "failed",
-    label: "Failed",
+    countBadge: "bg-red-500/15 text-red-800 dark:text-red-200",
     description: "Errors — click to inspect and retry",
     emptyMessage: "Failed runs show here. Open a card to edit or re-run.",
-    countBadge: "bg-red-500/15 text-red-800 dark:text-red-200",
     icon: XCircleIcon,
+    id: "failed",
+    label: "Failed",
   },
 ];
 
 export const TASK_COLUMN_META_BY_ID = Object.fromEntries(
-  TASK_COLUMN_META.map((column) => [column.id, column]),
+  TASK_COLUMN_META.map((column) => [column.id, column])
 ) as Record<TaskStatus, TaskColumnMeta>;
 
 export const TASK_STATUS_BADGE: Record<
@@ -69,23 +69,23 @@ export const TASK_STATUS_BADGE: Record<
   { label: string; className: string }
 > = {
   backlog: {
-    label: "Backlog",
     className: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
-  },
-  todo: {
-    label: "To Do",
-    className: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
-  },
-  in_progress: {
-    label: "In Progress",
-    className: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
+    label: "Backlog",
   },
   done: {
-    label: "Done",
     className: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
+    label: "Done",
   },
   failed: {
-    label: "Failed",
     className: "bg-red-500/15 text-red-800 dark:text-red-200",
+    label: "Failed",
+  },
+  in_progress: {
+    className: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
+    label: "In Progress",
+  },
+  todo: {
+    className: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
+    label: "To Do",
   },
 };

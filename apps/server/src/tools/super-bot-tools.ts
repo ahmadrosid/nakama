@@ -1,13 +1,13 @@
-import type { ProfileService } from "../services/profile-service";
 import {
-  emptyObjectSchema,
   type CreateProfileRequest,
+  emptyObjectSchema,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
 import { validateJavascriptToolModule } from "../services/javascript-tool-loader";
+import type { ProfileService } from "../services/profile-service";
 import {
-  SuperBotSessionState,
+  type SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
 
@@ -31,28 +31,28 @@ function requireOrgId(context: ToolContext): string {
 
 export function createSuperBotTools(
   profileService: ProfileService,
-  sessionState: SuperBotSessionState,
+  sessionState: SuperBotSessionState
 ): ToolDefinition[] {
   return [
     {
-      name: "list_profiles",
       description:
         "List all bot profiles with their id, name, and tool counts. Use when managing profiles or when the user asks you to assign a tool and you need profile ids.",
+      name: "list_profiles",
       parameters: emptyObjectSchema(),
       async run(_input, context: ToolContext) {
         return profileService.listProfiles(requireOrgId(context));
       },
     },
     {
-      name: "get_profile",
       description: "Get a bot profile by id, including assigned tools.",
+      name: "get_profile",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
-          profileId: { type: "string", description: "Profile id to fetch." },
+          profileId: { description: "Profile id to fetch.", type: "string" },
         },
         required: ["profileId"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context: ToolContext) {
         const profileId = readString(input, "profileId");
@@ -65,36 +65,42 @@ export function createSuperBotTools(
       },
     },
     {
-      name: "create_profile",
       description: "Create a new bot profile.",
+      name: "create_profile",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
-          name: { type: "string", description: "Display name for the profile." },
-          systemPrompt: { type: "string", description: "System prompt for the bot." },
-          model: {
-            type: "string",
-            description: "Model override, or null to use the server default.",
-          },
           isSuper: {
-            type: "boolean",
             description: "Whether this profile is a super bot.",
+            type: "boolean",
+          },
+          model: {
+            description: "Model override, or null to use the server default.",
+            type: "string",
+          },
+          name: {
+            description: "Display name for the profile.",
+            type: "string",
           },
           soulFiles: {
-            type: "object",
+            additionalProperties: false,
             description:
               "Optional generated soul file contents for the new profile. Supported keys: SOUL.md, STYLE.md, INSTRUCTIONS.md, MEMORY.md.",
             properties: {
-              "SOUL.md": { type: "string" },
-              "STYLE.md": { type: "string" },
               "INSTRUCTIONS.md": { type: "string" },
               "MEMORY.md": { type: "string" },
+              "SOUL.md": { type: "string" },
+              "STYLE.md": { type: "string" },
             },
-            additionalProperties: false,
+            type: "object",
+          },
+          systemPrompt: {
+            description: "System prompt for the bot.",
+            type: "string",
           },
         },
         required: ["name"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context: ToolContext) {
         const name = readString(input, "name");
@@ -104,32 +110,32 @@ export function createSuperBotTools(
         }
 
         return profileService.createProfile(requireOrgId(context), {
-          name,
-          systemPrompt: readString(input, "systemPrompt") ?? undefined,
-          model: readOptionalString(input, "model"),
           isSuper: readBoolean(input, "isSuper") ?? false,
+          model: readOptionalString(input, "model"),
+          name,
           soulFiles: readSoulFiles(input),
+          systemPrompt: readString(input, "systemPrompt") ?? undefined,
         });
       },
     },
     {
-      name: "assign_tool_to_profile",
       description:
         "Assign an existing tool to a profile. Use only when the user explicitly asks to assign a tool to a profile.",
+      name: "assign_tool_to_profile",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
-          profileId: { type: "string", description: "Target profile id." },
-          toolId: { type: "string", description: "Tool id to assign." },
+          profileId: { description: "Target profile id.", type: "string" },
+          toolId: { description: "Tool id to assign.", type: "string" },
         },
         required: ["profileId", "toolId"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context: ToolContext) {
         const profileId = readString(input, "profileId");
         const toolId = readString(input, "toolId");
 
-        if (!profileId || !toolId) {
+        if (!(profileId && toolId)) {
           throw new Error("profileId and toolId are required.");
         }
 
@@ -137,49 +143,53 @@ export function createSuperBotTools(
           throw new Error(TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE);
         }
 
-        const result = await profileService.assignTool(requireOrgId(context), profileId, {
-          toolId,
-        });
+        const result = await profileService.assignTool(
+          requireOrgId(context),
+          profileId,
+          {
+            toolId,
+          }
+        );
         sessionState.markToolAssigned(context.sessionId, toolId);
         return result;
       },
     },
     {
-      name: "list_tools",
       description: "List all registered tools.",
+      name: "list_tools",
       parameters: emptyObjectSchema(),
       async run() {
         return profileService.listTools();
       },
     },
     {
-      name: "create_tool",
       description:
-        'Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.',
+        "Register a JavaScript tool. Workflow: list_tools (check name) → write_file (~/.nakama/tools/<name>.js) → create_tool. Do not call list_profiles as part of this workflow.",
+      name: "create_tool",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
-          name: { type: "string", description: "Unique tool name." },
-          description: { type: "string", description: "What the tool does." },
-          handlerType: {
-            type: "string",
-            description: 'Handler type. Must be "javascript".',
-          },
+          description: { description: "What the tool does.", type: "string" },
           handlerConfig: {
-            type: "object",
+            additionalProperties: true,
             description:
               'For javascript tools: { "modulePath": "my-tool.js" } relative to ~/.nakama/tools/. The file must already exist and export run(input, context) plus optional parameters JSON schema.',
-            additionalProperties: true,
+            type: "object",
           },
+          handlerType: {
+            description: 'Handler type. Must be "javascript".',
+            type: "string",
+          },
+          name: { description: "Unique tool name.", type: "string" },
         },
         required: ["name", "description"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context: ToolContext) {
         const name = readString(input, "name");
         const description = readString(input, "description");
 
-        if (!name || !description) {
+        if (!(name && description)) {
           throw new Error("name and description are required.");
         }
 
@@ -189,7 +199,7 @@ export function createSuperBotTools(
 
         if (requestedHandlerType && requestedHandlerType !== handlerType) {
           throw new Error(
-            'Super Bot can only create JavaScript tools. Use handlerType "javascript".',
+            'Super Bot can only create JavaScript tools. Use handlerType "javascript".'
           );
         }
 
@@ -197,17 +207,17 @@ export function createSuperBotTools(
 
         if (!modulePath?.endsWith(".js")) {
           throw new Error(
-            'JavaScript tools require handlerConfig.modulePath ending in ".js". Write the module with write_file to ~/.nakama/tools/ first.',
+            'JavaScript tools require handlerConfig.modulePath ending in ".js". Write the module with write_file to ~/.nakama/tools/ first.'
           );
         }
 
         await validateJavascriptToolModule(modulePath);
 
         const tool = await profileService.createTool({
-          name,
           description,
-          handlerType,
           handlerConfig,
+          handlerType,
+          name,
         });
 
         sessionState.markToolCreated(context.sessionId, tool.id);
@@ -227,9 +237,12 @@ function readString(input: unknown, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function readOptionalString(input: unknown, key: string): string | null | undefined {
+function readOptionalString(
+  input: unknown,
+  key: string
+): string | null | undefined {
   if (typeof input !== "object" || input === null || !(key in input)) {
-    return undefined;
+    return;
   }
 
   const value = (input as Record<string, unknown>)[key];
@@ -252,17 +265,19 @@ function readBoolean(input: unknown, key: string): boolean | null {
 
 function readObject(input: unknown, key: string): unknown {
   if (typeof input !== "object" || input === null || !(key in input)) {
-    return undefined;
+    return;
   }
 
   return (input as Record<string, unknown>)[key];
 }
 
-function readSoulFiles(input: unknown): CreateProfileRequest["soulFiles"] | undefined {
+function readSoulFiles(
+  input: unknown
+): CreateProfileRequest["soulFiles"] | undefined {
   const raw = readObject(input, "soulFiles");
 
   if (raw === undefined) {
-    return undefined;
+    return;
   }
 
   if (typeof raw !== "object" || raw === null) {
@@ -293,5 +308,7 @@ function readModulePath(handlerConfig: unknown): string | null {
   }
 
   const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
-  return typeof modulePath === "string" && modulePath.trim() ? modulePath.trim() : null;
+  return typeof modulePath === "string" && modulePath.trim()
+    ? modulePath.trim()
+    : null;
 }

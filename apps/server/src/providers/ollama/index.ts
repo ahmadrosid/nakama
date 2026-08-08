@@ -2,16 +2,18 @@ import {
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
   normalizeBaseUrl,
-  resolveOllamaHostMode,
   type ProviderClient,
   type ProviderInstance,
+  resolveOllamaHostMode,
 } from "@nakama/core";
-import { createOpenAICompatibleProvider } from "../openai-compatible";
 import { compatibleModelSupportsThinking } from "../compatible-models";
+import { createOpenAICompatibleProvider } from "../openai-compatible";
 
 export { fetchOllamaModels } from "./models";
 
-export function resolveOllamaBaseUrl(instance: ProviderInstance | null | undefined): string {
+export function resolveOllamaBaseUrl(
+  instance: ProviderInstance | null | undefined
+): string {
   const trimmed = instance?.baseUrl?.trim();
   if (trimmed) {
     return normalizeBaseUrl(trimmed);
@@ -27,7 +29,8 @@ export function createOllamaProvider(options: {
 }): ProviderClient {
   const instance = options.instance;
   const hostMode = resolveOllamaHostMode(instance ?? {});
-  const apiKey = options.apiKey.trim() || (hostMode === "local" ? "not-needed" : "");
+  const apiKey =
+    options.apiKey.trim() || (hostMode === "local" ? "not-needed" : "");
 
   if (hostMode === "cloud" && !apiKey) {
     throw new Error("Ollama Cloud requires an API key.");
@@ -36,9 +39,12 @@ export function createOllamaProvider(options: {
   return createOpenAICompatibleProvider({
     apiKey,
     baseUrl: resolveOllamaBaseUrl(instance),
-    model: options.model,
     displayName: instance?.label?.trim() || defaultOllamaLabel(hostMode),
-    supportsThinking: compatibleModelSupportsThinking(options.model, instance?.customModels),
+    model: options.model,
     providerName: "ollama",
+    supportsThinking: compatibleModelSupportsThinking(
+      options.model,
+      instance?.customModels
+    ),
   });
 }

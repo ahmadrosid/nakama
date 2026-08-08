@@ -1,21 +1,26 @@
 import type {
+  ComposioConnectRequest,
   ComposioConnectResponse,
   ComposioToolkitSummary,
-  ComposioConnectRequest,
   EnableComposioToolkitRequest,
   ListComposioToolkitsResponse,
   ListProfileComposioToolkitsResponse,
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
-import { ComposioService } from "../../services/composio-service";
 import { resolveComposioCallbackBaseUrl } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
-import { requireNotViewerFromContext, requireOrgAdminFromContext } from "../org-guards";
+import {
+  requireNotViewerFromContext,
+  requireOrgAdminFromContext,
+} from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
-export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerComposioOAuthRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const service = options.composioService;
   if (!service) {
     return;
@@ -31,7 +36,8 @@ export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions
       const connectedAccountId = c.req.query("connected_account_id");
       const result = await service.completeOAuth(state, { connectedAccountId });
       const accept = c.req.header("accept") ?? "";
-      const wantsHtml = accept.includes("text/html") || !accept.includes("application/json");
+      const wantsHtml =
+        accept.includes("text/html") || !accept.includes("application/json");
 
       if (wantsHtml) {
         const toolkit = escapeHtml(result.toolkitSlug);
@@ -54,19 +60,22 @@ export function registerComposioOAuthRoutes(app: HonoApp, options: ServerOptions
   <p>You can close this tab and return to Discord, Telegram, or chat.</p>
   <p><a href="/integrations?section=composio&amp;connected=${encodeURIComponent(result.toolkitSlug)}">Open Integrations</a></p>
 </body>
-</html>`,
+</html>`
         );
       }
 
       return c.redirect(
-        `/integrations?section=composio&connected=${encodeURIComponent(result.toolkitSlug)}`,
+        `/integrations?section=composio&connected=${encodeURIComponent(result.toolkitSlug)}`
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 }
@@ -80,7 +89,10 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-export function registerComposioRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerComposioRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const service = options.composioService;
   if (!service) {
     return;
@@ -89,7 +101,7 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
   app.get("/v1/composio/toolkits", async (c) => {
     const auth = requireNotViewerFromContext(c);
     return json<ListComposioToolkitsResponse>(
-      await service.listToolkits(auth.activeOrgId!, auth.user.id),
+      await service.listToolkits(auth.activeOrgId!, auth.user.id)
     );
   });
 
@@ -100,14 +112,17 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
       return json<ComposioToolkitSummary>(
         await service.enableToolkit(auth.activeOrgId!, {
           toolkitSlug: c.req.param("toolkitSlug"),
-        } satisfies EnableComposioToolkitRequest),
+        } satisfies EnableComposioToolkitRequest)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -116,14 +131,20 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
 
     try {
       return json<ComposioToolkitSummary>(
-        await service.disableToolkit(auth.activeOrgId!, c.req.param("toolkitSlug")),
+        await service.disableToolkit(
+          auth.activeOrgId!,
+          c.req.param("toolkitSlug")
+        )
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -131,7 +152,9 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
     const auth = requireNotViewerFromContext(c);
 
     try {
-      const body = await readJson<ComposioConnectRequest>(c.req.raw).catch(() => ({}));
+      const body = await readJson<ComposioConnectRequest>(c.req.raw).catch(
+        () => ({})
+      );
       return json<ComposioConnectResponse>(
         await service.connectToolkit(
           auth.activeOrgId!,
@@ -140,15 +163,18 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
           resolveComposioCallbackBaseUrl({
             clientOrigin: body.callbackOrigin,
             request: c.req.raw,
-          }),
-        ),
+          })
+        )
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -160,15 +186,18 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
         await service.disconnectToolkit(
           auth.activeOrgId!,
           auth.user.id,
-          c.req.param("toolkitSlug"),
-        ),
+          c.req.param("toolkitSlug")
+        )
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -180,50 +209,62 @@ export function registerComposioRoutes(app: HonoApp, options: ServerOptions): vo
         await service.syncUserToolkit(
           auth.activeOrgId!,
           auth.user.id,
-          c.req.param("toolkitSlug"),
-        ),
+          c.req.param("toolkitSlug")
+        )
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
   app.get("/v1/profiles/:profileId/composio-toolkits", async (c) => {
     const auth = requireOrgAdminFromContext(c);
-    const profile = await options.databaseAdapter?.getProfile(c.req.param("profileId"));
+    const profile = await options.databaseAdapter?.getProfile(
+      c.req.param("profileId")
+    );
 
     if (!profile || profile.orgId !== auth.activeOrgId) {
       return errorResponse("Profile not found.", 404);
     }
 
     return json<ListProfileComposioToolkitsResponse>(
-      await service.listProfileAssignments(auth.activeOrgId!, profile),
+      await service.listProfileAssignments(auth.activeOrgId!, profile)
     );
   });
 
   app.put("/v1/profiles/:profileId/composio-toolkits", async (c) => {
     const auth = requireOrgAdminFromContext(c);
-    const profile = await options.databaseAdapter?.getProfile(c.req.param("profileId"));
+    const profile = await options.databaseAdapter?.getProfile(
+      c.req.param("profileId")
+    );
 
     if (!profile || profile.orgId !== auth.activeOrgId) {
       return errorResponse("Profile not found.", 404);
     }
 
     try {
-      const body = await readJson<UpdateProfileComposioToolkitsRequest>(c.req.raw);
+      const body = await readJson<UpdateProfileComposioToolkitsRequest>(
+        c.req.raw
+      );
       return json<ListProfileComposioToolkitsResponse>(
-        await service.updateProfileAssignments(auth.activeOrgId!, profile, body),
+        await service.updateProfileAssignments(auth.activeOrgId!, profile, body)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
 
-      return errorResponse(error instanceof Error ? error.message : String(error), 400);
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 }

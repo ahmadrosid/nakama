@@ -14,13 +14,13 @@ import { getArtifactSharesDir } from "./soul/resolve";
 const TEST_CONFIG_DIR = path.join(
   process.cwd(),
   ".tmp-test-config",
-  `artifact-shares-${crypto.randomUUID()}`,
+  `artifact-shares-${crypto.randomUUID()}`
 );
 
 describe("artifact shares", () => {
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = undefined;
-    await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
+    await rm(TEST_CONFIG_DIR, { force: true, recursive: true });
   });
 
   test("generateArtifactShareToken returns high-entropy share tokens without underscores", () => {
@@ -42,10 +42,10 @@ describe("artifact shares", () => {
     const shareId = "share_test";
     const bytes = Buffer.from("# Hello", "utf8");
     const storagePath = await writeArtifactShareSnapshot({
+      bytes,
+      filename: "report.md",
       orgId,
       shareId,
-      filename: "report.md",
-      bytes,
     });
 
     expect(storagePath.startsWith(getArtifactSharesDir(orgId))).toBe(true);

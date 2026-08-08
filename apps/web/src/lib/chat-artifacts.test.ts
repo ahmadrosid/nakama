@@ -7,23 +7,24 @@ import {
   toArtifactsRelativePath,
 } from "./chat-artifacts";
 
-const ARTIFACTS_ROOT = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+const ARTIFACTS_ROOT =
+  "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
 
 function writeFileTool(
   id: string,
   input: { path: string; content: string },
   result: { path: string; bytesWritten: number } | { error: string },
-  toolStatus: "running" | "done" = "done",
+  toolStatus: "running" | "done" = "done"
 ): ChatListItem {
   return {
+    content: "",
     id: `tool-${id}`,
     role: "tool",
-    content: "",
-    toolCallId: id,
     tool: "write_file",
-    toolStatus,
+    toolCallId: id,
     toolInput: input,
     toolResult: result,
+    toolStatus,
   };
 }
 
@@ -39,23 +40,31 @@ describe("extractTurnArtifacts", () => {
     const sidecarPath = `${ARTIFACTS_ROOT}/report.md.nakama-meta.json`;
 
     const messages: ChatListItem[] = [
-      writeFileTool("1", { path: "artifacts/report.md", content: "# Report" }, {
-        path: contentPath,
-        bytesWritten: 8,
-      }),
-      writeFileTool("2", { path: "artifacts/report.md.nakama-meta.json", content: metaJson }, {
-        path: sidecarPath,
-        bytesWritten: metaJson.length,
-      }),
+      writeFileTool(
+        "1",
+        { content: "# Report", path: "artifacts/report.md" },
+        {
+          bytesWritten: 8,
+          path: contentPath,
+        }
+      ),
+      writeFileTool(
+        "2",
+        { content: metaJson, path: "artifacts/report.md.nakama-meta.json" },
+        {
+          bytesWritten: metaJson.length,
+          path: sidecarPath,
+        }
+      ),
     ];
 
     expect(extractTurnArtifacts(messages)).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 42,
+        path: "report.md",
         savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 42,
       },
     ]);
   });
@@ -65,14 +74,25 @@ describe("extractTurnArtifacts", () => {
     const sidecarPath = `${ARTIFACTS_ROOT}/weekly/report.md.nakama-meta.json`;
 
     const messages: ChatListItem[] = [
-      writeFileTool("1", { path: "artifacts/weekly/report.md", content: "# Weekly" }, {
-        path: contentPath,
-        bytesWritten: 8,
-      }),
-      writeFileTool("2", { path: "artifacts/weekly/report.md.nakama-meta.json", content: metaJson }, {
-        path: sidecarPath,
-        bytesWritten: metaJson.length,
-      }),
+      writeFileTool(
+        "1",
+        { content: "# Weekly", path: "artifacts/weekly/report.md" },
+        {
+          bytesWritten: 8,
+          path: contentPath,
+        }
+      ),
+      writeFileTool(
+        "2",
+        {
+          content: metaJson,
+          path: "artifacts/weekly/report.md.nakama-meta.json",
+        },
+        {
+          bytesWritten: metaJson.length,
+          path: sidecarPath,
+        }
+      ),
     ];
 
     expect(extractTurnArtifacts(messages)).toEqual([
@@ -90,20 +110,23 @@ describe("extractTurnArtifacts", () => {
       extractTurnArtifacts([
         writeFileTool(
           "1",
-          { path: "artifacts/harness-engineering-slides.html", content: "<html></html>" },
           {
-            path: contentPath,
-            bytesWritten: 13,
+            content: "<html></html>",
+            path: "artifacts/harness-engineering-slides.html",
           },
+          {
+            bytesWritten: 13,
+            path: contentPath,
+          }
         ),
-      ]),
+      ])
     ).toEqual([
       {
         filename: "harness-engineering-slides.html",
-        path: "harness-engineering-slides.html",
         mimeType: "text/html",
-        sizeBytes: 13,
+        path: "harness-engineering-slides.html",
         savedAt: "",
+        sizeBytes: 13,
       },
     ]);
   });
@@ -113,11 +136,15 @@ describe("extractTurnArtifacts", () => {
 
     expect(
       extractTurnArtifacts([
-        writeFileTool("1", { path: "artifacts/report.md.nakama-meta.json", content: metaJson }, {
-          path: sidecarPath,
-          bytesWritten: metaJson.length,
-        }),
-      ]),
+        writeFileTool(
+          "1",
+          { content: metaJson, path: "artifacts/report.md.nakama-meta.json" },
+          {
+            bytesWritten: metaJson.length,
+            path: sidecarPath,
+          }
+        ),
+      ])
     ).toEqual([]);
   });
 
@@ -126,21 +153,29 @@ describe("extractTurnArtifacts", () => {
 
     expect(
       extractTurnArtifacts([
-        writeFileTool("1", { path: "artifacts/report.md", content: "# Report" }, {
-          path: contentPath,
-          bytesWritten: 8,
-        }),
-        writeFileTool("2", { path: "artifacts/report.md.nakama-meta.json", content: metaJson }, {
-          error: "write failed",
-        }),
-      ]),
+        writeFileTool(
+          "1",
+          { content: "# Report", path: "artifacts/report.md" },
+          {
+            bytesWritten: 8,
+            path: contentPath,
+          }
+        ),
+        writeFileTool(
+          "2",
+          { content: metaJson, path: "artifacts/report.md.nakama-meta.json" },
+          {
+            error: "write failed",
+          }
+        ),
+      ])
     ).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 8,
+        path: "report.md",
         savedAt: "",
+        sizeBytes: 8,
       },
     ]);
   });
@@ -149,18 +184,19 @@ describe("extractTurnArtifacts", () => {
     expect(
       extractTurnArtifacts([
         {
+          content:
+            "Saved to `artifacts/harness-engineering-slides.html` for you.",
           id: "assistant-1",
           role: "assistant",
-          content: "Saved to `artifacts/harness-engineering-slides.html` for you.",
         },
-      ]),
+      ])
     ).toEqual([
       {
         filename: "harness-engineering-slides.html",
-        path: "harness-engineering-slides.html",
         mimeType: "text/html",
-        sizeBytes: 0,
+        path: "harness-engineering-slides.html",
         savedAt: "",
+        sizeBytes: 0,
       },
     ]);
   });
@@ -171,27 +207,35 @@ describe("extractTurnArtifacts", () => {
 
     expect(
       extractTurnArtifacts([
-        writeFileTool("1", { path: "artifacts/report.md", content: "# Report" }, {
-          path: contentPath,
-          bytesWritten: 8,
-        }),
-        writeFileTool("2", { path: "artifacts/report.md.nakama-meta.json", content: metaJson }, {
-          path: sidecarPath,
-          bytesWritten: metaJson.length,
-        }),
+        writeFileTool(
+          "1",
+          { content: "# Report", path: "artifacts/report.md" },
+          {
+            bytesWritten: 8,
+            path: contentPath,
+          }
+        ),
+        writeFileTool(
+          "2",
+          { content: metaJson, path: "artifacts/report.md.nakama-meta.json" },
+          {
+            bytesWritten: metaJson.length,
+            path: sidecarPath,
+          }
+        ),
         {
+          content: "Saved `artifacts/report.md`.",
           id: "assistant-1",
           role: "assistant",
-          content: "Saved `artifacts/report.md`.",
         },
-      ]),
+      ])
     ).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 42,
+        path: "report.md",
         savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 42,
       },
     ]);
   });
@@ -202,57 +246,86 @@ describe("extractTurnArtifacts", () => {
 
     expect(
       extractTurnArtifacts([
-        writeFileTool("1", { path: "artifacts/report.md", content: "# Report" }, {
-          path: contentPath,
-          bytesWritten: 8,
-        }),
-        writeFileTool("2", { path: "artifacts/report.md.nakama-meta.json", content: "{bad" }, {
-          path: sidecarPath,
-          bytesWritten: 4,
-        }),
-      ]),
+        writeFileTool(
+          "1",
+          { content: "# Report", path: "artifacts/report.md" },
+          {
+            bytesWritten: 8,
+            path: contentPath,
+          }
+        ),
+        writeFileTool(
+          "2",
+          { content: "{bad", path: "artifacts/report.md.nakama-meta.json" },
+          {
+            bytesWritten: 4,
+            path: sidecarPath,
+          }
+        ),
+      ])
     ).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 8,
+        path: "report.md",
         savedAt: "",
+        sizeBytes: 8,
       },
     ]);
   });
 
   test("ignores meta files written outside artifacts", () => {
-    const outsidePath = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/notes.nakama-meta.json";
+    const outsidePath =
+      "/Users/test/.nakama/orgs/org_1/profiles/profile_1/notes.nakama-meta.json";
 
     expect(
       extractTurnArtifacts([
-        writeFileTool("1", { path: "notes.nakama-meta.json", content: metaJson }, {
-          path: outsidePath,
-          bytesWritten: metaJson.length,
-        }),
-      ]),
+        writeFileTool(
+          "1",
+          { content: metaJson, path: "notes.nakama-meta.json" },
+          {
+            bytesWritten: metaJson.length,
+            path: outsidePath,
+          }
+        ),
+      ])
     ).toEqual([]);
   });
 
   test("emits two refs for two full pairs in one turn", () => {
     const messages: ChatListItem[] = [
-      writeFileTool("1", { path: "artifacts/a.md", content: "a" }, {
-        path: `${ARTIFACTS_ROOT}/a.md`,
-        bytesWritten: 1,
-      }),
-      writeFileTool("2", { path: "artifacts/a.md.nakama-meta.json", content: metaJson }, {
-        path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`,
-        bytesWritten: metaJson.length,
-      }),
-      writeFileTool("3", { path: "artifacts/b.md", content: "b" }, {
-        path: `${ARTIFACTS_ROOT}/b.md`,
-        bytesWritten: 1,
-      }),
-      writeFileTool("4", { path: "artifacts/b.md.nakama-meta.json", content: metaJson }, {
-        path: `${ARTIFACTS_ROOT}/b.md.nakama-meta.json`,
-        bytesWritten: metaJson.length,
-      }),
+      writeFileTool(
+        "1",
+        { content: "a", path: "artifacts/a.md" },
+        {
+          bytesWritten: 1,
+          path: `${ARTIFACTS_ROOT}/a.md`,
+        }
+      ),
+      writeFileTool(
+        "2",
+        { content: metaJson, path: "artifacts/a.md.nakama-meta.json" },
+        {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`,
+        }
+      ),
+      writeFileTool(
+        "3",
+        { content: "b", path: "artifacts/b.md" },
+        {
+          bytesWritten: 1,
+          path: `${ARTIFACTS_ROOT}/b.md`,
+        }
+      ),
+      writeFileTool(
+        "4",
+        { content: metaJson, path: "artifacts/b.md.nakama-meta.json" },
+        {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/b.md.nakama-meta.json`,
+        }
+      ),
     ];
 
     expect(extractTurnArtifacts(messages)).toHaveLength(2);
@@ -262,40 +335,170 @@ describe("extractTurnArtifacts", () => {
     const contentPath = `${ARTIFACTS_ROOT}/weekly/report.md`;
 
     const [artifact] = extractTurnArtifacts([
-      writeFileTool("1", { path: "artifacts/weekly/report.md", content: "# Weekly" }, {
-        path: contentPath,
-        bytesWritten: 8,
-      }),
-      writeFileTool("2", { path: "artifacts/weekly/report.md.nakama-meta.json", content: metaJson }, {
-        path: `${ARTIFACTS_ROOT}/weekly/report.md.nakama-meta.json`,
-        bytesWritten: metaJson.length,
-      }),
+      writeFileTool(
+        "1",
+        { content: "# Weekly", path: "artifacts/weekly/report.md" },
+        {
+          bytesWritten: 8,
+          path: contentPath,
+        }
+      ),
+      writeFileTool(
+        "2",
+        {
+          content: metaJson,
+          path: "artifacts/weekly/report.md.nakama-meta.json",
+        },
+        {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/weekly/report.md.nakama-meta.json`,
+        }
+      ),
     ]);
 
     expect(artifact?.path).toBe("weekly/report.md");
     expect(artifact?.path.startsWith("/")).toBe(false);
   });
+
+  test("extracts successful generate_image tool results without write_file pairs", () => {
+    expect(
+      extractTurnArtifacts([
+        {
+          content: "",
+          id: "tool-img",
+          role: "tool",
+          tool: "generate_image",
+          toolCallId: "img_1",
+          toolInput: { prompt: "a cat" },
+          toolResult: {
+            attachmentId: "att_1",
+            mimeType: "image/png",
+            model: "gpt-image-2",
+            path: "artifacts/cat.png",
+            sizeBytes: 2048,
+          },
+          toolStatus: "done",
+        },
+      ])
+    ).toEqual([
+      {
+        filename: "cat.png",
+        mimeType: "image/png",
+        path: "cat.png",
+        savedAt: "",
+        sizeBytes: 2048,
+      },
+    ]);
+  });
+
+  test("ignores failed generate_image tool results", () => {
+    expect(
+      extractTurnArtifacts([
+        {
+          content: "",
+          id: "tool-img",
+          role: "tool",
+          tool: "generate_image",
+          toolCallId: "img_1",
+          toolInput: { prompt: "a cat" },
+          toolResult: { error: "Image model is not configured." },
+          toolStatus: "done",
+        },
+      ])
+    ).toEqual([]);
+  });
+
+  test("rejects generate_image results missing mimeType", () => {
+    expect(
+      extractTurnArtifacts([
+        {
+          content: "",
+          id: "tool-img",
+          role: "tool",
+          tool: "generate_image",
+          toolCallId: "img_1",
+          toolInput: { prompt: "a cat" },
+          toolResult: {
+            path: "artifacts/cat.png",
+            sizeBytes: 2048,
+          },
+          toolStatus: "done",
+        },
+      ])
+    ).toEqual([]);
+  });
+
+  test("extracts write_file pairs and generate_image together in one turn", () => {
+    const messages: ChatListItem[] = [
+      writeFileTool(
+        "1",
+        { content: "a", path: "artifacts/a.md" },
+        {
+          bytesWritten: 1,
+          path: `${ARTIFACTS_ROOT}/a.md`,
+        }
+      ),
+      writeFileTool(
+        "2",
+        { content: metaJson, path: "artifacts/a.md.nakama-meta.json" },
+        {
+          bytesWritten: metaJson.length,
+          path: `${ARTIFACTS_ROOT}/a.md.nakama-meta.json`,
+        }
+      ),
+      {
+        content: "",
+        id: "tool-img",
+        role: "tool",
+        tool: "generate_image",
+        toolCallId: "img_1",
+        toolInput: { prompt: "a cat" },
+        toolResult: {
+          attachmentId: "att_1",
+          mimeType: "image/png",
+          model: "gpt-image-2",
+          path: "artifacts/cat.png",
+          sizeBytes: 2048,
+        },
+        toolStatus: "done",
+      },
+    ];
+
+    expect(
+      extractTurnArtifacts(messages)
+        .map((artifact) => artifact.path)
+        .sort()
+    ).toEqual(["a.md", "cat.png"]);
+  });
 });
 
 describe("toArtifactsRelativePath", () => {
   test("strips the artifacts directory prefix", () => {
-    expect(toArtifactsRelativePath(`${ARTIFACTS_ROOT}/weekly/report.md`)).toBe("weekly/report.md");
+    expect(toArtifactsRelativePath(`${ARTIFACTS_ROOT}/weekly/report.md`)).toBe(
+      "weekly/report.md"
+    );
   });
 
   test("supports relative artifacts paths", () => {
-    expect(toArtifactsRelativePath("artifacts/weekly/report.md")).toBe("weekly/report.md");
+    expect(toArtifactsRelativePath("artifacts/weekly/report.md")).toBe(
+      "weekly/report.md"
+    );
   });
 });
 
 describe("extractArtifactPathsFromText", () => {
   test("finds inline artifact paths", () => {
     expect(
-      extractArtifactPathsFromText("Open artifacts/harness-engineering-slides.html when ready."),
+      extractArtifactPathsFromText(
+        "Open artifacts/harness-engineering-slides.html when ready."
+      )
     ).toEqual(["harness-engineering-slides.html"]);
   });
 
   test("ignores meta sidecars", () => {
-    expect(extractArtifactPathsFromText("artifacts/report.md.nakama-meta.json")).toEqual([]);
+    expect(
+      extractArtifactPathsFromText("artifacts/report.md.nakama-meta.json")
+    ).toEqual([]);
   });
 });
 

@@ -8,8 +8,8 @@ import type { ProviderModelOption } from "./contract";
 import {
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
-  ollamaRequiresApiKey,
   type OllamaHostMode,
+  ollamaRequiresApiKey,
 } from "./ollama-provider-config";
 import {
   createProviderInstanceId,
@@ -20,11 +20,11 @@ import {
 } from "./user-config";
 
 export interface ProviderSetupPromptOptions {
-  question: (prompt: string) => Promise<string>;
-  writeLine: (line: string) => void;
-  getModelsForProvider: (provider: UserProviderName) => ProviderModelOption[];
   getDefaultModel: (provider: UserProviderName) => string;
   getModelById: (modelId: string) => ProviderModelOption | undefined;
+  getModelsForProvider: (provider: UserProviderName) => ProviderModelOption[];
+  question: (prompt: string) => Promise<string>;
+  writeLine: (line: string) => void;
 }
 
 const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
@@ -41,10 +41,15 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
 ];
 
 export async function promptForProviderConfig(
-  options: ProviderSetupPromptOptions,
+  options: ProviderSetupPromptOptions
 ): Promise<UserConfig> {
-  const { question, writeLine, getModelsForProvider, getDefaultModel, getModelById } =
-    options;
+  const {
+    question,
+    writeLine,
+    getModelsForProvider,
+    getDefaultModel,
+    getModelById,
+  } = options;
 
   while (true) {
     writeLine("\nChoose a provider:");
@@ -61,12 +66,18 @@ export async function promptForProviderConfig(
     }
 
     if (provider === "openai_compatible") {
-      const instance = await promptForCompatibleProviderInstance(question, writeLine);
+      const instance = await promptForCompatibleProviderInstance(
+        question,
+        writeLine
+      );
       return buildUserConfigFromInstance(instance);
     }
 
     if (provider === "ollama") {
-      const instance = await promptForOllamaProviderInstance(question, writeLine);
+      const instance = await promptForOllamaProviderInstance(
+        question,
+        writeLine
+      );
       return buildUserConfigFromInstance(instance);
     }
 
@@ -98,30 +109,30 @@ export async function promptForProviderConfig(
       (provider === "fireworks" || provider === "cerebras") && catalogModel
         ? [
             {
-              id: selectedModel,
               default: true,
-              ...(catalogModel.supportsThinking !== undefined
-                ? { supportsThinking: catalogModel.supportsThinking }
-                : {}),
-              ...(catalogModel.supportsVision !== undefined
-                ? { supportsVision: catalogModel.supportsVision }
-                : {}),
-              ...(catalogModel.inputPerMillionUsd !== undefined
-                ? { inputPerMillionUsd: catalogModel.inputPerMillionUsd }
-                : {}),
-              ...(catalogModel.outputPerMillionUsd !== undefined
-                ? { outputPerMillionUsd: catalogModel.outputPerMillionUsd }
-                : {}),
+              id: selectedModel,
+              ...(catalogModel.supportsThinking === undefined
+                ? {}
+                : { supportsThinking: catalogModel.supportsThinking }),
+              ...(catalogModel.supportsVision === undefined
+                ? {}
+                : { supportsVision: catalogModel.supportsVision }),
+              ...(catalogModel.inputPerMillionUsd === undefined
+                ? {}
+                : { inputPerMillionUsd: catalogModel.inputPerMillionUsd }),
+              ...(catalogModel.outputPerMillionUsd === undefined
+                ? {}
+                : { outputPerMillionUsd: catalogModel.outputPerMillionUsd }),
             },
           ]
         : undefined;
 
     const instance: ProviderInstance = {
-      id: createProviderInstanceId(),
-      type: getModelById(selectedModel)?.provider ?? provider,
-      label: defaultProviderLabel(provider, []),
       apiKey,
       createdAt: new Date().toISOString(),
+      id: createProviderInstanceId(),
+      label: defaultProviderLabel(provider, []),
+      type: getModelById(selectedModel)?.provider ?? provider,
       ...(customModels ? { customModels } : {}),
     };
 
@@ -156,7 +167,11 @@ function resolveProviderChoice(input: string): UserProviderName | null {
 
   const numeric = Number(input);
 
-  if (Number.isInteger(numeric) && numeric >= 1 && numeric <= PROVIDER_CHOICES.length) {
+  if (
+    Number.isInteger(numeric) &&
+    numeric >= 1 &&
+    numeric <= PROVIDER_CHOICES.length
+  ) {
     return PROVIDER_CHOICES[numeric - 1]!.id;
   }
 
@@ -169,7 +184,7 @@ function resolveModelChoice(
   options: Pick<
     ProviderSetupPromptOptions,
     "getDefaultModel" | "getModelById" | "getModelsForProvider"
-  >,
+  >
 ): string {
   if (!input) {
     return options.getDefaultModel(provider);
@@ -197,7 +212,7 @@ function resolveModelChoice(
 
 async function promptForOllamaProviderInstance(
   question: (prompt: string) => Promise<string>,
-  writeLine: (line: string) => void,
+  writeLine: (line: string) => void
 ): Promise<ProviderInstance> {
   while (true) {
     writeLine("\nOllama host: 1) Local  2) Cloud");
@@ -206,7 +221,8 @@ async function promptForOllamaProviderInstance(
       hostInput === "2" || hostInput === "cloud" ? "cloud" : "local";
     const defaultBaseUrl = defaultOllamaBaseUrl(hostMode);
     const baseUrl = normalizeBaseUrl(
-      (await question(`Base URL (${defaultBaseUrl}): `)).trim() || defaultBaseUrl,
+      (await question(`Base URL (${defaultBaseUrl}): `)).trim() ||
+        defaultBaseUrl
     );
 
     if (!isValidBaseUrl(baseUrl)) {
@@ -215,7 +231,9 @@ async function promptForOllamaProviderInstance(
     }
 
     const apiKey = (
-      await question(ollamaRequiresApiKey(hostMode) ? "API key: " : "API key (optional): ")
+      await question(
+        ollamaRequiresApiKey(hostMode) ? "API key: " : "API key (optional): "
+      )
     ).trim();
 
     if (ollamaRequiresApiKey(hostMode) && !apiKey) {
@@ -234,26 +252,26 @@ async function promptForOllamaProviderInstance(
     }
 
     return {
-      id: createProviderInstanceId(),
-      type: "ollama",
-      label: defaultOllamaLabel(hostMode),
       apiKey,
       baseUrl,
-      hostMode,
+      createdAt: new Date().toISOString(),
       customModels: validateCustomModels(
         modelIds.map((id, index) => ({
           id,
           ...(index === 0 ? { default: true } : {}),
-        })),
+        }))
       ),
-      createdAt: new Date().toISOString(),
+      hostMode,
+      id: createProviderInstanceId(),
+      label: defaultOllamaLabel(hostMode),
+      type: "ollama",
     };
   }
 }
 
 async function promptForCompatibleProviderInstance(
   question: (prompt: string) => Promise<string>,
-  writeLine: (line: string) => void,
+  writeLine: (line: string) => void
 ): Promise<ProviderInstance> {
   while (true) {
     const displayName = validateDisplayName(await question("Provider name: "));
@@ -280,17 +298,17 @@ async function promptForCompatibleProviderInstance(
       modelIds.map((id, index) => ({
         id,
         ...(index === 0 ? { default: true } : {}),
-      })),
+      }))
     );
 
     return {
-      id: createProviderInstanceId(),
-      type: "openai_compatible",
-      label: displayName,
       apiKey,
       baseUrl,
-      customModels,
       createdAt: new Date().toISOString(),
+      customModels,
+      id: createProviderInstanceId(),
+      label: displayName,
+      type: "openai_compatible",
     };
   }
 }

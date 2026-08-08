@@ -6,10 +6,17 @@ import type {
   AgentTodo,
   ProviderModelOption,
   SkillSummary,
+  ThinkingEffort,
 } from "@nakama/core/contract";
-import type { ChatStatus } from "ai";
-import type { FileUIPart } from "ai";
-import { ArrowUpIcon, FileTextIcon, PlusIcon, WifiOffIcon, XIcon } from "lucide-react";
+import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
+import type { ChatStatus, FileUIPart } from "ai";
+import {
+  ArrowUpIcon,
+  FileTextIcon,
+  PlusIcon,
+  WifiOffIcon,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   PromptInput,
@@ -26,6 +33,18 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { AgentQuestionnairePanel } from "@/components/chat/AgentQuestionnairePanel";
+import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
+import {
+  ChatMessageQueuePanel,
+  type QueuedComposerMessage,
+} from "@/components/chat/ChatMessageQueuePanel";
+import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
+import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
+import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
+import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
+import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,67 +57,51 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
-import {
-  ALL_ATTACHMENT_ACCEPT,
-  DOCUMENT_ACCEPT,
-  IMAGE_ACCEPT,
-  isImageFilePart,
-} from "@/lib/chat-images";
-import { prepareChatUploadFiles } from "@/lib/compress-image";
-import {
-  composerIconButtonClass,
-  composerSelectTriggerClass,
-  composerShellClass,
-  composerShellCompactClass,
-  composerInputGroupClass,
-  composerToolbarClass,
-} from "@/lib/chat-stream";
-import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
-import { AgentQuestionnairePanel } from "@/components/chat/AgentQuestionnairePanel";
-import {
-  ChatMessageQueuePanel,
-  type QueuedComposerMessage,
-} from "@/components/chat/ChatMessageQueuePanel";
-import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
-import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
-import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
-import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
-import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
-import { ChatThinkingEffortControl } from "@/components/chat/chat-thinking-effort-control";
-import type { ChatContextUsage } from "@/lib/chat-context-usage";
-import type { ThinkingEffort } from "@nakama/core/contract";
-import { cn } from "@/lib/utils";
-import {
-  isPastedTextDocument,
-  LONG_PASTE_WORD_THRESHOLD,
-} from "@/lib/pasted-text";
-import {
-  encodeModelSelection,
-} from "@/lib/models";
 import {
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
 } from "@/lib/chat-composer-skills";
+import type { ChatContextUsage } from "@/lib/chat-context-usage";
+import {
+  ALL_ATTACHMENT_ACCEPT,
+  DOCUMENT_ACCEPT,
+  IMAGE_ACCEPT,
+  isImageFilePart,
+} from "@/lib/chat-images";
+import {
+  composerIconButtonClass,
+  composerInputGroupClass,
+  composerSelectTriggerClass,
+  composerShellClass,
+  composerShellCompactClass,
+  composerToolbarClass,
+} from "@/lib/chat-stream";
+import { prepareChatUploadFiles } from "@/lib/compress-image";
+import { encodeModelSelection } from "@/lib/models";
+import {
+  isPastedTextDocument,
+  LONG_PASTE_WORD_THRESHOLD,
+} from "@/lib/pasted-text";
+import { cn } from "@/lib/utils";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
 interface ChatComposerBaseProps {
-  chatStatus: ChatStatus;
   busy: boolean;
   canStop: boolean;
+  chatStatus: ChatStatus;
+  className?: string;
   disabled?: boolean;
   error: string | null;
-  placeholder?: string;
-  onSubmit: (text: string, files: FileUIPart[]) => void;
-  onStop?: () => void;
-  className?: string;
   footerClassName?: string;
-  todos?: AgentTodo[];
+  onStop?: () => void;
+  onSubmit: (text: string, files: FileUIPart[]) => void;
+  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+  placeholder?: string;
   questionnaire?: AgentQuestionnaire | null;
   queuedMessages?: QueuedComposerMessage[];
-  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
+  todos?: AgentTodo[];
 }
 
 interface ChatComposerMinimalProps extends ChatComposerBaseProps {
@@ -106,30 +109,32 @@ interface ChatComposerMinimalProps extends ChatComposerBaseProps {
 }
 
 interface ChatComposerFullProps extends ChatComposerBaseProps {
-  variant?: "full";
+  availableSkills?: SkillSummary[];
   contextUsage?: ChatContextUsage | null;
-  showOfflineHint?: boolean;
-  providerConfigured?: boolean;
+  currentModelSelection: string | null;
+  onModelChange: (selection: string) => void;
   onNavigateSetup?: () => void;
+  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
+  primarySupportsVision?: boolean;
+  profileModelId?: string | null;
+  providerConfigured?: boolean;
   providerModelGroups: Array<{
     providerId: string;
     providerLabel: string;
     models: ProviderModelOption[];
   }>;
-  profileModelId?: string | null;
-  currentModelSelection: string | null;
-  primarySupportsVision?: boolean;
-  availableSkills?: SkillSummary[];
-  onModelChange: (selection: string) => void;
   renderModelLabel: (selection: string | null) => string | null;
-  thinkingEffortVisible?: boolean;
+  showOfflineHint?: boolean;
+  showTips?: boolean;
   thinkingEffort?: ThinkingEffort;
   thinkingEffortDisabled?: boolean;
-  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
-  showTips?: boolean;
+  thinkingEffortVisible?: boolean;
+  variant?: "full";
 }
 
-export type ChatComposerProps = ChatComposerMinimalProps | ChatComposerFullProps;
+export type ChatComposerProps =
+  | ChatComposerMinimalProps
+  | ChatComposerFullProps;
 
 const EMPTY_TODOS: AgentTodo[] = [];
 const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
@@ -161,7 +166,9 @@ export function ChatComposer(props: ChatComposerProps) {
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
   const showTodos = hasTodos && !hasQuestionnaire && !displayError;
   const hasQueuedMessages = queuedMessages.length > 0;
-  const availableSkills = isMinimal ? EMPTY_SKILLS : (props.availableSkills ?? EMPTY_SKILLS);
+  const availableSkills = isMinimal
+    ? EMPTY_SKILLS
+    : (props.availableSkills ?? EMPTY_SKILLS);
   const skillPickerKey = availableSkills.map((skill) => skill.id).join("\0");
   const composerNotice = displayError ? (
     <ChatComposerError message={displayError} />
@@ -174,16 +181,16 @@ export function ChatComposer(props: ChatComposerProps) {
     <div className={cn("w-full shrink-0", className)}>
       {!isMinimal && props.showOfflineHint ? (
         <p
-          className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+          className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-800 text-xs dark:text-amber-200"
           role="status"
         >
-          <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
+          <WifiOffIcon aria-hidden className="size-3.5 shrink-0" />
           <span>
             No provider configured — limited responses.{" "}
             <button
-              type="button"
               className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
               onClick={props.onNavigateSetup}
+              type="button"
             >
               Set up provider
             </button>
@@ -194,55 +201,61 @@ export function ChatComposer(props: ChatComposerProps) {
         <div className="relative flex w-full flex-col">
           {hasQuestionnaire ? (
             <AgentQuestionnairePanel
-              questionnaire={questionnaire}
               disabled={disabled || busy}
               onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
+              questionnaire={questionnaire}
             />
           ) : null}
-          {showTodos ? <AgentTodoPanel todos={todos} stack /> : null}
-          {hasQueuedMessages ? <ChatMessageQueuePanel messages={queuedMessages} stack /> : null}
+          {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
+          {hasQueuedMessages ? (
+            <ChatMessageQueuePanel messages={queuedMessages} stack />
+          ) : null}
           <div className="relative z-10 -mt-2 w-full">
             {composerNotice}
             <PromptInput
               accept={ALL_ATTACHMENT_ACCEPT}
-              multiple
-              maxFiles={5}
-              maxFileSize={MAX_IMAGE_BYTES}
-              prepareFiles={prepareChatUploadFiles}
-              onError={(attachmentErr) => setAttachmentError(attachmentErr.message)}
               className={shellClass}
               inputGroupClassName={composerInputGroupClass}
-              rimActive={busy}
+              maxFileSize={MAX_IMAGE_BYTES}
+              maxFiles={5}
+              multiple
+              onError={(attachmentErr) =>
+                setAttachmentError(attachmentErr.message)
+              }
               onSubmit={({ text, files }) => {
                 setAttachmentError(null);
                 onSubmit(text.trim(), files);
               }}
+              prepareFiles={prepareChatUploadFiles}
+              rimActive={busy}
             >
-              <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
+              <ChatAttachmentHeader
+                primarySupportsVision={props.primarySupportsVision}
+              />
               <PromptInputBody>
                 <ChatComposerTextarea
-                  key={skillPickerKey}
-                  className="min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
-                  placeholder={placeholder}
-                  disabled={disabled}
                   availableSkills={availableSkills}
+                  className="max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                  disabled={disabled}
+                  key={skillPickerKey}
                   longPasteWordThreshold={LONG_PASTE_WORD_THRESHOLD}
+                  placeholder={placeholder}
                 />
               </PromptInputBody>
               <PromptInputFooter
                 className={cn(
                   "w-full border-0 px-0 py-0",
                   "flex-nowrap items-center gap-1.5 pt-1.5",
-                  footerClassName,
+                  footerClassName
                 )}
               >
                 <ChatComposerFullFooter
-                  props={props}
-                  chatStatus={chatStatus}
                   busy={busy}
                   canStop={canStop}
+                  chatStatus={chatStatus}
                   disabled={disabled}
                   onStop={onStop}
+                  props={props}
                 />
               </PromptInputFooter>
             </PromptInput>
@@ -253,38 +266,42 @@ export function ChatComposer(props: ChatComposerProps) {
           {composerNotice}
           <PromptInput
             accept={isMinimal ? undefined : ALL_ATTACHMENT_ACCEPT}
-            multiple={!isMinimal}
-            maxFiles={isMinimal ? undefined : 5}
+            className={shellClass}
+            inputGroupClassName={composerInputGroupClass}
             maxFileSize={isMinimal ? undefined : MAX_IMAGE_BYTES}
-            prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
+            maxFiles={isMinimal ? undefined : 5}
+            multiple={!isMinimal}
             onError={
               isMinimal
                 ? undefined
                 : (attachmentErr) => setAttachmentError(attachmentErr.message)
             }
-            className={shellClass}
-            inputGroupClassName={composerInputGroupClass}
-            rimActive={busy}
             onSubmit={({ text, files }) => {
               setAttachmentError(null);
               onSubmit(text.trim(), files);
             }}
+            prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
+            rimActive={busy}
           >
-            {!isMinimal ? (
-              <ChatAttachmentHeader primarySupportsVision={props.primarySupportsVision} />
-            ) : null}
+            {isMinimal ? null : (
+              <ChatAttachmentHeader
+                primarySupportsVision={props.primarySupportsVision}
+              />
+            )}
             <PromptInputBody>
               <ChatComposerTextarea
-                key={skillPickerKey}
+                availableSkills={availableSkills}
                 className={
                   isMinimal
-                    ? "min-h-10 max-h-32 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
-                    : "min-h-11 max-h-36 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                    ? "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground"
+                    : "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm"
+                }
+                disabled={disabled}
+                key={skillPickerKey}
+                longPasteWordThreshold={
+                  isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD
                 }
                 placeholder={placeholder}
-                disabled={disabled}
-                availableSkills={availableSkills}
-                longPasteWordThreshold={isMinimal ? undefined : LONG_PASTE_WORD_THRESHOLD}
               />
             </PromptInputBody>
             <PromptInputFooter
@@ -293,27 +310,27 @@ export function ChatComposer(props: ChatComposerProps) {
                 isMinimal
                   ? "justify-end pt-1.5"
                   : "flex-nowrap items-center gap-1.5 pt-1.5",
-                footerClassName,
+                footerClassName
               )}
             >
               {isMinimal ? (
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <ChatComposerSubmitButton
-                    chatStatus={chatStatus}
                     busy={busy}
                     canStop={canStop}
+                    chatStatus={chatStatus}
                     disabled={disabled}
                     onStop={onStop}
                   />
                 </div>
               ) : (
                 <ChatComposerFullFooter
-                  props={props}
-                  chatStatus={chatStatus}
                   busy={busy}
                   canStop={canStop}
+                  chatStatus={chatStatus}
                   disabled={disabled}
                   onStop={onStop}
+                  props={props}
                 />
               )}
             </PromptInputFooter>
@@ -347,11 +364,15 @@ function ChatComposerTextarea({
       slashRange
         ? filterSkillsForSlashQuery(availableSkills, slashRange.query)
         : [],
-    [availableSkills, slashRange],
+    [availableSkills, slashRange]
   );
-  const pickerOpen = Boolean(slashRange && availableSkills.length > 0 && !disabled);
+  const pickerOpen = Boolean(
+    slashRange && availableSkills.length > 0 && !disabled
+  );
   const safeActiveIndex =
-    suggestions.length === 0 ? 0 : Math.min(activeIndex, suggestions.length - 1);
+    suggestions.length === 0
+      ? 0
+      : Math.min(activeIndex, suggestions.length - 1);
 
   const updateSlashRange = useCallback((value: string, cursorIndex: number) => {
     setSlashRange(findActiveSkillSlashRange(value, cursorIndex));
@@ -363,49 +384,55 @@ function ChatComposerTextarea({
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
-      const activeRange = slashRange ?? findActiveSkillSlashRange(value, cursorIndex);
+      const activeRange =
+        slashRange ?? findActiveSkillSlashRange(value, cursorIndex);
 
       if (!activeRange) {
         return;
       }
 
-      const next = replaceSlashRangeWithSkillInvocation(value, activeRange, skill);
+      const next = replaceSlashRangeWithSkillInvocation(
+        value,
+        activeRange,
+        skill
+      );
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);
 
       requestAnimationFrame(() => {
-        textareaRef.current?.setSelectionRange(next.cursorIndex, next.cursorIndex);
+        textareaRef.current?.setSelectionRange(
+          next.cursorIndex,
+          next.cursorIndex
+        );
         textareaRef.current?.focus();
       });
     },
-    [controller.textInput, slashRange],
+    [controller.textInput, slashRange]
   );
 
   return (
     <div className="relative min-w-0 flex-1">
       <ChatSkillTokenOverlay
-        value={controller.textInput.value}
-        skills={availableSkills}
         className={className}
+        skills={availableSkills}
+        value={controller.textInput.value}
       />
       {pickerOpen ? (
         <ChatSkillPicker
-          skills={suggestions}
           activeIndex={safeActiveIndex}
           onSelect={selectSkill}
+          skills={suggestions}
         />
       ) : null}
       <PromptInputTextarea
-        ref={textareaRef}
         className={className}
-        placeholder={placeholder}
         disabled={disabled}
         longPasteWordThreshold={longPasteWordThreshold}
         onChange={(event) => {
           updateSlashRange(
             event.currentTarget.value,
-            event.currentTarget.selectionStart,
+            event.currentTarget.selectionStart
           );
         }}
         onKeyDown={(event) => {
@@ -416,7 +443,7 @@ function ChatComposerTextarea({
           if (event.key === "ArrowDown") {
             event.preventDefault();
             setActiveIndex((current) =>
-              suggestions.length === 0 ? 0 : (current + 1) % suggestions.length,
+              suggestions.length === 0 ? 0 : (current + 1) % suggestions.length
             );
             return;
           }
@@ -426,7 +453,7 @@ function ChatComposerTextarea({
             setActiveIndex((current) =>
               suggestions.length === 0
                 ? 0
-                : (current - 1 + suggestions.length) % suggestions.length,
+                : (current - 1 + suggestions.length) % suggestions.length
             );
             return;
           }
@@ -446,6 +473,8 @@ function ChatComposerTextarea({
             }
           }
         }}
+        placeholder={placeholder}
+        ref={textareaRef}
       />
     </div>
   );
@@ -469,9 +498,9 @@ function ChatComposerFullFooter({
   return (
     <>
       <div
-        role="toolbar"
         aria-label="Composer options"
         className={composerToolbarClass}
+        role="toolbar"
       >
         {props.contextUsage ? (
           <ChatContextUsageRing usage={props.contextUsage} />
@@ -480,24 +509,27 @@ function ChatComposerFullFooter({
         {props.providerConfigured ? (
           <div className="min-w-[4.5rem] shrink overflow-hidden">
             <PromptInputSelect
-              value={props.currentModelSelection ?? ""}
               disabled={
-                !props.providerModelGroups.some((group) => group.models.length > 0)
+                !props.providerModelGroups.some(
+                  (group) => group.models.length > 0
+                )
               }
               onValueChange={(value) =>
-                void props.onModelChange(value != null ? String(value) : "")
+                void props.onModelChange(value == null ? "" : String(value))
               }
+              value={props.currentModelSelection ?? ""}
             >
               <PromptInputSelectTrigger
-                size="sm"
                 className={cn(
                   composerSelectTriggerClass,
                   "max-w-full justify-start overflow-hidden",
-                  props.contextUsage && "pl-1",
+                  props.contextUsage && "pl-1"
                 )}
+                size="sm"
                 title={
                   props.currentModelSelection
-                    ? (props.renderModelLabel(props.currentModelSelection) ?? undefined)
+                    ? (props.renderModelLabel(props.currentModelSelection) ??
+                      undefined)
                     : undefined
                 }
               >
@@ -511,19 +543,24 @@ function ChatComposerFullFooter({
                 className="w-max max-w-[min(24rem,92vw)] text-xs"
               >
                 {props.profileModelId &&
-                  !props.providerModelGroups.some((group) =>
-                    group.models.some((model) => model.id === props.profileModelId),
-                  ) ? (
+                !props.providerModelGroups.some((group) =>
+                  group.models.some(
+                    (model) => model.id === props.profileModelId
+                  )
+                ) ? (
                   <PromptInputSelectItem
-                    value={encodeModelSelection("__unknown__", props.profileModelId)}
                     label={props.profileModelId}
+                    value={encodeModelSelection(
+                      "__unknown__",
+                      props.profileModelId
+                    )}
                   >
                     {props.profileModelId}
                   </PromptInputSelectItem>
                 ) : null}
                 {props.providerModelGroups.map((group) => (
                   <div key={group.providerId}>
-                    <div className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                    <div className="px-2 py-1.5 font-medium text-[11px] text-muted-foreground">
                       {group.providerLabel}
                     </div>
                     {group.models.map((model) => {
@@ -532,8 +569,8 @@ function ChatComposerFullFooter({
                       return (
                         <PromptInputSelectItem
                           key={`${providerId}:${model.id}`}
-                          value={`${providerId}::${model.id}`}
                           label={model.name}
+                          value={`${providerId}::${model.id}`}
                         >
                           {model.name}
                         </PromptInputSelectItem>
@@ -545,35 +582,37 @@ function ChatComposerFullFooter({
             </PromptInputSelect>
           </div>
         ) : (
-          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-            <WifiOffIcon className="size-3.5 shrink-0" aria-hidden />
+          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 font-medium text-amber-800 text-xs dark:text-amber-200">
+            <WifiOffIcon aria-hidden className="size-3.5 shrink-0" />
             Offline
           </span>
         )}
 
-        {props.thinkingEffortVisible && props.thinkingEffort && props.onThinkingEffortChange ? (
+        {props.thinkingEffortVisible &&
+        props.thinkingEffort &&
+        props.onThinkingEffortChange ? (
           <ChatThinkingEffortControl
-            visible
-            effort={props.thinkingEffort}
             disabled={props.thinkingEffortDisabled}
+            effort={props.thinkingEffort}
             onEffortChange={props.onThinkingEffortChange}
+            visible
           />
         ) : null}
       </div>
 
       <div
-        role="toolbar"
         aria-label="Composer actions"
         className="ml-auto flex shrink-0 items-center gap-1"
+        role="toolbar"
       >
         <ChatAttachmentButton disabled={disabled} />
 
-        <span className="h-4 w-px bg-border" aria-hidden />
+        <span aria-hidden className="h-4 w-px bg-border" />
 
         <ChatComposerSubmitButton
-          chatStatus={chatStatus}
           busy={busy}
           canStop={canStop}
+          chatStatus={chatStatus}
           disabled={disabled}
           onStop={onStop}
         />
@@ -601,19 +640,20 @@ function ChatComposerSubmitButton({
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
   const hasContent =
-    controller.textInput.value.trim().length > 0 || attachments.files.length > 0;
+    controller.textInput.value.trim().length > 0 ||
+    attachments.files.length > 0;
   const showStop = canStop && !hasContent;
 
   if (showStop) {
     return (
       <Button
+        aria-label="Stop response"
+        className={composerSubmitButtonClassName}
+        disabled={disabled}
+        onClick={onStop}
+        size="icon-sm"
         type="button"
         variant="default"
-        size="icon-sm"
-        disabled={disabled}
-        aria-label="Stop response"
-        onClick={onStop}
-        className={composerSubmitButtonClassName}
       >
         <StopIcon />
       </Button>
@@ -622,10 +662,10 @@ function ChatComposerSubmitButton({
 
   return (
     <PromptInputSubmit
-      status={chatStatus}
-      disabled={disabled || !hasContent}
       aria-label={busy ? "Queue message" : "Send message"}
       className={composerSubmitButtonClassName}
+      disabled={disabled || !hasContent}
+      status={chatStatus}
     >
       <ArrowUpIcon className="size-3.5" />
     </PromptInputSubmit>
@@ -647,7 +687,7 @@ function ChatAttachmentHeader({
 
   return (
     <PromptInputHeader className="pb-0">
-      <div className="flex w-full flex-wrap gap-2 border-b border-border/60 pb-3">
+      <div className="flex w-full flex-wrap gap-2 border-border/60 border-b pb-3">
         {attachments.files.map((file) => {
           const filename = file.filename ?? "Document";
           const mediaType = file.mediaType ?? "";
@@ -657,27 +697,27 @@ function ChatAttachmentHeader({
               return (
                 <ImageAttachmentPreview
                   key={file.id}
-                  url={file.url}
                   onRemove={() => attachments.remove(file.id)}
+                  url={file.url}
                 />
               );
             }
 
             return (
               <div
-                key={file.id}
                 className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                key={file.id}
               >
                 <img
-                  src={file.url}
                   alt={filename}
                   className="size-full object-cover"
+                  src={file.url}
                 />
                 <button
-                  type="button"
-                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
                   aria-label={`Remove ${filename}`}
+                  className="absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
                   onClick={() => attachments.remove(file.id)}
+                  type="button"
                 >
                   <XIcon className="size-3.5" />
                 </button>
@@ -688,8 +728,8 @@ function ChatAttachmentHeader({
           if (isPastedTextDocument(filename, mediaType)) {
             return (
               <TextAttachmentPreview
-                key={file.id}
                 filename={filename}
+                key={file.id}
                 onRemove={() => attachments.remove(file.id)}
               />
             );
@@ -697,16 +737,21 @@ function ChatAttachmentHeader({
 
           return (
             <div
-              key={file.id}
               className="relative flex max-w-full shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-border bg-muted px-3 py-2"
+              key={file.id}
             >
-              <FileTextIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="truncate text-xs font-medium text-foreground">{filename}</span>
+              <FileTextIcon
+                aria-hidden
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+              <span className="truncate font-medium text-foreground text-xs">
+                {filename}
+              </span>
               <button
-                type="button"
-                className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
                 aria-label={`Remove ${filename}`}
+                className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
                 onClick={() => attachments.remove(file.id)}
+                type="button"
               >
                 <XIcon className="size-3.5" />
               </button>
@@ -741,12 +786,12 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
             <DropdownMenuTrigger
               render={
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled}
                   aria-label="Add attachment"
                   className={composerIconButtonClass}
+                  disabled={disabled}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
                 >
                   <PlusIcon className="size-3.5" />
                 </Button>
@@ -777,8 +822,8 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
 function StopIcon() {
   return (
     <span
-      className="inline-block size-2.5 shrink-0 rounded-[2px] bg-current"
       aria-hidden
+      className="inline-block size-2.5 shrink-0 rounded-[2px] bg-current"
     />
   );
 }

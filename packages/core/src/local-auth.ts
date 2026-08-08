@@ -17,7 +17,7 @@ const LOCAL_AUTH_TOKEN_FILENAME = "local-auth-token";
 export class LocalAuthTokenManagedExternallyError extends Error {
   constructor() {
     super(
-      "Local auth token is managed by NAKAMA_LOCAL_AUTH_TOKEN and cannot be rotated on disk.",
+      "Local auth token is managed by NAKAMA_LOCAL_AUTH_TOKEN and cannot be rotated on disk."
     );
     this.name = "LocalAuthTokenManagedExternallyError";
   }
@@ -36,20 +36,24 @@ function getLocalAuthTokenPath(): string {
 }
 
 function toPersistedUserConfig(
-  config: Awaited<ReturnType<typeof loadUserConfig>>,
+  config: Awaited<ReturnType<typeof loadUserConfig>>
 ): UserConfig {
   return {
     defaultProviderId: config?.defaultProviderId ?? null,
     providers: config?.providers ?? [],
     ...(config?.timezone ? { timezone: config.timezone } : {}),
-    ...(config?.thinkingEnabled !== undefined
-      ? { thinkingEnabled: config.thinkingEnabled }
+    ...(config?.thinkingEnabled === undefined
+      ? {}
+      : { thinkingEnabled: config.thinkingEnabled }),
+    ...(config?.thinkingEffort
+      ? { thinkingEffort: config.thinkingEffort }
       : {}),
-    ...(config?.thinkingEffort ? { thinkingEffort: config.thinkingEffort } : {}),
     ...(config?.localAuthTokenHash
       ? { localAuthTokenHash: config.localAuthTokenHash }
       : {}),
-    ...(config?.localAuthToken ? { localAuthToken: config.localAuthToken } : {}),
+    ...(config?.localAuthToken
+      ? { localAuthToken: config.localAuthToken }
+      : {}),
   };
 }
 
@@ -68,7 +72,10 @@ function compareTokenHash(token: string, expectedHashHex: string): boolean {
   const actualHash = createHash("sha256").update(token).digest();
   const expectedHash = Buffer.from(expectedHashHex, "hex");
 
-  return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
+  return (
+    actualHash.length === expectedHash.length &&
+    timingSafeEqual(actualHash, expectedHash)
+  );
 }
 
 export async function resolveLocalAuthToken(): Promise<string> {
@@ -80,10 +87,12 @@ export async function resolveLocalAuthToken(): Promise<string> {
   const config = await loadUserConfig();
   const storedToken = await loadStoredLocalAuthToken();
 
-  if (config?.localAuthTokenHash?.trim() && storedToken) {
-    if (compareTokenHash(storedToken, config.localAuthTokenHash.trim())) {
-      return storedToken;
-    }
+  if (
+    config?.localAuthTokenHash?.trim() &&
+    storedToken &&
+    compareTokenHash(storedToken, config.localAuthTokenHash.trim())
+  ) {
+    return storedToken;
   }
 
   const legacyToken = config?.localAuthToken?.trim();
@@ -99,12 +108,15 @@ export async function resolveLocalAuthToken(): Promise<string> {
   const generated = generateLocalAuthToken();
   const newConfig = toPersistedUserConfig(config);
   await persistLocalAuthToken(generated);
-  await saveUserConfig({ ...newConfig, localAuthTokenHash: hashLocalAuthToken(generated) });
+  await saveUserConfig({
+    ...newConfig,
+    localAuthTokenHash: hashLocalAuthToken(generated),
+  });
   return generated;
 }
 
 export async function loadLocalAuthToken(
-  _email = LOCAL_CLIENT_EMAIL,
+  _email = LOCAL_CLIENT_EMAIL
 ): Promise<string | null> {
   return resolveLocalAuthToken();
 }
@@ -127,7 +139,7 @@ export async function rotateLocalAuthToken(): Promise<string> {
 }
 
 export async function verifyLocalAuthToken(
-  token: string,
+  token: string
 ): Promise<{ email: string } | null> {
   if (!token) {
     return null;

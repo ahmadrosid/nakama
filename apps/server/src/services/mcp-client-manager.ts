@@ -23,9 +23,11 @@ export class McpClientManager {
     serverId: string,
     transport: McpTransport,
     profileId?: string,
-    orgId?: string,
+    orgId?: string
   ): boolean {
-    return this.connections.has(connectionKey(serverId, transport, profileId, orgId));
+    return this.connections.has(
+      connectionKey(serverId, transport, profileId, orgId)
+    );
   }
 
   getConnectedCount(): number {
@@ -35,7 +37,7 @@ export class McpClientManager {
   async ensureConnected(
     server: StoredMcpServerRecord,
     orgId: string,
-    profileId: string,
+    profileId: string
   ): Promise<void> {
     if (this.isConnected(server.id, server.transport, profileId, orgId)) {
       return;
@@ -46,9 +48,14 @@ export class McpClientManager {
 
   async connect(
     server: StoredMcpServerRecord,
-    options?: { orgId?: string; profileId?: string },
+    options?: { orgId?: string; profileId?: string }
   ): Promise<CachedMcpTool[]> {
-    const key = connectionKey(server.id, server.transport, options?.profileId, options?.orgId);
+    const key = connectionKey(
+      server.id,
+      server.transport,
+      options?.profileId,
+      options?.orgId
+    );
     await this.disconnectKey(key);
 
     const transport = createTransport(server.transport, server.config, options);
@@ -68,7 +75,7 @@ export class McpClientManager {
 
   async disconnect(serverId: string): Promise<void> {
     const keys = [...this.connections.keys()].filter(
-      (key) => key === serverId || key.startsWith(`${serverId}:`),
+      (key) => key === serverId || key.startsWith(`${serverId}:`)
     );
 
     for (const key of keys) {
@@ -87,7 +94,7 @@ export class McpClientManager {
   async listTools(
     serverId: string,
     transport: McpTransport,
-    profileId?: string,
+    profileId?: string
   ): Promise<CachedMcpTool[]> {
     const client = this.requireClient(serverId, transport, profileId);
     const result = await client.listTools();
@@ -100,12 +107,12 @@ export class McpClientManager {
     toolName: string,
     input: unknown,
     profileId?: string,
-    orgId?: string,
+    orgId?: string
   ): Promise<unknown> {
     const client = this.requireClient(serverId, transport, profileId, orgId);
     const result = await client.callTool({
-      name: toolName,
       arguments: asToolArguments(input),
+      name: toolName,
     });
 
     if ("toolResult" in result) {
@@ -130,7 +137,7 @@ export class McpClientManager {
 
   async testConnection(
     transport: McpTransport,
-    config: unknown,
+    config: unknown
   ): Promise<CachedMcpTool[]> {
     const mcpTransport = createTransport(transport, config);
     const client = new Client({
@@ -154,7 +161,7 @@ export class McpClientManager {
   async connectHttpEndpoint(
     connectionKey: string,
     url: string,
-    headers?: Record<string, string>,
+    headers?: Record<string, string>
   ): Promise<CachedMcpTool[]> {
     await this.disconnectKey(connectionKey);
 
@@ -182,12 +189,12 @@ export class McpClientManager {
   async callHttpEndpointTool(
     connectionKey: string,
     toolName: string,
-    input: unknown,
+    input: unknown
   ): Promise<unknown> {
     const client = this.requireClientByKey(connectionKey);
     const result = await client.callTool({
-      name: toolName,
       arguments: asToolArguments(input),
+      name: toolName,
     });
 
     if ("toolResult" in result) {
@@ -228,9 +235,11 @@ export class McpClientManager {
     serverId: string,
     transport: McpTransport,
     profileId?: string,
-    orgId?: string,
+    orgId?: string
   ): Client {
-    const connection = this.connections.get(connectionKey(serverId, transport, profileId, orgId));
+    const connection = this.connections.get(
+      connectionKey(serverId, transport, profileId, orgId)
+    );
 
     if (!connection) {
       throw new Error(`MCP server "${serverId}" is not connected.`);
@@ -260,7 +269,7 @@ function connectionKey(
   serverId: string,
   transport: McpTransport,
   profileId?: string,
-  orgId?: string,
+  orgId?: string
 ): string {
   if (transport === "stdio" && profileId && orgId) {
     return `${serverId}:${orgId}:${profileId}`;
@@ -272,7 +281,7 @@ function connectionKey(
 function createTransport(
   transport: McpTransport,
   config: unknown,
-  options?: { orgId?: string; profileId?: string },
+  options?: { orgId?: string; profileId?: string }
 ): Transport {
   if (transport === "http") {
     const http = readHttpConfig(config);
@@ -327,7 +336,7 @@ function readStdioConfig(config: unknown): McpStdioConfig {
 
 function readStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
-    return undefined;
+    return;
   }
 
   const items = value
@@ -344,7 +353,10 @@ function readHttpConfig(config: unknown): McpHttpConfig {
   }
 
   const record = config as Record<string, unknown>;
-  const url = typeof record.url === "string" && record.url.trim() ? record.url.trim() : null;
+  const url =
+    typeof record.url === "string" && record.url.trim()
+      ? record.url.trim()
+      : null;
 
   if (!url) {
     throw new Error("HTTP MCP servers require config.url.");
@@ -357,14 +369,14 @@ function readHttpConfig(config: unknown): McpHttpConfig {
   }
 
   return {
-    url,
     headers: readStringRecord(record.headers),
+    url,
   };
 }
 
 function readStringRecord(value: unknown): Record<string, string> | undefined {
   if (typeof value !== "object" || value === null) {
-    return undefined;
+    return;
   }
 
   const record: Record<string, string> = {};
@@ -383,12 +395,12 @@ function normalizeListedTools(
     name: string;
     description?: string;
     inputSchema?: unknown;
-  }>,
+  }>
 ): CachedMcpTool[] {
   return tools.map((tool) => ({
-    name: tool.name,
     description: tool.description?.trim() || tool.name,
     inputSchema: tool.inputSchema,
+    name: tool.name,
   }));
 }
 
@@ -401,7 +413,7 @@ function asToolArguments(input: unknown): Record<string, unknown> {
 }
 
 function formatToolContent(
-  content: Array<{ type: string; text?: string }> | undefined,
+  content: Array<{ type: string; text?: string }> | undefined
 ): string {
   if (!content || content.length === 0) {
     return "Tool completed with no content.";
@@ -418,10 +430,12 @@ function formatToolContent(
     .join("\n");
 }
 
-export function toCachedMcpToolSummaries(tools: CachedMcpTool[]): CachedMcpToolSummary[] {
+export function toCachedMcpToolSummaries(
+  tools: CachedMcpTool[]
+): CachedMcpToolSummary[] {
   return tools.map((tool) => ({
-    name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
+    name: tool.name,
   }));
 }

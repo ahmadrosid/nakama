@@ -6,15 +6,15 @@ import {
 
 describe("isIgnorableInteractionError", () => {
   test("treats Unknown interaction (10062) as ignorable", () => {
-    expect(isIgnorableInteractionError({ code: 10062 })).toBe(true);
+    expect(isIgnorableInteractionError({ code: 10_062 })).toBe(true);
   });
 
   test("treats already acknowledged (40060) as ignorable", () => {
-    expect(isIgnorableInteractionError({ code: 40060 })).toBe(true);
+    expect(isIgnorableInteractionError({ code: 40_060 })).toBe(true);
   });
 
   test("does not ignore unrelated errors", () => {
-    expect(isIgnorableInteractionError({ code: 50035 })).toBe(false);
+    expect(isIgnorableInteractionError({ code: 50_035 })).toBe(false);
     expect(isIgnorableInteractionError(new Error("boom"))).toBe(false);
     expect(isIgnorableInteractionError(null)).toBe(false);
   });
@@ -22,7 +22,7 @@ describe("isIgnorableInteractionError", () => {
 
 describe("getDiscordErrorCode", () => {
   test("reads numeric code", () => {
-    expect(getDiscordErrorCode({ code: 10062 })).toBe(10062);
+    expect(getDiscordErrorCode({ code: 10_062 })).toBe(10_062);
   });
 
   test("returns null without a numeric code", () => {

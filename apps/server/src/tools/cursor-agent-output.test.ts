@@ -20,12 +20,12 @@ describe("cursor-agent-output", () => {
   test("summarizes assistant text, tools, and result from the end of a long stream", () => {
     const noise = Array.from({ length: 200 }, (_, i) =>
       JSON.stringify({
-        type: "tool_call",
         subtype: "started",
         tool_call: {
           readToolCall: { args: { path: `noise/file-${i}.ts` } },
         },
-      }),
+        type: "tool_call",
+      })
     ).join("\n");
 
     const stdout = [
@@ -51,19 +51,23 @@ describe("cursor-agent-output", () => {
   test("formatCodingAgentBashStdout appends log path and keep-tails plain text", () => {
     const longText = `${"x".repeat(30_000)}FINAL_ANSWER`;
     const formatted = formatCodingAgentBashStdout(longText, {
-      logPath: "artifacts/coding-agent-runs/run.log",
       exitCode: 0,
+      logPath: "artifacts/coding-agent-runs/run.log",
     });
 
     expect(formatted).toContain("FINAL_ANSWER");
-    expect(formatted).toContain("Full coding-agent log: artifacts/coding-agent-runs/run.log");
+    expect(formatted).toContain(
+      "Full coding-agent log: artifacts/coding-agent-runs/run.log"
+    );
     expect(formatted.startsWith("...[truncated]")).toBe(true);
   });
 
   test("commandLooksLikeCursorAgent matches argv0 agent paths", () => {
     expect(commandLooksLikeCursorAgent("agent -p 'hi' --yolo")).toBe(true);
     expect(commandLooksLikeCursorAgent("./agent -p hi")).toBe(true);
-    expect(commandLooksLikeCursorAgent("/usr/local/bin/agent -p hi")).toBe(true);
+    expect(commandLooksLikeCursorAgent("/usr/local/bin/agent -p hi")).toBe(
+      true
+    );
     expect(commandLooksLikeCursorAgent("cd repo && agent -p hi")).toBe(false);
     expect(commandLooksLikeCursorAgent("codex exec 'hi'")).toBe(false);
   });

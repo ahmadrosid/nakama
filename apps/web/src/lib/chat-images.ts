@@ -1,18 +1,25 @@
-import type { DocumentAttachment, ImageAttachment, MessageContentPart } from "@nakama/core/contract";
+import type {
+  DocumentAttachment,
+  ImageAttachment,
+  MessageContentPart,
+} from "@nakama/core/contract";
 import {
   isImageDescriptionText,
   parseImageDescriptionText,
 } from "@nakama/core/image-content";
-import { normalizeDocumentMediaType, parseDataUrl, parseDocumentDataUrl } from "@nakama/core/message-content";
+import {
+  normalizeDocumentMediaType,
+  parseDataUrl,
+  parseDocumentDataUrl,
+} from "@nakama/core/message-content";
 import type { FileUIPart } from "ai";
 import {
+  type DisplayDocument,
   documentDisplayFromContentPart,
   documentDisplayFromFilePart,
-  type DisplayDocument,
 } from "@/lib/pasted-text";
 
-export const IMAGE_ACCEPT =
-  "image/jpeg,image/png,image/gif,image/webp";
+export const IMAGE_ACCEPT = "image/jpeg,image/png,image/gif,image/webp";
 
 export const DOCUMENT_ACCEPT =
   ".pdf,.docx,.xls,.xlsx,.xlsm,.xlsb,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12,text/plain,text/csv";
@@ -44,7 +51,9 @@ export function isDocumentFilePart(file: FileUIPart): boolean {
   return DOCUMENT_MEDIA_TYPES.has(mediaType);
 }
 
-export function filePartsToImageAttachments(files: FileUIPart[]): ImageAttachment[] {
+export function filePartsToImageAttachments(
+  files: FileUIPart[]
+): ImageAttachment[] {
   const images: ImageAttachment[] = [];
 
   for (const file of files) {
@@ -62,7 +71,9 @@ export function filePartsToImageAttachments(files: FileUIPart[]): ImageAttachmen
   return images;
 }
 
-export function filePartsToDocumentAttachments(files: FileUIPart[]): DocumentAttachment[] {
+export function filePartsToDocumentAttachments(
+  files: FileUIPart[]
+): DocumentAttachment[] {
   const documents: DocumentAttachment[] = [];
 
   for (const file of files) {
@@ -82,7 +93,7 @@ export function filePartsToDocumentAttachments(files: FileUIPart[]): DocumentAtt
 }
 
 export function userContentToDisplayImages(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): Array<{ url: string; mediaType: string }> {
   if (typeof content === "string") {
     return [];
@@ -91,7 +102,7 @@ export function userContentToDisplayImages(
   return content
     .filter(
       (part): part is Extract<typeof part, { type: "image" }> =>
-        part.type === "image" && !part.description?.trim(),
+        part.type === "image" && !part.description?.trim()
     )
     .map((part) => ({
       mediaType: part.mediaType,
@@ -100,21 +111,21 @@ export function userContentToDisplayImages(
 }
 
 export interface DisplayImageAttachment {
-  url?: string;
-  mediaType: string;
   description?: string | null;
+  mediaType: string;
+  url?: string;
 }
 
 export function userContentToDisplayImageAttachments(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): DisplayImageAttachment[] {
   const attachments: DisplayImageAttachment[] = [];
 
   if (typeof content === "string") {
     if (isImageDescriptionText(content)) {
       attachments.push({
-        mediaType: "image/unknown",
         description: parseImageDescriptionText(content),
+        mediaType: "image/unknown",
       });
     }
 
@@ -124,17 +135,17 @@ export function userContentToDisplayImageAttachments(
   for (const part of content) {
     if (part.type === "image" && part.description?.trim()) {
       attachments.push({
+        description: part.description.trim(),
         mediaType: part.mediaType,
         url: `data:${part.mediaType};base64,${part.data}`,
-        description: part.description.trim(),
       });
       continue;
     }
 
     if (part.type === "text" && isImageDescriptionText(part.text)) {
       attachments.push({
-        mediaType: "image/unknown",
         description: parseImageDescriptionText(part.text),
+        mediaType: "image/unknown",
       });
     }
   }
@@ -143,7 +154,7 @@ export function userContentToDisplayImageAttachments(
 }
 
 export function stripImageDescriptionsFromDisplayText(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): string {
   if (typeof content === "string") {
     return isImageDescriptionText(content) ? "" : content;
@@ -152,14 +163,16 @@ export function stripImageDescriptionsFromDisplayText(
   return content
     .filter(
       (part): part is Extract<MessageContentPart, { type: "text" }> =>
-        part.type === "text" && !isImageDescriptionText(part.text),
+        part.type === "text" && !isImageDescriptionText(part.text)
     )
     .map((part) => part.text)
     .join("\n")
     .trim();
 }
 
-export function filePartsToDisplayDocuments(files: FileUIPart[]): DisplayDocument[] {
+export function filePartsToDisplayDocuments(
+  files: FileUIPart[]
+): DisplayDocument[] {
   const documents: DisplayDocument[] = [];
 
   for (const file of files) {
@@ -174,13 +187,16 @@ export function filePartsToDisplayDocuments(files: FileUIPart[]): DisplayDocumen
 }
 
 export function userContentToDisplayDocuments(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): DisplayDocument[] {
   if (typeof content === "string") {
     return [];
   }
 
   return content
-    .filter((part): part is Extract<typeof part, { type: "document" }> => part.type === "document")
+    .filter(
+      (part): part is Extract<typeof part, { type: "document" }> =>
+        part.type === "document"
+    )
     .map((part) => documentDisplayFromContentPart(part));
 }

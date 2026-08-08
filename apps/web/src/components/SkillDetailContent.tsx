@@ -1,4 +1,8 @@
-import type { SkillCreatedBy, SkillDetail, SkillUsageSummary } from "@nakama/core/contract";
+import type {
+  SkillCreatedBy,
+  SkillDetail,
+  SkillUsageSummary,
+} from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
@@ -29,7 +33,9 @@ function formatUsageTimestamp(value: string | null | undefined): string {
   return formatSessionRelativeTime(value);
 }
 
-function formatSkillMeta(skill: Pick<SkillDetail, "hasTool" | "disableModelInvocation">): string[] {
+function formatSkillMeta(
+  skill: Pick<SkillDetail, "hasTool" | "disableModelInvocation">
+): string[] {
   const parts: string[] = [];
 
   if (skill.hasTool) {
@@ -69,7 +75,9 @@ function formatInlineMetaLine({
       const matchLabel = usageSummary.useCount === 1 ? "match" : "matches";
       parts.push(`${usageSummary.useCount} ${matchLabel}`);
       if (usageSummary.lastUsedAt) {
-        parts.push(`last matched ${formatUsageTimestamp(usageSummary.lastUsedAt)}`);
+        parts.push(
+          `last matched ${formatUsageTimestamp(usageSummary.lastUsedAt)}`
+        );
       }
     }
   }
@@ -110,76 +118,92 @@ export function SkillDetailContent({
 }) {
   const body = skill.body.trim();
   const editable = canEditSkill(skill);
-  const inlineMeta = formatInlineMetaLine({ skill, createdBy, usageSummary });
+  const inlineMeta = formatInlineMetaLine({ createdBy, skill, usageSummary });
 
   return (
     <div className="space-y-3 sm:space-y-4">
       <header className="space-y-1 sm:space-y-1.5">
-        <h1 className="text-base font-semibold text-foreground">{skill.name}</h1>
+        <h1 className="font-semibold text-base text-foreground">
+          {skill.name}
+        </h1>
         {skill.description ? (
-          <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
             {skill.description}
           </p>
         ) : null}
         {inlineMeta ? (
-          <p className="text-xs text-muted-foreground">{inlineMeta}</p>
+          <p className="text-muted-foreground text-xs">{inlineMeta}</p>
         ) : null}
       </header>
 
       {editing ? (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">markdown</span>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-border border-b px-3 py-2">
+            <span className="font-medium text-muted-foreground text-xs">
+              markdown
+            </span>
             <div className="flex items-center gap-2">
               <Button
-                type="button"
-                variant="outline"
-                size="sm"
                 disabled={saveBusy}
                 onClick={onCancelEdit}
+                size="sm"
+                type="button"
+                variant="outline"
               >
                 Cancel
               </Button>
-              <Button type="button" size="sm" disabled={saveBusy} onClick={onSaveEdit}>
+              <Button
+                disabled={saveBusy}
+                onClick={onSaveEdit}
+                size="sm"
+                type="button"
+              >
                 {saveBusy ? <Spinner className="size-4" /> : "Save"}
               </Button>
             </div>
           </div>
           <Textarea
-            value={editBody}
-            disabled={saveBusy}
-            onChange={(event) => onEditBodyChange?.(event.target.value)}
             className={cn(
               skillBodyScrollClass,
-              "min-h-[min(50vh,28rem)] overflow-y-auto border-0 bg-muted/20 font-mono text-xs leading-6 shadow-none focus-visible:ring-0",
+              "min-h-[min(50vh,28rem)] overflow-y-auto border-0 bg-muted/20 font-mono text-xs leading-6 shadow-none focus-visible:ring-0"
             )}
+            disabled={saveBusy}
+            onChange={(event) => onEditBodyChange?.(event.target.value)}
+            value={editBody}
           />
         </div>
       ) : body ? (
         <CodeBlock
+          className="rounded-lg border border-border"
           code={body}
           lang="markdown"
-          showEdit={editable}
-          onEdit={onStartEdit}
           maxScrollHeightClass={skillBodyScrollClass}
-          className="rounded-lg border border-border"
+          onEdit={onStartEdit}
+          showEdit={editable}
         />
       ) : editable ? (
-          <div className="space-y-3 rounded-lg border border-dashed border-border px-4 py-6 text-center">
-            <p className="text-sm text-muted-foreground">No skill body content.</p>
-            <Button type="button" variant="outline" size="sm" onClick={onStartEdit}>
-              Add instructions
-            </Button>
-          </div>
-        ) : (
-          <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+        <div className="space-y-3 rounded-lg border border-border border-dashed px-4 py-6 text-center">
+          <p className="text-muted-foreground text-sm">
             No skill body content.
           </p>
-        )}
+          <Button
+            onClick={onStartEdit}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Add instructions
+          </Button>
+        </div>
+      ) : (
+        <p className="rounded-lg border border-border border-dashed px-4 py-6 text-center text-muted-foreground text-sm">
+          No skill body content.
+        </p>
+      )}
 
       {saveError ? (
         <p
-          className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
           role="alert"
         >
           {saveError}

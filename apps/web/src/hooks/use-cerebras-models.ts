@@ -1,19 +1,21 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import {
   CEREBRAS_FALLBACK_MODELS,
-  normalizeCerebrasModels,
   type CerebrasModelRow,
   type CerebrasModelsApiResponse,
+  normalizeCerebrasModels,
 } from "@/lib/cerebras-models";
-import { queryKeys } from "@/lib/query-keys";
 import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 async function fetchCerebrasModels(): Promise<{
   rows: CerebrasModelRow[];
   usedFallback: boolean;
 }> {
   try {
-    const data = (await client.getExternalModelCatalog("cerebras")) as CerebrasModelsApiResponse;
+    const data = (await client.getExternalModelCatalog(
+      "cerebras"
+    )) as CerebrasModelsApiResponse;
     const rows = normalizeCerebrasModels(data);
     if (rows.length === 0) {
       return { rows: CEREBRAS_FALLBACK_MODELS, usedFallback: true };
@@ -26,8 +28,8 @@ async function fetchCerebrasModels(): Promise<{
 }
 
 export const cerebrasModelsQueryOptions = queryOptions({
-  queryKey: queryKeys.cerebrasModels,
   queryFn: fetchCerebrasModels,
+  queryKey: queryKeys.cerebrasModels,
   staleTime: 1000 * 60 * 30,
 });
 

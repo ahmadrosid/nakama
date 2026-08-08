@@ -43,7 +43,7 @@ export function consumeTerminalInput(buffer: string): {
 
     if (pending.startsWith("\x1b")) {
       const match = pending.match(
-        /^\x1b(?:\[[0-9;]*[A-Za-z]|\[<\d+;\d+;\d+[mM]|\][^\x07]*(?:\x07|\x1b\\)|[OPINOZ=><\^]|\([AB012])/,
+        /^\x1b(?:\[[0-9;]*[A-Za-z]|\[<\d+;\d+;\d+[mM]|\][^\x07]*(?:\x07|\x1b\\)|[OPINOZ=><^]|\([AB012])/
       );
 
       if (!match) {
@@ -133,11 +133,13 @@ export class TerminalInput {
       return;
     }
 
-    process.stdout.write(enabled ? "\x1b[?1000h\x1b[?1006h" : "\x1b[?1000l\x1b[?1006l");
+    process.stdout.write(
+      enabled ? "\x1b[?1000h\x1b[?1006h" : "\x1b[?1000l\x1b[?1006l"
+    );
   }
 
   async requestCursorRow(timeoutMs = 750): Promise<number | null> {
-    if (!this.active || !process.stdin.isTTY || !process.stdout.isTTY) {
+    if (!(this.active && process.stdin.isTTY && process.stdout.isTTY)) {
       return null;
     }
 

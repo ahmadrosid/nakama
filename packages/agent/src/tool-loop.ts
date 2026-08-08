@@ -1,27 +1,29 @@
-import type { ToolCall, ToolDefinition, ToolContext } from "@nakama/core";
+import type { ToolCall, ToolContext, ToolDefinition } from "@nakama/core";
 
 export function findTool(
   tools: ToolDefinition[],
-  name: string,
+  name: string
 ): ToolDefinition | undefined {
   return tools.find((tool) => tool.name === name);
 }
 
 export function canRunToolCallsInParallel(
   tools: ToolDefinition[],
-  toolCalls: ToolCall[],
+  toolCalls: ToolCall[]
 ): boolean {
   if (toolCalls.length <= 1) {
     return false;
   }
 
-  return toolCalls.every((call) => findTool(tools, call.name)?.parallelSafe === true);
+  return toolCalls.every(
+    (call) => findTool(tools, call.name)?.parallelSafe === true
+  );
 }
 
 export async function executeToolCall(
   tools: ToolDefinition[],
   call: ToolCall,
-  context: ToolContext = {},
+  context: ToolContext = {}
 ): Promise<unknown> {
   const tool = findTool(tools, call.name);
 

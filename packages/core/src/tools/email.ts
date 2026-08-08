@@ -5,37 +5,35 @@ import {
   isEmailConfigComplete,
   loadEmailConfig,
 } from "../email-config";
-import { createFakeMailReader, createFakeMailSender } from "../mail/fake";
-import { createImapReader } from "../mail/imap-reader";
-import { createSmtpSender } from "../mail/smtp-sender";
-import { sanitizeMailError } from "../mail/sanitize";
-import type { MailMessage, MailReader, MailSender } from "../mail/types";
-import { MAX_EMAIL_BODY_BYTES } from "../mail/types";
 import {
   createAttachmentReference,
   getMailboxIdentity,
 } from "../mail/attachment-reference";
+import { createFakeMailReader, createFakeMailSender } from "../mail/fake";
+import { createImapReader } from "../mail/imap-reader";
+import { sanitizeMailError } from "../mail/sanitize";
+import { createSmtpSender } from "../mail/smtp-sender";
+import type { MailMessage, MailReader, MailSender } from "../mail/types";
+import { MAX_EMAIL_BODY_BYTES } from "../mail/types";
 import { parseToolInput } from "./schema";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const folderSchema = z.preprocess(
-  (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
-  z.string().optional().default("INBOX"),
+  (value) =>
+    typeof value === "string" && value.trim() ? value.trim() : undefined,
+  z.string().optional().default("INBOX")
 );
 
-const limitSchema = z.preprocess(
-  (value) => {
-    if (value === undefined) {
-      return 20;
-    }
-    if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-      return 20;
-    }
-    return Math.min(value, 100);
-  },
-  z.number().int().positive().max(100),
-);
+const limitSchema = z.preprocess((value) => {
+  if (value === undefined) {
+    return 20;
+  }
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    return 20;
+  }
+  return Math.min(value, 100);
+}, z.number().int().positive().max(100));
 
 const emailListInputSchema = z.object({
   action: z.literal("list"),
@@ -55,16 +53,16 @@ const emailReadInputSchema = z.object({
 const emailSearchInputSchema = z.object({
   action: z.literal("search"),
   folder: folderSchema,
-  query: z.string({ error: "query is required." }).trim().min(1),
   limit: limitSchema,
+  query: z.string({ error: "query is required." }).trim().min(1),
 });
 
 const emailSendInputSchema = z.object({
   action: z.literal("send"),
-  to: z.string({ error: "to is required." }).trim().min(1),
+  html: z.string().trim().min(1).optional(),
   subject: z.string({ error: "subject is required." }).trim().min(1),
   text: z.string({ error: "text is required." }).trim().min(1),
-  html: z.string().trim().min(1).optional(),
+  to: z.string({ error: "to is required." }).trim().min(1),
 });
 
 export const emailInputSchema = z.discriminatedUnion("action", [
@@ -86,59 +84,52 @@ export type EmailToolInput = z.infer<typeof emailInputSchema>;
  */
 export function emailParameters(): JsonSchema {
   return {
-    type: "object",
+    additionalProperties: false,
     properties: {
       action: {
-        type: "string",
         enum: ["list", "read", "search", "send"],
+        type: "string",
       },
       folder: {
-        type: "string",
         description: "Mail folder. Defaults to INBOX.",
-      },
-      limit: {
-        type: "integer",
-        description: "Max messages to return (1-100). Defaults to 20.",
-      },
-      uid: {
-        type: "integer",
-        description: "Message UID. Required for action=read.",
-      },
-      query: {
         type: "string",
-        description: "Search query. Required for action=search.",
-      },
-      to: {
-        type: "string",
-        description: "Recipient address. Required for action=send.",
-      },
-      subject: {
-        type: "string",
-        description: "Subject. Required for action=send.",
-      },
-      text: {
-        type: "string",
-        description: "Plain-text body. Required for action=send.",
       },
       html: {
-        type: "string",
         description: "Optional HTML body for action=send.",
+        type: "string",
+      },
+      limit: {
+        description: "Max messages to return (1-100). Defaults to 20.",
+        type: "integer",
+      },
+      query: {
+        description: "Search query. Required for action=search.",
+        type: "string",
+      },
+      subject: {
+        description: "Subject. Required for action=send.",
+        type: "string",
+      },
+      text: {
+        description: "Plain-text body. Required for action=send.",
+        type: "string",
+      },
+      to: {
+        description: "Recipient address. Required for action=send.",
+        type: "string",
+      },
+      uid: {
+        description: "Message UID. Required for action=read.",
+        type: "integer",
       },
     },
     required: ["action"],
-    additionalProperties: false,
+    type: "object",
   };
 }
 
 export interface EmailToolSuccess {
   action: EmailAction;
-  messages?: Array<{
-    uid: number;
-    subject: string;
-    from: string;
-    date: string;
-    folder: string;
-  }>;
   message?: {
     uid: number;
     subject: string;
@@ -156,6 +147,13 @@ export interface EmailToolSuccess {
       disposition: "attachment" | "inline" | null;
     }>;
   };
+  messages?: Array<{
+    uid: number;
+    subject: string;
+    from: string;
+    date: string;
+    folder: string;
+  }>;
   sent?: {
     to: string;
     subject: string;
@@ -170,9 +168,13 @@ export interface EmailToolFailure {
 export type EmailToolResult = EmailToolSuccess | EmailToolFailure;
 
 export interface EmailToolDependencies {
+  createReader?: (
+    config: ReturnType<typeof emailConfigToMailboxConfig>
+  ) => MailReader;
+  createSender?: (
+    config: ReturnType<typeof emailConfigToMailboxConfig>
+  ) => MailSender;
   loadConfig?: typeof loadEmailConfig;
-  createReader?: (config: ReturnType<typeof emailConfigToMailboxConfig>) => MailReader;
-  createSender?: (config: ReturnType<typeof emailConfigToMailboxConfig>) => MailSender;
 }
 
 function parseEmailToolInput(input: unknown): EmailToolInput {
@@ -182,7 +184,7 @@ function parseEmailToolInput(input: unknown): EmailToolInput {
 export async function runEmailTool(
   input: unknown,
   dependencies: EmailToolDependencies = {},
-  context: ToolContext = {},
+  context: ToolContext = {}
 ): Promise<EmailToolResult> {
   const loadConfig = dependencies.loadConfig ?? loadEmailConfig;
   const config = await loadConfig();
@@ -216,16 +218,26 @@ export async function runEmailTool(
       const message = await reader.readMessage(parsed.folder, parsed.uid);
 
       if (!message) {
-        return { error: `No message found with uid ${parsed.uid} in ${parsed.folder}.` };
+        return {
+          error: `No message found with uid ${parsed.uid} in ${parsed.folder}.`,
+        };
       }
 
       return {
         action: parsed.action,
-        message: toEmailMessage(message, context, getMailboxIdentity(mailboxConfig)),
+        message: toEmailMessage(
+          message,
+          context,
+          getMailboxIdentity(mailboxConfig)
+        ),
       };
     }
 
-    const messages = await reader.searchMessages(parsed.folder, parsed.query, parsed.limit);
+    const messages = await reader.searchMessages(
+      parsed.folder,
+      parsed.query,
+      parsed.limit
+    );
     return { action: parsed.action, messages };
   } catch (err) {
     return { error: sanitizeMailError(err) };
@@ -237,7 +249,7 @@ export async function runEmailTool(
 async function sendEmail(
   input: Extract<EmailToolInput, { action: "send" }>,
   mailboxConfig: ReturnType<typeof emailConfigToMailboxConfig>,
-  createSender: EmailToolDependencies["createSender"],
+  createSender: EmailToolDependencies["createSender"]
 ): Promise<EmailToolResult> {
   const { to, subject, text, html } = input;
 
@@ -261,13 +273,13 @@ async function sendEmail(
   const sender = senderFactory(mailboxConfig);
 
   try {
-    const result = await sender.send({ to, subject, text, html });
+    const result = await sender.send({ html, subject, text, to });
     return {
       action: "send",
       sent: {
-        to,
-        subject,
         messageId: result.messageId,
+        subject,
+        to,
       },
     };
   } catch (err) {
@@ -276,9 +288,9 @@ async function sendEmail(
 }
 
 export const emailTool: ToolDefinition<EmailToolInput, EmailToolResult> = {
-  name: "email",
   description:
     "List, read, search, and send email through the deployment mailbox configured in Settings. Read exposes documentRef values for supported document attachments; pass one to extract_document_text when you need document text.",
+  name: "email",
   parameters: emailParameters(),
   run(input, context) {
     return runEmailTool(input, {}, context);
@@ -288,7 +300,7 @@ export const emailTool: ToolDefinition<EmailToolInput, EmailToolResult> = {
 function toEmailMessage(
   message: MailMessage,
   context: ToolContext,
-  mailboxId: string,
+  mailboxId: string
 ): NonNullable<Extract<EmailToolSuccess, { message?: unknown }>["message"]> {
   const { attachments, ...messageWithoutAttachments } = message;
   if (!attachments) {
@@ -298,16 +310,16 @@ function toEmailMessage(
   return {
     ...messageWithoutAttachments,
     attachments: attachments.map((attachment) => ({
+      disposition: attachment.disposition,
+      documentRef: createAttachmentReference(context, {
+        attachmentId: attachment.id,
+        folder: message.folder,
+        mailboxId,
+        uid: message.uid,
+      }),
       filename: attachment.filename,
       mediaType: attachment.mediaType,
       size: attachment.size,
-      disposition: attachment.disposition,
-      documentRef: createAttachmentReference(context, {
-        folder: message.folder,
-        uid: message.uid,
-        attachmentId: attachment.id,
-        mailboxId,
-      }),
     })),
   };
 }

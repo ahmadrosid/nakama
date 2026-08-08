@@ -1,16 +1,17 @@
+"use strict";
 module.exports = {
   apps: [
     {
-      name: "server",
-      script: "bun",
       args: ["run", "apps/server/src/index.ts"],
-      cwd: "/app",
       autorestart: true,
+      cwd: "/app",
       env: {
-        NODE_ENV: "production",
         NAKAMA_HOST: "0.0.0.0",
         NAKAMA_PORT: "4310",
+        NODE_ENV: "production",
       },
+      name: "server",
+      script: "bun",
     },
   ],
 };

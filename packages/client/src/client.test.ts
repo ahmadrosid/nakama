@@ -1,22 +1,27 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { createClient } from "./index";
 
 test("chat stream request includes cookie CSRF protection", async () => {
-  const originalDocument = (globalThis as typeof globalThis & { document?: { cookie: string } }).document;
-  (globalThis as typeof globalThis & { document?: { cookie: string } }).document = {
+  const originalDocument = (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document;
+  (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document = {
     cookie: "nakama_csrf=csrf-token-123; other=value",
   };
 
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       return new Response('data: {"type":"done","reply":"ok"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       });
@@ -35,20 +40,23 @@ test("chat stream request includes cookie CSRF protection", async () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(fetchCalls[0]!.init?.credentials).toBe("include");
   } finally {
-    (globalThis as typeof globalThis & { document?: { cookie: string } }).document = originalDocument;
+    (
+      globalThis as typeof globalThis & { document?: { cookie: string } }
+    ).document = originalDocument;
   }
 });
 
 test("clients send org context on authenticated requests", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
-    orgId: "org_test",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       return Response.json({ profiles: [] });
     },
+    orgId: "org_test",
   });
 
   await client.listProfiles();
@@ -59,12 +67,13 @@ test("clients send org context on authenticated requests", async () => {
 });
 
 test("non-browser clients send local auth as a bearer token", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       return Response.json({ ok: true });
     },
   });
@@ -76,15 +85,17 @@ test("non-browser clients send local auth as a bearer token", async () => {
 });
 
 test("data export downloads zip bytes with filename metadata", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: {
-          "Content-Disposition": 'attachment; filename="nakama-export-test.zip"',
+          "Content-Disposition":
+            'attachment; filename="nakama-export-test.zip"',
           "Content-Type": "application/zip",
         },
       });
@@ -93,7 +104,9 @@ test("data export downloads zip bytes with filename metadata", async () => {
 
   const result = await client.exportData();
 
-  expect(fetchCalls[0]!.input.toString()).toBe("http://localhost:4310/v1/platform/data/export");
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://localhost:4310/v1/platform/data/export"
+  );
   const headers = new Headers(fetchCalls[0]!.init?.headers);
   expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
   expect(headers.get("Content-Type")).toBeNull();
@@ -102,28 +115,33 @@ test("data export downloads zip bytes with filename metadata", async () => {
 });
 
 test("readProfileArtifactContent fetches artifact bytes with inline query", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
-    orgId: "org_test",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       return new Response("# Report", {
         headers: {
-          "Content-Type": "text/markdown",
           "Content-Disposition": 'inline; filename="report.md"',
+          "Content-Type": "text/markdown",
         },
       });
     },
+    orgId: "org_test",
   });
 
-  const result = await client.readProfileArtifactContent("profile_1", "weekly/report.md", {
-    inline: true,
-  });
+  const result = await client.readProfileArtifactContent(
+    "profile_1",
+    "weekly/report.md",
+    {
+      inline: true,
+    }
+  );
 
   expect(fetchCalls[0]!.input.toString()).toBe(
-    "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=weekly%2Freport.md&inline=1",
+    "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=weekly%2Freport.md&inline=1"
   );
   const headers = new Headers(fetchCalls[0]!.init?.headers);
   expect(headers.get("Authorization")).toBe("Bearer local-auth-token");
@@ -133,17 +151,18 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
 });
 
 test("data import helpers upload base64 archive data", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
       if (input.toString().endsWith("/preview")) {
         return Response.json({
-          manifest: { kind: "nakama-export" },
           archiveFileCount: 1,
           archiveTotalBytes: 3,
+          manifest: { kind: "nakama-export" },
           topLevelPaths: ["config.ini"],
           willReplaceRoot: true,
         });
@@ -151,26 +170,30 @@ test("data import helpers upload base64 archive data", async () => {
 
       return Response.json({
         manifest: { kind: "nakama-export" },
-        restoredRoot: "/tmp/nakama",
         restoredFileCount: 1,
+        restoredRoot: "/tmp/nakama",
       });
     },
   });
 
-  await expect(client.previewDataImport(new Uint8Array([1, 2, 3]))).resolves.toMatchObject({
+  await expect(
+    client.previewDataImport(new Uint8Array([1, 2, 3]))
+  ).resolves.toMatchObject({
     archiveFileCount: 1,
   });
   await expect(
-    client.restoreDataImport(new Uint8Array([4, 5, 6]), { confirm: true }),
+    client.restoreDataImport(new Uint8Array([4, 5, 6]), { confirm: true })
   ).resolves.toMatchObject({ restoredFileCount: 1 });
 
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({ data: "AQID" });
+  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+    data: "AQID",
+  });
   expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
     confirm: true,
     data: "BAUG",
   });
   expect(new Headers(fetchCalls[1]!.init?.headers).get("Authorization")).toBe(
-    "Bearer local-auth-token",
+    "Bearer local-auth-token"
   );
 });
 
@@ -182,30 +205,35 @@ test("non-browser clients reload the local auth token once after a 401", async (
     await writeFile(
       join(getUserConfigDir(), "local-auth-token"),
       "tc_local_stale\n",
-      "utf8",
+      "utf8"
     );
     await saveUserConfig({
       defaultProviderId: null,
+      localAuthTokenHash: createHash("sha256")
+        .update("tc_local_fresh")
+        .digest("hex"),
       providers: [],
-      localAuthTokenHash: createHash("sha256").update("tc_local_fresh").digest("hex"),
     });
     await writeFile(
       join(getUserConfigDir(), "local-auth-token"),
       "tc_local_fresh\n",
-      "utf8",
+      "utf8"
     );
 
     let attempts = 0;
     const client = createClient({
-      baseUrl: "http://localhost:4310",
       authToken: "tc_local_stale",
+      baseUrl: "http://localhost:4310",
       fetch: async () => {
         attempts += 1;
         if (attempts === 1) {
-          return new Response(JSON.stringify({ error: "Authentication required" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Authentication required" }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 401,
+            }
+          );
         }
 
         return Response.json({ ok: true });
@@ -216,25 +244,31 @@ test("non-browser clients reload the local auth token once after a 401", async (
     expect(attempts).toBe(2);
   } finally {
     delete process.env.NAKAMA_CONFIG_DIR;
-    await rm(configDir, { recursive: true, force: true });
+    await rm(configDir, { force: true, recursive: true });
   }
 });
 
 test("notification destination client methods hit the expected routes", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
   const client = createClient({
-    baseUrl: "http://localhost:4310",
     authToken: "local-auth-token",
-    orgId: "org_test",
+    baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
-      fetchCalls.push({ input, init });
+      fetchCalls.push({ init, input });
 
       if (init?.method === "POST" && input.toString().endsWith("/rotate-key")) {
-        return Response.json({ destination: { id: "dest_1" }, apiKey: "rotated" });
+        return Response.json({
+          apiKey: "rotated",
+          destination: { id: "dest_1" },
+        });
       }
 
       if (init?.method === "POST") {
-        return Response.json({ destination: { id: "dest_1" }, apiKey: "created" });
+        return Response.json({
+          apiKey: "created",
+          destination: { id: "dest_1" },
+        });
       }
 
       if (init?.method === "PUT") {
@@ -247,12 +281,13 @@ test("notification destination client methods hit the expected routes", async ()
 
       return Response.json({ destinations: [] });
     },
+    orgId: "org_test",
   });
 
   await client.listNotificationDestinations();
   await client.createNotificationDestination({
-    name: "Ops",
     channel: "telegram",
+    name: "Ops",
     telegram: { chatId: 1001 },
   });
   await client.updateNotificationDestination("dest_1", {
@@ -263,18 +298,18 @@ test("notification destination client methods hit the expected routes", async ()
   await client.deleteNotificationDestination("dest_1");
 
   expect(fetchCalls[0]?.input.toString()).toBe(
-    "http://localhost:4310/v1/notification-destinations",
+    "http://localhost:4310/v1/notification-destinations"
   );
   expect(fetchCalls[1]?.input.toString()).toBe(
-    "http://localhost:4310/v1/notification-destinations",
+    "http://localhost:4310/v1/notification-destinations"
   );
   expect(fetchCalls[2]?.input.toString()).toBe(
-    "http://localhost:4310/v1/notification-destinations/dest_1",
+    "http://localhost:4310/v1/notification-destinations/dest_1"
   );
   expect(fetchCalls[3]?.input.toString()).toBe(
-    "http://localhost:4310/v1/notification-destinations/dest_1/rotate-key",
+    "http://localhost:4310/v1/notification-destinations/dest_1/rotate-key"
   );
   expect(fetchCalls[4]?.input.toString()).toBe(
-    "http://localhost:4310/v1/notification-destinations/dest_1",
+    "http://localhost:4310/v1/notification-destinations/dest_1"
   );
 });
