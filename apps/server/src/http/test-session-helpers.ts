@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import type { OrgRole } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
-import type { AuthService } from "../services/auth-service";
+import { AuthService } from "../services/auth-service";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
@@ -144,4 +144,68 @@ export async function loginUserSession(
 
   expect(response.status).toBe(200);
   return browserSessionFromResponse(response, orgId);
+}
+
+export type SeedOrgAdminOptions = {
+  authService?: AuthService;
+  email?: string;
+  orgId?: string;
+  password?: string;
+  /** When set, also upserts a default profile with this id. */
+  profileId?: string;
+  userId?: string;
+};
+
+export async function seedOrgAdmin(
+  databaseAdapter: DatabaseAdapter,
+  opts: SeedOrgAdminOptions = {}
+) {
+  const email = opts.email ?? "admin@example.com";
+  const password = opts.password ?? "password123";
+  const orgId = opts.orgId ?? "org_test";
+  const userId = opts.userId ?? "user_admin";
+  const authService = opts.authService ?? new AuthService();
+  const now = new Date().toISOString();
+
+  await databaseAdapter.createUser({
+    createdAt: now,
+    email,
+    id: userId,
+    passwordHash: await authService.hashPassword(password),
+    updatedAt: now,
+  });
+  await databaseAdapter.upsertOrganization({
+    createdAt: now,
+    id: orgId,
+    name: "Test Org",
+    slug: "test-org",
+    updatedAt: now,
+  });
+  await databaseAdapter.upsertOrgMember({
+    createdAt: now,
+    orgId,
+    role: "admin",
+    userId,
+  });
+
+  if (opts.profileId) {
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: opts.profileId,
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Default",
+      orgId,
+      systemPrompt: "You are helpful.",
+      updatedAt: now,
+    });
+  }
+
+  return {
+    email,
+    orgId,
+    password,
+    profileId: opts.profileId,
+    userId,
+  };
 }

@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
 import { OrgMemoryService } from "../../services/org-memory-service";
-import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
@@ -14,26 +12,9 @@ setupTestConfigDir("nakama-org-memory-routes-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
   const orgMemoryService = new OrgMemoryService(databaseAdapter);
   return {
-    app: createHonoApp({
-      agent: {
-        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
-      } as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgMemoryService,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
-    }),
-    authService,
-    databaseAdapter,
+    ...createMinimalHonoApp({ databaseAdapter, orgMemoryService }),
     orgMemoryService,
   };
 }

@@ -2,35 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../services/auth-service";
-import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
-import { createHonoApp } from "./app";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import { setupFreshInstallSession } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-web-public-url-test-");
 
 function createApp() {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  return {
-    app: createHonoApp({
-      agent: {
-        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
-      } as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
-    }),
-    databaseAdapter,
-  };
+  return createMinimalHonoApp();
 }
 
 describe("web public url settings", () => {

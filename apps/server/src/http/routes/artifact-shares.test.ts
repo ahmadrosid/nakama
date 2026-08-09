@@ -3,33 +3,18 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getProfileArtifactsDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
 import { isPublicRouteRequest } from "../public-routes";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-artifact-shares-test-");
 
 function createApp(databaseAdapter = createInMemoryDatabaseAdapter()) {
-  const authService = new AuthService();
-  return {
-    app: createHonoApp({
-      agent: {} as never,
-      authService,
-      automationService: {} as never,
-      databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
-    }),
-    authService,
+  return createMinimalHonoApp({
+    agent: {},
     databaseAdapter,
-  };
+  });
 }
 
 describe("artifact share routes", () => {
