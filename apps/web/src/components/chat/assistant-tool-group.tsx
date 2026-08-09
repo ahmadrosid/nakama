@@ -7,6 +7,7 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import type { AssistantTurnSegment } from "@/components/chat/assistant-tool-group.shared";
+import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
 import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
@@ -26,6 +27,10 @@ import {
   parseSubAgentResult,
 } from "@/lib/chat-stream";
 import {
+  isGenerateImageTool,
+  shouldRenderGenerateImageToolRow,
+} from "@/lib/chat-stream-image-generation";
+import {
   isWebFetchTool,
   shouldRenderWebFetchToolRow,
 } from "@/lib/chat-stream-web-fetch";
@@ -40,15 +45,18 @@ export function AssistantTurnSegmentView({
   segment,
   showThinking = true,
   modelLabel,
+  profileId,
 }: {
   segment: AssistantTurnSegment;
   showThinking?: boolean;
   modelLabel?: string | null;
+  profileId?: string | null;
 }) {
   if (segment.kind === "work") {
     return (
       <AssistantWorkGroup
         modelLabel={modelLabel}
+        profileId={profileId}
         thinking={showThinking ? segment.thinking : undefined}
         tools={segment.tools}
       />
@@ -109,10 +117,12 @@ function AssistantWorkGroup({
   thinking,
   tools,
   modelLabel,
+  profileId,
 }: {
   thinking?: ChatListItem;
   tools: ChatListItem[];
   modelLabel?: string | null;
+  profileId?: string | null;
 }) {
   const visibleTools = tools.filter((tool) => !isArtifactMetaSidecarTool(tool));
   const isThinkingStreaming = Boolean(thinking?.thinkingStreaming);
@@ -126,7 +136,13 @@ function AssistantWorkGroup({
   }
 
   if (!thinking) {
-    return <ToolOnlyWorkGroup modelLabel={modelLabel} tools={visibleTools} />;
+    return (
+      <ToolOnlyWorkGroup
+        modelLabel={modelLabel}
+        profileId={profileId}
+        tools={visibleTools}
+      />
+    );
   }
 
   return (
@@ -140,7 +156,11 @@ function AssistantWorkGroup({
       {visibleTools.map((tool, index) => (
         <TimelineStep isLast={index === visibleTools.length - 1} key={tool.id}>
           {isDedicatedTool(tool) ? (
-            <DedicatedToolRow message={tool} modelLabel={modelLabel} />
+            <DedicatedToolRow
+              message={tool}
+              modelLabel={modelLabel}
+              profileId={profileId}
+            />
           ) : (
             <ToolTimelineItem
               defaultDetailsOpen={visibleTools.length === 1}
@@ -156,9 +176,11 @@ function AssistantWorkGroup({
 function ToolOnlyWorkGroup({
   tools,
   modelLabel,
+  profileId,
 }: {
   tools: ChatListItem[];
   modelLabel?: string | null;
+  profileId?: string | null;
 }) {
   const hasRunningTools = tools.some((tool) => tool.toolStatus === "running");
   const isWorkActive = hasRunningTools;
@@ -242,7 +264,11 @@ function ToolOnlyWorkGroup({
               {tools.map((tool, index) => (
                 <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
                   {isDedicatedTool(tool) ? (
-                    <DedicatedToolRow message={tool} modelLabel={modelLabel} />
+                    <DedicatedToolRow
+                      message={tool}
+                      modelLabel={modelLabel}
+                      profileId={profileId}
+                    />
                   ) : (
                     <ToolTimelineItem
                       defaultDetailsOpen={tools.length === 1}
@@ -316,17 +342,28 @@ function isDedicatedTool(tool: ChatListItem): boolean {
   return (
     isSubAgentTool(tool.tool) ||
     shouldRenderWebSearchToolRow(tool) ||
-    shouldRenderWebFetchToolRow(tool)
+    shouldRenderWebFetchToolRow(tool) ||
+    shouldRenderGenerateImageToolRow(tool)
   );
 }
 
 function DedicatedToolRow({
   message,
   modelLabel,
+  profileId,
 }: {
   message: ChatListItem;
   modelLabel?: string | null;
+  profileId?: string | null;
 }) {
+  if (isGenerateImageTool(message.tool)) {
+    if (shouldRenderGenerateImageToolRow(message)) {
+      return <ImageGenerationToolRow message={message} profileId={profileId} />;
+    }
+
+    return <ToolTimelineItem message={message} />;
+  }
+
   if (isWebFetchTool(message.tool)) {
     if (shouldRenderWebFetchToolRow(message)) {
       return <WebFetchToolRow message={message} />;
