@@ -27,6 +27,31 @@ import {
 
 setupTestConfigDir("nakama-http-app-test-");
 
+async function withNodeEnv<T>(env: string, run: () => Promise<T>): Promise<T> {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = env;
+  try {
+    return await run();
+  } finally {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  }
+}
+
+function expectCookiesSecure(setCookies: string[], expected: boolean): void {
+  expect(setCookies.length).toBeGreaterThan(0);
+  expect(
+    setCookies.every((cookie) =>
+      expected
+        ? /;\s*Secure(?:;|$)/i.test(cookie)
+        : !/;\s*Secure(?:;|$)/i.test(cookie)
+    )
+  ).toBe(true);
+}
+
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
@@ -559,185 +584,83 @@ describe("createHonoApp", () => {
     expect(response.status).toBe(201);
   });
 
-  test("setup over HTTP does not set Secure cookies even in production (#112)", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+  const secureCookieCases = [
+    {
+      expectSecure: false,
+      headers: { "Content-Type": "application/json" },
+      name: "setup over HTTP does not set Secure cookies even in production (#112)",
+      nodeEnv: "production",
+      url: "http://localhost:4310/v1/auth/setup",
+      verifySession: true,
+    },
+    {
+      expectSecure: true,
+      headers: { "Content-Type": "application/json" },
+      name: "setup over HTTPS sets Secure cookies in production",
+      nodeEnv: "production",
+      url: "https://nakama.example/v1/auth/setup",
+    },
+    {
+      expectSecure: true,
+      headers: { "Content-Type": "application/json" },
+      name: "setup over HTTPS sets Secure cookies even when NODE_ENV is not production",
+      nodeEnv: "development",
+      url: "https://nakama.example/v1/auth/setup",
+    },
+    {
+      expectSecure: true,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Proto": "https",
+      },
+      name: "setup behind HTTPS proxy sets Secure cookies via X-Forwarded-Proto",
+      nodeEnv: "production",
+      url: "http://localhost:4310/v1/auth/setup",
+    },
+    {
+      expectSecure: true,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Proto": "http",
+      },
+      name: "https request URL keeps Secure cookies even if X-Forwarded-Proto is http",
+      nodeEnv: "production",
+      url: "https://nakama.example/v1/auth/setup",
+    },
+  ] as const;
 
-    try {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const setupResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/setup", {
-          body: JSON.stringify(
-            buildSetupAuthBody("admin@example.com", {
-              admin: { password: "secret123" },
+  for (const tc of secureCookieCases) {
+    test(tc.name, async () => {
+      await withNodeEnv(tc.nodeEnv, async () => {
+        const options = createServerOptions();
+        const app = createHonoApp(options);
+        const setupResponse = await app.fetch(
+          new Request(tc.url, {
+            body: JSON.stringify(
+              buildSetupAuthBody("admin@example.com", {
+                admin: { password: "secret123" },
+              })
+            ),
+            headers: { ...tc.headers },
+            method: "POST",
+          })
+        );
+
+        expect(setupResponse.status).toBe(201);
+        const setCookies = extractSetCookies(setupResponse);
+        expectCookiesSecure(setCookies, tc.expectSecure);
+
+        if ("verifySession" in tc && tc.verifySession) {
+          const meResponse = await app.fetch(
+            new Request("http://localhost:4310/v1/auth/me", {
+              headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
             })
-          ),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-      );
-
-      expect(setupResponse.status).toBe(201);
-      const setCookies = extractSetCookies(setupResponse);
-      expect(setCookies.length).toBeGreaterThan(0);
-      expect(
-        setCookies.every((cookie) => !/;\s*Secure(?:;|$)/i.test(cookie))
-      ).toBe(true);
-
-      const meResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/me", {
-          headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
-        })
-      );
-      expect(meResponse.status).toBe(200);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  test("setup over HTTPS sets Secure cookies in production", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-
-    try {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const setupResponse = await app.fetch(
-        new Request("https://nakama.example/v1/auth/setup", {
-          body: JSON.stringify(
-            buildSetupAuthBody("admin@example.com", {
-              admin: { password: "secret123" },
-            })
-          ),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-      );
-
-      expect(setupResponse.status).toBe(201);
-      const setCookies = extractSetCookies(setupResponse);
-      expect(setCookies.length).toBeGreaterThan(0);
-      expect(
-        setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))
-      ).toBe(true);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  test("setup over HTTPS sets Secure cookies even when NODE_ENV is not production", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "development";
-
-    try {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const setupResponse = await app.fetch(
-        new Request("https://nakama.example/v1/auth/setup", {
-          body: JSON.stringify(
-            buildSetupAuthBody("admin@example.com", {
-              admin: { password: "secret123" },
-            })
-          ),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        })
-      );
-
-      expect(setupResponse.status).toBe(201);
-      const setCookies = extractSetCookies(setupResponse);
-      expect(
-        setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))
-      ).toBe(true);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  test("setup behind HTTPS proxy sets Secure cookies via X-Forwarded-Proto", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-
-    try {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const setupResponse = await app.fetch(
-        new Request("http://localhost:4310/v1/auth/setup", {
-          body: JSON.stringify(
-            buildSetupAuthBody("admin@example.com", {
-              admin: { password: "secret123" },
-            })
-          ),
-          headers: {
-            "Content-Type": "application/json",
-            "X-Forwarded-Proto": "https",
-          },
-          method: "POST",
-        })
-      );
-
-      expect(setupResponse.status).toBe(201);
-      const setCookies = extractSetCookies(setupResponse);
-      expect(
-        setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))
-      ).toBe(true);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  test("https request URL keeps Secure cookies even if X-Forwarded-Proto is http", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-
-    try {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-      const setupResponse = await app.fetch(
-        new Request("https://nakama.example/v1/auth/setup", {
-          body: JSON.stringify(
-            buildSetupAuthBody("admin@example.com", {
-              admin: { password: "secret123" },
-            })
-          ),
-          headers: {
-            "Content-Type": "application/json",
-            "X-Forwarded-Proto": "http",
-          },
-          method: "POST",
-        })
-      );
-
-      expect(setupResponse.status).toBe(201);
-      const setCookies = extractSetCookies(setupResponse);
-      expect(
-        setCookies.every((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))
-      ).toBe(true);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
-      } else {
-        process.env.NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
+          );
+          expect(meResponse.status).toBe(200);
+        }
+      });
+    });
+  }
 
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
@@ -874,27 +797,6 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("serves worker logs through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/workers/whatsapp/logs?lines=50", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      lines: ["last:50"],
-      worker: "whatsapp",
-    });
-  });
-
   test("requires platform admin to control messaging workers", async () => {
     const options = createServerOptions();
     const calls: string[] = [];
@@ -956,47 +858,6 @@ describe("createHonoApp", () => {
     expect(calls).toEqual(["stop:telegram"]);
   });
 
-  test("serves model catalog through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/models?source=remote", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      models: [{ id: "model-remote" }],
-    });
-  });
-
-  test("serves user context through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/user/context?content=true", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      active: true,
-      content: "ctx",
-    });
-  });
-
   test("creates and lists sessions through Hono routes", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
@@ -1035,198 +896,106 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("sends non-streaming session messages through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
+  const smokeRoutes = [
+    {
+      expected: { lines: ["last:50"], worker: "whatsapp" },
+      name: "serves worker logs through Hono routes",
+      path: "/v1/workers/whatsapp/logs?lines=50",
+    },
+    {
+      expected: { models: [{ id: "model-remote" }] },
+      name: "serves model catalog through Hono routes",
+      path: "/v1/models?source=remote",
+    },
+    {
+      expected: { active: true, content: "ctx" },
+      name: "serves user context through Hono routes",
+      path: "/v1/user/context?content=true",
+    },
+    {
+      csrf: true,
+      expected: { reply: "reply:hello" },
+      method: "POST" as const,
+      name: "sends non-streaming session messages through Hono routes",
+      path: "/v1/sessions/session_1/messages",
+      requestBody: { message: "hello" },
+    },
+    {
+      expected: { profiles: [{ id: "default" }] },
+      name: "serves profiles through Hono routes",
+      path: "/v1/profiles",
+    },
+    {
+      expected: { servers: [{ id: "mcp_1" }] },
+      name: "serves mcp servers through Hono routes",
+      path: "/v1/mcp/servers",
+    },
+    {
+      expected: { skills: [{ id: "skill_1" }] },
+      name: "serves skills through Hono routes",
+      path: "/v1/skills",
+    },
+    {
+      expected: { tools: [{ id: "tool_1" }] },
+      name: "serves tools through Hono routes",
+      path: "/v1/tools",
+    },
+    {
+      expected: {
+        automations: [{ id: "automation_1" }],
+        unread: { byAutomationId: {}, totalUnread: 0 },
+      },
+      name: "serves automations through Hono routes",
+      path: "/v1/automations",
+    },
+    {
+      csrf: true,
+      expected: { run: { id: "automation_run_1" } },
+      method: "POST" as const,
+      name: "runs automations through Hono routes",
+      path: "/v1/automations/automation_1/run",
+    },
+    {
+      expected: { tasks: [{ id: "task_1", status: "pending" }] },
+      name: "serves tasks through Hono routes",
+      path: "/v1/tasks",
+    },
+    {
+      csrf: true,
+      expected: { run: { id: "task_run_1" } },
+      method: "POST" as const,
+      name: "runs tasks through Hono routes",
+      path: "/v1/tasks/task_1/run",
+    },
+  ] as const;
 
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions/session_1/messages", {
-        body: JSON.stringify({ message: "hello" }),
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "POST",
-      })
-    );
+  for (const tc of smokeRoutes) {
+    test(tc.name, async () => {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const session = await setupFreshInstallSession(
+        app,
+        options.databaseAdapter
+      );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ reply: "reply:hello" });
-  });
+      const method = "method" in tc ? tc.method : "GET";
+      const headers =
+        "csrf" in tc && tc.csrf
+          ? session.headers({ "X-CSRF-Token": session.csrfToken })
+          : session.headers();
+      const init: RequestInit = { headers, method };
+      if ("requestBody" in tc) {
+        init.body = JSON.stringify(tc.requestBody);
+      }
 
-  test("serves profiles through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${tc.path}`, init)
+      );
 
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      profiles: [{ id: "default" }],
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(tc.expected);
     });
-  });
-
-  test("serves mcp servers through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/mcp/servers", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      servers: [{ id: "mcp_1" }],
-    });
-  });
-
-  test("serves skills through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/skills", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      skills: [{ id: "skill_1" }],
-    });
-  });
-
-  test("serves tools through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const setupResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/setup", {
-        body: JSON.stringify(buildSetupAuthBody()),
-        method: "POST",
-      })
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/tools", {
-        headers: {
-          Cookie: cookieHeaderFromSetCookies(extractSetCookies(setupResponse)),
-        },
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      tools: [{ id: "tool_1" }],
-    });
-  });
-
-  test("serves automations through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/automations", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      automations: [{ id: "automation_1" }],
-      unread: { byAutomationId: {}, totalUnread: 0 },
-    });
-  });
-
-  test("runs automations through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/automations/automation_1/run", {
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "POST",
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      run: { id: "automation_run_1" },
-    });
-  });
-
-  test("serves tasks through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/tasks", {
-        headers: session.headers(),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      tasks: [{ id: "task_1", status: "pending" }],
-    });
-  });
-
-  test("runs tasks through Hono routes", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const session = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/tasks/task_1/run", {
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-        }),
-        method: "POST",
-      })
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      run: { id: "task_run_1" },
-    });
-  });
+  }
 
   describe("org context middleware", () => {
     test("setup stores active org on the session", async () => {

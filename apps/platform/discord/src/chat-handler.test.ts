@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import path from "node:path";
 import type { ChatMessage } from "@nakama/core/contract";
+import { loadDiscordConfigFile } from "@nakama/core/discord-config";
 import { DiscordAuthStore } from "./auth-store";
 import {
   chatLockOptions,
@@ -39,11 +40,14 @@ async function createPairedHandler(
       typeof createMockClient
     >[0]["artifactContentBytes"];
     configProfileId?: string;
+    pairedUserIds?: string[];
+    allowedUserIds?: string[];
   } = {}
 ) {
   await writeDiscordConfigIni(homeDir, {
+    allowedUserIds: options.allowedUserIds ?? [],
     botToken: "discord-bot-token",
-    pairedUserIds: ["424242424242424242"],
+    pairedUserIds: options.pairedUserIds ?? ["424242424242424242"],
   });
 
   const authStore = new DiscordAuthStore();
@@ -1345,6 +1349,62 @@ describe("createChatHandler guild thread routing", () => {
         "I can only close threads I started."
       );
       expect(threadStore.hasThreadId("thread_owned")).toBe(true);
+    });
+  });
+
+  test("denies non-paired users", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        pairedUserIds: [],
+      });
+      const allowCmd = createSlashInteraction({
+        commandName: "allow",
+        userId: "555555555555555555",
+        userOption: { id: "999999999999999999" },
+      });
+      await handleSlashCommand(allowCmd.interaction);
+
+      expect(
+        allowCmd.replies.some((reply) => /not authorized/i.test(reply))
+      ).toBe(true);
+      expect((await loadDiscordConfigFile())?.allowedUserIds ?? []).toEqual([]);
+    });
+  });
+
+  test("adds a mentioned user", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir);
+      const targetUserId = "777777777777777777";
+      const allowCmd = createSlashInteraction({
+        commandName: "allow",
+        userOption: { id: targetUserId, username: "alice" },
+      });
+      await handleSlashCommand(allowCmd.interaction);
+
+      expect(
+        allowCmd.replies.some((reply) => reply.includes(`<@${targetUserId}>`))
+      ).toBe(true);
+      expect((await loadDiscordConfigFile())?.allowedUserIds).toContain(
+        targetUserId
+      );
+    });
+  });
+
+  test("reports already-allowed users", async () => {
+    await withTempHome(async (homeDir) => {
+      const targetUserId = "888888888888888888";
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        allowedUserIds: [targetUserId],
+      });
+      const allowCmd = createSlashInteraction({
+        commandName: "allow",
+        userOption: { id: targetUserId },
+      });
+      await handleSlashCommand(allowCmd.interaction);
+
+      expect(allowCmd.replies.some((reply) => /already/i.test(reply))).toBe(
+        true
+      );
     });
   });
 

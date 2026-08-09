@@ -472,6 +472,8 @@ export function createSlashInteraction(options: {
   /** Parent id returned by channel.fetch() when initial parentId is null. */
   fetchParentId?: string;
   threadId?: string;
+  /** Resolved USER option for commands like /allow. Pass `null` for missing. */
+  userOption?: { id: string; username?: string } | null;
 }): {
   interaction: import("discord.js").ChatInputCommandInteraction;
   replies: string[];
@@ -483,6 +485,7 @@ export function createSlashInteraction(options: {
   const parentId =
     options.parentId === null ? null : (options.parentId ?? channelId);
   const fetchParentId = options.fetchParentId ?? channelId;
+  const hasUserOption = options.userOption !== undefined;
 
   const channel = options.inThread
     ? {
@@ -521,6 +524,15 @@ export function createSlashInteraction(options: {
     followUp: async ({ content }: { content: string }) => {
       replies.push(content);
     },
+    options: {
+      getUser: (name: string) => {
+        if (name !== "user" || !hasUserOption) {
+          return null;
+        }
+
+        return options.userOption;
+      },
+    },
     reply: async ({ content }: { content: string }) => {
       replies.push(content);
     },
@@ -536,6 +548,7 @@ export async function writeDiscordConfigIni(
     botToken: string;
     profileId?: string;
     pairedUserIds?: string[];
+    allowedUserIds?: string[];
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
@@ -549,6 +562,10 @@ export async function writeDiscordConfigIni(
 
   if (config.pairedUserIds?.length) {
     lines.push(`paired_user_ids=${config.pairedUserIds.join(",")}`);
+  }
+
+  if (config.allowedUserIds?.length) {
+    lines.push(`allowed_user_ids=${config.allowedUserIds.join(",")}`);
   }
 
   lines.push("");
