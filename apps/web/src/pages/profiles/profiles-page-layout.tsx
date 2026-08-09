@@ -2,7 +2,6 @@ import { Trash2Icon } from "lucide-react";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
-import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { Button } from "@/components/ui/button";
 import {
@@ -210,14 +209,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                     >
                       Prompt
                     </ProfileDetailTabButton>
-                    <ProfileDetailTabButton
-                      active={detailTab === "knowledge"}
-                      controls="profile-detail-panel-knowledge"
-                      id="profile-detail-tab-knowledge"
-                      onSelect={() => setDetailTab("knowledge")}
-                    >
-                      Knowledge
-                    </ProfileDetailTabButton>
                     {isOrgAdmin ? (
                       <ProfileDetailTabButton
                         active={detailTab === "proposals"}
@@ -282,15 +273,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                     role="tabpanel"
                   >
                     <SoulTab profileId={selectedId} />
-                  </div>
-                ) : detailTab === "knowledge" ? (
-                  <div
-                    aria-labelledby="profile-detail-tab-knowledge"
-                    className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
-                    id="profile-detail-panel-knowledge"
-                    role="tabpanel"
-                  >
-                    <KnowledgeTab profileId={selectedId} />
                   </div>
                 ) : null}
               </>

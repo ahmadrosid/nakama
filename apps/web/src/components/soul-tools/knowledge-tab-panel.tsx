@@ -41,9 +41,6 @@ function formatDocumentCount(count: number): string {
 }
 
 export function KnowledgeTabPanel({
-  embedded,
-  selectedProfileName,
-  knowledgeBaseDirectory,
   sources,
   documents,
   readyCount,
@@ -54,9 +51,6 @@ export function KnowledgeTabPanel({
   onUpload,
   onDeleteDocument,
 }: {
-  embedded: boolean;
-  selectedProfileName?: string;
-  knowledgeBaseDirectory: string | null;
   sources: KnowledgeBaseSource[];
   documents: KnowledgeBaseDocument[];
   readyCount: number;
@@ -68,19 +62,9 @@ export function KnowledgeTabPanel({
   onDeleteDocument: (document: KnowledgeBaseDocument) => void;
 }) {
   return (
-    <div className={cn("space-y-4", !embedded && "min-w-0 p-4 sm:p-5")}>
+    <div className="space-y-4">
       <div className="min-w-0">
-        <h2 className="type-section-title text-balance">
-          {embedded ? "Knowledge" : (selectedProfileName ?? "Profile")}
-        </h2>
-        {!embedded && knowledgeBaseDirectory ? (
-          <p
-            className="type-code mt-2 truncate text-muted-foreground"
-            title={knowledgeBaseDirectory}
-          >
-            {knowledgeBaseDirectory}
-          </p>
-        ) : null}
+        <h2 className="type-section-title text-balance">Knowledge</h2>
       </div>
 
       {sources.length > 0 ? (

@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
-  describeSharedChannelConfigTests,
-  withTempHomedir,
-  writeChannelIniConfig,
-} from "./testing/channel-config-fixtures";
-import {
   buildDiscordInviteUrl,
   generateHandshakeCode,
   isDiscordUserAuthorized,
@@ -18,6 +13,11 @@ import {
   saveDiscordConfig,
   verifyAndPairDiscordUser,
 } from "./discord-config";
+import {
+  describeSharedChannelConfigTests,
+  withTempHomedir,
+  writeChannelIniConfig,
+} from "./testing/channel-config-fixtures";
 
 describe("buildDiscordInviteUrl", () => {
   test("builds an oauth invite link with bot scopes and permissions", () => {

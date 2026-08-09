@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { describeSharedChannelConfigTests } from "./testing/channel-config-fixtures";
 import {
   generateHandshakeCode,
   isTelegramUserAuthorized,
@@ -11,6 +10,7 @@ import {
   saveTelegramConfig,
   verifyAndPairTelegramUser,
 } from "./telegram-config";
+import { describeSharedChannelConfigTests } from "./testing/channel-config-fixtures";
 
 describe("parseAllowedUserIds", () => {
   test("parses comma-separated ids", () => {
