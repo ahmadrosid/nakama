@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, UserConfig } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+} from "@nakama/db";
 import {
   evaluatePostTurnReviewTurnEligibility,
   SkillPostTurnReviewService,
@@ -15,6 +18,73 @@ function assistantWithTools(count: number, names?: string[]): ChatMessage {
     toolCall(`call_${index}`, names?.[index] ?? "read_file")
   );
   return { content: "working", role: "assistant", toolCalls };
+}
+
+async function seedEligibleTurn(db: DatabaseAdapter, channel: string) {
+  const now = new Date().toISOString();
+  await db.upsertOrganization({
+    createdAt: now,
+    id: "org_1",
+    name: "Org",
+    skillsPostTurnReview: true,
+    slug: "org",
+    updatedAt: now,
+  });
+  await db.upsertProfile({
+    createdAt: now,
+    id: "profile_1",
+    isSuper: false,
+    model: null,
+    name: "Bot",
+    orgId: "org_1",
+    systemPrompt: "",
+    updatedAt: now,
+  });
+  await db.upsertSkill({
+    createdAt: now,
+    createdBy: "bundled",
+    description: "Manage skills",
+    disableModelInvocation: false,
+    enabled: true,
+    hasTool: false,
+    id: "skill_manage_skills",
+    name: "manage-skills",
+    sourcePath: "/tmp/manage-skills/SKILL.md",
+    updatedAt: now,
+  });
+  await db.assignSkillToProfile("profile_1", "skill_manage_skills");
+  await db.upsertSession({
+    agentQuestionnaire: null,
+    agentTodos: [],
+    channel,
+    createdAt: now,
+    id: "session_1",
+    orgId: "org_1",
+    profileId: "profile_1",
+    title: null,
+    userId: "user_1",
+  });
+
+  const turn: ChatMessage[] = [
+    { content: "complex", role: "user" },
+    assistantWithTools(5),
+    ...Array.from({ length: 5 }, (_, index) => ({
+      content: "{}",
+      name: "read_file",
+      role: "tool" as const,
+      toolCallId: `call_${index}`,
+    })),
+  ];
+  await db.appendMessagesForSession(
+    "session_1",
+    turn.map((message, index) => ({
+      createdAt: now,
+      id: `msg_${index}`,
+      payload: message,
+      seq: index,
+      sessionId: "session_1",
+    }))
+  );
 }
 
 describe("evaluatePostTurnReviewTurnEligibility", () => {
@@ -68,7 +138,26 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
 });
 
 describe("SkillPostTurnReviewService", () => {
-  test("runs runner once for eligible web turn when flag on and manage-skills assigned", async () => {
+  test("runs runner once for eligible interactive channels when flag on and manage-skills assigned", async () => {
+    for (const channel of ["web", "discord", "telegram", "whatsapp"]) {
+      const db = createInMemoryDatabaseAdapter();
+      await seedEligibleTurn(db, channel);
+
+      let ran = 0;
+      const service = new SkillPostTurnReviewService(
+        db,
+        () => null,
+        async () => {
+          ran += 1;
+        }
+      );
+
+      expect(await service.runPostTurnSkillReview("session_1")).toBe("ran");
+      expect(ran).toBe(1);
+    }
+  });
+
+  test("skips headless automation channel as channel_not_interactive", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
     await db.upsertOrganization({
@@ -89,23 +178,10 @@ describe("SkillPostTurnReviewService", () => {
       systemPrompt: "",
       updatedAt: now,
     });
-    await db.upsertSkill({
-      createdAt: now,
-      createdBy: "bundled",
-      description: "Manage skills",
-      disableModelInvocation: false,
-      enabled: true,
-      hasTool: false,
-      id: "skill_manage_skills",
-      name: "manage-skills",
-      sourcePath: "/tmp/manage-skills/SKILL.md",
-      updatedAt: now,
-    });
-    await db.assignSkillToProfile("profile_1", "skill_manage_skills");
     await db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
-      channel: "web",
+      channel: "automation",
       createdAt: now,
       id: "session_1",
       orgId: "org_1",
@@ -113,27 +189,6 @@ describe("SkillPostTurnReviewService", () => {
       title: null,
       userId: "user_1",
     });
-
-    const turn: ChatMessage[] = [
-      { content: "complex", role: "user" },
-      assistantWithTools(5),
-      ...Array.from({ length: 5 }, (_, index) => ({
-        content: "{}",
-        name: "read_file",
-        role: "tool" as const,
-        toolCallId: `call_${index}`,
-      })),
-    ];
-    await db.appendMessagesForSession(
-      "session_1",
-      turn.map((message, index) => ({
-        createdAt: now,
-        id: `msg_${index}`,
-        payload: message,
-        seq: index,
-        sessionId: "session_1",
-      }))
-    );
 
     let ran = 0;
     const service = new SkillPostTurnReviewService(
@@ -144,8 +199,10 @@ describe("SkillPostTurnReviewService", () => {
       }
     );
 
-    expect(await service.runPostTurnSkillReview("session_1")).toBe("ran");
-    expect(ran).toBe(1);
+    expect(await service.runPostTurnSkillReview("session_1")).toBe(
+      "channel_not_interactive"
+    );
+    expect(ran).toBe(0);
   });
 
   test("skips when flag disabled", async () => {
@@ -197,65 +254,7 @@ describe("SkillPostTurnReviewService", () => {
 
   test("skips duplicate while in flight", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-    await db.upsertOrganization({
-      createdAt: now,
-      id: "org_1",
-      name: "Org",
-      skillsPostTurnReview: true,
-      slug: "org",
-      updatedAt: now,
-    });
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_1",
-      isSuper: false,
-      model: null,
-      name: "Bot",
-      orgId: "org_1",
-      systemPrompt: "",
-      updatedAt: now,
-    });
-    await db.upsertSkill({
-      createdAt: now,
-      createdBy: "bundled",
-      description: "Manage skills",
-      disableModelInvocation: false,
-      enabled: true,
-      hasTool: false,
-      id: "skill_manage_skills",
-      name: "manage-skills",
-      sourcePath: "/tmp/manage-skills/SKILL.md",
-      updatedAt: now,
-    });
-    await db.assignSkillToProfile("profile_1", "skill_manage_skills");
-    await db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      channel: "cli",
-      createdAt: now,
-      id: "session_1",
-      orgId: "org_1",
-      profileId: "profile_1",
-      title: null,
-      userId: "user_1",
-    });
-    await db.appendMessagesForSession("session_1", [
-      {
-        createdAt: now,
-        id: "msg_0",
-        payload: { content: "go", role: "user" },
-        seq: 0,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_1",
-        payload: assistantWithTools(5),
-        seq: 1,
-        sessionId: "session_1",
-      },
-    ]);
+    await seedEligibleTurn(db, "cli");
 
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
