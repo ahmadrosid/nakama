@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatMessage } from "@nakama/core";
 import {
   formatHttpErrorBody,
   normalizeThinkingEffort,
   parseJsonRecord,
   readRecord,
   readSseEvents,
+  sanitizeToolCallHistory,
 } from "./shared";
 
 function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
@@ -97,5 +99,59 @@ describe("provider shared helpers", () => {
     ).toBe(
       "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
     );
+  });
+
+  test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
+    const messages: ChatMessage[] = [
+      { content: "Use the tool", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [{ arguments: {}, id: "call_missing", name: "lookup" }],
+      },
+      { content: "Thanks", role: "user" },
+    ];
+
+    expect(sanitizeToolCallHistory(messages)).toEqual([
+      { content: "Use the tool", role: "user" },
+      { content: "Thanks", role: "user" },
+    ]);
+  });
+
+  test("sanitizeToolCallHistory drops orphaned tool messages", () => {
+    const messages: ChatMessage[] = [
+      { content: "Hi", role: "user" },
+      {
+        content: "result",
+        name: "lookup",
+        role: "tool",
+        toolCallId: "call_orphan",
+      },
+    ];
+
+    expect(sanitizeToolCallHistory(messages)).toEqual([
+      { content: "Hi", role: "user" },
+    ]);
+  });
+
+  test("sanitizeToolCallHistory leaves intact tool pairs untouched", () => {
+    const messages: ChatMessage[] = [
+      { content: "Use the tool", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        thinking: "plan",
+        toolCalls: [{ arguments: { q: "x" }, id: "call_1", name: "lookup" }],
+      },
+      {
+        content: "ok",
+        name: "lookup",
+        role: "tool",
+        toolCallId: "call_1",
+      },
+      { content: "Done", role: "assistant" },
+    ];
+
+    expect(sanitizeToolCallHistory(messages)).toEqual(messages);
   });
 });
