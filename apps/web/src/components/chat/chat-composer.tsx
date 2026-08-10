@@ -624,6 +624,18 @@ function ChatComposerFullFooter({
 const composerSubmitButtonClassName =
   "size-7 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-colors hover:bg-primary/90 disabled:opacity-50";
 
+/**
+ * Stop must stay reachable while a turn is running. It used to be hidden as soon
+ * as the composer had text, so typing the next message swapped Stop for Queue and
+ * left no way to cancel: the turn kept the session and every send came back 409.
+ */
+export function composerActions(state: {
+  canStop: boolean;
+  hasContent: boolean;
+}): { showStop: boolean; showSubmit: boolean } {
+  return { showStop: state.canStop, showSubmit: state.hasContent };
+}
+
 function ChatComposerSubmitButton({
   chatStatus,
   busy,
@@ -642,33 +654,50 @@ function ChatComposerSubmitButton({
   const hasContent =
     controller.textInput.value.trim().length > 0 ||
     attachments.files.length > 0;
-  const showStop = canStop && !hasContent;
+  const { showStop, showSubmit } = composerActions({ canStop, hasContent });
 
-  if (showStop) {
+  const stopButton = showStop ? (
+    <Button
+      aria-label="Stop response"
+      className={composerSubmitButtonClassName}
+      disabled={disabled}
+      key="stop"
+      onClick={onStop}
+      size="icon-sm"
+      type="button"
+      variant={hasContent ? "outline" : "default"}
+    >
+      <StopIcon />
+    </Button>
+  ) : null;
+
+  if (!showSubmit) {
     return (
-      <Button
-        aria-label="Stop response"
-        className={composerSubmitButtonClassName}
-        disabled={disabled}
-        onClick={onStop}
-        size="icon-sm"
-        type="button"
-        variant="default"
-      >
-        <StopIcon />
-      </Button>
+      stopButton ?? (
+        <PromptInputSubmit
+          aria-label="Send message"
+          className={composerSubmitButtonClassName}
+          disabled
+          status={chatStatus}
+        >
+          <ArrowUp02Icon className="size-3.5" />
+        </PromptInputSubmit>
+      )
     );
   }
 
   return (
-    <PromptInputSubmit
-      aria-label={busy ? "Queue message" : "Send message"}
-      className={composerSubmitButtonClassName}
-      disabled={disabled || !hasContent}
-      status={chatStatus}
-    >
-      <ArrowUp02Icon className="size-3.5" />
-    </PromptInputSubmit>
+    <div className="flex items-center gap-1.5">
+      {stopButton}
+      <PromptInputSubmit
+        aria-label={busy ? "Queue message" : "Send message"}
+        className={composerSubmitButtonClassName}
+        disabled={disabled}
+        status={chatStatus}
+      >
+        <ArrowUp02Icon className="size-3.5" />
+      </PromptInputSubmit>
+    </div>
   );
 }
 
