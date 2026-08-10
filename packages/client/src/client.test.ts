@@ -314,25 +314,38 @@ test("notification destination client methods hit the expected routes", async ()
   );
 });
 
-test("publishProfileArtifactShare includes clientOrigin when configured", async () => {
+function createPublishShareClient(options: {
+  clientOrigin?: string;
+  response: Record<string, unknown>;
+}) {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
   const client = createClient({
     authToken: "local-auth-token",
     baseUrl: "http://127.0.0.1:4310",
-    clientOrigin: "https://nakama.example.com/",
+    ...(options.clientOrigin === undefined
+      ? {}
+      : { clientOrigin: options.clientOrigin }),
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
-      return Response.json({
-        id: "share_1",
-        refreshed: false,
-        sharePath: "/s/tok",
-        shareUrl: "https://nakama.example.com/s/tok",
-        token: "tok",
-        webPublicUrlConfigured: true,
-      });
+      return Response.json(options.response);
     },
     orgId: "org_test",
+  });
+  return { client, fetchCalls };
+}
+
+test("publishProfileArtifactShare includes clientOrigin when configured", async () => {
+  const { client, fetchCalls } = createPublishShareClient({
+    clientOrigin: "https://nakama.example.com/",
+    response: {
+      id: "share_1",
+      refreshed: false,
+      sharePath: "/s/tok",
+      shareUrl: "https://nakama.example.com/s/tok",
+      token: "tok",
+      webPublicUrlConfigured: true,
+    },
   });
 
   await client.publishProfileArtifactShare("profile_1", "report.md");
@@ -348,23 +361,15 @@ test("publishProfileArtifactShare includes clientOrigin when configured", async 
 });
 
 test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
-  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
-    [];
-  const client = createClient({
-    authToken: "local-auth-token",
-    baseUrl: "http://127.0.0.1:4310",
-    fetch: async (input, init) => {
-      fetchCalls.push({ init, input });
-      return Response.json({
-        id: "share_1",
-        refreshed: false,
-        sharePath: "/s/tok",
-        shareUrl: null,
-        token: "tok",
-        webPublicUrlConfigured: false,
-      });
+  const { client, fetchCalls } = createPublishShareClient({
+    response: {
+      id: "share_1",
+      refreshed: false,
+      sharePath: "/s/tok",
+      shareUrl: null,
+      token: "tok",
+      webPublicUrlConfigured: false,
     },
-    orgId: "org_test",
   });
 
   await client.publishProfileArtifactShare("profile_1", "report.md");

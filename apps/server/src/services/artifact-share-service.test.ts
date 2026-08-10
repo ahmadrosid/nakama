@@ -4,97 +4,93 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveArtifactShareBaseUrl } from "./artifact-share-service";
 
+const SHARE_PUBLISH_URL =
+  "http://127.0.0.1:4310/v1/profiles/p1/artifacts/shares";
+
+function sharePublishRequest(init?: RequestInit): Request {
+  return new Request(SHARE_PUBLISH_URL, { method: "POST", ...init });
+}
+
+async function withEnv<T>(
+  vars: Record<string, string | undefined>,
+  run: () => T | Promise<T>
+): Promise<T> {
+  const previous = new Map(
+    Object.keys(vars).map((key) => [key, process.env[key]] as const)
+  );
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+async function withFreshConfigDir<T>(run: () => T | Promise<T>): Promise<T> {
+  const configDir = join(tmpdir(), `nakama-artifact-share-base-${Date.now()}`);
+  mkdirSync(configDir, { recursive: true });
+  try {
+    return await withEnv(
+      {
+        NAKAMA_CONFIG_DIR: configDir,
+        NAKAMA_PUBLIC_URL: undefined,
+        NAKAMA_WEB_PUBLIC_URL: undefined,
+      },
+      run
+    );
+  } finally {
+    rmSync(configDir, { force: true, recursive: true });
+  }
+}
+
 describe("resolveArtifactShareBaseUrl", () => {
   test("prefers explicit clientOrigin over loopback request URL", () => {
-    const request = new Request(
-      "http://127.0.0.1:4310/v1/profiles/p1/artifacts/shares",
-      { method: "POST" }
-    );
-
     expect(
       resolveArtifactShareBaseUrl({
         clientOrigin: "https://nakama.example.com/",
-        request,
+        request: sharePublishRequest(),
       })
     ).toBe("https://nakama.example.com");
   });
 
-  test("prefers configured web public URL when request host is loopback", () => {
-    const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
-    process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com/";
-
-    try {
-      const request = new Request(
-        "http://127.0.0.1:4310/v1/profiles/p1/artifacts/shares",
-        { method: "POST" }
-      );
-
-      expect(resolveArtifactShareBaseUrl({ request })).toBe(
-        "https://deployed.example.com"
-      );
-    } finally {
-      if (previous === undefined) {
-        delete process.env.NAKAMA_WEB_PUBLIC_URL;
-      } else {
-        process.env.NAKAMA_WEB_PUBLIC_URL = previous;
+  test("prefers configured web public URL when request host is loopback", async () => {
+    await withEnv(
+      { NAKAMA_WEB_PUBLIC_URL: "https://deployed.example.com/" },
+      () => {
+        expect(
+          resolveArtifactShareBaseUrl({ request: sharePublishRequest() })
+        ).toBe("https://deployed.example.com");
       }
-    }
+    );
   });
 
-  test("keeps loopback when no configured web public URL exists", () => {
-    const configDir = join(
-      tmpdir(),
-      `nakama-artifact-share-base-${Date.now()}`
-    );
-    mkdirSync(configDir, { recursive: true });
-
-    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    const previousWeb = process.env.NAKAMA_WEB_PUBLIC_URL;
-    const previousPublic = process.env.NAKAMA_PUBLIC_URL;
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-    delete process.env.NAKAMA_WEB_PUBLIC_URL;
-    delete process.env.NAKAMA_PUBLIC_URL;
-
-    try {
-      const request = new Request(
-        "http://127.0.0.1:4310/v1/profiles/p1/artifacts/shares",
-        { method: "POST" }
-      );
-
-      expect(resolveArtifactShareBaseUrl({ request })).toBe(
-        "http://127.0.0.1:4310"
-      );
-    } finally {
-      if (previousConfigDir === undefined) {
-        delete process.env.NAKAMA_CONFIG_DIR;
-      } else {
-        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
-      }
-      if (previousWeb === undefined) {
-        delete process.env.NAKAMA_WEB_PUBLIC_URL;
-      } else {
-        process.env.NAKAMA_WEB_PUBLIC_URL = previousWeb;
-      }
-      if (previousPublic === undefined) {
-        delete process.env.NAKAMA_PUBLIC_URL;
-      } else {
-        process.env.NAKAMA_PUBLIC_URL = previousPublic;
-      }
-      rmSync(configDir, { force: true, recursive: true });
-    }
+  test("keeps loopback when no configured web public URL exists", async () => {
+    await withFreshConfigDir(() => {
+      expect(
+        resolveArtifactShareBaseUrl({ request: sharePublishRequest() })
+      ).toBe("http://127.0.0.1:4310");
+    });
   });
 
   test("reads Origin header from request when clientOrigin is absent", () => {
-    const request = new Request(
-      "http://127.0.0.1:4310/v1/profiles/p1/artifacts/shares",
-      {
-        headers: { Origin: "https://app.example.com" },
-        method: "POST",
-      }
-    );
-
-    expect(resolveArtifactShareBaseUrl({ request })).toBe(
-      "https://app.example.com"
-    );
+    expect(
+      resolveArtifactShareBaseUrl({
+        request: sharePublishRequest({
+          headers: { Origin: "https://app.example.com" },
+        }),
+      })
+    ).toBe("https://app.example.com");
   });
 });
