@@ -101,57 +101,47 @@ describe("provider shared helpers", () => {
     );
   });
 
-  test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
-    const messages: ChatMessage[] = [
-      { content: "Use the tool", role: "user" },
-      {
-        content: "",
-        role: "assistant",
-        toolCalls: [{ arguments: {}, id: "call_missing", name: "lookup" }],
-      },
-      { content: "Thanks", role: "user" },
-    ];
+  const user = (content: string): ChatMessage => ({ content, role: "user" });
+  const toolResult = (toolCallId: string, content = "ok"): ChatMessage => ({
+    content,
+    name: "lookup",
+    role: "tool",
+    toolCallId,
+  });
+  const assistantTools = (
+    id: string,
+    args: Record<string, unknown> = {},
+    thinking?: string
+  ): ChatMessage => ({
+    content: "",
+    role: "assistant",
+    ...(thinking ? { thinking } : {}),
+    toolCalls: [{ arguments: args, id, name: "lookup" }],
+  });
 
-    expect(sanitizeToolCallHistory(messages)).toEqual([
-      { content: "Use the tool", role: "user" },
-      { content: "Thanks", role: "user" },
-    ]);
+  test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
+    expect(
+      sanitizeToolCallHistory([
+        user("Use the tool"),
+        assistantTools("call_missing"),
+        user("Thanks"),
+      ])
+    ).toEqual([user("Use the tool"), user("Thanks")]);
   });
 
   test("sanitizeToolCallHistory drops orphaned tool messages", () => {
-    const messages: ChatMessage[] = [
-      { content: "Hi", role: "user" },
-      {
-        content: "result",
-        name: "lookup",
-        role: "tool",
-        toolCallId: "call_orphan",
-      },
-    ];
-
-    expect(sanitizeToolCallHistory(messages)).toEqual([
-      { content: "Hi", role: "user" },
-    ]);
+    expect(
+      sanitizeToolCallHistory([user("Hi"), toolResult("call_orphan", "result")])
+    ).toEqual([user("Hi")]);
   });
 
   test("sanitizeToolCallHistory leaves intact tool pairs untouched", () => {
     const messages: ChatMessage[] = [
-      { content: "Use the tool", role: "user" },
-      {
-        content: "",
-        role: "assistant",
-        thinking: "plan",
-        toolCalls: [{ arguments: { q: "x" }, id: "call_1", name: "lookup" }],
-      },
-      {
-        content: "ok",
-        name: "lookup",
-        role: "tool",
-        toolCallId: "call_1",
-      },
+      user("Use the tool"),
+      assistantTools("call_1", { q: "x" }, "plan"),
+      toolResult("call_1"),
       { content: "Done", role: "assistant" },
     ];
-
     expect(sanitizeToolCallHistory(messages)).toEqual(messages);
   });
 });
