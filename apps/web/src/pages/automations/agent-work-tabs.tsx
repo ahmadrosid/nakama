@@ -22,7 +22,7 @@ export function AgentWorkTabs() {
   return (
     <div
       aria-label="Agent work views"
-      className="flex items-center gap-1"
+      className="flex h-full min-w-0 items-stretch"
       role="tablist"
     >
       <TabButton
@@ -74,8 +74,10 @@ function TabButton({
     <button
       aria-controls={`agent-work-panel-${tab}`}
       aria-selected={active}
-      className={`rounded-md px-3 py-1.5 font-medium text-sm transition-colors hover:bg-muted ${
-        active ? "bg-muted text-foreground" : "text-muted-foreground"
+      className={`relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4 ${
+        active
+          ? "border-foreground text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground"
       }`}
       id={`agent-work-tab-${tab}`}
       onClick={onClick}

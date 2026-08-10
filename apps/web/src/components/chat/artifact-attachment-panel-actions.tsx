@@ -1,8 +1,8 @@
 import {
   ArrowDown01Icon,
+  ArrowExpand01Icon,
+  ArrowShrink02Icon,
   CheckmarkCircle01Icon,
-  Maximize01Icon,
-  Minimize01Icon,
 } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,9 +100,9 @@ export function ArtifactAttachmentPanelActions({
         variant="ghost"
       >
         {fullscreen ? (
-          <Minimize01Icon aria-hidden className="size-4" />
+          <ArrowShrink02Icon aria-hidden className="size-4" />
         ) : (
-          <Maximize01Icon aria-hidden className="size-4" />
+          <ArrowExpand01Icon aria-hidden className="size-4" />
         )}
       </Button>
     </>

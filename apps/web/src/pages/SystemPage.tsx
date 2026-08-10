@@ -123,7 +123,7 @@ function SystemTabButton({
       aria-controls={controls}
       aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
+        "relative inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground"

@@ -143,13 +143,16 @@ export function Layout() {
                   <AgentWorkTabs />
                 ) : page === "files" ? (
                   <FilesViewTabs />
-                ) : (
+                ) : page === "soul" || page === "profiles" ? null : (
                   <h1 className="type-brand min-w-0 truncate">
                     {activeNav?.label}
                   </h1>
                 )}
                 <div
-                  className="ml-auto flex shrink-0 items-center gap-2"
+                  className={cn(
+                    "flex h-full shrink-0 items-stretch gap-2",
+                    page !== "soul" && page !== "profiles" && "ml-auto"
+                  )}
                   data-page-header-actions
                 />
               </header>
