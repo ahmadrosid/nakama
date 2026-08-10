@@ -549,12 +549,25 @@ export function streamMessage(
   sessionId: string,
   session: AgentChatSession,
   input: SendMessageInput,
-  onComplete?: (terminal: StreamEvent) => void
+  onComplete?: (terminal: StreamEvent) => void,
+  requestSignal?: AbortSignal
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
+  // The turn is cancelled either by the client going away (requestSignal, which is
+  // what Discord /stop and a closed browser tab both look like here) or by the
+  // response stream being cancelled. Both must reach the agent, otherwise the turn
+  // runs to completion and endTurn is late, which is what returned 409 to the next
+  // message in the session.
+  const turnAbort = new AbortController();
+  const turnSignal = requestSignal
+    ? AbortSignal.any([turnAbort.signal, requestSignal])
+    : turnAbort.signal;
 
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      turnAbort.abort();
+    },
     async start(controller) {
       const { send, getTerminal } = createStreamSenders(sessionId, (chunk) => {
         controller.enqueue(chunk);
@@ -570,7 +583,9 @@ export function streamMessage(
 
       try {
         const reply = await Promise.race([
-          session.sendStream(input, buildAgentStreamHandlers(send)),
+          session.sendStream(input, buildAgentStreamHandlers(send), {
+            signal: turnSignal,
+          }),
           new Promise<never>((_, reject) => {
             setTimeout(() => {
               reject(
@@ -589,7 +604,12 @@ export function streamMessage(
           ...(contextUsage ? { contextUsage } : {}),
         });
       } catch (error) {
-        send({ error: formatServerError(error), type: "error" });
+        send({
+          error: turnSignal.aborted
+            ? "Turn cancelled."
+            : formatServerError(error),
+          type: "error",
+        });
       } finally {
         clearInterval(keepalive);
 
@@ -601,7 +621,11 @@ export function streamMessage(
           } satisfies StreamEvent);
 
         sessionTurnRegistry.endTurn(sessionId, terminal);
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by the client cancelling the stream.
+        }
         onComplete?.(terminal);
       }
     },

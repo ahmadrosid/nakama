@@ -1889,6 +1889,8 @@ export interface ToolContext {
   orgRole?: OrgRole;
   profileId?: string;
   sessionId?: string;
+  /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
+  signal?: AbortSignal;
   userId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;

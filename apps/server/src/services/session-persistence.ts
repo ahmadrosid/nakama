@@ -46,11 +46,11 @@ export function wrapPersistedSession(
       lastPersistedRevision = session.getHistoryRevision();
       return reply;
     },
-    async sendStream(message, handlers) {
+    async sendStream(message, handlers, streamOptions) {
       options.onBeginTurn?.(sessionId);
       const before = session.getHistory().length;
       const revisionBefore = session.getHistoryRevision();
-      const reply = await session.sendStream(message, handlers);
+      const reply = await session.sendStream(message, handlers, streamOptions);
       await persistSessionHistory(
         db,
         sessionId,

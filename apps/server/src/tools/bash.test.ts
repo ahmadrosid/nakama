@@ -24,6 +24,29 @@ describe("bash tool", () => {
     }
   });
 
+  test("kills the shell when the turn is cancelled", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    // 30s beats any plausible test runtime, so finishing fast can only mean the
+    // abort killed it rather than the command completing on its own.
+    const pending = runBash(
+      { command: "sleep 30" },
+      {
+        orgId: "org_test",
+        profileId: "profile_test",
+        signal: controller.signal,
+      },
+      { workspaceRoot }
+    );
+
+    setTimeout(() => controller.abort(), 50);
+
+    await expect(pending).rejects.toThrow();
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+  });
+
   test("runs commands in the profile workspace by default", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
 

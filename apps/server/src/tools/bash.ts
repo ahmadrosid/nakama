@@ -40,6 +40,7 @@ interface BashRunOptions {
 
 interface ShellRunOptions {
   codingAgentMode: boolean;
+  signal?: AbortSignal;
   workspaceRoot: string;
 }
 
@@ -121,6 +122,7 @@ export async function runBash(
   return runShellCommand(command, cwd, timeoutMs, env, {
     codingAgentMode,
     workspaceRoot,
+    ...(context.signal ? { signal: context.signal } : {}),
   });
 }
 
@@ -135,6 +137,9 @@ function runShellCommand(
     const child = spawn("/bin/bash", ["-lc", command], {
       cwd,
       env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
+      // SIGTERMs the shell when the turn is cancelled, so a stopped chat does not
+      // leave an ffmpeg or coding-agent run holding the session turn open.
+      ...(options.signal ? { signal: options.signal } : {}),
       stdio: ["ignore", "pipe", "pipe"],
     });
 

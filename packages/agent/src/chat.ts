@@ -87,7 +87,16 @@ export interface AgentChatSession {
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
   send(input: SendMessageArg): Promise<string>;
-  sendStream(input: SendMessageArg, handlers: StreamHandlers): Promise<string>;
+  sendStream(
+    input: SendMessageArg,
+    handlers: StreamHandlers,
+    options?: SendStreamOptions
+  ): Promise<string>;
+}
+
+export interface SendStreamOptions {
+  /** Cancels the turn: stops the tool loop and asks running tools to abort. */
+  signal?: AbortSignal;
 }
 
 export interface ResolvePromptContextInput {
@@ -266,7 +275,7 @@ export function createAgentChatSession(
         }
       );
     },
-    async sendStream(input, handlers) {
+    async sendStream(input, handlers, streamOptions) {
       return sendMessage(
         dependencies,
         tools,
@@ -277,6 +286,7 @@ export function createAgentChatSession(
         {
           enableToolLoop,
           handlers,
+          ...(streamOptions?.signal ? { signal: streamOptions.signal } : {}),
           onContextUsage: rememberContextUsage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
@@ -318,6 +328,7 @@ async function sendMessage(
     rehydrateMessagesForProvider?: (
       messages: readonly ChatMessage[]
     ) => Promise<ChatMessage[]>;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
   let userContent = normalizeUserContent(
@@ -388,12 +399,15 @@ async function sendMessage(
   ) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
   }
-  const effectiveToolContext =
+  const baseToolContext =
     input.clientOrigin?.trim() && options.toolContext
       ? { ...options.toolContext, clientOrigin: input.clientOrigin.trim() }
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
+  const effectiveToolContext = options.signal
+    ? { ...baseToolContext, signal: options.signal }
+    : baseToolContext;
 
   try {
     const reply = await runConversation(
@@ -408,7 +422,8 @@ async function sendMessage(
       options.handlers,
       effectiveToolContext,
       options.rehydrateMessagesForProvider,
-      options.onContextUsage
+      options.onContextUsage,
+      options.signal
     );
 
     return reply;
@@ -457,9 +472,12 @@ async function runConversation(
   onContextUsage?: (
     usedTokens: number,
     source: ChatContextUsage["source"]
-  ) => void
+  ) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+    signal?.throwIfAborted();
+
     const result = await generateReply(
       provider,
       systemPrompt,
@@ -482,6 +500,12 @@ async function runConversation(
       usedTokens,
       result.usage && !result.usage.estimated ? "provider" : "estimate"
     );
+
+    // Checked before the push so a cancelled turn leaves no half-written assistant
+    // message and never starts another tool batch.
+    // ponytail: cooperative cancel. The provider HTTP call in flight is not aborted;
+    // pass the signal down to the provider clients if that latency starts to matter.
+    signal?.throwIfAborted();
 
     history.push(result.assistantMessage);
 
