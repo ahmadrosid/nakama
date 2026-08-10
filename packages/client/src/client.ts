@@ -980,6 +980,31 @@ export class NakamaClient {
     );
   }
 
+  async readKnowledgeBaseDocumentContent(
+    profileId: string,
+    documentId: string,
+    options: { inline?: boolean; render?: "text" } = {}
+  ): Promise<{ contentType: string; data: ArrayBuffer }> {
+    const query = new URLSearchParams();
+    if (options.inline) {
+      query.set("inline", "1");
+    }
+    if (options.render) {
+      query.set("render", options.render);
+    }
+
+    const queryString = query.toString();
+    const path = `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/${encodeURIComponent(documentId)}/content${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetchRaw(path);
+
+    return {
+      contentType:
+        response.headers.get("Content-Type") ?? "application/octet-stream",
+      data: await response.arrayBuffer(),
+    };
+  }
+
   async getUserContext(
     options: { includeContent?: boolean } = {}
   ): Promise<UserContextStatusResponse> {

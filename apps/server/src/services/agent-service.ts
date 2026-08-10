@@ -2619,6 +2619,20 @@ export class AgentService {
     );
   }
 
+  async readKnowledgeBaseDocument(
+    orgId: string,
+    profileId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    return this.profileService.readKnowledgeBaseDocument(
+      orgId,
+      profileId,
+      documentId,
+      options
+    );
+  }
+
   async getProfileSoulStatus(
     orgId: string,
     profileId: string,

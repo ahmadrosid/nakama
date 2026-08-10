@@ -4,6 +4,7 @@ import type { DocumentAttachment, KnowledgeBaseDocument } from "../contract";
 import {
   ensureDir,
   pathExists,
+  readBytes,
   readTextOrNull,
   removeFile,
   writePrivateBytesFile,
@@ -312,4 +313,86 @@ export async function deleteKnowledgeBaseDocument(
   }
 
   return true;
+}
+
+/**
+ * Strip the metadata header that `uploadKnowledgeBaseDocument` prepends to the
+ * extracted text file, so previews show the document body without the redundant
+ * `# source:` / `# mediaType:` / `# uploadedAt:` preamble. Matches the exact
+ * header prefixes so a markdown body that starts with `#` is never mistaken
+ * for metadata.
+ */
+function stripExtractedTextHeader(text: string): string {
+  const match = text.match(
+    /^# source: [^\n]*\n# mediaType: [^\n]*\n# uploadedAt: [^\n]*\n/
+  );
+  if (match) {
+    return text.slice(match[0].length);
+  }
+
+  return text;
+}
+
+export async function readKnowledgeBaseDocumentContent(
+  orgId: string,
+  profileId: string,
+  documentId: string,
+  options: { render?: "text" } = {}
+): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+  const manifest = await readManifest(orgId, profileId);
+  const document = manifest.documents.find((entry) => entry.id === documentId);
+
+  if (!document) {
+    throw new Error("Knowledge base document not found.");
+  }
+
+  const storedPath = getKnowledgeBaseStoredDocumentPath(
+    orgId,
+    profileId,
+    documentId,
+    document.filename
+  );
+
+  const isTextLike =
+    document.mediaType === "text/plain" ||
+    document.mediaType === "text/csv" ||
+    document.mediaType === "text/markdown";
+
+  if (options.render === "text") {
+    if (isTextLike && (await pathExists(storedPath))) {
+      return {
+        bytes: await readBytes(storedPath),
+        contentType: document.mediaType,
+        filename: document.filename,
+      };
+    }
+
+    const extractedPath = getKnowledgeBaseExtractedPath(
+      orgId,
+      profileId,
+      documentId
+    );
+
+    if (await pathExists(extractedPath)) {
+      const raw = (await readBytes(extractedPath)).toString("utf8");
+      const body = stripExtractedTextHeader(raw);
+      return {
+        bytes: Buffer.from(body, "utf8"),
+        contentType: "text/plain",
+        filename: document.filename,
+      };
+    }
+
+    throw new Error("Preview is not available for this document.");
+  }
+
+  if (!(await pathExists(storedPath))) {
+    throw new Error("Knowledge base document file not found.");
+  }
+
+  return {
+    bytes: await readBytes(storedPath),
+    contentType: document.mediaType,
+    filename: document.filename,
+  };
 }

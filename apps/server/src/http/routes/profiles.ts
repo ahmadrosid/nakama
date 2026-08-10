@@ -477,6 +477,37 @@ export function registerProfileRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
+      operationId: "getKnowledgeBaseDocumentContent",
+      path: "/v1/profiles/{profileId}/knowledge-base/{documentId}/content",
+      request: {
+        params: documentIdParam,
+        query: z.object({
+          inline: z.enum(["0", "1"]).optional(),
+          render: z.enum(["text"]).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "*/*": { schema: z.string() } },
+          description: "Knowledge base document bytes",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Read knowledge base document bytes (render=text returns extracted text for preview)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
       operationId: "getProfileAvatar",
       path: "/v1/profiles/{profileId}/avatar",
       request: { params: profileIdParam },
@@ -726,6 +757,33 @@ export function registerProfileRoutes(
           decodeURIComponent(c.req.param("documentId"))
         )
       );
+    }
+  );
+
+  app.get(
+    "/v1/profiles/:profileId/knowledge-base/:documentId/content",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      const render =
+        c.req.query("render") === "text" ? ("text" as const) : undefined;
+      const document = await agent.readKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        documentId,
+        { render }
+      );
+      const downloadName = document.filename.replace(/["\\]/g, "_");
+      const disposition =
+        c.req.query("inline") === "1" ? "inline" : "attachment";
+      return new Response(document.bytes, {
+        headers: {
+          "Content-Disposition": `${disposition}; filename="${downloadName}"`,
+          "Content-Type": document.contentType,
+        },
+      });
     }
   );
 

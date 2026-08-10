@@ -10,6 +10,7 @@ import {
 import {
   deleteKnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
+  readKnowledgeBaseDocumentContent,
   uploadKnowledgeBaseDocument,
 } from "./store";
 
@@ -197,5 +198,45 @@ describe("knowledge base store", () => {
     await expect(
       readFile(path.join(legacyDir, "manifest.json"), "utf8")
     ).rejects.toThrow();
+  });
+
+  test("readKnowledgeBaseDocumentContent strips header for text preview and serves original for download", async () => {
+    const profileId = "profile_kb_read";
+    await setupProfile(profileId);
+
+    const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+      data: Buffer.from("needle in haystack", "utf8").toString("base64"),
+      filename: "notes.txt",
+      mediaType: "text/plain",
+    });
+
+    const preview = await readKnowledgeBaseDocumentContent(
+      ORG_ID,
+      profileId,
+      uploaded.id,
+      { render: "text" }
+    );
+    expect(preview.contentType).toBe("text/plain");
+    expect(preview.filename).toBe("notes.txt");
+    expect(preview.bytes.toString("utf8")).toBe("needle in haystack");
+
+    const download = await readKnowledgeBaseDocumentContent(
+      ORG_ID,
+      profileId,
+      uploaded.id
+    );
+    expect(download.contentType).toBe("text/plain");
+    expect(download.bytes.toString("utf8")).toBe("needle in haystack");
+  });
+
+  test("readKnowledgeBaseDocumentContent throws for missing documents", async () => {
+    const profileId = "profile_kb_missing";
+    await setupProfile(profileId);
+
+    await expect(
+      readKnowledgeBaseDocumentContent(ORG_ID, profileId, "kb_nope", {
+        render: "text",
+      })
+    ).rejects.toThrow(/not found/);
   });
 });
