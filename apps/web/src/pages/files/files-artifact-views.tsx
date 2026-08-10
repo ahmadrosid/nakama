@@ -1,4 +1,5 @@
 import type { ArtifactFile } from "@nakama/core/contract";
+import { Button } from "@/components/ui/button";
 import { formatError } from "@/lib/client";
 import type { FilesViewMode } from "@/lib/files-page.shared";
 import { ArtifactGridSkeleton } from "@/pages/files/files-artifact-grid-skeleton";
@@ -6,26 +7,71 @@ import { ArtifactGridView } from "@/pages/files/files-artifact-grid-view";
 import { ArtifactListSkeleton } from "@/pages/files/files-artifact-list-skeleton";
 import { ArtifactListView } from "@/pages/files/files-artifact-list-view";
 
+function ShowMoreArtifactsButton({
+  hasMore,
+  isLoadingMore,
+  onShowMore,
+  remainingCount,
+}: {
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onShowMore: () => void;
+  remainingCount: number;
+}) {
+  if (!hasMore || remainingCount <= 0) {
+    return null;
+  }
+
+  return (
+    <div className="border-border border-t px-4 py-3 text-center">
+      <Button
+        disabled={isLoadingMore}
+        onClick={onShowMore}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {isLoadingMore ? (
+          "Loading…"
+        ) : (
+          <>
+            Show more (<span className="tabular-nums">{remainingCount}</span>{" "}
+            remaining)
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
 export function FilesArtifactViews({
   viewMode,
   isLoading,
+  isLoadingMore,
   error,
   artifacts,
   filteredArtifacts,
   emptyFilterMessage,
   profileId,
   deletePending,
+  hasMore,
+  remainingCount,
   onDelete,
+  onShowMore,
 }: {
   viewMode: FilesViewMode;
   isLoading: boolean;
+  isLoadingMore: boolean;
   error: unknown;
   artifacts: ArtifactFile[];
   filteredArtifacts: ArtifactFile[];
   emptyFilterMessage: string;
   profileId: string;
   deletePending: boolean;
+  hasMore: boolean;
+  remainingCount: number;
   onDelete: (artifact: ArtifactFile) => void;
+  onShowMore: () => void;
 }) {
   if (
     viewMode === "grid" &&
@@ -34,12 +80,20 @@ export function FilesArtifactViews({
     filteredArtifacts.length > 0
   ) {
     return (
-      <ArtifactGridView
-        artifacts={filteredArtifacts}
-        deletePending={deletePending}
-        onDelete={onDelete}
-        profileId={profileId}
-      />
+      <div>
+        <ArtifactGridView
+          artifacts={filteredArtifacts}
+          deletePending={deletePending}
+          onDelete={onDelete}
+          profileId={profileId}
+        />
+        <ShowMoreArtifactsButton
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onShowMore={onShowMore}
+          remainingCount={remainingCount}
+        />
+      </div>
     );
   }
 
@@ -64,12 +118,20 @@ export function FilesArtifactViews({
           {emptyFilterMessage}
         </div>
       ) : (
-        <ArtifactListView
-          artifacts={filteredArtifacts}
-          deletePending={deletePending}
-          onDelete={onDelete}
-          profileId={profileId}
-        />
+        <>
+          <ArtifactListView
+            artifacts={filteredArtifacts}
+            deletePending={deletePending}
+            onDelete={onDelete}
+            profileId={profileId}
+          />
+          <ShowMoreArtifactsButton
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onShowMore={onShowMore}
+            remainingCount={remainingCount}
+          />
+        </>
       )}
     </div>
   );

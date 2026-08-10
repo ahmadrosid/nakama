@@ -12,7 +12,7 @@ import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-con
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
-  useArtifactsQuery,
+  useArtifactsInfiniteQuery,
   useDeleteArtifactMutation,
 } from "@/hooks/use-resource-mutations";
 import {
@@ -42,11 +42,24 @@ export function FilesPage() {
   const [viewMode, setViewMode] = useState<FilesViewMode>(() =>
     getStoredFilesViewMode()
   );
-  const { data, isLoading, isFetching, error, refetch } =
-    useArtifactsQuery(profileId);
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+  } = useArtifactsInfiniteQuery(profileId);
   const deleteMutation = useDeleteArtifactMutation();
 
-  const artifacts = data?.artifacts ?? EMPTY_ARTIFACTS;
+  const artifacts = useMemo(
+    () => data?.pages.flatMap((page) => page.artifacts) ?? EMPTY_ARTIFACTS,
+    [data]
+  );
+  const totalCount = data?.pages[0]?.total ?? 0;
+  const remainingCount = Math.max(totalCount - artifacts.length, 0);
   const typeOptions = useMemo(
     () => availableArtifactTypeFilters(artifacts),
     [artifacts]
@@ -134,11 +147,11 @@ export function FilesPage() {
                 isFetching={isFetching}
                 onRefresh={() => void refetch()}
                 onViewModeChange={handleViewModeChange}
-                showViewModeToggle={artifacts.length > 0}
+                showViewModeToggle={totalCount > 0}
                 viewMode={viewMode}
               />
 
-              {artifacts.length > 0 ? (
+              {totalCount > 0 ? (
                 <FilesSearchRow
                   onSearchQueryChange={setSearchQuery}
                   onTypeFilterChange={setTypeFilter}
@@ -154,9 +167,13 @@ export function FilesPage() {
                 emptyFilterMessage={emptyFilterMessage}
                 error={error}
                 filteredArtifacts={filteredArtifacts}
+                hasMore={hasNextPage ?? false}
                 isLoading={isLoading}
+                isLoadingMore={isFetchingNextPage}
                 onDelete={setDeleteTarget}
+                onShowMore={() => void fetchNextPage()}
                 profileId={profileId}
+                remainingCount={remainingCount}
                 viewMode={viewMode}
               />
             </div>

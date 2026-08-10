@@ -320,11 +320,21 @@ export function registerProfileRoutes(
       method: "get",
       operationId: "listProfileArtifacts",
       path: "/v1/profiles/{profileId}/artifacts",
-      request: { params: profileIdParam },
+      request: {
+        params: profileIdParam,
+        query: z.object({
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
+        }),
+      },
       responses: {
         200: {
           content: { "application/json": { schema: listArtifactsSchema } },
           description: "Artifact list",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid pagination",
         },
         500: {
           content: { "application/json": { schema: errorSchema } },
@@ -607,8 +617,34 @@ export function registerProfileRoutes(
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
+    const limitRaw = c.req.query("limit");
+    const offsetRaw = c.req.query("offset");
+
+    if (limitRaw === undefined && offsetRaw !== undefined) {
+      return json({ error: "limit is required when offset is provided" }, 400);
+    }
+
+    const limit =
+      limitRaw === undefined ? undefined : Number.parseInt(limitRaw, 10);
+    const offset =
+      offsetRaw === undefined ? undefined : Number.parseInt(offsetRaw, 10);
+
+    if (
+      limit !== undefined &&
+      (!Number.isFinite(limit) || limit < 1 || limit > 100)
+    ) {
+      return json({ error: "limit must be an integer between 1 and 100" }, 400);
+    }
+
+    if (offset !== undefined && (!Number.isFinite(offset) || offset < 0)) {
+      return json({ error: "offset must be a non-negative integer" }, 400);
+    }
+
     return json<ListArtifactsResponse>(
-      await agent.listProfileArtifacts(orgId, profileId)
+      await agent.listProfileArtifacts(orgId, profileId, {
+        limit,
+        offset,
+      })
     );
   });
 

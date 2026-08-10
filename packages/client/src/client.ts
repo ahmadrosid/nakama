@@ -865,10 +865,19 @@ export class NakamaClient {
   }
 
   async listProfileArtifacts(
-    profileId: string
+    profileId: string,
+    options: { limit?: number; offset?: number } = {}
   ): Promise<ListArtifactsResponse> {
+    const query = new URLSearchParams();
+    if (options.limit !== undefined) {
+      query.set("limit", String(options.limit));
+    }
+    if (options.offset !== undefined) {
+      query.set("offset", String(options.offset));
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
     return this.request<ListArtifactsResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts`
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts${suffix}`
     );
   }
 

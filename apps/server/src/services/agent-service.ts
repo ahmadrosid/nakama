@@ -40,6 +40,7 @@ import type {
   ImageGenerationSettingsResponse,
   InitSoulResponse,
   InitUserContextResponse,
+  ListArtifactsOptions,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
@@ -2685,10 +2686,11 @@ export class AgentService {
 
   async listProfileArtifacts(
     orgId: string,
-    profileId: string
+    profileId: string,
+    options: ListArtifactsOptions = {}
   ): Promise<ListArtifactsResponse> {
     await this.requireProfile(orgId, profileId);
-    return listArtifacts(orgId, profileId);
+    return listArtifacts(orgId, profileId, options);
   }
 
   async readProfileArtifact(

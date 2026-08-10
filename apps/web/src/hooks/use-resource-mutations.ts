@@ -9,6 +9,7 @@ import type {
   UserContextStatusResponse,
 } from "@nakama/core/contract";
 import {
+  useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
@@ -453,10 +454,21 @@ export function useKnowledgeBaseQuery(profileId: string | null) {
   });
 }
 
-export function useArtifactsQuery(profileId: string | null) {
-  return useQuery({
+export const ARTIFACTS_PAGE_SIZE = 30;
+
+export function useArtifactsInfiniteQuery(profileId: string | null) {
+  return useInfiniteQuery({
     enabled: Boolean(profileId),
-    queryFn: () => client.listProfileArtifacts(profileId!),
+    getNextPageParam: (lastPage) => {
+      const nextOffset = (lastPage.offset ?? 0) + lastPage.artifacts.length;
+      return nextOffset < lastPage.total ? nextOffset : undefined;
+    },
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      client.listProfileArtifacts(profileId!, {
+        limit: ARTIFACTS_PAGE_SIZE,
+        offset: pageParam,
+      }),
     queryKey: queryKeys.artifacts.profile(profileId ?? ""),
   });
 }
