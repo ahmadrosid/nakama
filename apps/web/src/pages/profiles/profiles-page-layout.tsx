@@ -1,4 +1,5 @@
 import { Delete02Icon } from "hugeicons-react";
+import { createPortal } from "react-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
@@ -60,6 +61,10 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
+  const pageHeaderActions =
+    typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLElement>("[data-page-header-actions]");
 
   if (profilesLoading && profiles.length === 0) {
     return <PageState message="Loading profiles…" />;
@@ -67,6 +72,23 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
 
   return (
     <div className="space-y-4">
+      {pageHeaderActions && selectedId && detail && !detail.isSuper
+        ? createPortal(
+            <Button
+              aria-label="Delete profile"
+              className="text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() => openDeleteDialog(selectedId)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Delete02Icon aria-hidden className="size-3.5" />
+              <span>Delete</span>
+            </Button>,
+            pageHeaderActions
+          )
+        : null}
       {error ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {error}
@@ -229,22 +251,6 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                       </ProfileDetailTabButton>
                     ) : null}
                   </div>
-                  {detail.isSuper ? null : (
-                    <div className="flex shrink-0 items-center border-border border-l px-2 sm:px-3">
-                      <Button
-                        aria-label="Delete profile"
-                        className="text-destructive hover:text-destructive max-sm:size-7 max-sm:px-0"
-                        disabled={busy}
-                        onClick={() => openDeleteDialog(selectedId)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Delete02Icon aria-hidden className="size-3.5" />
-                        <span className="hidden sm:inline">Delete</span>
-                      </Button>
-                    </div>
-                  )}
                 </div>
                 {detailTab === "profile" ? (
                   <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">

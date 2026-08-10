@@ -1,5 +1,6 @@
 import type { ArtifactFile } from "@nakama/core/contract";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
   type ArtifactTypeFilter,
@@ -24,16 +25,16 @@ import { FilesArtifactViews } from "@/pages/files/files-artifact-views";
 import { FilesDeleteDialog } from "@/pages/files/files-delete-dialog";
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
-import { ProfileDetailTabButton } from "@/pages/profiles/profiles-ui";
 
 const EMPTY_ARTIFACTS: ArtifactFile[] = [];
-type FilesPageView = "artifacts" | "knowledge";
 
 export function FilesPage() {
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
-  const [view, setView] = useState<FilesPageView>("artifacts");
+  const [searchParams] = useSearchParams();
+  const view =
+    searchParams.get("tab") === "knowledge" ? "knowledge" : "artifacts";
 
   const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -122,29 +123,6 @@ export function FilesPage() {
     <ChatAttachmentPanelProvider presentation="overlay">
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-4">
-          <div
-            aria-label="Files views"
-            className="flex min-w-0 items-stretch border-border border-b"
-            role="tablist"
-          >
-            <ProfileDetailTabButton
-              active={view === "artifacts"}
-              controls="files-page-panel-artifacts"
-              id="files-page-tab-artifacts"
-              onSelect={() => setView("artifacts")}
-            >
-              Artifacts
-            </ProfileDetailTabButton>
-            <ProfileDetailTabButton
-              active={view === "knowledge"}
-              controls="files-page-panel-knowledge"
-              id="files-page-tab-knowledge"
-              onSelect={() => setView("knowledge")}
-            >
-              Knowledge base
-            </ProfileDetailTabButton>
-          </div>
-
           {view === "artifacts" ? (
             <div
               aria-labelledby="files-page-tab-artifacts"
