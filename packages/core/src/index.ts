@@ -21,6 +21,7 @@ export * from "./composio";
 export * from "./composio-config";
 export * from "./config";
 export * from "./contract";
+export * from "./crash-report";
 export {
   DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
   formatDiscordAttachmentSizeLimitMessage,

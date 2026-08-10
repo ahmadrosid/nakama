@@ -11,6 +11,7 @@
     "./bridge-api": "./src/bridge-api.ts",
     "./channel-org": "./src/channel-org.ts",
     "./contract": "./src/contract.ts",
+    "./crash-report": "./src/crash-report.ts",
     "./chat-stream-timeout": "./src/chat-stream-timeout.ts",
     "./config": "./src/config.ts",
     "./fs": "./src/fs.ts",

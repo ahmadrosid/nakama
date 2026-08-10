@@ -3,6 +3,7 @@ import {
   ChannelOrgStore,
   getChannelOrgSelectionPath,
 } from "@nakama/core/channel-org";
+import { reportError } from "@nakama/core/crash-report";
 import {
   ensureServerRunning,
   stopSpawnedServer,
@@ -17,6 +18,7 @@ import {
   writeWhatsAppWorkerHeartbeat,
 } from "@nakama/core/whatsapp-worker";
 import { WhatsAppAuthStore } from "./auth-store";
+
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
@@ -172,11 +174,15 @@ function registerProcessLifecycleLogging(): void {
     console.log(`WhatsApp worker exiting with code ${code}.`);
   });
 
+  // This worker keeps running after both, unlike the others, because listening at all
+  // suppresses Bun's exit(1). That predates crash reporting and is left alone here: a
+  // worker that survives in a broken state is caught by the heartbeat check, not by
+  // changing crash semantics underneath baileys.
   process.on("uncaughtException", (error) => {
-    console.error("WhatsApp worker uncaught exception.", error);
+    void reportError(error, { source: "worker:whatsapp" });
   });
 
   process.on("unhandledRejection", (reason) => {
-    console.error("WhatsApp worker unhandled rejection.", reason);
+    void reportError(reason, { source: "worker:whatsapp" });
   });
 }

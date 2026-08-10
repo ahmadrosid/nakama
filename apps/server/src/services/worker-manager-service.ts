@@ -8,6 +8,7 @@ import {
   readWorkerDesiredState,
   setWorkerDesiredRunning,
 } from "@nakama/core";
+import { reportInvariant } from "@nakama/core/crash-report";
 
 const WORKER_SCRIPTS: Record<string, string> = {
   automation: "apps/platform/automation/src/index.ts",
@@ -162,6 +163,14 @@ export class WorkerManagerService {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`Could not recover ${name} worker: ${message}`);
+        // The operator asked for this worker and it is not running. Nothing throws past
+        // here, so without this the channel just stays quiet and looks idle.
+        void reportInvariant(
+          `${name} worker was enabled but could not be started`,
+          {
+            source: "server",
+          }
+        );
       }
     }
   }

@@ -3,6 +3,7 @@ import {
   ChannelOrgStore,
   getChannelOrgSelectionPath,
 } from "@nakama/core/channel-org";
+import { installCrashHandlers } from "@nakama/core/crash-report";
 import {
   clearDiscordWorkerHeartbeat,
   isHeartbeatAlive,
@@ -15,11 +16,14 @@ import {
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
+
 import { DiscordAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
 import { SessionStore } from "./session-store";
 import { ThreadStore } from "./thread-store";
+
+installCrashHandlers("worker:discord");
 
 let spawnedChild: Bun.Subprocess | null = null;
 let clientStop: (() => void) | null = null;
