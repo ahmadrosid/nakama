@@ -10,6 +10,56 @@ import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = DEFAULT_CHAT_STREAM_TIMEOUT_MS;
 
+/** How long a 409 is treated as a turn that is still stopping rather than a real conflict. */
+const TURN_CONFLICT_RETRY_MS = 3000;
+const TURN_CONFLICT_POLL_MS = 150;
+
+export function isActiveTurnConflict(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message.includes("already in progress")
+  );
+}
+
+/**
+ * Cancelling a turn aborts the fetch, but the server only learns the client is
+ * gone once the socket closes, measured at 30 to 45ms on loopback. A message
+ * sent inside that window collides with a turn that is already dying and gets a
+ * 409 the caller can do nothing about, so retry until the turn clears.
+ *
+ * Every channel hits this: Discord /stop then a follow-up, the web Stop button,
+ * a closed tab followed by a resend.
+ */
+export async function retryWhileTurnIsStopping<T>(
+  send: () => Promise<T>,
+  options: {
+    signal?: AbortSignal;
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {}
+): Promise<T> {
+  const now = options.now ?? (() => Date.now());
+  const sleep =
+    options.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = now() + TURN_CONFLICT_RETRY_MS;
+
+  for (;;) {
+    try {
+      return await send();
+    } catch (error) {
+      if (
+        options.signal?.aborted ||
+        !isActiveTurnConflict(error) ||
+        now() >= deadline
+      ) {
+        throw error;
+      }
+
+      await sleep(TURN_CONFLICT_POLL_MS);
+    }
+  }
+}
+
 export async function readStreamEvents(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,

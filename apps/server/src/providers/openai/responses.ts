@@ -44,6 +44,7 @@ export async function generateOpenAIResponsesChat(options: {
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal: options.input.signal,
   });
 
   if (!response.ok) {

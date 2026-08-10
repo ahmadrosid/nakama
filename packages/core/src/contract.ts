@@ -1831,6 +1831,12 @@ export interface ProviderChatOptions {
 export interface GenerateChatInput {
   messages: ChatMessage[];
   providerOptions?: ProviderChatOptions;
+  /**
+   * Aborts the upstream request when the caller cancels the turn. Providers must
+   * pass it to their HTTP client, otherwise a cancelled chat keeps streaming and
+   * billing until the model finishes.
+   */
+  signal?: AbortSignal;
   system: string;
   tools?: LlmToolDefinition[];
 }
@@ -1889,6 +1895,8 @@ export interface ToolContext {
   orgRole?: OrgRole;
   profileId?: string;
   sessionId?: string;
+  /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
+  signal?: AbortSignal;
   userId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;

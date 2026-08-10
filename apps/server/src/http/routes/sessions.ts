@@ -507,12 +507,18 @@ export function registerSessionRoutes(
     }
 
     if (wantsStream) {
-      return streamMessage(sessionId, session, input, (terminal) => {
-        agent.scheduleSessionTitleGeneration(sessionId);
-        if (terminal.type === "done") {
-          agent.schedulePostTurnSkillReview(sessionId);
-        }
-      });
+      return streamMessage(
+        sessionId,
+        session,
+        input,
+        (terminal) => {
+          agent.scheduleSessionTitleGeneration(sessionId);
+          if (terminal.type === "done") {
+            agent.schedulePostTurnSkillReview(sessionId);
+          }
+        },
+        c.req.raw.signal
+      );
     }
 
     try {

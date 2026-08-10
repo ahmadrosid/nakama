@@ -186,6 +186,7 @@ import {
   readAgentBrowserInstallStream,
   readStreamEvents,
   resolveSendMessageBody,
+  retryWhileTurnIsStopping,
 } from "./stream";
 import type {
   BinaryBufferSource,
@@ -1090,23 +1091,30 @@ export class NakamaClient {
           Accept: "text/event-stream",
           "Content-Type": "application/json",
         });
-        const response = await this.fetchImpl(
-          `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
-          {
-            body: JSON.stringify(body),
-            credentials: this.credentials,
-            headers,
-            method: "POST",
-            signal: options?.signal,
-          }
-        );
+        const response = await retryWhileTurnIsStopping(
+          async () => {
+            const attempt = await this.fetchImpl(
+              `${this.baseUrl}/v1/sessions/${sessionId}/messages?stream=true`,
+              {
+                body: JSON.stringify(body),
+                credentials: this.credentials,
+                headers,
+                method: "POST",
+                signal: options?.signal,
+              }
+            );
 
-        if (!response.ok) {
-          throw await createApiError(
-            response,
-            `/v1/sessions/${sessionId}/messages`
-          );
-        }
+            if (!attempt.ok) {
+              throw await createApiError(
+                attempt,
+                `/v1/sessions/${sessionId}/messages`
+              );
+            }
+
+            return attempt;
+          },
+          { signal: options?.signal }
+        );
 
         if (!response.body) {
           throw new Error("Server returned an empty stream.");

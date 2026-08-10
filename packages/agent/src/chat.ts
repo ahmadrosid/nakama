@@ -87,7 +87,16 @@ export interface AgentChatSession {
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
   send(input: SendMessageArg): Promise<string>;
-  sendStream(input: SendMessageArg, handlers: StreamHandlers): Promise<string>;
+  sendStream(
+    input: SendMessageArg,
+    handlers: StreamHandlers,
+    options?: SendStreamOptions
+  ): Promise<string>;
+}
+
+export interface SendStreamOptions {
+  /** Cancels the turn: stops the tool loop and asks running tools to abort. */
+  signal?: AbortSignal;
 }
 
 export interface ResolvePromptContextInput {
@@ -266,7 +275,7 @@ export function createAgentChatSession(
         }
       );
     },
-    async sendStream(input, handlers) {
+    async sendStream(input, handlers, streamOptions) {
       return sendMessage(
         dependencies,
         tools,
@@ -282,6 +291,7 @@ export function createAgentChatSession(
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
+          signal: streamOptions?.signal,
           toolContext,
         }
       );
@@ -318,6 +328,7 @@ async function sendMessage(
     rehydrateMessagesForProvider?: (
       messages: readonly ChatMessage[]
     ) => Promise<ChatMessage[]>;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
   let userContent = normalizeUserContent(
@@ -388,12 +399,15 @@ async function sendMessage(
   ) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
   }
-  const effectiveToolContext =
+  const baseToolContext =
     input.clientOrigin?.trim() && options.toolContext
       ? { ...options.toolContext, clientOrigin: input.clientOrigin.trim() }
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
+  const effectiveToolContext = options.signal
+    ? { ...baseToolContext, signal: options.signal }
+    : baseToolContext;
 
   try {
     const reply = await runConversation(
@@ -408,7 +422,8 @@ async function sendMessage(
       options.handlers,
       effectiveToolContext,
       options.rehydrateMessagesForProvider,
-      options.onContextUsage
+      options.onContextUsage,
+      options.signal
     );
 
     return reply;
@@ -457,9 +472,12 @@ async function runConversation(
   onContextUsage?: (
     usedTokens: number,
     source: ChatContextUsage["source"]
-  ) => void
+  ) => void,
+  signal?: AbortSignal
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+    signal?.throwIfAborted();
+
     const result = await generateReply(
       provider,
       systemPrompt,
@@ -468,7 +486,8 @@ async function runConversation(
       providerOptions,
       mode,
       handlers,
-      rehydrateMessagesForProvider
+      rehydrateMessagesForProvider,
+      signal
     );
 
     const usedTokens =
@@ -482,6 +501,12 @@ async function runConversation(
       usedTokens,
       result.usage && !result.usage.estimated ? "provider" : "estimate"
     );
+
+    // Backstop for providers that ignore the signal. The in-flight request is
+    // aborted through GenerateChatInput.signal; this only catches the case where
+    // it returned anyway, so a cancelled turn leaves no half-written assistant
+    // message and never starts another tool batch.
+    signal?.throwIfAborted();
 
     history.push(result.assistantMessage);
 
@@ -610,7 +635,8 @@ async function generateReply(
   handlers?: StreamHandlers,
   rehydrateMessagesForProvider?: (
     messages: readonly ChatMessage[]
-  ) => Promise<ChatMessage[]>
+  ) => Promise<ChatMessage[]>,
+  signal?: AbortSignal
 ) {
   const dateLine = `Today is ${formatCurrentDate()}.`;
   const messages =
@@ -620,6 +646,7 @@ async function generateReply(
   const input = {
     messages,
     providerOptions,
+    signal,
     system: `${systemPrompt}\n\n${dateLine}`,
     tools,
   };

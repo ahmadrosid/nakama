@@ -378,9 +378,10 @@ export function createOpenRouterProvider(
           system: input.system,
           tools: input.tools,
         });
-        const result = await client.chat.send({
-          chatRequest: { ...chatRequest, stream: false as const },
-        });
+        const result = await client.chat.send(
+          { chatRequest: { ...chatRequest, stream: false as const } },
+          { fetchOptions: { signal: input.signal } }
+        );
 
         return parseChatResult(result);
       });
@@ -432,9 +433,10 @@ export function createOpenRouterProvider(
           system: input.system,
           tools: input.tools,
         });
-        const stream = await client.chat.send({
-          chatRequest: { ...chatRequest, stream: true as const },
-        });
+        const stream = await client.chat.send(
+          { chatRequest: { ...chatRequest, stream: true as const } },
+          { fetchOptions: { signal: input.signal } }
+        );
 
         return readOpenRouterStream(stream, handlers);
       });
