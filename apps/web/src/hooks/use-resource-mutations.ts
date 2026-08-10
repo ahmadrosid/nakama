@@ -464,7 +464,7 @@ export function useArtifactsInfiniteQuery(profileId: string | null) {
       return nextOffset < lastPage.total ? nextOffset : undefined;
     },
     initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam }: { pageParam: number }) =>
       client.listProfileArtifacts(profileId!, {
         limit: ARTIFACTS_PAGE_SIZE,
         offset: pageParam,
