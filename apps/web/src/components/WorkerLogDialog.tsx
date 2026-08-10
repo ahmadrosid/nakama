@@ -1,4 +1,9 @@
-import { CheckIcon, CopyIcon, FileTextIcon, Trash2Icon } from "lucide-react";
+import {
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  File01Icon,
+} from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,10 +107,7 @@ export function WorkerLogDialog({
       <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <FileTextIcon
-              aria-hidden
-              className="size-4 text-muted-foreground"
-            />
+            <File01Icon aria-hidden className="size-4 text-muted-foreground" />
             <DialogTitle className="text-base">
               {workerName} worker logs
             </DialogTitle>
@@ -146,12 +148,12 @@ export function WorkerLogDialog({
             variant="outline"
           >
             {copied ? (
-              <CheckIcon
+              <CheckmarkCircle01Icon
                 aria-hidden
                 className="mr-1 size-3 text-emerald-600 dark:text-emerald-400"
               />
             ) : (
-              <CopyIcon aria-hidden className="mr-1 size-3" />
+              <Copy01Icon aria-hidden className="mr-1 size-3" />
             )}
             {copied ? "Copied" : "Copy"}
           </Button>
@@ -176,7 +178,7 @@ export function WorkerLogDialog({
             type="button"
             variant="outline"
           >
-            <Trash2Icon aria-hidden className="mr-1 size-3" />
+            <Delete02Icon aria-hidden className="mr-1 size-3" />
             {confirmClear ? "Confirm?" : "Clear"}
           </Button>
         </div>

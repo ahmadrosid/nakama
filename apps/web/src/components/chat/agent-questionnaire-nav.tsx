@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { ArrowDown01Icon, ArrowUp01Icon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 
 export function AgentQuestionnaireNav({
@@ -37,7 +37,7 @@ export function AgentQuestionnaireNav({
           type="button"
           variant="ghost"
         >
-          <ChevronUpIcon aria-hidden className="size-3.5" />
+          <ArrowUp01Icon aria-hidden className="size-3.5" />
         </Button>
         <span className="min-w-10 text-center">
           {currentQuestionIndex + 1} of {totalQuestions}
@@ -51,7 +51,7 @@ export function AgentQuestionnaireNav({
           type="button"
           variant="ghost"
         >
-          <ChevronDownIcon aria-hidden className="size-3.5" />
+          <ArrowDown01Icon aria-hidden className="size-3.5" />
         </Button>
       </div>
     </div>

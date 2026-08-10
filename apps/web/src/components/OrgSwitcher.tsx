@@ -1,5 +1,5 @@
 import type { UserOrgSummary } from "@nakama/core/contract";
-import { ChevronDownIcon, PencilIcon, PlusIcon } from "lucide-react";
+import { Add01Icon, ArrowDown01Icon, PencilIcon } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -155,7 +155,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
       ) : (
         <>
           <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-          <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+          <ArrowDown01Icon className="size-3.5 shrink-0 text-muted-foreground/70" />
         </>
       )}
     </Button>
@@ -225,7 +225,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                   setCreateOpen(true);
                 }}
               >
-                <PlusIcon className="size-4" />
+                <Add01Icon className="size-4" />
                 Create organization
               </DropdownMenuItem>
             </div>

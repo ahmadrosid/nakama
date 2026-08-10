@@ -1,6 +1,6 @@
 import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type { AgentTodo } from "@nakama/core/contract";
-import { ChevronDownIcon, ListIcon } from "lucide-react";
+import { ArrowDown01Icon, ListViewIcon } from "hugeicons-react";
 import { useState } from "react";
 import { Matrix } from "@/components/ui/matrix";
 import { type Frame, snake3x2 } from "@/components/ui/matrix-frames";
@@ -82,7 +82,7 @@ export function AgentTodoPanel({
       onClick={() => setExpanded((current) => !current)}
       type="button"
     >
-      <ChevronDownIcon
+      <ArrowDown01Icon
         aria-hidden="true"
         className={cn(
           "size-3.5 shrink-0 transition-transform duration-200",
@@ -92,7 +92,7 @@ export function AgentTodoPanel({
       {!expanded && runningTodo?.status === "in_progress" ? (
         <TodoStatusIcon status="in_progress" />
       ) : (
-        <ListIcon aria-hidden="true" className="size-3.5 shrink-0" />
+        <ListViewIcon aria-hidden="true" className="size-3.5 shrink-0" />
       )}
       <span
         className={cn(

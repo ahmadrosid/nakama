@@ -1,5 +1,4 @@
-import { Share04Icon, ViewIcon } from "hugeicons-react";
-import { Loader2Icon } from "lucide-react";
+import { Loading03Icon, Share04Icon, ViewIcon } from "hugeicons-react";
 import { ArtifactSharePublishDialog } from "@/components/chat/artifact-share-publish-dialog";
 import {
   type ArtifactShareControlsState,
@@ -110,7 +109,10 @@ export function ArtifactShareControls({
                 variant="outline"
               >
                 {share.busy ? (
-                  <Loader2Icon aria-hidden className="size-3.5 animate-spin" />
+                  <Loading03Icon
+                    aria-hidden
+                    className="size-3.5 animate-spin"
+                  />
                 ) : (
                   <Share04Icon aria-hidden className="size-3.5" />
                 )}
@@ -169,7 +171,7 @@ export function ArtifactShareControls({
             variant="outline"
           >
             {share.busy ? (
-              <Loader2Icon aria-hidden className="size-3.5 animate-spin" />
+              <Loading03Icon aria-hidden className="size-3.5 animate-spin" />
             ) : (
               <Share04Icon aria-hidden className="size-3.5" />
             )}

@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, Trash2Icon } from "lucide-react";
+import { ArrowLeft01Icon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   Link,
@@ -179,7 +179,7 @@ function SkillDetailPageContent({
             type="button"
             variant="destructive"
           >
-            <Trash2Icon aria-hidden className="size-4" />
+            <Delete02Icon aria-hidden className="size-4" />
             Remove from profile
           </Button>
         ) : null}
@@ -222,7 +222,7 @@ function BackLink() {
       type="button"
       variant="ghost"
     >
-      <ChevronLeftIcon aria-hidden className="size-4" />
+      <ArrowLeft01Icon aria-hidden className="size-4" />
       {label}
     </Button>
   );

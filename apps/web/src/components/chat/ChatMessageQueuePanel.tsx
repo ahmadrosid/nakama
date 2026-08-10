@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ClockIcon } from "lucide-react";
+import { ArrowDown01Icon, Clock01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Matrix } from "@/components/ui/matrix";
 import type { Frame } from "@/components/ui/matrix-frames";
@@ -81,14 +81,14 @@ export function ChatMessageQueuePanel({
       onClick={() => setExpanded((current) => !current)}
       type="button"
     >
-      <ChevronDownIcon
+      <ArrowDown01Icon
         aria-hidden="true"
         className={cn(
           "size-3.5 shrink-0 transition-transform duration-200",
           !expanded && "-rotate-90"
         )}
       />
-      <ClockIcon aria-hidden="true" className="size-3.5 shrink-0" />
+      <Clock01Icon aria-hidden="true" className="size-3.5 shrink-0" />
       <span
         className={cn(
           "min-w-0 flex-1 truncate transition-opacity duration-200",

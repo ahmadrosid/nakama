@@ -182,4 +182,160 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hi");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  const deepseekProvider = () =>
+    createOpenAIProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-chat",
+      providerName: "deepseek",
+    });
+
+  const sseResponse = (...deltas: Record<string, unknown>[]) =>
+    new Response(
+      streamFromChunks([
+        ...deltas.map(
+          (delta) => `data:${JSON.stringify({ choices: [{ delta }] })}\r\n\r\n`
+        ),
+        "data:[DONE]\r\n\r\n",
+      ]),
+      { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+    );
+
+  const mockFetchBodies = (
+    handler: (call: number, body: Record<string, unknown>) => Response
+  ) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let callCount = 0;
+    const fetchMock = mock(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        callCount += 1;
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<
+          string,
+          unknown
+        >;
+        bodies.push(body);
+        return handler(callCount, body);
+      }
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    return { bodies, fetchMock };
+  };
+
+  test("deepseek stream tool turn re-sends reasoning_content on follow-up", async () => {
+    const { bodies, fetchMock } = mockFetchBodies((call) =>
+      call === 1
+        ? sseResponse(
+            { reasoning_content: "Need lookup" },
+            {
+              tool_calls: [
+                {
+                  function: { arguments: '{"q":"x"}', name: "lookup" },
+                  id: "call_1",
+                  index: 0,
+                  type: "function",
+                },
+              ],
+            }
+          )
+        : sseResponse({ content: "Done" })
+    );
+
+    const provider = deepseekProvider();
+    const request = {
+      providerOptions: { thinking: { effort: "high" as const, enabled: true } },
+      system: "You are helpful.",
+      tools: [
+        {
+          description: "Lookup",
+          name: "lookup",
+          parameters: {
+            properties: { q: { type: "string" } },
+            required: ["q"],
+            type: "object",
+          },
+        },
+      ],
+    };
+
+    const first = await provider.streamChat(
+      { messages: [{ content: "Look it up", role: "user" }], ...request },
+      { onChunk: () => {} }
+    );
+
+    expect(first.assistantMessage.thinking).toBe("Need lookup");
+    expect(first.toolCalls).toEqual([
+      { arguments: { q: "x" }, id: "call_1", name: "lookup" },
+    ]);
+    expect(bodies[0]?.thinking).toEqual({ type: "enabled" });
+    expect(bodies[0]?.reasoning_effort).toBe("high");
+
+    const second = await provider.streamChat(
+      {
+        messages: [
+          { content: "Look it up", role: "user" },
+          first.assistantMessage,
+          {
+            content: "value",
+            name: "lookup",
+            role: "tool",
+            toolCallId: "call_1",
+          },
+        ],
+        ...request,
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(second.content).toBe("Done");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const followUpMessages = (bodies[1]?.messages ?? []) as Array<
+      Record<string, unknown>
+    >;
+    const assistantWithTools = followUpMessages.find(
+      (message) => message.role === "assistant" && message.tool_calls
+    );
+    expect(assistantWithTools?.reasoning_content).toBe("Need lookup");
+    expect(assistantWithTools?.tool_calls).toBeDefined();
+  });
+
+  test("deepseek omits thinking body when thinking is disabled", async () => {
+    mockFetchBodies((_call, body) => {
+      expect(body.thinking).toEqual({ type: "disabled" });
+      expect(body.reasoning_effort).toBeUndefined();
+      return sseResponse({ content: "Hi" });
+    });
+
+    const result = await deepseekProvider().streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: false } },
+        system: "You are helpful.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+  });
+
+  test("captures reasoning_content from non-streaming deepseek responses", async () => {
+    const fetchMock = mock(async () =>
+      Response.json({
+        choices: [
+          { message: { content: "Answer", reasoning_content: "Plan" } },
+        ],
+      })
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await deepseekProvider().generateChat({
+      messages: [{ content: "Think", role: "user" }],
+      providerOptions: { thinking: { effort: "medium", enabled: true } },
+      system: "You are helpful.",
+    });
+
+    expect(result.content).toBe("Answer");
+    expect(result.assistantMessage.thinking).toBe("Plan");
+  });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import { useState } from "react";
 import type { LinkSafetyModalProps } from "streamdown";
 
@@ -73,7 +73,7 @@ function ExternalLinkSafetyModalContent({
             title="Close"
             type="button"
           >
-            <XIcon className="size-4" />
+            <Cancel01Icon className="size-4" />
             <span className="sr-only">Close</span>
           </button>
         </div>

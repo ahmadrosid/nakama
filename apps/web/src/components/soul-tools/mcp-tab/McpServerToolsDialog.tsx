@@ -1,5 +1,5 @@
 import type { McpServerSummary } from "@nakama/core/contract";
-import { BlocksIcon } from "lucide-react";
+import { CubeIcon } from "hugeicons-react";
 import { McpToolList } from "@/components/soul-tools/McpToolList";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +64,7 @@ export function McpServerToolsDialog({
                   aria-hidden
                   className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/30 text-muted-foreground"
                 >
-                  <BlocksIcon className="size-4" />
+                  <CubeIcon className="size-4" />
                 </span>
                 {server.name}
               </DialogTitle>

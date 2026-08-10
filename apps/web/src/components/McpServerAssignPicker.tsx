@@ -1,5 +1,5 @@
 import type { McpServerSummary } from "@nakama/core/contract";
-import { PlusIcon } from "lucide-react";
+import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +50,7 @@ export function McpServerAssignPicker({
         type="button"
         variant="outline"
       >
-        <PlusIcon aria-hidden className="size-4" />
+        <Add01Icon aria-hidden className="size-4" />
         {buttonLabel}
       </Button>
 

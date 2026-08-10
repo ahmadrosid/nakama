@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import { wordCountFromPastedFilename } from "@/lib/pasted-text";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,7 @@ export function TextAttachmentPreview({
           onClick={onRemove}
           type="button"
         >
-          <XIcon className="size-3" />
+          <Cancel01Icon className="size-3" />
         </button>
       ) : null}
     </div>

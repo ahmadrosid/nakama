@@ -1,5 +1,5 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import type { ChangeEvent, ReactNode, RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,7 +202,7 @@ export function ProfileCreateDialogForm({
                               <span className="max-w-52 truncate">
                                 {tool.name}
                               </span>
-                              <XIcon
+                              <Cancel01Icon
                                 aria-hidden
                                 className="size-3.5 text-muted-foreground"
                               />

@@ -1,4 +1,4 @@
-import { ImageIcon, XIcon } from "lucide-react";
+import { Cancel01Icon, Image01Icon } from "hugeicons-react";
 import { useEffect, useId } from "react";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { cn } from "@/lib/utils";
@@ -95,7 +95,7 @@ export function ImageAttachmentPreview({
         />
       ) : (
         <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-          <ImageIcon aria-hidden className="size-4 text-muted-foreground" />
+          <Image01Icon aria-hidden className="size-4 text-muted-foreground" />
         </div>
       )}
       {chipPreview ? (
@@ -130,7 +130,7 @@ export function ImageAttachmentPreview({
       onClick={onRemove}
       type="button"
     >
-      <XIcon className="size-3" />
+      <Cancel01Icon className="size-3" />
     </button>
   ) : null;
 

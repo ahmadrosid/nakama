@@ -25,6 +25,11 @@ export class DiscordAuthStore {
     return isDiscordUserAuthorized(userId, this.config);
   }
 
+  /** Paired bridge owners — admin for Discord bot management commands. */
+  isPaired(userId: string): boolean {
+    return this.config?.pairedUserIds.includes(userId) ?? false;
+  }
+
   async tryPair(
     handshakeInput: string,
     userId: string

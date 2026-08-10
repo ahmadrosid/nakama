@@ -1,5 +1,5 @@
 import type { CachedMcpToolSummary, McpTransport } from "@nakama/core/contract";
-import { BracesIcon } from "lucide-react";
+import { CodeIcon } from "hugeicons-react";
 import { McpToolList } from "@/components/soul-tools/McpToolList";
 import {
   McpArgsEditor,
@@ -89,7 +89,7 @@ export function McpServerDialogForm({
             type="button"
             variant="ghost"
           >
-            <BracesIcon aria-hidden />
+            <CodeIcon aria-hidden />
             Import JSON
           </Button>
         }

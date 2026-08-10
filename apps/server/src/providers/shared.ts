@@ -124,6 +124,51 @@ export function buildChatCompletionResult(options: {
   };
 }
 
+/**
+ * Drop orphaned assistant tool_calls / tool results so partial histories cannot
+ * produce provider 400s ("insufficient tool messages following tool_calls").
+ * Intact tool_call ↔ tool pairs are left untouched.
+ */
+export function sanitizeToolCallHistory(
+  messages: ChatMessage[]
+): ChatMessage[] {
+  const toolResultIds = new Set(
+    messages
+      .filter(
+        (message): message is Extract<ChatMessage, { role: "tool" }> =>
+          message.role === "tool"
+      )
+      .map((message) => message.toolCallId)
+  );
+
+  const validToolCallIds = new Set<string>();
+
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.toolCalls?.length) {
+      continue;
+    }
+
+    const ids = message.toolCalls.map((call) => call.id);
+    if (ids.every((id) => toolResultIds.has(id))) {
+      for (const id of ids) {
+        validToolCallIds.add(id);
+      }
+    }
+  }
+
+  return messages.filter((message) => {
+    if (message.role === "assistant" && message.toolCalls?.length) {
+      return message.toolCalls.every((call) => validToolCallIds.has(call.id));
+    }
+
+    if (message.role === "tool") {
+      return validToolCallIds.has(message.toolCallId);
+    }
+
+    return true;
+  });
+}
+
 export interface SseEvent {
   data: string;
   event: string;

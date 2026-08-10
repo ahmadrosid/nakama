@@ -6,18 +6,18 @@ import type {
   StoredAutomation,
 } from "@nakama/core/contract";
 import {
+  ArrowRight01Icon,
   BotIcon,
-  CheckCircle2Icon,
-  ChevronRightIcon,
-  CopyIcon,
-  Loader2Icon,
+  Cancel01Icon,
+  CancelCircleIcon,
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  Loading03Icon,
   PencilIcon,
   PlayIcon,
-  SearchIcon,
-  Trash2Icon,
-  XCircleIcon,
-  XIcon,
-} from "lucide-react";
+  Search01Icon,
+} from "hugeicons-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
@@ -97,7 +97,7 @@ export function AutomationDetailActions({
         type="button"
         variant="ghost"
       >
-        <Trash2Icon aria-hidden className="size-3.5" />
+        <Delete02Icon aria-hidden className="size-3.5" />
       </Button>
     </div>
   );
@@ -171,7 +171,7 @@ export function AutomationListItem({
         type="button"
         variant="ghost"
       >
-        <Trash2Icon aria-hidden className="size-3.5" />
+        <Delete02Icon aria-hidden className="size-3.5" />
       </Button>
     </div>
   );
@@ -216,7 +216,7 @@ export function AutomationSearch({
 }) {
   return (
     <div className="relative">
-      <SearchIcon
+      <Search01Icon
         aria-hidden
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
       />
@@ -235,7 +235,7 @@ export function AutomationSearch({
           onClick={onClear}
           type="button"
         >
-          <XIcon className="size-4" />
+          <Cancel01Icon className="size-4" />
         </button>
       ) : null}
     </div>
@@ -621,7 +621,7 @@ function RunHistoryItem({
           </div>
 
           {hasBody ? (
-            <ChevronRightIcon
+            <ArrowRight01Icon
               aria-hidden
               className={cn(
                 "mt-0.5 size-4 shrink-0 text-muted-foreground/70 transition-transform duration-200",
@@ -640,7 +640,7 @@ function RunHistoryItem({
           type="button"
           variant="ghost"
         >
-          <Trash2Icon aria-hidden className="size-4" />
+          <Delete02Icon aria-hidden className="size-4" />
         </Button>
       </div>
 
@@ -669,7 +669,7 @@ function RunHistoryItem({
                 type="button"
                 variant="ghost"
               >
-                <CopyIcon aria-hidden className="size-3.5" />
+                <Copy01Icon aria-hidden className="size-3.5" />
                 Copy
               </Button>
             ) : null}
@@ -683,7 +683,7 @@ function RunHistoryItem({
 
           {isRunning && !hasOutput && !hasError ? (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2Icon aria-hidden className="size-4 animate-spin" />
+              <Loading03Icon aria-hidden className="size-4 animate-spin" />
               Run in progress…
             </div>
           ) : null}
@@ -720,7 +720,7 @@ function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
 
   if (status === "completed") {
     return (
-      <CheckCircle2Icon
+      <CheckmarkCircle01Icon
         aria-hidden
         className={cn(className, "text-emerald-600 dark:text-emerald-400")}
       />
@@ -729,12 +729,15 @@ function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
 
   if (status === "failed") {
     return (
-      <XCircleIcon aria-hidden className={cn(className, "text-destructive")} />
+      <CancelCircleIcon
+        aria-hidden
+        className={cn(className, "text-destructive")}
+      />
     );
   }
 
   return (
-    <Loader2Icon
+    <Loading03Icon
       aria-hidden
       className={cn(className, "animate-spin text-muted-foreground")}
     />

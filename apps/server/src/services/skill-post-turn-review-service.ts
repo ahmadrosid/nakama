@@ -194,7 +194,14 @@ export class SkillPostTurnReviewService {
       }
 
       const channel = session.channel;
-      if (channel !== "web" && channel !== "cli") {
+      const interactiveChannels = new Set([
+        "web",
+        "cli",
+        "discord",
+        "telegram",
+        "whatsapp",
+      ]);
+      if (!interactiveChannels.has(channel)) {
         return "channel_not_interactive";
       }
 

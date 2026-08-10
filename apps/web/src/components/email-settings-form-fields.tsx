@@ -1,4 +1,4 @@
-import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { ViewIcon, ViewOffIcon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -100,9 +100,9 @@ export function EmailSettingsFormFields({
               variant="ghost"
             >
               {showPassword ? (
-                <EyeOffIcon className="size-4" />
+                <ViewOffIcon className="size-4" />
               ) : (
-                <EyeIcon className="size-4" />
+                <ViewIcon className="size-4" />
               )}
             </Button>
           </div>

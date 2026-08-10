@@ -4,13 +4,13 @@ import type {
   SoulStackFiles,
 } from "@nakama/core/contract";
 import {
-  CheckIcon,
-  ChevronRightIcon,
+  ArrowRight01Icon,
+  CheckmarkCircle01Icon,
   CircleIcon,
-  FileTextIcon,
-  FolderIcon,
-  RefreshCwIcon,
-} from "lucide-react";
+  File01Icon,
+  Folder01Icon,
+  RefreshIcon,
+} from "hugeicons-react";
 import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
@@ -89,7 +89,7 @@ export function SoulTabPanel({
             {refreshing ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon aria-hidden className="size-4" />
+              <RefreshIcon aria-hidden className="size-4" />
             )}
             Refresh
           </Button>
@@ -191,7 +191,7 @@ export function SoulTabShell({
             {refreshing ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon aria-hidden className="size-4" />
+              <RefreshIcon aria-hidden className="size-4" />
             )}
           </Button>
         </div>
@@ -309,9 +309,9 @@ function FileStatusListItem({
           )}
         >
           {writable ? (
-            <FileTextIcon aria-hidden className="size-4" />
+            <File01Icon aria-hidden className="size-4" />
           ) : (
-            <FolderIcon aria-hidden className="size-4" />
+            <Folder01Icon aria-hidden className="size-4" />
           )}
         </span>
 
@@ -331,14 +331,14 @@ function FileStatusListItem({
           )}
         >
           {present ? (
-            <CheckIcon className="size-3.5" />
+            <CheckmarkCircle01Icon className="size-3.5" />
           ) : (
             <CircleIcon className="size-3.5" />
           )}
           {present ? "Present" : "Missing"}
         </span>
 
-        <ChevronRightIcon
+        <ArrowRight01Icon
           aria-hidden
           className="size-4 shrink-0 text-muted-foreground/50 transition group-hover:text-muted-foreground"
         />

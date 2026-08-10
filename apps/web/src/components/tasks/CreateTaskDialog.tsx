@@ -1,6 +1,6 @@
 import type { ProfileSummary } from "@nakama/core/contract";
 import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
-import { SparklesIcon } from "lucide-react";
+import { SparklesIcon } from "hugeicons-react";
 import { useReducer } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";

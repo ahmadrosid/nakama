@@ -1,4 +1,9 @@
-import { EyeIcon, FileTextIcon, FilmIcon, ImageIcon } from "lucide-react";
+import {
+  File01Icon,
+  Image01Icon,
+  Video01Icon,
+  ViewIcon,
+} from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -347,7 +352,7 @@ export function ArtifactAttachmentPreview({
               type="button"
               variant="outline"
             >
-              <EyeIcon aria-hidden className="size-3.5" />
+              <ViewIcon aria-hidden className="size-3.5" />
             </Button>
           }
         />
@@ -376,7 +381,7 @@ export function ArtifactAttachmentPreview({
           />
         ) : (
           <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-border bg-background">
-            <ImageIcon aria-hidden className="size-6 text-muted-foreground" />
+            <Image01Icon aria-hidden className="size-6 text-muted-foreground" />
           </div>
         )}
         <div className="min-w-0 px-0.5">
@@ -405,9 +410,9 @@ export function ArtifactAttachmentPreview({
     >
       <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
         {isVideo ? (
-          <FilmIcon aria-hidden className="size-4 text-muted-foreground" />
+          <Video01Icon aria-hidden className="size-4 text-muted-foreground" />
         ) : (
-          <FileTextIcon aria-hidden className="size-4 text-muted-foreground" />
+          <File01Icon aria-hidden className="size-4 text-muted-foreground" />
         )}
       </div>
       <div className="min-w-0 max-w-[12rem]">

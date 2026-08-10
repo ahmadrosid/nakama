@@ -1,5 +1,5 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
-import { PencilIcon, Trash2Icon } from "lucide-react";
+import { Delete02Icon, PencilIcon } from "hugeicons-react";
 import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -113,7 +113,7 @@ export function OrgMembersTable({
                       type="button"
                       variant="ghost"
                     >
-                      <Trash2Icon className="size-3.5" />
+                      <Delete02Icon className="size-3.5" />
                     </Button>
                   </div>
                 </td>

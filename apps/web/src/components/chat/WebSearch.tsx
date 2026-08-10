@@ -2,7 +2,7 @@
  * Adapted from AIcss Web Search (https://www.aicss.dev/components/web-search).
  * Production use requires a valid AIcss license per https://www.aicss.dev/pricing
  */
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowDown01Icon } from "hugeicons-react";
 import { cn } from "@/lib/utils";
 import styles from "./WebSearch.module.css";
 import type {
@@ -229,7 +229,7 @@ export function WebSourceCard({
         </span>
       </span>
       {canExpand ? (
-        <ChevronDownIcon
+        <ArrowDown01Icon
           aria-hidden
           className={cn(
             styles.wsChevronIcon,

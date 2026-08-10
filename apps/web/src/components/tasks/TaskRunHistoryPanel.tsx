@@ -5,7 +5,7 @@ import type {
 } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
@@ -347,7 +347,7 @@ export function TaskRunHistoryPanel({
           type="button"
           variant="ghost"
         >
-          <XIcon aria-hidden className="size-4" strokeWidth={2} />
+          <Cancel01Icon aria-hidden className="size-4" strokeWidth={2} />
         </Button>
       </header>
 

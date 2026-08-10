@@ -1,5 +1,5 @@
 import type { ToolDetail } from "@nakama/core/contract";
-import { ChevronLeftIcon } from "lucide-react";
+import { ArrowLeft01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
@@ -230,7 +230,7 @@ function BackLink() {
       type="button"
       variant="ghost"
     >
-      <ChevronLeftIcon aria-hidden className="size-4" />
+      <ArrowLeft01Icon aria-hidden className="size-4" />
       {label}
     </Button>
   );

@@ -1,4 +1,4 @@
-import { BracesIcon, Trash2Icon } from "lucide-react";
+import { CodeIcon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -202,7 +202,7 @@ export function TelegramAllowedUsersDialog({
                 type="button"
                 variant="ghost"
               >
-                <BracesIcon aria-hidden />
+                <CodeIcon aria-hidden />
                 Import JSON
               </Button>
             </div>
@@ -273,7 +273,7 @@ export function TelegramAllowedUsersDialog({
                       type="button"
                       variant="ghost"
                     >
-                      <Trash2Icon aria-hidden="true" className="size-4" />
+                      <Delete02Icon aria-hidden="true" className="size-4" />
                     </Button>
                   </div>
                 ))

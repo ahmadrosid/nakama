@@ -672,6 +672,10 @@
     letter-spacing: 0.01em;
   }
 
+  .artifact-share-page .chat-markdown {
+    max-width: none;
+  }
+
   /* Streamdown code fences in chat — single compact block, no 200px placeholder */
   .chat-markdown [data-streamdown="code-block"] {
     display: flex !important;

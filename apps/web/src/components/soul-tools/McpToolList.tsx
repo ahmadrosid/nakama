@@ -1,5 +1,5 @@
 import type { CachedMcpToolSummary } from "@nakama/core/contract";
-import { ChevronRightIcon, SearchIcon } from "lucide-react";
+import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -131,7 +131,7 @@ export function McpToolList({
     <div className={cn("space-y-3", className)}>
       {showSearch ? (
         <div className="relative">
-          <SearchIcon
+          <Search01Icon
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
           />
@@ -204,7 +204,7 @@ function McpToolItem({
       >
         <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden pt-0.5">
           {hasDetails ? (
-            <ChevronRightIcon
+            <ArrowRight01Icon
               aria-hidden
               className={cn(
                 "size-4 shrink-0 text-muted-foreground transition-transform duration-200",

@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import {
   type PointerEvent,
   type ReactNode,
@@ -145,7 +145,7 @@ export function AttachmentDetailPanel({
               type="button"
               variant="ghost"
             >
-              <XIcon className="size-4" />
+              <Cancel01Icon className="size-4" />
             </Button>
           </div>
         </div>

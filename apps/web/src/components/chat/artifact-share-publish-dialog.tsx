@@ -1,4 +1,4 @@
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
 import { Button } from "@/components/ui/button";
 import {
@@ -143,9 +143,9 @@ function ArtifactShareSuccessView({
             variant="outline"
           >
             {copied ? (
-              <CheckIcon aria-hidden className="size-3.5" />
+              <CheckmarkCircle01Icon aria-hidden className="size-3.5" />
             ) : (
-              <CopyIcon aria-hidden className="size-3.5" />
+              <Copy01Icon aria-hidden className="size-3.5" />
             )}
           </Button>
         </div>

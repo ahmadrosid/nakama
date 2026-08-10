@@ -1,6 +1,6 @@
 import type { ProfileDetail, ToolSummary } from "@nakama/core/contract";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
-import { Trash2Icon } from "lucide-react";
+import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
@@ -111,7 +111,7 @@ export function ProfileToolsSection({
                     type="button"
                     variant="ghost"
                   >
-                    <Trash2Icon aria-hidden className="size-4" />
+                    <Delete02Icon aria-hidden className="size-4" />
                   </Button>
                 </div>
               </li>

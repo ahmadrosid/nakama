@@ -1,9 +1,9 @@
 import {
-  CheckIcon,
-  ChevronDownIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-} from "lucide-react";
+  ArrowDown01Icon,
+  CheckmarkCircle01Icon,
+  Maximize01Icon,
+  Minimize01Icon,
+} from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,7 +48,7 @@ export function ArtifactAttachmentPanelActions({
         >
           {copied ? (
             <span className="inline-flex items-center gap-1.5">
-              <CheckIcon
+              <CheckmarkCircle01Icon
                 aria-hidden
                 className="size-3.5 text-emerald-600 dark:text-emerald-400"
               />
@@ -69,7 +69,7 @@ export function ArtifactAttachmentPanelActions({
               />
             }
           >
-            <ChevronDownIcon aria-hidden className="size-3.5" />
+            <ArrowDown01Icon aria-hidden className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-44">
             <DropdownMenuItem
@@ -100,9 +100,9 @@ export function ArtifactAttachmentPanelActions({
         variant="ghost"
       >
         {fullscreen ? (
-          <Minimize2Icon aria-hidden className="size-4" />
+          <Minimize01Icon aria-hidden className="size-4" />
         ) : (
-          <Maximize2Icon aria-hidden className="size-4" />
+          <Maximize01Icon aria-hidden className="size-4" />
         )}
       </Button>
     </>

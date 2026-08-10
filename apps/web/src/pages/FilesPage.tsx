@@ -6,6 +6,7 @@ import {
   artifactMatchesTypeFilter,
   availableArtifactTypeFilters,
 } from "@/components/soul-tools/artifacts-tab-filters";
+import { KnowledgeTab } from "@/components/soul-tools/KnowledgeTab";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
@@ -23,13 +24,16 @@ import { FilesArtifactViews } from "@/pages/files/files-artifact-views";
 import { FilesDeleteDialog } from "@/pages/files/files-delete-dialog";
 import { FilesSearchRow } from "@/pages/files/files-search-row";
 import { FilesToolbar } from "@/pages/files/files-toolbar";
+import { ProfileDetailTabButton } from "@/pages/profiles/profiles-ui";
 
 const EMPTY_ARTIFACTS: ArtifactFile[] = [];
+type FilesPageView = "artifacts" | "knowledge";
 
 export function FilesPage() {
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
+  const [view, setView] = useState<FilesPageView>("artifacts");
 
   const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,35 +122,75 @@ export function FilesPage() {
     <ChatAttachmentPanelProvider presentation="overlay">
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-4">
-          <FilesToolbar
-            isFetching={isFetching}
-            onRefresh={() => void refetch()}
-            onViewModeChange={handleViewModeChange}
-            showViewModeToggle={artifacts.length > 0}
-            viewMode={viewMode}
-          />
+          <div
+            aria-label="Files views"
+            className="flex min-w-0 items-stretch border-border border-b"
+            role="tablist"
+          >
+            <ProfileDetailTabButton
+              active={view === "artifacts"}
+              controls="files-page-panel-artifacts"
+              id="files-page-tab-artifacts"
+              onSelect={() => setView("artifacts")}
+            >
+              Artifacts
+            </ProfileDetailTabButton>
+            <ProfileDetailTabButton
+              active={view === "knowledge"}
+              controls="files-page-panel-knowledge"
+              id="files-page-tab-knowledge"
+              onSelect={() => setView("knowledge")}
+            >
+              Knowledge base
+            </ProfileDetailTabButton>
+          </div>
 
-          {artifacts.length > 0 ? (
-            <FilesSearchRow
-              onSearchQueryChange={setSearchQuery}
-              onTypeFilterChange={setTypeFilter}
-              searchQuery={searchQuery}
-              typeFilter={effectiveTypeFilter}
-              typeOptions={typeOptions}
-            />
-          ) : null}
+          {view === "artifacts" ? (
+            <div
+              aria-labelledby="files-page-tab-artifacts"
+              className="space-y-4"
+              id="files-page-panel-artifacts"
+              role="tabpanel"
+            >
+              <FilesToolbar
+                isFetching={isFetching}
+                onRefresh={() => void refetch()}
+                onViewModeChange={handleViewModeChange}
+                showViewModeToggle={artifacts.length > 0}
+                viewMode={viewMode}
+              />
 
-          <FilesArtifactViews
-            artifacts={artifacts}
-            deletePending={deleteMutation.isPending}
-            emptyFilterMessage={emptyFilterMessage}
-            error={error}
-            filteredArtifacts={filteredArtifacts}
-            isLoading={isLoading}
-            onDelete={setDeleteTarget}
-            profileId={profileId}
-            viewMode={viewMode}
-          />
+              {artifacts.length > 0 ? (
+                <FilesSearchRow
+                  onSearchQueryChange={setSearchQuery}
+                  onTypeFilterChange={setTypeFilter}
+                  searchQuery={searchQuery}
+                  typeFilter={effectiveTypeFilter}
+                  typeOptions={typeOptions}
+                />
+              ) : null}
+
+              <FilesArtifactViews
+                artifacts={artifacts}
+                deletePending={deleteMutation.isPending}
+                emptyFilterMessage={emptyFilterMessage}
+                error={error}
+                filteredArtifacts={filteredArtifacts}
+                isLoading={isLoading}
+                onDelete={setDeleteTarget}
+                profileId={profileId}
+                viewMode={viewMode}
+              />
+            </div>
+          ) : (
+            <div
+              aria-labelledby="files-page-tab-knowledge"
+              id="files-page-panel-knowledge"
+              role="tabpanel"
+            >
+              <KnowledgeTab profileId={profileId} />
+            </div>
+          )}
         </div>
       </div>
 

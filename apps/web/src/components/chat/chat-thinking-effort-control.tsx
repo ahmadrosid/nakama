@@ -1,5 +1,5 @@
 import type { ThinkingEffort } from "@nakama/core/contract";
-import { BrainIcon } from "lucide-react";
+import { BrainIcon } from "hugeicons-react";
 import {
   PromptInputSelect,
   PromptInputSelectContent,

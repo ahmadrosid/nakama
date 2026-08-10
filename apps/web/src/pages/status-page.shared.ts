@@ -1,11 +1,10 @@
 import type { SystemStatusResponse } from "@nakama/core/contract";
 import {
-  ClockIcon,
-  HashIcon,
-  type LucideIcon,
-  MessageCircleIcon,
-  SmartphoneIcon,
-} from "lucide-react";
+  Clock01Icon,
+  HashtagIcon,
+  Message01Icon,
+  SmartPhone01Icon,
+} from "hugeicons-react";
 import { PAGE_PATHS } from "@/lib/navigation";
 
 export type StatusTone = "ok" | "warn" | "bad";
@@ -18,27 +17,27 @@ export function buildServiceColumns(status: SystemStatusResponse) {
 
   return [
     {
-      icon: ClockIcon,
+      icon: Clock01Icon,
       title: "Automation",
       ...automationServiceStatus(automationWorker),
     },
     {
-      icon: MessageCircleIcon,
+      icon: Message01Icon,
       title: "Telegram",
       ...telegramServiceStatus(telegramWorker),
     },
     {
-      icon: SmartphoneIcon,
+      icon: SmartPhone01Icon,
       title: "WhatsApp",
       ...whatsappServiceStatus(whatsappWorker),
     },
     {
-      icon: HashIcon,
+      icon: HashtagIcon,
       title: "Discord",
       ...discordServiceStatus(discordWorker),
     },
   ] satisfies Array<{
-    icon: LucideIcon;
+    icon: typeof Clock01Icon;
     title: string;
     status: string;
     tone: ServiceStatusTone;

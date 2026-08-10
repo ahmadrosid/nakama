@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import {
   type CSSProperties,
   Fragment,
@@ -115,12 +115,12 @@ export function CodeBlock({
             type="button"
           >
             {copied ? (
-              <CheckIcon
+              <CheckmarkCircle01Icon
                 aria-hidden
                 className="size-3.5 text-emerald-600 dark:text-emerald-400"
               />
             ) : (
-              <CopyIcon aria-hidden className="size-3.5" />
+              <Copy01Icon aria-hidden className="size-3.5" />
             )}
             <span>{copied ? "Copied" : "Copy"}</span>
           </button>

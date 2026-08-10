@@ -1,5 +1,5 @@
 import type { McpServerSummary, ProfileDetail } from "@nakama/core/contract";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
 import { Button } from "@/components/ui/button";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
@@ -40,7 +40,7 @@ export function ProfileMcpSection({
             type="button"
             variant="outline"
           >
-            <PlusIcon aria-hidden className="size-4" />
+            <Add01Icon aria-hidden className="size-4" />
             Add MCP server
           </Button>
           <McpServerAssignPicker
@@ -83,7 +83,7 @@ export function ProfileMcpSection({
                 type="button"
                 variant="ghost"
               >
-                <Trash2Icon aria-hidden className="size-4" />
+                <Delete02Icon aria-hidden className="size-4" />
               </Button>
             </li>
           ))}

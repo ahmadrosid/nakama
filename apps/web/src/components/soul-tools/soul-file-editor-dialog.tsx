@@ -1,5 +1,5 @@
 import type { SoulFileStatus, SoulStackFiles } from "@nakama/core/contract";
-import { FileTextIcon, FolderIcon } from "lucide-react";
+import { File01Icon, Folder01Icon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,12 +54,12 @@ export function SoulFileEditorDialog({
         <DialogHeader className="gap-2 pr-8 sm:gap-3">
           <DialogTitle className="flex items-center gap-2 font-mono text-base">
             {openFileMeta?.writable ? (
-              <FileTextIcon
+              <File01Icon
                 aria-hidden
                 className="size-4 shrink-0 text-muted-foreground"
               />
             ) : (
-              <FolderIcon
+              <Folder01Icon
                 aria-hidden
                 className="size-4 shrink-0 text-muted-foreground"
               />

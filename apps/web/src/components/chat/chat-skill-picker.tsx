@@ -1,5 +1,5 @@
 import type { SkillSummary } from "@nakama/core/contract";
-import { CheckIcon, WandSparklesIcon } from "lucide-react";
+import { CheckmarkCircle01Icon, SparklesIcon } from "hugeicons-react";
 import { cn } from "@/lib/utils";
 
 interface ChatSkillPickerProps {
@@ -67,7 +67,7 @@ export function ChatSkillPicker({
               role="option"
               type="button"
             >
-              <WandSparklesIcon
+              <SparklesIcon
                 aria-hidden
                 className="size-4 shrink-0 text-muted-foreground"
               />
@@ -87,7 +87,10 @@ export function ChatSkillPicker({
                 </span>
               ) : null}
               {active ? (
-                <CheckIcon aria-hidden className="size-4 shrink-0" />
+                <CheckmarkCircle01Icon
+                  aria-hidden
+                  className="size-4 shrink-0"
+                />
               ) : null}
             </button>
           );

@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowDown01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
 import {
   Command,
@@ -92,7 +92,7 @@ export function ProviderSelect({
         <span className="min-w-0 flex-1 truncate text-left">
           {selectedLabel}
         </span>
-        <ChevronDownIcon
+        <ArrowDown01Icon
           aria-hidden
           className="size-4 shrink-0 text-muted-foreground"
         />

@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -201,7 +201,7 @@ function CollapsedOrgExpandControl({ onExpand }: { onExpand: () => void }) {
         type="button"
         variant="ghost"
       >
-        <ChevronRightIcon className="size-4" strokeWidth={1.75} />
+        <ArrowRight01Icon className="size-4" strokeWidth={1.75} />
       </Button>
     </div>
   );
@@ -219,7 +219,7 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
       type="button"
       variant="ghost"
     >
-      <ChevronLeftIcon className="size-4" strokeWidth={1.75} />
+      <ArrowLeft01Icon className="size-4" strokeWidth={1.75} />
     </Button>
   );
 }

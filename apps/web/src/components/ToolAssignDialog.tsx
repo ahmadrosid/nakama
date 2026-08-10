@@ -1,5 +1,5 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { PlusIcon } from "lucide-react";
+import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +44,7 @@ export function ToolAssignDialog({
         type="button"
         variant="outline"
       >
-        <PlusIcon aria-hidden className="size-4" data-icon="inline-start" />
+        <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
         Add tool
       </Button>
 

@@ -1,5 +1,9 @@
 import type { OrgRole } from "@nakama/core/contract";
-import { CheckIcon, CopyIcon, UserPlusIcon } from "lucide-react";
+import {
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  UserAdd01Icon,
+} from "hugeicons-react";
 import { useState } from "react";
 import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs";
 import { Button } from "@/components/ui/button";
@@ -64,12 +68,12 @@ export function OrgMembersCardHeader({
           variant="ghost"
         >
           {copiedOrgId ? (
-            <CheckIcon
+            <CheckmarkCircle01Icon
               aria-hidden
               className="size-3.5 text-emerald-600 dark:text-emerald-400"
             />
           ) : (
-            <CopyIcon aria-hidden className="size-3.5" />
+            <Copy01Icon aria-hidden className="size-3.5" />
           )}
         </Button>
       </div>
@@ -95,7 +99,7 @@ export function OrgMembersCardHeader({
                 type="button"
                 variant="outline"
               >
-                <UserPlusIcon aria-hidden className="size-3.5" />
+                <UserAdd01Icon aria-hidden className="size-3.5" />
               </Button>
             }
           />
@@ -135,7 +139,7 @@ export function OrgMembersSecretBanner({
           type="button"
           variant="outline"
         >
-          <CopyIcon className="size-3.5" />
+          <Copy01Icon className="size-3.5" />
         </Button>
       </div>
     </div>

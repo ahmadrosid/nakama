@@ -334,6 +334,46 @@ export async function saveDiscordConfig(
   return withDiscordInviteUrl(toDiscordSettingsPublic(next), next.botToken);
 }
 
+export async function addDiscordAllowedUserId(
+  userId: string
+): Promise<
+  | { alreadyAllowed: boolean; ok: true; userId: string }
+  | { message: string; ok: false }
+> {
+  const trimmed = userId.trim();
+
+  if (!SNOWFLAKE_PATTERN.test(trimmed)) {
+    return { message: "Invalid Discord user ID.", ok: false };
+  }
+
+  const config = await loadDiscordConfigFile();
+
+  if (!config) {
+    return {
+      message: "Discord is not configured on the server yet.",
+      ok: false,
+    };
+  }
+
+  if (config.allowedUserIds.includes(trimmed)) {
+    return { alreadyAllowed: true, ok: true, userId: trimmed };
+  }
+
+  try {
+    await writeDiscordConfigFile({
+      ...config,
+      allowedUserIds: [...config.allowedUserIds, trimmed],
+    });
+  } catch {
+    return {
+      message: "Could not update the Discord allowed list.",
+      ok: false,
+    };
+  }
+
+  return { alreadyAllowed: false, ok: true, userId: trimmed };
+}
+
 export async function regenerateDiscordHandshake(): Promise<DiscordSettingsPublic> {
   const existing = await loadDiscordConfigFile();
 

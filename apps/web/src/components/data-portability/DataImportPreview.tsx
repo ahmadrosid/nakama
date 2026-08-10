@@ -1,10 +1,6 @@
 import type { DataImportPreviewResponse } from "@nakama/core/contract";
-import {
-  AlertTriangleIcon,
-  FileArchiveIcon,
-  RotateCcwIcon,
-} from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
+import { Alert02Icon, Archive01Icon, Rotate02Icon } from "hugeicons-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDataPortabilityBytes } from "@/hooks/use-data-portability";
@@ -43,7 +39,7 @@ export function DataImportPreview({
           aria-hidden
           className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
         >
-          <FileArchiveIcon className="size-4" strokeWidth={1.75} />
+          <Archive01Icon className="size-4" strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="truncate font-medium text-foreground text-sm">
@@ -73,10 +69,7 @@ export function DataImportPreview({
               )}
               role="status"
             >
-              <AlertTriangleIcon
-                aria-hidden
-                className="mt-0.5 size-4 shrink-0"
-              />
+              <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span className="text-pretty">
                 This replaces everything already set up here.
               </span>
@@ -102,7 +95,7 @@ export function DataImportPreview({
             onClick={onRestore}
             type="button"
           >
-            <PendingIcon idle={RotateCcwIcon} pending={restorePending} />
+            <PendingIcon idle={Rotate02Icon} pending={restorePending} />
             {actionLabel}
           </Button>
         </div>
@@ -116,7 +109,7 @@ export function PendingIcon({
   idle: IdleIcon,
 }: {
   pending: boolean;
-  idle: ComponentType<SVGProps<SVGSVGElement>>;
+  idle: (props: { className?: string }) => ReactNode;
 }) {
   return (
     <span aria-hidden className="relative size-3.5 shrink-0">

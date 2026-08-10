@@ -1,4 +1,4 @@
-import { CheckCircle2Icon } from "lucide-react";
+import { CheckmarkCircle01Icon } from "hugeicons-react";
 import { useToasts } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ export function Toaster() {
           key={item.id}
           role="status"
         >
-          <CheckCircle2Icon
+          <CheckmarkCircle01Icon
             aria-hidden="true"
             className="mt-0.5 size-5 shrink-0 text-emerald-400"
           />

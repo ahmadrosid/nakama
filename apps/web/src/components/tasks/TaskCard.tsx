@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
-import { Loader2Icon, PencilIcon, PlayIcon } from "lucide-react";
+import { Loading03Icon, PencilIcon, PlayIcon } from "hugeicons-react";
 import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -79,7 +79,7 @@ export function TaskCard({
           {task.title}
         </h3>
         {isRunning ? (
-          <Loader2Icon
+          <Loading03Icon
             aria-label="Running"
             className="size-4 shrink-0 text-amber-600 motion-safe:animate-spin motion-reduce:animate-none dark:text-amber-400"
           />

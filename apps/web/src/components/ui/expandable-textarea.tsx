@@ -1,4 +1,4 @@
-import { PencilIcon } from "lucide-react";
+import { PencilIcon } from "hugeicons-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";

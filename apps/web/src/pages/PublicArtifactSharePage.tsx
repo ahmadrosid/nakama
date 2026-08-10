@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download04Icon } from "hugeicons-react";
 import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -83,8 +83,8 @@ export function PublicArtifactSharePage() {
   return (
     <div
       className={cn(
-        "bg-background text-foreground",
-        isHtml ? "flex h-svh flex-col overflow-hidden" : "min-h-svh"
+        "artifact-share-page bg-background text-foreground",
+        isHtml ? "flex h-svh flex-col overflow-hidden" : "h-svh overflow-y-auto"
       )}
     >
       <header className="border-border border-b px-3 py-1.5">
@@ -97,7 +97,7 @@ export function PublicArtifactSharePage() {
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 font-medium text-xs hover:bg-muted"
               href={downloadUrl}
             >
-              <Download className="h-3 w-3" />
+              <Download04Icon className="h-3 w-3" />
               Download
             </a>
           ) : null}

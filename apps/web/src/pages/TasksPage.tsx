@@ -1,6 +1,6 @@
 import type { StoredTask, TaskStatus } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
-import { KanbanIcon, PlusIcon } from "lucide-react";
+import { Add01Icon, KanbanIcon } from "hugeicons-react";
 import { useEffect, useMemo, useState } from "react";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -240,7 +240,7 @@ export function TasksPage() {
 
           <div className="flex shrink-0 items-center">
             <Button onClick={() => setCreateOpen(true)} type="button">
-              <PlusIcon
+              <Add01Icon
                 aria-hidden
                 className="size-4"
                 data-icon="inline-start"

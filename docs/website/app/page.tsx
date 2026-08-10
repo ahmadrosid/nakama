@@ -1,13 +1,12 @@
 import {
-  ArrowRight,
-  Bot,
-  Boxes,
-  Building2,
-  Cloud,
-  type LucideIcon,
-  MessagesSquare,
-  Sparkles,
-} from "lucide-react";
+  ArrowRight01Icon,
+  BotIcon,
+  Building01Icon,
+  CloudIcon,
+  MessageMultiple01Icon,
+  PackageIcon,
+  SparklesIcon,
+} from "hugeicons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HeroPaperBackground } from "@/components/hero-paper-background";
@@ -34,35 +33,39 @@ function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
-const features: Array<{ title: string; details: string; icon: LucideIcon }> = [
+const features: Array<{
+  title: string;
+  details: string;
+  icon: typeof BotIcon;
+}> = [
   {
     details: "Identity, instructions, tools, and knowledge per profile.",
-    icon: Bot,
+    icon: BotIcon,
     title: "Every agent has a role",
   },
   {
     details: "One server — shared orgs, channels, and ops.",
-    icon: Boxes,
+    icon: PackageIcon,
     title: "Your nakama, one deployment",
   },
   {
     details: "Orgs, members, profiles, and tools — isolated by tenant.",
-    icon: Building2,
+    icon: Building01Icon,
     title: "Multi-tenant by design",
   },
   {
     details: "Soul files, skills, knowledge bases, and MCP per agent.",
-    icon: Sparkles,
+    icon: SparklesIcon,
     title: "Flexible agent behavior",
   },
   {
     details: "Web, CLI, Telegram, WhatsApp, and Discord.",
-    icon: MessagesSquare,
+    icon: MessageMultiple01Icon,
     title: "Works across channels",
   },
   {
     details: "Docker, self-host, or getnakama.cloud — open source.",
-    icon: Cloud,
+    icon: CloudIcon,
     title: "Self-hosted or managed",
   },
 ];
@@ -124,7 +127,7 @@ export default function HomePage() {
                     href="/quickstart"
                   >
                     Get Started
-                    <ArrowRight aria-hidden className="size-4" />
+                    <ArrowRight01Icon aria-hidden className="size-4" />
                   </Link>
                   <a
                     className="hero-cta-secondary"
@@ -241,7 +244,7 @@ export default function HomePage() {
                 href="/quickstart"
               >
                 Read the docs
-                <ArrowRight aria-hidden className="size-4" />
+                <ArrowRight01Icon aria-hidden className="size-4" />
               </Link>
               <a
                 className="hero-cta-secondary w-full justify-center sm:w-auto"

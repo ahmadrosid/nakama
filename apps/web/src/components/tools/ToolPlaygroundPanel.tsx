@@ -1,5 +1,5 @@
 import type { ToolDetail } from "@nakama/core/contract";
-import { PlayIcon } from "lucide-react";
+import { PlayIcon } from "hugeicons-react";
 import { ToolSourceCodeBlock } from "@/components/tools/ToolSourceCodeBlock";
 import {
   formatToolPlaygroundResult,

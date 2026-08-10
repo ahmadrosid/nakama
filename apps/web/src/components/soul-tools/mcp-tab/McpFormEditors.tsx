@@ -1,4 +1,4 @@
-import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { Add01Icon, Cancel01Icon, Delete02Icon } from "hugeicons-react";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import {
   emptyHeaderRow,
@@ -140,7 +140,7 @@ export function McpArgsEditor({
             onClick={() => removeArg(index)}
             type="button"
           >
-            <XIcon aria-hidden className="size-2.5" />
+            <Cancel01Icon aria-hidden className="size-2.5" />
           </button>
         </span>
       ))}
@@ -237,7 +237,7 @@ export function McpHeadersEditor({
               type="button"
               variant="ghost"
             >
-              <Trash2Icon aria-hidden className="size-4" />
+              <Delete02Icon aria-hidden className="size-4" />
             </Button>
           </li>
         ))}
@@ -253,7 +253,7 @@ export function McpHeadersEditor({
         type="button"
         variant="outline"
       >
-        <PlusIcon aria-hidden className="size-4" />
+        <Add01Icon aria-hidden className="size-4" />
         Add header
       </Button>
     </div>

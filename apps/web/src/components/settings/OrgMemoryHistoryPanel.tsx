@@ -1,5 +1,5 @@
 import type { OrgMemoryChangeLogEntry } from "@nakama/core/contract";
-import { EyeIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
+import { EyeIcon, RotateLeft01Icon, TimelineIcon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -174,7 +174,7 @@ function HistoryTimelineItem({
                 : "border-border bg-muted text-muted-foreground"
             )}
           >
-            <HistoryIcon className="size-3.5" strokeWidth={2.25} />
+            <TimelineIcon className="size-3.5" strokeWidth={2.25} />
           </div>
           {isLast ? null : <div className="mt-2 w-px flex-1 bg-border" />}
         </div>
@@ -239,7 +239,7 @@ function HistoryTimelineItem({
                         {busy ? (
                           <Spinner className="size-3.5" />
                         ) : (
-                          <RotateCcwIcon aria-hidden className="size-3.5" />
+                          <RotateLeft01Icon aria-hidden className="size-3.5" />
                         )}
                       </Button>
                     }

@@ -1,6 +1,6 @@
 import type { ProfileSummary, StoredTask } from "@nakama/core/contract";
 import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
-import { PlayIcon, SparklesIcon, Trash2Icon } from "lucide-react";
+import { Delete02Icon, PlayIcon, SparklesIcon } from "hugeicons-react";
 import { useReducer } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -278,7 +278,7 @@ function TaskDetailDialogContent({
           type="button"
           variant="destructive"
         >
-          <Trash2Icon aria-hidden className="size-4" />
+          <Delete02Icon aria-hidden className="size-4" />
           Delete
         </Button>
 

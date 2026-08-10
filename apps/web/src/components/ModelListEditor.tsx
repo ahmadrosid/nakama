@@ -1,5 +1,5 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
@@ -164,7 +164,7 @@ export function ModelListEditor({
                     type="button"
                     variant="ghost"
                   >
-                    <Trash2Icon className="size-4" />
+                    <Delete02Icon className="size-4" />
                   </Button>
                 </td>
               </tr>
@@ -184,7 +184,7 @@ export function ModelListEditor({
           type="button"
           variant="outline"
         >
-          <PlusIcon className="mr-1 size-4" />
+          <Add01Icon className="mr-1 size-4" />
           Add model
         </Button>
 

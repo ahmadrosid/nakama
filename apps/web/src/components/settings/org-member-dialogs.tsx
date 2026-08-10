@@ -1,6 +1,6 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
-import { CopyIcon, MailIcon } from "lucide-react";
+import { Copy01Icon, Mail01Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
 import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
 import { Button } from "@/components/ui/button";
@@ -147,7 +147,7 @@ export function OrgMemberInvitePopover({
                     type="button"
                     variant="outline"
                   >
-                    <MailIcon aria-hidden className="size-3.5" />
+                    <Mail01Icon aria-hidden className="size-3.5" />
                   </Button>
                 }
               />
@@ -209,7 +209,7 @@ function CredentialRow({
           type="button"
           variant="outline"
         >
-          <CopyIcon className="size-3.5" />
+          <Copy01Icon className="size-3.5" />
         </Button>
       </div>
     </div>

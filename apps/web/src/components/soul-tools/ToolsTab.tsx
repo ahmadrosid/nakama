@@ -3,7 +3,7 @@ import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
-import { PlusIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { Add01Icon, Delete02Icon, Search01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmailSettingsDialog } from "@/components/EmailSettingsDialog";
@@ -108,7 +108,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
 
         <Button onClick={goToCreateTool} size="sm" type="button">
-          <PlusIcon aria-hidden className="size-4" data-icon="inline-start" />
+          <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
           Create tool
         </Button>
       </div>
@@ -117,7 +117,11 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
         <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-muted-foreground text-sm">
           <p>No tools yet. Ask Super Bot to create one.</p>
           <Button onClick={goToCreateTool} size="sm" type="button">
-            <PlusIcon aria-hidden className="size-4" data-icon="inline-start" />
+            <Add01Icon
+              aria-hidden
+              className="size-4"
+              data-icon="inline-start"
+            />
             Create tool
           </Button>
         </div>
@@ -276,7 +280,7 @@ function ToolListSection({
               size="sm"
               type="button"
             >
-              <PlusIcon
+              <Add01Icon
                 aria-hidden
                 className="size-4"
                 data-icon="inline-start"
@@ -289,7 +293,7 @@ function ToolListSection({
         <div className="space-y-3">
           {showSearch ? (
             <div className="relative">
-              <SearchIcon
+              <Search01Icon
                 aria-hidden
                 className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
               />
@@ -410,7 +414,7 @@ function ToolListItem({
             type="button"
             variant="ghost"
           >
-            <Trash2Icon
+            <Delete02Icon
               aria-hidden
               className="size-4"
               data-icon="inline-start"

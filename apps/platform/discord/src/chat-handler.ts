@@ -12,6 +12,7 @@ import type {
   AgentQuestionnaire,
   SendMessageInput,
 } from "@nakama/core/contract";
+import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
   formatProfileSelectionPrompt,
@@ -101,6 +102,8 @@ const NO_CODE_PROMPT =
   "This bot is not linked yet.\n\n" +
   "Open Nakama Integrations → Discord, save your bot token, and copy the pairing code. " +
   "Then send that code here in a DM.";
+
+const ALLOW_NOT_AUTHORIZED = "You are not authorized to use this command.";
 
 export interface ChatHandlerDeps {
   authStore: DiscordAuthStore;
@@ -403,6 +406,41 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
   }
 
+  async function handleAllowCommand(
+    interaction: ChatInputCommandInteraction,
+    messenger: DiscordMessenger,
+    requesterId: string
+  ): Promise<void> {
+    if (!authStore.isPaired(requesterId)) {
+      await messenger.send(ALLOW_NOT_AUTHORIZED);
+      return;
+    }
+
+    const targetUser = interaction.options.getUser("user");
+
+    if (!targetUser) {
+      await messenger.send("Choose a Discord user to allow.");
+      return;
+    }
+
+    const result = await addDiscordAllowedUserId(targetUser.id);
+    await authStore.reload();
+
+    if (!result.ok) {
+      await messenger.send(result.message);
+      return;
+    }
+
+    if (result.alreadyAllowed) {
+      await messenger.send(
+        `<@${result.userId}> is already on the allowed list.`
+      );
+      return;
+    }
+
+    await messenger.send(`Added <@${result.userId}> to the allowed list.`);
+  }
+
   async function handleSlashCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
@@ -441,6 +479,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     try {
       await authStore.reload();
+
+      if (interaction.commandName === "allow") {
+        await handleAllowCommand(interaction, messenger, userId);
+        return;
+      }
 
       if (!authStore.isAuthorized(userId)) {
         if (

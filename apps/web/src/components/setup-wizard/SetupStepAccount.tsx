@@ -1,4 +1,4 @@
-import { UploadIcon } from "lucide-react";
+import { Upload04Icon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackupImport";
@@ -176,7 +176,7 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             type="button"
             variant="ghost"
           >
-            <UploadIcon aria-hidden className="size-3.5" />I have a backup
+            <Upload04Icon aria-hidden className="size-3.5" />I have a backup
           </Button>
         </div>
       </form>

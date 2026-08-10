@@ -1,4 +1,4 @@
-import { RefreshCwIcon } from "lucide-react";
+import { RefreshIcon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -129,7 +129,7 @@ export function AutomationDetailPanel(state: DetailState) {
             {runsLoading ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon aria-hidden className="size-4" />
+              <RefreshIcon aria-hidden className="size-4" />
             )}
           </Button>
         </div>

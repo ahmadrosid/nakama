@@ -1,18 +1,17 @@
 import type { TaskStatus } from "@nakama/core/contract";
-import type { LucideIcon } from "lucide-react";
 import {
-  CheckCircle2Icon,
-  CircleDashedIcon,
-  ListTodoIcon,
-  LoaderIcon,
-  XCircleIcon,
-} from "lucide-react";
+  CancelCircleIcon,
+  CheckmarkCircle01Icon,
+  CircleIcon,
+  ListViewIcon,
+  Loading03Icon,
+} from "hugeicons-react";
 
 export interface TaskColumnMeta {
   countBadge: string;
   description: string;
   emptyMessage: string;
-  icon: LucideIcon;
+  icon: typeof CircleIcon;
   id: TaskStatus;
   label: string;
 }
@@ -22,7 +21,7 @@ export const TASK_COLUMN_META: TaskColumnMeta[] = [
     countBadge: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
     description: "Ideas waiting to be picked up",
     emptyMessage: "Drag tasks here or create one to get started.",
-    icon: CircleDashedIcon,
+    icon: CircleIcon,
     id: "backlog",
     label: "Backlog",
   },
@@ -30,7 +29,7 @@ export const TASK_COLUMN_META: TaskColumnMeta[] = [
     countBadge: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
     description: "Ready to run — press play on a card",
     emptyMessage: "Move a task here, then start it with the play button.",
-    icon: ListTodoIcon,
+    icon: ListViewIcon,
     id: "todo",
     label: "To Do",
   },
@@ -38,7 +37,7 @@ export const TASK_COLUMN_META: TaskColumnMeta[] = [
     countBadge: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
     description: "Agents actively working",
     emptyMessage: "No agents running. Start a task from To Do.",
-    icon: LoaderIcon,
+    icon: Loading03Icon,
     id: "in_progress",
     label: "In Progress",
   },
@@ -46,7 +45,7 @@ export const TASK_COLUMN_META: TaskColumnMeta[] = [
     countBadge: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
     description: "Completed — click to open task chat",
     emptyMessage: "Finished tasks appear here. Click one to review the run.",
-    icon: CheckCircle2Icon,
+    icon: CheckmarkCircle01Icon,
     id: "done",
     label: "Done",
   },
@@ -54,7 +53,7 @@ export const TASK_COLUMN_META: TaskColumnMeta[] = [
     countBadge: "bg-red-500/15 text-red-800 dark:text-red-200",
     description: "Errors — click to inspect and retry",
     emptyMessage: "Failed runs show here. Open a card to edit or re-run.",
-    icon: XCircleIcon,
+    icon: CancelCircleIcon,
     id: "failed",
     label: "Failed",
   },

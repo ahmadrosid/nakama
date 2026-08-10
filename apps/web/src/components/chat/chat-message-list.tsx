@@ -1,11 +1,11 @@
 import {
-  CheckIcon,
-  CopyIcon,
-  FileTextIcon,
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  File01Icon,
   GitBranchIcon,
   MoreHorizontalIcon,
-  RotateCcwIcon,
-} from "lucide-react";
+  Rotate02Icon,
+} from "hugeicons-react";
 import {
   forwardRef,
   useCallback,
@@ -544,9 +544,9 @@ function AssistantMessageActions({
         type="button"
       >
         {copied ? (
-          <CheckIcon aria-hidden className="size-4" />
+          <CheckmarkCircle01Icon aria-hidden className="size-4" />
         ) : (
-          <CopyIcon aria-hidden className="size-4" />
+          <Copy01Icon aria-hidden className="size-4" />
         )}
       </button>
       {onRetryMessage ? (
@@ -558,7 +558,7 @@ function AssistantMessageActions({
           title="Try again"
           type="button"
         >
-          <RotateCcwIcon aria-hidden className="size-4" />
+          <Rotate02Icon aria-hidden className="size-4" />
         </button>
       ) : null}
       {onBranchMessage && branchCreatedAt ? (
@@ -676,7 +676,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
               className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2"
               key={`${document.filename}-${document.mediaType}`}
             >
-              <FileTextIcon
+              <File01Icon
                 aria-hidden
                 className="size-4 shrink-0 text-muted-foreground"
               />

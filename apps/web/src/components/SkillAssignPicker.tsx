@@ -3,7 +3,12 @@ import {
   BUNDLED_SKILL_NAMES,
   RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
 } from "@nakama/core/skills/bundled-names";
-import { CheckIcon, DownloadIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  Add01Icon,
+  CheckmarkCircle01Icon,
+  Delete02Icon,
+  Download04Icon,
+} from "hugeicons-react";
 import { type SyntheticEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -132,7 +137,7 @@ function AgentBrowserPrerequisitesNotice({
               {assigningBash ? (
                 <Spinner className="size-3.5" />
               ) : (
-                <PlusIcon aria-hidden />
+                <Add01Icon aria-hidden />
               )}
               Add bash
             </Button>
@@ -229,7 +234,7 @@ function AvailableSkillActions({
           {assigningBash ? (
             <Spinner className="size-3.5" />
           ) : (
-            <PlusIcon aria-hidden />
+            <Add01Icon aria-hidden />
           )}
           Add bash
         </Button>
@@ -246,7 +251,7 @@ function AvailableSkillActions({
           {installingAgentBrowser ? (
             <Spinner className="size-3.5" />
           ) : (
-            <DownloadIcon aria-hidden />
+            <Download04Icon aria-hidden />
           )}
           Install
         </Button>
@@ -260,7 +265,7 @@ function AvailableSkillActions({
           type="button"
           variant="outline"
         >
-          <PlusIcon aria-hidden />
+          <Add01Icon aria-hidden />
           Add
         </Button>
       )}
@@ -282,7 +287,7 @@ function AvailableSkillActions({
           type="button"
           variant="ghost"
         >
-          <Trash2Icon aria-hidden className="size-4" />
+          <Delete02Icon aria-hidden className="size-4" />
         </Button>
       ) : null}
     </div>
@@ -409,7 +414,7 @@ function OnProfileSkillCommandItem({
             {skill.name}
           </p>
           <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
-            <CheckIcon aria-hidden className="size-3" />
+            <CheckmarkCircle01Icon aria-hidden className="size-3" />
             On profile
           </span>
         </div>
@@ -435,7 +440,7 @@ function OnProfileSkillCommandItem({
           type="button"
           variant="ghost"
         >
-          <Trash2Icon aria-hidden className="size-4" />
+          <Delete02Icon aria-hidden className="size-4" />
         </Button>
       ) : null}
     </CommandItem>

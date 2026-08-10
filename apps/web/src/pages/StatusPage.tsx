@@ -3,17 +3,16 @@ import type {
   SystemStatusResponse,
 } from "@nakama/core/contract";
 import {
-  AlertTriangleIcon,
-  ArrowDownLeftIcon,
-  ArrowUpRightIcon,
-  CheckCircle2Icon,
-  ClockIcon,
-  CoinsIcon,
-  type LucideIcon,
+  Alert02Icon,
+  ArrowDownLeft01Icon,
+  ArrowUpRight01Icon,
+  CancelCircleIcon,
+  CheckmarkCircle01Icon,
+  Clock01Icon,
+  Coins01Icon,
   SparklesIcon,
-  XCircleIcon,
   ZapIcon,
-} from "lucide-react";
+} from "hugeicons-react";
 import { type ReactNode, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -255,7 +254,7 @@ function LlmUsageSection({
             <div className="rounded-lg border border-border bg-background/50 p-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
                 <CompactUsageStat
-                  icon={CoinsIcon}
+                  icon={Coins01Icon}
                   label="API cost"
                   value={
                     usage.costEstimated
@@ -269,12 +268,12 @@ function LlmUsageSection({
                   value={usage.requestCount.toLocaleString()}
                 />
                 <CompactUsageStat
-                  icon={ArrowDownLeftIcon}
+                  icon={ArrowDownLeft01Icon}
                   label="Input"
                   value={usage.inputTokens.toLocaleString()}
                 />
                 <CompactUsageStat
-                  icon={ArrowUpRightIcon}
+                  icon={ArrowUpRight01Icon}
                   label="Output"
                   value={usage.outputTokens.toLocaleString()}
                 />
@@ -379,7 +378,7 @@ function LlmUsageEmptyState({
   description,
   action,
 }: {
-  icon: LucideIcon;
+  icon: typeof Clock01Icon;
   title: string;
   description: string;
   action?: ReactNode;
@@ -434,7 +433,7 @@ function CompactUsageStat({
   label,
   value,
 }: {
-  icon: LucideIcon;
+  icon: typeof Clock01Icon;
   label: string;
   value: string;
 }) {
@@ -571,7 +570,7 @@ function SummaryStrip({
         ) : null}
       </div>
       <div className="ml-auto flex basis-full items-center justify-end gap-1.5 text-muted-foreground text-xs leading-none sm:basis-auto">
-        <ClockIcon aria-hidden className="size-3.5 shrink-0 opacity-70" />
+        <Clock01Icon aria-hidden className="size-3.5 shrink-0 opacity-70" />
         <span title={formatDate(status.checkedAt)}>
           Updated{" "}
           <span className="tabular-nums">
@@ -649,7 +648,7 @@ function WorkerServiceRow({
   canManage,
   footerLink,
 }: {
-  icon: LucideIcon;
+  icon: typeof Clock01Icon;
   title: string;
   status: string;
   tone: ServiceStatusTone;
@@ -714,7 +713,7 @@ function ToneIcon({
 }) {
   if (tone === "ok") {
     return (
-      <CheckCircle2Icon
+      <CheckmarkCircle01Icon
         aria-hidden
         className={cn("text-emerald-600 dark:text-emerald-400", className)}
       />
@@ -723,7 +722,7 @@ function ToneIcon({
 
   if (tone === "warn") {
     return (
-      <AlertTriangleIcon
+      <Alert02Icon
         aria-hidden
         className={cn("text-amber-600 dark:text-amber-400", className)}
       />
@@ -731,7 +730,10 @@ function ToneIcon({
   }
 
   return (
-    <XCircleIcon aria-hidden className={cn("text-destructive", className)} />
+    <CancelCircleIcon
+      aria-hidden
+      className={cn("text-destructive", className)}
+    />
   );
 }
 

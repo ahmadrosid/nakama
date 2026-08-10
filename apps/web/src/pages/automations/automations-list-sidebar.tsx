@@ -1,4 +1,4 @@
-import { RefreshCwIcon, SearchIcon } from "lucide-react";
+import { RefreshIcon, Search01Icon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -64,7 +64,7 @@ export function AutomationsListSidebar(state: ListState) {
             {automationsRefreshing ? (
               <Spinner className="size-3.5" />
             ) : (
-              <RefreshCwIcon aria-hidden className="size-3.5" />
+              <RefreshIcon aria-hidden className="size-3.5" />
             )}
           </Button>
         </div>
@@ -87,7 +87,10 @@ export function AutomationsListSidebar(state: ListState) {
           </div>
         ) : filteredAutomations.length === 0 ? (
           <div className="flex min-h-[12rem] flex-col items-center justify-center px-2 py-10 text-center">
-            <SearchIcon aria-hidden className="size-5 text-muted-foreground" />
+            <Search01Icon
+              aria-hidden
+              className="size-5 text-muted-foreground"
+            />
             <p className="mt-3 font-medium text-foreground text-sm">
               No matching automations
             </p>

@@ -1,4 +1,4 @@
-import { MessageSquareIcon, RefreshCwIcon } from "lucide-react";
+import { Message01Icon, RefreshIcon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -98,11 +98,11 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
                 {refreshing ? (
                   <Spinner className="size-4" />
                 ) : (
-                  <RefreshCwIcon aria-hidden className="size-4" />
+                  <RefreshIcon aria-hidden className="size-4" />
                 )}
               </Button>
               <Button onClick={goToCreateAutomation} size="sm" type="button">
-                <MessageSquareIcon aria-hidden className="size-4" />
+                <Message01Icon aria-hidden className="size-4" />
                 Create automation
               </Button>
             </div>

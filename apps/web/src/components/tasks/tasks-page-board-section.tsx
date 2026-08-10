@@ -3,7 +3,7 @@ import type {
   StoredTask,
   TaskStatus,
 } from "@nakama/core/contract";
-import { AlertTriangleIcon, KanbanIcon, PlusIcon } from "lucide-react";
+import { Add01Icon, Alert02Icon, KanbanIcon } from "hugeicons-react";
 import { TaskBoard } from "@/components/tasks/TaskBoard";
 import { TaskBoardSkeleton } from "@/components/tasks/TaskBoardSkeleton";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export function TasksPageBoardSection({
       {errorMessage ? (
         <Card className="border-red-200 bg-red-50 shadow-none dark:border-red-900/40 dark:bg-red-950/20">
           <CardContent className="flex flex-wrap items-start gap-3 p-4">
-            <AlertTriangleIcon
+            <Alert02Icon
               aria-hidden
               className="mt-0.5 size-5 shrink-0 text-red-700 dark:text-red-300"
             />
@@ -88,7 +88,7 @@ export function TasksPageBoardSection({
               </p>
             </div>
             <Button onClick={onCreateOpen} size="sm" type="button">
-              <PlusIcon
+              <Add01Icon
                 aria-hidden
                 className="size-4"
                 data-icon="inline-start"

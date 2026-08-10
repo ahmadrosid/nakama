@@ -1,4 +1,4 @@
-import { ChevronDownIcon, WrenchIcon } from "lucide-react";
+import { ArrowDown01Icon, Wrench01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -438,7 +438,7 @@ function SubAgentToolRow({
             <span className="min-w-0 flex-1">
               {expanded ? "Hide full output" : "Show full output"}
             </span>
-            <ChevronDownIcon
+            <ArrowDown01Icon
               aria-hidden
               className={cn(
                 "size-3.5 shrink-0 transition-transform duration-200",
@@ -598,7 +598,7 @@ function ToolTimelineItem({
 
 function DefaultToolIcon({ className }: { className?: string }) {
   return (
-    <WrenchIcon
+    <Wrench01Icon
       aria-hidden
       className={cn("size-3.5 shrink-0 text-muted-foreground", className)}
     />
@@ -636,7 +636,7 @@ function CollapsibleTrigger({
         {label}
       </span>
       {disabled ? null : (
-        <ChevronDownIcon
+        <ArrowDown01Icon
           aria-hidden
           className={cn(
             "size-3.5 shrink-0 transition-transform duration-200",

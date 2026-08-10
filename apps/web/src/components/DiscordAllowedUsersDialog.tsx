@@ -1,4 +1,4 @@
-import { Trash2Icon } from "lucide-react";
+import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -155,7 +155,7 @@ export function DiscordAllowedUsersDialog({
                     type="button"
                     variant="ghost"
                   >
-                    <Trash2Icon className="size-4" />
+                    <Delete02Icon className="size-4" />
                   </Button>
                 </li>
               ))}

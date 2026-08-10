@@ -1,4 +1,4 @@
-import { Trash2Icon } from "lucide-react";
+import { Delete02Icon } from "hugeicons-react";
 import { ComposioToolkitAssignPicker } from "@/components/ComposioToolkitAssignPicker";
 import { Button } from "@/components/ui/button";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
@@ -89,7 +89,7 @@ export function ProfileComposioSection({
                   type="button"
                   variant="ghost"
                 >
-                  <Trash2Icon aria-hidden className="size-4" />
+                  <Delete02Icon aria-hidden className="size-4" />
                 </Button>
               </li>
             )

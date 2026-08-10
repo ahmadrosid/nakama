@@ -15,10 +15,12 @@ const COMMAND_NAMES = [
   "new",
   "close",
   "status",
+  "allow",
 ] as const;
 
 export function buildSlashCommands(): SlashCommandBuilder[] {
   const descriptions: Record<(typeof COMMAND_NAMES)[number], string> = {
+    allow: "Add a Discord user to the bot allowed list",
     clear: "Clear chat history",
     close: "Close this bot conversation thread",
     compact: "Compact conversation history",
@@ -29,12 +31,23 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     stop: "Stop the current agent reply",
   };
 
-  return COMMAND_NAMES.map((name) =>
-    new SlashCommandBuilder()
+  return COMMAND_NAMES.map((name) => {
+    const builder = new SlashCommandBuilder()
       .setName(name)
       .setDescription(descriptions[name])
-      .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM)
-  );
+      .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM);
+
+    if (name === "allow") {
+      builder.addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("Discord user to allow")
+          .setRequired(true)
+      );
+    }
+
+    return builder;
+  });
 }
 
 export async function registerSlashCommands(

@@ -1,5 +1,9 @@
 import type { DataImportPreviewResponse } from "@nakama/core/contract";
-import { AlertTriangleIcon, CheckCircle2Icon, UploadIcon } from "lucide-react";
+import {
+  Alert02Icon,
+  CheckmarkCircle01Icon,
+  Upload04Icon,
+} from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import {
   DataImportPreview,
@@ -200,7 +204,7 @@ export function SetupStepBackupImport({
                     : "scale-[0.25] opacity-0 blur-[4px]"
                 )}
               >
-                <CheckCircle2Icon className="size-10" strokeWidth={1.75} />
+                <CheckmarkCircle01Icon className="size-10" strokeWidth={1.75} />
               </span>
               <div
                 className={cn(
@@ -241,7 +245,7 @@ export function SetupStepBackupImport({
             type="button"
             variant={selectedFile ? "outline" : "default"}
           >
-            <PendingIcon idle={UploadIcon} pending={previewPending} />
+            <PendingIcon idle={Upload04Icon} pending={previewPending} />
             {selectedFile ? "Choose a different file" : "Choose backup file"}
           </Button>
           <input
@@ -275,7 +279,7 @@ export function SetupStepBackupImport({
               "border-destructive/30 bg-destructive/10 text-destructive"
             )}
           >
-            <AlertTriangleIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
             <span className="text-pretty">{error}</span>
           </div>
         ) : null}

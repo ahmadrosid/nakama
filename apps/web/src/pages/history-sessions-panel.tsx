@@ -1,5 +1,10 @@
 import type { ProfileSummary, SessionSummary } from "@nakama/core/contract";
-import { RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  Cancel01Icon,
+  Delete02Icon,
+  RefreshIcon,
+  Search01Icon,
+} from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -57,7 +62,7 @@ export function HistorySessionsPanel({
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-3 border-border border-b p-4">
         <div className="relative min-w-0 flex-1">
-          <SearchIcon
+          <Search01Icon
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
@@ -76,7 +81,7 @@ export function HistorySessionsPanel({
               onClick={onClearSearch}
               type="button"
             >
-              <XIcon className="size-4" />
+              <Cancel01Icon className="size-4" />
             </button>
           ) : null}
         </div>
@@ -96,7 +101,7 @@ export function HistorySessionsPanel({
             {refreshing ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon className="size-4" />
+              <RefreshIcon className="size-4" />
             )}
           </Button>
         </div>
@@ -207,7 +212,7 @@ function HistorySessionRow({
         type="button"
         variant="ghost"
       >
-        <Trash2Icon className="size-4" />
+        <Delete02Icon className="size-4" />
       </Button>
     </div>
   );

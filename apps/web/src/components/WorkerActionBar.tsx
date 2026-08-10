@@ -1,11 +1,10 @@
-import type { LucideIcon } from "lucide-react";
 import {
-  Loader2Icon,
+  Loading03Icon,
   PlayIcon,
-  RotateCcwIcon,
-  ScrollTextIcon,
-  SquareIcon,
-} from "lucide-react";
+  Rotate02Icon,
+  ScrollIcon,
+  StopIcon,
+} from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WorkerLogDialog } from "@/components/WorkerLogDialog";
@@ -18,13 +17,14 @@ import { cn } from "@/lib/utils";
 
 const glyphTransition =
   "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+type ActionIcon = typeof PlayIcon;
 
 function ActionGlyph({
   icon: Icon,
   busy,
   iconClassName,
 }: {
-  icon: LucideIcon;
+  icon: ActionIcon;
   busy: boolean;
   iconClassName?: string;
 }) {
@@ -41,7 +41,7 @@ function ActionGlyph({
         )}
         strokeWidth={2}
       />
-      <Loader2Icon
+      <Loading03Icon
         aria-hidden={!busy}
         className={cn(
           glyphTransition,
@@ -104,7 +104,7 @@ export function WorkerActionBar({
               type="button"
               variant="outline"
             >
-              <ActionGlyph busy={stopping} icon={SquareIcon} />
+              <ActionGlyph busy={stopping} icon={StopIcon} />
               Stop
             </Button>
             <Button
@@ -115,7 +115,7 @@ export function WorkerActionBar({
               type="button"
               variant="outline"
             >
-              <ActionGlyph busy={restarting} icon={RotateCcwIcon} />
+              <ActionGlyph busy={restarting} icon={Rotate02Icon} />
               Restart
             </Button>
           </>
@@ -144,7 +144,7 @@ export function WorkerActionBar({
             type="button"
             variant="ghost"
           >
-            <ScrollTextIcon aria-hidden className="size-3.5" strokeWidth={2} />
+            <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
             View logs
           </Button>
         ) : null}
@@ -178,7 +178,7 @@ export function WorkerViewLogsButton({
         type="button"
         variant="ghost"
       >
-        <ScrollTextIcon aria-hidden className="size-3.5" strokeWidth={2} />
+        <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs
       </Button>
       <WorkerLogDialog

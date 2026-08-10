@@ -1,4 +1,4 @@
-import { LogOutIcon, SparklesIcon, UserIcon } from "lucide-react";
+import { Logout03Icon, SparklesIcon, UserIcon } from "hugeicons-react";
 import { useState } from "react";
 import { THEME_OPTIONS } from "@/components/theme-options";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
@@ -152,7 +152,7 @@ export function SidebarUserMenu() {
                       }}
                       variant="destructive"
                     >
-                      <LogOutIcon className="size-4" />
+                      <Logout03Icon className="size-4" />
                       Log out
                     </DropdownMenuItem>
                   </div>

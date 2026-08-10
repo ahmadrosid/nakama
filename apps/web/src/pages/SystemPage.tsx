@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import { useCallback } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
@@ -11,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { StatusPage } from "@/pages/StatusPage";
 import {
   resolveSystemTab,
+  type SYSTEM_TABS,
   type SystemTabId,
   visibleSystemTabs,
 } from "@/pages/system-page.shared";
@@ -102,7 +102,7 @@ function SystemTabButton({
 }: {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: (typeof SYSTEM_TABS)[number]["icon"];
   active: boolean;
   controls: string;
   onSelect: () => void;
@@ -123,7 +123,7 @@ function SystemTabButton({
       role="tab"
       type="button"
     >
-      <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
+      <Icon aria-hidden className="size-4 shrink-0" />
       {label}
     </button>
   );

@@ -5,7 +5,7 @@ import type {
 } from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
-import { Trash2Icon } from "lucide-react";
+import { Delete02Icon } from "hugeicons-react";
 import { useMemo } from "react";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { Button } from "@/components/ui/button";
@@ -131,7 +131,7 @@ function ProfileSkillRow({
         type="button"
         variant="ghost"
       >
-        <Trash2Icon aria-hidden className="size-4" />
+        <Delete02Icon aria-hidden className="size-4" />
       </Button>
     </li>
   );

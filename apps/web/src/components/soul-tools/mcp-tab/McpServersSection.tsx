@@ -1,14 +1,14 @@
 import type { McpServerSummary } from "@nakama/core/contract";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import {
-  EllipsisVerticalIcon,
+  Add01Icon,
+  Delete02Icon,
   EyeIcon,
+  MoreVerticalIcon,
   PencilIcon,
-  PlugIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-} from "lucide-react";
+  Plug01Icon,
+  RefreshIcon,
+} from "hugeicons-react";
 import { McpToolLabels } from "@/components/soul-tools/McpToolList";
 import { sectionClass } from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
@@ -96,12 +96,12 @@ function McpServerActions({
             />
           }
         >
-          <EllipsisVerticalIcon aria-hidden className="size-4" />
+          <MoreVerticalIcon aria-hidden className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-40">
           {server.status === "connected" ? null : (
             <DropdownMenuItem disabled={busy} onClick={onConnect}>
-              <PlugIcon aria-hidden />
+              <Plug01Icon aria-hidden />
               Connect
             </DropdownMenuItem>
           )}
@@ -110,7 +110,7 @@ function McpServerActions({
             Edit
           </DropdownMenuItem>
           <DropdownMenuItem disabled={busy} onClick={onSync}>
-            <RefreshCwIcon aria-hidden />
+            <RefreshIcon aria-hidden />
             Sync tools
           </DropdownMenuItem>
           {deleteBlocked ? (
@@ -118,7 +118,7 @@ function McpServerActions({
               <TooltipTrigger
                 render={
                   <DropdownMenuItem disabled variant="destructive">
-                    <Trash2Icon aria-hidden />
+                    <Delete02Icon aria-hidden />
                     Delete
                   </DropdownMenuItem>
                 }
@@ -131,7 +131,7 @@ function McpServerActions({
               onClick={onDelete}
               variant="destructive"
             >
-              <Trash2Icon aria-hidden />
+              <Delete02Icon aria-hidden />
               Delete
             </DropdownMenuItem>
           )}
@@ -176,7 +176,7 @@ export function McpServersSection({
 
         <div className="flex shrink-0 items-center gap-1">
           <Button onClick={onAddServer} size="sm" type="button">
-            <PlusIcon aria-hidden className="size-4" />
+            <Add01Icon aria-hidden className="size-4" />
             Add server
           </Button>
         </div>

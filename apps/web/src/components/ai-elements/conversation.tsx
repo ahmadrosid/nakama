@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownIcon } from "lucide-react";
+import { ArrowDown01Icon } from "hugeicons-react";
 import {
   type ComponentProps,
   createContext,
@@ -98,7 +98,7 @@ export const ConversationScrollButton = ({
       variant="outline"
       {...props}
     >
-      <ArrowDownIcon className="size-4" />
+      <ArrowDown01Icon className="size-4" />
     </Button>
   );
 };

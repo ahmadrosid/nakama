@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import type * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,7 @@ function DialogContent({
               />
             }
           >
-            <XIcon />
+            <Cancel01Icon />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
