@@ -200,4 +200,116 @@ describe("artifact share routes", () => {
       "inline"
     );
   });
+
+  test("publish prefers clientOrigin over loopback request URL", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_origin";
+    const now = new Date().toISOString();
+
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Share Origin",
+      orgId,
+      systemPrompt: "test",
+      updatedAt: now,
+    });
+
+    const artifactsDir = getProfileArtifactsDir(orgId, profileId);
+    await mkdir(artifactsDir, { recursive: true });
+    await writeFile(join(artifactsDir, "note.md"), "hello", "utf8");
+
+    const publishResponse = await app.fetch(
+      new Request(
+        `http://127.0.0.1:4310/v1/profiles/${profileId}/artifacts/shares`,
+        {
+          body: JSON.stringify({
+            clientOrigin: "https://nakama.example.com/",
+            path: "note.md",
+          }),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
+    );
+
+    expect(publishResponse.status).toBe(201);
+    const published = (await publishResponse.json()) as {
+      shareUrl: string | null;
+      webPublicUrlConfigured: boolean;
+    };
+    expect(published.shareUrl).toMatch(/^https:\/\/nakama\.example\.com\/s\//);
+    expect(published.webPublicUrlConfigured).toBe(true);
+  });
+
+  test("publish prefers configured web public URL over loopback request URL", async () => {
+    const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com/";
+
+    try {
+      const { app, databaseAdapter } = createApp();
+      const session = await setupFreshInstallSession(app, databaseAdapter);
+      const orgId = session.orgId!;
+      const profileId = "profile_share_env";
+      const now = new Date().toISOString();
+
+      await databaseAdapter.upsertProfile({
+        createdAt: now,
+        id: profileId,
+        isSuper: false,
+        model: "openrouter/auto",
+        name: "Share Env",
+        orgId,
+        systemPrompt: "test",
+        updatedAt: now,
+      });
+
+      const artifactsDir = getProfileArtifactsDir(orgId, profileId);
+      await mkdir(artifactsDir, { recursive: true });
+      await writeFile(join(artifactsDir, "note.md"), "hello", "utf8");
+
+      const publishResponse = await app.fetch(
+        new Request(
+          `http://127.0.0.1:4310/v1/profiles/${profileId}/artifacts/shares`,
+          {
+            body: JSON.stringify({ path: "note.md" }),
+            headers: session.headers(
+              {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": session.csrfToken,
+              },
+              orgId
+            ),
+            method: "POST",
+          }
+        )
+      );
+
+      expect(publishResponse.status).toBe(201);
+      const published = (await publishResponse.json()) as {
+        shareUrl: string | null;
+        webPublicUrlConfigured: boolean;
+      };
+      expect(published.shareUrl).toMatch(
+        /^https:\/\/deployed\.example\.com\/s\//
+      );
+      expect(published.webPublicUrlConfigured).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previous;
+      }
+    }
+  });
 });

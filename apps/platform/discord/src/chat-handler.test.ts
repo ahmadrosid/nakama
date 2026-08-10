@@ -163,7 +163,7 @@ describe("createChatHandler artifact delivery", () => {
         dm.sentMessages.some((reply) =>
           reply.includes("https://app.example/s/tok_test")
         )
-      ).toBe(false);
+      ).toBe(true);
     });
   });
 

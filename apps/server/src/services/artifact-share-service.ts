@@ -8,6 +8,7 @@ import {
   readArtifactFile,
   readArtifactShareSnapshot,
   resolveArtifactMimeType,
+  resolveWebPublicUrl,
   writeArtifactShareSnapshot,
 } from "@nakama/core";
 import type {
@@ -18,8 +19,33 @@ import type {
 } from "@nakama/core/contract";
 import type { DatabaseAdapter, StoredArtifactShareRecord } from "@nakama/db";
 import type { AuthService } from "./auth-service";
-import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
+import {
+  isLoopbackComposioCallbackBaseUrl,
+  resolveComposioCallbackBaseUrl,
+} from "./composio-callback-url";
 import { ProfileService } from "./profile-service";
+
+/** Share links must be reachable outside the API host (Discord/Telegram). */
+export function resolveArtifactShareBaseUrl(options: {
+  clientOrigin?: string;
+  request?: Request;
+}): string {
+  const resolved = resolveComposioCallbackBaseUrl({
+    clientOrigin: options.clientOrigin,
+    request: options.request,
+  });
+
+  if (!isLoopbackComposioCallbackBaseUrl(resolved)) {
+    return resolved;
+  }
+
+  const configured = resolveWebPublicUrl();
+  if (configured && !isLoopbackComposioCallbackBaseUrl(configured)) {
+    return configured;
+  }
+
+  return resolved;
+}
 
 export class ArtifactShareService {
   private readonly profileService: ProfileService;
@@ -36,6 +62,7 @@ export class ArtifactShareService {
     profileId: string;
     sourcePath: string;
     userId: string;
+    clientOrigin?: string;
     request?: Request;
   }): Promise<PublishArtifactShareResponse> {
     await this.requireProfile(input.orgId, input.profileId);
@@ -117,9 +144,12 @@ export class ArtifactShareService {
       await this.db.createArtifactShare(record);
     }
 
-    const baseUrl = resolveComposioCallbackBaseUrl({ request: input.request });
+    const baseUrl = resolveArtifactShareBaseUrl({
+      clientOrigin: input.clientOrigin,
+      request: input.request,
+    });
     const webPublicUrlConfigured = Boolean(
-      baseUrl && !baseUrl.includes("127.0.0.1")
+      baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
     );
     const shareUrl = token
       ? `${baseUrl}${buildArtifactSharePath(token)}`
@@ -139,6 +169,7 @@ export class ArtifactShareService {
     orgId: string;
     profileId: string;
     sourcePath: string;
+    clientOrigin?: string;
     request?: Request;
   }): Promise<ArtifactShareStatusResponse | null> {
     await this.requireProfile(input.orgId, input.profileId);
@@ -153,9 +184,12 @@ export class ArtifactShareService {
       return null;
     }
 
-    const baseUrl = resolveComposioCallbackBaseUrl({ request: input.request });
+    const baseUrl = resolveArtifactShareBaseUrl({
+      clientOrigin: input.clientOrigin,
+      request: input.request,
+    });
     const webPublicUrlConfigured = Boolean(
-      baseUrl && !baseUrl.includes("127.0.0.1")
+      baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
     );
 
     return {

@@ -1649,6 +1649,8 @@ export interface DeleteArtifactResponse {
 }
 
 export interface PublishArtifactShareRequest {
+  /** Public web origin for minting share URLs (workers; browsers send Origin). */
+  clientOrigin?: string;
   path: string;
 }
 

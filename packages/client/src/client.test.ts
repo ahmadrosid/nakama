@@ -313,3 +313,63 @@ test("notification destination client methods hit the expected routes", async ()
     "http://localhost:4310/v1/notification-destinations/dest_1"
   );
 });
+
+test("publishProfileArtifactShare includes clientOrigin when configured", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = createClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://127.0.0.1:4310",
+    clientOrigin: "https://nakama.example.com/",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return Response.json({
+        id: "share_1",
+        refreshed: false,
+        sharePath: "/s/tok",
+        shareUrl: "https://nakama.example.com/s/tok",
+        token: "tok",
+        webPublicUrlConfigured: true,
+      });
+    },
+    orgId: "org_test",
+  });
+
+  await client.publishProfileArtifactShare("profile_1", "report.md");
+
+  expect(fetchCalls).toHaveLength(1);
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://127.0.0.1:4310/v1/profiles/profile_1/artifacts/shares"
+  );
+  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+    clientOrigin: "https://nakama.example.com",
+    path: "report.md",
+  });
+});
+
+test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = createClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://127.0.0.1:4310",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return Response.json({
+        id: "share_1",
+        refreshed: false,
+        sharePath: "/s/tok",
+        shareUrl: null,
+        token: "tok",
+        webPublicUrlConfigured: false,
+      });
+    },
+    orgId: "org_test",
+  });
+
+  await client.publishProfileArtifactShare("profile_1", "report.md");
+
+  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+    path: "report.md",
+  });
+});
