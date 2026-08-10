@@ -167,4 +167,33 @@ test("lists sidecar-less artifacts with an inferred mime type", async () => {
   );
 
   expect(summary?.mimeType).toBe("text/markdown");
+  expect(listing.total).toBe(listing.artifacts.length);
+});
+
+test("paginates artifacts with limit and offset", async () => {
+  for (let index = 0; index < 5; index += 1) {
+    await writeArtifact(`file-${index}.txt`, `content ${index}`);
+  }
+
+  const page1 = await listArtifacts(ORG_ID, PROFILE_ID, {
+    limit: 2,
+    offset: 0,
+  });
+  expect(page1.total).toBe(5);
+  expect(page1.artifacts).toHaveLength(2);
+  expect(page1.limit).toBe(2);
+  expect(page1.offset).toBe(0);
+
+  const page2 = await listArtifacts(ORG_ID, PROFILE_ID, {
+    limit: 2,
+    offset: 2,
+  });
+  expect(page2.artifacts).toHaveLength(2);
+  expect(page2.offset).toBe(2);
+
+  const page3 = await listArtifacts(ORG_ID, PROFILE_ID, {
+    limit: 2,
+    offset: 4,
+  });
+  expect(page3.artifacts).toHaveLength(1);
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   legacyArtifactProfileId,
+  parseFilesViewMode,
   resolveFilesProfileId,
 } from "./files-page.shared";
 
@@ -30,5 +31,16 @@ describe("Files profile resolution", () => {
     expect(
       legacyArtifactProfileId("tab=artifacts&profile=missing", profiles)
     ).toBeNull();
+  });
+});
+
+describe("Files view mode", () => {
+  test("accepts list and grid only", () => {
+    expect(parseFilesViewMode("list")).toBe("list");
+    expect(parseFilesViewMode("grid")).toBe("grid");
+    expect(parseFilesViewMode("table")).toBeNull();
+    expect(parseFilesViewMode("")).toBeNull();
+    expect(parseFilesViewMode(null)).toBeNull();
+    expect(parseFilesViewMode(undefined)).toBeNull();
   });
 });

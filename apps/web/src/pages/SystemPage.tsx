@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
 import { ToolsTab } from "@/components/soul-tools/ToolsTab";
@@ -22,6 +23,10 @@ export function SystemPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = resolveSystemTab(searchParams.get("tab"), isPlatformAdmin);
   const visibleTabs = visibleSystemTabs(isPlatformAdmin);
+  const pageHeaderActions =
+    typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLElement>("[data-page-header-actions]");
 
   const setTab = useCallback(
     (nextTab: SystemTabId) => {
@@ -54,41 +59,47 @@ export function SystemPage() {
   }
 
   return (
-    <section className="overflow-hidden rounded-md border border-border bg-card">
-      <div
-        aria-label="System"
-        className="flex shrink-0 border-border border-b px-4 sm:px-5"
-        role="tablist"
-      >
-        {visibleTabs.map((item) => (
-          <SystemTabButton
-            active={tab === item.id}
-            controls={`system-panel-${item.id}`}
-            icon={item.icon}
-            id={`system-tab-${item.id}`}
-            key={item.id}
-            label={item.label}
-            onSelect={() => setTab(item.id)}
-          />
-        ))}
-      </div>
-
-      <div
-        aria-labelledby={`system-tab-${tab}`}
-        id={`system-panel-${tab}`}
-        role="tabpanel"
-      >
-        {tab === "status" ? (
-          <StatusPage embedded />
-        ) : tab === "organization" ? (
-          <OrganizationPanel />
-        ) : tab === "tools" ? (
-          <ToolsTab embedded />
-        ) : (
-          <McpTab embedded />
-        )}
-      </div>
-    </section>
+    <>
+      {pageHeaderActions
+        ? createPortal(
+            <div
+              aria-label="System"
+              className="flex h-full min-w-0 items-stretch"
+              role="tablist"
+            >
+              {visibleTabs.map((item) => (
+                <SystemTabButton
+                  active={tab === item.id}
+                  controls={`system-panel-${item.id}`}
+                  icon={item.icon}
+                  id={`system-tab-${item.id}`}
+                  key={item.id}
+                  label={item.label}
+                  onSelect={() => setTab(item.id)}
+                />
+              ))}
+            </div>,
+            pageHeaderActions
+          )
+        : null}
+      <section className="overflow-hidden rounded-md border border-border bg-card">
+        <div
+          aria-labelledby={`system-tab-${tab}`}
+          id={`system-panel-${tab}`}
+          role="tabpanel"
+        >
+          {tab === "status" ? (
+            <StatusPage embedded />
+          ) : tab === "organization" ? (
+            <OrganizationPanel />
+          ) : tab === "tools" ? (
+            <ToolsTab embedded />
+          ) : (
+            <McpTab embedded />
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -112,7 +123,7 @@ function SystemTabButton({
       aria-controls={controls}
       aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
+        "relative inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground"

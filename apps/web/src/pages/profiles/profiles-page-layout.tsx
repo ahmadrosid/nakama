@@ -1,4 +1,5 @@
 import { Delete02Icon } from "hugeicons-react";
+import { createPortal } from "react-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
@@ -60,6 +61,10 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
+  const pageHeaderActions =
+    typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLElement>("[data-page-header-actions]");
 
   if (profilesLoading && profiles.length === 0) {
     return <PageState message="Loading profiles…" />;
@@ -67,6 +72,69 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
 
   return (
     <div className="space-y-4">
+      {pageHeaderActions && selectedId && detail
+        ? createPortal(
+            <div
+              aria-label="Profile settings"
+              className="no-scrollbar flex h-full min-w-0 items-stretch overflow-x-auto"
+              role="tablist"
+            >
+              <ProfileDetailTabButton
+                active={detailTab === "profile"}
+                controls="profile-detail-panel-profile"
+                id="profile-detail-tab-profile"
+                onSelect={() => setDetailTab("profile")}
+              >
+                Config
+              </ProfileDetailTabButton>
+              <ProfileDetailTabButton
+                active={detailTab === "prompt"}
+                controls="profile-detail-panel-prompt"
+                id="profile-detail-tab-prompt"
+                onSelect={() => setDetailTab("prompt")}
+              >
+                Prompt
+              </ProfileDetailTabButton>
+              {isOrgAdmin ? (
+                <ProfileDetailTabButton
+                  active={detailTab === "proposals"}
+                  controls="profile-detail-panel-proposals"
+                  id="profile-detail-tab-proposals"
+                  onSelect={() => setDetailTab("proposals")}
+                >
+                  Proposals
+                  {pendingSkillProposals > 0 ? (
+                    <span className="text-amber-600 text-xs tabular-nums dark:text-amber-400">
+                      (
+                      {pendingSkillProposals > 99
+                        ? "99+"
+                        : pendingSkillProposals}
+                      )
+                    </span>
+                  ) : null}
+                </ProfileDetailTabButton>
+              ) : null}
+            </div>,
+            pageHeaderActions
+          )
+        : null}
+      {pageHeaderActions && selectedId && detail && !detail.isSuper
+        ? createPortal(
+            <Button
+              aria-label="Delete profile"
+              className="self-center text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() => openDeleteDialog(selectedId)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Delete02Icon aria-hidden className="size-3.5" />
+              <span>Delete</span>
+            </Button>,
+            pageHeaderActions
+          )
+        : null}
       {error ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {error}
@@ -186,96 +254,35 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
                 <PageState embedded message="Loading profile…" />
               </div>
             ) : selectedId && detail ? (
-              <>
-                <div className="flex min-w-0 shrink-0 items-stretch border-border border-b">
-                  <div
-                    aria-label="Profile settings"
-                    className="no-scrollbar flex min-w-0 flex-1 overflow-x-auto px-2 sm:px-3"
-                    role="tablist"
-                  >
-                    <ProfileDetailTabButton
-                      active={detailTab === "profile"}
-                      controls="profile-detail-panel-profile"
-                      id="profile-detail-tab-profile"
-                      onSelect={() => setDetailTab("profile")}
-                    >
-                      Config
-                    </ProfileDetailTabButton>
-                    <ProfileDetailTabButton
-                      active={detailTab === "prompt"}
-                      controls="profile-detail-panel-prompt"
-                      id="profile-detail-tab-prompt"
-                      onSelect={() => setDetailTab("prompt")}
-                    >
-                      Prompt
-                    </ProfileDetailTabButton>
-                    {isOrgAdmin ? (
-                      <ProfileDetailTabButton
-                        active={detailTab === "proposals"}
-                        controls="profile-detail-panel-proposals"
-                        id="profile-detail-tab-proposals"
-                        onSelect={() => setDetailTab("proposals")}
-                      >
-                        Proposals
-                        {pendingSkillProposals > 0 ? (
-                          <span className="text-amber-600 text-xs tabular-nums dark:text-amber-400">
-                            (
-                            {pendingSkillProposals > 99
-                              ? "99+"
-                              : pendingSkillProposals}
-                            )
-                          </span>
-                        ) : null}
-                      </ProfileDetailTabButton>
-                    ) : null}
-                  </div>
-                  {detail.isSuper ? null : (
-                    <div className="flex shrink-0 items-center border-border border-l px-2 sm:px-3">
-                      <Button
-                        aria-label="Delete profile"
-                        className="text-destructive hover:text-destructive max-sm:size-7 max-sm:px-0"
-                        disabled={busy}
-                        onClick={() => openDeleteDialog(selectedId)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Delete02Icon aria-hidden className="size-3.5" />
-                        <span className="hidden sm:inline">Delete</span>
-                      </Button>
-                    </div>
-                  )}
+              detailTab === "profile" ? (
+                <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                  <ProfileConfigTab state={state} />
                 </div>
-                {detailTab === "profile" ? (
-                  <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                    <ProfileConfigTab state={state} />
-                  </div>
-                ) : detailTab === "proposals" &&
-                  isOrgAdmin &&
-                  activeOrg &&
-                  selectedId ? (
-                  <div
-                    aria-labelledby="profile-detail-tab-proposals"
-                    className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
-                    id="profile-detail-panel-proposals"
-                    role="tabpanel"
-                  >
-                    <SkillProposalsPanel
-                      orgId={activeOrg.id}
-                      profileId={selectedId}
-                    />
-                  </div>
-                ) : detailTab === "prompt" ? (
-                  <div
-                    aria-labelledby="profile-detail-tab-prompt"
-                    className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
-                    id="profile-detail-panel-prompt"
-                    role="tabpanel"
-                  >
-                    <SoulTab profileId={selectedId} />
-                  </div>
-                ) : null}
-              </>
+              ) : detailTab === "proposals" &&
+                isOrgAdmin &&
+                activeOrg &&
+                selectedId ? (
+                <div
+                  aria-labelledby="profile-detail-tab-proposals"
+                  className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                  id="profile-detail-panel-proposals"
+                  role="tabpanel"
+                >
+                  <SkillProposalsPanel
+                    orgId={activeOrg.id}
+                    profileId={selectedId}
+                  />
+                </div>
+              ) : detailTab === "prompt" ? (
+                <div
+                  aria-labelledby="profile-detail-tab-prompt"
+                  className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
+                  id="profile-detail-panel-prompt"
+                  role="tabpanel"
+                >
+                  <SoulTab profileId={selectedId} />
+                </div>
+              ) : null
             ) : (
               <div className="flex min-h-48 items-center justify-center p-4 text-muted-foreground text-sm sm:p-5">
                 Select a profile to edit.

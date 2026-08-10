@@ -5,9 +5,9 @@ import type {
 } from "@nakama/core/contract";
 import {
   Delete02Icon,
+  Edit03Icon,
   Key01Icon,
   ListViewIcon,
-  PencilIcon,
 } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
@@ -129,7 +129,7 @@ export function ProviderInstanceCard({
           <div className="flex items-center justify-end gap-0.5">
             {card.isCompatibleLike ? (
               <ProviderActionButton label="Edit" onClick={card.openEdit}>
-                <PencilIcon className="size-3.5" />
+                <Edit03Icon className="size-3.5" />
               </ProviderActionButton>
             ) : null}
             {canManage ? (

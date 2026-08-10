@@ -9,6 +9,7 @@ import {
 import type {
   ArtifactFile,
   DeleteArtifactResponse,
+  ListArtifactsOptions,
   ListArtifactsResponse,
 } from "./contract";
 import { convertDocxToMarkdown } from "./docx-text";
@@ -36,12 +37,13 @@ function isArtifactMetaFile(filename: string): boolean {
 
 export async function listArtifacts(
   orgId: string,
-  profileId: string
+  profileId: string,
+  options: ListArtifactsOptions = {}
 ): Promise<ListArtifactsResponse> {
   const directory = getProfileArtifactsDir(orgId, profileId);
 
   if (!(await pathExists(directory))) {
-    return { artifacts: [], directory, profileId };
+    return { artifacts: [], directory, profileId, total: 0 };
   }
 
   const resolvedDirectory = await realpath(directory);
@@ -50,7 +52,21 @@ export async function listArtifacts(
     right.updatedAt.localeCompare(left.updatedAt)
   );
 
-  return { artifacts, directory: resolvedDirectory, profileId };
+  const total = artifacts.length;
+  const offset = options.offset ?? 0;
+
+  if (options.limit !== undefined) {
+    return {
+      artifacts: artifacts.slice(offset, offset + options.limit),
+      directory: resolvedDirectory,
+      limit: options.limit,
+      offset,
+      profileId,
+      total,
+    };
+  }
+
+  return { artifacts, directory: resolvedDirectory, profileId, total };
 }
 
 async function walkArtifacts(

@@ -320,11 +320,21 @@ export function registerProfileRoutes(
       method: "get",
       operationId: "listProfileArtifacts",
       path: "/v1/profiles/{profileId}/artifacts",
-      request: { params: profileIdParam },
+      request: {
+        params: profileIdParam,
+        query: z.object({
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
+        }),
+      },
       responses: {
         200: {
           content: { "application/json": { schema: listArtifactsSchema } },
           description: "Artifact list",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid pagination",
         },
         500: {
           content: { "application/json": { schema: errorSchema } },
@@ -461,6 +471,37 @@ export function registerProfileRoutes(
         },
       },
       summary: "Delete a knowledge base document",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getKnowledgeBaseDocumentContent",
+      path: "/v1/profiles/{profileId}/knowledge-base/{documentId}/content",
+      request: {
+        params: documentIdParam,
+        query: z.object({
+          inline: z.enum(["0", "1"]).optional(),
+          render: z.enum(["text"]).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "*/*": { schema: z.string() } },
+          description: "Knowledge base document bytes",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary:
+        "Read knowledge base document bytes (render=text returns extracted text for preview)",
       tags: ["Profiles"],
     })
   );
@@ -607,8 +648,34 @@ export function registerProfileRoutes(
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
+    const limitRaw = c.req.query("limit");
+    const offsetRaw = c.req.query("offset");
+
+    if (limitRaw === undefined && offsetRaw !== undefined) {
+      return json({ error: "limit is required when offset is provided" }, 400);
+    }
+
+    const limit =
+      limitRaw === undefined ? undefined : Number.parseInt(limitRaw, 10);
+    const offset =
+      offsetRaw === undefined ? undefined : Number.parseInt(offsetRaw, 10);
+
+    if (
+      limit !== undefined &&
+      (!Number.isFinite(limit) || limit < 1 || limit > 100)
+    ) {
+      return json({ error: "limit must be an integer between 1 and 100" }, 400);
+    }
+
+    if (offset !== undefined && (!Number.isFinite(offset) || offset < 0)) {
+      return json({ error: "offset must be a non-negative integer" }, 400);
+    }
+
     return json<ListArtifactsResponse>(
-      await agent.listProfileArtifacts(orgId, profileId)
+      await agent.listProfileArtifacts(orgId, profileId, {
+        limit,
+        offset,
+      })
     );
   });
 
@@ -690,6 +757,33 @@ export function registerProfileRoutes(
           decodeURIComponent(c.req.param("documentId"))
         )
       );
+    }
+  );
+
+  app.get(
+    "/v1/profiles/:profileId/knowledge-base/:documentId/content",
+    async (c) => {
+      requirePlatformAdminFromContext(c);
+      const orgId = requireActiveOrgIdFromContext(c);
+      const profileId = decodeURIComponent(c.req.param("profileId"));
+      const documentId = decodeURIComponent(c.req.param("documentId"));
+      const render =
+        c.req.query("render") === "text" ? ("text" as const) : undefined;
+      const document = await agent.readKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        documentId,
+        { render }
+      );
+      const downloadName = document.filename.replace(/["\\]/g, "_");
+      const disposition =
+        c.req.query("inline") === "1" ? "inline" : "attachment";
+      return new Response(document.bytes, {
+        headers: {
+          "Content-Disposition": `${disposition}; filename="${downloadName}"`,
+          "Content-Type": document.contentType,
+        },
+      });
     }
   );
 

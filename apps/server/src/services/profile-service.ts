@@ -30,6 +30,7 @@ import {
   listKnowledgeBaseSources,
   NakamaApiError,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
+  readKnowledgeBaseDocumentContent,
   readProfileAvatar,
   deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
   resolveSoulStackForProfile,
@@ -493,6 +494,30 @@ export class ProfileService {
     }
 
     return { deleted: true, documentId, profileId };
+  }
+
+  async readKnowledgeBaseDocument(
+    orgId: string,
+    profileId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    await this.requireProfile(orgId, profileId);
+
+    try {
+      return await readKnowledgeBaseDocumentContent(
+        orgId,
+        profileId,
+        documentId,
+        options
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Knowledge base document not found.";
+      throw new NakamaApiError(message, 404);
+    }
   }
 
   private async resolveNewProfileId(

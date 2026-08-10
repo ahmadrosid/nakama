@@ -460,4 +460,54 @@ describe("profile service knowledge base", () => {
     const afterDelete = await service.listKnowledgeBase(ORG_ID, profileId);
     expect(afterDelete.documents).toHaveLength(0);
   });
+
+  test("readKnowledgeBaseDocument returns preview text and download bytes", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-kb-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
+    const profileId = created.profile.id;
+
+    const uploaded = await service.uploadKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      {
+        data: Buffer.from("project fact", "utf8").toString("base64"),
+        filename: "notes.txt",
+        mediaType: "text/plain",
+      }
+    );
+
+    const preview = await service.readKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      uploaded.document.id,
+      { render: "text" }
+    );
+    expect(preview.contentType).toBe("text/plain");
+    expect(preview.bytes.toString("utf8")).toBe("project fact");
+
+    const download = await service.readKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      uploaded.document.id
+    );
+    expect(download.bytes.toString("utf8")).toBe("project fact");
+  });
+
+  test("readKnowledgeBaseDocument throws for unknown document", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-kb-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
+    const profileId = created.profile.id;
+
+    await expect(
+      service.readKnowledgeBaseDocument(ORG_ID, profileId, "kb_nope", {
+        render: "text",
+      })
+    ).rejects.toThrow(/not found/);
+  });
 });

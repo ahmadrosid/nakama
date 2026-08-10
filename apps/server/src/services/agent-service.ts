@@ -40,6 +40,7 @@ import type {
   ImageGenerationSettingsResponse,
   InitSoulResponse,
   InitUserContextResponse,
+  ListArtifactsOptions,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
@@ -2618,6 +2619,20 @@ export class AgentService {
     );
   }
 
+  async readKnowledgeBaseDocument(
+    orgId: string,
+    profileId: string,
+    documentId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    return this.profileService.readKnowledgeBaseDocument(
+      orgId,
+      profileId,
+      documentId,
+      options
+    );
+  }
+
   async getProfileSoulStatus(
     orgId: string,
     profileId: string,
@@ -2685,10 +2700,11 @@ export class AgentService {
 
   async listProfileArtifacts(
     orgId: string,
-    profileId: string
+    profileId: string,
+    options: ListArtifactsOptions = {}
   ): Promise<ListArtifactsResponse> {
     await this.requireProfile(orgId, profileId);
-    return listArtifacts(orgId, profileId);
+    return listArtifacts(orgId, profileId, options);
   }
 
   async readProfileArtifact(

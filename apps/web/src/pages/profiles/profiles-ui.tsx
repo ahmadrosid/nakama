@@ -41,7 +41,7 @@ export function ProfileDetailTabButton({
       aria-controls={controls}
       aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 font-medium text-sm transition-colors sm:gap-2 sm:px-4",
+        "relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 font-medium text-sm transition-colors sm:gap-2 sm:px-4",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground"

@@ -1,7 +1,7 @@
 import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { ProfileRail } from "@/components/ProfileRail";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
+import { ProfileDetailTabButton } from "@/pages/profiles/profiles-ui";
 
 export function Layout() {
   const location = useLocation();
@@ -140,11 +141,20 @@ export function Layout() {
               <header className="app-shell-header gap-4 bg-card px-6">
                 {page === "automations" ? (
                   <AgentWorkTabs />
-                ) : (
+                ) : page === "files" ? (
+                  <FilesViewTabs />
+                ) : page === "soul" || page === "profiles" ? null : (
                   <h1 className="type-brand min-w-0 truncate">
                     {activeNav?.label}
                   </h1>
                 )}
+                <div
+                  className={cn(
+                    "flex h-full shrink-0 items-stretch gap-2",
+                    page !== "soul" && page !== "profiles" && "ml-auto"
+                  )}
+                  data-page-header-actions
+                />
               </header>
             )}
 
@@ -184,6 +194,46 @@ export function Layout() {
         </div>
       </ActiveChatProfileProvider>
     </TooltipProvider>
+  );
+}
+
+function FilesViewTabs() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view =
+    searchParams.get("tab") === "knowledge" ? "knowledge" : "artifacts";
+
+  function selectView(nextView: "artifacts" | "knowledge") {
+    if (nextView === "artifacts") {
+      searchParams.delete("tab");
+    } else {
+      searchParams.set("tab", nextView);
+    }
+    setSearchParams(searchParams);
+  }
+
+  return (
+    <div
+      aria-label="Files views"
+      className="flex h-full min-w-0 items-stretch"
+      role="tablist"
+    >
+      <ProfileDetailTabButton
+        active={view === "artifacts"}
+        controls="files-page-panel-artifacts"
+        id="files-page-tab-artifacts"
+        onSelect={() => selectView("artifacts")}
+      >
+        Artifacts
+      </ProfileDetailTabButton>
+      <ProfileDetailTabButton
+        active={view === "knowledge"}
+        controls="files-page-panel-knowledge"
+        id="files-page-tab-knowledge"
+        onSelect={() => selectView("knowledge")}
+      >
+        Knowledge base
+      </ProfileDetailTabButton>
+    </div>
   );
 }
 

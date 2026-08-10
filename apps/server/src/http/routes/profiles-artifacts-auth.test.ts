@@ -27,6 +27,7 @@ function createApp() {
       artifacts: [],
       directory: "/tmp/artifacts",
       profileId: "profile_1",
+      total: 0,
     }),
     readProfileArtifact: async (
       _orgId: string,

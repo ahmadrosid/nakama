@@ -143,10 +143,12 @@ export function createMockClient(
     health: async () => ({ ok: true, providerConfigured: false }),
     listProfileArtifacts: async () => {
       calls.listProfileArtifacts += 1;
+      const artifacts = options.listedArtifacts ?? [];
       return {
-        artifacts: options.listedArtifacts ?? [],
+        artifacts,
         directory: "/tmp/artifacts",
         profileId: "default",
+        total: artifacts.length,
       };
     },
     listProfiles: async () =>

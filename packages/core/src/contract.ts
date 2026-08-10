@@ -1628,10 +1628,18 @@ export interface ArtifactFile {
   updatedAt: string;
 }
 
+export interface ListArtifactsOptions {
+  limit?: number;
+  offset?: number;
+}
+
 export interface ListArtifactsResponse {
   artifacts: ArtifactFile[];
   directory: string;
+  limit?: number;
+  offset?: number;
   profileId: string;
+  total: number;
 }
 
 export interface DeleteArtifactResponse {

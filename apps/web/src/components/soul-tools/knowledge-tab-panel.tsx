@@ -10,6 +10,7 @@ import {
   Upload04Icon,
 } from "hugeicons-react";
 import type { RefObject } from "react";
+import { KnowledgeDocumentPreview } from "@/components/soul-tools/knowledge-document-preview";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, KNOWLEDGE_BASE_ACCEPT } from "@/lib/knowledge-base-files";
@@ -197,6 +198,11 @@ export function KnowledgeTabPanel({
                   >
                     {document.status}
                   </span>
+                  <KnowledgeDocumentPreview
+                    className={iconActionHitArea}
+                    document={document}
+                    profileId={profileId ?? ""}
+                  />
                   <Button
                     aria-label={`Delete ${document.filename}`}
                     className={iconActionHitArea}
