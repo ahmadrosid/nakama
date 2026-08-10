@@ -8,9 +8,8 @@ import { AgentService } from "../../services/agent-service";
 import { AuthService } from "../../services/auth-service";
 import type { ComposioApiClient } from "../../services/composio-api-client";
 import { ComposioService } from "../../services/composio-service";
-import { OrgService } from "../../services/org-service";
-import { createHonoApp } from "../app";
-import { loginUserSession } from "../test-session-helpers";
+import { createMinimalHonoApp } from "../test-app-helpers";
+import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 
 const TEST_API_KEY = "ck_test";
 
@@ -43,51 +42,6 @@ function createMockClient(): ComposioApiClient {
   };
 }
 
-async function seedOrgAdmin(
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>
-) {
-  const email = "admin@example.com";
-  const password = "password123";
-  const orgId = "org_test";
-  const now = new Date().toISOString();
-  const authService = new AuthService();
-
-  await databaseAdapter.createUser({
-    createdAt: now,
-    email,
-    id: "user_admin",
-    passwordHash: await authService.hashPassword(password),
-    updatedAt: now,
-  });
-  await databaseAdapter.upsertOrganization({
-    createdAt: now,
-    id: orgId,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
-  await databaseAdapter.upsertOrgMember({
-    createdAt: now,
-    orgId,
-    role: "admin",
-    userId: "user_admin",
-  });
-
-  const profileId = "profile_test";
-  await databaseAdapter.upsertProfile({
-    createdAt: now,
-    id: profileId,
-    isSuper: false,
-    model: "openrouter/auto",
-    name: "Default",
-    orgId,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  });
-
-  return { email, orgId, password, profileId };
-}
-
 async function createApp() {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-route-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -106,30 +60,21 @@ async function createApp() {
     key: TEST_API_KEY,
   };
 
-  return {
-    app: createHonoApp({
-      agent: new AgentService(null, null, databaseAdapter),
-      authService,
-      automationService: {} as any,
-      composioService,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
-    }),
+  return createMinimalHonoApp({
+    agent: new AgentService(null, null, databaseAdapter),
+    authService,
     composioService,
     databaseAdapter,
-  };
+  });
 }
 
 describe("composio routes", () => {
   test("org admin can enable toolkit and assign it to a profile", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId, profileId } =
-      await seedOrgAdmin(databaseAdapter);
+    const { email, password, orgId, profileId } = await seedOrgAdmin(
+      databaseAdapter,
+      { profileId: "profile_test" }
+    );
     const session = await loginUserSession(app, email, password, orgId);
 
     const enableResponse = await app.fetch(
@@ -152,7 +97,7 @@ describe("composio routes", () => {
 
     const assignResponse = await app.fetch(
       new Request(
-        `http://localhost:4310/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
+        `http://localhost:4310/v1/profiles/${encodeURIComponent(profileId!)}/composio-toolkits`,
         {
           body: JSON.stringify({
             assignments: [{ toolkitId: enabled.id }],
@@ -179,7 +124,9 @@ describe("composio routes", () => {
 
   test("org admin can connect an enabled toolkit with their user id", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter);
+    const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
+      profileId: "profile_test",
+    });
     const session = await loginUserSession(app, email, password, orgId);
 
     const enableResponse = await app.fetch(
@@ -223,7 +170,9 @@ describe("composio routes", () => {
 
   test("org member can list toolkits but cannot enable them", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { orgId } = await seedOrgAdmin(databaseAdapter);
+    const { orgId } = await seedOrgAdmin(databaseAdapter, {
+      profileId: "profile_test",
+    });
     const now = new Date().toISOString();
     const authService = new AuthService();
 

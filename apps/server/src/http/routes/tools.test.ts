@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
+import type { DatabaseAdapter } from "@nakama/db";
+import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginPlatformAdminSession,
   loginUserSession,
@@ -12,55 +11,38 @@ import {
 setupTestConfigDir("nakama-tools-route-test-");
 
 function createApp(agentOverrides: Record<string, unknown> = {}) {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  const agent = {
-    getTool: async (toolId: string) => ({
-      tool: {
-        createdAt: new Date().toISOString(),
-        description: "Echo tool",
-        handlerConfig: { modulePath: "echo.js" },
-        handlerType: "javascript",
-        id: toolId,
-        name: "echo",
-        updatedAt: new Date().toISOString(),
-      },
-    }),
-    getToolSource: async () => ({
-      content: "export async function run() {}",
-      language: "javascript" as const,
-      path: "echo.js",
-    }),
-    listTools: async () => ({ tools: [] }),
-    runToolPlayground: async () => ({ ok: true, result: { echo: "hello" } }),
-    suggestToolPlaygroundParams: async () => ({
-      parameters: { query: "hello" },
-    }),
-    ...agentOverrides,
-  };
-
-  return {
-    app: createHonoApp({
-      agent: agent as never,
-      authService,
-      automationService: {} as never,
-      databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
-    }),
-    authService,
-    databaseAdapter,
-  };
+  return createMinimalHonoApp({
+    agent: {
+      getTool: async (toolId: string) => ({
+        tool: {
+          createdAt: new Date().toISOString(),
+          description: "Echo tool",
+          handlerConfig: { modulePath: "echo.js" },
+          handlerType: "javascript",
+          id: toolId,
+          name: "echo",
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+      getToolSource: async () => ({
+        content: "export async function run() {}",
+        language: "javascript" as const,
+        path: "echo.js",
+      }),
+      listTools: async () => ({ tools: [] }),
+      runToolPlayground: async () => ({ ok: true, result: { echo: "hello" } }),
+      suggestToolPlaygroundParams: async () => ({
+        parameters: { query: "hello" },
+      }),
+      ...agentOverrides,
+    },
+  });
 }
 
 async function createOrgAdminSession(
   app: ReturnType<typeof createApp>["app"],
   authService: AuthService,
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  databaseAdapter: DatabaseAdapter,
   slug: string,
   email: string
 ) {

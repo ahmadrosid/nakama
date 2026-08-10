@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
 import { SkillProposalService } from "../../services/skill-proposal-service";
 import { SkillSuggestionService } from "../../services/skill-suggestion-service";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
@@ -24,7 +22,6 @@ Run the deploy checklist before shipping.
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
   const skillsService = new SkillsService(databaseAdapter);
   const skillProposalService = new SkillProposalService(
     databaseAdapter,
@@ -36,24 +33,11 @@ function createApp() {
     skillProposalService
   );
   return {
-    app: createHonoApp({
-      agent: {
-        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
-      } as any,
-      authService,
-      automationService: {} as any,
+    ...createMinimalHonoApp({
       databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
       skillProposalService,
       skillSuggestionService,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
     }),
-    authService,
-    databaseAdapter,
     skillProposalService,
     skillSuggestionService,
     skillsService,

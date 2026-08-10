@@ -2,39 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
 } from "../../services/data-portability";
-import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginPlatformAdminSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-setup-import-routes-test-");
 
 function createApp() {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  const app = createHonoApp({
+  return createMinimalHonoApp({
     agent: {
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       providerConfigured: true,
-    } as any,
-    authService,
-    automationService: {} as any,
-    databaseAdapter,
-    mcpService: {} as any,
-    orgService: new OrgService(databaseAdapter, authService),
-    systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-    taskService: {} as any,
-    webDistDir: null,
-    workerManager: {} as any,
+    },
   });
-
-  return { app, authService, databaseAdapter };
 }
 
 describe("setup import routes", () => {
@@ -86,26 +70,15 @@ describe("setup import routes", () => {
   });
 
   test("setup restore reports requiresRestart false after onDataRestored succeeds", async () => {
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
     let restoredCalls = 0;
-    const app = createHonoApp({
+    const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
         providerConfigured: true,
-      } as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
+      },
       onDataRestored: async () => {
         restoredCalls += 1;
       },
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
@@ -134,25 +107,14 @@ describe("setup import routes", () => {
   });
 
   test("setup restore keeps 200 with requiresRestart when onDataRestored throws", async () => {
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
+    const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
         providerConfigured: true,
-      } as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
+      },
       onDataRestored: async () => {
         throw new Error("reopen failed");
       },
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");

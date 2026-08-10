@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgRole } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
+import type { AuthService } from "../../services/auth-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-rbac-mutations-test-");
@@ -13,8 +11,6 @@ const ORG_ID = "org_test";
 const PASSWORD = "password123";
 
 function createApp() {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
   const calls: string[] = [];
   const record =
     (name: string) =>
@@ -23,7 +19,7 @@ function createApp() {
       return { id: "x", name: "x", prompt: "x" } as any;
     };
 
-  const app = createHonoApp({
+  const result = createMinimalHonoApp({
     agent: {
       draftAutomation: record("agent.draftAutomation"),
       draftTaskPrompt: record("agent.draftTaskPrompt"),
@@ -36,8 +32,7 @@ function createApp() {
         calls.push("agent.runTask");
         return { skipped: false };
       },
-    } as any,
-    authService,
+    },
     automationService: {
       create: record("automationService.create"),
       delete: record("automationService.delete"),
@@ -45,27 +40,21 @@ function createApp() {
       get: async () => ({ id: "a", name: "a", prompt: "x" }),
       listRuns: async () => [{ id: "r", status: "ok" }],
       update: record("automationService.update"),
-    } as any,
-    databaseAdapter,
-    mcpService: {} as any,
-    orgService: new OrgService(databaseAdapter, authService),
-    systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+    },
     taskService: {
       create: record("taskService.create"),
       delete: record("taskService.delete"),
       get: async () => ({ id: "t", status: "todo" }),
       listRuns: async () => [{ id: "r", status: "ok" }],
       update: record("taskService.update"),
-    } as any,
-    webDistDir: null,
-    workerManager: {} as any,
+    },
   });
 
-  return { app, authService, calls, databaseAdapter };
+  return { ...result, calls };
 }
 
 async function seedUser(
-  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  databaseAdapter: ReturnType<typeof createApp>["databaseAdapter"],
   authService: AuthService,
   email: string,
   role: OrgRole

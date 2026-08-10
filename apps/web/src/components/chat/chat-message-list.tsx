@@ -367,6 +367,7 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
+          profileId={profileId}
           segment={segment}
           showThinking={showThinking}
         />

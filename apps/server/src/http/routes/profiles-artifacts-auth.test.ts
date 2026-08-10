@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import type { AuthService as AuthServiceType } from "../../services/auth-service";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginPlatformAdminSession,
   loginUserSession,
@@ -14,8 +11,6 @@ import {
 setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
 
 function createApp() {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
   const readCalls: Array<{ render?: "markdown" }> = [];
   const agent = {
     deleteProfileArtifact: async () => ({
@@ -44,20 +39,7 @@ function createApp() {
   };
 
   return {
-    app: createHonoApp({
-      agent: agent as never,
-      authService,
-      automationService: {} as never,
-      databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
-    }),
-    authService,
-    databaseAdapter,
+    ...createMinimalHonoApp({ agent }),
     readCalls,
   };
 }
