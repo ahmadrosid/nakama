@@ -23,7 +23,7 @@ function ShowMoreArtifactsButton({
   }
 
   return (
-    <div className="border-border border-t px-4 py-3 text-center">
+    <div className="border-border border-t bg-muted/20 px-4 py-3 text-center">
       <Button
         disabled={isLoadingMore}
         onClick={onShowMore}
@@ -35,8 +35,9 @@ function ShowMoreArtifactsButton({
           "Loading…"
         ) : (
           <>
-            Show more (<span className="tabular-nums">{remainingCount}</span>{" "}
-            remaining)
+            Show more
+            <span aria-hidden="true"> · </span>
+            <span className="tabular-nums">{remainingCount}</span> remaining
           </>
         )}
       </Button>
@@ -73,30 +74,6 @@ export function FilesArtifactViews({
   onDelete: (artifact: ArtifactFile) => void;
   onShowMore: () => void;
 }) {
-  if (
-    viewMode === "grid" &&
-    !isLoading &&
-    !error &&
-    filteredArtifacts.length > 0
-  ) {
-    return (
-      <div>
-        <ArtifactGridView
-          artifacts={filteredArtifacts}
-          deletePending={deletePending}
-          onDelete={onDelete}
-          profileId={profileId}
-        />
-        <ShowMoreArtifactsButton
-          hasMore={hasMore}
-          isLoadingMore={isLoadingMore}
-          onShowMore={onShowMore}
-          remainingCount={remainingCount}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-md border border-border">
       {isLoading ? (
@@ -117,6 +94,23 @@ export function FilesArtifactViews({
         <div className="px-4 py-6 text-muted-foreground text-sm">
           {emptyFilterMessage}
         </div>
+      ) : viewMode === "grid" ? (
+        <>
+          <div className="p-4">
+            <ArtifactGridView
+              artifacts={filteredArtifacts}
+              deletePending={deletePending}
+              onDelete={onDelete}
+              profileId={profileId}
+            />
+          </div>
+          <ShowMoreArtifactsButton
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onShowMore={onShowMore}
+            remainingCount={remainingCount}
+          />
+        </>
       ) : (
         <>
           <ArtifactListView
