@@ -70,6 +70,7 @@ export function createFireworksProvider(
       return requestChatCompletion(client, {
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: resolveThinking(input),
         tools: input.tools,
@@ -97,6 +98,7 @@ export function createFireworksProvider(
         handlers,
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: resolveThinking(input),
         tools: input.tools,
@@ -180,22 +182,26 @@ async function requestChatCompletion(
     model: string;
     system: string;
     messages: ChatMessage[];
+    signal?: AbortSignal;
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
   }
 ): Promise<ChatCompletionResult> {
   try {
-    const completion = await client.chat.completions.create({
-      messages: await buildMessages(options.system, options.messages),
-      model: options.model,
-      ...buildThinkingBody(options.thinking),
-      ...(options.tools?.length
-        ? {
-            tool_choice: "auto" as const,
-            tools: toOpenAITools(options.tools),
-          }
-        : {}),
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+    const completion = await client.chat.completions.create(
+      {
+        messages: await buildMessages(options.system, options.messages),
+        model: options.model,
+        ...buildThinkingBody(options.thinking),
+        ...(options.tools?.length
+          ? {
+              tool_choice: "auto" as const,
+              tools: toOpenAITools(options.tools),
+            }
+          : {}),
+      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+      { signal: options.signal }
+    );
 
     const message = completion.choices[0]?.message;
     const toolCalls = parseOpenAIToolCalls(
@@ -232,6 +238,7 @@ async function streamChatCompletion(options: {
   tools?: LlmToolDefinition[];
   thinking?: ProviderChatOptions["thinking"];
   handlers: StreamChatHandlers;
+  signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
   const response = await fetch(
     `${FIREWORKS_INFERENCE_BASE_URL}/chat/completions`,
@@ -254,6 +261,7 @@ async function streamChatCompletion(options: {
         "Content-Type": "application/json",
       },
       method: "POST",
+      signal: options.signal,
     }
   );
 

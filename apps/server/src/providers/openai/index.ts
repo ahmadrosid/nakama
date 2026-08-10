@@ -83,6 +83,7 @@ export function createOpenAIProvider(
       return requestChatCompletion(client, {
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: input.providerOptions?.thinking,
         tools: input.tools,
@@ -120,6 +121,7 @@ export function createOpenAIProvider(
         handlers,
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: input.providerOptions?.thinking,
         tools: input.tools,
@@ -416,6 +418,7 @@ async function requestChatCompletion(
     model: string;
     system: string;
     messages: ChatMessage[];
+    signal?: AbortSignal;
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
   }
@@ -429,6 +432,7 @@ async function requestChatCompletion(
     ),
     headers: buildRequestHeaders(client),
     method: "POST",
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -476,6 +480,7 @@ async function streamChatCompletion(
     model: string;
     system: string;
     messages: ChatMessage[];
+    signal?: AbortSignal;
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
     handlers: StreamChatHandlers;
@@ -496,6 +501,7 @@ async function streamChatCompletion(
     ),
     headers: buildRequestHeaders(client),
     method: "POST",
+    signal: options.signal,
   });
 
   if (!response.ok) {

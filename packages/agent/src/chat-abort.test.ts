@@ -100,6 +100,37 @@ describe("agent chat cancellation", () => {
     expect(getCallCount()).toBe(1);
   });
 
+  test("hands the signal to the provider so the request can be aborted", async () => {
+    const controller = new AbortController();
+    let providerSignal: AbortSignal | undefined;
+
+    const provider: ProviderClient = {
+      generateChat: (input: GenerateChatInput) => {
+        providerSignal = input.signal;
+        return Promise.resolve(callThenReply[1] as ChatCompletionResult);
+      },
+      generateText: () => Promise.resolve({ content: "{}" }),
+      name: "openai",
+      streamChat: (input: GenerateChatInput) => {
+        providerSignal = input.signal;
+        return Promise.resolve(callThenReply[1] as ChatCompletionResult);
+      },
+    };
+
+    const harness = createAgentHarness({ provider, tools: [] });
+    const session = harness.createChatSession({ tools: [] });
+
+    await session.sendStream(
+      "hello",
+      { onChunk: () => {} },
+      { signal: controller.signal }
+    );
+
+    // Without this the provider request outlives the cancel and the session
+    // stays locked until the model finishes on its own.
+    expect(providerSignal).toBe(controller.signal);
+  });
+
   test("runs to completion when nothing aborts", async () => {
     const controller = new AbortController();
     const tool: ToolDefinition = {

@@ -169,6 +169,7 @@ export interface ContinueAnthropicUntilDoneOptions {
   messages: ChatMessage[];
   model: string;
   provider?: ProviderName;
+  signal?: AbortSignal;
   stream: boolean;
   system: string;
   thinking?: GenerateChatInput["providerOptions"];
@@ -199,11 +200,14 @@ export async function continueAnthropicUntilDone(
 
   for (let attempt = 0; attempt < MAX_PAUSE_CONTINUATIONS; attempt += 1) {
     if (options.stream) {
-      const stream = await options.client.messages.create({
-        ...requestBase,
-        messages: apiMessages,
-        stream: true,
-      });
+      const stream = await options.client.messages.create(
+        {
+          ...requestBase,
+          messages: apiMessages,
+          stream: true,
+        },
+        { signal: options.signal }
+      );
 
       const streamed = await readAnthropicStream(stream, options.handlers);
       totalInputTokens += streamed.usage?.inputTokens ?? 0;
@@ -229,10 +233,13 @@ export async function continueAnthropicUntilDone(
       continue;
     }
 
-    const payload = await options.client.messages.create({
-      ...requestBase,
-      messages: apiMessages,
-    });
+    const payload = await options.client.messages.create(
+      {
+        ...requestBase,
+        messages: apiMessages,
+      },
+      { signal: options.signal }
+    );
     totalInputTokens += payload.usage?.input_tokens ?? 0;
     totalOutputTokens += payload.usage?.output_tokens ?? 0;
 

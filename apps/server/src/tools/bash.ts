@@ -121,8 +121,8 @@ export async function runBash(
 
   return runShellCommand(command, cwd, timeoutMs, env, {
     codingAgentMode,
+    signal: context.signal,
     workspaceRoot,
-    ...(context.signal ? { signal: context.signal } : {}),
   });
 }
 
@@ -139,7 +139,7 @@ function runShellCommand(
       env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
       // SIGTERMs the shell when the turn is cancelled, so a stopped chat does not
       // leave an ffmpeg or coding-agent run holding the session turn open.
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: options.signal,
       stdio: ["ignore", "pipe", "pipe"],
     });
 

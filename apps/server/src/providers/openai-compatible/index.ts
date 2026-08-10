@@ -62,6 +62,7 @@ export function createOpenAICompatibleProvider(
       return requestChatCompletion(client, label, {
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
           ? input.providerOptions?.thinking
@@ -93,6 +94,7 @@ export function createOpenAICompatibleProvider(
         label,
         messages: input.messages,
         model,
+        signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
           ? input.providerOptions?.thinking
@@ -193,25 +195,29 @@ async function requestChatCompletion(
     model: string;
     system: string;
     messages: ChatMessage[];
+    signal?: AbortSignal;
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
   }
 ): Promise<ChatCompletionResult> {
   try {
-    const completion = await client.chat.completions.create({
-      messages: await buildMessages(options.system, options.messages),
-      model: options.model,
-      ...buildThinkingBody(options.thinking, {
-        hasTools: Boolean(options.tools?.length),
+    const completion = await client.chat.completions.create(
+      {
+        messages: await buildMessages(options.system, options.messages),
         model: options.model,
-      }),
-      ...(options.tools?.length
-        ? {
-            tool_choice: "auto" as const,
-            tools: toOpenAITools(options.tools),
-          }
-        : {}),
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+        ...buildThinkingBody(options.thinking, {
+          hasTools: Boolean(options.tools?.length),
+          model: options.model,
+        }),
+        ...(options.tools?.length
+          ? {
+              tool_choice: "auto" as const,
+              tools: toOpenAITools(options.tools),
+            }
+          : {}),
+      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+      { signal: options.signal }
+    );
 
     const message = completion.choices[0]?.message;
     const toolCalls = parseOpenAIToolCalls(
@@ -250,6 +256,7 @@ async function streamChatCompletion(options: {
   tools?: LlmToolDefinition[];
   thinking?: ProviderChatOptions["thinking"];
   handlers: StreamChatHandlers;
+  signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
   const response = await fetch(`${options.baseUrl}/chat/completions`, {
     body: JSON.stringify({
@@ -273,6 +280,7 @@ async function streamChatCompletion(options: {
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal: options.signal,
   });
 
   const bodyText = response.ok ? null : await response.text();

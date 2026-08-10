@@ -212,7 +212,10 @@ export function createGeminiProvider(
     generateChat(input: GenerateChatInput) {
       return withGeminiError(async () => {
         const response = await client.models.generateContent({
-          config: buildGeminiChatConfig(input, input.system, model),
+          config: {
+            ...buildGeminiChatConfig(input, input.system, model),
+            abortSignal: input.signal,
+          },
           contents: await toGeminiContents(input.messages),
           model,
         });
@@ -254,7 +257,10 @@ export function createGeminiProvider(
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withGeminiError(async () => {
         const stream = await client.models.generateContentStream({
-          config: buildGeminiChatConfig(input, input.system, model),
+          config: {
+            ...buildGeminiChatConfig(input, input.system, model),
+            abortSignal: input.signal,
+          },
           contents: await toGeminiContents(input.messages),
           model,
         });

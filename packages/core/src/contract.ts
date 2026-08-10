@@ -1831,6 +1831,12 @@ export interface ProviderChatOptions {
 export interface GenerateChatInput {
   messages: ChatMessage[];
   providerOptions?: ProviderChatOptions;
+  /**
+   * Aborts the upstream request when the caller cancels the turn. Providers must
+   * pass it to their HTTP client, otherwise a cancelled chat keeps streaming and
+   * billing until the model finishes.
+   */
+  signal?: AbortSignal;
   system: string;
   tools?: LlmToolDefinition[];
 }

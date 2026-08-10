@@ -286,12 +286,12 @@ export function createAgentChatSession(
         {
           enableToolLoop,
           handlers,
-          ...(streamOptions?.signal ? { signal: streamOptions.signal } : {}),
           onContextUsage: rememberContextUsage,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
           resolvePromptContext: options.resolvePromptContext,
           runCompaction,
+          signal: streamOptions?.signal,
           toolContext,
         }
       );
@@ -486,7 +486,8 @@ async function runConversation(
       providerOptions,
       mode,
       handlers,
-      rehydrateMessagesForProvider
+      rehydrateMessagesForProvider,
+      signal
     );
 
     const usedTokens =
@@ -501,10 +502,10 @@ async function runConversation(
       result.usage && !result.usage.estimated ? "provider" : "estimate"
     );
 
-    // Checked before the push so a cancelled turn leaves no half-written assistant
+    // Backstop for providers that ignore the signal. The in-flight request is
+    // aborted through GenerateChatInput.signal; this only catches the case where
+    // it returned anyway, so a cancelled turn leaves no half-written assistant
     // message and never starts another tool batch.
-    // ponytail: cooperative cancel. The provider HTTP call in flight is not aborted;
-    // pass the signal down to the provider clients if that latency starts to matter.
     signal?.throwIfAborted();
 
     history.push(result.assistantMessage);
@@ -634,7 +635,8 @@ async function generateReply(
   handlers?: StreamHandlers,
   rehydrateMessagesForProvider?: (
     messages: readonly ChatMessage[]
-  ) => Promise<ChatMessage[]>
+  ) => Promise<ChatMessage[]>,
+  signal?: AbortSignal
 ) {
   const dateLine = `Today is ${formatCurrentDate()}.`;
   const messages =
@@ -644,6 +646,7 @@ async function generateReply(
   const input = {
     messages,
     providerOptions,
+    signal,
     system: `${systemPrompt}\n\n${dateLine}`,
     tools,
   };
