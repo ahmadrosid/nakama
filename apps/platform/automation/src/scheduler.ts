@@ -1,12 +1,13 @@
-import type { AutomationSchedule } from "@nakama/core/contract";
+import type { NakamaClient } from "@nakama/client";
 import {
   AutomationScheduler,
   type AutomationSchedulerDelegate,
   type AutomationSchedulerStatus,
 } from "@nakama/core/automation-scheduler";
-import type { NakamaClient } from "@nakama/client";
+import type { AutomationSchedule } from "@nakama/core/contract";
 
-export interface AutomationWorkerSchedulerDelegate extends AutomationSchedulerDelegate {}
+export interface AutomationWorkerSchedulerDelegate
+  extends AutomationSchedulerDelegate {}
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;
@@ -14,12 +15,14 @@ export class AutomationWorkerScheduler {
 
   constructor(
     private readonly client: NakamaClient,
-    private readonly onStatusChange?: (status: AutomationSchedulerStatus) => void,
+    private readonly onStatusChange?: (
+      status: AutomationSchedulerStatus
+    ) => void
   ) {
     this.scheduler = new AutomationScheduler({
+      getDefaultTimezone: () => this.fetchDefaultTimezone(),
       listScheduledAutomations: () => this.fetchSchedules(),
       runAutomation: (id) => this.runAutomation(id),
-      getDefaultTimezone: () => this.fetchDefaultTimezone(),
     });
   }
 
@@ -58,13 +61,15 @@ export class AutomationWorkerScheduler {
     return this.client.listAutomationSchedules();
   }
 
-  private async runAutomation(automationId: string): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  private async runAutomation(
+    automationId: string
+  ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
     try {
       await this.client.runAutomationInternal(automationId);
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { ok: false, error: message };
+      return { error: message, ok: false };
     }
   }
 

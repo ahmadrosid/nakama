@@ -5,7 +5,12 @@ export class NakamaApiError extends Error {
   readonly path?: string;
   readonly profiles?: ProfileRef[];
 
-  constructor(message: string, status: number, path?: string, profiles?: ProfileRef[]) {
+  constructor(
+    message: string,
+    status: number,
+    path?: string,
+    profiles?: ProfileRef[]
+  ) {
     super(message);
     this.name = "NakamaApiError";
     this.status = status;
@@ -84,7 +89,7 @@ export function formatClientError(error: unknown): string {
     return error.message;
   }
 
-    if (error instanceof Error) {
+  if (error instanceof Error) {
     if (isNetworkError(error)) {
       return "Could not reach the Nakama server. Make sure it is running.";
     }
@@ -135,7 +140,9 @@ function extractErrorText(value: unknown): string | null {
 
   if (value && typeof value === "object" && "message" in value) {
     const message = (value as { message?: unknown }).message;
-    return typeof message === "string" && message.trim() ? message.trim() : null;
+    return typeof message === "string" && message.trim()
+      ? message.trim()
+      : null;
   }
 
   return null;

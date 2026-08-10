@@ -2,7 +2,10 @@ function stripMarkdownFences(text: string): string {
   let result = text.trim();
 
   if (result.startsWith("```")) {
-    result = result.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+    result = result
+      .replace(/^```[a-z]*\n?/i, "")
+      .replace(/\n?```$/i, "")
+      .trim();
   }
 
   return result;
@@ -70,7 +73,14 @@ function unwrapPayload(payload: unknown): string | null {
 
   const record = payload as Record<string, unknown>;
 
-  for (const key of ["prompt", "text", "content", "message", "instruction", "instructions"]) {
+  for (const key of [
+    "prompt",
+    "text",
+    "content",
+    "message",
+    "instruction",
+    "instructions",
+  ]) {
     const value = record[key];
 
     if (typeof value === "string" && value.trim()) {
@@ -79,7 +89,8 @@ function unwrapPayload(payload: unknown): string | null {
   }
 
   const stringValues = Object.values(record).filter(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0
   );
 
   if (stringValues.length === 1) {

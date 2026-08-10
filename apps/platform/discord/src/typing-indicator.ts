@@ -1,10 +1,10 @@
 import type { DiscordMessenger } from "./messenger";
 
-const TYPING_REFRESH_MS = 8_000;
+const TYPING_REFRESH_MS = 8000;
 
 export interface TypingLoop {
-  start(): void;
   ping(): void;
+  start(): void;
   stop(): void;
 }
 
@@ -20,6 +20,14 @@ export function createTypingLoop(messenger: DiscordMessenger): TypingLoop {
   }
 
   return {
+    ping() {
+      // Ignore late stream callbacks after stop() so we do not refresh Discord typing.
+      if (!active) {
+        return;
+      }
+
+      void messenger.sendTyping();
+    },
     start() {
       clear();
       active = true;
@@ -32,14 +40,6 @@ export function createTypingLoop(messenger: DiscordMessenger): TypingLoop {
 
         void messenger.sendTyping();
       }, TYPING_REFRESH_MS);
-    },
-    ping() {
-      // Ignore late stream callbacks after stop() so we do not refresh Discord typing.
-      if (!active) {
-        return;
-      }
-
-      void messenger.sendTyping();
     },
     stop() {
       active = false;

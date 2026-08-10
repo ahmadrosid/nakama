@@ -1,7 +1,7 @@
 "use client";
 
+import { Cancel01Icon } from "hugeicons-react";
 import { useState } from "react";
-import { XIcon } from "lucide-react";
 import type { LinkSafetyModalProps } from "streamdown";
 
 import { Button } from "@/components/ui/button";
@@ -51,10 +51,12 @@ function ExternalLinkSafetyModalContent({
 
   return (
     <Dialog
-      open={isOpen}
       onOpenChange={(open) => {
-        if (!open) handleClose();
+        if (!open) {
+          handleClose();
+        }
       }}
+      open={isOpen}
     >
       <DialogContent
         className="flex w-full max-w-md flex-col gap-3 rounded-3xl border bg-background p-6 shadow-lg sm:max-w-md"
@@ -62,7 +64,7 @@ function ExternalLinkSafetyModalContent({
         showCloseButton={false}
       >
         <div className="flex items-center justify-between gap-3">
-          <DialogTitle className="m-0 text-lg leading-none font-semibold text-foreground">
+          <DialogTitle className="m-0 font-semibold text-foreground text-lg leading-none">
             External site
           </DialogTitle>
           <button
@@ -71,13 +73,13 @@ function ExternalLinkSafetyModalContent({
             title="Close"
             type="button"
           >
-            <XIcon className="size-4" />
+            <Cancel01Icon className="size-4" />
             <span className="sr-only">Close</span>
           </button>
         </div>
 
         <div className="flex flex-col gap-2 py-4">
-          <DialogDescription className="m-0 text-sm leading-snug text-muted-foreground">
+          <DialogDescription className="m-0 text-muted-foreground text-sm leading-snug">
             Verify this link is where you&apos;d like to go.{" "}
             <a
               className="underline underline-offset-2 hover:text-foreground"

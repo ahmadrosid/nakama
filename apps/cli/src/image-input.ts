@@ -5,14 +5,16 @@ import { MAX_IMAGE_BYTES } from "@nakama/core";
 const IMAGE_PATH_PATTERN = /^@(\S+)(?:\s+([\s\S]*))?$/;
 
 const EXTENSION_MEDIA_TYPES: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
   ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
   ".webp": "image/webp",
 };
 
-export async function parseImageLine(line: string): Promise<SendMessageInput | null> {
+export async function parseImageLine(
+  line: string
+): Promise<SendMessageInput | null> {
   const match = IMAGE_PATH_PATTERN.exec(line.trim());
 
   if (!match) {
@@ -31,7 +33,7 @@ export async function parseImageLine(line: string): Promise<SendMessageInput | n
 
   if (size > MAX_IMAGE_BYTES) {
     throw new Error(
-      `Image file is too large (${size} bytes). Maximum is ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`,
+      `Image file is too large (${size} bytes). Maximum is ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`
     );
   }
 
@@ -40,14 +42,14 @@ export async function parseImageLine(line: string): Promise<SendMessageInput | n
 
   if (!mediaType) {
     throw new Error(
-      `Unsupported image extension "${extension}". Use .png, .jpg, .gif, or .webp.`,
+      `Unsupported image extension "${extension}". Use .png, .jpg, .gif, or .webp.`
     );
   }
 
   const data = Buffer.from(await file.arrayBuffer()).toString("base64");
-  const images: ImageAttachment[] = [{ mediaType, data }];
+  const images: ImageAttachment[] = [{ data, mediaType }];
 
-  return { message, images };
+  return { images, message };
 }
 
 export function mergeSendInput(
@@ -55,14 +57,14 @@ export function mergeSendInput(
   options: {
     promptImages?: ImageAttachment[];
     fromPath?: SendMessageInput | null;
-  } = {},
+  } = {}
 ): SendMessageInput {
   if (options.fromPath) {
     return options.fromPath;
   }
 
   if (options.promptImages?.length) {
-    return { message: text, images: options.promptImages };
+    return { images: options.promptImages, message: text };
   }
 
   return { message: text };

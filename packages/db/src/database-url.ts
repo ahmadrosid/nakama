@@ -9,7 +9,7 @@ export interface ResolveDatabasePathOptions {
 
 export function resolveDatabasePath(
   databaseUrl: string,
-  options: ResolveDatabasePathOptions = {},
+  options: ResolveDatabasePathOptions = {}
 ): string {
   const trimmed = databaseUrl.trim();
 

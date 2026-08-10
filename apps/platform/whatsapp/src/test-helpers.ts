@@ -1,15 +1,14 @@
-import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import type { NakamaClient } from "@nakama/client";
-import type { ProfileSummary, UserOrgSummary } from "@nakama/core/contract";
+import type { NakamaClient, StreamHandlers } from "@nakama/client";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { StreamHandlers } from "@nakama/client";
+import type { ProfileSummary, UserOrgSummary } from "@nakama/core/contract";
 
 export interface MockStreamControl {
   complete(reply?: string): void;
@@ -29,19 +28,19 @@ export function createMultiTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
   return [
     {
+      createdAt: now,
       id: "org_a",
       name: "Acme",
-      slug: "acme",
       role: "admin",
-      createdAt: now,
+      slug: "acme",
       updatedAt: now,
     },
     {
+      createdAt: now,
       id: "org_b",
       name: "Beta",
-      slug: "beta",
       role: "member",
-      createdAt: now,
+      slug: "beta",
       updatedAt: now,
     },
   ];
@@ -51,11 +50,11 @@ export function createDefaultTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
   return [
     {
+      createdAt: now,
       id: "org_test",
       name: "Test Org",
-      slug: "test-org",
       role: "admin",
-      createdAt: now,
+      slug: "test-org",
       updatedAt: now,
     },
   ];
@@ -68,15 +67,15 @@ export function createMockClient(
     autoComplete?: boolean;
     profiles?: ProfileSummary[];
     orgs?: UserOrgSummary[];
-  } = {},
+  } = {}
 ) {
   const calls = {
-    createSession: 0,
-    sendStream: 0,
     compact: 0,
-    profileIds: [] as string[],
+    createSession: 0,
     listProfiles: 0,
     listUserOrgs: 0,
+    profileIds: [] as string[],
+    sendStream: 0,
     setOrgId: 0,
   };
   const orgIds: string[] = [];
@@ -86,7 +85,7 @@ export function createMockClient(
   const sendStream = async (
     _input: unknown,
     handlers: unknown,
-    streamOptions?: { signal?: AbortSignal },
+    streamOptions?: { signal?: AbortSignal }
   ) => {
     calls.sendStream += 1;
 
@@ -100,34 +99,42 @@ export function createMockClient(
       let settled = false;
 
       streamControl = {
-        get signal() {
-          return streamOptions?.signal;
-        },
         complete(reply = "Agent reply") {
-          if (settled) return;
+          if (settled) {
+            return;
+          }
           settled = true;
           resolve(reply);
         },
         fail(error = new Error("Stream failed")) {
-          if (settled) return;
+          if (settled) {
+            return;
+          }
           settled = true;
           reject(error);
+        },
+        get signal() {
+          return streamOptions?.signal;
         },
       };
 
       streamOptions?.signal?.addEventListener(
         "abort",
         () => {
-          if (settled) return;
+          if (settled) {
+            return;
+          }
           settled = true;
           reject(new DOMException("Aborted", "AbortError"));
         },
-        { once: true },
+        { once: true }
       );
 
       queueMicrotask(() => {
         for (const step of options.steps ?? []) {
-          if (settled) break;
+          if (settled) {
+            break;
+          }
 
           switch (step.type) {
             case "chunk":
@@ -138,16 +145,16 @@ export function createMockClient(
               break;
             case "tool_start":
               streamHandlers.onToolStart?.({
-                toolCallId: "tool_call_1",
-                tool: "todo_write",
                 input: {},
+                tool: "todo_write",
+                toolCallId: "tool_call_1",
               });
               break;
             case "tool_end":
               streamHandlers.onToolEnd?.({
-                toolCallId: "tool_call_1",
-                tool: "todo_write",
                 result: {},
+                tool: "todo_write",
+                toolCallId: "tool_call_1",
               });
               break;
             case "error":
@@ -159,7 +166,11 @@ export function createMockClient(
           }
         }
 
-        if (!settled && options.steps?.length && options.autoComplete !== false) {
+        if (
+          !settled &&
+          options.steps?.length &&
+          options.autoComplete !== false
+        ) {
           streamControl?.complete("Agent reply");
         }
       });
@@ -167,26 +178,40 @@ export function createMockClient(
   };
 
   const session = {
-    id: "session_test",
-    sendStream,
+    clear: async () => {},
     compact: async () => {
       calls.compact += 1;
       return {
         action: "summarized" as const,
-        messagesBefore: 10,
         messagesAfter: 4,
+        messagesBefore: 10,
       };
     },
-    getMessages: async () => [],
-    clear: async () => {},
-    send: async () => "ok",
-    purge: async () => {},
     createAutomation: async () => ({}),
+    getMessages: async () => [],
+    id: "session_test",
+    purge: async () => {},
+    send: async () => "ok",
+    sendStream,
   };
 
   const orgs = options.orgs ?? createDefaultTestOrgs();
 
   const client = {
+    createChatSession: () => session,
+    createSession: async (_channel, options = {}) => {
+      calls.createSession += 1;
+      calls.profileIds.push(options.profileId ?? "default");
+      return session;
+    },
+    getModels: async () => ({
+      currentProviderId: null,
+      displayName: null,
+      models: [],
+      provider: null,
+      providers: [],
+    }),
+    health: async () => ({ ok: true, providerConfigured: false }),
     listProfiles: async () => {
       calls.listProfiles += 1;
       return parseListProfilesResponse({
@@ -201,44 +226,30 @@ export function createMockClient(
       calls.setOrgId += 1;
       orgIds.push(orgId ?? "");
     },
-    createSession: async (_channel, options = {}) => {
-      calls.createSession += 1;
-      calls.profileIds.push(options.profileId ?? "default");
-      return session;
-    },
-    createChatSession: () => session,
-    health: async () => ({ ok: true, providerConfigured: false }),
-    getModels: async () => ({
-      provider: null,
-      currentProviderId: null,
-      providers: [],
-      models: [],
-      displayName: null,
-    }),
   } as unknown as NakamaClient;
 
   assertBridgeClientMethods(client);
 
   return {
-    client,
     calls,
-    orgIds,
+    client,
     getStreamControl: () => streamControl,
+    orgIds,
   };
 }
 
 function createDefaultProfileSummary(): ProfileSummary {
   const now = new Date().toISOString();
   return {
-    id: "default",
-    name: "Default",
-    model: null,
-    isSuper: false,
-    toolCount: 0,
-    mcpServerCount: 0,
-    soulActive: false,
-    hasAvatar: false,
     createdAt: now,
+    hasAvatar: false,
+    id: "default",
+    isSuper: false,
+    mcpServerCount: 0,
+    model: null,
+    name: "Default",
+    soulActive: false,
+    toolCount: 0,
     updatedAt: now,
   };
 }
@@ -250,7 +261,7 @@ export async function writeWhatsAppConfigIni(
     profileId?: string;
     pairingCode?: string | null;
     pairedJid?: string | null;
-  },
+  }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "whatsapp");
   await mkdir(dir, { recursive: true });
@@ -275,7 +286,7 @@ export async function writeWhatsAppConfigIni(
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return new ChannelOrgStore(
-    path.join(homeDir, ".nakama", "whatsapp", "org-selection.json"),
+    path.join(homeDir, ".nakama", "whatsapp", "org-selection.json")
   );
 }
 
@@ -283,7 +294,7 @@ let tempHomeChain: Promise<void> = Promise.resolve();
 
 export async function waitForStreamControl(
   getStreamControl: () => MockStreamControl | null,
-  timeoutMs = 2_000,
+  timeoutMs = 2000
 ): Promise<MockStreamControl> {
   const deadline = Date.now() + timeoutMs;
 
@@ -301,7 +312,7 @@ export async function waitForStreamControl(
 }
 
 export async function withTempHome<T>(
-  run: (homeDir: string) => Promise<T>,
+  run: (homeDir: string) => Promise<T>
 ): Promise<T> {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -312,7 +323,9 @@ export async function withTempHome<T>(
 
   await previous;
 
-  const homeDir = await mkdtemp(path.join(os.tmpdir(), "nakama-whatsapp-home-"));
+  const homeDir = await mkdtemp(
+    path.join(os.tmpdir(), "nakama-whatsapp-home-")
+  );
   const configDir = path.join(homeDir, ".nakama");
   const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -326,7 +339,7 @@ export async function withTempHome<T>(
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
 
-    await rm(homeDir, { recursive: true, force: true });
+    await rm(homeDir, { force: true, recursive: true });
     release();
   }
 }

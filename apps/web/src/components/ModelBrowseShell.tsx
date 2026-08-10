@@ -1,10 +1,10 @@
 import {
+  type CSSProperties,
   Fragment,
+  type ReactNode,
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type ReactNode,
 } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { formatError } from "@/lib/client";
@@ -16,12 +16,12 @@ const MODEL_ROW_OVERSCAN = 6;
 export type BrowseModelBadgeTone = "emerald" | "amber";
 
 export interface BrowseModelRowDisplay {
-  id: string;
-  name: string;
-  description?: string;
-  contextLength?: number;
   badges?: Array<{ label: string; tone: BrowseModelBadgeTone }>;
   capabilities?: Array<"tools" | "vision" | "reasoning">;
+  contextLength?: number;
+  description?: string;
+  id: string;
+  name: string;
 }
 
 export function ModelBrowseShell({
@@ -45,11 +45,11 @@ export function ModelBrowseShell({
 }) {
   return (
     <div className={cn("flex flex-col", className)}>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
         {toolbar}
       </div>
 
-      <div className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
         {status}
       </div>
 
@@ -59,11 +59,11 @@ export function ModelBrowseShell({
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="px-3 py-8 text-center text-sm text-destructive">
+          <div className="px-3 py-8 text-center text-destructive text-sm">
             Failed to load: {formatError(error)}
           </div>
         ) : isEmpty ? (
-          <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+          <div className="px-3 py-8 text-center text-muted-foreground text-sm">
             {emptyMessage}
           </div>
         ) : (
@@ -95,7 +95,9 @@ export function VirtualModelBrowseList<T>({
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     const updateHeight = () => setViewportHeight(element.clientHeight);
     updateHeight();
@@ -107,7 +109,9 @@ export function VirtualModelBrowseList<T>({
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
-    if (!element) return;
+    if (!element) {
+      return;
+    }
     element.scrollTop = 0;
   }, [rows]);
 
@@ -115,19 +119,19 @@ export function VirtualModelBrowseList<T>({
   const visibleCount = Math.ceil(viewportHeight / MODEL_ROW_HEIGHT);
   const startIndex = Math.max(
     0,
-    Math.floor(scrollTop / MODEL_ROW_HEIGHT) - MODEL_ROW_OVERSCAN,
+    Math.floor(scrollTop / MODEL_ROW_HEIGHT) - MODEL_ROW_OVERSCAN
   );
   const endIndex = Math.min(
     rows.length,
-    startIndex + visibleCount + MODEL_ROW_OVERSCAN * 2,
+    startIndex + visibleCount + MODEL_ROW_OVERSCAN * 2
   );
   const visibleRows = rows.slice(startIndex, endIndex);
 
   return (
     <div
-      ref={scrollRef}
       className="h-full overflow-y-auto"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      ref={scrollRef}
     >
       <div className="relative" style={{ height: totalHeight }}>
         {visibleRows.map((row, offset) => (
@@ -144,9 +148,8 @@ export function VirtualModelBrowseList<T>({
 }
 
 const BADGE_TONES: Record<BrowseModelBadgeTone, string> = {
-  emerald:
-    "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
   amber: "bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30",
+  emerald: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
 };
 
 export function BrowseModelRowButton({
@@ -160,31 +163,31 @@ export function BrowseModelRowButton({
 }) {
   return (
     <button
-      type="button"
+      className="absolute top-0 left-0 flex w-full cursor-pointer items-start gap-2.5 border-border border-b px-3 py-2 text-left transition-colors hover:bg-muted"
       onClick={onSelect}
       style={style}
-      className="absolute left-0 top-0 flex w-full cursor-pointer items-start gap-2.5 border-b border-border px-3 py-2 text-left transition-colors hover:bg-muted"
+      type="button"
     >
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium leading-tight text-foreground">
+        <div className="truncate font-medium text-foreground text-sm leading-tight">
           {row.name}
         </div>
         <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
           {row.id}
         </div>
         {row.description ? (
-          <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+          <div className="mt-0.5 line-clamp-1 text-muted-foreground text-xs">
             {row.description}
           </div>
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-xs text-muted-foreground">
+      <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-muted-foreground text-xs">
         <div className="flex items-center gap-1">
           {(row.badges ?? []).map((badge) => (
             <span
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-bold text-[0.6rem] uppercase tracking-wide ${BADGE_TONES[badge.tone]}`}
               key={badge.label}
-              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${BADGE_TONES[badge.tone]}`}
             >
               {badge.label}
             </span>
@@ -201,8 +204,8 @@ export function BrowseModelRowButton({
           <div className="flex gap-1">
             {row.capabilities!.map((capability) => (
               <span
-                key={capability}
                 className="rounded bg-muted px-1 py-0.5 text-[0.6rem]"
+                key={capability}
               >
                 {capability}
               </span>

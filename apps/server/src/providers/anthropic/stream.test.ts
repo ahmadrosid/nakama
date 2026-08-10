@@ -34,7 +34,7 @@ describe("Anthropic provider streaming", () => {
           'event: content_block_delta\r\ndata:{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}\r\n\r\n',
           'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":11}}\r\n\r\n',
         ]),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
       );
     });
 
@@ -48,12 +48,12 @@ describe("Anthropic provider streaming", () => {
     const chunks: string[] = [];
     const result = await provider.streamChat(
       {
+        messages: [{ content: "Say hello", role: "user" }],
         system: "You are helpful.",
-        messages: [{ role: "user", content: "Say hello" }],
       },
       {
         onChunk: (delta) => chunks.push(delta),
-      },
+      }
     );
 
     expect(result.content).toBe("Hello");

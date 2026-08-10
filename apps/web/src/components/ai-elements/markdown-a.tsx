@@ -1,26 +1,31 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { parseYoutubeVideoId } from "@/lib/youtube-url";
 import {
-  useCallback,
-  useContext,
-  useState,
   type ComponentProps,
   type MouseEvent,
   type ReactNode,
+  useCallback,
+  useContext,
+  useState,
 } from "react";
-import { StreamdownContext, type LinkSafetyModalProps } from "streamdown";
-
+import { type LinkSafetyModalProps, StreamdownContext } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
 import { YoutubeEmbed } from "@/components/ai-elements/youtube-embed";
+import { cn } from "@/lib/utils";
+import { parseYoutubeVideoId } from "@/lib/youtube-url";
 
 type MarkdownAProps = ComponentProps<"a"> & {
   node?: unknown;
 };
 
 /** Streamdown `a` override: embed YouTube URLs, keep link-safety for everything else. */
-export function MarkdownA({ href, children, className, node: _node, ...rest }: MarkdownAProps) {
+export function MarkdownA({
+  href,
+  children,
+  className,
+  node: _node,
+  ...rest
+}: MarkdownAProps) {
   const videoId = typeof href === "string" ? parseYoutubeVideoId(href) : null;
   if (videoId) {
     return <YoutubeEmbed videoId={videoId} />;
@@ -45,7 +50,9 @@ function SafeMarkdownLink({
 
   const onClick = useCallback(
     async (event: MouseEvent<HTMLButtonElement>) => {
-      if (!linkSafety?.enabled || !href || incomplete) return;
+      if (!(linkSafety?.enabled && href) || incomplete) {
+        return;
+      }
       event.preventDefault();
       if (linkSafety.onLinkCheck && (await linkSafety.onLinkCheck(href))) {
         window.open(href, "_blank", "noreferrer");
@@ -53,11 +60,13 @@ function SafeMarkdownLink({
       }
       setOpen(true);
     },
-    [href, incomplete, linkSafety],
+    [href, incomplete, linkSafety]
   );
 
   const onConfirm = useCallback(() => {
-    if (href) window.open(href, "_blank", "noreferrer");
+    if (href) {
+      window.open(href, "_blank", "noreferrer");
+    }
   }, [href]);
 
   const onClose = useCallback(() => {
@@ -66,10 +75,10 @@ function SafeMarkdownLink({
 
   if (linkSafety?.enabled && href) {
     const modalProps: LinkSafetyModalProps = {
-      url: href,
       isOpen: open,
       onClose,
       onConfirm,
+      url: href,
     };
 
     return (
@@ -77,7 +86,7 @@ function SafeMarkdownLink({
         <button
           className={cn(
             "wrap-anywhere appearance-none text-left font-medium text-primary underline",
-            className,
+            className
           )}
           data-incomplete={incomplete || undefined}
           data-streamdown="link"
@@ -93,7 +102,10 @@ function SafeMarkdownLink({
 
   return (
     <a
-      className={cn("wrap-anywhere font-medium text-primary underline", className)}
+      className={cn(
+        "wrap-anywhere font-medium text-primary underline",
+        className
+      )}
       data-incomplete={incomplete || undefined}
       data-streamdown="link"
       href={href}
@@ -108,8 +120,10 @@ function SafeMarkdownLink({
 
 function renderLinkSafetyModal(
   renderModal: ((props: LinkSafetyModalProps) => ReactNode) | undefined,
-  props: LinkSafetyModalProps,
+  props: LinkSafetyModalProps
 ): ReactNode {
-  if (renderModal) return renderModal(props);
+  if (renderModal) {
+    return renderModal(props);
+  }
   return <ExternalLinkSafetyModal {...props} />;
 }

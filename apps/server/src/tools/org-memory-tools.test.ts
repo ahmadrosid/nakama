@@ -13,10 +13,13 @@ describe("org memory tools", () => {
     const service = new OrgMemoryService();
     const spy = spyOnSearch(service, "org_a", "Bun");
     const [searchTool] = createOrgMemoryTools(service);
-    const result = await searchTool.run({ query: "Bun" }, context("org_a", "member"));
+    const result = await searchTool.run(
+      { query: "Bun" },
+      context("org_a", "member")
+    );
     expect(result).toEqual({
+      matches: [{ bullet: "we use Bun", source: "live", tier: "pinned" }],
       query: "Bun",
-      matches: [{ source: "live", bullet: "we use Bun", tier: "pinned" }],
     });
     expect(spy.orgId).toBe("org_a");
     expect(spy.query).toBe("Bun");
@@ -26,31 +29,31 @@ describe("org memory tools", () => {
     const service = new OrgMemoryService();
     const [searchTool] = createOrgMemoryTools(service);
     await expect(
-      searchTool.run({ query: "x" }, context("org_a", "viewer")),
+      searchTool.run({ query: "x" }, context("org_a", "viewer"))
     ).rejects.toThrow("Viewers cannot access org memory.");
   });
 
   test("org_memory_search with undefined orgRole throws (deny-by-default)", async () => {
     const service = new OrgMemoryService();
     const [searchTool] = createOrgMemoryTools(service);
-    await expect(searchTool.run({ query: "x" }, context("org_a", undefined))).rejects.toThrow(
-      "organization role",
-    );
+    await expect(
+      searchTool.run({ query: "x" }, context("org_a", undefined))
+    ).rejects.toThrow("organization role");
   });
 
   test("org_memory_search with missing orgId throws", async () => {
     const service = new OrgMemoryService();
     const [searchTool] = createOrgMemoryTools(service);
-    await expect(searchTool.run({ query: "x" }, { orgRole: "member" })).rejects.toThrow(
-      "Organization context is required.",
-    );
+    await expect(
+      searchTool.run({ query: "x" }, { orgRole: "member" })
+    ).rejects.toThrow("Organization context is required.");
   });
 
   test("org_memory_search with empty query throws", async () => {
     const service = new OrgMemoryService();
     const [searchTool] = createOrgMemoryTools(service);
     await expect(
-      searchTool.run({ query: "  " }, context("org_a", "member")),
+      searchTool.run({ query: "  " }, context("org_a", "member"))
     ).rejects.toThrow("query is required.");
   });
 
@@ -66,7 +69,12 @@ describe("org memory tools", () => {
     const proposeTool = createOrgMemoryTools(service)[2];
     const result = await proposeTool.run(
       { bullet: "standups are at 10am UTC" },
-      { ...context("org_a", "member"), profileId: "profile_1", sessionId: "session_1", userId: "user_1" },
+      {
+        ...context("org_a", "member"),
+        profileId: "profile_1",
+        sessionId: "session_1",
+        userId: "user_1",
+      }
     );
     expect(result.outcome).toBe("created");
   });
@@ -75,7 +83,7 @@ describe("org memory tools", () => {
     const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
     const proposeTool = createOrgMemoryTools(service)[2];
     await expect(
-      proposeTool.run({ bullet: "fact" }, context("org_a", "viewer")),
+      proposeTool.run({ bullet: "fact" }, context("org_a", "viewer"))
     ).rejects.toThrow("Viewers cannot access org memory.");
   });
 });
@@ -83,13 +91,18 @@ describe("org memory tools", () => {
 function spyOnSearch(
   service: OrgMemoryService,
   expectedOrgId: string,
-  expectedQuery: string,
+  expectedQuery: string
 ): { orgId: string; query: string } {
   const captured = { orgId: "", query: "" };
   service.search = (async (orgId: string, query: string) => {
     captured.orgId = orgId;
     captured.query = query;
-    return { query, matches: [{ source: "live", bullet: "we use Bun", tier: "pinned" as const }] };
+    return {
+      matches: [
+        { bullet: "we use Bun", source: "live", tier: "pinned" as const },
+      ],
+      query,
+    };
   }) as OrgMemoryService["search"];
   void expectedOrgId;
   void expectedQuery;

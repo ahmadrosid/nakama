@@ -62,12 +62,12 @@ export interface CompactionConfig {
 }
 
 export interface CompactHistoryInput {
+  compaction: CompactionConfig;
+  force?: boolean;
   history: ChatMessage[];
   provider: ProviderClient;
   systemPrompt: string;
   tools?: LlmToolDefinition[];
-  compaction: CompactionConfig;
-  force?: boolean;
 }
 
 function estimateTokens(text: string): number {
@@ -103,7 +103,9 @@ function estimateMessageTokens(messages: readonly ChatMessage[]): number {
 
       if (message.providerContent?.length) {
         total += estimateTokens(
-          JSON.stringify(stripThinkingFromProviderContent(message.providerContent)),
+          JSON.stringify(
+            stripThinkingFromProviderContent(message.providerContent)
+          )
         );
       }
 
@@ -119,7 +121,7 @@ function estimateMessageTokens(messages: readonly ChatMessage[]): number {
 export function estimateHistoryTokens(
   messages: readonly ChatMessage[],
   systemPrompt: string,
-  tools?: LlmToolDefinition[],
+  tools?: LlmToolDefinition[]
 ): number {
   return (
     estimateTokens(systemPrompt) +
@@ -138,7 +140,7 @@ export function usableContextTokens(compaction: CompactionConfig): number {
 
 export function isOverflow(
   usedTokens: number,
-  compaction: CompactionConfig,
+  compaction: CompactionConfig
 ): boolean {
   return usedTokens >= usableContextTokens(compaction);
 }
@@ -153,7 +155,7 @@ function getTurns(messages: readonly ChatMessage[]): Turn[] {
 
   for (let index = 0; index < messages.length; index += 1) {
     if (messages[index]?.role === "user") {
-      turns.push({ start: index, end: messages.length });
+      turns.push({ end: messages.length, start: index });
     }
   }
 
@@ -164,16 +166,20 @@ function getTurns(messages: readonly ChatMessage[]): Turn[] {
   return turns;
 }
 
-function findPreviousSummary(messages: readonly ChatMessage[]): string | undefined {
+function findPreviousSummary(
+  messages: readonly ChatMessage[]
+): string | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
 
-    if (message?.role === "assistant" && message.summary && message.content.trim()) {
+    if (
+      message?.role === "assistant" &&
+      message.summary &&
+      message.content.trim()
+    ) {
       return message.content.trim();
     }
   }
-
-  return undefined;
 }
 
 export function buildCompactionPrompt(previousSummary?: string): string {
@@ -192,7 +198,7 @@ export function buildCompactionPrompt(previousSummary?: string): string {
 
 export function selectCompactionRange(
   messages: readonly ChatMessage[],
-  tailTurns = TAIL_TURNS,
+  tailTurns = TAIL_TURNS
 ): { head: ChatMessage[]; tailStartIndex: number } {
   const turns = getTurns(messages);
 
@@ -212,13 +218,19 @@ export function selectCompactionRange(
   };
 }
 
-export function pruneToolOutputs(messages: ChatMessage[]): { prunedTokens: number } {
+export function pruneToolOutputs(messages: ChatMessage[]): {
+  prunedTokens: number;
+} {
   let total = 0;
   let pruned = 0;
   const toPrune: Extract<ChatMessage, { role: "tool" }>[] = [];
   let turns = 0;
 
-  loop: for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const message = messages[messageIndex];
 
     if (!message) {
@@ -234,7 +246,7 @@ export function pruneToolOutputs(messages: ChatMessage[]): { prunedTokens: numbe
     }
 
     if (message.role === "assistant" && message.summary) {
-      break loop;
+      break;
     }
 
     if (message.role !== "tool") {
@@ -242,7 +254,7 @@ export function pruneToolOutputs(messages: ChatMessage[]): { prunedTokens: numbe
     }
 
     if (message.content === PRUNE_TRUNCATION) {
-      break loop;
+      break;
     }
 
     const estimate = estimateTokens(message.content);
@@ -268,14 +280,14 @@ export function pruneToolOutputs(messages: ChatMessage[]): { prunedTokens: numbe
 }
 
 export async function compactHistory(
-  input: CompactHistoryInput,
+  input: CompactHistoryInput
 ): Promise<CompactionResponse> {
   const messagesBefore = input.history.length;
   const { prunedTokens } = pruneToolOutputs(input.history);
   const usedTokens = estimateHistoryTokens(
     input.history,
     input.systemPrompt,
-    input.tools,
+    input.tools
   );
   const overflow = isOverflow(usedTokens, input.compaction);
   const shouldSummarize = input.force === true || overflow;
@@ -283,9 +295,9 @@ export async function compactHistory(
   if (!shouldSummarize) {
     return {
       action: prunedTokens > 0 ? "pruned" : "none",
-      prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
-      messagesBefore,
       messagesAfter: input.history.length,
+      messagesBefore,
+      prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
     };
   }
 
@@ -294,25 +306,25 @@ export async function compactHistory(
   if (head.length === 0) {
     return {
       action: prunedTokens > 0 ? "pruned" : "none",
-      prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
-      messagesBefore,
       messagesAfter: input.history.length,
+      messagesBefore,
+      prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
     };
   }
 
   const previousSummary = findPreviousSummary(head);
   const compactionPrompt = buildCompactionPrompt(previousSummary);
   const result = await input.provider.generateChat({
-    system: COMPACTION_SYSTEM,
     messages: [
       ...stripImagesForCompaction(head),
-      { role: "user", content: compactionPrompt },
+      { content: compactionPrompt, role: "user" },
     ],
+    system: COMPACTION_SYSTEM,
   });
 
   const summaryMessage: Extract<ChatMessage, { role: "assistant" }> = {
-    role: "assistant",
     content: result.content.trim() || result.assistantMessage.content.trim(),
+    role: "assistant",
     summary: true,
   };
 
@@ -321,8 +333,8 @@ export async function compactHistory(
 
   return {
     action: "summarized",
-    prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
-    messagesBefore,
     messagesAfter: input.history.length,
+    messagesBefore,
+    prunedTokens: prunedTokens > 0 ? prunedTokens : undefined,
   };
 }

@@ -1,14 +1,20 @@
 import { createClient } from "@nakama/client";
-import { ChannelOrgStore, getChannelOrgSelectionPath } from "@nakama/core/channel-org";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
-import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { resolveWebPublicUrl } from "@nakama/core/runtime";
+import {
+  ChannelOrgStore,
+  getChannelOrgSelectionPath,
+} from "@nakama/core/channel-org";
 import {
   clearDiscordWorkerHeartbeat,
   isHeartbeatAlive,
   readDiscordWorkerHeartbeat,
   writeDiscordWorkerHeartbeat,
 } from "@nakama/core/discord-worker";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
+import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { DiscordAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
@@ -38,7 +44,7 @@ try {
   ) {
     console.error(
       `Another Nakama Discord bridge is already running (pid ${existingHeartbeat.pid}). ` +
-        "Stop the existing bridge worker or disable it in the dashboard before starting a new one.",
+        "Stop the existing bridge worker or disable it in the dashboard before starting a new one."
     );
     process.exit(1);
   }
@@ -48,15 +54,16 @@ try {
   spawnedChild = child;
 
   const client = createClient({
+    authToken:
+      (await loadLocalAuthToken("discord@nakama.internal")) ?? undefined,
     baseUrl: serverUrl,
-    authToken: (await loadLocalAuthToken("discord@nakama.internal")) ?? undefined,
     clientOrigin: resolveWebPublicUrl(),
   });
   const health = await client.health();
 
   if (!health.providerConfigured) {
     console.warn(
-      "Server has no provider configured. Chat runs in offline mode until an API key is set.",
+      "Server has no provider configured. Chat runs in offline mode until an API key is set."
     );
   }
 
@@ -67,7 +74,7 @@ try {
     console.error(
       `Nakama API authentication failed: ${message}\n` +
         "Restart the server so it can provision the local client user:\n" +
-        "  bun run dev:server",
+        "  bun run dev:server"
     );
     process.exit(1);
   }
@@ -85,11 +92,11 @@ try {
   await authStore.reload();
 
   const discord = await createBot(config, {
-    client,
     authStore,
+    client,
+    orgStore,
     sessionStore,
     threadStore,
-    orgStore,
   });
 
   console.log("Nakama Discord bridge running.");
@@ -98,16 +105,26 @@ try {
   const authConfig = authStore.getConfig();
   const paired = authConfig?.pairedUserIds.length ?? 0;
   const pendingHandshake = authConfig?.handshakeCode ? "yes" : "no";
-  console.log(`Paired users: ${paired} · Pending handshake: ${pendingHandshake}`);
+  console.log(
+    `Paired users: ${paired} · Pending handshake: ${pendingHandshake}`
+  );
   console.log(`Bot: ${discord.user.tag}`);
 
   clientStop = () => {
     void discord.destroy();
   };
 
-  await writeDiscordWorkerHeartbeat(process.pid, new Date().toISOString(), true);
+  await writeDiscordWorkerHeartbeat(
+    process.pid,
+    new Date().toISOString(),
+    true
+  );
   heartbeatTimer = setInterval(() => {
-    void writeDiscordWorkerHeartbeat(process.pid, new Date().toISOString(), true);
+    void writeDiscordWorkerHeartbeat(
+      process.pid,
+      new Date().toISOString(),
+      true
+    );
   }, 15_000);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

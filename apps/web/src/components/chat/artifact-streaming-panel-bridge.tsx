@@ -1,43 +1,47 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
-import { artifactPanelDefaultWidth, artifactPanelBodyClassName, artifactPanelSubtitle } from "@/components/chat/artifact-attachment-panel-body.shared";
+import {
+  artifactPanelBodyClassName,
+  artifactPanelDefaultWidth,
+  artifactPanelSubtitle,
+} from "@/components/chat/artifact-attachment-panel-body.shared";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
-  findCompletedContentArtifact,
-  findLatestStreamingArtifact,
-} from "@/lib/chat-stream-artifact";
-import {
   artifactCodeLanguage,
+  type ChatArtifactRef,
   inferArtifactMimeType,
   isDocxFile,
   isHtmlArtifactMimeType,
   isLegacyDocFile,
   isMarkdownArtifactMimeType,
-  type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
+import {
+  findCompletedContentArtifact,
+  findLatestStreamingArtifact,
+} from "@/lib/chat-stream-artifact";
 import { client, formatError } from "@/lib/client";
 
 interface EligibleStreamTarget {
-  toolCallId: string;
   relativePath: string;
   tool: string;
+  toolCallId: string;
 }
 
 function buildStreamingArtifactRef(
   filename: string,
   relativePath: string,
-  tool: string,
+  tool: string
 ): ChatArtifactRef {
   return {
     filename,
-    path: relativePath,
     mimeType:
       tool === "write_docx"
         ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         : inferArtifactMimeType(filename),
-    sizeBytes: 0,
+    path: relativePath,
     savedAt: "",
+    sizeBytes: 0,
   };
 }
 
@@ -50,21 +54,22 @@ function buildStreamingPanelBody({
 }) {
   const mimeType = artifact.mimeType;
   const isWordDocument =
-    isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
+    isDocxFile(artifact.filename, mimeType) ||
+    isLegacyDocFile(artifact.filename, mimeType);
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
   const language = artifactCodeLanguage(artifact.filename);
 
   return (
     <ArtifactAttachmentPanelBody
-      kind="text"
+      artifact={artifact}
+      canPreview
+      content={content || null}
+      error={null}
       format={isMarkdown && !isHtml ? "markdown" : "plain"}
+      kind="text"
       language={language}
       loading={false}
-      error={null}
-      content={content || null}
-      canPreview
-      artifact={artifact}
       streaming
     />
   );
@@ -79,32 +84,33 @@ function buildStablePanelBody({
 }) {
   const mimeType = artifact.mimeType;
   const isWordDocument =
-    isDocxFile(artifact.filename, mimeType) || isLegacyDocFile(artifact.filename, mimeType);
+    isDocxFile(artifact.filename, mimeType) ||
+    isLegacyDocFile(artifact.filename, mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
 
   if (isHtmlArtifactMimeType(mimeType)) {
     return (
       <ArtifactAttachmentPanelBody
+        artifact={artifact}
+        canPreview
+        content={content}
+        error={null}
         kind="html"
         loading={false}
-        error={null}
-        content={content}
-        canPreview
-        artifact={artifact}
       />
     );
   }
 
   return (
     <ArtifactAttachmentPanelBody
-      kind="text"
+      artifact={artifact}
+      canPreview
+      content={content}
+      error={null}
       format={isMarkdown ? "markdown" : "plain"}
+      kind="text"
       language={artifactCodeLanguage(artifact.filename)}
       loading={false}
-      error={null}
-      content={content}
-      canPreview
-      artifact={artifact}
     />
   );
 }
@@ -122,20 +128,29 @@ export function ArtifactStreamingPanelBridge({
   const lastEligibleRef = useRef<EligibleStreamTarget | null>(null);
   const handedOffRef = useRef(new Set<string>());
   const autoWidthAppliedRef = useRef(new Set<string>());
-  const streaming = useMemo(() => findLatestStreamingArtifact(messages), [messages]);
+  const streaming = useMemo(
+    () => findLatestStreamingArtifact(messages),
+    [messages]
+  );
 
   useEffect(() => {
     if (streaming?.parsed.eligible && streaming.parsed.relativePath) {
       lastEligibleRef.current = {
-        toolCallId: streaming.toolCallId,
         relativePath: streaming.parsed.relativePath,
         tool: streaming.tool,
+        toolCallId: streaming.toolCallId,
       };
     }
   }, [streaming]);
 
   useEffect(() => {
-    if (!profileId || !streaming?.parsed.eligible || !streaming.parsed.relativePath) {
+    if (
+      !(
+        profileId &&
+        streaming?.parsed.eligible &&
+        streaming.parsed.relativePath
+      )
+    ) {
       return;
     }
 
@@ -149,13 +164,16 @@ export function ArtifactStreamingPanelBridge({
     const artifact = buildStreamingArtifactRef(
       filename,
       streaming.parsed.relativePath,
-      streaming.tool,
+      streaming.tool
     );
     const body = buildStreamingPanelBody({
       artifact,
       content: streaming.parsed.content ?? "",
     });
-    const defaultWidth = artifactPanelDefaultWidth(artifact.filename, artifact.mimeType);
+    const defaultWidth = artifactPanelDefaultWidth(
+      artifact.filename,
+      artifact.mimeType
+    );
     const subtitle = artifactPanelSubtitle({
       mimeType: artifact.mimeType,
       streaming: true,
@@ -164,7 +182,8 @@ export function ArtifactStreamingPanelBridge({
     const isWordDocument =
       isDocxFile(artifact.filename, artifact.mimeType) ||
       isLegacyDocFile(artifact.filename, artifact.mimeType);
-    const isMarkdown = isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
+    const isMarkdown =
+      isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
     const bodyClassName = artifactPanelBodyClassName({
       isHtml,
       isImage: false,
@@ -181,10 +200,10 @@ export function ArtifactStreamingPanelBridge({
 
     if (activeId === panelId) {
       update(panelId, {
-        title: filename,
-        subtitle,
-        content: body,
         bodyClassName,
+        content: body,
+        subtitle,
+        title: filename,
         ...widthPatch,
       });
       return;
@@ -199,18 +218,18 @@ export function ArtifactStreamingPanelBridge({
       autoWidthAppliedRef.current.add(panelId);
     }
     show({
-      id: panelId,
-      title: filename,
-      subtitle,
-      defaultWidth,
-      resizable: true,
-      fullscreen: false,
       bodyClassName,
       content: body,
+      defaultWidth,
+      fullscreen: false,
+      id: panelId,
       onClose: () => {
         dismissedRef.current.add(panelId);
         openedRef.current = null;
       },
+      resizable: true,
+      subtitle,
+      title: filename,
     });
   }, [activeId, profileId, show, streaming, update]);
 
@@ -221,7 +240,10 @@ export function ArtifactStreamingPanelBridge({
       return null;
     }
 
-    if (activeId !== candidate.toolCallId && openedRef.current !== candidate.toolCallId) {
+    if (
+      activeId !== candidate.toolCallId &&
+      openedRef.current !== candidate.toolCallId
+    ) {
       return null;
     }
 
@@ -229,7 +251,7 @@ export function ArtifactStreamingPanelBridge({
   }, [activeId, messages]);
 
   useEffect(() => {
-    if (!profileId || !handoffTarget) {
+    if (!(profileId && handoffTarget)) {
       return;
     }
 
@@ -252,25 +274,22 @@ export function ArtifactStreamingPanelBridge({
         }
 
         const text = new TextDecoder().decode(response.data);
-        const filename = handoffTarget.relativePath.split("/").pop() ?? handoffTarget.relativePath;
+        const filename =
+          handoffTarget.relativePath.split("/").pop() ??
+          handoffTarget.relativePath;
         const artifact = buildStreamingArtifactRef(
           filename,
           handoffTarget.relativePath,
-          handoffTarget.tool,
+          handoffTarget.tool
         );
         const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
         const isWordDocument =
           isDocxFile(artifact.filename, artifact.mimeType) ||
           isLegacyDocFile(artifact.filename, artifact.mimeType);
-        const isMarkdown = isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
+        const isMarkdown =
+          isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
 
         update(handoffTarget.toolCallId, {
-          title: filename,
-          subtitle: artifactPanelSubtitle({
-            mimeType: artifact.mimeType,
-            sizeBytes: new TextEncoder().encode(text).byteLength,
-          }),
-          defaultWidth: artifactPanelDefaultWidth(artifact.filename, artifact.mimeType),
           bodyClassName: artifactPanelBodyClassName({
             isHtml,
             isImage: false,
@@ -280,6 +299,15 @@ export function ArtifactStreamingPanelBridge({
             artifact,
             content: text,
           }),
+          defaultWidth: artifactPanelDefaultWidth(
+            artifact.filename,
+            artifact.mimeType
+          ),
+          subtitle: artifactPanelSubtitle({
+            mimeType: artifact.mimeType,
+            sizeBytes: new TextEncoder().encode(text).byteLength,
+          }),
+          title: filename,
         });
       })
       .catch((error) => {
@@ -289,7 +317,7 @@ export function ArtifactStreamingPanelBridge({
 
         update(handoffTarget.toolCallId, {
           content: (
-            <p className="p-4 text-sm text-destructive">{formatError(error)}</p>
+            <p className="p-4 text-destructive text-sm">{formatError(error)}</p>
           ),
         });
       });

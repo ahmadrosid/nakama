@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import type { StoredToolRecord } from "@nakama/db";
 import {
   loadJavascriptTool,
@@ -10,7 +10,10 @@ import {
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
-async function setupToolsDir(): Promise<{ configDir: string; toolsDir: string }> {
+async function setupToolsDir(): Promise<{
+  configDir: string;
+  toolsDir: string;
+}> {
   const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
   const toolsDir = path.join(configDir, "tools");
@@ -29,7 +32,7 @@ describe("javascript tool loader", () => {
     }
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
   });
@@ -51,16 +54,16 @@ export async function run(input) {
   return { echoed: input.message };
 }
 `,
-      "utf8",
+      "utf8"
     );
 
     const record: StoredToolRecord = {
+      createdAt: new Date().toISOString(),
+      description: "Echo a message",
+      handlerConfig: { modulePath: "echo.js" },
+      handlerType: "javascript",
       id: "tool_echo",
       name: "echo",
-      description: "Echo a message",
-      handlerType: "javascript",
-      handlerConfig: { modulePath: "echo.js" },
-      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -86,16 +89,16 @@ export async function run(input) {
   return { echoed: input.message };
 }
 `,
-      "utf8",
+      "utf8"
     );
 
     const record: StoredToolRecord = {
+      createdAt: new Date().toISOString(),
+      description: "Parallel-safe echo",
+      handlerConfig: { modulePath: "parallel-echo.js" },
+      handlerType: "javascript",
       id: "tool_parallel_echo",
       name: "parallel_echo",
-      description: "Parallel-safe echo",
-      handlerType: "javascript",
-      handlerConfig: { modulePath: "parallel-echo.js" },
-      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -109,7 +112,7 @@ export async function run(input) {
     configDir = dir;
 
     expect(() => resolveJavascriptModulePath("../escape.js")).toThrow(
-      /must stay inside/i,
+      /must stay inside/i
     );
   });
 
@@ -118,12 +121,12 @@ export async function run(input) {
     configDir = dir;
 
     const record: StoredToolRecord = {
+      createdAt: new Date().toISOString(),
+      description: "Missing module",
+      handlerConfig: { modulePath: "missing.js" },
+      handlerType: "javascript",
       id: "tool_missing",
       name: "missing",
-      description: "Missing module",
-      handlerType: "javascript",
-      handlerConfig: { modulePath: "missing.js" },
-      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -145,7 +148,7 @@ describe("tool resolver", () => {
     }
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
   });
@@ -160,18 +163,18 @@ describe("tool resolver", () => {
   return { sum: Number(input.a) + Number(input.b) };
 }
 `,
-      "utf8",
+      "utf8"
     );
 
     const { resolveToolsFromStorage } = await import("./tool-resolver");
     const tools = await resolveToolsFromStorage([
       {
+        createdAt: new Date().toISOString(),
+        description: "Add two numbers",
+        handlerConfig: { modulePath: "adder.js" },
+        handlerType: "javascript",
         id: "tool_adder",
         name: "adder",
-        description: "Add two numbers",
-        handlerType: "javascript",
-        handlerConfig: { modulePath: "adder.js" },
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
     ]);
@@ -184,12 +187,12 @@ describe("tool resolver", () => {
     const { resolveToolsFromStorage } = await import("./tool-resolver");
     const tools = await resolveToolsFromStorage([
       {
+        createdAt: new Date().toISOString(),
+        description: "Unsupported tool",
+        handlerConfig: {},
+        handlerType: "custom",
         id: "tool_legacy_custom",
         name: "legacy-custom",
-        description: "Unsupported tool",
-        handlerType: "custom",
-        handlerConfig: {},
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
     ]);

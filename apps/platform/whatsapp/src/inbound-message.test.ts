@@ -25,8 +25,8 @@ describe("inbound message routing", () => {
           key: { fromMe: true, remoteJid: "236283431522503@lid" },
           message: { conversation: "hello" },
         },
-        me,
-      ),
+        me
+      )
     ).toBe(true);
     expect(isSelfWhatsAppChat("236283431522503@lid", me)).toBe(true);
   });
@@ -38,8 +38,8 @@ describe("inbound message routing", () => {
           key: { fromMe: true, remoteJid: "9999999999@s.whatsapp.net" },
           message: { conversation: "hello" },
         },
-        { id: "6281379292556@s.whatsapp.net", lid: "236283431522503@lid" },
-      ),
+        { id: "6281379292556@s.whatsapp.net", lid: "236283431522503@lid" }
+      )
     ).toBe(false);
   });
 
@@ -53,16 +53,14 @@ describe("inbound message routing", () => {
             },
           },
         },
-      } as any),
+      } as any)
     ).toBe("hello from wrapper");
   });
 
   test("extracts text from protobuf-like messages that only expose text via JSON", () => {
     const payload = {
       extendedTextMessage: {
-        get text() {
-          return undefined;
-        },
+        get text() {},
         toJSON() {
           return { text: "hi from toJSON" };
         },

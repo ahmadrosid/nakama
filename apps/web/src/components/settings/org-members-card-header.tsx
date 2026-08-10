@@ -1,9 +1,17 @@
-import { useState } from "react";
 import type { OrgRole } from "@nakama/core/contract";
-import { CheckIcon, CopyIcon, UserPlusIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  UserAdd01Icon,
+} from "hugeicons-react";
+import { useState } from "react";
 import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function OrgMembersCardHeader({
   orgId,
@@ -45,48 +53,53 @@ export function OrgMembersCardHeader({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-sm font-medium leading-none text-foreground">Organization</span>
-        <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-[11px] leading-none text-foreground sm:max-w-xs">
+        <span className="shrink-0 font-medium text-foreground text-sm leading-none">
+          Organization
+        </span>
+        <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-[11px] text-foreground leading-none sm:max-w-xs">
           {orgId}
         </code>
         <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          className="size-7 shrink-0"
           aria-label={copiedOrgId ? "Copied org ID" : "Copy org ID"}
+          className="size-7 shrink-0"
           onClick={() => void handleCopyOrgId()}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
         >
           {copiedOrgId ? (
-            <CheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <CheckmarkCircle01Icon
+              aria-hidden
+              className="size-3.5 text-emerald-600 dark:text-emerald-400"
+            />
           ) : (
-            <CopyIcon className="size-3.5" aria-hidden />
+            <Copy01Icon aria-hidden className="size-3.5" />
           )}
         </Button>
       </div>
       <div className="flex items-center gap-1">
         <OrgMemberInvitePopover
-          open={inviteOpen}
+          formError={inviteFormError}
           inviteEmail={inviteEmail}
           inviteRole={inviteRole}
-          formError={inviteFormError}
-          pending={invitePending}
-          onOpenChange={onInviteOpenChange}
           onInviteEmailChange={onInviteEmailChange}
           onInviteRoleChange={onInviteRoleChange}
+          onOpenChange={onInviteOpenChange}
           onSubmit={onInviteSubmit}
+          open={inviteOpen}
+          pending={invitePending}
         />
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
                 aria-label="Add member"
                 onClick={onAddMember}
+                size="icon-sm"
+                type="button"
+                variant="outline"
               >
-                <UserPlusIcon className="size-3.5" aria-hidden />
+                <UserAdd01Icon aria-hidden className="size-3.5" />
               </Button>
             }
           />
@@ -111,7 +124,7 @@ export function OrgMembersSecretBanner({
   return (
     <div className="space-y-2 px-4 py-3">
       {secretHint ? (
-        <p className="text-xs text-emerald-200" role="status">
+        <p className="text-emerald-200 text-xs" role="status">
           {secretHint}
         </p>
       ) : null}
@@ -120,13 +133,13 @@ export function OrgMembersSecretBanner({
           {secretValue}
         </code>
         <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
           aria-label="Copy"
           onClick={onCopy}
+          size="icon-sm"
+          type="button"
+          variant="outline"
         >
-          <CopyIcon className="size-3.5" />
+          <Copy01Icon className="size-3.5" />
         </Button>
       </div>
     </div>

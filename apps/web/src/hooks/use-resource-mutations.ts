@@ -1,4 +1,4 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   AgentChannel,
   CreateProfileRequest,
@@ -8,9 +8,14 @@ import type {
   UpdateProfileRequest,
   UserContextStatusResponse,
 } from "@nakama/core/contract";
-import { NakamaApiError } from "@nakama/core/api-error";
-import { client } from "@/lib/client";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { HISTORY_SESSION_CHANNELS } from "@/lib/chat-history";
+import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
@@ -18,7 +23,7 @@ const EMPTY_USER_CONTEXT: UserContextStatusResponse = {
 };
 
 async function fetchUserContext(
-  includeContent?: boolean,
+  includeContent?: boolean
 ): Promise<UserContextStatusResponse> {
   try {
     return await client.getUserContext({ includeContent });
@@ -39,8 +44,12 @@ export function useDeleteToolMutation() {
     onSuccess: async (_data, toolId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.tools.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tools.detail(toolId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tools.source(toolId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tools.detail(toolId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tools.source(toolId),
+        }),
       ]);
     },
   });
@@ -97,11 +106,13 @@ export function useDeleteProfileMutation() {
 
 async function invalidateProfileQueries(
   queryClient: ReturnType<typeof useQueryClient>,
-  profileId: string,
+  profileId: string
 ) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.profiles.detail(profileId) }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.profiles.detail(profileId),
+    }),
   ]);
 }
 
@@ -137,8 +148,13 @@ export function useAssignToolMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, toolId }: { profileId: string; toolId: string }) =>
-      client.assignTool(profileId, { toolId }),
+    mutationFn: ({
+      profileId,
+      toolId,
+    }: {
+      profileId: string;
+      toolId: string;
+    }) => client.assignTool(profileId, { toolId }),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -154,8 +170,13 @@ export function useUnassignToolMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, toolId }: { profileId: string; toolId: string }) =>
-      client.unassignTool(profileId, toolId),
+    mutationFn: ({
+      profileId,
+      toolId,
+    }: {
+      profileId: string;
+      toolId: string;
+    }) => client.unassignTool(profileId, toolId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -174,7 +195,10 @@ export function useCreateMcpServerMutation() {
     mutationFn: (input: Parameters<typeof client.createMcpServer>[0]) =>
       client.createMcpServer(input),
     onSuccess: async (data) => {
-      queryClient.setQueryData(queryKeys.mcp.detail(data.server.id), data.server);
+      queryClient.setQueryData(
+        queryKeys.mcp.detail(data.server.id),
+        data.server
+      );
       await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all });
     },
   });
@@ -206,7 +230,9 @@ export function useDeleteMcpServerMutation() {
     onSuccess: async (_data, serverId) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.mcp.detail(serverId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.mcp.detail(serverId),
+        }),
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
       ]);
     },
@@ -241,8 +267,13 @@ export function useAssignMcpServerMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, serverId }: { profileId: string; serverId: string }) =>
-      client.assignMcpServer(profileId, { serverId }),
+    mutationFn: ({
+      profileId,
+      serverId,
+    }: {
+      profileId: string;
+      serverId: string;
+    }) => client.assignMcpServer(profileId, { serverId }),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -258,8 +289,13 @@ export function useUnassignMcpServerMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, serverId }: { profileId: string; serverId: string }) =>
-      client.unassignMcpServer(profileId, serverId),
+    mutationFn: ({
+      profileId,
+      serverId,
+    }: {
+      profileId: string;
+      serverId: string;
+    }) => client.unassignMcpServer(profileId, serverId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -275,7 +311,8 @@ export function useCreateSkillMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: Parameters<typeof client.createSkill>[0]) => client.createSkill(input),
+    mutationFn: (input: Parameters<typeof client.createSkill>[0]) =>
+      client.createSkill(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
     },
@@ -294,7 +331,8 @@ export function usePatchSkillMutation() {
       skillId: string;
       input: Parameters<typeof client.patchSkill>[1];
       profileId?: string;
-    }) => client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
+    }) =>
+      client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
     onSuccess: async (data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
@@ -310,7 +348,10 @@ export function usePatchSkillMutation() {
             ]
           : []),
       ]);
-      queryClient.setQueryData(queryKeys.skills.detail(data.skill.id), data.skill);
+      queryClient.setQueryData(
+        queryKeys.skills.detail(data.skill.id),
+        data.skill
+      );
     },
   });
 }
@@ -333,8 +374,13 @@ export function useAssignSkillMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, skillId }: { profileId: string; skillId: string }) =>
-      client.assignSkill(profileId, { skillId }),
+    mutationFn: ({
+      profileId,
+      skillId,
+    }: {
+      profileId: string;
+      skillId: string;
+    }) => client.assignSkill(profileId, { skillId }),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -350,8 +396,13 @@ export function useUnassignSkillMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, skillId }: { profileId: string; skillId: string }) =>
-      client.unassignSkill(profileId, skillId),
+    mutationFn: ({
+      profileId,
+      skillId,
+    }: {
+      profileId: string;
+      skillId: string;
+    }) => client.unassignSkill(profileId, skillId),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
@@ -366,9 +417,10 @@ export function useUnassignSkillMutation() {
 export function useHistorySessionsQuery(profileId: string) {
   const results = useQueries({
     queries: HISTORY_SESSION_CHANNELS.map((channel) => ({
-      queryKey: queryKeys.sessions(profileId, channel),
-      queryFn: async () => (await client.listSessions(profileId, channel)).sessions,
       enabled: Boolean(profileId),
+      queryFn: async () =>
+        (await client.listSessions(profileId, channel)).sessions,
+      queryKey: queryKeys.sessions(profileId, channel),
     })),
   });
 
@@ -378,34 +430,34 @@ export function useHistorySessionsQuery(profileId: string) {
 
   return {
     data: sessions,
-    isLoading: results.some((result) => result.isLoading),
-    isFetching: results.some((result) => result.isFetching),
     error: results.find((result) => result.error)?.error ?? null,
+    isFetching: results.some((result) => result.isFetching),
+    isLoading: results.some((result) => result.isLoading),
     refetch: () => Promise.all(results.map((result) => result.refetch())),
   };
 }
 
 export function useSoulStatusQuery(profileId: string | null) {
   return useQuery({
-    queryKey: queryKeys.soul.profile(profileId ?? ""),
-    queryFn: () => client.getProfileSoulStatus(profileId!),
     enabled: Boolean(profileId),
+    queryFn: () => client.getProfileSoulStatus(profileId!),
+    queryKey: queryKeys.soul.profile(profileId ?? ""),
   });
 }
 
 export function useKnowledgeBaseQuery(profileId: string | null) {
   return useQuery({
-    queryKey: queryKeys.knowledgeBase.profile(profileId ?? ""),
-    queryFn: () => client.listKnowledgeBase(profileId!),
     enabled: Boolean(profileId),
+    queryFn: () => client.listKnowledgeBase(profileId!),
+    queryKey: queryKeys.knowledgeBase.profile(profileId ?? ""),
   });
 }
 
 export function useArtifactsQuery(profileId: string | null) {
   return useQuery({
-    queryKey: queryKeys.artifacts.profile(profileId ?? ""),
-    queryFn: () => client.listProfileArtifacts(profileId!),
     enabled: Boolean(profileId),
+    queryFn: () => client.listProfileArtifacts(profileId!),
+    queryKey: queryKeys.artifacts.profile(profileId ?? ""),
   });
 }
 
@@ -431,12 +483,13 @@ export function useDeleteArtifactMutation() {
 export function useArtifactShareStatusQuery(
   profileId: string,
   artifactPath: string,
-  orgId: string,
+  orgId: string
 ) {
   return useQuery({
-    queryKey: queryKeys.artifacts.shareStatus(profileId, artifactPath),
-    queryFn: () => client.getProfileArtifactShareStatus(profileId, artifactPath),
     enabled: Boolean(profileId && artifactPath && orgId),
+    queryFn: () =>
+      client.getProfileArtifactShareStatus(profileId, artifactPath),
+    queryKey: queryKeys.artifacts.shareStatus(profileId, artifactPath),
   });
 }
 
@@ -448,7 +501,10 @@ export function usePublishArtifactShareMutation() {
       client.publishProfileArtifactShare(profileId, path),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.artifacts.shareStatus(variables.profileId, variables.path),
+        queryKey: queryKeys.artifacts.shareStatus(
+          variables.profileId,
+          variables.path
+        ),
       });
     },
   });
@@ -469,7 +525,10 @@ export function useRevokeArtifactShareMutation() {
     onSuccess: async (_data, variables) => {
       if (variables.path) {
         await queryClient.invalidateQueries({
-          queryKey: queryKeys.artifacts.shareStatus(variables.profileId, variables.path),
+          queryKey: queryKeys.artifacts.shareStatus(
+            variables.profileId,
+            variables.path
+          ),
         });
       }
     },
@@ -479,15 +538,21 @@ export function useRevokeArtifactShareMutation() {
 export function useSoulFileQuery(
   profileId: string | null,
   fileKey: string | null,
-  enabled: boolean,
+  enabled: boolean
 ) {
   return useQuery({
-    queryKey: [...queryKeys.soul.profile(profileId ?? ""), "file", fileKey ?? ""] as const,
+    enabled: enabled && Boolean(profileId) && Boolean(fileKey),
     queryFn: async () => {
-      const response = await client.getProfileSoulStatus(profileId!, { includeContents: true });
+      const response = await client.getProfileSoulStatus(profileId!, {
+        includeContents: true,
+      });
       return response.contents?.[fileKey as keyof SoulStackFiles] ?? "";
     },
-    enabled: enabled && Boolean(profileId) && Boolean(fileKey),
+    queryKey: [
+      ...queryKeys.soul.profile(profileId ?? ""),
+      "file",
+      fileKey ?? "",
+    ] as const,
   });
 }
 
@@ -508,8 +573,8 @@ export function usePurgeSessionMutation() {
         HISTORY_SESSION_CHANNELS.map((channel) =>
           queryClient.invalidateQueries({
             queryKey: queryKeys.sessions(variables.profileId, channel),
-          }),
-        ),
+          })
+        )
       );
     },
   });
@@ -530,7 +595,10 @@ export function useBranchSessionMutation() {
     }) => client.branchSession(sessionId, { messageIndex }),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId, variables.channel ?? "web"),
+        queryKey: queryKeys.sessions(
+          variables.profileId,
+          variables.channel ?? "web"
+        ),
       });
     },
   });
@@ -563,11 +631,17 @@ export function useWriteSoulFileMutation() {
   });
 }
 
-export function useUserContextQuery(options: { includeContent?: boolean; orgId?: string | null } = {}) {
+export function useUserContextQuery(
+  options: { includeContent?: boolean; orgId?: string | null } = {}
+) {
   return useQuery({
-    queryKey: [...queryKeys.userContext, options.orgId ?? "no-org", options.includeContent ? "content" : "status"] as const,
-    queryFn: () => fetchUserContext(options.includeContent),
     enabled: options.orgId !== null,
+    queryFn: () => fetchUserContext(options.includeContent),
+    queryKey: [
+      ...queryKeys.userContext,
+      options.orgId ?? "no-org",
+      options.includeContent ? "content" : "status",
+    ] as const,
   });
 }
 

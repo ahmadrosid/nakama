@@ -1,64 +1,59 @@
-import { useCallback, useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import {
-  CheckIcon,
-  CopyIcon,
-  FileTextIcon,
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  File01Icon,
   GitBranchIcon,
   MoreHorizontalIcon,
-  RotateCcwIcon,
-} from "lucide-react";
+  Rotate02Icon,
+} from "hugeicons-react";
 import {
-  Virtuoso,
-  type Components,
-  type VirtuosoHandle,
-} from "react-virtuoso";
-import {
-  AssistantTurnSegmentView,
-} from "@/components/chat/assistant-tool-group";
-import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { type Components, Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-} from "@/components/ai-elements/message";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
+import { AssistantTurnSegmentView } from "@/components/chat/assistant-tool-group";
+import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
+import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatSessionTimestamp, type ChatListItem } from "@/lib/chat-history";
-import {
-  awaitingModelLabel,
-  isAwaitingModelResponse,
-} from "@/lib/chat-stream";
+import { extractTurnArtifacts } from "@/lib/chat-artifacts";
+import { type ChatListItem, formatSessionTimestamp } from "@/lib/chat-history";
 import {
   followOutputBehavior,
   listOverflowsViewport,
   shouldAutoscrollOnHeightGrowth,
 } from "@/lib/chat-list-stickiness";
-import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
-import { isPastedTextDocument } from "@/lib/pasted-text";
-import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
-import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
-import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
-import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
   groupMessagesIntoTurns,
-  turnKey,
   type IndexedMessage,
   type MessageTurn,
+  turnKey,
 } from "@/lib/chat-message-turns";
+import { awaitingModelLabel, isAwaitingModelResponse } from "@/lib/chat-stream";
+import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { isPastedTextDocument } from "@/lib/pasted-text";
 import { cn } from "@/lib/utils";
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {
-  return <div className="h-4 shrink-0" aria-hidden />;
+  return <div aria-hidden className="h-4 shrink-0" />;
 }
 
 /**
@@ -79,9 +74,9 @@ const VirtuosoItem = forwardRef<
   return (
     <div
       {...props}
+      className="shrink-0 overflow-visible"
       ref={ref}
       style={style}
-      className="shrink-0 overflow-visible"
     >
       {children}
     </div>
@@ -89,26 +84,26 @@ const VirtuosoItem = forwardRef<
 });
 
 const virtuosoComponents: Components<MessageTurn> = {
-  Header: VirtuosoEdgePad,
   Footer: VirtuosoEdgePad,
+  Header: VirtuosoEdgePad,
   Item: VirtuosoItem,
 };
 
 interface ChatMessageListProps {
+  actionsDisabled?: boolean;
+  branchingMessageId?: string | null;
+  className?: string;
+  contentClassName?: string;
+  emptyMessage?: string;
   messages: ChatListItem[];
+  modelLabel?: string | null;
+  onBranchMessage?: (message: ChatListItem) => void;
+  onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
   showThinking?: boolean;
-  modelLabel?: string | null;
-  branchingMessageId?: string | null;
-  actionsDisabled?: boolean;
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
   turnStartedAt?: string | null;
-  onBranchMessage?: (message: ChatListItem) => void;
-  onRetryMessage?: (message: ChatListItem) => void;
-  emptyMessage?: string;
-  className?: string;
-  contentClassName?: string;
 }
 
 export function ChatMessageList(props: ChatMessageListProps) {
@@ -153,16 +148,17 @@ function ChatMessageListSession({
     // scrollToIndex({ align: "end" }) when content still fits the viewport —
     // that is what packs short threads to the bottom.
     if (
-      !scroller ||
-      !listOverflowsViewport(listHeight, scroller.clientHeight)
+      !(scroller && listOverflowsViewport(listHeight, scroller.clientHeight))
     ) {
-      if (scroller) scroller.scrollTop = 0;
+      if (scroller) {
+        scroller.scrollTop = 0;
+      }
       return;
     }
     virtuosoRef.current?.scrollToIndex({
-      index: "LAST",
       align: "end",
       behavior,
+      index: "LAST",
     });
   }, []);
 
@@ -178,7 +174,7 @@ function ChatMessageListSession({
       isAtBottom,
       scrollToLatest,
     }),
-    [isAtBottom, scrollToLatest],
+    [isAtBottom, scrollToLatest]
   );
 
   const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
@@ -192,8 +188,10 @@ function ChatMessageListSession({
   const handleFollowOutput = useCallback((_atBottom: boolean) => {
     const scroller = scrollerRef.current;
     if (
-      !scroller ||
-      !listOverflowsViewport(lastListHeightRef.current, scroller.clientHeight)
+      !(
+        scroller &&
+        listOverflowsViewport(lastListHeightRef.current, scroller.clientHeight)
+      )
     ) {
       return false;
     }
@@ -220,7 +218,7 @@ function ChatMessageListSession({
         pinLatest("auto");
       }
     },
-    [pinLatest],
+    [pinLatest]
   );
 
   const renderTurn = useCallback(
@@ -230,7 +228,7 @@ function ChatMessageListSession({
       const itemClassName = cn(
         "shrink-0 overflow-visible",
         contentClassName ?? "px-4",
-        turnIndex === turns.length - 1 ? "pb-4" : "pb-6",
+        turnIndex === turns.length - 1 ? "pb-4" : "pb-6"
       );
 
       if (turn.kind === "user") {
@@ -244,19 +242,19 @@ function ChatMessageListSession({
       return (
         <div className={itemClassName}>
           <AssistantTurn
-            messages={turn.messages}
-            profileId={profileId}
-            showThinking={showThinking}
-            modelLabel={modelLabel}
-            branchingMessageId={branchingMessageId}
             actionsDisabled={actionsDisabled}
-            streamActive={streamActive}
+            branchingMessageId={branchingMessageId}
+            messages={turn.messages}
+            modelLabel={modelLabel}
+            onBranchMessage={onBranchMessage}
+            onRetryMessage={onRetryMessage}
+            profileId={profileId}
             showAwaiting={
               turnIndex === turns.length - 1 && awaitingLabel === "Working…"
             }
+            showThinking={showThinking}
+            streamActive={streamActive}
             turnStartedAt={turnStartedAt}
-            onBranchMessage={onBranchMessage}
-            onRetryMessage={onRetryMessage}
           />
         </div>
       );
@@ -274,7 +272,7 @@ function ChatMessageListSession({
       streamActive,
       turnStartedAt,
       turns.length,
-    ],
+    ]
   );
 
   if (turns.length === 0) {
@@ -284,13 +282,10 @@ function ChatMessageListSession({
       >
         <Conversation className={cn("min-h-0 flex-1", className)}>
           <ConversationContent
-            className={cn(
-              "justify-start gap-6 px-4 py-4",
-              contentClassName,
-            )}
+            className={cn("justify-start gap-6 px-4 py-4", contentClassName)}
           >
             {emptyMessage ? (
-              <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+              <p className="text-muted-foreground text-sm">{emptyMessage}</p>
             ) : null}
           </ConversationContent>
         </Conversation>
@@ -302,24 +297,23 @@ function ChatMessageListSession({
     <ConversationStickinessProvider value={stickiness}>
       <Conversation className={cn("min-h-0 flex-1", className)}>
         <Virtuoso
-          ref={virtuosoRef}
-          className="h-full no-scrollbar"
-          data={turns}
+          atBottomStateChange={handleAtBottomStateChange}
+          atBottomThreshold={80}
+          className="no-scrollbar h-full"
           components={virtuosoComponents}
           computeItemKey={(_, turn) => turnKey(turn)}
-          itemContent={renderTurn}
+          data={turns}
+          followOutput={handleFollowOutput}
+          increaseViewportBy={{ bottom: 200, top: 200 }}
           // Default is top-aligned for short lists. Do not set alignToBottom —
           // that uses marginTop:auto and packs messages to the bottom.
           // https://virtuoso.dev/react-virtuoso/api-reference/virtuoso/
           initialTopMostItemIndex={0}
+          itemContent={renderTurn}
+          ref={virtuosoRef}
           scrollerRef={(ref) => {
-            scrollerRef.current =
-              ref instanceof HTMLElement ? ref : null;
+            scrollerRef.current = ref instanceof HTMLElement ? ref : null;
           }}
-          followOutput={handleFollowOutput}
-          atBottomStateChange={handleAtBottomStateChange}
-          atBottomThreshold={80}
-          increaseViewportBy={{ top: 200, bottom: 200 }}
           totalListHeightChanged={handleTotalListHeightChanged}
         />
         <ConversationScrollButton />
@@ -364,7 +358,7 @@ function AssistantTurn({
   const showActions = !streamActive && turnComplete && anchorMessage != null;
 
   return (
-    <div className="group flex w-full max-w-full flex-col gap-3 mr-auto ml-0 items-start justify-start">
+    <div className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-3">
       {segments.map((segment) => (
         <AssistantTurnSegmentView
           key={
@@ -372,14 +366,12 @@ function AssistantTurn({
               ? `work:${segment.thinking?.id ?? "thought"}:${segment.tools.map((message) => message.id).join(":")}`
               : `text:${segment.message.id}`
           }
+          modelLabel={modelLabel}
           segment={segment}
           showThinking={showThinking}
-          modelLabel={modelLabel}
         />
       ))}
-      {showAwaiting ? (
-        <TurnAwaitingElapsed startedAt={turnStartedAt} />
-      ) : null}
+      {showAwaiting ? <TurnAwaitingElapsed startedAt={turnStartedAt} /> : null}
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
           {artifacts.map((artifact) => {
@@ -387,10 +379,10 @@ function AssistantTurn({
 
             return (
               <ArtifactAttachmentPreview
-                key={chipId}
-                id={chipId}
-                profileId={profileId}
                 artifact={artifact}
+                id={chipId}
+                key={chipId}
+                profileId={profileId}
               />
             );
           })}
@@ -398,10 +390,10 @@ function AssistantTurn({
       ) : null}
       {showActions && anchorMessage ? (
         <AssistantMessageActions
-          message={anchorMessage}
-          copyContent={assistantTurnContent(turnMessages)}
-          busy={branchingMessageId === anchorMessage.id}
           actionsDisabled={actionsDisabled}
+          busy={branchingMessageId === anchorMessage.id}
+          copyContent={assistantTurnContent(turnMessages)}
+          message={anchorMessage}
           onBranchMessage={onBranchMessage}
           onRetryMessage={onRetryMessage}
         />
@@ -415,9 +407,9 @@ function TurnAwaitingElapsed({ startedAt }: { startedAt?: string | null }) {
 
   return (
     <span
-      role="status"
       aria-live="polite"
-      className="text-xs tabular-nums text-muted-foreground"
+      className="text-muted-foreground text-xs tabular-nums"
+      role="status"
     >
       {formatElapsedSeconds(elapsedSeconds)}
     </span>
@@ -427,10 +419,10 @@ function TurnAwaitingElapsed({ startedAt }: { startedAt?: string | null }) {
 function ChatMessageRow({ message }: { message: ChatListItem }) {
   return (
     <Message
+      className="mr-0 ml-auto min-w-0 max-w-full items-end justify-end overflow-visible"
       from="user"
-      className="max-w-full ml-auto mr-0 min-w-0 items-end justify-end overflow-visible"
     >
-      <MessageContent className="max-w-full min-w-0 ml-auto overflow-visible group-[.is-user]:ml-auto">
+      <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto">
         <UserMessageContent message={message} />
       </MessageContent>
     </Message>
@@ -439,16 +431,20 @@ function ChatMessageRow({ message }: { message: ChatListItem }) {
 
 function isAssistantTurnComplete(messages: ChatListItem[]): boolean {
   return (
-    messages.some((message) => message.role === "assistant" && !message.streaming) &&
+    messages.some(
+      (message) => message.role === "assistant" && !message.streaming
+    ) &&
     !messages.some(
       (message) =>
         (message.role === "assistant" && message.streaming) ||
-        (message.role === "tool" && message.toolStatus === "running"),
+        (message.role === "tool" && message.toolStatus === "running")
     )
   );
 }
 
-function findAssistantTurnAnchor(messages: ChatListItem[]): ChatListItem | null {
+function findAssistantTurnAnchor(
+  messages: ChatListItem[]
+): ChatListItem | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
 
@@ -499,13 +495,14 @@ function AssistantMessageActions({
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-    };
-  }, []);
+    },
+    []
+  );
 
   async function copyMessage() {
     const content = copyContent.trim();
@@ -529,37 +526,39 @@ function AssistantMessageActions({
     }
   }
 
-  const branchCreatedAt = isBranchableAssistantMessage(message) ? message.createdAt : null;
+  const branchCreatedAt = isBranchableAssistantMessage(message)
+    ? message.createdAt
+    : null;
 
   return (
-    <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
       <button
-        type="button"
         aria-label={copied ? "Copied" : "Copy response"}
-        title={copied ? "Copied" : "Copy response"}
-        disabled={!copyContent.trim()}
-        onClick={() => void copyMessage()}
         className={cn(
           "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
-          copied && "text-emerald-600 dark:text-emerald-400",
+          copied && "text-emerald-600 dark:text-emerald-400"
         )}
+        disabled={!copyContent.trim()}
+        onClick={() => void copyMessage()}
+        title={copied ? "Copied" : "Copy response"}
+        type="button"
       >
         {copied ? (
-          <CheckIcon className="size-4" aria-hidden />
+          <CheckmarkCircle01Icon aria-hidden className="size-4" />
         ) : (
-          <CopyIcon className="size-4" aria-hidden />
+          <Copy01Icon aria-hidden className="size-4" />
         )}
       </button>
       {onRetryMessage ? (
         <button
-          type="button"
           aria-label="Try again"
-          title="Try again"
+          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
           disabled={busy || actionsDisabled}
           onClick={() => onRetryMessage(message)}
-          className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40"
+          title="Try again"
+          type="button"
         >
-          <RotateCcwIcon className="size-4" aria-hidden />
+          <Rotate02Icon aria-hidden className="size-4" />
         </button>
       ) : null}
       {onBranchMessage && branchCreatedAt ? (
@@ -567,27 +566,27 @@ function AssistantMessageActions({
           <DropdownMenuTrigger
             render={
               <button
-                type="button"
                 aria-label="Message actions"
                 className={cn(
                   "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  busy && "pointer-events-none opacity-60",
+                  busy && "pointer-events-none opacity-60"
                 )}
+                type="button"
               />
             }
           >
-            <MoreHorizontalIcon className="size-4" aria-hidden />
+            <MoreHorizontalIcon aria-hidden className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56 min-w-56 p-1.5">
-            <div className="px-2 py-1 text-xs text-muted-foreground">
+            <div className="px-2 py-1 text-muted-foreground text-xs">
               {formatSessionTimestamp(branchCreatedAt)}
             </div>
             <DropdownMenuItem
+              className="gap-2"
               disabled={busy}
               onClick={() => onBranchMessage(message)}
-              className="gap-2"
             >
-              <GitBranchIcon className="size-4" aria-hidden />
+              <GitBranchIcon aria-hidden className="size-4" />
               <span>Branch in new chat</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -601,12 +600,19 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
   if (message.questionnaireAnswers?.length) {
     return (
       <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3">
-        <p className="mb-2 text-sm font-medium text-muted-foreground">Answers</p>
+        <p className="mb-2 font-medium text-muted-foreground text-sm">
+          Answers
+        </p>
         <div className="space-y-3">
           {message.questionnaireAnswers.map((entry) => (
-            <div key={`${entry.questionId}:${entry.prompt}`} className="space-y-1">
-              <p className="whitespace-pre-wrap text-foreground">{entry.prompt}</p>
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            <div
+              className="space-y-1"
+              key={`${entry.questionId}:${entry.prompt}`}
+            >
+              <p className="whitespace-pre-wrap text-foreground">
+                {entry.prompt}
+              </p>
+              <p className="whitespace-pre-wrap text-muted-foreground text-sm">
                 {entry.answer}
               </p>
             </div>
@@ -618,11 +624,11 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
 
   const pastedTextDocuments =
     message.documents?.filter((document) =>
-      isPastedTextDocument(document.filename, document.mediaType),
+      isPastedTextDocument(document.filename, document.mediaType)
     ) ?? [];
   const otherDocuments =
     message.documents?.filter(
-      (document) => !isPastedTextDocument(document.filename, document.mediaType),
+      (document) => !isPastedTextDocument(document.filename, document.mediaType)
     ) ?? [];
 
   return (
@@ -631,9 +637,12 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex flex-wrap gap-2">
           {message.imageAttachments.map((image) => (
             <ImageAttachmentPreview
-              key={image.url ?? `image-attachment-${message.id}-${image.description ?? "unnamed"}`}
-              url={image.url}
               description={image.description}
+              key={
+                image.url ??
+                `image-attachment-${message.id}-${image.description ?? "unnamed"}`
+              }
+              url={image.url}
             />
           ))}
         </div>
@@ -642,10 +651,10 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex flex-wrap gap-2">
           {message.images.map((image) => (
             <img
-              key={image.url}
-              src={image.url}
               alt=""
               className="max-h-40 max-w-full rounded-md border border-border object-contain"
+              key={image.url}
+              src={image.url}
             />
           ))}
         </div>
@@ -654,8 +663,8 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex flex-wrap gap-2">
           {pastedTextDocuments.map((document) => (
             <TextAttachmentPreview
-              key={`${document.filename}-${document.mediaType}`}
               filename={document.filename}
+              key={`${document.filename}-${document.mediaType}`}
             />
           ))}
         </div>
@@ -664,17 +673,24 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex flex-wrap gap-2">
           {otherDocuments.map((document) => (
             <div
-              key={`${document.filename}-${document.mediaType}`}
               className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted px-3 py-2"
+              key={`${document.filename}-${document.mediaType}`}
             >
-              <FileTextIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="truncate text-sm text-foreground">{document.filename}</span>
+              <File01Icon
+                aria-hidden
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+              <span className="truncate text-foreground text-sm">
+                {document.filename}
+              </span>
             </div>
           ))}
         </div>
       ) : null}
       {message.content ? (
-        <p className="whitespace-pre-wrap break-words text-foreground">{message.content}</p>
+        <p className="whitespace-pre-wrap break-words text-foreground">
+          {message.content}
+        </p>
       ) : null}
     </div>
   );

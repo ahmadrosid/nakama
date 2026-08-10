@@ -1,8 +1,8 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
-  ModelBrowseShell,
   type BrowseModelRowDisplay,
+  ModelBrowseShell,
   VirtualModelBrowseList,
 } from "@/components/ModelBrowseShell";
 import { filterRowsBySearch } from "@/components/model-browse-utils";
@@ -10,28 +10,34 @@ import { Input } from "@/components/ui/input";
 
 export interface CatalogModelsBrowseQuery {
   canFetch?: boolean;
-  isLoading?: boolean;
-  isFetching?: boolean;
   error?: Error | null;
+  isFetching?: boolean;
+  isLoading?: boolean;
   onRefresh?: () => void;
   refreshDisabled?: boolean;
 }
 
-export interface CatalogModelsBrowseListProps<T extends { id: string; name: string }> {
-  rows: T[];
-  onSelect: (row: T) => void;
+export interface CatalogModelsBrowseListProps<
+  T extends { id: string; name: string },
+> {
   className?: string;
-  query?: CatalogModelsBrowseQuery;
-  idleMessage?: string;
   emptyMessage?: string;
-  status?: ReactNode | ((context: { filteredCount: number; filteredRows: T[] }) => ReactNode);
-  toDisplayRow?: (row: T) => BrowseModelRowDisplay;
   filterRows?: (rows: T[], search: string, hideDeprecated: boolean) => T[];
+  idleMessage?: string;
   isDeprecated?: (row: T) => boolean;
+  onSelect: (row: T) => void;
+  query?: CatalogModelsBrowseQuery;
+  rows: T[];
+  status?:
+    | ReactNode
+    | ((context: { filteredCount: number; filteredRows: T[] }) => ReactNode);
+  toDisplayRow?: (row: T) => BrowseModelRowDisplay;
   toolbarTrailing?: ReactNode;
 }
 
-export function CatalogModelsBrowseList<T extends { id: string; name: string }>({
+export function CatalogModelsBrowseList<
+  T extends { id: string; name: string },
+>({
   rows,
   onSelect,
   className,
@@ -68,38 +74,47 @@ export function CatalogModelsBrowseList<T extends { id: string; name: string }>(
     }
 
     return filterRowsBySearch(result, deferredSearch);
-  }, [rows, deferredSearch, hideDeprecated, filterRows, isDeprecated, showDeprecatedFilter]);
+  }, [
+    rows,
+    deferredSearch,
+    hideDeprecated,
+    filterRows,
+    isDeprecated,
+    showDeprecatedFilter,
+  ]);
 
   const resolvedStatus =
     typeof status === "function"
       ? status({ filteredCount: filtered.length, filteredRows: filtered })
-      : status ??
+      : (status ??
         (canFetch
           ? `${filtered.length} model${filtered.length === 1 ? "" : "s"}`
-          : (idleMessage ?? "Enter credentials to browse models."));
+          : (idleMessage ?? "Enter credentials to browse models.")));
 
   const resolvedEmptyMessage =
     emptyMessage ??
-    (canFetch ? "No models found." : (idleMessage ?? "Enter credentials to browse models."));
+    (canFetch
+      ? "No models found."
+      : (idleMessage ?? "Enter credentials to browse models."));
 
   const toolbarDisabled = !canFetch;
 
   return (
     <ModelBrowseShell
       className={className}
-      isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
+      emptyMessage={resolvedEmptyMessage}
       error={canFetch ? error : null}
       isEmpty={!canFetch || filtered.length === 0}
-      emptyMessage={resolvedEmptyMessage}
+      isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
       status={
         onRefresh ? (
           <div className="flex items-center justify-between gap-2">
             <span>{resolvedStatus}</span>
             <button
-              type="button"
               className="text-foreground underline-offset-2 hover:underline disabled:opacity-50"
               disabled={toolbarDisabled || refreshDisabled || isFetching}
               onClick={onRefresh}
+              type="button"
             >
               Refresh
             </button>
@@ -111,21 +126,21 @@ export function CatalogModelsBrowseList<T extends { id: string; name: string }>(
       toolbar={
         <>
           <Input
-            placeholder="Search model name or ID..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
             className="min-w-35 flex-1"
             disabled={toolbarDisabled}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search model name or ID..."
+            value={search}
           />
           {toolbarTrailing}
           {showDeprecatedFilter ? (
-            <label className="flex h-8 cursor-pointer items-center gap-2 text-sm text-foreground">
+            <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
               <input
-                type="checkbox"
-                className="size-4 rounded border-input"
                 checked={hideDeprecated}
-                onChange={(event) => setHideDeprecated(event.target.checked)}
+                className="size-4 rounded border-input"
                 disabled={toolbarDisabled}
+                onChange={(event) => setHideDeprecated(event.target.checked)}
+                type="checkbox"
               />
               Hide deprecated
             </label>
@@ -134,15 +149,15 @@ export function CatalogModelsBrowseList<T extends { id: string; name: string }>(
       }
     >
       <VirtualModelBrowseList
-        rows={filtered}
         getKey={(row) => row.id}
         renderRow={(row, style) => (
           <BrowseModelRowButton
-            row={toDisplayRow(row)}
             onSelect={() => onSelect(row)}
+            row={toDisplayRow(row)}
             style={style}
           />
         )}
+        rows={filtered}
       />
     </ModelBrowseShell>
   );

@@ -6,7 +6,7 @@ const EXPLICIT_SKILL_PATTERN =
 export function matchSkillsForMessage(
   skills: DiscoveredSkill[],
   userMessage: string,
-  options: SkillMatchOptions = {},
+  options: SkillMatchOptions = {}
 ): DiscoveredSkill[] {
   const message = userMessage.trim();
 
@@ -103,7 +103,9 @@ function extractKeywords(description: string): string[] {
 }
 
 function containsWord(haystack: string, word: string): boolean {
-  const pattern = new RegExp(`(?:^|[^a-z0-9-])${escapeRegExp(word)}(?:[^a-z0-9-]|$)`);
+  const pattern = new RegExp(
+    `(?:^|[^a-z0-9-])${escapeRegExp(word)}(?:[^a-z0-9-]|$)`
+  );
   return pattern.test(haystack);
 }
 

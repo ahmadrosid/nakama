@@ -4,26 +4,30 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import {
-  KeyRoundIcon,
-  ListIcon,
+  Delete02Icon,
+  Key01Icon,
+  ListViewIcon,
   PencilIcon,
-  Trash2Icon,
-} from "lucide-react";
+} from "hugeicons-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
-import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
-import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
+import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
+import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {
   ProviderCompatibleEditDialog,
   ProviderManageModelsDialog,
   ProviderReplaceKeyDialog,
 } from "@/components/settings/provider-instance-dialogs";
 import { useProviderInstanceCard } from "@/components/settings/use-provider-instance-card";
-import type { CatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 function ProviderActionButton({
   label,
@@ -43,17 +47,17 @@ function ProviderActionButton({
       <TooltipTrigger
         render={
           <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={disabled}
             aria-label={label}
             className={
               destructive
                 ? "text-muted-foreground hover:text-destructive"
                 : "text-muted-foreground"
             }
+            disabled={disabled}
             onClick={onClick}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
           >
             {children}
           </Button>
@@ -73,16 +77,19 @@ export function ProviderInstanceCard({
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
-  onUpdate: (providerId: string, request: UpdateProviderRequest) => Promise<void>;
+  onUpdate: (
+    providerId: string,
+    request: UpdateProviderRequest
+  ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
 }) {
   const card = useProviderInstanceCard({
-    instance,
     catalog,
-    onUpdate,
+    instance,
     onDelete,
     onError,
+    onUpdate,
   });
 
   const canManage =
@@ -99,19 +106,24 @@ export function ProviderInstanceCard({
     <>
       <tr>
         <td className="px-3 py-2.5 align-middle">
-          <p className="truncate text-sm font-medium text-foreground">{instance.label}</p>
+          <p className="truncate font-medium text-foreground text-sm">
+            {instance.label}
+          </p>
         </td>
         <td className="px-3 py-2.5 align-middle">
           {endpoint ? (
-            <p className="max-w-[18rem] truncate font-mono text-[11px] text-foreground/80" title={endpoint}>
+            <p
+              className="max-w-[18rem] truncate font-mono text-[11px] text-foreground/80"
+              title={endpoint}
+            >
               {endpoint}
             </p>
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
+            <span className="text-muted-foreground text-xs">—</span>
           )}
         </td>
-        <td className="px-3 py-2.5 align-middle whitespace-nowrap">
-          <span className="text-sm text-muted-foreground">{modelLabel}</span>
+        <td className="whitespace-nowrap px-3 py-2.5 align-middle">
+          <span className="text-muted-foreground text-sm">{modelLabel}</span>
         </td>
         <td className="px-3 py-2.5 align-middle">
           <div className="flex items-center justify-end gap-0.5">
@@ -121,89 +133,92 @@ export function ProviderInstanceCard({
               </ProviderActionButton>
             ) : null}
             {canManage ? (
-              <ProviderActionButton label="Manage models" onClick={card.openManage}>
-                <ListIcon className="size-3.5" />
+              <ProviderActionButton
+                label="Manage models"
+                onClick={card.openManage}
+              >
+                <ListViewIcon className="size-3.5" />
               </ProviderActionButton>
             ) : null}
             <ProviderActionButton
               label={instance.hasApiKey ? "Update key" : "Add key"}
               onClick={() => card.setReplaceKeyOpen(true)}
             >
-              <KeyRoundIcon className="size-3.5" />
+              <Key01Icon className="size-3.5" />
             </ProviderActionButton>
             <ProviderActionButton
-              label="Remove"
               destructive
               disabled={card.busy}
+              label="Remove"
               onClick={() => void card.handleDelete()}
             >
-              <Trash2Icon className="size-3.5" />
+              <Delete02Icon className="size-3.5" />
             </ProviderActionButton>
           </div>
         </td>
       </tr>
 
       <ProviderReplaceKeyDialog
-        open={card.replaceKeyOpen}
-        instance={instance}
-        providerType={card.providerType}
         apiKey={card.apiKey}
-        showApiKey={card.showApiKey}
         busy={card.busy}
         dialogError={card.dialogError}
-        onOpenChange={card.setReplaceKeyOpen}
+        instance={instance}
         onApiKeyChange={card.setApiKey}
-        onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+        onOpenChange={card.setReplaceKeyOpen}
         onSave={() => void card.handleReplaceKey()}
+        onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+        open={card.replaceKeyOpen}
+        providerType={card.providerType}
+        showApiKey={card.showApiKey}
       />
 
       {card.isCompatibleLike ? (
         <ProviderCompatibleEditDialog
-          open={card.editOpen}
+          browseLabel={card.isOllama ? "Ollama" : undefined}
           busy={card.busy}
           dialogError={card.dialogError}
-          editLabel={card.editLabel}
           editBaseUrl={card.editBaseUrl}
-          manageModels={card.editManageModels}
-          providerInstanceId={instance.id}
-          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          editLabel={card.editLabel}
           hostMode={instance.hostMode ?? undefined}
-          browseLabel={card.isOllama ? "Ollama" : undefined}
-          onOpenChange={card.setEditOpen}
-          onDisplayNameChange={card.setEditLabel}
+          manageModels={card.editManageModels}
           onBaseUrlChange={card.setEditBaseUrl}
           onCustomModelsChange={card.handleManageModelsChange}
+          onDisplayNameChange={card.setEditLabel}
+          onOpenChange={card.setEditOpen}
           onSave={() => void card.saveCompatible()}
+          open={card.editOpen}
+          providerInstanceId={instance.id}
+          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
         />
       ) : null}
 
       {canManage ? (
         <ProviderManageModelsDialog
-          open={card.manageOpen}
           busy={card.busy}
           dialogError={card.isCompatibleLike ? card.dialogError : null}
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
+          open={card.manageOpen}
         >
           {card.isCompatibleLike ? (
             <CustomProviderFields
-              displayName={instance.label}
-              baseUrl={instance.baseUrl ?? ""}
               apiKey=""
+              baseUrl={instance.baseUrl ?? ""}
+              baseUrlError={null}
+              browseLabel={card.isOllama ? "Ollama" : undefined}
+              browseSource="remote"
               customModels={card.manageModels}
               disabled={card.busy}
-              identityReadOnly
+              displayName={instance.label}
               displayNameError={null}
-              baseUrlError={null}
-              modelsError={null}
-              browseSource="remote"
-              remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
-              providerInstanceId={instance.id}
               hostMode={instance.hostMode ?? undefined}
-              browseLabel={card.isOllama ? "Ollama" : undefined}
-              onDisplayNameChange={() => {}}
+              identityReadOnly
+              modelsError={null}
               onBaseUrlChange={() => {}}
               onCustomModelsChange={card.handleManageModelsChange}
+              onDisplayNameChange={() => {}}
+              providerInstanceId={instance.id}
+              remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
             />
           ) : null}
           {card.isOpenRouter ? (
@@ -216,23 +231,25 @@ export function ProviderInstanceCard({
           ) : null}
           {isShortlistBrowseProvider(card.providerType) ? (
             <ShortlistBrowseProviderModelFields
-              provider={card.providerType}
               customModels={card.manageModels}
               disabled={card.busy}
               modelsError={card.dialogError}
-              providerId={card.providerType === "fireworks" ? instance.id : undefined}
               onCustomModelsChange={card.handleManageModelsChange}
+              provider={card.providerType}
+              providerId={
+                card.providerType === "fireworks" ? instance.id : undefined
+              }
             />
           ) : null}
           {card.isCatalogShortlist ? (
             <CatalogProviderModelFields
-              provider={card.providerType as CatalogShortlistProvider}
-              providerInstanceId={instance.id}
-              customModels={card.manageModels}
               catalogModels={card.catalogModelsForType}
+              customModels={card.manageModels}
               disabled={card.busy}
               modelsError={card.dialogError}
               onCustomModelsChange={card.handleManageModelsChange}
+              provider={card.providerType as CatalogShortlistProvider}
+              providerInstanceId={instance.id}
             />
           ) : null}
         </ProviderManageModelsDialog>

@@ -9,7 +9,7 @@ export function buildMcpToolDefinitions(
   servers: StoredMcpServerRecord[],
   manager: McpClientManager,
   orgId: string,
-  profileId: string,
+  profileId: string
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
   const usedNames = new Set<string>();
@@ -18,13 +18,13 @@ export function buildMcpToolDefinitions(
     for (const cachedTool of server.cachedTools) {
       const name = uniqueLlmToolName(
         namespacedMcpToolName(server.name, cachedTool.name),
-        usedNames,
+        usedNames
       );
       usedNames.add(name);
 
       tools.push({
-        name,
         description: cachedTool.description,
+        name,
         parameters: toJsonSchema(cachedTool.inputSchema),
         async run(input) {
           try {
@@ -42,7 +42,7 @@ export function buildMcpToolDefinitions(
               cachedTool.name,
               input,
               server.transport === "stdio" ? profileId : undefined,
-              server.transport === "stdio" ? orgId : undefined,
+              server.transport === "stdio" ? orgId : undefined
             );
           } catch (error) {
             return {
@@ -66,7 +66,10 @@ export function sanitizeLlmToolNamePart(name: string): string {
   return sanitized || "tool";
 }
 
-export function namespacedMcpToolName(serverName: string, toolName: string): string {
+export function namespacedMcpToolName(
+  serverName: string,
+  toolName: string
+): string {
   return `${sanitizeLlmToolNamePart(serverName)}__${sanitizeLlmToolNamePart(toolName)}`;
 }
 

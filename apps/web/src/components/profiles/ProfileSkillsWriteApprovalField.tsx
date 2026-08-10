@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { ProfileDetail } from "@nakama/core/contract";
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -44,9 +44,9 @@ export function ProfileSkillsWriteApprovalField({
 }) {
   return (
     <ProfileSkillsWriteApprovalFieldBody
+      disabled={disabled}
       key={`${profile.id}:${String(profile.skillsWriteApproval)}`}
       profile={profile}
-      disabled={disabled}
     />
   );
 }
@@ -60,7 +60,9 @@ function ProfileSkillsWriteApprovalFieldBody({
 }) {
   const { activeOrg } = useAuth();
   const updateMutation = useUpdateProfileMutation();
-  const [value, setValue] = useState<OverrideValue>(() => toOverrideValue(profile.skillsWriteApproval));
+  const [value, setValue] = useState<OverrideValue>(() =>
+    toOverrideValue(profile.skillsWriteApproval)
+  );
   const busy = updateMutation.isPending;
 
   if (!activeOrg || activeOrg.role !== "admin") {
@@ -71,8 +73,8 @@ function ProfileSkillsWriteApprovalFieldBody({
     setValue(nextValue);
     try {
       await updateMutation.mutateAsync({
-        profileId: profile.id,
         input: { skillsWriteApproval: fromOverrideValue(nextValue) },
+        profileId: profile.id,
       });
       toast("Skill write approval setting saved.");
     } catch (err) {
@@ -84,14 +86,13 @@ function ProfileSkillsWriteApprovalFieldBody({
   return (
     <div>
       <label
+        className="mb-1 block text-balance font-medium text-muted-foreground text-xs"
         htmlFor="profile-skills-write-approval"
-        className="mb-1 block text-xs font-medium text-balance text-muted-foreground"
       >
         Skill write approval
       </label>
       <div className="flex items-center gap-2">
         <Select
-          value={value}
           disabled={disabled || busy}
           onValueChange={(next) => {
             if (!next) {
@@ -99,8 +100,12 @@ function ProfileSkillsWriteApprovalFieldBody({
             }
             void handleChange(next as OverrideValue);
           }}
+          value={value}
         >
-          <SelectTrigger id="profile-skills-write-approval" className="max-w-xs">
+          <SelectTrigger
+            className="max-w-xs"
+            id="profile-skills-write-approval"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

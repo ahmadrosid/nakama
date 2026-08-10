@@ -153,14 +153,18 @@ describe("legacy profile id migration", () => {
 
       migrateDatabase(db);
 
-      const profiles = db.prepare("SELECT id FROM profiles ORDER BY id").all() as Array<{
+      const profiles = db
+        .prepare("SELECT id FROM profiles ORDER BY id")
+        .all() as Array<{
         id: string;
       }>;
       const profileTools = db
         .prepare("SELECT profile_id FROM profile_tools ORDER BY profile_id")
         .all() as Array<{ profile_id: string }>;
       const profileMcpServers = db
-        .prepare("SELECT profile_id FROM profile_mcp_servers ORDER BY profile_id")
+        .prepare(
+          "SELECT profile_id FROM profile_mcp_servers ORDER BY profile_id"
+        )
         .all() as Array<{ profile_id: string }>;
       const profileSkills = db
         .prepare("SELECT profile_id FROM profile_skills ORDER BY profile_id")
@@ -177,15 +181,30 @@ describe("legacy profile id migration", () => {
       const foreignKeyViolations = db.prepare("PRAGMA foreign_key_check").all();
 
       expect(profiles.map((row) => row.id)).toEqual(["default", "super_bot"]);
-      expect(profileTools.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
+      expect(profileTools.map((row) => row.profile_id)).toEqual([
+        "default",
+        "super_bot",
+      ]);
       expect(profileMcpServers.map((row) => row.profile_id)).toEqual([
         "default",
         "super_bot",
       ]);
-      expect(profileSkills.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
-      expect(sessions.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
-      expect(tasks.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
-      expect(automations.map((row) => row.profile_id)).toEqual(["default", "super_bot"]);
+      expect(profileSkills.map((row) => row.profile_id)).toEqual([
+        "default",
+        "super_bot",
+      ]);
+      expect(sessions.map((row) => row.profile_id)).toEqual([
+        "default",
+        "super_bot",
+      ]);
+      expect(tasks.map((row) => row.profile_id)).toEqual([
+        "default",
+        "super_bot",
+      ]);
+      expect(automations.map((row) => row.profile_id)).toEqual([
+        "default",
+        "super_bot",
+      ]);
       expect(foreignKeyViolations).toHaveLength(0);
     } finally {
       db.close();
@@ -231,7 +250,9 @@ describe("coding-delegation skill rename migration", () => {
         .get("skill_coding") as { name: string; source_path: string };
 
       expect(skill.name).toBe("coding-agent");
-      expect(skill.source_path).toBe("/tmp/.nakama/agent/skills/coding-agent/SKILL.md");
+      expect(skill.source_path).toBe(
+        "/tmp/.nakama/agent/skills/coding-agent/SKILL.md"
+      );
     } finally {
       db.close();
     }
@@ -288,7 +309,9 @@ describe("coding-delegation skill rename migration", () => {
       migrateCodingDelegationSkillName(db);
 
       const skills = db
-        .prepare("SELECT id, name FROM skills WHERE name LIKE 'coding%' ORDER BY name")
+        .prepare(
+          "SELECT id, name FROM skills WHERE name LIKE 'coding%' ORDER BY name"
+        )
         .all() as Array<{ id: string; name: string }>;
       const assignment = db
         .prepare("SELECT skill_id FROM profile_skills WHERE profile_id = ?")
@@ -311,8 +334,8 @@ describe("schema path resolution", () => {
 
   test("falls back to the workspace schema when running from the bundled server output", () => {
     const schemaPath = resolveSchemaPath({
-      moduleDir: resolve(repoRoot, "apps/server/dist"),
       cwd: repoRoot,
+      moduleDir: resolve(repoRoot, "apps/server/dist"),
     });
 
     expect(schemaPath).toBe(resolve(repoRoot, "packages/db/sql/schema.sql"));
@@ -326,10 +349,14 @@ describe("browser session schema", () => {
     try {
       migrateDatabase(db);
 
-      const columns = db.prepare("PRAGMA table_info(browser_sessions)").all() as Array<{
+      const columns = db
+        .prepare("PRAGMA table_info(browser_sessions)")
+        .all() as Array<{
         name: string;
       }>;
-      const indexes = db.prepare("PRAGMA index_list(browser_sessions)").all() as Array<{
+      const indexes = db
+        .prepare("PRAGMA index_list(browser_sessions)")
+        .all() as Array<{
         name: string;
       }>;
 
@@ -344,9 +371,11 @@ describe("browser session schema", () => {
         "last_used_at",
         "active_org_id",
       ]);
-      expect(indexes.some((index) => index.name === "browser_sessions_token_hash_unique")).toBe(
-        true,
-      );
+      expect(
+        indexes.some(
+          (index) => index.name === "browser_sessions_token_hash_unique"
+        )
+      ).toBe(true);
     } finally {
       db.close();
     }
@@ -384,8 +413,13 @@ describe("organization schema migration", () => {
       expect(fkCheck).toEqual([]);
 
       const member = db
-        .prepare("SELECT role, user_context FROM org_members WHERE org_id = ? AND user_id = ?")
-        .get("org_acme", "user_admin") as { role: string; user_context: string | null };
+        .prepare(
+          "SELECT role, user_context FROM org_members WHERE org_id = ? AND user_id = ?"
+        )
+        .get("org_acme", "user_admin") as {
+        role: string;
+        user_context: string | null;
+      };
       expect(member.role).toBe("admin");
       expect(member.user_context).toBeNull();
     } finally {
@@ -403,7 +437,13 @@ describe("organization schema migration", () => {
         INSERT INTO organizations (
           id, name, slug, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?)
-      `).run("org_a", "Org A", "acme", "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+      `).run(
+        "org_a",
+        "Org A",
+        "acme",
+        "2026-06-21T00:00:00.000Z",
+        "2026-06-21T00:00:00.000Z"
+      );
 
       let error: unknown;
       try {
@@ -411,7 +451,13 @@ describe("organization schema migration", () => {
           INSERT INTO organizations (
             id, name, slug, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?)
-        `).run("org_b", "Org B", "acme", "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+        `).run(
+          "org_b",
+          "Org B",
+          "acme",
+          "2026-06-21T00:00:00.000Z",
+          "2026-06-21T00:00:00.000Z"
+        );
       } catch (caught) {
         error = caught;
       }
@@ -433,7 +479,14 @@ describe("organization schema migration", () => {
         INSERT INTO users (
           id, email, password_hash, is_platform_admin, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?)
-      `).run("user_1", "user@example.com", "hash", 0, "2026-06-21T00:00:00.000Z", "2026-06-21T00:00:00.000Z");
+      `).run(
+        "user_1",
+        "user@example.com",
+        "hash",
+        0,
+        "2026-06-21T00:00:00.000Z",
+        "2026-06-21T00:00:00.000Z"
+      );
 
       let error: unknown;
       try {
@@ -467,8 +520,12 @@ describe("organization schema migration", () => {
 
       migrateDatabase(db);
 
-      const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
-      expect(columns.map((column) => column.name)).toContain("is_platform_admin");
+      const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{
+        name: string;
+      }>;
+      expect(columns.map((column) => column.name)).toContain(
+        "is_platform_admin"
+      );
     } finally {
       db.close();
     }
@@ -491,13 +548,21 @@ describe("organization schema migration", () => {
         "llm_usage_stats",
         "workspace_settings",
       ]) {
-        const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+        const columns = db
+          .prepare(`PRAGMA table_info(${tableName})`)
+          .all() as Array<{ name: string }>;
         expect(columns.map((column) => column.name)).toContain("org_id");
       }
 
-      const toolIndexes = db.prepare("PRAGMA index_list(tools)").all() as Array<{ name: string }>;
-      expect(toolIndexes.some((index) => index.name === "tools_org_name_unique")).toBe(true);
-      expect(toolIndexes.some((index) => index.name === "tools_name_unique")).toBe(false);
+      const toolIndexes = db
+        .prepare("PRAGMA index_list(tools)")
+        .all() as Array<{ name: string }>;
+      expect(
+        toolIndexes.some((index) => index.name === "tools_org_name_unique")
+      ).toBe(true);
+      expect(
+        toolIndexes.some((index) => index.name === "tools_name_unique")
+      ).toBe(false);
 
       db.exec(`
         INSERT INTO organizations (
@@ -569,8 +634,8 @@ describe("migration SQL hardening", () => {
       expect(() =>
         addOrgIdColumnIfMissing(
           db,
-          `profiles ADD COLUMN hacked TEXT; ATTACH DATABASE '${attachPath}' AS injected; --`,
-        ),
+          `profiles ADD COLUMN hacked TEXT; ATTACH DATABASE '${attachPath}' AS injected; --`
+        )
       ).toThrow("Unsupported tenant org table");
       expect(existsSync(attachPath)).toBe(false);
     } finally {
@@ -597,8 +662,8 @@ describe("migration SQL hardening", () => {
           "profile_tools",
           "tool_id; ATTACH DATABASE '/tmp/ignored.sqlite' AS injected; --" as "tool_id",
           "legacy",
-          "canonical",
-        ),
+          "canonical"
+        )
       ).toThrow("Unsupported profile join target");
     } finally {
       db.close();

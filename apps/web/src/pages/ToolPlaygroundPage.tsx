@@ -1,6 +1,6 @@
 import type { ToolDetail } from "@nakama/core/contract";
-import { ChevronLeftIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ArrowLeft01Icon } from "hugeicons-react";
+import { type ReactNode, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
 import {
@@ -29,7 +29,10 @@ export function ToolPlaygroundPage() {
   const { user, activeOrg, isLoading: authLoading } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canAccess = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
-  const canUsePlayground = canUseToolPlayground(isPlatformAdmin, activeOrg?.role);
+  const canUsePlayground = canUseToolPlayground(
+    isPlatformAdmin,
+    activeOrg?.role
+  );
   const backHref = toolPlaygroundBackTarget(searchParams).href;
 
   const {
@@ -44,12 +47,12 @@ export function ToolPlaygroundPage() {
     return <PageState message="Loading…" />;
   }
 
-  if (!canAccess || !canUsePlayground) {
-    return <Navigate to="/chat" replace />;
+  if (!(canAccess && canUsePlayground)) {
+    return <Navigate replace to="/chat" />;
   }
 
   if (!toolId) {
-    return <Navigate to={backHref} replace />;
+    return <Navigate replace to={backHref} />;
   }
 
   if (toolLoading && !tool) {
@@ -60,7 +63,7 @@ export function ToolPlaygroundPage() {
     return (
       <div className="space-y-4 p-6">
         <BackLink />
-        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
           {formatError(toolError)}
         </p>
       </div>
@@ -68,13 +71,13 @@ export function ToolPlaygroundPage() {
   }
 
   if (!tool) {
-    return <Navigate to={backHref} replace />;
+    return <Navigate replace to={backHref} />;
   }
 
   return (
     <ToolPlaygroundPageContent
-      tool={tool}
       superBotProfileId={superBotProfileId}
+      tool={tool}
     />
   );
 }
@@ -96,13 +99,13 @@ function ToolPlaygroundPageContent({
     <div className="flex min-h-0 flex-1 flex-col space-y-4 p-6">
       <BackLink />
 
-      <section className={cn(sectionClass, "flex min-h-0 flex-1 overflow-hidden")}>
+      <section
+        className={cn(sectionClass, "flex min-h-0 flex-1 overflow-hidden")}
+      >
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {isJavascriptTool ? (
-            <aside
-              className="order-2 shrink-0 overflow-y-auto border-t border-border lg:order-1 lg:w-80 lg:border-t-0 lg:border-r xl:w-96"
-            >
-              <ToolPlaygroundRunForm tool={tool} run={run} />
+            <aside className="order-2 shrink-0 overflow-y-auto border-border border-t lg:order-1 lg:w-80 lg:border-t-0 lg:border-r xl:w-96">
+              <ToolPlaygroundRunForm run={run} tool={tool} />
             </aside>
           ) : null}
 
@@ -110,23 +113,23 @@ function ToolPlaygroundPageContent({
             {isJavascriptTool ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
-                  role="tablist"
                   aria-label="Tool playground"
-                  className="flex shrink-0 border-b border-border px-4 sm:px-5"
+                  className="flex shrink-0 border-border border-b px-4 sm:px-5"
+                  role="tablist"
                 >
                   <PlaygroundTab
-                    id="tool-playground-tab-output"
                     active={mainTab === "output"}
                     controls="tool-playground-panel-output"
+                    id="tool-playground-tab-output"
                     onSelect={() => setMainTab("output")}
                   >
                     Run output
                     {run.running ? <Spinner className="size-3.5" /> : null}
                   </PlaygroundTab>
                   <PlaygroundTab
-                    id="tool-playground-tab-detail"
                     active={mainTab === "detail"}
                     controls="tool-playground-panel-detail"
+                    id="tool-playground-tab-detail"
                     onSelect={() => setMainTab("detail")}
                   >
                     Tool detail
@@ -136,19 +139,22 @@ function ToolPlaygroundPageContent({
                 <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
                   {mainTab === "output" ? (
                     <div
+                      aria-labelledby="tool-playground-tab-output"
                       id="tool-playground-panel-output"
                       role="tabpanel"
-                      aria-labelledby="tool-playground-tab-output"
                     >
-                      <ToolPlaygroundOutput run={run} superBotProfileId={superBotProfileId} />
+                      <ToolPlaygroundOutput
+                        run={run}
+                        superBotProfileId={superBotProfileId}
+                      />
                     </div>
                   ) : (
                     <div
+                      aria-labelledby="tool-playground-tab-detail"
                       id="tool-playground-panel-detail"
                       role="tabpanel"
-                      aria-labelledby="tool-playground-tab-detail"
                     >
-                      <ToolDetailSections tool={tool} showHeader />
+                      <ToolDetailSections showHeader tool={tool} />
                     </div>
                   )}
                 </div>
@@ -156,16 +162,19 @@ function ToolPlaygroundPageContent({
             ) : (
               <div className="space-y-5 overflow-y-auto p-4 sm:p-5">
                 <p
-                  className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+                  className="rounded-md border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-amber-800 text-sm dark:text-amber-200"
                   role="status"
                 >
-                  Playground is available for custom JavaScript tools only. Built-in and MCP tools
-                  cannot be run here.{" "}
-                  <Link to={back.href} className="font-medium underline underline-offset-2">
+                  Playground is available for custom JavaScript tools only.
+                  Built-in and MCP tools cannot be run here.{" "}
+                  <Link
+                    className="font-medium underline underline-offset-2"
+                    to={back.href}
+                  >
                     Back to {back.label.toLowerCase()}
                   </Link>
                 </p>
-                <ToolDetailSections tool={tool} showHeader />
+                <ToolDetailSections showHeader tool={tool} />
               </div>
             )}
           </main>
@@ -190,19 +199,19 @@ function PlaygroundTab({
 }) {
   return (
     <button
-      type="button"
-      id={id}
-      role="tab"
-      aria-selected={active}
       aria-controls={controls}
-      data-active={active || undefined}
+      aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
         active
           ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          : "border-transparent text-muted-foreground hover:text-foreground"
       )}
+      data-active={active || undefined}
+      id={id}
       onClick={onSelect}
+      role="tab"
+      type="button"
     >
       {children}
     </button>
@@ -214,8 +223,14 @@ function BackLink() {
   const { href, label } = toolPlaygroundBackTarget(searchParams);
 
   return (
-    <Button type="button" variant="ghost" size="sm" className="-ml-2 w-fit" render={<Link to={href} />}>
-      <ChevronLeftIcon className="size-4" aria-hidden />
+    <Button
+      className="-ml-2 w-fit"
+      render={<Link to={href} />}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <ArrowLeft01Icon aria-hidden className="size-4" />
       {label}
     </Button>
   );
@@ -227,7 +242,7 @@ function PageState({ message }: { message: string }) {
       <div
         className={cn(
           sectionClass,
-          "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-sm text-muted-foreground",
+          "flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-muted-foreground text-sm"
         )}
       >
         <Spinner className="size-5" />

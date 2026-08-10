@@ -1,18 +1,18 @@
-import type { TerminalInput } from "./terminal-input";
+import {
+  normalizeStyledLine,
+  plainLine,
+  type StyledLine,
+  styledLine,
+  styledLineText,
+} from "./styled-text";
 import {
   clampFrameCursor,
   cursorColFromLine,
   diffFrames,
-  serializeDiffOps,
   type FrameModel,
+  serializeDiffOps,
 } from "./terminal-frame";
-import {
-  normalizeStyledLine,
-  plainLine,
-  styledLine,
-  styledLineText,
-  type StyledLine,
-} from "./styled-text";
+import type { TerminalInput } from "./terminal-input";
 import { wrapText } from "./text-measure";
 import type { MessageKind } from "./virtual-message-list";
 import { VirtualMessageList } from "./virtual-message-list";
@@ -27,7 +27,7 @@ export function computeReservedRows(options: {
 export function shouldPinToBottom(
   contentBottomRow: number,
   inputRows: number,
-  terminalRows: number,
+  terminalRows: number
 ): boolean {
   return contentBottomRow + inputRows >= terminalRows;
 }
@@ -36,13 +36,19 @@ export function getInputStartLine(contentBottomRow: number): number {
   return contentBottomRow + 1;
 }
 
-export function getVisiblePinnedInputRows(inputRows: number, terminalRows: number): number {
+export function getVisiblePinnedInputRows(
+  inputRows: number,
+  terminalRows: number
+): number {
   const rows = Math.max(1, inputRows);
   const maxVisibleRows = terminalRows > 1 ? terminalRows - 1 : 1;
   return Math.min(rows, maxVisibleRows);
 }
 
-export function getPinnedInputStartLine(inputRows: number, terminalRows: number): number {
+export function getPinnedInputStartLine(
+  inputRows: number,
+  terminalRows: number
+): number {
   const visibleRows = getVisiblePinnedInputRows(inputRows, terminalRows);
   return Math.max(1, terminalRows - visibleRows + 1);
 }
@@ -88,7 +94,9 @@ function padTranscriptLine(text: string): string {
 
 function wrapPaddedTranscriptLines(text: string, width: number): string[] {
   const contentWidth = Math.max(1, width - TRANSCRIPT_HORIZONTAL_PADDING * 2);
-  return wrapPlainTextToLines(text, contentWidth).map((line) => padTranscriptLine(line));
+  return wrapPlainTextToLines(text, contentWidth).map((line) =>
+    padTranscriptLine(line)
+  );
 }
 
 export class TerminalLayout {
@@ -111,7 +119,7 @@ export class TerminalLayout {
   constructor(private readonly terminalInput: TerminalInput | null = null) {}
 
   apply(): boolean {
-    if (!process.stdout.isTTY || !process.stdin.isTTY) {
+    if (!(process.stdout.isTTY && process.stdin.isTTY)) {
       return false;
     }
 
@@ -202,7 +210,7 @@ export class TerminalLayout {
   setReservedRows(rows: number, lines: Array<StyledLine | string>): void {
     this.reservedRows = Math.max(1, rows);
     this.inputLines = (lines.length > 0 ? lines : [plainLine("")]).map((line) =>
-      normalizeStyledLine(line),
+      normalizeStyledLine(line)
     );
     this.render();
   }
@@ -232,8 +240,10 @@ export class TerminalLayout {
   }
 
   writeStatusLine(text: StyledLine | string): void {
-    if (!this.enabled || !this.anchored) {
-      process.stdout.write(`\r\x1b[K${styledLineText(normalizeStyledLine(text))}`);
+    if (!(this.enabled && this.anchored)) {
+      process.stdout.write(
+        `\r\x1b[K${styledLineText(normalizeStyledLine(text))}`
+      );
       return;
     }
 
@@ -258,7 +268,7 @@ export class TerminalLayout {
     const line = normalizeStyledLine(text);
     const plain = styledLineText(line);
 
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       process.stdout.write(plain);
       return;
     }
@@ -274,7 +284,7 @@ export class TerminalLayout {
     const line = normalizeStyledLine(text);
     const plain = styledLineText(line);
 
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       process.stdout.write(`${plain}\n`);
       return;
     }
@@ -292,7 +302,7 @@ export class TerminalLayout {
   }
 
   scrollPage(deltaPages: number): void {
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       return;
     }
 
@@ -303,7 +313,7 @@ export class TerminalLayout {
   }
 
   scrollLines(deltaLines: number): void {
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       return;
     }
 
@@ -317,7 +327,7 @@ export class TerminalLayout {
   }
 
   scrollToLatest(): void {
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       return;
     }
 
@@ -340,14 +350,15 @@ export class TerminalLayout {
       return [];
     }
 
-    const lines = wrapPaddedTranscriptLines(this.streamBuffer, getTerminalColumns()).map((line) =>
-      plainLine(line),
-    );
+    const lines = wrapPaddedTranscriptLines(
+      this.streamBuffer,
+      getTerminalColumns()
+    ).map((line) => plainLine(line));
     return this.messages.messageCount > 0 ? [plainLine(""), ...lines] : lines;
   }
 
   private render(): void {
-    if (!this.enabled || !this.anchored) {
+    if (!(this.enabled && this.anchored)) {
       return;
     }
 
@@ -360,20 +371,37 @@ export class TerminalLayout {
     const statusLeadingGapRows = this.statusLine && fullLength > 0 ? 1 : 0;
     const statusRows = this.statusLine ? statusLeadingGapRows + 1 : 0;
     const debugRows = this.debugOverlay ? 1 : 0;
-    const neededRows = Math.max(1, fullLength + statusRows + GAP_ROWS + this.reservedRows + debugRows);
+    const neededRows = Math.max(
+      1,
+      fullLength + statusRows + GAP_ROWS + this.reservedRows + debugRows
+    );
     const anchor = Math.min(rows, Math.max(1, this.anchorRow));
     const initialViewportRows = Math.max(1, rows - anchor + 1);
-    const targetViewportRows = Math.min(rows, Math.max(initialViewportRows, neededRows));
+    const targetViewportRows = Math.min(
+      rows,
+      Math.max(initialViewportRows, neededRows)
+    );
     const desiredTop = Math.max(1, rows - targetViewportRows + 1);
     // Keep viewport growth monotonic within a session: once grown upward, do not shrink down.
-    this.viewportTopRow = Math.max(1, Math.min(anchor, this.viewportTopRow, desiredTop));
+    this.viewportTopRow = Math.max(
+      1,
+      Math.min(anchor, this.viewportTopRow, desiredTop)
+    );
     const viewportTop = this.viewportTopRow;
     const viewportRows = Math.max(1, rows - viewportTop + 1);
-    const visibleInputRows = getVisiblePinnedInputRows(this.reservedRows, viewportRows);
+    const visibleInputRows = getVisiblePinnedInputRows(
+      this.reservedRows,
+      viewportRows
+    );
     const visibleInput = this.inputLines.slice(-visibleInputRows);
-    const pinned = fullLength + statusRows + GAP_ROWS + debugRows + visibleInput.length > viewportRows;
+    const pinned =
+      fullLength + statusRows + GAP_ROWS + debugRows + visibleInput.length >
+      viewportRows;
     const contentCapacity = pinned
-      ? Math.max(0, viewportRows - visibleInput.length - statusRows - GAP_ROWS - debugRows)
+      ? Math.max(
+          0,
+          viewportRows - visibleInput.length - statusRows - GAP_ROWS - debugRows
+        )
       : fullLength;
     this.contentWindowRows = Math.max(1, contentCapacity);
     const maxOffset = Math.max(0, fullLength - contentCapacity);
@@ -383,13 +411,22 @@ export class TerminalLayout {
     }
     const endExclusive = Math.max(0, fullLength - this.historyOffset);
     const startInclusive = Math.max(0, endExclusive - contentCapacity);
-    const visibleTranscript = this.messages.getLines(startInclusive, Math.min(endExclusive, transcriptCount), cols);
+    const visibleTranscript = this.messages.getLines(
+      startInclusive,
+      Math.min(endExclusive, transcriptCount),
+      cols
+    );
     const streamStart = Math.max(0, startInclusive - transcriptCount);
-    const streamEnd = Math.max(0, Math.min(endExclusive - transcriptCount, streamContent.length));
+    const streamEnd = Math.max(
+      0,
+      Math.min(endExclusive - transcriptCount, streamContent.length)
+    );
     const visibleStream = streamContent.slice(streamStart, streamEnd);
     const visibleContent = [...visibleTranscript, ...visibleStream];
 
-    const lines: StyledLine[] = Array.from({ length: viewportRows }, () => plainLine(""));
+    const lines: StyledLine[] = Array.from({ length: viewportRows }, () =>
+      plainLine("")
+    );
     let row = 0;
 
     if (this.debugOverlay && viewportRows > 0) {
@@ -399,12 +436,17 @@ export class TerminalLayout {
         `msgs:${this.messages.messageCount} ` +
         `follow:${this.followOutput ? "1" : "0"} pin:${pinned ? "1" : "0"} dtop:${desiredTop} ` +
         `sr:${viewportTop}-${pinned ? Math.max(viewportTop, rows - visibleInput.length) : rows}`;
-      lines[0] = styledLine(debugText.slice(0, Math.max(1, cols)), { dim: true, color: "yellow" });
+      lines[0] = styledLine(debugText.slice(0, Math.max(1, cols)), {
+        color: "yellow",
+        dim: true,
+      });
       row = 1;
     }
 
     for (const line of visibleContent.slice(-viewportRows)) {
-      if (row >= viewportRows) break;
+      if (row >= viewportRows) {
+        break;
+      }
       lines[row] = line;
       row += 1;
     }
@@ -418,30 +460,34 @@ export class TerminalLayout {
 
     const inputStart = pinned
       ? Math.max(0, viewportRows - visibleInput.length)
-      : Math.min(viewportRows - visibleInput.length, row + statusRows + GAP_ROWS);
+      : Math.min(
+          viewportRows - visibleInput.length,
+          row + statusRows + GAP_ROWS
+        );
     for (let index = 0; index < visibleInput.length; index += 1) {
       lines[inputStart + index] = visibleInput[index] ?? plainLine("");
     }
 
     const cursorLine = visibleInput[visibleInput.length - 1] ?? plainLine("");
-    const cursorRow = viewportTop + Math.max(1, inputStart + visibleInput.length) - 1;
+    const cursorRow =
+      viewportTop + Math.max(1, inputStart + visibleInput.length) - 1;
     const scrollBottom = pinned
       ? Math.max(viewportTop, rows - visibleInput.length - GAP_ROWS)
       : rows;
     const frame = clampFrameCursor(
       {
-        lines,
-        topRow: viewportTop,
-        scrollTop: viewportTop,
-        scrollBottom,
         cursor: {
-          row: cursorRow,
           col: cursorColFromLine(cursorLine, cols),
+          row: cursorRow,
           visible: false,
         },
+        lines,
+        scrollBottom,
+        scrollTop: viewportTop,
+        topRow: viewportTop,
       },
       rows,
-      cols,
+      cols
     );
     const operations = diffFrames(this.previousFrame, frame);
     const output = serializeDiffOps(operations);
@@ -452,5 +498,4 @@ export class TerminalLayout {
 
     this.previousFrame = frame;
   }
-
 }

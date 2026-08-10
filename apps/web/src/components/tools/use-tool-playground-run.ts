@@ -12,25 +12,29 @@ export type ToolPlaygroundRunState =
   | { status: "error"; error: string; parameters: Record<string, unknown> };
 
 export interface ToolPlaygroundRunControls {
-  parametersJson: string;
-  setParametersJson: (value: string) => void;
-  jsonError: string | null;
-  assistPrompt: string;
-  setAssistPrompt: (value: string) => void;
-  suggesting: boolean;
-  runState: ToolPlaygroundRunState;
   actionError: string | null;
-  running: boolean;
-  handleSuggestParams: () => Promise<void>;
-  handleRun: () => Promise<void>;
+  assistPrompt: string;
   handleFixWithSuperBot: () => void;
+  handleRun: () => Promise<void>;
+  handleSuggestParams: () => Promise<void>;
+  jsonError: string | null;
+  parametersJson: string;
+  running: boolean;
+  runState: ToolPlaygroundRunState;
+  setAssistPrompt: (value: string) => void;
+  setParametersJson: (value: string) => void;
+  suggesting: boolean;
 }
 
 function parseParametersJson(raw: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(raw);
 
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -42,16 +46,18 @@ function parseParametersJson(raw: string): Record<string, unknown> | null {
 
 export function useToolPlaygroundRun(
   tool: ToolDetail,
-  superBotProfileId: string | null,
+  superBotProfileId: string | null
 ): ToolPlaygroundRunControls {
   const { navigateToNewChat } = useAppNavigation();
   const [parametersJson, setParametersJsonState] = useState(() =>
-    buildExampleParametersJson(tool.parameters),
+    buildExampleParametersJson(tool.parameters)
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [assistPrompt, setAssistPrompt] = useState("");
   const [suggesting, setSuggesting] = useState(false);
-  const [runState, setRunState] = useState<ToolPlaygroundRunState>({ status: "idle" });
+  const [runState, setRunState] = useState<ToolPlaygroundRunState>({
+    status: "idle",
+  });
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleSuggestParams() {
@@ -92,19 +98,19 @@ export function useToolPlaygroundRun(
 
       if (!response.ok) {
         setRunState({
-          status: "error",
           error: response.error ?? "Tool run failed.",
           parameters,
+          status: "error",
         });
         return;
       }
 
-      setRunState({ status: "success", result: response.result, parameters });
+      setRunState({ parameters, result: response.result, status: "success" });
     } catch (error) {
       setRunState({
-        status: "error",
         error: formatError(error),
         parameters,
+        status: "error",
       });
     }
   }
@@ -115,9 +121,9 @@ export function useToolPlaygroundRun(
     }
 
     const draft = buildSuperBotFixDraft({
-      toolName: tool.name,
-      parameters: runState.parameters,
       error: runState.error,
+      parameters: runState.parameters,
+      toolName: tool.name,
     });
 
     navigateToNewChat(superBotProfileId, { draft });
@@ -129,18 +135,18 @@ export function useToolPlaygroundRun(
   }
 
   return {
-    parametersJson,
-    setParametersJson,
-    jsonError,
-    assistPrompt,
-    setAssistPrompt,
-    suggesting,
-    runState,
     actionError,
-    running: runState.status === "running",
-    handleSuggestParams,
-    handleRun,
+    assistPrompt,
     handleFixWithSuperBot,
+    handleRun,
+    handleSuggestParams,
+    jsonError,
+    parametersJson,
+    running: runState.status === "running",
+    runState,
+    setAssistPrompt,
+    setParametersJson,
+    suggesting,
   };
 }
 

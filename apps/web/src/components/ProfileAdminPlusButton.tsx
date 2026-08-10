@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react";
+import { Add01Icon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -22,16 +22,16 @@ export function ProfileAdminPlusButton({
       <TooltipTrigger
         render={
           <Button
+            aria-label={label}
+            className="text-muted-foreground/70 hover:text-foreground"
+            disabled={disabled}
+            onClick={onClick}
+            size="icon-sm"
+            title={label}
             type="button"
             variant="ghost"
-            size="icon-sm"
-            disabled={disabled}
-            aria-label={label}
-            title={label}
-            onClick={onClick}
-            className="text-muted-foreground/70 hover:text-foreground"
           >
-            <PlusIcon className="size-4" strokeWidth={1.75} aria-hidden />
+            <Add01Icon aria-hidden className="size-4" />
           </Button>
         }
       />

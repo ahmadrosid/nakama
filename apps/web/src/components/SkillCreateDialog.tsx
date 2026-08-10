@@ -1,5 +1,5 @@
 import type { CreateSkillRequest } from "@nakama/core/contract";
-import { useState, type SubmitEvent } from "react";
+import { type SubmitEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,11 +15,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatError } from "@/lib/client";
 
 interface SkillCreateDialogProps {
-  open: boolean;
   busy: boolean;
-  profileId: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (request: CreateSkillRequest) => Promise<void>;
+  open: boolean;
+  profileId: string | null;
 }
 
 const bodyPlaceholder = `# Skill instructions
@@ -34,13 +34,13 @@ export function SkillCreateDialog({
   onSubmit,
 }: SkillCreateDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <SkillCreateDialogContent
           busy={busy}
-          profileId={profileId}
           onOpenChange={onOpenChange}
           onSubmit={onSubmit}
+          profileId={profileId}
         />
       ) : null}
     </Dialog>
@@ -76,13 +76,15 @@ function SkillCreateDialogContent({
 
     try {
       await onSubmit({
-        name: name.trim(),
-        description: description.trim(),
         body: body.trim() || undefined,
+        description: description.trim(),
+        name: name.trim(),
         profileId,
       });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : formatError(error));
+      setSubmitError(
+        error instanceof Error ? error.message : formatError(error)
+      );
     }
   }
 
@@ -99,62 +101,62 @@ function SkillCreateDialogContent({
         <div className="space-y-5">
           <div className="space-y-2.5">
             <label
-              className="block text-sm font-medium text-foreground"
+              className="block font-medium text-foreground text-sm"
               htmlFor="skill-create-name"
             >
               Name
             </label>
             <Input
-              id="skill-create-name"
-              value={name}
-              disabled={busy}
               autoFocus
               className="font-mono text-sm"
-              placeholder="weather"
+              disabled={busy}
+              id="skill-create-name"
               onChange={(event) => setName(event.target.value)}
+              placeholder="weather"
+              value={name}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Lowercase letters, numbers, and hyphens only.
             </p>
           </div>
 
           <div className="space-y-2.5">
             <label
-              className="block text-sm font-medium text-foreground"
+              className="block font-medium text-foreground text-sm"
               htmlFor="skill-create-description"
             >
               Description
             </label>
             <Input
-              id="skill-create-description"
-              value={description}
               disabled={busy}
-              placeholder="Get weather forecasts. Use when the user asks about weather."
+              id="skill-create-description"
               onChange={(event) => setDescription(event.target.value)}
+              placeholder="Get weather forecasts. Use when the user asks about weather."
+              value={description}
             />
           </div>
 
           <div className="space-y-2.5">
             <label
-              className="block text-sm font-medium text-foreground"
+              className="block font-medium text-foreground text-sm"
               htmlFor="skill-create-body"
             >
               Instructions
             </label>
             <Textarea
-              id="skill-create-body"
-              value={body}
+              className="max-h-64 min-h-40 overflow-y-auto font-mono text-sm"
               disabled={busy}
-              rows={8}
-              placeholder={bodyPlaceholder}
-              className="min-h-40 max-h-64 overflow-y-auto font-mono text-sm"
+              id="skill-create-body"
               onChange={(event) => setBody(event.target.value)}
+              placeholder={bodyPlaceholder}
+              rows={8}
+              value={body}
             />
           </div>
 
           {submitError ? (
             <p
-              className="rounded-md bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+              className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
               role="alert"
             >
               {submitError}
@@ -163,10 +165,15 @@ function SkillCreateDialogContent({
         </div>
 
         <DialogFooter className="gap-3 border-t-0 bg-transparent pt-0 sm:justify-end">
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={busy || !canSubmit || !profileId}>
+          <Button disabled={busy || !canSubmit || !profileId} type="submit">
             {busy ? <Spinner className="size-4" /> : "Create skill"}
           </Button>
         </DialogFooter>

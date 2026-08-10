@@ -1,15 +1,13 @@
+import { getWhatsAppConfigDir } from "@nakama/core/whatsapp-config";
 import {
+  DisconnectReason,
   extractMessageContent,
+  fetchLatestBaileysVersion,
   getContentType,
-  type WASocket,
   makeWASocket,
   useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
+  type WASocket,
 } from "@whiskeysockets/baileys";
-import {
-  getWhatsAppConfigDir,
-} from "@nakama/core/whatsapp-config";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
@@ -17,9 +15,9 @@ import {
 } from "./inbound-message";
 
 export interface WhatsAppSocketDeps {
-  onMessage: (data: { jid: string; text: string }) => Promise<void>;
   onConnected?: (me: { id: string; lid?: string | null }) => void;
   onDisconnected?: () => void;
+  onMessage: (data: { jid: string; text: string }) => Promise<void>;
   onQr?: (qr: string) => void;
 }
 
@@ -30,7 +28,7 @@ export interface WhatsAppSocketHandle {
 }
 
 export async function createWhatsAppSocket(
-  deps: WhatsAppSocketDeps,
+  deps: WhatsAppSocketDeps
 ): Promise<WhatsAppSocketHandle> {
   const authDir = getWhatsAppConfigDir() + "/auth";
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -46,20 +44,22 @@ export async function createWhatsAppSocket(
       return socket;
     },
     async start() {
-      if (stopped) return;
+      if (stopped) {
+        return;
+      }
 
       socket = makeWASocket({
-        version,
         auth: state,
-        logger: baileysLogger,
-        printQRInTerminal: false,
         browser: ["Nakama", "Chrome", "4.0.0"] as [string, string, string],
         connectTimeoutMs: 30_000,
-        retryRequestDelayMs: 2_000,
+        logger: baileysLogger,
+        markOnlineOnConnect: false,
+        printQRInTerminal: false,
+        retryRequestDelayMs: 2000,
         // Keep history sync disabled, but allow Baileys init queries so the
         // socket fully subscribes after reconnect/restart.
         shouldSyncHistoryMessage: () => false,
-        markOnlineOnConnect: false,
+        version,
       });
 
       socket.ev.on("connection.update", async (update) => {
@@ -85,7 +85,7 @@ export async function createWhatsAppSocket(
             statusCode !== DisconnectReason.loggedOut && !stopped;
 
           console.log(
-            `WhatsApp disconnected (code: ${statusCode}).${shouldReconnect ? " Reconnecting..." : ""}`,
+            `WhatsApp disconnected (code: ${statusCode}).${shouldReconnect ? " Reconnecting..." : ""}`
           );
 
           if (shouldReconnect) {
@@ -98,7 +98,7 @@ export async function createWhatsAppSocket(
 
       socket.ev.on("messages.upsert", async (m) => {
         console.log(
-          `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`,
+          `WhatsApp messages.upsert type=${m.type} count=${m.messages.length}`
         );
 
         if (!isSupportedUpsertType(m.type)) {
@@ -114,7 +114,7 @@ export async function createWhatsAppSocket(
 
           if (remoteJid) {
             console.log(
-              `WhatsApp upsert item jid=${remoteJid} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${msg.key.participant ?? "-"} text=${text ? "yes" : "no"} handle=${shouldHandle ? "yes" : "no"}`,
+              `WhatsApp upsert item jid=${remoteJid} fromMe=${msg.key.fromMe ? "yes" : "no"} participant=${msg.key.participant ?? "-"} text=${text ? "yes" : "no"} handle=${shouldHandle ? "yes" : "no"}`
             );
           }
 
@@ -127,22 +127,25 @@ export async function createWhatsAppSocket(
             loggedMissingTextPayload = true;
             console.log(
               "WhatsApp missing-text payload:",
-              summarizeMissingTextPayload(msg),
+              summarizeMissingTextPayload(msg)
             );
           }
 
-          if (!shouldHandle || !remoteJid) continue;
+          if (!(shouldHandle && remoteJid)) {
+            continue;
+          }
 
-          const preview =
-            text.length > 120 ? `${text.slice(0, 120)}…` : text;
-          console.log(`WhatsApp message received from ${remoteJid}: ${preview}`);
+          const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
+          console.log(
+            `WhatsApp message received from ${remoteJid}: ${preview}`
+          );
 
           try {
             await deps.onMessage({ jid: remoteJid, text });
           } catch (error) {
             console.error("WhatsApp inbound message handling failed.", {
-              jid: remoteJid,
               error: error instanceof Error ? error.message : String(error),
+              jid: remoteJid,
             });
           }
         }
@@ -165,24 +168,29 @@ function isSupportedUpsertType(type: string): boolean {
 }
 
 function summarizeMissingTextPayload(msg: {
-  key: { remoteJid?: string | null; fromMe?: boolean | null; participant?: string | null; id?: string | null };
+  key: {
+    remoteJid?: string | null;
+    fromMe?: boolean | null;
+    participant?: string | null;
+    id?: string | null;
+  };
   message?: Record<string, unknown> | null;
   messageStubType?: unknown;
 }): string {
   const extracted = extractMessageContent(msg.message as any);
   const summary = {
-    key: {
-      remoteJid: msg.key.remoteJid ?? null,
-      fromMe: msg.key.fromMe ?? null,
-      participant: msg.key.participant ?? null,
-      id: msg.key.id ?? null,
-    },
-    topLevelType: getContentType(msg.message as any) ?? null,
-    extractedType: getContentType(extracted as any) ?? null,
-    topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
     extractedKeys: extracted ? Object.keys(extracted).slice(0, 10) : [],
-    messageStubType: msg.messageStubType ?? null,
+    extractedType: getContentType(extracted as any) ?? null,
+    key: {
+      fromMe: msg.key.fromMe ?? null,
+      id: msg.key.id ?? null,
+      participant: msg.key.participant ?? null,
+      remoteJid: msg.key.remoteJid ?? null,
+    },
     message: msg.message ?? null,
+    messageStubType: msg.messageStubType ?? null,
+    topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
+    topLevelType: getContentType(msg.message as any) ?? null,
   };
 
   return JSON.stringify(summary);
@@ -192,14 +200,14 @@ function summarizeMissingTextPayload(msg: {
 function createBaileysLogger() {
   const noop = () => {};
   const logger = {
-    level: "silent",
-    trace: noop,
+    child: () => logger,
     debug: noop,
-    info: noop,
-    warn: console.warn.bind(console),
     error: console.error.bind(console),
     fatal: console.error.bind(console),
-    child: () => logger,
+    info: noop,
+    level: "silent",
+    trace: noop,
+    warn: console.warn.bind(console),
   };
 
   return logger;

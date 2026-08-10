@@ -1,12 +1,12 @@
+import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
+import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
-import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
-import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
-import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
+import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { extractModelId } from "@/lib/models";
-import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
@@ -56,61 +56,72 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const { banner: skillReviewBanner } = usePostTurnSkillReviewOverlay({
-    sessionId: session?.id ?? null,
-    profile: activeProfile,
-    sessionChannel,
     lastSuccessfulTurnAt,
+    profile: activeProfile,
     readOnlySession,
+    sessionChannel,
+    sessionId: session?.id ?? null,
   });
 
   const readOnlyBanner = readOnlySession ? (
-    <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-      View-only {formatSessionChannelLabel(sessionChannel)} conversation. Reply from{" "}
-      {formatSessionChannelLabel(sessionChannel)}.
+    <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
+      View-only {formatSessionChannelLabel(sessionChannel)} conversation. Reply
+      from {formatSessionChannelLabel(sessionChannel)}.
     </p>
   ) : null;
 
   const composer = (
-    <PromptInputProvider key={composerDraft || "empty"} initialInput={composerDraft}>
+    <PromptInputProvider
+      initialInput={composerDraft}
+      key={composerDraft || "empty"}
+    >
       {skillReviewBanner}
       {readOnlyBanner}
       <ChatComposer
-        className={isEmptyState && !error ? "py-0 [&>p:first-child]:min-h-0 z-10" : "py-0 z-10"}
-        chatStatus={chatStatus}
+        availableSkills={availableSkills}
         busy={busy}
         canStop={canStop}
+        chatStatus={chatStatus}
+        className={
+          isEmptyState && !error
+            ? "z-10 py-0 [&>p:first-child]:min-h-0"
+            : "z-10 py-0"
+        }
+        contextUsage={contextUsage}
+        currentModelSelection={currentModelSelection}
         disabled={composerDisabled}
         error={error}
-        contextUsage={contextUsage}
-        availableSkills={availableSkills}
-        showTips={isEmptyState}
-        showOfflineHint={showOfflineHint}
-        providerConfigured={health?.providerConfigured}
-        onNavigateSetup={navigateSetup}
-        providerModelGroups={providerModelGroups}
-        profileModelId={extractModelId(activeProfile?.model)}
-        currentModelSelection={currentModelSelection}
-        primarySupportsVision={activeModelSupportsVision}
         onModelChange={handleModelChange}
-        thinkingEffortVisible={thinkingEffortVisible}
-        thinkingEffort={thinkingEffort}
-        thinkingEffortDisabled={thinkingEffortDisabled}
-        onThinkingEffortChange={handleThinkingEffortChange}
-        renderModelLabel={renderModelLabel}
-        todos={agentTodos}
-        questionnaire={agentQuestionnaire}
-        queuedMessages={queuedMessages}
-        onSubmitQuestionnaire={(answers) => {
-          setComposerDraft("");
-          void sendMessage(formatAgentQuestionnaireAnswersMessage(answers), [], {
-            questionnaireAnswers: answers,
-          });
-        }}
+        onNavigateSetup={navigateSetup}
+        onStop={stopStreaming}
         onSubmit={(text, files) => {
           setComposerDraft("");
           void sendMessage(text, files);
         }}
-        onStop={stopStreaming}
+        onSubmitQuestionnaire={(answers) => {
+          setComposerDraft("");
+          void sendMessage(
+            formatAgentQuestionnaireAnswersMessage(answers),
+            [],
+            {
+              questionnaireAnswers: answers,
+            }
+          );
+        }}
+        onThinkingEffortChange={handleThinkingEffortChange}
+        primarySupportsVision={activeModelSupportsVision}
+        profileModelId={extractModelId(activeProfile?.model)}
+        providerConfigured={health?.providerConfigured}
+        providerModelGroups={providerModelGroups}
+        questionnaire={agentQuestionnaire}
+        queuedMessages={queuedMessages}
+        renderModelLabel={renderModelLabel}
+        showOfflineHint={showOfflineHint}
+        showTips={isEmptyState}
+        thinkingEffort={thinkingEffort}
+        thinkingEffortDisabled={thinkingEffortDisabled}
+        thinkingEffortVisible={thinkingEffortVisible}
+        todos={agentTodos}
       />
     </PromptInputProvider>
   );
@@ -121,11 +132,11 @@ export function ChatPageContent(state: ChatPageState) {
         <ChatPageColumn centered>
           <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
             <ChatWelcome
+              onProfileSwitch={handleProfileSwitch}
               profile={activeProfile}
               profileId={profileId}
-              profiles={profiles}
-              onProfileSwitch={handleProfileSwitch}
               profileSwitchDisabled={busy}
+              profiles={profiles}
             />
             {composer}
           </div>
@@ -141,18 +152,20 @@ export function ChatPageContent(state: ChatPageState) {
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ChatMessageList
-              messages={messages}
-              profileId={profileId}
-              showThinking={showThinking}
-              modelLabel={
-                currentModelSelection ? renderModelLabel(currentModelSelection) : null
-              }
-              branchingMessageId={branchingMessageId}
               actionsDisabled={busy || readOnlySession}
-              streamActive={busy}
-              turnStartedAt={turnStartedAt}
+              branchingMessageId={branchingMessageId}
+              messages={messages}
+              modelLabel={
+                currentModelSelection
+                  ? renderModelLabel(currentModelSelection)
+                  : null
+              }
               onBranchMessage={(message) => void handleBranchMessage(message)}
               onRetryMessage={(message) => void handleTryAgainMessage(message)}
+              profileId={profileId}
+              showThinking={showThinking}
+              streamActive={busy}
+              turnStartedAt={turnStartedAt}
             />
           </div>
 

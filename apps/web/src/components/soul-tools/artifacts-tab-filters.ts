@@ -25,17 +25,22 @@ export type ArtifactTypeFilter = (typeof ARTIFACT_TYPE_FILTERS)[number];
 
 export const ARTIFACT_TYPE_FILTER_LABELS: Record<ArtifactTypeFilter, string> = {
   all: "All types",
-  markdown: "Markdown",
+  document: "Documents",
   html: "HTML",
   image: "Images",
-  video: "Video",
-  document: "Documents",
-  text: "Text",
+  markdown: "Markdown",
   other: "Other",
+  text: "Text",
+  video: "Video",
 };
 
-export function classifyArtifactType(artifact: ArtifactFile): Exclude<ArtifactTypeFilter, "all"> {
-  const mimeType = resolveArtifactMimeType(artifact.mimeType, artifact.filename);
+export function classifyArtifactType(
+  artifact: ArtifactFile
+): Exclude<ArtifactTypeFilter, "all"> {
+  const mimeType = resolveArtifactMimeType(
+    artifact.mimeType,
+    artifact.filename
+  );
 
   if (isMarkdownArtifactMimeType(mimeType)) {
     return "markdown";
@@ -70,17 +75,17 @@ export function classifyArtifactType(artifact: ArtifactFile): Exclude<ArtifactTy
 
 export function artifactMatchesTypeFilter(
   artifact: ArtifactFile,
-  filter: ArtifactTypeFilter,
+  filter: ArtifactTypeFilter
 ): boolean {
   return filter === "all" || classifyArtifactType(artifact) === filter;
 }
 
 /** Type options present in the list (plus `all`), ordered for the filter menu. */
 export function availableArtifactTypeFilters(
-  artifacts: ArtifactFile[],
+  artifacts: ArtifactFile[]
 ): ArtifactTypeFilter[] {
   const present = new Set(artifacts.map(classifyArtifactType));
   return ARTIFACT_TYPE_FILTERS.filter(
-    (filter) => filter === "all" || present.has(filter),
+    (filter) => filter === "all" || present.has(filter)
   );
 }

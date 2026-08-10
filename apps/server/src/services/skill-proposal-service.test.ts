@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { NakamaApiError } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
-  seedOrgDefaultProfile,
   type DatabaseAdapter,
+  seedOrgDefaultProfile,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
@@ -26,15 +26,15 @@ async function seedOrg(
   options: {
     orgSkillsWriteApproval?: boolean;
     profileSkillsWriteApproval?: boolean | null;
-  } = {},
+  } = {}
 ) {
   const now = new Date().toISOString();
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Test Org",
-    slug: "test-org",
     skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    createdAt: now,
+    slug: "test-org",
     updatedAt: now,
   });
   const profile = await seedOrgDefaultProfile(db, ORG_ID);
@@ -68,7 +68,9 @@ describe("SkillProposalService", () => {
     });
     const service = new SkillProposalService(db);
 
-    expect(await service.isWriteApprovalRequired(ORG_ID, profile.id)).toBe(false);
+    expect(await service.isWriteApprovalRequired(ORG_ID, profile.id)).toBe(
+      false
+    );
   });
 
   test("stage create inserts pending row without writing skill to disk", async () => {
@@ -78,19 +80,23 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     const result = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
 
     expect(result.outcome).toBe("created");
     expect(result.proposalId).toBeTruthy();
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(false);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      false
+    );
 
-    const { proposals } = await service.listProposals(ORG_ID, { profileId: profile.id });
+    const { proposals } = await service.listProposals(ORG_ID, {
+      profileId: profile.id,
+    });
     expect(proposals).toHaveLength(1);
     expect(proposals[0]?.status).toBe("pending");
     expect(proposals[0]?.action).toBe("create");
@@ -102,23 +108,25 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, new SkillsService(db));
 
     const first = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
     const second = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
 
     expect(first.outcome).toBe("created");
     expect(second.outcome).toBe("already_pending");
     expect(second.proposalId).toBe(first.proposalId);
 
-    const { proposals } = await service.listProposals(ORG_ID, { profileId: profile.id });
+    const { proposals } = await service.listProposals(ORG_ID, {
+      profileId: profile.id,
+    });
     expect(proposals).toHaveLength(1);
   });
 
@@ -129,23 +137,29 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     const staged = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
 
     const approved = await service.approveProposal(
       ORG_ID,
       staged.proposalId!,
-      "admin_user",
+      "admin_user"
     );
     expect(approved.status).toBe("approved");
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(true);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      true
+    );
 
-    const again = await service.approveProposal(ORG_ID, staged.proposalId!, "admin_user");
+    const again = await service.approveProposal(
+      ORG_ID,
+      staged.proposalId!,
+      "admin_user"
+    );
     expect(again.status).toBe("approved");
   });
 
@@ -156,21 +170,23 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     const staged = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
 
     const rejected = await service.rejectProposal(
       ORG_ID,
       staged.proposalId!,
-      "admin_user",
+      "admin_user"
     );
     expect(rejected.status).toBe("rejected");
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(false);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      false
+    );
   });
 
   test("stage patch requires an existing profile-owned skill", async () => {
@@ -180,19 +196,19 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     await skills.createSkill(ORG_ID, {
-      name: "deploy-notes",
-      description: "Notes about deploy process.",
       body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
       profileId: profile.id,
     });
 
     const result = await service.stageProposal({
+      action: "patch",
+      newString: "release checklist",
+      oldString: "deploy checklist",
       orgId: ORG_ID,
       profileId: profile.id,
-      action: "patch",
       skillName: "deploy-notes",
-      oldString: "deploy checklist",
-      newString: "release checklist",
     });
 
     expect(result.outcome).toBe("created");
@@ -205,19 +221,19 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     const created = await skills.createSkill(ORG_ID, {
-      name: "deploy-notes",
-      description: "Notes about deploy process.",
       body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
       profileId: profile.id,
     });
 
     const staged = await service.stageProposal({
+      action: "patch",
+      newString: "release checklist",
+      oldString: "deploy checklist",
       orgId: ORG_ID,
       profileId: profile.id,
-      action: "patch",
       skillName: "deploy-notes",
-      oldString: "deploy checklist",
-      newString: "release checklist",
     });
 
     await service.approveProposal(ORG_ID, staged.proposalId!, "admin_user");
@@ -234,26 +250,26 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, skills);
 
     const created = await skills.createSkill(ORG_ID, {
-      name: "deploy-notes",
-      description: "Notes about deploy process.",
       body: "Run the deploy checklist before shipping.",
+      description: "Notes about deploy process.",
+      name: "deploy-notes",
       profileId: profile.id,
     });
 
     const patchStaged = await service.stageProposal({
+      action: "patch",
+      newString: "release checklist",
+      oldString: "deploy checklist",
       orgId: ORG_ID,
       profileId: profile.id,
-      action: "patch",
       skillName: "deploy-notes",
-      oldString: "deploy checklist",
-      newString: "release checklist",
     });
     expect(patchStaged.outcome).toBe("created");
 
     const deleteStaged = await service.stageProposal({
+      action: "delete",
       orgId: ORG_ID,
       profileId: profile.id,
-      action: "delete",
       skillName: "deploy-notes",
     });
     expect(deleteStaged.outcome).toBe("already_pending");
@@ -269,17 +285,17 @@ describe("SkillProposalService", () => {
     const service = new SkillProposalService(db, new SkillsService(db));
 
     const staged = await service.stageProposal({
-      orgId: ORG_ID,
-      profileId: profile.id,
       action: "create",
       content: sampleSkillMarkdown,
+      orgId: ORG_ID,
+      profileId: profile.id,
     });
 
     await expect(
-      service.approveProposal("org_other", staged.proposalId!, "admin_user"),
+      service.approveProposal("org_other", staged.proposalId!, "admin_user")
     ).rejects.toBeInstanceOf(NakamaApiError);
     await expect(
-      service.approveProposal("org_other", staged.proposalId!, "admin_user"),
+      service.approveProposal("org_other", staged.proposalId!, "admin_user")
     ).rejects.toMatchObject({ status: 404 });
   });
 
@@ -295,27 +311,32 @@ describe("SkillProposalService", () => {
     await skills.createAndAssignRawSkillToProfile(
       ORG_ID,
       profile.id,
-      sampleSkillMarkdown,
+      sampleSkillMarkdown
     );
 
     const staged = await service.stageProposal({
+      action: "write_file",
+      content: "- staging\n",
       orgId: ORG_ID,
       profileId: profile.id,
-      action: "write_file",
-      skillName: "deploy-notes",
       relativePath: "checklist.md",
-      content: "- staging\n",
+      skillName: "deploy-notes",
     });
     expect(staged.outcome).toBe("created");
     expect(
-      (await service.listProposals(ORG_ID, { profileId: profile.id })).proposals[0]?.relativePath,
+      (await service.listProposals(ORG_ID, { profileId: profile.id }))
+        .proposals[0]?.relativePath
     ).toBe("checklist.md");
 
     await service.approveProposal(ORG_ID, staged.proposalId!, "admin_user");
 
     const onDisk = await readFile(
-      join(getProfileSkillsDir(ORG_ID, profile.id), "deploy-notes", "checklist.md"),
-      "utf8",
+      join(
+        getProfileSkillsDir(ORG_ID, profile.id),
+        "deploy-notes",
+        "checklist.md"
+      ),
+      "utf8"
     );
     expect(onDisk).toContain("- staging");
   });

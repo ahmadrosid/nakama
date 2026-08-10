@@ -6,13 +6,13 @@ export const FIREWORKS_GATEWAY_ACCOUNT = "fireworks";
 
 interface MoneyAmount {
   currencyCode?: string;
-  units?: string;
   nanos?: number;
+  units?: string;
 }
 
 interface SkuInfo {
-  sku?: string;
   amount?: MoneyAmount;
+  sku?: string;
   unit?: string;
 }
 
@@ -21,18 +21,18 @@ interface ServerlessMode {
 }
 
 interface GatewayModel {
-  name?: string;
-  displayName?: string;
-  kind?: string;
-  supportsTools?: boolean;
-  supportsImageInput?: boolean;
-  supportsReasoning?: boolean;
-  conversationConfig?: unknown;
-  serverlessModes?: ServerlessMode[];
-  deprecationDate?: unknown;
   baseModelDetails?: {
     parameterCount?: string;
   };
+  conversationConfig?: unknown;
+  deprecationDate?: unknown;
+  displayName?: string;
+  kind?: string;
+  name?: string;
+  serverlessModes?: ServerlessMode[];
+  supportsImageInput?: boolean;
+  supportsReasoning?: boolean;
+  supportsTools?: boolean;
 }
 
 interface ListModelsResponse {
@@ -40,16 +40,18 @@ interface ListModelsResponse {
   nextPageToken?: string;
 }
 
-function moneyToPerMillion(amount: MoneyAmount | undefined): number | undefined {
+function moneyToPerMillion(
+  amount: MoneyAmount | undefined
+): number | undefined {
   if (!amount) {
-    return undefined;
+    return;
   }
 
   const units = Number.parseInt(amount.units ?? "0", 10);
   const nanos = amount.nanos ?? 0;
 
-  if (!Number.isFinite(units) || !Number.isFinite(nanos)) {
-    return undefined;
+  if (!(Number.isFinite(units) && Number.isFinite(nanos))) {
+    return;
   }
 
   return units + nanos / 1_000_000_000;
@@ -103,7 +105,10 @@ function isChatModel(model: GatewayModel): boolean {
     return false;
   }
 
-  if (model.conversationConfig !== undefined && model.conversationConfig !== null) {
+  if (
+    model.conversationConfig !== undefined &&
+    model.conversationConfig !== null
+  ) {
     return true;
   }
 
@@ -132,10 +137,12 @@ function inferReasoning(model: GatewayModel, modelId: string): boolean {
   );
 }
 
-export function normalizeGatewayModel(model: GatewayModel): CustomModelEntry | null {
+export function normalizeGatewayModel(
+  model: GatewayModel
+): CustomModelEntry | null {
   const id = modelIdFromGatewayName(model.name);
 
-  if (!id || !isChatModel(model)) {
+  if (!(id && isChatModel(model))) {
     return null;
   }
 
@@ -156,7 +163,9 @@ export function normalizeGatewayModel(model: GatewayModel): CustomModelEntry | n
   };
 }
 
-export async function fetchFireworksGatewayModels(apiKey: string): Promise<CustomModelEntry[]> {
+export async function fetchFireworksGatewayModels(
+  apiKey: string
+): Promise<CustomModelEntry[]> {
   const key = apiKey.trim();
 
   if (!key) {
@@ -169,7 +178,7 @@ export async function fetchFireworksGatewayModels(apiKey: string): Promise<Custo
 
   do {
     const url = new URL(
-      `${FIREWORKS_GATEWAY_BASE_URL}/accounts/${FIREWORKS_GATEWAY_ACCOUNT}/models`,
+      `${FIREWORKS_GATEWAY_BASE_URL}/accounts/${FIREWORKS_GATEWAY_ACCOUNT}/models`
     );
     url.searchParams.set("filter", "supports_serverless=true");
     url.searchParams.set("pageSize", "200");
@@ -180,8 +189,8 @@ export async function fetchFireworksGatewayModels(apiKey: string): Promise<Custo
 
     const response = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${key}`,
         Accept: "application/json",
+        Authorization: `Bearer ${key}`,
       },
     });
 

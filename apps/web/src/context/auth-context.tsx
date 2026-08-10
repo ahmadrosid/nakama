@@ -1,14 +1,22 @@
+import type {
+  AuthUserResponse,
+  SetupAuthRequest,
+  UpdateOrganizationRequest,
+  UserOrgSummary,
+} from "@nakama/core/contract";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { queryClient } from "@/lib/query-client";
-import type { SetupAuthRequest, UpdateOrganizationRequest, UserOrgSummary, AuthUserResponse } from "@nakama/core/contract";
-import { AuthContext, type AuthContextValue } from "@/context/auth-context-shared";
 
 function refreshAuthenticatedQueries(): void {
   void queryClient.invalidateQueries();
@@ -18,8 +26,11 @@ async function loadSessionState(): Promise<{
   user: AuthUserResponse;
   orgs: UserOrgSummary[];
 }> {
-  const [user, { orgs }] = await Promise.all([client.getMe(), client.listUserOrgs()]);
-  return { user, orgs };
+  const [user, { orgs }] = await Promise.all([
+    client.getMe(),
+    client.listUserOrgs(),
+  ]);
+  return { orgs, user };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -59,24 +70,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return orgs.find((org) => org.id === activeOrgId) ?? null;
   }, [orgs, user]);
 
-  const setup = useCallback(async (request: SetupAuthRequest) => {
-    const webPublicUrl =
-      request.webPublicUrl ??
-      (typeof window !== "undefined" && window.location?.origin
-        ? window.location.origin
-        : undefined);
+  const setup = useCallback(
+    async (request: SetupAuthRequest) => {
+      const webPublicUrl =
+        request.webPublicUrl ??
+        (typeof window !== "undefined" && window.location?.origin
+          ? window.location.origin
+          : undefined);
 
-    await client.setupUser({
-      ...request,
-      ...(webPublicUrl ? { webPublicUrl } : {}),
-    });
-    await refreshSession();
-  }, [refreshSession]);
+      await client.setupUser({
+        ...request,
+        ...(webPublicUrl ? { webPublicUrl } : {}),
+      });
+      await refreshSession();
+    },
+    [refreshSession]
+  );
 
-  const login = useCallback(async (email: string, password: string) => {
-    await client.login(email, password);
-    await refreshSession();
-  }, [refreshSession]);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      await client.login(email, password);
+      await refreshSession();
+    },
+    [refreshSession]
+  );
 
   const logout = useCallback(async () => {
     await client.logout();
@@ -106,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       refreshAuthenticatedQueries();
     },
-    [user?.isPlatformAdmin],
+    [user?.isPlatformAdmin]
   );
 
   const updateOrg = useCallback(
@@ -130,23 +147,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrgs(nextOrgs);
       refreshAuthenticatedQueries();
     },
-    [orgs, user?.isPlatformAdmin],
+    [orgs, user?.isPlatformAdmin]
   );
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      user,
-      orgs,
       activeOrg,
+      createOrg,
       isAuthenticated: user !== null,
       isLoading,
-      setup,
       login,
       logout,
-      switchOrg,
-      createOrg,
-      updateOrg,
+      orgs,
       refreshSession,
+      setup,
+      switchOrg,
+      updateOrg,
+      user,
     }),
     [
       user,
@@ -160,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createOrg,
       updateOrg,
       refreshSession,
-    ],
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

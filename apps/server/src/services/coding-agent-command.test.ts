@@ -6,21 +6,21 @@ import {
 import { makeAnthropicProvider } from "./coding-agent-fixtures";
 
 const anthropicUserConfig = {
-  providers: [makeAnthropicProvider()],
   defaultProviderId: "prov_anthropic",
+  providers: [makeAnthropicProvider()],
 };
 
 describe("buildCodingAgentCommandTemplate", () => {
   test("builds Claude Code print-mode command", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: [],
+        command: "claude",
         kind: "claude_code",
         name: "Claude Code",
-        command: "claude",
-        args: [],
       },
       "Add tests for auth",
-      "/tmp/workspace",
+      "/tmp/workspace"
     );
 
     expect(template.command).toContain("claude");
@@ -33,13 +33,13 @@ describe("buildCodingAgentCommandTemplate", () => {
   test("builds Codex exec command", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: [],
+        command: "codex",
         kind: "codex",
         name: "Codex",
-        command: "codex",
-        args: [],
       },
       "Refactor auth module",
-      "/tmp/workspace",
+      "/tmp/workspace"
     );
 
     expect(template.command).toContain("codex exec");
@@ -50,17 +50,17 @@ describe("buildCodingAgentCommandTemplate", () => {
   test("builds pi.dev command and spawn env", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: [],
+        command: "pi",
         kind: "pi",
         name: "pi.dev",
-        command: "pi",
-        args: [],
       },
       "Fix bugs",
       "/workspace",
       {
-        userConfig: anthropicUserConfig,
         profileModel: "claude-sonnet-4-6",
-      },
+        userConfig: anthropicUserConfig,
+      }
     );
     expect(template.backend).toBe("pi");
     expect(template.command).toContain("pi");
@@ -73,13 +73,13 @@ describe("buildCodingAgentCommandTemplate", () => {
   test("builds OpenCode run command with workspace dir", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: [],
+        command: "opencode",
         kind: "opencode",
         name: "OpenCode",
-        command: "opencode",
-        args: [],
       },
       "Fix lint errors",
-      "/tmp/workspace",
+      "/tmp/workspace"
     );
 
     expect(template.command).toContain("opencode run");
@@ -92,17 +92,17 @@ describe("buildCodingAgentCommandTemplate", () => {
   test("builds Cursor Agent print command with text output and yolo", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: [],
+        command: "agent",
         kind: "cursor_agent",
         name: "Cursor Agent",
-        command: "agent",
-        args: [],
       },
       "Where are the built-in skills",
       "/tmp/workspace",
       {
-        userConfig: anthropicUserConfig,
         profileModel: "claude-sonnet-4-6",
-      },
+        userConfig: anthropicUserConfig,
+      }
     );
 
     expect(template.backend).toBe("cursor_agent");
@@ -119,16 +119,18 @@ describe("buildCodingAgentCommandTemplate", () => {
   test("reflects custom harness command from workspace settings", async () => {
     const template = await buildCodingAgentCommandTemplate(
       {
+        args: ["--model", "sonnet"],
+        command: "/opt/bin/claude",
         kind: "claude_code",
         name: "Custom Claude",
-        command: "/opt/bin/claude",
-        args: ["--model", "sonnet"],
       },
       "Touch README",
-      "/tmp/workspace",
+      "/tmp/workspace"
     );
 
-    expect(template.command.startsWith("/opt/bin/claude --model sonnet")).toBe(true);
+    expect(template.command.startsWith("/opt/bin/claude --model sonnet")).toBe(
+      true
+    );
   });
 });
 
@@ -137,14 +139,14 @@ describe("formatCodingAgentCommandContext", () => {
     const context = formatCodingAgentCommandContext(
       await buildCodingAgentCommandTemplate(
         {
+          args: [],
+          command: "opencode",
           kind: "opencode",
           name: "OpenCode",
-          command: "opencode",
-          args: [],
         },
         "Ship feature",
-        "/tmp/workspace",
-      ),
+        "/tmp/workspace"
+      )
     );
 
     expect(context).toContain("bash");
@@ -155,18 +157,18 @@ describe("formatCodingAgentCommandContext", () => {
     const context = formatCodingAgentCommandContext(
       await buildCodingAgentCommandTemplate(
         {
+          args: [],
+          command: "claude",
           kind: "claude_code",
           name: "Claude Code",
-          command: "claude",
-          args: [],
         },
         "Ship feature",
         "/tmp/workspace",
         {
-          userConfig: anthropicUserConfig,
           profileModel: "claude-sonnet-4-6",
-        },
-      ),
+          userConfig: anthropicUserConfig,
+        }
+      )
     );
 
     expect(context).toContain("Nakama provider passthrough");
@@ -178,18 +180,18 @@ describe("formatCodingAgentCommandContext", () => {
     const context = formatCodingAgentCommandContext(
       await buildCodingAgentCommandTemplate(
         {
+          args: [],
+          command: "agent",
           kind: "cursor_agent",
           name: "Cursor Agent",
-          command: "agent",
-          args: [],
         },
         "Ship feature",
         "/tmp/workspace",
         {
-          userConfig: anthropicUserConfig,
           profileModel: "claude-sonnet-4-6",
-        },
-      ),
+          userConfig: anthropicUserConfig,
+        }
+      )
     );
 
     expect(context).toContain("host auth");

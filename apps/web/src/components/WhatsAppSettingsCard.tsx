@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
 import type { UpdateWhatsAppSettingsRequest } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
-import { WhatsAppSettingsCardContent } from "@/components/whatsapp-settings-card-content";
+import { useEffect, useRef, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
+import { WhatsAppSettingsCardContent } from "@/components/whatsapp-settings-card-content";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import {
-  useRegenerateWhatsAppPairingCode,
   useReconnectWhatsApp,
+  useRegenerateWhatsAppPairingCode,
   useSaveWhatsAppSettings,
   useWhatsAppSettings,
 } from "@/hooks/use-whatsapp-settings";
@@ -16,8 +16,8 @@ import { queryKeys } from "@/lib/query-keys";
 
 interface WhatsAppSettingsCardProps {
   embedded?: boolean;
-  submitLabel?: string;
   onSaveSuccess?: () => void;
+  submitLabel?: string;
 }
 
 export function WhatsAppSettingsCard({
@@ -68,44 +68,68 @@ export function WhatsAppSettingsCard({
 
   useEffect(() => {
     if (worker?.paired && !settings?.pairedJid) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.whatsapp.settings });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.whatsapp.settings,
+      });
       return;
     }
 
     if (worker?.connected && !paired) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.whatsapp.settings });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.whatsapp.settings,
+      });
     }
-  }, [worker?.paired, worker?.connected, settings?.pairedJid, paired, queryClient]);
+  }, [
+    worker?.paired,
+    worker?.connected,
+    settings?.pairedJid,
+    paired,
+    queryClient,
+  ]);
 
   useEffect(() => {
     setCopied(false);
   }, [pairingCode]);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-    };
-  }, []);
+    },
+    []
+  );
 
   const useQrLinking = !pairingCode;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
   const awaitingQr =
-    configured && !paired && running && !connected && !qrCode && !qrWasVisible && useQrLinking;
-  const bridgeStarting = configured && !paired && running && !connected && Boolean(pairingCode);
+    configured &&
+    !paired &&
+    running &&
+    !connected &&
+    !qrCode &&
+    !qrWasVisible &&
+    useQrLinking;
+  const bridgeStarting =
+    configured && !paired && running && !connected && Boolean(pairingCode);
   const linkingAfterScan =
-    configured && !paired && running && !qrCode && (qrWasVisible || connected) && useQrLinking;
+    configured &&
+    !paired &&
+    running &&
+    !qrCode &&
+    (qrWasVisible || connected) &&
+    useQrLinking;
   const showReconnect = configured && !showQr && !awaitingQr;
   const canSave = !configured || profileId !== settings?.profileId;
   const actionLabel = submitLabel ?? (configured ? "Save" : "Enable WhatsApp");
 
   const statusLine =
-    hint ?? (formError ? formError : null) ?? (loadError ? formatError(loadError) : null);
+    hint ??
+    (formError ? formError : null) ??
+    (loadError ? formatError(loadError) : null);
 
-  const headerSubtitle = !configured
-    ? "Choose a profile and enable WhatsApp to get started"
-    : paired && running && !showQr
+  const headerSubtitle = configured
+    ? paired && running && !showQr
       ? "WhatsApp is linked and the bridge is running"
       : paired && !running
         ? "Linked. Start the WhatsApp bridge to receive messages"
@@ -119,11 +143,11 @@ export function WhatsAppSettingsCard({
                 ? "Preparing QR code…"
                 : pairingCode
                   ? "Enter the pairing code in WhatsApp"
-                  : "Scan the QR code, or generate a pairing code";
+                  : "Scan the QR code, or generate a pairing code"
+    : "Choose a profile and enable WhatsApp to get started";
 
-  const statusBadge = !configured
-    ? "Not set up"
-    : paired && running && !showQr
+  const statusBadge = configured
+    ? paired && running && !showQr
       ? "Connected"
       : paired && !running
         ? "Paired"
@@ -137,7 +161,8 @@ export function WhatsAppSettingsCard({
                 ? "Starting…"
                 : pairingCode
                   ? "Awaiting link"
-                  : "Not linked";
+                  : "Not linked"
+    : "Not set up";
 
   async function copyPairingCode() {
     if (!pairingCode) {
@@ -168,20 +193,20 @@ export function WhatsAppSettingsCard({
     };
 
     saveMutation.mutate(request, {
+      onError: (error) => {
+        setFormError(formatError(error));
+      },
       onSuccess: (saved) => {
         if (saved.pairedJid) {
           setHint("Saved.");
         } else if (saved.pairingCode) {
           setHint("Saved. Use the pairing code in WhatsApp.");
-        } else if (!configured) {
-          setHint("Enabled. Start the bridge and scan the QR code.");
-        } else {
+        } else if (configured) {
           setHint("Saved.");
+        } else {
+          setHint("Enabled. Start the bridge and scan the QR code.");
         }
         onSaveSuccess?.();
-      },
-      onError: (error) => {
-        setFormError(formatError(error));
       },
     });
   }
@@ -191,11 +216,11 @@ export function WhatsAppSettingsCard({
     setHint(null);
 
     regenerateMutation.mutate(undefined, {
-      onSuccess: () => {
-        setHint("New code ready.");
-      },
       onError: (error) => {
         setFormError(formatError(error));
+      },
+      onSuccess: () => {
+        setHint("New code ready.");
       },
     });
   }
@@ -206,11 +231,11 @@ export function WhatsAppSettingsCard({
     setQrWasVisible(false);
 
     reconnectMutation.mutate(undefined, {
-      onSuccess: () => {
-        setHint("Session reset. Scan the QR code when it appears.");
-      },
       onError: (error) => {
         setFormError(formatError(error));
+      },
+      onSuccess: () => {
+        setHint("Session reset. Scan the QR code when it appears.");
       },
     });
   }
@@ -227,13 +252,13 @@ export function WhatsAppSettingsCard({
     saveMutation.mutate(
       { profileId: nextProfileId.trim() || "default" },
       {
-        onSuccess: () => {
-          setHint("Reply profile saved.");
-        },
         onError: (error) => {
           setFormError(formatError(error));
         },
-      },
+        onSuccess: () => {
+          setHint("Reply profile saved.");
+        },
+      }
     );
   }
 
@@ -242,51 +267,49 @@ export function WhatsAppSettingsCard({
       return SETTINGS_CARD_LOADING_SKELETON;
     }
 
-    return (
-      <div className="py-3">{SETTINGS_CARD_LOADING_SKELETON}</div>
-    );
+    return <div className="py-3">{SETTINGS_CARD_LOADING_SKELETON}</div>;
   }
 
   const content = (
     <WhatsAppSettingsCardContent
-      embedded={embedded}
-      headerSubtitle={headerSubtitle}
-      statusBadge={statusBadge}
+      actionLabel={actionLabel}
+      awaitingQr={awaitingQr}
+      bridgeStarting={bridgeStarting}
+      canSave={canSave}
       configured={configured}
-      paired={paired}
-      running={running}
-      showQr={showQr}
+      copied={copied}
+      embedded={embedded}
+      formError={formError}
+      headerSubtitle={headerSubtitle}
       linkedNumber={linkedNumber}
+      linkingAfterScan={linkingAfterScan}
+      loadError={loadError}
+      onCopyPairingCode={() => void copyPairingCode()}
+      onProfileChange={handleProfileChange}
+      onReconnect={handleReconnect}
+      onRegeneratePairingCode={handleRegeneratePairingCode}
+      onSave={handleSave}
+      paired={paired}
+      pairingCode={pairingCode}
       profileId={profileId}
       profiles={profiles}
-      savePending={saveMutation.isPending}
-      onProfileChange={handleProfileChange}
-      pairingCode={pairingCode}
-      copied={copied}
-      onCopyPairingCode={() => void copyPairingCode()}
-      onRegeneratePairingCode={handleRegeneratePairingCode}
-      regeneratePending={regenerateMutation.isPending}
       qrCode={qrCode}
-      linkingAfterScan={linkingAfterScan}
-      bridgeStarting={bridgeStarting}
-      awaitingQr={awaitingQr}
-      showReconnect={showReconnect}
-      onReconnect={handleReconnect}
       reconnectPending={reconnectMutation.isPending}
-      worker={worker}
+      regeneratePending={regenerateMutation.isPending}
+      running={running}
+      savePending={saveMutation.isPending}
+      showQr={showQr}
+      showReconnect={showReconnect}
+      statusBadge={statusBadge}
       statusLine={statusLine}
-      formError={formError}
-      loadError={loadError}
-      canSave={canSave}
-      actionLabel={actionLabel}
-      onSave={handleSave}
+      worker={worker}
     />
   );
 
   if (embedded) {
     return (
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">{headerSubtitle}</p>
+        <p className="text-muted-foreground text-xs">{headerSubtitle}</p>
         {content}
       </div>
     );

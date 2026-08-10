@@ -10,17 +10,17 @@ import { createAgentHarness } from "./index";
 
 function createCapturingProvider(
   response: ChatCompletionResult,
-  name: ProviderClient["name"] = "anthropic",
+  name: ProviderClient["name"] = "anthropic"
 ): ProviderClient & { lastInput?: GenerateChatInput } {
   const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
-    name,
-    generateText() {
-      return Promise.resolve({ content: "{}" });
-    },
     generateChat(input) {
       provider.lastInput = input;
       return Promise.resolve(response);
     },
+    generateText() {
+      return Promise.resolve({ content: "{}" });
+    },
+    name,
     streamChat(input, handlers) {
       provider.lastInput = input;
       if (response.content) {
@@ -36,12 +36,12 @@ function createCapturingProvider(
 describe("provider-native web search", () => {
   test("passes webSearch provider option when web_search is assigned", async () => {
     const provider = createCapturingProvider({
+      assistantMessage: {
+        content: "Latest news summary.",
+        role: "assistant",
+      },
       content: "Latest news summary.",
       toolCalls: [],
-      assistantMessage: {
-        role: "assistant",
-        content: "Latest news summary.",
-      },
     });
 
     const harness = createAgentHarness({ provider, tools: [webSearchTool] });
@@ -55,44 +55,48 @@ describe("provider-native web search", () => {
 
   test("keeps local tools while enabling provider web search", async () => {
     const localTool: ToolDefinition = {
-      name: "sample",
       description: "Sample tool",
+      name: "sample",
       run(input) {
         return Promise.resolve(input);
       },
     };
 
     const provider = createCapturingProvider({
+      assistantMessage: {
+        content: "Done",
+        role: "assistant",
+      },
       content: "Done",
       toolCalls: [],
-      assistantMessage: {
-        role: "assistant",
-        content: "Done",
-      },
     });
 
     const harness = createAgentHarness({
       provider,
       tools: [localTool, webSearchTool],
     });
-    const session = harness.createChatSession({ tools: [localTool, webSearchTool] });
+    const session = harness.createChatSession({
+      tools: [localTool, webSearchTool],
+    });
     await session.send("hello");
 
     expect(provider.lastInput?.providerOptions).toEqual({ webSearch: true });
-    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual(["sample"]);
+    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
+      "sample",
+    ]);
   });
 
   test("enables provider web search on Gemini when web_search is the only tool", async () => {
     const provider = createCapturingProvider(
       {
+        assistantMessage: {
+          content: "Latest news summary.",
+          role: "assistant",
+        },
         content: "Latest news summary.",
         toolCalls: [],
-        assistantMessage: {
-          role: "assistant",
-          content: "Latest news summary.",
-        },
       },
-      "gemini",
+      "gemini"
     );
 
     const harness = createAgentHarness({ provider, tools: [webSearchTool] });
@@ -105,8 +109,8 @@ describe("provider-native web search", () => {
 
   test("skips provider web search on Gemini when local tools are also assigned", async () => {
     const localTool: ToolDefinition = {
-      name: "sample",
       description: "Sample tool",
+      name: "sample",
       run(input) {
         return Promise.resolve(input);
       },
@@ -114,24 +118,28 @@ describe("provider-native web search", () => {
 
     const provider = createCapturingProvider(
       {
+        assistantMessage: {
+          content: "Done",
+          role: "assistant",
+        },
         content: "Done",
         toolCalls: [],
-        assistantMessage: {
-          role: "assistant",
-          content: "Done",
-        },
       },
-      "gemini",
+      "gemini"
     );
 
     const harness = createAgentHarness({
       provider,
       tools: [localTool, webSearchTool],
     });
-    const session = harness.createChatSession({ tools: [localTool, webSearchTool] });
+    const session = harness.createChatSession({
+      tools: [localTool, webSearchTool],
+    });
     await session.send("hello");
 
     expect(provider.lastInput?.providerOptions).toBeUndefined();
-    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual(["sample"]);
+    expect(provider.lastInput?.tools?.map((tool) => tool.name)).toEqual([
+      "sample",
+    ]);
   });
 });

@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -18,55 +18,82 @@ describe("knowledge_base_search tool", () => {
     process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
 
     if (tempConfigDir) {
-      await rm(tempConfigDir, { recursive: true, force: true });
+      await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
     }
   });
 
-  async function setupExtractedFile(filename: string, body: string): Promise<void> {
+  async function setupExtractedFile(
+    filename: string,
+    body: string
+  ): Promise<void> {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-kb-search-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
-    const profileDir = path.join(tempConfigDir, "orgs", orgId, "profiles", profileId);
+    const profileDir = path.join(
+      tempConfigDir,
+      "orgs",
+      orgId,
+      "profiles",
+      profileId
+    );
     await mkdir(path.join(profileDir, "knowledge-base"), { recursive: true });
 
     const docId = "kb_test_doc";
-    const extractedPath = getKnowledgeBaseExtractedPath(orgId, profileId, docId);
+    const extractedPath = getKnowledgeBaseExtractedPath(
+      orgId,
+      profileId,
+      docId
+    );
     const header = `# source: ${filename}\n# mediaType: text/plain\n# uploadedAt: 2026-06-13T00:00:00.000Z\n\n`;
     await writeFile(extractedPath, `${header}${body}`, "utf8");
 
-    const manifestPath = path.join(profileDir, "knowledge-base", "manifest.json");
+    const manifestPath = path.join(
+      profileDir,
+      "knowledge-base",
+      "manifest.json"
+    );
     await writeFile(
       manifestPath,
       JSON.stringify(
         {
           documents: [
             {
-              id: docId,
               filename,
+              id: docId,
               mediaType: "text/plain",
               sizeBytes: body.length,
-              uploadedAt: "2026-06-13T00:00:00.000Z",
               status: "ready",
+              uploadedAt: "2026-06-13T00:00:00.000Z",
             },
           ],
         },
         null,
-        2,
+        2
       ),
-      "utf8",
+      "utf8"
     );
   }
 
   test("searches all knowledge base files", async () => {
     await setupExtractedFile("notes.txt", "alpha project fact\nbeta line\n");
 
-    const profileDir = path.join(tempConfigDir, "orgs", orgId, "profiles", profileId);
-    await writeFile(path.join(profileDir, "SOUL.md"), "alpha soul content\n", "utf8");
+    const profileDir = path.join(
+      tempConfigDir,
+      "orgs",
+      orgId,
+      "profiles",
+      profileId
+    );
+    await writeFile(
+      path.join(profileDir, "SOUL.md"),
+      "alpha soul content\n",
+      "utf8"
+    );
 
     const result = await runKnowledgeBaseSearch(
       { query: "project fact" },
-      { orgId, profileId },
+      { orgId, profileId }
     );
 
     expect(result.matchCount).toBe(1);
@@ -75,17 +102,17 @@ describe("knowledge_base_search tool", () => {
   });
 
   test("filters by source filename", async () => {
-    await setupExtractedFile("notes.txt", "unique-token-here\n",);
+    await setupExtractedFile("notes.txt", "unique-token-here\n");
 
     const missing = await runKnowledgeBaseSearch(
-      { query: "unique-token", filename: "missing.txt" },
-      { orgId, profileId },
+      { filename: "missing.txt", query: "unique-token" },
+      { orgId, profileId }
     );
     expect(missing.matchCount).toBe(0);
 
     const found = await runKnowledgeBaseSearch(
-      { query: "unique-token", filename: "notes.txt" },
-      { orgId, profileId },
+      { filename: "notes.txt", query: "unique-token" },
+      { orgId, profileId }
     );
     expect(found.matchCount).toBe(1);
   });

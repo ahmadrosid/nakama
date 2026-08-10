@@ -12,8 +12,12 @@ export function attachmentPanelMaxWidthRatio(viewportWidth: number): number {
 
 export function clampAttachmentPanelWidth(
   width: number,
-  viewportWidth = typeof window !== "undefined" ? window.innerWidth : TABLET_MAX_VIEWPORT_WIDTH,
+  viewportWidth = typeof window === "undefined"
+    ? TABLET_MAX_VIEWPORT_WIDTH
+    : window.innerWidth
 ): number {
-  const maxWidth = Math.floor(viewportWidth * attachmentPanelMaxWidthRatio(viewportWidth));
+  const maxWidth = Math.floor(
+    viewportWidth * attachmentPanelMaxWidthRatio(viewportWidth)
+  );
   return Math.min(maxWidth, Math.max(ATTACHMENT_PANEL_MIN_WIDTH, width));
 }

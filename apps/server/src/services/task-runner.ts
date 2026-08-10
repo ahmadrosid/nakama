@@ -6,12 +6,14 @@ export class TaskRunner {
 
   constructor(
     private readonly taskService: TaskService,
-    private readonly agentService: AgentService,
+    private readonly agentService: AgentService
   ) {}
 
-  async run(taskId: string): Promise<{ output?: string; error?: string; skipped?: boolean }> {
+  async run(
+    taskId: string
+  ): Promise<{ output?: string; error?: string; skipped?: boolean }> {
     if (this.running.has(taskId)) {
-      return { skipped: true, error: "Task is already running." };
+      return { error: "Task is already running.", skipped: true };
     }
 
     this.running.add(taskId);
@@ -26,7 +28,11 @@ export class TaskRunner {
       const run = await this.taskService.createRun(taskId);
 
       try {
-        const output = await this.agentService.runTaskPrompt(taskId, task.profileId, task.prompt);
+        const output = await this.agentService.runTaskPrompt(
+          taskId,
+          task.profileId,
+          task.prompt
+        );
 
         await this.taskService.completeRun(run.id, taskId, { output });
         await this.taskService.setTaskStatus(taskId, "done");

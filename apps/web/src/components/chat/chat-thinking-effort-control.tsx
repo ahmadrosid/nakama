@@ -1,5 +1,5 @@
 import type { ThinkingEffort } from "@nakama/core/contract";
-import { BrainIcon } from "lucide-react";
+import { BrainIcon } from "hugeicons-react";
 import {
   PromptInputSelect,
   PromptInputSelectContent,
@@ -22,10 +22,10 @@ import { cn } from "@/lib/utils";
 const THINKING_TOOLTIP = "Reasoning depth for the next replies.";
 
 export interface ChatThinkingEffortControlProps {
-  visible: boolean;
-  effort: ThinkingEffort;
   disabled?: boolean;
+  effort: ThinkingEffort;
   onEffortChange: (effort: ThinkingEffort) => void;
+  visible: boolean;
 }
 
 export function ChatThinkingEffortControl({
@@ -39,7 +39,9 @@ export function ChatThinkingEffortControl({
   }
 
   const fullLabel = thinkingEffortLabel(effort);
-  const shortLabel = ({ low: "Low", medium: "Med", high: "High" } as const)[effort];
+  const shortLabel = ({ high: "High", low: "Low", medium: "Med" } as const)[
+    effort
+  ];
 
   return (
     <Tooltip>
@@ -47,25 +49,32 @@ export function ChatThinkingEffortControl({
         render={
           <div className="inline-flex">
             <PromptInputSelect
-              value={effort}
               disabled={disabled}
               onValueChange={(value) => {
                 if (value === "low" || value === "medium" || value === "high") {
                   onEffortChange(value);
                 }
               }}
+              value={effort}
             >
               <PromptInputSelectTrigger
-                size="sm"
-                className={cn(composerSelectTriggerClass, "shrink-0")}
                 aria-label="Thinking effort"
+                className={cn(composerSelectTriggerClass, "shrink-0")}
+                size="sm"
                 title={THINKING_TOOLTIP}
               >
                 <PromptInputSelectValue placeholder="Thinking">
                   <span className="inline-flex items-center gap-1">
-                    <BrainIcon className="size-3 shrink-0 opacity-70" aria-hidden />
-                    <span className="@[22rem]/composer:hidden">{shortLabel}</span>
-                    <span className="hidden @[22rem]/composer:inline">{fullLabel}</span>
+                    <BrainIcon
+                      aria-hidden
+                      className="size-3 shrink-0 opacity-70"
+                    />
+                    <span className="@[22rem]/composer:hidden">
+                      {shortLabel}
+                    </span>
+                    <span className="@[22rem]/composer:inline hidden">
+                      {fullLabel}
+                    </span>
                   </span>
                 </PromptInputSelectValue>
               </PromptInputSelectTrigger>
@@ -77,8 +86,8 @@ export function ChatThinkingEffortControl({
                 {THINKING_EFFORT_OPTIONS.map((option) => (
                   <PromptInputSelectItem
                     key={option.value}
-                    value={option.value}
                     label={option.label}
+                    value={option.value}
                   >
                     {option.label}
                   </PromptInputSelectItem>
@@ -88,7 +97,7 @@ export function ChatThinkingEffortControl({
           </div>
         }
       />
-      <TooltipContent side="top" className="max-w-xs">
+      <TooltipContent className="max-w-xs" side="top">
         {THINKING_TOOLTIP}
       </TooltipContent>
     </Tooltip>

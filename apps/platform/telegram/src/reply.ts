@@ -10,7 +10,7 @@ function sleep(ms: number): Promise<void> {
 export async function replyAsChat(
   messenger: TelegramRichMessenger,
   text: string,
-  options: { delayMs?: number } = {},
+  options: { delayMs?: number } = {}
 ): Promise<void> {
   const prepared = prepareTelegramReply(text);
 

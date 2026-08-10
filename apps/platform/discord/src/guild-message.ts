@@ -6,7 +6,6 @@ export interface DiscordBotInfo {
 }
 
 export interface GuildMessageHandlingDecision {
-  shouldHandle: boolean;
   reason:
     | "slash-command"
     | "missing-bot-info"
@@ -17,6 +16,7 @@ export interface GuildMessageHandlingDecision {
     | "bot-mention"
     | "no-text"
     | "no-trigger";
+  shouldHandle: boolean;
 }
 
 export interface GuildMessageHandlingOptions {
@@ -31,31 +31,52 @@ export function isDiscordGuildMessage(message: Message): boolean {
 export function resolveChannelOrgKey(
   channelId: string,
   userId: string,
-  isGuild: boolean,
+  isGuild: boolean
 ): string {
   return isGuild ? `g:${channelId}` : `u:${userId}`;
 }
 
+/**
+ * Optional overrides when Discord delivers a partial thread (`parentId` missing).
+ * Callers should hydrate via `channel.fetch()` first.
+ */
+export interface ThreadParentResolution {
+  /** Known parent guild channel id when `message.channel.parentId` is unset. */
+  parentChannelId?: string;
+}
+
 /** Parent guild channel for org selection — threads inherit the parent's org. */
-export function resolveOrgChannelId(message: Message, channelId: string, isGuild: boolean): string {
+export function resolveOrgChannelId(
+  message: Message,
+  channelId: string,
+  isGuild: boolean,
+  options?: ThreadParentResolution
+): string {
   if (!isGuild) {
     return channelId;
   }
 
   if (message.channel.isThread()) {
-    return message.channel.parentId ?? channelId;
+    return message.channel.parentId ?? options?.parentChannelId ?? channelId;
   }
 
   return channelId;
 }
 
-export function resolveConversationKey(message: Message, channelId: string, isGuild: boolean): string {
+export function resolveConversationKey(
+  message: Message,
+  channelId: string,
+  isGuild: boolean,
+  options?: ThreadParentResolution
+): string {
   if (!isGuild) {
     return channelId;
   }
 
   if (message.channel.isThread()) {
-    return `g:${message.channel.parentId ?? channelId}:t:${message.channel.id}`;
+    const parentId =
+      message.channel.parentId ?? options?.parentChannelId ?? channelId;
+    return `g:${parentId}:t:${message.channel.id}`;
   }
 
   return channelId;
@@ -67,7 +88,7 @@ export function isDiscordThreadMessage(message: Message): boolean {
 
 export function resolveBotInfo(
   message: Message,
-  storedBotInfo?: DiscordBotInfo,
+  storedBotInfo?: DiscordBotInfo
 ): DiscordBotInfo | undefined {
   if (message.client.user?.id) {
     return {
@@ -82,66 +103,82 @@ export function resolveBotInfo(
 export function shouldHandleGuildMessage(
   message: Message,
   storedBotInfo?: DiscordBotInfo,
-  options?: GuildMessageHandlingOptions,
+  options?: GuildMessageHandlingOptions
 ): boolean {
-  return explainGuildMessageHandling(message, storedBotInfo, options).shouldHandle;
+  return explainGuildMessageHandling(message, storedBotInfo, options)
+    .shouldHandle;
 }
 
 export function explainGuildMessageHandling(
   message: Message,
   storedBotInfo?: DiscordBotInfo,
-  options?: GuildMessageHandlingOptions,
+  options?: GuildMessageHandlingOptions
 ): GuildMessageHandlingDecision {
   const text = message.content?.trim() ?? "";
   const botInfo = resolveBotInfo(message, storedBotInfo);
 
   if (text.startsWith("/")) {
-    return { shouldHandle: true, reason: "slash-command" };
+    return { reason: "slash-command", shouldHandle: true };
   }
 
   if (!botInfo) {
-    return { shouldHandle: false, reason: "missing-bot-info" };
+    return { reason: "missing-bot-info", shouldHandle: false };
   }
 
   // Bot-owned threads continue without a mention. Foreign threads stay quiet
   // unless the user @mentions the bot or replies to it — then we claim the thread.
   if (message.channel.isThread()) {
     if (options?.botOwnsThread) {
-      return { shouldHandle: true, reason: "in-thread" };
+      return { reason: "in-thread", shouldHandle: true };
     }
 
     if (isReplyToBot(message, botInfo.id) || hasBotMention(message, botInfo)) {
-      return { shouldHandle: true, reason: "claim-thread" };
+      return { reason: "claim-thread", shouldHandle: true };
     }
 
-    return { shouldHandle: false, reason: "foreign-thread" };
+    return { reason: "foreign-thread", shouldHandle: false };
   }
 
   if (isReplyToBot(message, botInfo.id)) {
-    return { shouldHandle: true, reason: "reply-to-bot" };
+    return { reason: "reply-to-bot", shouldHandle: true };
   }
 
   if (hasBotMention(message, botInfo)) {
-    return { shouldHandle: true, reason: "bot-mention" };
+    return { reason: "bot-mention", shouldHandle: true };
   }
 
   return {
-    shouldHandle: false,
     reason: text ? "no-trigger" : "no-text",
+    shouldHandle: false,
   };
 }
 
-export function stripBotMention(text: string, botInfo: DiscordBotInfo | undefined): string {
-  if (!botInfo) {
-    return text.trim();
+export function stripBotMention(
+  text: string,
+  botInfo: DiscordBotInfo | undefined,
+  roleIds: readonly string[] = []
+): string {
+  const patterns: RegExp[] = [];
+
+  if (botInfo) {
+    patterns.push(new RegExp(`<@!?${botInfo.id}>`, "g"));
+    if (botInfo.username) {
+      patterns.push(
+        new RegExp(
+          `@${botInfo.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+          "gi"
+        )
+      );
+    }
   }
 
-  const patterns = [
-    new RegExp(`<@!?${botInfo.id}>`, "g"),
-    botInfo.username
-      ? new RegExp(`@${botInfo.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi")
-      : null,
-  ].filter(Boolean) as RegExp[];
+  for (const roleId of roleIds) {
+    patterns.push(new RegExp(`<@&${roleId}>`, "g"));
+  }
+
+  if (patterns.length === 0) {
+    return text.trim();
+  }
 
   let result = text;
 
@@ -150,6 +187,31 @@ export function stripBotMention(text: string, botInfo: DiscordBotInfo | undefine
   }
 
   return result.replace(/\s+/g, " ").trim();
+}
+
+/** Role IDs mentioned in the message that the bot currently holds (excludes @everyone). */
+export function resolveMentionedBotRoleIds(message: Message): string[] {
+  const guild = message.guild;
+  const botMember = guild?.members.me;
+
+  if (!(guild && botMember)) {
+    return [];
+  }
+
+  const everyoneRoleId = guild.id;
+  const roleIds: string[] = [];
+
+  for (const roleId of message.mentions.roles.keys()) {
+    if (roleId === everyoneRoleId) {
+      continue;
+    }
+
+    if (botMember.roles.cache.has(roleId)) {
+      roleIds.push(roleId);
+    }
+  }
+
+  return roleIds;
 }
 
 function isReplyToBot(message: Message, botId: string): boolean {
@@ -166,6 +228,12 @@ function isReplyToBot(message: Message, botId: string): boolean {
 
 function hasBotMention(message: Message, botInfo: DiscordBotInfo): boolean {
   if (message.mentions.users.has(botInfo.id)) {
+    return true;
+  }
+
+  // Users often pick a role with the bot's name from autocomplete (`<@&role>`),
+  // which does not populate mentions.users — treat held role pings as triggers.
+  if (resolveMentionedBotRoleIds(message).length > 0) {
     return true;
   }
 

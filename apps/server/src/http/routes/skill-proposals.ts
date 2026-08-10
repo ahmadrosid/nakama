@@ -4,20 +4,28 @@ import type {
   ListSkillProposalsResponse,
   SkillProposalResponse,
 } from "@nakama/core/contract";
-import type { HonoApp } from "../types";
+import {
+  type SkillProposalService,
+  toSkillProposal,
+} from "../../services/skill-proposal-service";
 import type { ServerOptions } from "../context";
-import { json } from "../shared";
 import {
   requireNotViewerFromContext,
   requireOrgAdminFromContext,
 } from "../org-guards";
-import { SkillProposalService, toSkillProposal } from "../../services/skill-proposal-service";
+import { json } from "../shared";
+import type { HonoApp } from "../types";
 
-export function registerSkillProposalRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerSkillProposalRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const skillProposalService = options.skillProposalService;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const orgIdParam = z.object({
-    orgId: z.string().openapi({ param: { name: "orgId", in: "path" } }),
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
   const listSkillProposalsResponseSchema = z
     .object({})
@@ -28,7 +36,10 @@ export function registerSkillProposalRoutes(app: HonoApp, options: ServerOptions
     .passthrough()
     .openapi("SkillProposalResponse");
 
-  function resolveOrgId(c: { req: { param: (n: string) => string } }, authOrgId: string): string {
+  function resolveOrgId(
+    c: { req: { param: (n: string) => string } },
+    authOrgId: string
+  ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
@@ -46,75 +57,106 @@ export function registerSkillProposalRoutes(app: HonoApp, options: ServerOptions
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
-      path: "/v1/orgs/{orgId}/skill-proposals",
-      tags: ["Organizations"],
-      summary: "List skill proposals",
       operationId: "listSkillProposals",
+      path: "/v1/orgs/{orgId}/skill-proposals",
       request: {
         params: orgIdParam,
         query: z.object({
-          status: z.enum(["pending", "approved", "rejected"]).optional(),
           profileId: z.string().optional(),
           sessionId: z.string().optional(),
+          status: z.enum(["pending", "approved", "rejected"]).optional(),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: listSkillProposalsResponseSchema },
+          },
           description: "Skill proposals",
-          content: { "application/json": { schema: listSkillProposalsResponseSchema } },
         },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "List skill proposals",
+      tags: ["Organizations"],
+    })
   );
 
   app.get("/v1/orgs/:orgId/skill-proposals", async (c) => {
     const auth = requireNotViewerFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const status = c.req.query("status") as "pending" | "approved" | "rejected" | undefined;
+    const status = c.req.query("status") as
+      | "pending"
+      | "approved"
+      | "rejected"
+      | undefined;
     const profileId = c.req.query("profileId");
     const sessionId = c.req.query("sessionId");
     const isOrgAdmin = auth.orgRole === "admin" || auth.isPlatformAdmin;
-    if (!isOrgAdmin && !sessionId) {
+    if (!(isOrgAdmin || sessionId)) {
       throw new NakamaApiError("Forbidden", 403);
     }
     const result = await service.listProposals(orgId, {
-      status,
       profileId: profileId || undefined,
       sessionId: sessionId || undefined,
+      status,
     });
     return json<ListSkillProposalsResponse>({
-      proposals: result.proposals.map(toSkillProposal),
       pendingCount: result.pendingCount,
+      proposals: result.proposals.map(toSkillProposal),
     });
   });
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/skill-proposals/{proposalId}/approve",
-      tags: ["Organizations"],
-      summary: "Approve a skill proposal",
       operationId: "approveSkillProposal",
+      path: "/v1/orgs/{orgId}/skill-proposals/{proposalId}/approve",
       request: {
         params: orgIdParam.extend({
-          proposalId: z.string().openapi({ param: { name: "proposalId", in: "path" } }),
+          proposalId: z
+            .string()
+            .openapi({ param: { in: "path", name: "proposalId" } }),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: skillProposalResponseSchema },
+          },
           description: "Approved",
-          content: { "application/json": { schema: skillProposalResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Approve a skill proposal",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/skill-proposals/:proposalId/approve", async (c) => {
@@ -122,33 +164,53 @@ export function registerSkillProposalRoutes(app: HonoApp, options: ServerOptions
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
-    const proposal = await service.approveProposal(orgId, proposalId, auth.user.id);
+    const proposal = await service.approveProposal(
+      orgId,
+      proposalId,
+      auth.user.id
+    );
     return json<SkillProposalResponse>({ proposal: toSkillProposal(proposal) });
   });
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/orgs/{orgId}/skill-proposals/{proposalId}/reject",
-      tags: ["Organizations"],
-      summary: "Reject a skill proposal",
       operationId: "rejectSkillProposal",
+      path: "/v1/orgs/{orgId}/skill-proposals/{proposalId}/reject",
       request: {
         params: orgIdParam.extend({
-          proposalId: z.string().openapi({ param: { name: "proposalId", in: "path" } }),
+          proposalId: z
+            .string()
+            .openapi({ param: { in: "path", name: "proposalId" } }),
         }),
       },
       responses: {
         200: {
+          content: {
+            "application/json": { schema: skillProposalResponseSchema },
+          },
           description: "Rejected",
-          content: { "application/json": { schema: skillProposalResponseSchema } },
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        403: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Reject a skill proposal",
+      tags: ["Organizations"],
+    })
   );
 
   app.post("/v1/orgs/:orgId/skill-proposals/:proposalId/reject", async (c) => {
@@ -156,7 +218,11 @@ export function registerSkillProposalRoutes(app: HonoApp, options: ServerOptions
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
-    const proposal = await service.rejectProposal(orgId, proposalId, auth.user.id);
+    const proposal = await service.rejectProposal(
+      orgId,
+      proposalId,
+      auth.user.id
+    );
     return json<SkillProposalResponse>({ proposal: toSkillProposal(proposal) });
   });
 }

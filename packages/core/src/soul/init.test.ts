@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { initSoulDirectory, isLegacySoulPlaceholder } from "./init";
 import { loadSoulStack } from "./load";
 
@@ -24,7 +24,7 @@ describe("initSoulDirectory seeding", () => {
       const soul = await readFile(join(directory, "SOUL.md"), "utf8");
       expect(soul.trim().length).toBeGreaterThan(0);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 
@@ -32,13 +32,17 @@ describe("initSoulDirectory seeding", () => {
     const directory = await mkdtemp(join(tmpdir(), "nakama-soul-legacy-"));
 
     try {
-      await writeFile(join(directory, "SOUL.md"), "# Your Name\n\n[Belief 1]\n", "utf8");
+      await writeFile(
+        join(directory, "SOUL.md"),
+        "# Your Name\n\n[Belief 1]\n",
+        "utf8"
+      );
       await initSoulDirectory(directory);
 
       const soul = await readFile(join(directory, "SOUL.md"), "utf8");
       expect(soul).not.toContain("# Your Name");
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 
@@ -46,19 +50,25 @@ describe("initSoulDirectory seeding", () => {
     const directory = await mkdtemp(join(tmpdir(), "nakama-soul-custom-"));
 
     try {
-      await writeFile(join(directory, "SOUL.md"), "# My Custom Bot\n\nCustom identity.\n", "utf8");
+      await writeFile(
+        join(directory, "SOUL.md"),
+        "# My Custom Bot\n\nCustom identity.\n",
+        "utf8"
+      );
       await initSoulDirectory(directory);
 
       expect(await readFile(join(directory, "SOUL.md"), "utf8")).toBe(
-        "# My Custom Bot\n\nCustom identity.\n",
+        "# My Custom Bot\n\nCustom identity.\n"
       );
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 
   test("creates full stack for first install", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-first-install-"));
+    const directory = await mkdtemp(
+      join(tmpdir(), "nakama-soul-first-install-")
+    );
 
     try {
       const result = await initSoulDirectory(directory);
@@ -75,7 +85,7 @@ describe("initSoulDirectory seeding", () => {
       expect(stack.files.soul.trim().length).toBeGreaterThan(0);
       expect(stack.loaded.length).toBeGreaterThan(0);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 });

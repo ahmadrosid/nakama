@@ -1,13 +1,13 @@
-import type { ChatStatus } from "ai";
-import { nanoid } from "nanoid";
-import type { Dispatch, SetStateAction } from "react";
+import type { StreamHandlers } from "@nakama/client";
 import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
 } from "@nakama/core/contract";
-import type { StreamHandlers } from "@nakama/client";
+import type { ChatStatus } from "ai";
+import { nanoid } from "nanoid";
+import type { Dispatch, SetStateAction } from "react";
 import type { ChatListItem } from "@/lib/chat-history";
 import { upsertStreamingToolMessage } from "@/lib/chat-stream-artifact";
 import { cn } from "@/lib/utils";
@@ -68,7 +68,10 @@ export function formatDefaultToolResult(result: unknown): string | null {
   return String(result);
 }
 
-export function formatToolResult(tool: string | undefined, result: unknown): string | null {
+export function formatToolResult(
+  tool: string | undefined,
+  result: unknown
+): string | null {
   if (tool === "bash") {
     return formatBashToolResult(result);
   }
@@ -80,9 +83,16 @@ export function formatToolResult(tool: string | undefined, result: unknown): str
   return formatDefaultToolResult(result);
 }
 
-export function isToolResultError(result: unknown, formattedOutput: string | null): boolean {
+export function isToolResultError(
+  result: unknown,
+  formattedOutput: string | null
+): boolean {
   if (typeof result === "object" && result !== null) {
-    const record = result as { error?: unknown; exitCode?: number | null; timedOut?: boolean };
+    const record = result as {
+      error?: unknown;
+      exitCode?: number | null;
+      timedOut?: boolean;
+    };
     const error = record.error;
 
     if (typeof error === "string" && error.trim()) {
@@ -96,7 +106,9 @@ export function isToolResultError(result: unknown, formattedOutput: string | nul
 
   if (
     formattedOutput &&
-    /^(unknown tool|error:|failed\b|\[stderr\]|\[exit code|\[timed out\])/i.test(formattedOutput)
+    /^(unknown tool|error:|failed\b|\[stderr\]|\[exit code|\[timed out\])/i.test(
+      formattedOutput
+    )
   ) {
     return true;
   }
@@ -111,13 +123,15 @@ export function isSubAgentTool(tool: string | undefined): boolean {
 export type SubAgentToolStatus = "success" | "fail" | "timeout";
 
 export interface ParsedSubAgentResult {
+  error?: string;
+  output: string;
   status: SubAgentToolStatus;
   summary: string;
-  output: string;
-  error?: string;
 }
 
-export function parseSubAgentResult(result: unknown): ParsedSubAgentResult | null {
+export function parseSubAgentResult(
+  result: unknown
+): ParsedSubAgentResult | null {
   if (typeof result !== "object" || result === null) {
     return null;
   }
@@ -130,7 +144,9 @@ export function parseSubAgentResult(result: unknown): ParsedSubAgentResult | nul
   };
 
   const status =
-    record.status === "success" || record.status === "fail" || record.status === "timeout"
+    record.status === "success" ||
+    record.status === "fail" ||
+    record.status === "timeout"
       ? record.status
       : null;
 
@@ -138,14 +154,18 @@ export function parseSubAgentResult(result: unknown): ParsedSubAgentResult | nul
     return null;
   }
 
-  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+  const summary =
+    typeof record.summary === "string" ? record.summary.trim() : "";
   const output = typeof record.output === "string" ? record.output.trim() : "";
-  const error = typeof record.error === "string" && record.error.trim() ? record.error.trim() : undefined;
+  const error =
+    typeof record.error === "string" && record.error.trim()
+      ? record.error.trim()
+      : undefined;
 
   return {
+    output,
     status,
     summary,
-    output,
     ...(error ? { error } : {}),
   };
 }
@@ -164,14 +184,18 @@ export function formatSubAgentSubtitle(
   input: Record<string, unknown> | undefined,
   result: unknown,
   running: boolean,
-  activity?: string,
+  activity?: string
 ): string {
   if (running) {
     if (activity?.trim()) {
-      return truncateDisplay(activity.trim().split("\n")[0] ?? activity.trim(), 72);
+      return truncateDisplay(
+        activity.trim().split("\n")[0] ?? activity.trim(),
+        72
+      );
     }
 
-    const context = typeof input?.context === "string" ? input.context.trim() : "";
+    const context =
+      typeof input?.context === "string" ? input.context.trim() : "";
 
     if (context) {
       return truncateDisplay(context.split("\n")[0] ?? context, 72);
@@ -225,13 +249,21 @@ export function formatSubAgentToolResult(result: unknown): string | null {
 
 export function formatToolSummary(
   tool: string | undefined,
-  input?: Record<string, unknown>,
+  input?: Record<string, unknown>
 ): string | null {
-  if (isSubAgentTool(tool) && typeof input?.task === "string" && input.task.trim()) {
+  if (
+    isSubAgentTool(tool) &&
+    typeof input?.task === "string" &&
+    input.task.trim()
+  ) {
     return input.task.trim();
   }
 
-  if (tool === "bash" && typeof input?.command === "string" && input.command.trim()) {
+  if (
+    tool === "bash" &&
+    typeof input?.command === "string" &&
+    input.command.trim()
+  ) {
     return input.command.trim();
   }
 
@@ -276,7 +308,7 @@ function basename(value: string): string {
 
 export function formatToolActionLabel(
   tool: string | undefined,
-  input?: Record<string, unknown>,
+  input?: Record<string, unknown>
 ): string {
   const summary = formatToolSummary(tool, input);
 
@@ -288,7 +320,10 @@ export function formatToolActionLabel(
     return `Ran ${truncateDisplay(summary.split("\n")[0] ?? summary, 96)}`;
   }
 
-  if ((tool === "write_file" || tool === "write_docx") && typeof input?.path === "string") {
+  if (
+    (tool === "write_file" || tool === "write_docx") &&
+    typeof input?.path === "string"
+  ) {
     return `Wrote ${basename(input.path)}`;
   }
 
@@ -320,7 +355,11 @@ export function formatToolActionLabel(
   if (summary) {
     const firstLine = summary.split("\n")[0] ?? summary;
 
-    if (/^(npm|pnpm|yarn|bun|node|python|cd|curl|git|tail|cat|grep|ls)\b/.test(firstLine)) {
+    if (
+      /^(npm|pnpm|yarn|bun|node|python|cd|curl|git|tail|cat|grep|ls)\b/.test(
+        firstLine
+      )
+    ) {
       return `Ran ${truncateDisplay(firstLine, 96)}`;
     }
 
@@ -337,9 +376,13 @@ export function formatToolActionLabel(
 
 export function formatToolCommand(
   tool: string | undefined,
-  input?: Record<string, unknown>,
+  input?: Record<string, unknown>
 ): string | null {
-  if (tool === "bash" && typeof input?.command === "string" && input.command.trim()) {
+  if (
+    tool === "bash" &&
+    typeof input?.command === "string" &&
+    input.command.trim()
+  ) {
     return input.command.trim();
   }
 
@@ -357,16 +400,18 @@ export function isAbortError(error: unknown): boolean {
   );
 }
 
-export function finalizeStreamingMessages(messages: ChatListItem[]): ChatListItem[] {
+export function finalizeStreamingMessages(
+  messages: ChatListItem[]
+): ChatListItem[] {
   const next = messages.map((message) =>
     message.role === "tool" && message.toolStatus === "running"
       ? {
           ...message,
-          toolStatus: "done" as const,
           artifactStreaming: false,
           content: `${message.tool} stopped`,
+          toolStatus: "done" as const,
         }
-      : message,
+      : message
   );
 
   for (let index = next.length - 1; index >= 0; index -= 1) {
@@ -388,7 +433,7 @@ export function finalizeStreamingMessages(messages: ChatListItem[]): ChatListIte
 export function deriveChatStatus(
   busy: boolean,
   error: string | null,
-  messages: ChatListItem[],
+  messages: ChatListItem[]
 ): ChatStatus {
   if (error) {
     return "error";
@@ -408,7 +453,9 @@ export function deriveChatStatus(
 }
 
 /** Messages after the latest user message (current assistant turn). */
-export function latestAssistantTurnMessages(messages: ChatListItem[]): ChatListItem[] {
+export function latestAssistantTurnMessages(
+  messages: ChatListItem[]
+): ChatListItem[] {
   let start = 0;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -433,18 +480,17 @@ export function isAwaitingModelResponse(messages: ChatListItem[]): boolean {
     return false;
   }
 
-  if (turn.some((message) => message.role === "tool" && message.toolStatus === "running")) {
-    return false;
-  }
-
-  if (turn.some((message) => message.role === "assistant" && message.thinkingStreaming)) {
+  if (
+    turn.some(
+      (message) => message.role === "tool" && message.toolStatus === "running"
+    )
+  ) {
     return false;
   }
 
   if (
     turn.some(
-      (message) =>
-        message.role === "assistant" && message.streaming && message.content.trim().length > 0,
+      (message) => message.role === "assistant" && message.thinkingStreaming
     )
   ) {
     return false;
@@ -453,20 +499,38 @@ export function isAwaitingModelResponse(messages: ChatListItem[]): boolean {
   if (
     turn.some(
       (message) =>
-        message.role === "assistant" && message.streaming && message.content.trim().length === 0,
+        message.role === "assistant" &&
+        message.streaming &&
+        message.content.trim().length > 0
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    turn.some(
+      (message) =>
+        message.role === "assistant" &&
+        message.streaming &&
+        message.content.trim().length === 0
     )
   ) {
     return true;
   }
 
-  return turn.some((message) => message.role === "tool" || message.role === "assistant");
+  return turn.some(
+    (message) => message.role === "tool" || message.role === "assistant"
+  );
 }
 
-export function awaitingModelLabel(messages: ChatListItem[]): "Thinking…" | "Working…" {
+export function awaitingModelLabel(
+  messages: ChatListItem[]
+): "Thinking…" | "Working…" {
   const turn = latestAssistantTurnMessages(messages);
   const hasTools = turn.some((message) => message.role === "tool");
   const hasThinkingText = turn.some(
-    (message) => message.role === "assistant" && Boolean(message.thinking?.trim()),
+    (message) =>
+      message.role === "assistant" && Boolean(message.thinking?.trim())
   );
 
   return hasTools || hasThinkingText ? "Working…" : "Thinking…";
@@ -478,9 +542,48 @@ export function buildStreamHandlers(
     onTodosUpdated?: (todos: AgentTodo[]) => void;
     onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
     onContextUsage?: (usage: ChatContextUsage) => void;
-  } = {},
+  } = {}
 ): StreamHandlers {
   return {
+    onChunk: (delta) => {
+      setMessages((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+
+        if (last?.role === "assistant" && last.streaming) {
+          next[next.length - 1] = {
+            ...last,
+            content: last.content + delta,
+            streaming: true,
+            ...(last.thinkingStreaming ? { thinkingStreaming: false } : {}),
+          };
+          return next;
+        }
+
+        next.push({
+          content: delta,
+          id: nanoid(),
+          role: "assistant",
+          streaming: true,
+        });
+        return next;
+      });
+    },
+    onContextUsage: options.onContextUsage,
+    onQuestionnaireUpdated: options.onQuestionnaireUpdated,
+    onSubAgentActivity: (event) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.toolCallId === event.parentToolCallId &&
+          message.toolStatus === "running"
+            ? {
+                ...message,
+                subAgentActivity: event.label,
+              }
+            : message
+        )
+      );
+    },
     onThinking: (delta) => {
       setMessages((current) => {
         const next = [...current];
@@ -498,9 +601,9 @@ export function buildStreamHandlers(
         // After tools the prior assistant is finalized; seed a new streaming
         // message so post-tool thinking is not dropped.
         next.push({
+          content: "",
           id: nanoid(),
           role: "assistant",
-          content: "",
           streaming: true,
           thinking: delta,
           thinkingStreaming: true,
@@ -508,37 +611,30 @@ export function buildStreamHandlers(
         return next;
       });
     },
-    onChunk: (delta) => {
-      setMessages((current) => {
-        const next = [...current];
-        const last = next[next.length - 1];
-
-        if (last?.role === "assistant" && last.streaming) {
-          next[next.length - 1] = {
-            ...last,
-            content: last.content + delta,
-            streaming: true,
-            ...(last.thinkingStreaming ? { thinkingStreaming: false } : {}),
-          };
-          return next;
-        }
-
-        next.push({
-          id: nanoid(),
-          role: "assistant",
-          content: delta,
-          streaming: true,
-        });
-        return next;
-      });
+    onTodosUpdated: options.onTodosUpdated,
+    onToolEnd: (event) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.toolCallId === event.toolCallId
+            ? {
+                ...message,
+                artifactStreaming: false,
+                content: `${event.tool} completed`,
+                subAgentActivity: undefined,
+                toolResult: event.result,
+                toolStatus: "done",
+              }
+            : message
+        )
+      );
     },
     onToolInputDelta: (event) => {
       setMessages((current) =>
         upsertStreamingToolMessage(current, {
-          toolCallId: event.toolCallId,
-          tool: event.tool,
           accumulatedArguments: event.accumulatedArguments ?? event.delta,
-        }),
+          tool: event.tool,
+          toolCallId: event.toolCallId,
+        })
       );
     },
     onToolStart: (event) => {
@@ -546,22 +642,22 @@ export function buildStreamHandlers(
         const next = current.map((message) =>
           message.role === "assistant" && message.streaming
             ? { ...message, streaming: false }
-            : message,
+            : message
         );
 
         const existingIndex = next.findIndex(
-          (message) => message.toolCallId === event.toolCallId,
+          (message) => message.toolCallId === event.toolCallId
         );
 
         const toolMessage: ChatListItem = {
+          content: event.tool,
+          createdAt: new Date().toISOString(),
           id: event.toolCallId,
           role: "tool",
-          createdAt: new Date().toISOString(),
-          content: event.tool,
-          toolCallId: event.toolCallId,
           tool: event.tool,
-          toolStatus: "running",
+          toolCallId: event.toolCallId,
           toolInput: event.input,
+          toolStatus: "running",
         };
 
         if (existingIndex >= 0) {
@@ -570,7 +666,8 @@ export function buildStreamHandlers(
             ...merged[existingIndex],
             ...toolMessage,
             artifactStreaming: merged[existingIndex]?.artifactStreaming,
-            toolInputAccumulatedJson: merged[existingIndex]?.toolInputAccumulatedJson,
+            toolInputAccumulatedJson:
+              merged[existingIndex]?.toolInputAccumulatedJson,
           };
           return merged;
         }
@@ -578,44 +675,16 @@ export function buildStreamHandlers(
         return [...next, toolMessage];
       });
     },
-    onToolEnd: (event) => {
-      setMessages((current) =>
-        current.map((message) =>
-          message.toolCallId === event.toolCallId
-            ? {
-                ...message,
-                toolStatus: "done",
-                artifactStreaming: false,
-                content: `${event.tool} completed`,
-                toolResult: event.result,
-                subAgentActivity: undefined,
-              }
-            : message,
-        ),
-      );
-    },
-    onSubAgentActivity: (event) => {
-      setMessages((current) =>
-        current.map((message) =>
-          message.toolCallId === event.parentToolCallId &&
-          message.toolStatus === "running"
-            ? {
-                ...message,
-                subAgentActivity: event.label,
-              }
-            : message,
-        ),
-      );
-    },
-    onTodosUpdated: options.onTodosUpdated,
-    onQuestionnaireUpdated: options.onQuestionnaireUpdated,
-    onContextUsage: options.onContextUsage,
   };
 }
 
 type OutgoingMessageOptions = {
   thinkingEnabled?: boolean;
-  imageAttachments?: Array<{ url?: string; mediaType: string; description?: string | null }>;
+  imageAttachments?: Array<{
+    url?: string;
+    mediaType: string;
+    description?: string | null;
+  }>;
   questionnaireAnswers?: AgentQuestionAnswer[];
 };
 
@@ -623,30 +692,30 @@ function buildOutgoingUserMessage(
   text: string,
   images: Array<{ mediaType: string; url: string }> = [],
   documents: Array<{ filename: string; mediaType: string }> = [],
-  options: OutgoingMessageOptions = {},
+  options: OutgoingMessageOptions = {}
 ): ChatListItem {
   return {
-    id: nanoid(),
-    role: "user",
     content: text,
-    images: images.length > 0 ? images : undefined,
+    documents: documents.length > 0 ? documents : undefined,
+    id: nanoid(),
     imageAttachments:
       options.imageAttachments && options.imageAttachments.length > 0
         ? options.imageAttachments
         : undefined,
-    documents: documents.length > 0 ? documents : undefined,
+    images: images.length > 0 ? images : undefined,
     questionnaireAnswers:
       options.questionnaireAnswers && options.questionnaireAnswers.length > 0
         ? options.questionnaireAnswers
         : undefined,
+    role: "user",
   };
 }
 
 function buildStreamingAssistantMessage(thinkingEnabled = false): ChatListItem {
   return {
+    content: "",
     id: nanoid(),
     role: "assistant",
-    content: "",
     streaming: true,
     ...(thinkingEnabled ? { thinking: "", thinkingStreaming: true } : {}),
   };
@@ -657,7 +726,7 @@ export function appendOutgoingMessages(
   text: string,
   images: Array<{ mediaType: string; url: string }> = [],
   documents: Array<{ filename: string; mediaType: string }> = [],
-  options: OutgoingMessageOptions = {},
+  options: OutgoingMessageOptions = {}
 ): void {
   setMessages((current) => [
     ...current,
@@ -688,13 +757,13 @@ export const composerDockClass =
 
 export const composerShellClass = cn(
   composerInputGroupBase,
-  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]",
+  "[&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]"
 );
 
 export const composerShellStackedClass = cn(
   composerInputGroupBase,
   "w-full [&_form]:w-full",
-  "[&_[data-slot=input-group]]:w-full [&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none",
+  "[&_[data-slot=input-group]]:w-full [&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:bg-transparent [&_[data-slot=input-group]]:shadow-none"
 );
 
 export const composerShellCompactClass =

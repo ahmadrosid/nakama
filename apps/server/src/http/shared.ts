@@ -1,28 +1,28 @@
+import type { AgentChatSession } from "@nakama/agent";
 import type { OrgRole } from "@nakama/core";
 import {
-  formatServerError,
-  LOCAL_CLIENT_EMAIL,
-  NakamaApiError,
-  resolveChatStreamTimeoutMs,
   type AgentChannel,
   type AgentQuestionnaire,
   type AgentTodo,
   type ApiErrorResponse,
+  formatServerError,
+  LOCAL_CLIENT_EMAIL,
+  NakamaApiError,
+  resolveChatStreamTimeoutMs,
   type SendMessageInput,
   type StreamEvent,
   verifyLocalAuthToken,
 } from "@nakama/core";
-import type { AgentChatSession } from "@nakama/agent";
-import type { Context } from "hono";
-import type { AuthService } from "../services/auth-service";
 import type {
   DatabaseAdapter,
   StoredBrowserSessionRecord,
   StoredUserRecord,
 } from "@nakama/db";
 import { ensureLocalClientAccess } from "@nakama/db";
-import type { AppEnv } from "./types";
+import type { Context } from "hono";
+import type { AuthService } from "../services/auth-service";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
+import type { AppEnv } from "./types";
 
 const SESSION_COOKIE_NAME = "nakama_session";
 const CSRF_COOKIE_NAME = "nakama_csrf";
@@ -57,7 +57,7 @@ function buildCookie(
     path?: string;
     sameSite?: "Lax" | "Strict" | "None";
     secure?: boolean;
-  } = {},
+  } = {}
 ): string {
   const parts = [`${name}=${value}`];
 
@@ -86,7 +86,10 @@ function appendSetCookie(headers: Headers, cookie: string): void {
   headers.append("Set-Cookie", cookie);
 }
 
-function getRequestTokenFromCookies(request: Request, name: string): string | null {
+function getRequestTokenFromCookies(
+  request: Request,
+  name: string
+): string | null {
   const cookies = parseCookies(request.headers.get("Cookie"));
   return cookies[name]?.trim() || null;
 }
@@ -121,16 +124,16 @@ function isSecureCookieRequest(request: Request): boolean {
 }
 
 export interface RequestAuthContext {
-  mode: "browser-session" | "local-token";
-  user: Pick<StoredUserRecord, "id" | "email">;
-  session?: StoredBrowserSessionRecord;
-  isPlatformAdmin: boolean;
   activeOrgId?: string;
+  isPlatformAdmin: boolean;
+  mode: "browser-session" | "local-token";
   orgRole?: OrgRole;
+  session?: StoredBrowserSessionRecord;
+  user: Pick<StoredUserRecord, "id" | "email">;
 }
 
 function toAuthUser(user: StoredUserRecord): RequestAuthContext["user"] {
-  return { id: user.id, email: user.email };
+  return { email: user.email, id: user.id };
 }
 
 export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
@@ -145,7 +148,7 @@ export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
 export async function authenticateRequest(
   request: Request,
   authService: AuthService,
-  databaseAdapter: DatabaseAdapter,
+  databaseAdapter: DatabaseAdapter
 ): Promise<RequestAuthContext | null> {
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
@@ -164,9 +167,9 @@ export async function authenticateRequest(
     }
 
     return {
+      isPlatformAdmin: Boolean(user.isPlatformAdmin),
       mode: "local-token",
       user: toAuthUser(user),
-      isPlatformAdmin: Boolean(user.isPlatformAdmin),
     };
   }
 
@@ -187,9 +190,9 @@ export async function authenticateRequest(
 
         if (user) {
           return {
+            isPlatformAdmin: Boolean(user.isPlatformAdmin),
             mode: "local-token",
             user: toAuthUser(user),
-            isPlatformAdmin: Boolean(user.isPlatformAdmin),
           };
         }
       }
@@ -199,7 +202,8 @@ export async function authenticateRequest(
   }
 
   const sessionTokenHash = authService.hashToken(sessionToken);
-  const session = await databaseAdapter.getBrowserSessionBySessionTokenHash(sessionTokenHash);
+  const session =
+    await databaseAdapter.getBrowserSessionBySessionTokenHash(sessionTokenHash);
   if (!session || session.revokedAt) {
     return null;
   }
@@ -213,20 +217,23 @@ export async function authenticateRequest(
     return null;
   }
 
-  await databaseAdapter.updateBrowserSessionLastUsedAt(session.id, new Date().toISOString());
+  await databaseAdapter.updateBrowserSessionLastUsedAt(
+    session.id,
+    new Date().toISOString()
+  );
 
   return {
-    mode: "browser-session",
-    user: toAuthUser(user),
-    session,
     isPlatformAdmin: Boolean(user.isPlatformAdmin),
+    mode: "browser-session",
+    session,
+    user: toAuthUser(user),
   };
 }
 
 export function assertBrowserCsrf(
   request: Request,
   auth: RequestAuthContext,
-  authService: AuthService,
+  authService: AuthService
 ): void {
   if (auth.mode !== "browser-session" || !isMutatingMethod(request.method)) {
     return;
@@ -235,7 +242,7 @@ export function assertBrowserCsrf(
   const csrfToken = getRequestTokenFromCookies(request, CSRF_COOKIE_NAME);
   const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
 
-  if (!csrfToken || !csrfHeader || csrfToken !== csrfHeader.trim()) {
+  if (!(csrfToken && csrfHeader) || csrfToken !== csrfHeader.trim()) {
     throw new NakamaApiError("CSRF validation failed.", 403);
   }
 
@@ -248,7 +255,7 @@ function applyBrowserSessionCookies(
   headers: Headers,
   sessionToken: string,
   csrfToken: string,
-  request: Request,
+  request: Request
 ): void {
   const cookieBase = {
     path: "/",
@@ -262,7 +269,7 @@ function applyBrowserSessionCookies(
       ...cookieBase,
       httpOnly: true,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
-    }),
+    })
   );
 
   appendSetCookie(
@@ -270,7 +277,7 @@ function applyBrowserSessionCookies(
     buildCookie(CSRF_COOKIE_NAME, csrfToken, {
       ...cookieBase,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
-    }),
+    })
   );
 }
 
@@ -278,7 +285,7 @@ export async function createBrowserSessionResponse(
   authService: AuthService,
   databaseAdapter: DatabaseAdapter,
   user: StoredUserRecord,
-  options: { activeOrgId?: string | null; request: Request },
+  options: { activeOrgId?: string | null; request: Request }
 ): Promise<{
   body: { email: string };
   headers: Headers;
@@ -287,15 +294,15 @@ export async function createBrowserSessionResponse(
   const now = new Date().toISOString();
   const session = authService.createBrowserSessionTokens();
   const record: StoredBrowserSessionRecord = {
-    id: crypto.randomUUID(),
-    userId: user.id,
-    sessionTokenHash: authService.hashToken(session.sessionToken),
-    csrfTokenHash: authService.hashToken(session.csrfToken),
     activeOrgId: options.activeOrgId ?? null,
     createdAt: now,
+    csrfTokenHash: authService.hashToken(session.csrfToken),
     expiresAt: session.expiresAt,
-    revokedAt: null,
+    id: crypto.randomUUID(),
     lastUsedAt: now,
+    revokedAt: null,
+    sessionTokenHash: authService.hashToken(session.sessionToken),
+    userId: user.id,
   };
 
   await databaseAdapter.createBrowserSession(record);
@@ -305,7 +312,7 @@ export async function createBrowserSessionResponse(
     headers,
     session.sessionToken,
     session.csrfToken,
-    options.request,
+    options.request
   );
 
   return {
@@ -331,7 +338,7 @@ export function clearBrowserSessionCookies(headers: Headers): void {
         httpOnly: true,
         maxAge: 0,
         secure,
-      }),
+      })
     );
     appendSetCookie(
       headers,
@@ -339,7 +346,7 @@ export function clearBrowserSessionCookies(headers: Headers): void {
         ...cookieBase,
         maxAge: 0,
         secure,
-      }),
+      })
     );
   }
 }
@@ -358,15 +365,18 @@ export async function readJson<T>(request: Request): Promise<T> {
 export function json<T>(body: T, status = 200, headers?: Headers): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Content-Type", "application/json; charset=utf-8");
-  return Response.json(body, { status, headers: responseHeaders });
+  return Response.json(body, { headers: responseHeaders, status });
 }
 
 export function errorResponse(
   message: string,
   status: number,
-  extra?: Omit<ApiErrorResponse, "error">,
+  extra?: Omit<ApiErrorResponse, "error">
 ): Response {
-  return Response.json({ error: message, ...extra } satisfies ApiErrorResponse, { status });
+  return Response.json(
+    { error: message, ...extra } satisfies ApiErrorResponse,
+    { status }
+  );
 }
 
 export function parseChannel(value: string | undefined): AgentChannel {
@@ -385,7 +395,7 @@ export function parseChannel(value: string | undefined): AgentChannel {
 
   throw new NakamaApiError(
     "Invalid channel. Expected cli, web, telegram, whatsapp, discord, automation, task, or subagent.",
-    400,
+    400
   );
 }
 
@@ -393,7 +403,7 @@ const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
 
 function createStreamSenders(
   sessionId: string,
-  enqueue: (chunk: Uint8Array) => void,
+  enqueue: (chunk: Uint8Array) => void
 ): {
   send: (event: StreamEvent) => void;
   getTerminal: () => StreamEvent | null;
@@ -415,52 +425,38 @@ function createStreamSenders(
   };
 
   return {
-    send,
     getTerminal: () => terminal,
+    send,
   };
 }
 
 function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
   return {
-    onChunk: (delta: string) => send({ type: "chunk", delta }),
-    onThinking: (delta: string) => send({ type: "thinking", delta }),
-    onToolInputDelta: (event: {
+    onChunk: (delta: string) => send({ delta, type: "chunk" }),
+    onSubAgentActivity: (event: { parentToolCallId: string; label: string }) =>
+      send({
+        label: event.label,
+        parentToolCallId: event.parentToolCallId,
+        type: "sub_agent_activity",
+      }),
+    onThinking: (delta: string) => send({ delta, type: "thinking" }),
+    onToolEnd: (event: {
       toolCallId: string;
       tool: string;
-      delta: string;
-      accumulatedArguments?: string;
-    }) =>
+      result: unknown;
+    }) => {
       send({
-        type: "tool_input_delta",
-        toolCallId: event.toolCallId,
-        tool: event.tool,
-        delta: event.delta,
-        accumulatedArguments: event.accumulatedArguments,
-      }),
-    onToolStart: (event: {
-      toolCallId: string;
-      tool: string;
-      input: Record<string, unknown>;
-    }) =>
-      send({
-        type: "tool_start",
-        toolCallId: event.toolCallId,
-        tool: event.tool,
-        input: event.input,
-      }),
-    onToolEnd: (event: { toolCallId: string; tool: string; result: unknown }) => {
-      send({
-        type: "tool_end",
-        toolCallId: event.toolCallId,
-        tool: event.tool,
         result: event.result,
+        tool: event.tool,
+        toolCallId: event.toolCallId,
+        type: "tool_end",
       });
 
       if (event.tool === "todo_write") {
         const todos = readTodosFromToolResult(event.result);
 
         if (todos) {
-          send({ type: "todos_updated", todos });
+          send({ todos, type: "todos_updated" });
         }
       }
 
@@ -468,15 +464,33 @@ function buildAgentStreamHandlers(send: (event: StreamEvent) => void) {
         const questionnaire = readQuestionnaireFromToolResult(event.result);
 
         if (questionnaire) {
-          send({ type: "questionnaire_updated", questionnaire });
+          send({ questionnaire, type: "questionnaire_updated" });
         }
       }
     },
-    onSubAgentActivity: (event: { parentToolCallId: string; label: string }) =>
+    onToolInputDelta: (event: {
+      toolCallId: string;
+      tool: string;
+      delta: string;
+      accumulatedArguments?: string;
+    }) =>
       send({
-        type: "sub_agent_activity",
-        parentToolCallId: event.parentToolCallId,
-        label: event.label,
+        accumulatedArguments: event.accumulatedArguments,
+        delta: event.delta,
+        tool: event.tool,
+        toolCallId: event.toolCallId,
+        type: "tool_input_delta",
+      }),
+    onToolStart: (event: {
+      toolCallId: string;
+      tool: string;
+      input: Record<string, unknown>;
+    }) =>
+      send({
+        input: event.input,
+        tool: event.tool,
+        toolCallId: event.toolCallId,
+        type: "tool_start",
       }),
   };
 }
@@ -487,13 +501,15 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
   }
 
   const encoder = new TextEncoder();
-  const keepaliveIntervalMs = 4_000;
+  const keepaliveIntervalMs = 4000;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const subscription = sessionTurnRegistry.subscribe(sessionId, (event) => {
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+          );
 
           if (event.type === "done" || event.type === "error") {
             subscription?.unsubscribe();
@@ -522,9 +538,9 @@ export function streamTurnSubscribe(sessionId: string): Response | null {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
     },
   });
 }
@@ -533,10 +549,10 @@ export function streamMessage(
   sessionId: string,
   session: AgentChatSession,
   input: SendMessageInput,
-  onComplete?: (terminal: StreamEvent) => void,
+  onComplete?: (terminal: StreamEvent) => void
 ): Response {
   const encoder = new TextEncoder();
-  const keepaliveIntervalMs = 4_000;
+  const keepaliveIntervalMs = 4000;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -559,25 +575,29 @@ export function streamMessage(
             setTimeout(() => {
               reject(
                 new Error(
-                  `Chat timed out after ${Math.round(STREAM_TIMEOUT_MS / 1000)}s waiting for the provider. Try another model or check provider settings.`,
-                ),
+                  `Chat timed out after ${Math.round(STREAM_TIMEOUT_MS / 1000)}s waiting for the provider. Try another model or check provider settings.`
+                )
               );
             }, STREAM_TIMEOUT_MS);
           }),
         ]);
 
         const contextUsage = session.getContextUsage() ?? undefined;
-        send({ type: "done", reply, ...(contextUsage ? { contextUsage } : {}) });
+        send({
+          reply,
+          type: "done",
+          ...(contextUsage ? { contextUsage } : {}),
+        });
       } catch (error) {
-        send({ type: "error", error: formatServerError(error) });
+        send({ error: formatServerError(error), type: "error" });
       } finally {
         clearInterval(keepalive);
 
         const terminal =
           getTerminal() ??
           ({
-            type: "error",
             error: "Stream closed before the agent finished.",
+            type: "error",
           } satisfies StreamEvent);
 
         sessionTurnRegistry.endTurn(sessionId, terminal);
@@ -589,9 +609,9 @@ export function streamMessage(
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
     },
   });
 }
@@ -625,8 +645,8 @@ function readTodosFromToolResult(result: unknown): AgentTodo[] | null {
     }
 
     parsed.push({
-      id: record.id,
       content: record.content,
+      id: record.id,
       status: record.status as AgentTodo["status"],
     });
   }
@@ -634,8 +654,14 @@ function readTodosFromToolResult(result: unknown): AgentTodo[] | null {
   return parsed;
 }
 
-function readQuestionnaireFromToolResult(result: unknown): AgentQuestionnaire | null {
-  if (typeof result !== "object" || result === null || !("questionnaire" in result)) {
+function readQuestionnaireFromToolResult(
+  result: unknown
+): AgentQuestionnaire | null {
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    !("questionnaire" in result)
+  ) {
     return null;
   }
 
@@ -690,12 +716,14 @@ function readQuestionnaireFromToolResult(result: unknown): AgentQuestionnaire | 
     }
 
     return {
-      id: question.id,
-      prompt: question.prompt,
       allowCustomAnswer: question.allowCustomAnswer,
-      placeholder:
-        typeof question.placeholder === "string" ? question.placeholder : undefined,
       choices: choices as AgentQuestionnaire["questions"][number]["choices"],
+      id: question.id,
+      placeholder:
+        typeof question.placeholder === "string"
+          ? question.placeholder
+          : undefined,
+      prompt: question.prompt,
     };
   });
 
@@ -705,7 +733,7 @@ function readQuestionnaireFromToolResult(result: unknown): AgentQuestionnaire | 
 
   return {
     id: record.id,
-    title: record.title,
     questions: questions as AgentQuestionnaire["questions"],
+    title: record.title,
   };
 }

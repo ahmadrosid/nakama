@@ -13,23 +13,27 @@
  */
 import { expect, test } from "bun:test";
 import {
-  loadUserConfig,
-  readBundledSkillBody,
-  toLlmToolDefinition,
   type ChatMessage,
+  loadUserConfig,
   type ProviderInstance,
+  readBundledSkillBody,
   type ToolCall,
+  toLlmToolDefinition,
 } from "@nakama/core";
 import {
+  createInMemoryDatabaseAdapter,
   SUPER_BOT_PROFILE_ID,
   SUPER_BOT_SYSTEM_PROMPT,
   SUPER_BOT_TOOL_AUTHORING_RULES,
-  createInMemoryDatabaseAdapter,
 } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { AutomationRunner } from "../services/automation-runner";
 import { AutomationService } from "../services/automation-service";
-import { cassetteFilePath, loadCassette, withMswCassette } from "../testing/llm-msw-cassette";
+import {
+  cassetteFilePath,
+  loadCassette,
+  withMswCassette,
+} from "../testing/llm-msw-cassette";
 import { createAutomationTools } from "./automation-tools";
 
 const cassetteName = "super-bot-create-automation";
@@ -45,8 +49,9 @@ const MAX_TURNS = 5;
 async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
   const configured =
-    config?.providers.find((provider) => provider.type === "deepseek" && provider.apiKey.trim()) ??
-    null;
+    config?.providers.find(
+      (provider) => provider.type === "deepseek" && provider.apiKey.trim()
+    ) ?? null;
 
   if (configured) {
     return configured;
@@ -58,11 +63,11 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   }
 
   return {
-    id: "env-deepseek",
-    type: "deepseek",
-    label: "DeepSeek",
     apiKey,
     createdAt: new Date().toISOString(),
+    id: "env-deepseek",
+    label: "DeepSeek",
+    type: "deepseek",
   };
 }
 
@@ -79,27 +84,27 @@ async function buildSuperBotSystemPrompt(): Promise<string> {
 }
 
 async function seedOrgAndSuperBot(
-  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
 ): Promise<void> {
   const now = new Date().toISOString();
 
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Super Bot Automation Org",
     slug: "super-bot-automation-org",
-    createdAt: now,
     updatedAt: now,
   });
 
   await db.upsertProfile({
-    id: SUPER_BOT_PROFILE_ID,
-    name: "Super Bot",
-    systemPrompt: SUPER_BOT_SYSTEM_PROMPT,
-    model: null,
-    isSuper: true,
-    orgId: ORG_ID,
-    isDefault: false,
     createdAt: now,
+    id: SUPER_BOT_PROFILE_ID,
+    isDefault: false,
+    isSuper: true,
+    model: null,
+    name: "Super Bot",
+    orgId: ORG_ID,
+    systemPrompt: SUPER_BOT_SYSTEM_PROMPT,
     updatedAt: now,
   });
 }
@@ -114,7 +119,7 @@ test(
 
     if (!existing && mode !== "record" && !instance) {
       throw new Error(
-        "Missing DeepSeek credentials to record super-bot-create-automation cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record.",
+        "Missing DeepSeek credentials to record super-bot-create-automation cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
       );
     }
 
@@ -130,11 +135,13 @@ test(
     const tools = createAutomationTools(automationService, automationRunner);
     const toolDefs = tools.map(toLlmToolDefinition);
     const toolContext = {
-      sessionId: SESSION_ID,
       orgId: ORG_ID,
       profileId: SUPER_BOT_PROFILE_ID,
+      sessionId: SESSION_ID,
     };
-    const createAutomationTool = tools.find((entry) => entry.name === "create_automation");
+    const createAutomationTool = tools.find(
+      (entry) => entry.name === "create_automation"
+    );
     if (!createAutomationTool) {
       throw new Error("create_automation tool missing");
     }
@@ -144,13 +151,13 @@ test(
       async () => {
         const liveProvider = createProviderForInstance(
           instance ?? {
-            id: "replay-deepseek",
-            type: "deepseek",
-            label: "DeepSeek",
             apiKey: "sk-replay-placeholder",
             createdAt: new Date().toISOString(),
+            id: "replay-deepseek",
+            label: "DeepSeek",
+            type: "deepseek",
           },
-          modelId,
+          modelId
         );
 
         if (!liveProvider) {
@@ -158,20 +165,22 @@ test(
         }
 
         const system = await buildSuperBotSystemPrompt();
-        const messages: ChatMessage[] = [{ role: "user", content: USER_ASK }];
+        const messages: ChatMessage[] = [{ content: USER_ASK, role: "user" }];
         let createCall: ToolCall | null = null;
         let confirmed = false;
 
         for (let turn = 0; turn < MAX_TURNS; turn += 1) {
           const result = await liveProvider.generateChat({
-            system,
             messages,
+            system,
             tools: toolDefs,
           });
 
           messages.push(result.assistantMessage);
 
-          const found = result.toolCalls?.find((call) => call.name === "create_automation");
+          const found = result.toolCalls?.find(
+            (call) => call.name === "create_automation"
+          );
           if (found) {
             createCall = found;
             break;
@@ -184,10 +193,10 @@ test(
                 ? await tool.run(call.arguments, toolContext)
                 : { error: `Unknown tool: ${call.name}` };
               messages.push({
+                content: JSON.stringify(output),
+                name: call.name,
                 role: "tool",
                 toolCallId: call.id,
-                name: call.name,
-                content: JSON.stringify(output),
               });
             }
             continue;
@@ -196,7 +205,7 @@ test(
           // Skill confirms schedule in chat before create_automation.
           if (!confirmed) {
             confirmed = true;
-            messages.push({ role: "user", content: "yes" });
+            messages.push({ content: "yes", role: "user" });
             continue;
           }
 
@@ -248,8 +257,8 @@ test(
         expect(listed.automations[0]?.id).toBe(created.id);
         expect(listed.automations[0]?.profileId).toBe(SUPER_BOT_PROFILE_ID);
       },
-      { url: deepseekChatCompletionsUrl },
+      { url: deepseekChatCompletionsUrl }
     );
   },
-  { timeout: 180_000 },
+  { timeout: 180_000 }
 );

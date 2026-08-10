@@ -8,19 +8,19 @@ import type { UserOrgSummary } from "./contract";
 
 const orgs: UserOrgSummary[] = [
   {
+    createdAt: "2026-01-01T00:00:00.000Z",
     id: "org_a",
     name: "Acme",
-    slug: "acme",
     role: "admin",
-    createdAt: "2026-01-01T00:00:00.000Z",
+    slug: "acme",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
   {
+    createdAt: "2026-01-01T00:00:00.000Z",
     id: "org_b",
     name: "Beta",
-    slug: "beta",
     role: "member",
-    createdAt: "2026-01-01T00:00:00.000Z",
+    slug: "beta",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
 ];
@@ -40,25 +40,25 @@ describe("prepareChannelOrgContext", () => {
     let saved: string | undefined;
 
     const result = await prepareChannelOrgContext({
-      listOrgs: async () => ({ orgs: [orgs[0]!] }),
       getSelectedOrgId: () => undefined,
+      listOrgs: async () => ({ orgs: [orgs[0]!] }),
       saveSelectedOrgId: async (orgId) => {
         saved = orgId;
       },
     });
 
     expect(result).toEqual({
-      status: "ready",
       orgId: "org_a",
       orgName: "Acme",
+      status: "ready",
     });
     expect(saved).toBe("org_a");
   });
 
   test("prompts when multiple orgs and nothing stored", async () => {
     const result = await prepareChannelOrgContext({
-      listOrgs: async () => ({ orgs }),
       getSelectedOrgId: () => undefined,
+      listOrgs: async () => ({ orgs }),
       saveSelectedOrgId: async () => {},
     });
 
@@ -72,8 +72,8 @@ describe("prepareChannelOrgContext", () => {
     let saved: string | undefined;
 
     const result = await prepareChannelOrgContext({
-      listOrgs: async () => ({ orgs }),
       getSelectedOrgId: () => undefined,
+      listOrgs: async () => ({ orgs }),
       saveSelectedOrgId: async (orgId) => {
         saved = orgId;
       },
@@ -81,10 +81,10 @@ describe("prepareChannelOrgContext", () => {
     });
 
     expect(result).toEqual({
-      status: "ready",
+      justSelected: true,
       orgId: "org_b",
       orgName: "Beta",
-      justSelected: true,
+      status: "ready",
     });
     expect(saved).toBe("org_b");
   });

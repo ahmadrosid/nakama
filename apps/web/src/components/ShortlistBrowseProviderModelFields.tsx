@@ -9,13 +9,13 @@ import {
 } from "@/components/shortlist-browse-providers.shared";
 
 interface ShortlistBrowseProviderModelFieldsProps {
-  provider: ShortlistBrowseProvider;
+  apiKey?: string;
   customModels: ModelListRow[];
-  disabled?: boolean;
   density?: "default" | "compact";
+  disabled?: boolean;
   modelsError?: string | null;
   onCustomModelsChange: (models: ModelListRow[]) => void;
-  apiKey?: string;
+  provider: ShortlistBrowseProvider;
   providerId?: string;
 }
 
@@ -33,30 +33,30 @@ export function ShortlistBrowseProviderModelFields({
 
   return (
     <BrowsableModelFields
-      fieldId={`${provider}-provider-models`}
-      customModels={customModels}
-      disabled={disabled}
-      density={density}
-      modelsError={modelsError}
       browseLabel={copy.browseLabel}
+      customModels={customModels}
+      density={density}
+      disabled={disabled}
+      fieldId={`${provider}-provider-models`}
       footerHint={copy.footerHint}
+      modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
-      toModelRow={capabilityBrowseRowToModelListRow}
       renderBrowse={(onSelect) =>
         provider === "cerebras" ? (
           <CerebrasModelsBrowseList
-            onSelect={onSelect}
             className="h-72 rounded-md border border-border"
+            onSelect={onSelect}
           />
         ) : (
           <FireworksModelsBrowseList
-            onSelect={onSelect}
-            className="h-72 rounded-md border border-border"
             apiKey={apiKey}
+            className="h-72 rounded-md border border-border"
+            onSelect={onSelect}
             providerId={providerId}
           />
         )
       }
+      toModelRow={capabilityBrowseRowToModelListRow}
     />
   );
 }

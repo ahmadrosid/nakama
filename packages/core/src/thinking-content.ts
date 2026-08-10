@@ -1,23 +1,31 @@
 import type { ChatMessage } from "./contract";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function readTrimmedText(value: unknown): string | undefined {
   if (typeof value !== "string") {
-    return undefined;
+    return;
   }
 
   const text = value.trim();
   return text || undefined;
 }
 
-function extractThinkingBlockText(block: Record<string, unknown>): string | undefined {
-  return block.type === "thinking" ? readTrimmedText(block.thinking) : undefined;
+function extractThinkingBlockText(
+  block: Record<string, unknown>
+): string | undefined {
+  return block.type === "thinking"
+    ? readTrimmedText(block.thinking)
+    : undefined;
 }
 
-function extractReasoningSummaryTexts(block: Record<string, unknown>): string[] {
+function extractReasoningSummaryTexts(
+  block: Record<string, unknown>
+): string[] {
   if (block.type !== "reasoning" || !Array.isArray(block.summary)) {
     return [];
   }
@@ -35,7 +43,7 @@ function extractReasoningSummaryTexts(block: Record<string, unknown>): string[] 
 }
 
 export function extractThinkingFromAssistantMessage(
-  message: Extract<ChatMessage, { role: "assistant" }>,
+  message: Extract<ChatMessage, { role: "assistant" }>
 ): string | undefined {
   const direct = message.thinking?.trim();
 
@@ -47,10 +55,10 @@ export function extractThinkingFromAssistantMessage(
 }
 
 export function extractThinkingFromProviderContent(
-  content: unknown[] | undefined,
+  content: unknown[] | undefined
 ): string | undefined {
   if (!content?.length) {
-    return undefined;
+    return;
   }
 
   const parts: string[] = [];

@@ -35,20 +35,20 @@ export async function generateOpenAIResponsesChat(options: {
     options.model,
     options.input,
     options.stream,
-    options.customModels,
+    options.customModels
   );
   const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
+    body: JSON.stringify(body),
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    method: "POST",
   });
 
   if (!response.ok) {
     throw new Error(
-      `OpenAI request failed (${response.status}): ${await response.text()}`,
+      `OpenAI request failed (${response.status}): ${await response.text()}`
     );
   }
 
@@ -62,23 +62,34 @@ export async function generateOpenAIResponsesChat(options: {
 
   const payload = (await response.json()) as {
     output?: ResponseItem[];
-    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
+    };
   };
-  return parseResponsesOutput(payload.output ?? [], options.handlers, payload.usage);
+  return parseResponsesOutput(
+    payload.output ?? [],
+    options.handlers,
+    payload.usage
+  );
 }
 
 async function buildResponsesRequestBody(
   model: string,
   input: GenerateChatInput,
   stream: boolean,
-  customModels?: CustomModelEntry[],
+  customModels?: CustomModelEntry[]
 ) {
-  const tools = buildResponsesTools(input.tools, input.providerOptions?.webSearch ?? false);
+  const tools = buildResponsesTools(
+    input.tools,
+    input.providerOptions?.webSearch ?? false
+  );
 
   return {
-    model,
-    instructions: input.system,
     input: await toResponsesInput(input.messages),
+    instructions: input.system,
+    model,
     ...(tools.length > 0 ? { tools } : {}),
     ...buildOpenAIReasoningRequest(model, input, customModels),
     ...(stream ? { stream: true } : {}),
@@ -88,11 +99,13 @@ async function buildResponsesRequestBody(
 function buildOpenAIReasoningRequest(
   model: string,
   input: GenerateChatInput,
-  customModels?: CustomModelEntry[],
+  customModels?: CustomModelEntry[]
 ): Record<string, unknown> {
   if (
-    !input.providerOptions?.thinking?.enabled ||
-    !openAIModelSupportsThinking(model, customModels)
+    !(
+      input.providerOptions?.thinking?.enabled &&
+      openAIModelSupportsThinking(model, customModels)
+    )
   ) {
     return {};
   }
@@ -105,19 +118,24 @@ function buildOpenAIReasoningRequest(
   };
 }
 
-function buildResponsesTools(tools: LlmToolDefinition[] | undefined, webSearch: boolean) {
+function buildResponsesTools(
+  tools: LlmToolDefinition[] | undefined,
+  webSearch: boolean
+) {
   const hostedTools = webSearch ? [{ type: "web_search" }] : [];
   const functionTools = (tools ?? []).map((tool) => ({
-    type: "function" as const,
-    name: tool.name,
     description: tool.description,
+    name: tool.name,
     parameters: tool.parameters,
+    type: "function" as const,
   }));
 
   return [...hostedTools, ...functionTools];
 }
 
-export async function toResponsesInput(messages: ChatMessage[]): Promise<unknown[]> {
+export async function toResponsesInput(
+  messages: ChatMessage[]
+): Promise<unknown[]> {
   const input: unknown[] = [];
 
   for (const message of messages) {
@@ -138,26 +156,26 @@ export async function toResponsesInput(messages: ChatMessage[]): Promise<unknown
 }
 
 async function toResponsesUserInput(
-  message: Extract<ChatMessage, { role: "user" }>,
+  message: Extract<ChatMessage, { role: "user" }>
 ): Promise<unknown> {
   const content = await toOpenAIResponsesUserContent(message.content);
 
   if (isMessageContentPartArray(message.content)) {
     return {
-      type: "message",
-      role: "user",
       content,
+      role: "user",
+      type: "message",
     };
   }
 
   return {
-    role: "user",
     content,
+    role: "user",
   };
 }
 
 function toResponsesAssistantInput(
-  message: Extract<ChatMessage, { role: "assistant" }>,
+  message: Extract<ChatMessage, { role: "assistant" }>
 ): unknown[] {
   const input: unknown[] = [];
 
@@ -167,16 +185,18 @@ function toResponsesAssistantInput(
     }
 
     if (message.providerContent?.length) {
-      input.push(...message.providerContent.filter(isNonFunctionCallProviderItem));
+      input.push(
+        ...message.providerContent.filter(isNonFunctionCallProviderItem)
+      );
     }
 
     input.push(
       ...message.toolCalls.map((call) => ({
-        type: "function_call",
+        arguments: JSON.stringify(call.arguments),
         call_id: call.id,
         name: call.name,
-        arguments: JSON.stringify(call.arguments),
-      })),
+        type: "function_call",
+      }))
     );
 
     return input;
@@ -196,9 +216,9 @@ function toResponsesAssistantInput(
 
 function toResponsesAssistantTextMessage(content: string) {
   return {
-    type: "message",
+    content: [{ text: content, type: "output_text" }],
     role: "assistant",
-    content: [{ type: "output_text", text: content }],
+    type: "message",
   };
 }
 
@@ -208,19 +228,23 @@ function isNonFunctionCallProviderItem(item: unknown): item is ResponseItem {
 }
 
 function toResponsesToolOutput(
-  message: Extract<ChatMessage, { role: "tool" }>,
+  message: Extract<ChatMessage, { role: "tool" }>
 ) {
   return {
-    type: "function_call_output",
     call_id: message.toolCallId,
     output: message.content,
+    type: "function_call_output",
   };
 }
 
 function parseResponsesOutput(
   output: ResponseItem[],
   handlers?: StreamChatHandlers,
-  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number },
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  }
 ): ChatCompletionResult {
   const textParts: string[] = [];
   const thinkingParts: string[] = [];
@@ -261,9 +285,9 @@ function parseResponsesOutput(
 
     if (item.type === "function_call") {
       toolCalls.push({
+        arguments: parseJsonRecord(String(item.arguments ?? "{}")),
         id: String(item.call_id ?? item.id ?? ""),
         name: String(item.name ?? ""),
-        arguments: parseJsonRecord(String(item.arguments ?? "{}")),
       });
     }
   }
@@ -282,15 +306,15 @@ function parseResponsesOutput(
   }
 
   return {
-    content,
-    toolCalls,
     assistantMessage: {
-      role: "assistant",
       content,
+      role: "assistant",
       ...(thinking ? { thinking } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(providerContent ? { providerContent } : {}),
     },
+    content,
+    toolCalls,
     ...(normalizedUsage ? { usage: normalizedUsage } : {}),
   };
 }
@@ -299,7 +323,7 @@ function extractReasoningSummaryText(item: ResponseItem): string | undefined {
   const summary = item.summary;
 
   if (!Array.isArray(summary)) {
-    return undefined;
+    return;
   }
 
   const parts: string[] = [];
@@ -325,26 +349,26 @@ function extractReasoningSummaryText(item: ResponseItem): string | undefined {
 
 function emitWebSearchToolEvent(
   item: ResponseItem,
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): void {
   const action = readRecord(item.action);
   const toolCallId = String(item.id ?? "");
 
   handlers?.onToolStart?.({
-    toolCallId,
-    tool: WEB_SEARCH_TOOL_NAME,
     input: action,
+    tool: WEB_SEARCH_TOOL_NAME,
+    toolCallId,
   });
   handlers?.onToolEnd?.({
-    toolCallId,
-    tool: WEB_SEARCH_TOOL_NAME,
     result: action,
+    tool: WEB_SEARCH_TOOL_NAME,
+    toolCallId,
   });
 }
 
 async function readOpenAIResponsesStream(
   body: ReadableStream<Uint8Array>,
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): Promise<ChatCompletionResult> {
   let content = "";
   let thinking = "";
@@ -358,9 +382,13 @@ async function readOpenAIResponsesStream(
     const responseRecord = readRecord(payload.response);
     usage =
       buildTokenUsage({
-        inputTokens: responseRecord.usage && readRecord(responseRecord.usage).input_tokens,
-        outputTokens: responseRecord.usage && readRecord(responseRecord.usage).output_tokens,
-        totalTokens: responseRecord.usage && readRecord(responseRecord.usage).total_tokens,
+        inputTokens:
+          responseRecord.usage && readRecord(responseRecord.usage).input_tokens,
+        outputTokens:
+          responseRecord.usage &&
+          readRecord(responseRecord.usage).output_tokens,
+        totalTokens:
+          responseRecord.usage && readRecord(responseRecord.usage).total_tokens,
       }) ?? usage;
 
     if (type === "response.output_text.delta") {

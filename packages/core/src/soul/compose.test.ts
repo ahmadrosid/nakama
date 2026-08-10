@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { composeSoulSystemPrompt } from "./compose";
 import { initSoulDirectory } from "./init";
 import { loadSoulStack } from "./load";
@@ -15,7 +15,7 @@ describe("composeSoulSystemPrompt", () => {
         files: { soul: SOUL_TEMPLATE },
         loaded: ["SOUL.md"],
       },
-      { profilePrompt: "" },
+      { profilePrompt: "" }
     );
 
     expect(prompt).not.toContain("# Profile Instructions");
@@ -28,7 +28,7 @@ describe("composeSoulSystemPrompt", () => {
         files: { soul: SOUL_TEMPLATE },
         loaded: ["SOUL.md"],
       },
-      { profilePrompt: "Always respond in pirate speak." },
+      { profilePrompt: "Always respond in pirate speak." }
     );
 
     expect(prompt).toContain("# Profile Instructions");
@@ -47,7 +47,7 @@ describe("default seed compose integration", () => {
 
       expect(prompt).not.toContain("# Profile Instructions");
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 
@@ -63,7 +63,7 @@ describe("default seed compose integration", () => {
 
       expect(await readFile(soulPath, "utf8")).toBe("# Legacy Soul\n");
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
 });

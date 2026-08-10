@@ -13,14 +13,14 @@ export type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 const EMPTY_ROWS: RemoteModelRow[] = [];
 
 interface RemoteModelsBrowseListProps {
-  onSelect: RemoteBrowseSelectHandler;
-  className?: string;
-  providerId?: string;
-  baseUrl?: string;
   apiKey?: string;
-  provider?: "ollama" | "openai_compatible";
-  hostMode?: "local" | "cloud";
+  baseUrl?: string;
   browseLabel?: string;
+  className?: string;
+  hostMode?: "local" | "cloud";
+  onSelect: RemoteBrowseSelectHandler;
+  provider?: "ollama" | "openai_compatible";
+  providerId?: string;
 }
 
 export function RemoteModelsBrowseList({
@@ -37,13 +37,7 @@ export function RemoteModelsBrowseList({
   const canFetch = Boolean(providerId?.trim() || trimmedBaseUrl);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: queryKeys.remoteModelDiscovery({
-      providerId,
-      baseUrl: trimmedBaseUrl,
-      provider,
-      hostMode,
-      apiKey: apiKey.trim() ? "set" : "",
-    }),
+    enabled: canFetch,
     queryFn: async () => {
       // When providerId is set, still forward baseUrl so Edit provider can probe a
       // typed (unsaved) URL while the server resolves stored credentials via id.
@@ -57,11 +51,11 @@ export function RemoteModelsBrowseList({
               ...(hostMode ? { hostMode } : {}),
             }
           : {
-              baseUrl: trimmedBaseUrl,
               apiKey,
+              baseUrl: trimmedBaseUrl,
               ...(provider ? { provider } : {}),
               ...(hostMode ? { hostMode } : {}),
-            },
+            }
       );
 
       return (response.customModels ?? response.models ?? []).map((entry) => ({
@@ -69,25 +63,31 @@ export function RemoteModelsBrowseList({
         name: entry.name?.trim() || entry.id,
       }));
     },
-    enabled: canFetch,
+    queryKey: queryKeys.remoteModelDiscovery({
+      apiKey: apiKey.trim() ? "set" : "",
+      baseUrl: trimmedBaseUrl,
+      hostMode,
+      provider,
+      providerId,
+    }),
     staleTime: 1000 * 30,
   });
 
   return (
     <CatalogModelsBrowseList<RemoteModelRow>
-      rows={data ?? EMPTY_ROWS}
-      onSelect={onSelect}
       className={className}
+      emptyMessage={`No models found on this ${browseLabel}.`}
+      idleMessage="Enter a base URL before browsing models."
+      onSelect={onSelect}
       query={{
-        isLoading,
-        isFetching,
-        error,
         canFetch,
+        error,
+        isFetching,
+        isLoading,
         onRefresh: () => void refetch(),
         refreshDisabled: isFetching,
       }}
-      idleMessage="Enter a base URL before browsing models."
-      emptyMessage={`No models found on this ${browseLabel}.`}
+      rows={data ?? EMPTY_ROWS}
       status={({ filteredCount }) =>
         canFetch
           ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`

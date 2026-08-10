@@ -1,6 +1,9 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -18,13 +21,13 @@ try {
 
   viteProcess = Bun.spawn(["bun", "run", "vite"], {
     cwd: webRoot,
-    stdout: "inherit",
-    stderr: "inherit",
-    stdin: "inherit",
     env: {
       ...process.env,
       nakama_SERVER_URL: serverUrl,
     },
+    stderr: "inherit",
+    stdin: "inherit",
+    stdout: "inherit",
   });
 
   const exitCode = await viteProcess.exited;

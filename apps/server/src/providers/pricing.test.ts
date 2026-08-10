@@ -1,42 +1,50 @@
 import { describe, expect, test } from "bun:test";
-import { estimateUsageCostUsd, getModelPricing, hasCatalogPricing } from "./pricing";
+import {
+  estimateUsageCostUsd,
+  getModelPricing,
+  hasCatalogPricing,
+} from "./pricing";
 
 const openRouterInstance = {
-  id: "or-1",
-  type: "openrouter" as const,
-  label: "OpenRouter",
   apiKey: "sk-test",
   createdAt: "2026-06-07T10:00:00.000Z",
+  id: "or-1",
+  label: "OpenRouter",
+  type: "openrouter" as const,
 };
 
 const compatibleInstance = {
-  id: "cmp-1",
-  type: "openai_compatible" as const,
-  label: "Ollama",
   apiKey: "k",
   baseUrl: "http://localhost:11434/v1",
   createdAt: "2026-06-07T10:00:00.000Z",
+  id: "cmp-1",
+  label: "Ollama",
+  type: "openai_compatible" as const,
 };
 
 const cerebrasInstance = {
-  id: "cb-1",
-  type: "cerebras" as const,
-  label: "Cerebras",
   apiKey: "csk-test",
   createdAt: "2026-07-16T10:00:00.000Z",
+  id: "cb-1",
+  label: "Cerebras",
+  type: "cerebras" as const,
 };
 
 const fireworksInstance = {
-  id: "fw-1",
-  type: "fireworks" as const,
-  label: "Fireworks",
   apiKey: "fw-test",
   createdAt: "2026-07-24T10:00:00.000Z",
+  id: "fw-1",
+  label: "Fireworks",
+  type: "fireworks" as const,
 };
 
 describe("estimateUsageCostUsd", () => {
   test("computes cost from catalog pricing", () => {
-    const cost = estimateUsageCostUsd("claude-sonnet-4-6", 1_000_000, 1_000_000);
+    const cost = estimateUsageCostUsd(
+      "claude-sonnet-4-6",
+      1_000_000,
+      1_000_000
+    );
     expect(cost).toBe(18);
   });
 
@@ -46,20 +54,35 @@ describe("estimateUsageCostUsd", () => {
     expect(pricing?.outputPerMillionUsd).toBe(3);
   });
 
-  test("uses saved pricing for openrouter custom models", () => {
-    const cost = estimateUsageCostUsd("anthropic/claude-sonnet-4-6", 1_000_000, 1_000_000, {
-      provider: "openrouter",
-      providerInstance: {
-        ...openRouterInstance,
-        customModels: [
-          {
-            id: "anthropic/claude-sonnet-4-6",
-            inputPerMillionUsd: 3,
-            outputPerMillionUsd: 15,
-          },
-        ],
-      },
+  test("prices gpt-image-2 with Images token rates", () => {
+    const pricing = getModelPricing("gpt-image-2");
+    expect(pricing).toEqual({
+      inputPerMillionUsd: 5,
+      outputPerMillionUsd: 30,
     });
+    // 1M input + 1M output → $5 + $30
+    expect(estimateUsageCostUsd("gpt-image-2", 1_000_000, 1_000_000)).toBe(35);
+  });
+
+  test("uses saved pricing for openrouter custom models", () => {
+    const cost = estimateUsageCostUsd(
+      "anthropic/claude-sonnet-4-6",
+      1_000_000,
+      1_000_000,
+      {
+        provider: "openrouter",
+        providerInstance: {
+          ...openRouterInstance,
+          customModels: [
+            {
+              id: "anthropic/claude-sonnet-4-6",
+              inputPerMillionUsd: 3,
+              outputPerMillionUsd: 15,
+            },
+          ],
+        },
+      }
+    );
 
     expect(cost).toBe(18);
   });
@@ -72,16 +95,16 @@ describe("estimateUsageCostUsd", () => {
           ...openRouterInstance,
           customModels: [{ id: "anthropic/claude-sonnet-4-6" }],
         },
-      }),
+      })
     ).toBeNull();
     expect(
-      estimateUsageCostUsd("anthropic/claude-sonnet-4-6", 1_000, 500, {
+      estimateUsageCostUsd("anthropic/claude-sonnet-4-6", 1000, 500, {
         provider: "openrouter",
         providerInstance: {
           ...openRouterInstance,
           customModels: [{ id: "anthropic/claude-sonnet-4-6" }],
         },
-      }),
+      })
     ).toBe(0);
   });
 
@@ -104,19 +127,24 @@ describe("estimateUsageCostUsd", () => {
   });
 
   test("uses saved pricing for fireworks custom models", () => {
-    const cost = estimateUsageCostUsd("accounts/fireworks/models/kimi-k2p6", 1_000_000, 1_000_000, {
-      provider: "fireworks",
-      providerInstance: {
-        ...fireworksInstance,
-        customModels: [
-          {
-            id: "accounts/fireworks/models/kimi-k2p6",
-            inputPerMillionUsd: 0.5,
-            outputPerMillionUsd: 2,
-          },
-        ],
-      },
-    });
+    const cost = estimateUsageCostUsd(
+      "accounts/fireworks/models/kimi-k2p6",
+      1_000_000,
+      1_000_000,
+      {
+        provider: "fireworks",
+        providerInstance: {
+          ...fireworksInstance,
+          customModels: [
+            {
+              id: "accounts/fireworks/models/kimi-k2p6",
+              inputPerMillionUsd: 0.5,
+              outputPerMillionUsd: 2,
+            },
+          ],
+        },
+      }
+    );
 
     expect(cost).toBeCloseTo(2.5, 5);
   });
@@ -132,13 +160,13 @@ describe("estimateUsageCostUsd", () => {
 
     expect(pricing).toBeNull();
     expect(
-      estimateUsageCostUsd("llama3.2", 1_000, 500, {
+      estimateUsageCostUsd("llama3.2", 1000, 500, {
         provider: "openai_compatible",
         providerInstance: {
           ...compatibleInstance,
           customModels: [{ id: "llama3.2" }],
         },
-      }),
+      })
     ).toBe(0);
     expect(
       hasCatalogPricing("llama3.2", {
@@ -153,7 +181,7 @@ describe("estimateUsageCostUsd", () => {
             },
           ],
         },
-      }),
+      })
     ).toBe(true);
   });
 });

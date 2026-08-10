@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import {
   archiveProfileMemoryBullets,
   formatArchiveAppend,
@@ -19,7 +19,7 @@ describe("memory archive", () => {
 
   afterEach(async () => {
     if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
     if (originalConfigDir === undefined) {
@@ -31,7 +31,13 @@ describe("memory archive", () => {
 
   async function setupProfileMemory(content: string): Promise<string> {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-memory-archive-"));
-    const soulDir = path.join(tempDir, "orgs", PROFILE.orgId, "profiles", PROFILE.profileId);
+    const soulDir = path.join(
+      tempDir,
+      "orgs",
+      PROFILE.orgId,
+      "profiles",
+      PROFILE.profileId
+    );
     await mkdir(soulDir, { recursive: true });
     await writeFile(path.join(soulDir, "MEMORY.md"), content, "utf8");
     process.env.NAKAMA_CONFIG_DIR = tempDir;
@@ -54,8 +60,8 @@ describe("memory archive", () => {
 
     expect(parsed.preamble).toContain("# Memory Log");
     expect(parsed.sections).toEqual([
-      { date: "2026-06-28", bullets: ["Older fact."] },
-      { date: "2026-06-29", bullets: ["Active fact."] },
+      { bullets: ["Older fact."], date: "2026-06-28" },
+      { bullets: ["Active fact."], date: "2026-06-29" },
     ]);
   });
 
@@ -74,23 +80,26 @@ describe("memory archive", () => {
 - Remove me too.
 `);
 
-    const result = partitionMemoryEntries(parsed, ["Remove me.", "Remove me too."]);
+    const result = partitionMemoryEntries(parsed, [
+      "Remove me.",
+      "Remove me too.",
+    ]);
 
     expect(result.archivedCount).toBe(2);
     expect(result.unmatched).toEqual([]);
     expect(result.active.sections).toEqual([
-      { date: "2026-06-29", bullets: ["Keep me."] },
+      { bullets: ["Keep me."], date: "2026-06-29" },
     ]);
     expect(result.archivedSections).toEqual([
-      { date: "2026-06-28", bullets: ["Remove me."] },
-      { date: "2026-06-29", bullets: ["Remove me too."] },
+      { bullets: ["Remove me."], date: "2026-06-28" },
+      { bullets: ["Remove me too."], date: "2026-06-29" },
     ]);
   });
 
   test("rebuildMemoryContent drops empty date sections", () => {
     const rebuilt = rebuildMemoryContent({
       preamble: "# Memory Log\n\n---",
-      sections: [{ date: "2026-06-29", bullets: ["Still here."] }],
+      sections: [{ bullets: ["Still here."], date: "2026-06-29" }],
     });
 
     expect(rebuilt).toContain("## 2026-06-29");
@@ -101,8 +110,8 @@ describe("memory archive", () => {
   test("formatArchiveAppend preserves original section dates", () => {
     const append = formatArchiveAppend(
       new Date("2026-06-29T12:00:00.000Z"),
-      [{ date: "2026-06-15", bullets: ["Old preference."] }],
-      "user cleanup",
+      [{ bullets: ["Old preference."], date: "2026-06-15" }],
+      "user cleanup"
     );
 
     expect(append).toContain("<!-- archived: 2026-06-29T12:00:00.000Z -->");
@@ -127,18 +136,25 @@ describe("memory archive", () => {
       PROFILE.orgId,
       PROFILE.profileId,
       ["User prefers dark mode."],
-      { archivedAt, reason: "no longer relevant" },
+      { archivedAt, reason: "no longer relevant" }
     );
 
     expect(result.archived).toBe(1);
     expect(result.activeBytes).toBeGreaterThan(0);
     expect(result.archivePath).toEndWith(
-      path.join("memory-archive", "2026-06.md"),
+      path.join("memory-archive", "2026-06.md")
     );
 
     const active = await readFile(
-      path.join(tempDir, "orgs", PROFILE.orgId, "profiles", PROFILE.profileId, "MEMORY.md"),
-      "utf8",
+      path.join(
+        tempDir,
+        "orgs",
+        PROFILE.orgId,
+        "profiles",
+        PROFILE.profileId,
+        "MEMORY.md"
+      ),
+      "utf8"
     );
     expect(active).not.toContain("User prefers dark mode.");
     expect(active).toContain("- User lives in Jakarta.");
@@ -160,15 +176,23 @@ describe("memory archive", () => {
 - Keep active.
 `);
 
-    const archivePath = getMemoryArchiveFilePath(PROFILE.orgId, PROFILE.profileId, "2026-06");
+    const archivePath = getMemoryArchiveFilePath(
+      PROFILE.orgId,
+      PROFILE.profileId,
+      "2026-06"
+    );
     await mkdir(path.dirname(archivePath), { recursive: true });
-    await writeFile(archivePath, "# Archived Memory\n\n---\n\n<!-- archived: 2026-06-01T00:00:00.000Z -->\n", "utf8");
+    await writeFile(
+      archivePath,
+      "# Archived Memory\n\n---\n\n<!-- archived: 2026-06-01T00:00:00.000Z -->\n",
+      "utf8"
+    );
 
     await archiveProfileMemoryBullets(
       PROFILE.orgId,
       PROFILE.profileId,
       ["First archived."],
-      { archivedAt: new Date("2026-06-29T16:00:00.000Z") },
+      { archivedAt: new Date("2026-06-29T16:00:00.000Z") }
     );
 
     const archive = await readFile(archivePath, "utf8");
@@ -188,7 +212,9 @@ describe("memory archive", () => {
 `);
 
     await expect(
-      archiveProfileMemoryBullets(PROFILE.orgId, PROFILE.profileId, ["Missing fact."]),
+      archiveProfileMemoryBullets(PROFILE.orgId, PROFILE.profileId, [
+        "Missing fact.",
+      ])
     ).rejects.toThrow("Memory entries not found: Missing fact.");
   });
 
@@ -206,20 +232,24 @@ describe("memory archive", () => {
     await writeFile(
       path.join(legacyArchiveDir, "2026-06.md"),
       "# Archived Memory\n\n---\n\n<!-- archived: 2026-06-01T00:00:00.000Z -->\n",
-      "utf8",
+      "utf8"
     );
 
     const result = await archiveProfileMemoryBullets(
       PROFILE.orgId,
       PROFILE.profileId,
       ["Move this."],
-      { archivedAt: new Date("2026-06-29T16:00:00.000Z") },
+      { archivedAt: new Date("2026-06-29T16:00:00.000Z") }
     );
 
-    expect(result.archivePath).toEndWith(path.join("memory-archive", "2026-06.md"));
+    expect(result.archivePath).toEndWith(
+      path.join("memory-archive", "2026-06.md")
+    );
     const archive = await readFile(result.archivePath, "utf8");
     expect(archive).toContain("<!-- archived: 2026-06-01T00:00:00.000Z -->");
     expect(archive).toContain("- Move this.");
-    await expect(readFile(path.join(legacyArchiveDir, "2026-06.md"), "utf8")).rejects.toThrow();
+    await expect(
+      readFile(path.join(legacyArchiveDir, "2026-06.md"), "utf8")
+    ).rejects.toThrow();
   });
 });

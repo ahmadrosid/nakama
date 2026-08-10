@@ -1,4 +1,8 @@
-import type { McpHttpConfig, McpStdioConfig, McpTransport } from "@nakama/core/contract";
+import type {
+  McpHttpConfig,
+  McpStdioConfig,
+  McpTransport,
+} from "@nakama/core/contract";
 
 export type ParsedMcpServerImport = {
   name: string;
@@ -22,28 +26,28 @@ export function parseMcpConfigJson(text: string): ParseMcpConfigResult | null {
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    return { ok: false, error: "Invalid JSON." };
+    return { error: "Invalid JSON.", ok: false };
   }
 
   if (typeof parsed !== "object" || parsed === null) {
-    return { ok: false, error: "Expected a JSON object." };
+    return { error: "Expected a JSON object.", ok: false };
   }
 
   const record = parsed as Record<string, unknown>;
   const entries = readServerEntries(record);
 
   if (!entries) {
-    return { ok: false, error: "No MCP server config found in JSON." };
+    return { error: "No MCP server config found in JSON.", ok: false };
   }
 
   if (entries.length === 0) {
-    return { ok: false, error: "mcpServers is empty." };
+    return { error: "mcpServers is empty.", ok: false };
   }
 
   const [name, serverConfig] = entries[0]!;
 
   if (typeof serverConfig !== "object" || serverConfig === null) {
-    return { ok: false, error: "Invalid server config." };
+    return { error: "Invalid server config.", ok: false };
   }
 
   const config = serverConfig as Record<string, unknown>;
@@ -51,40 +55,40 @@ export function parseMcpConfigJson(text: string): ParseMcpConfigResult | null {
 
   if (typeof config.url === "string" && config.url.trim()) {
     return {
-      ok: true,
       importedCount: entries.length,
+      ok: true,
       server: {
+        config: {
+          headers: readStringRecord(config.headers),
+          url: config.url.trim(),
+        },
         name: serverName,
         transport: "http",
-        config: {
-          url: config.url.trim(),
-          headers: readStringRecord(config.headers),
-        },
       },
     };
   }
 
   if (typeof config.command === "string" && config.command.trim()) {
     return {
-      ok: true,
       importedCount: entries.length,
+      ok: true,
       server: {
-        name: serverName,
-        transport: "stdio",
         config: {
-          command: config.command.trim(),
           args: readStringArray(config.args),
+          command: config.command.trim(),
           env: readStringRecord(config.env),
         },
+        name: serverName,
+        transport: "stdio",
       },
     };
   }
 
-  return { ok: false, error: "Server config needs command or url." };
+  return { error: "Server config needs command or url.", ok: false };
 }
 
 function readServerEntries(
-  record: Record<string, unknown>,
+  record: Record<string, unknown>
 ): Array<[string, unknown]> | null {
   if (
     typeof record.mcpServers === "object" &&
@@ -103,7 +107,7 @@ function readServerEntries(
 
 function readStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
-    return undefined;
+    return;
   }
 
   const items = value.flatMap((entry) => {
@@ -120,7 +124,7 @@ function readStringArray(value: unknown): string[] | undefined {
 
 function readStringRecord(value: unknown): Record<string, string> | undefined {
   if (typeof value !== "object" || value === null) {
-    return undefined;
+    return;
   }
 
   const record: Record<string, string> = {};

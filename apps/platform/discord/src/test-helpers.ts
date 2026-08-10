@@ -1,26 +1,29 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
-import type { UserOrgSummary } from "@nakama/core/contract";
+import type { NakamaClient, StreamHandlers } from "@nakama/client";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
   parseListUserOrgsResponse,
 } from "@nakama/core/bridge-api";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
-import type { NakamaClient, StreamHandlers } from "@nakama/client";
+import type {
+  AgentQuestionnaire,
+  ChatMessage,
+  UserOrgSummary,
+} from "@nakama/core/contract";
 import type { Message } from "discord.js";
 
 export function createDefaultTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
   return [
     {
+      createdAt: now,
       id: "org_test",
       name: "Test Org",
-      slug: "test-org",
       role: "admin",
-      createdAt: now,
+      slug: "test-org",
       updatedAt: now,
     },
   ];
@@ -30,19 +33,19 @@ export function createMultiTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
   return [
     {
+      createdAt: now,
       id: "org_a",
       name: "Personal",
-      slug: "helipod",
       role: "admin",
-      createdAt: now,
+      slug: "helipod",
       updatedAt: now,
     },
     {
+      createdAt: now,
       id: "org_b",
       name: "Tinyclaw",
-      slug: "tinyclaw",
       role: "member",
-      createdAt: now,
+      slug: "tinyclaw",
       updatedAt: now,
     },
   ];
@@ -60,17 +63,29 @@ export function createMockClient(
       isSuper?: boolean;
     }>;
     orgs?: UserOrgSummary[];
-    onSendStream?: (input: unknown, handlers?: StreamHandlers) => Promise<string>;
+    listedArtifacts?: Array<{
+      filename: string;
+      mimeType: string;
+      path: string;
+      sizeBytes: number;
+      updatedAt: string;
+    }>;
+    onSendStream?: (
+      input: unknown,
+      handlers?: StreamHandlers
+    ) => Promise<string>;
     artifactContentBytes?: Uint8Array;
-  } = {},
+  } = {}
 ) {
   const calls = {
     createSession: 0,
-    sendStream: 0,
     getSessionMessages: 0,
+    listProfileArtifacts: 0,
     publishProfileArtifactShare: 0,
     readProfileArtifactContent: 0,
+    sendStream: 0,
   };
+  const createdSessionProfileIds: string[] = [];
 
   const sendStream = async (input: unknown, handlers?: StreamHandlers) => {
     calls.sendStream += 1;
@@ -81,18 +96,18 @@ export function createMockClient(
   };
 
   const session = {
-    id: "session_test",
-    sendStream,
+    clear: async () => {},
     compact: async () => ({
       action: "summarized" as const,
-      messagesBefore: 10,
       messagesAfter: 4,
+      messagesBefore: 10,
     }),
-    getMessages: async () => options.messages ?? [],
-    clear: async () => {},
-    send: async () => "ok",
-    purge: async () => {},
     createAutomation: async () => ({}),
+    getMessages: async () => options.messages ?? [],
+    id: "session_test",
+    purge: async () => {},
+    send: async () => "ok",
+    sendStream,
   };
 
   const profiles = options.profiles ?? [{ id: "default", model: null }];
@@ -100,73 +115,88 @@ export function createMockClient(
   let activeOrgId: string | null = orgs[0]?.id ?? null;
 
   const client = {
-    createSession: async () => {
+    createChatSession: () => session,
+    createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
+      if (input?.profileId) {
+        createdSessionProfileIds.push(input.profileId);
+      }
       return session;
     },
-    createChatSession: () => session,
+    getModels: async () => ({
+      currentProviderId: null,
+      displayName: null,
+      models: [],
+      provider: null,
+      providers: [],
+    }),
     getSessionMessages: async () => {
       calls.getSessionMessages += 1;
       return {
         channel: "discord" as const,
-        messages: options.messages ?? [],
         messageMeta: [],
-        todos: [],
+        messages: options.messages ?? [],
         questionnaire: options.questionnaire ?? null,
+        todos: [],
       };
     },
     health: async () => ({ ok: true, providerConfigured: false }),
+    listProfileArtifacts: async () => {
+      calls.listProfileArtifacts += 1;
+      return {
+        artifacts: options.listedArtifacts ?? [],
+        directory: "/tmp/artifacts",
+        profileId: "default",
+      };
+    },
     listProfiles: async () =>
       parseListProfilesResponse({
         profiles: profiles.map((profile) => ({
           id: profile.id,
-          name: profile.name ?? profile.id,
-          model: profile.model ?? null,
           isDefault: profile.isDefault ?? false,
           isSuper: profile.isSuper ?? false,
+          model: profile.model ?? null,
+          name: profile.name ?? profile.id,
         })),
       }),
     listUserOrgs: async () => parseListUserOrgsResponse({ orgs }),
-    setOrgId: (orgId: string | null) => {
-      activeOrgId = orgId?.trim() || null;
-    },
-    getModels: async () => ({
-      provider: null,
-      currentProviderId: null,
-      providers: [],
-      models: [],
-      displayName: null,
-    }),
     publishProfileArtifactShare: async () => {
       calls.publishProfileArtifactShare += 1;
       return {
         id: "share_test",
-        token: "tok_test",
-        shareUrl: "https://app.example/s/tok_test",
-        sharePath: "/s/tok_test",
-        webPublicUrlConfigured: true,
         refreshed: false,
+        sharePath: "/s/tok_test",
+        shareUrl: "https://app.example/s/tok_test",
+        token: "tok_test",
+        webPublicUrlConfigured: true,
       };
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
-      const data = options.artifactContentBytes ?? new TextEncoder().encode("# Report");
+      const data =
+        options.artifactContentBytes ?? new TextEncoder().encode("# Report");
       return {
         contentType: "text/markdown",
-        data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+        data: data.buffer.slice(
+          data.byteOffset,
+          data.byteOffset + data.byteLength
+        ),
       };
+    },
+    setOrgId: (orgId: string | null) => {
+      activeOrgId = orgId?.trim() || null;
     },
   } as unknown as NakamaClient;
 
   assertBridgeClientMethods(client);
 
-  return { client, calls };
+  return { calls, client, createdSessionProfileIds };
 }
 
 export interface MockDmMessage {
+  fileSendCalls: number;
   message: Message;
   sentMessages: string[];
-  fileSendCalls: number;
 }
 
 export function createDmMessage(options: {
@@ -183,6 +213,11 @@ export function createDmMessage(options: {
     isDMBased: () => true,
     isTextBased: () => true,
     isThread: () => false,
+    messages: {
+      fetch: async () => ({
+        edit: async () => {},
+      }),
+    },
     parentId: null,
     send: async (payload: string | { files: unknown[] }) => {
       if (typeof payload === "string") {
@@ -194,47 +229,47 @@ export function createDmMessage(options: {
       return { id: String(sentMessages.length) };
     },
     sendTyping: async () => {},
-    messages: {
-      fetch: async () => ({
-        edit: async () => {},
-      }),
-    },
   };
 
   const message = {
-    author: { id: options.userId ?? "424242424242424242", bot: false },
-    content: options.content ?? "",
+    author: { bot: false, id: options.userId ?? "424242424242424242" },
     channel,
     client: { user: { id: "bot_id", username: "nakamabot" } },
+    content: options.content ?? "",
   } as unknown as Message;
 
   return {
-    message,
-    sentMessages,
     get fileSendCalls() {
       return fileSendCalls;
     },
+    message,
+    sentMessages,
   };
 }
 
 export interface MockGuildChatMessage {
-  message: Message;
-  channelSentMessages: string[];
-  threadSentMessages: string[];
-  startThreadCalls: number;
-  createdThreadId: string | null;
   channelFileSendCalls: number;
-  threadFileSendCalls: number;
+  channelSentMessages: string[];
+  createdThreadId: string | null;
   lastThreadName: string | null;
+  message: Message;
+  startThreadCalls: number;
+  threadFileSendCalls: number;
+  threadSentMessages: string[];
 }
 
 export function createGuildChatMessage(options: {
   userId?: string;
   channelId?: string;
   threadId?: string;
-  parentId?: string;
+  /** Pass `null` to simulate a partial thread channel with missing parentId. */
+  parentId?: string | null;
+  /** Parent id returned by channel.fetch() when initial parentId is null. */
+  fetchParentId?: string;
   content?: string;
   mentionsBot?: boolean;
+  mentionedRoleIds?: string[];
+  botHeldRoleIds?: string[];
   replyToBot?: boolean;
   inThread?: boolean;
   startThreadError?: Error;
@@ -259,8 +294,13 @@ export function createGuildChatMessage(options: {
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
   const threadId = options.threadId ?? "thread_1";
-  const parentId = options.parentId ?? channelId;
+  const parentId =
+    options.parentId === null ? null : (options.parentId ?? channelId);
+  const fetchParentId = options.fetchParentId ?? channelId;
   const botId = "bot_id";
+  const guildId = "guild_1";
+  const mentionedRoleIds = options.mentionedRoleIds ?? [];
+  const botHeldRoleIds = new Set(options.botHeldRoleIds ?? []);
   const existingThreads = options.existingThreads ?? new Map();
 
   const messages = new Map<string, { author: { id: string } }>();
@@ -268,18 +308,26 @@ export function createGuildChatMessage(options: {
     messages.set("reply_1", { author: { id: botId } });
   }
 
-  function createThreadChannel(id: string, parent: string, archived = false) {
-    return {
-      id,
-      parentId: parent,
+  function createThreadChannel(
+    id: string,
+    parent: string | null,
+    archived = false
+  ) {
+    const channel = {
       archived,
+      fetch: async () => createThreadChannel(id, fetchParentId, archived),
+      id,
       isDMBased: () => false,
       isTextBased: () => true,
       isThread: () => true,
-      setArchived: async (value: boolean) => {
-        archived = value;
-        return createThreadChannel(id, parent, archived);
+      messages: {
+        cache: messages,
+        fetch: async () => ({
+          edit: async () => {},
+        }),
       },
+      parentId: parent,
+      partial: parent === null,
       send: async (payload: string | { files: unknown[] }) => {
         if (typeof payload === "string") {
           threadSentMessages.push(payload);
@@ -290,21 +338,26 @@ export function createGuildChatMessage(options: {
         return { id: `tfile_${threadFileSendCalls}` };
       },
       sendTyping: async () => {},
-      messages: {
-        cache: messages,
-        fetch: async () => ({
-          edit: async () => {},
-        }),
+      setArchived: async (value: boolean) => {
+        archived = value;
+        return createThreadChannel(id, parent, archived);
       },
     };
+    return channel;
   }
 
   const parentChannel = {
     id: channelId,
-    parentId: null as string | null,
     isDMBased: () => false,
     isTextBased: () => true,
     isThread: () => false,
+    messages: {
+      cache: messages,
+      fetch: async () => ({
+        edit: async () => {},
+      }),
+    },
+    parentId: null as string | null,
     send: async (payload: string | { files: unknown[] }) => {
       if (typeof payload === "string") {
         channelSentMessages.push(payload);
@@ -315,12 +368,6 @@ export function createGuildChatMessage(options: {
       return { id: `cfile_${channelFileSendCalls}` };
     },
     sendTyping: async () => {},
-    messages: {
-      cache: messages,
-      fetch: async () => ({
-        edit: async () => {},
-      }),
-    },
   };
 
   const channel = options.inThread
@@ -331,7 +378,11 @@ export function createGuildChatMessage(options: {
     fetch: async (id: string) => {
       const known = existingThreads.get(id);
       if (known) {
-        return createThreadChannel(known.id, known.parentId ?? parentId, known.archived ?? false);
+        return createThreadChannel(
+          known.id,
+          known.parentId ?? parentId,
+          known.archived ?? false
+        );
       }
 
       if (createdThreadId && id === createdThreadId) {
@@ -343,19 +394,34 @@ export function createGuildChatMessage(options: {
   };
 
   const message = {
-    author: { id: userId, bot: false },
+    author: { bot: false, id: userId },
+    channel,
+    client: {
+      channels: clientChannels,
+      user: { id: botId, username: "nakamabot" },
+    },
     content: options.content ?? "",
+    guild: {
+      id: guildId,
+      members: {
+        me: {
+          roles: {
+            cache: {
+              has: (id: string) => botHeldRoleIds.has(id),
+            },
+          },
+        },
+      },
+    },
     mentions: {
+      roles: {
+        keys: () => mentionedRoleIds.values(),
+      },
       users: {
         has: (id: string) => (options.mentionsBot ? id === botId : false),
       },
     },
     reference: options.replyToBot ? { messageId: "reply_1" } : null,
-    channel,
-    client: {
-      user: { id: botId, username: "nakamabot" },
-      channels: clientChannels,
-    },
     startThread: async ({ name }: { name: string }) => {
       startThreadCalls += 1;
       lastThreadName = name;
@@ -366,33 +432,33 @@ export function createGuildChatMessage(options: {
       createdThreadId = `created_thread_${mockInstanceId}_${startThreadCalls}`;
       const thread = createThreadChannel(createdThreadId, channelId, false);
       existingThreads.set(createdThreadId, {
+        archived: false,
         id: createdThreadId,
         parentId: channelId,
-        archived: false,
       });
       return thread;
     },
   } as unknown as Message;
 
   return {
-    message,
-    channelSentMessages,
-    threadSentMessages,
-    get startThreadCalls() {
-      return startThreadCalls;
+    get channelFileSendCalls() {
+      return channelFileSendCalls;
     },
+    channelSentMessages,
     get createdThreadId() {
       return createdThreadId;
     },
     get lastThreadName() {
       return lastThreadName;
     },
-    get channelFileSendCalls() {
-      return channelFileSendCalls;
+    message,
+    get startThreadCalls() {
+      return startThreadCalls;
     },
     get threadFileSendCalls() {
       return threadFileSendCalls;
     },
+    threadSentMessages,
   };
 }
 
@@ -401,8 +467,13 @@ export function createSlashInteraction(options: {
   channelId?: string;
   commandName: string;
   inThread?: boolean;
-  parentId?: string;
+  /** Pass `null` to simulate a partial thread channel with missing parentId. */
+  parentId?: string | null;
+  /** Parent id returned by channel.fetch() when initial parentId is null. */
+  fetchParentId?: string;
   threadId?: string;
+  /** Resolved USER option for commands like /allow. Pass `null` for missing. */
+  userOption?: { id: string; username?: string } | null;
 }): {
   interaction: import("discord.js").ChatInputCommandInteraction;
   replies: string[];
@@ -411,15 +482,26 @@ export function createSlashInteraction(options: {
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
   const threadId = options.threadId ?? "thread_1";
-  const parentId = options.parentId ?? channelId;
+  const parentId =
+    options.parentId === null ? null : (options.parentId ?? channelId);
+  const fetchParentId = options.fetchParentId ?? channelId;
+  const hasUserOption = options.userOption !== undefined;
 
   const channel = options.inThread
     ? {
-        id: threadId,
-        parentId,
         archived: false,
+        fetch: async () => ({
+          archived: false,
+          id: threadId,
+          isDMBased: () => false,
+          isThread: () => true,
+          parentId: fetchParentId,
+        }),
+        id: threadId,
         isDMBased: () => false,
         isThread: () => true,
+        parentId,
+        partial: parentId === null,
         setArchived: async (value: boolean) => {
           channel.archived = value;
           return channel;
@@ -427,25 +509,34 @@ export function createSlashInteraction(options: {
       }
     : {
         id: channelId,
-        parentId: null,
         isDMBased: () => false,
         isThread: () => false,
+        parentId: null,
       };
 
   const interaction = {
-    user: { id: userId },
-    channelId: options.inThread ? threadId : channelId,
     channel,
+    channelId: options.inThread ? threadId : channelId,
     commandName: options.commandName,
-    reply: async ({ content }: { content: string }) => {
+    editReply: async ({ content }: { content: string }) => {
       replies.push(content);
     },
     followUp: async ({ content }: { content: string }) => {
       replies.push(content);
     },
-    editReply: async ({ content }: { content: string }) => {
+    options: {
+      getUser: (name: string) => {
+        if (name !== "user" || !hasUserOption) {
+          return null;
+        }
+
+        return options.userOption;
+      },
+    },
+    reply: async ({ content }: { content: string }) => {
       replies.push(content);
     },
+    user: { id: userId },
   } as unknown as import("discord.js").ChatInputCommandInteraction;
 
   return { interaction, replies };
@@ -457,7 +548,8 @@ export async function writeDiscordConfigIni(
     botToken: string;
     profileId?: string;
     pairedUserIds?: string[];
-  },
+    allowedUserIds?: string[];
+  }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
   await mkdir(dir, { recursive: true });
@@ -472,17 +564,25 @@ export async function writeDiscordConfigIni(
     lines.push(`paired_user_ids=${config.pairedUserIds.join(",")}`);
   }
 
+  if (config.allowedUserIds?.length) {
+    lines.push(`allowed_user_ids=${config.allowedUserIds.join(",")}`);
+  }
+
   lines.push("");
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
-  return new ChannelOrgStore(path.join(homeDir, ".nakama", "discord", "org-selection.json"));
+  return new ChannelOrgStore(
+    path.join(homeDir, ".nakama", "discord", "org-selection.json")
+  );
 }
 
 let tempHomeChain: Promise<void> = Promise.resolve();
 
-export async function withTempHome<T>(run: (homeDir: string) => Promise<T>): Promise<T> {
+export async function withTempHome<T>(
+  run: (homeDir: string) => Promise<T>
+): Promise<T> {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -506,7 +606,7 @@ export async function withTempHome<T>(run: (homeDir: string) => Promise<T>): Pro
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
 
-    await rm(homeDir, { recursive: true, force: true });
+    await rm(homeDir, { force: true, recursive: true });
     release();
   }
 }

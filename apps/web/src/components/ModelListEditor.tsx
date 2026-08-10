@@ -1,5 +1,5 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
@@ -9,13 +9,13 @@ import { createClientId, syncRowKeys } from "@/lib/client-id";
 export interface ModelListRow extends CustomModelEntry {}
 
 interface ModelListEditorProps {
-  models: ModelListRow[];
+  browseLabel?: string;
   disabled?: boolean;
+  models: ModelListRow[];
+  onBrowse?: () => void;
+  onChange: (models: ModelListRow[]) => void;
   showPricing?: boolean;
   showThinking?: boolean;
-  onBrowse?: () => void;
-  browseLabel?: string;
-  onChange: (models: ModelListRow[]) => void;
 }
 
 function emptyRow(): ModelListRow {
@@ -38,8 +38,8 @@ export function ModelListEditor({
   const updateRow = (index: number, patch: Partial<ModelListRow>) => {
     onChange(
       models.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, ...patch } : row,
-      ),
+        rowIndex === index ? { ...row, ...patch } : row
+      )
     );
   };
 
@@ -54,7 +54,7 @@ export function ModelListEditor({
         <table
           className={`w-full text-left text-xs ${showThinking ? "min-w-[40rem]" : "min-w-[32rem]"}`}
         >
-          <thead className="border-b border-border bg-muted/30 text-muted-foreground">
+          <thead className="border-border border-b bg-muted/30 text-muted-foreground">
             <tr>
               <th className="px-2 py-2 font-medium">Model ID</th>
               <th className="px-2 py-2 font-medium">Display name</th>
@@ -67,49 +67,49 @@ export function ModelListEditor({
                   <th className="px-2 py-2 font-medium">$/1M out</th>
                 </>
               ) : null}
-              <th className="px-2 py-2 w-10" aria-label="Actions" />
+              <th aria-label="Actions" className="w-10 px-2 py-2" />
             </tr>
           </thead>
           <tbody>
             {models.map((row, index) => (
               <tr
+                className="border-border/60 border-b last:border-0"
                 key={row.id.trim() || rowKeysRef.current[index]}
-                className="border-b border-border/60 last:border-0"
               >
                 <td className="px-2 py-1.5">
                   <InputGroup>
                     <InputGroupInput
-                      value={row.id}
                       disabled={disabled}
-                      placeholder="llama3.2"
                       onChange={(event) =>
                         updateRow(index, { id: event.target.value })
                       }
+                      placeholder="llama3.2"
+                      value={row.id}
                     />
                   </InputGroup>
                 </td>
                 <td className="px-2 py-1.5">
                   <InputGroup>
                     <InputGroupInput
-                      value={row.name ?? ""}
                       disabled={disabled}
-                      placeholder="Optional label"
                       onChange={(event) =>
                         updateRow(index, { name: event.target.value })
                       }
+                      placeholder="Optional label"
+                      value={row.name ?? ""}
                     />
                   </InputGroup>
                 </td>
                 {showThinking ? (
                   <td className="px-2 py-1.5">
                     <Switch
-                      size="sm"
+                      aria-label={`Reasoning for ${row.id.trim() || "model"}`}
                       checked={row.supportsThinking === true}
                       disabled={disabled}
-                      aria-label={`Reasoning for ${row.id.trim() || "model"}`}
                       onCheckedChange={(checked) =>
                         updateRow(index, { supportsThinking: checked })
                       }
+                      size="sm"
                     />
                   </td>
                 ) : null}
@@ -118,12 +118,8 @@ export function ModelListEditor({
                     <td className="px-2 py-1.5">
                       <InputGroup>
                         <InputGroupInput
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.inputPerMillionUsd ?? ""}
                           disabled={disabled}
-                          placeholder="—"
+                          min={0}
                           onChange={(event) => {
                             const value = event.target.value;
                             updateRow(index, {
@@ -131,18 +127,18 @@ export function ModelListEditor({
                                 value === "" ? undefined : Number(value),
                             });
                           }}
+                          placeholder="—"
+                          step="any"
+                          type="number"
+                          value={row.inputPerMillionUsd ?? ""}
                         />
                       </InputGroup>
                     </td>
                     <td className="px-2 py-1.5">
                       <InputGroup>
                         <InputGroupInput
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.outputPerMillionUsd ?? ""}
                           disabled={disabled}
-                          placeholder="—"
+                          min={0}
                           onChange={(event) => {
                             const value = event.target.value;
                             updateRow(index, {
@@ -150,6 +146,10 @@ export function ModelListEditor({
                                 value === "" ? undefined : Number(value),
                             });
                           }}
+                          placeholder="—"
+                          step="any"
+                          type="number"
+                          value={row.outputPerMillionUsd ?? ""}
                         />
                       </InputGroup>
                     </td>
@@ -157,14 +157,14 @@ export function ModelListEditor({
                 ) : null}
                 <td className="px-2 py-1.5 text-right">
                   <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={disabled || models.length <= 1}
                     aria-label="Remove model"
+                    disabled={disabled || models.length <= 1}
                     onClick={() => removeRow(index)}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
                   >
-                    <Trash2Icon className="size-4" />
+                    <Delete02Icon className="size-4" />
                   </Button>
                 </td>
               </tr>
@@ -175,26 +175,26 @@ export function ModelListEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
-          type="button"
-          size="sm"
-          variant="outline"
           disabled={disabled}
           onClick={() => {
             rowKeysRef.current.push(createClientId());
             onChange([...models, emptyRow()]);
           }}
+          size="sm"
+          type="button"
+          variant="outline"
         >
-          <PlusIcon className="mr-1 size-4" />
+          <Add01Icon className="mr-1 size-4" />
           Add model
         </Button>
 
         {onBrowse ? (
           <Button
-            type="button"
-            size="sm"
-            variant="secondary"
             disabled={disabled}
             onClick={onBrowse}
+            size="sm"
+            type="button"
+            variant="secondary"
           >
             {browseLabel}
           </Button>

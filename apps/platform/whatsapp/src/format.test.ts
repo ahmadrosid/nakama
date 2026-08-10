@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  prepareWhatsAppReply,
   splitWhatsAppMessage,
   stripMarkdownForWhatsApp,
-  prepareWhatsAppReply,
 } from "./format";
 
 describe("stripMarkdownForWhatsApp", () => {
@@ -19,9 +19,9 @@ describe("stripMarkdownForWhatsApp", () => {
   });
 
   test("unwraps fenced code blocks", () => {
-    expect(stripMarkdownForWhatsApp("Before\n```js\nconst x = 1;\n```\nAfter")).toBe(
-      "Before\nconst x = 1;\nAfter",
-    );
+    expect(
+      stripMarkdownForWhatsApp("Before\n```js\nconst x = 1;\n```\nAfter")
+    ).toBe("Before\nconst x = 1;\nAfter");
   });
 
   test("strips headings", () => {
@@ -41,10 +41,7 @@ describe("splitWhatsAppMessage", () => {
     const text = `${first}\n\n${second}\n\n${third}`;
     const chunks = splitWhatsAppMessage(text);
 
-    expect(chunks).toEqual([
-      `${first}\n\n${second}`,
-      third,
-    ]);
+    expect(chunks).toEqual([`${first}\n\n${second}`, third]);
   });
 
   test("splits long paragraphs by words", () => {
@@ -62,7 +59,7 @@ describe("splitWhatsAppMessage", () => {
     const chunks = splitWhatsAppMessage(text);
 
     expect(chunks.length).toBeGreaterThan(1);
-    expect(chunks.every((chunk) => chunk.length <= 65536)).toBe(true);
+    expect(chunks.every((chunk) => chunk.length <= 65_536)).toBe(true);
   });
 });
 

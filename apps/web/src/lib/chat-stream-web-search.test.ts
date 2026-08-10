@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatListItem } from "./chat-history";
 import {
   buildWebSearchToolState,
   extractWebSearchBlocksFromProviderContent,
@@ -6,7 +7,6 @@ import {
   parseWebSearchQuery,
   parseWebSearchSourcesFromResult,
 } from "./chat-stream-web-search";
-import type { ChatListItem } from "./chat-history";
 
 describe("chat-stream-web-search", () => {
   test("isWebSearchTool matches name", () => {
@@ -19,7 +19,9 @@ describe("chat-stream-web-search", () => {
   });
 
   test("parseWebSearchQuery reads query and queries array", () => {
-    expect(parseWebSearchQuery({ query: "  jwt security  " })).toBe("jwt security");
+    expect(parseWebSearchQuery({ query: "  jwt security  " })).toBe(
+      "jwt security"
+    );
     expect(parseWebSearchQuery({ queries: ["first", "second"] })).toBe("first");
     expect(parseWebSearchQuery({})).toBeNull();
   });
@@ -27,27 +29,27 @@ describe("chat-stream-web-search", () => {
   test("parseWebSearchSourcesFromResult handles Anthropic content array", () => {
     const sources = parseWebSearchSourcesFromResult([
       {
-        type: "web_search_result",
         title: "JWT best practices",
+        type: "web_search_result",
         url: "https://auth0.com/blog/jwt-security-best-practices",
       },
       {
-        type: "web_search_result",
         title: "OWASP guide",
+        type: "web_search_result",
         url: "https://owasp.org/www-project-nodejs-goat",
       },
     ]);
 
     expect(sources).toEqual([
       {
+        href: "https://auth0.com/blog/jwt-security-best-practices",
         title: "JWT best practices",
         url: "https://auth0.com/blog/jwt-security-best-practices",
-        href: "https://auth0.com/blog/jwt-security-best-practices",
       },
       {
+        href: "https://owasp.org/www-project-nodejs-goat",
         title: "OWASP guide",
         url: "https://owasp.org/www-project-nodejs-goat",
-        href: "https://owasp.org/www-project-nodejs-goat",
       },
     ]);
   });
@@ -73,14 +75,14 @@ describe("chat-stream-web-search", () => {
 
     expect(sources).toEqual([
       {
+        href: "https://auth0.com/blog/jwt-security-best-practices",
         title: "JWT Security Best Practices",
         url: "https://auth0.com/blog/jwt-security-best-practices",
-        href: "https://auth0.com/blog/jwt-security-best-practices",
       },
       {
+        href: "https://owasp.org/www-project-nodejs-goat",
         title: "OWASP Node.js Guide",
         url: "https://owasp.org/www-project-nodejs-goat",
-        href: "https://owasp.org/www-project-nodejs-goat",
       },
     ]);
   });
@@ -89,8 +91,8 @@ describe("chat-stream-web-search", () => {
     const sources = parseWebSearchSourcesFromResult({
       content: [
         {
-          type: "text",
           text: "Title: Example\nURL: https://example.com/article\nPublished: N/A\nAuthor: N/A",
+          type: "text",
         },
       ],
       text: "Title: Example\nURL: https://example.com/article\nPublished: N/A\nAuthor: N/A",
@@ -103,12 +105,12 @@ describe("chat-stream-web-search", () => {
 
   test("parseWebSearchSourcesFromResult handles OpenAI action sources", () => {
     const sources = parseWebSearchSourcesFromResult({
-      type: "search",
       query: "latest AI news",
       sources: [
         { type: "url", url: "https://example.com/news" },
         { type: "url", url: "https://example.org/report" },
       ],
+      type: "search",
     });
 
     expect(sources).toHaveLength(2);
@@ -124,28 +126,28 @@ describe("chat-stream-web-search", () => {
   test("extractWebSearchBlocksFromProviderContent pairs Anthropic blocks", () => {
     const blocks = extractWebSearchBlocksFromProviderContent([
       {
-        type: "server_tool_use",
         id: "srvtool_1",
-        name: "web_search",
         input: { query: "jwt middleware" },
+        name: "web_search",
+        type: "server_tool_use",
       },
       {
-        type: "web_search_tool_result",
-        tool_use_id: "srvtool_1",
         content: [
           {
-            type: "web_search_result",
             title: "JWT middleware",
+            type: "web_search_result",
             url: "https://example.com/jwt",
           },
         ],
+        tool_use_id: "srvtool_1",
+        type: "web_search_tool_result",
       },
     ]);
 
     expect(blocks).toHaveLength(1);
     expect(blocks[0]).toMatchObject({
-      toolCallId: "srvtool_1",
       query: "jwt middleware",
+      toolCallId: "srvtool_1",
     });
     expect(parseWebSearchSourcesFromResult(blocks[0]?.result)).toHaveLength(1);
   });
@@ -153,26 +155,30 @@ describe("chat-stream-web-search", () => {
   test("extractWebSearchBlocksFromProviderContent collects OpenAI web_search_call items", () => {
     const blocks = extractWebSearchBlocksFromProviderContent([
       {
-        type: "web_search_call",
+        action: {
+          query: "semaglutide diabetes",
+          sources: [
+            { type: "url", url: "https://pubmed.ncbi.nlm.nih.gov/example" },
+          ],
+          type: "search",
+        },
         id: "ws_1",
         status: "completed",
-        action: {
-          type: "search",
-          query: "semaglutide diabetes",
-          sources: [{ type: "url", url: "https://pubmed.ncbi.nlm.nih.gov/example" }],
-        },
+        type: "web_search_call",
       },
     ]);
 
     expect(blocks).toEqual([
       {
-        toolCallId: "ws_1",
         query: "semaglutide diabetes",
         result: {
-          type: "search",
           query: "semaglutide diabetes",
-          sources: [{ type: "url", url: "https://pubmed.ncbi.nlm.nih.gov/example" }],
+          sources: [
+            { type: "url", url: "https://pubmed.ncbi.nlm.nih.gov/example" },
+          ],
+          type: "search",
         },
+        toolCallId: "ws_1",
       },
     ]);
   });
@@ -180,26 +186,30 @@ describe("chat-stream-web-search", () => {
   test("extractWebSearchBlocksFromProviderContent returns one state per toolCallId", () => {
     const blocks = extractWebSearchBlocksFromProviderContent([
       {
-        type: "server_tool_use",
         id: "a",
-        name: "web_search",
         input: { query: "one" },
-      },
-      {
-        type: "web_search_tool_result",
-        tool_use_id: "a",
-        content: [{ type: "web_search_result", title: "One", url: "https://one.test" }],
-      },
-      {
-        type: "server_tool_use",
-        id: "b",
         name: "web_search",
-        input: { query: "two" },
+        type: "server_tool_use",
       },
       {
+        content: [
+          { title: "One", type: "web_search_result", url: "https://one.test" },
+        ],
+        tool_use_id: "a",
         type: "web_search_tool_result",
+      },
+      {
+        id: "b",
+        input: { query: "two" },
+        name: "web_search",
+        type: "server_tool_use",
+      },
+      {
+        content: [
+          { title: "Two", type: "web_search_result", url: "https://two.test" },
+        ],
         tool_use_id: "b",
-        content: [{ type: "web_search_result", title: "Two", url: "https://two.test" }],
+        type: "web_search_tool_result",
       },
     ]);
 
@@ -208,12 +218,12 @@ describe("chat-stream-web-search", () => {
 
   test("buildWebSearchToolState combines query, sources, and status", () => {
     const running: ChatListItem = {
+      content: "web_search",
       id: "tool_1",
       role: "tool",
-      content: "web_search",
       tool: "web_search",
-      toolStatus: "running",
       toolInput: { query: "running query" },
+      toolStatus: "running",
     };
 
     expect(buildWebSearchToolState(running)).toEqual({
@@ -223,19 +233,19 @@ describe("chat-stream-web-search", () => {
     });
 
     const done: ChatListItem = {
+      content: "web_search completed",
       id: "tool_2",
       role: "tool",
-      content: "web_search completed",
       tool: "web_search",
-      toolStatus: "done",
       toolInput: { query: "done query" },
       toolResult: [
         {
-          type: "web_search_result",
           title: "Result",
+          type: "web_search_result",
           url: "https://example.com",
         },
       ],
+      toolStatus: "done",
     };
 
     expect(buildWebSearchToolState(done)).toMatchObject({
@@ -256,35 +266,37 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     });
 
     handlers.onToolStart?.({
-      toolCallId: "ws_test",
-      tool: "web_search",
       input: { query: "test query" },
+      tool: "web_search",
+      toolCallId: "ws_test",
     });
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
       role: "tool",
       tool: "web_search",
-      toolStatus: "running",
-      toolInput: { query: "test query" },
       toolCallId: "ws_test",
+      toolInput: { query: "test query" },
+      toolStatus: "running",
     });
 
     handlers.onToolEnd?.({
-      toolCallId: "ws_test",
-      tool: "web_search",
       result: {
-        type: "search",
         query: "test query",
         sources: [{ type: "url", url: "https://example.com/article" }],
+        type: "search",
       },
+      tool: "web_search",
+      toolCallId: "ws_test",
     });
 
     expect(messages[0]).toMatchObject({
-      toolStatus: "done",
       content: "web_search completed",
+      toolStatus: "done",
     });
-    expect(parseWebSearchSourcesFromResult(messages[0]?.toolResult)).toHaveLength(1);
+    expect(
+      parseWebSearchSourcesFromResult(messages[0]?.toolResult)
+    ).toHaveLength(1);
   });
 
   test("onToolStart and onToolEnd work for Exa MCP web search tools", async () => {
@@ -296,28 +308,30 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     });
 
     handlers.onToolStart?.({
-      toolCallId: "tool_exa_1",
-      tool: "exa__web_search_exa",
       input: { query: "JWT middleware security" },
+      tool: "exa__web_search_exa",
+      toolCallId: "tool_exa_1",
     });
 
     expect(messages[0]).toMatchObject({
       tool: "exa__web_search_exa",
-      toolStatus: "running",
       toolInput: { query: "JWT middleware security" },
+      toolStatus: "running",
     });
 
     handlers.onToolEnd?.({
-      toolCallId: "tool_exa_1",
-      tool: "exa__web_search_exa",
       result: {
         text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
       },
+      tool: "exa__web_search_exa",
+      toolCallId: "tool_exa_1",
     });
 
     expect(messages[0]).toMatchObject({
       toolStatus: "done",
     });
-    expect(parseWebSearchSourcesFromResult(messages[0]?.toolResult)).toHaveLength(1);
+    expect(
+      parseWebSearchSourcesFromResult(messages[0]?.toolResult)
+    ).toHaveLength(1);
   });
 });

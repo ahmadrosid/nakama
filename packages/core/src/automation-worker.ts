@@ -1,18 +1,23 @@
 import { join } from "node:path";
+import {
+  pathExists,
+  readTextOrNull,
+  removeFile,
+  writePrivateTextFile,
+} from "./fs";
 import { getUserConfigDir } from "./user-config";
-import { pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./fs";
 
 export interface AutomationWorkerHeartbeat {
   pid: number;
-  updatedAt: string;
   running: boolean;
   scheduledJobs: number;
+  updatedAt: string;
 }
 
 export interface AutomationWorkerHeartbeatStatus {
+  pid: number | null;
   running: boolean;
   scheduledJobs: number;
-  pid: number | null;
 }
 
 const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
@@ -42,7 +47,7 @@ export function isAutomationProcessAlive(pid: number): boolean {
 
 export function isAutomationHeartbeatAlive(
   heartbeat: AutomationWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): boolean {
   if (!heartbeat) {
     return false;
@@ -62,7 +67,7 @@ export function isAutomationHeartbeatAlive(
 }
 
 export function parseAutomationWorkerHeartbeat(
-  raw: string,
+  raw: string
 ): AutomationWorkerHeartbeat | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -88,14 +93,19 @@ export async function writeAutomationWorkerHeartbeat(
   running: boolean,
   scheduledJobs: number,
   pid = process.pid,
-  updatedAt = new Date().toISOString(),
+  updatedAt = new Date().toISOString()
 ): Promise<void> {
-  const payload: AutomationWorkerHeartbeat = { pid, updatedAt, running, scheduledJobs };
+  const payload: AutomationWorkerHeartbeat = {
+    pid,
+    running,
+    scheduledJobs,
+    updatedAt,
+  };
 
   await writePrivateTextFile(
     getAutomationWorkerHeartbeatPath(),
     `${JSON.stringify(payload)}\n`,
-    { ensureDir: getAutomationConfigDir() },
+    { ensureDir: getAutomationConfigDir() }
   );
 }
 
@@ -118,20 +128,23 @@ export async function readAutomationWorkerHeartbeat(): Promise<AutomationWorkerH
 }
 
 export async function isAutomationWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): Promise<boolean> {
-  return isAutomationHeartbeatAlive(await readAutomationWorkerHeartbeat(), maxAgeMs);
+  return isAutomationHeartbeatAlive(
+    await readAutomationWorkerHeartbeat(),
+    maxAgeMs
+  );
 }
 
 export async function getAutomationWorkerHeartbeatStatus(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): Promise<AutomationWorkerHeartbeatStatus> {
   const heartbeat = await readAutomationWorkerHeartbeat();
   const running = isAutomationHeartbeatAlive(heartbeat, maxAgeMs);
 
   return {
-    running,
-    scheduledJobs: running ? heartbeat?.scheduledJobs ?? 0 : 0,
     pid: heartbeat?.pid ?? null,
+    running,
+    scheduledJobs: running ? (heartbeat?.scheduledJobs ?? 0) : 0,
   };
 }

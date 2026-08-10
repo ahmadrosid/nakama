@@ -13,8 +13,10 @@ export function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
  */
 export function listOverflowsViewport(
   listHeight: number,
-  viewportHeight: number,
+  viewportHeight: number
 ): boolean {
-  if (viewportHeight <= 0) return false;
+  if (viewportHeight <= 0) {
+    return false;
+  }
   return listHeight > viewportHeight + 1;
 }

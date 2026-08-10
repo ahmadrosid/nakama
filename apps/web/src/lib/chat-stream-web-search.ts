@@ -1,5 +1,8 @@
+import type {
+  WebSearchSource,
+  WebSearchToolState,
+} from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
-import type { WebSearchSource, WebSearchToolState } from "@/components/chat/web-search.shared";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
@@ -59,11 +62,14 @@ export function parseWebSearchQuery(input: unknown): string | null {
 function normalizeSourceUrl(url: string): { url: string; href: string } {
   const trimmed = url.trim();
   const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
-  return { url: trimmed, href };
+  return { href, url: trimmed };
 }
 
-function sourceFromRecord(record: Record<string, unknown>): WebSearchSource | null {
-  const url = readString(record.url) ?? readString(record.uri) ?? readString(record.link);
+function sourceFromRecord(
+  record: Record<string, unknown>
+): WebSearchSource | null {
+  const url =
+    readString(record.url) ?? readString(record.uri) ?? readString(record.link);
   if (!url) {
     return null;
   }
@@ -76,9 +82,9 @@ function sourceFromRecord(record: Record<string, unknown>): WebSearchSource | nu
     normalized.url;
 
   return {
+    href: normalized.href,
     title,
     url: normalized.url,
-    href: normalized.href,
   };
 }
 
@@ -114,7 +120,12 @@ function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
 
     const type = readString(record.type);
 
-    if (type === "web_search_result" || type === "url" || type === "url_citation" || !type) {
+    if (
+      type === "web_search_result" ||
+      type === "url" ||
+      type === "url_citation" ||
+      !type
+    ) {
       const source = sourceFromRecord(record);
       if (source) {
         sources.push(source);
@@ -134,7 +145,11 @@ function parseMcpTextContent(content: unknown): string | null {
 
   for (const entry of content) {
     const record = readRecord(entry);
-    if (record?.type === "text" && typeof record.text === "string" && record.text.trim()) {
+    if (
+      record?.type === "text" &&
+      typeof record.text === "string" &&
+      record.text.trim()
+    ) {
       parts.push(record.text.trim());
     }
   }
@@ -157,7 +172,7 @@ export function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
     const urlMatch = block.match(/^URL:\s*(.+)$/m);
     const url = urlMatch?.[1]?.trim();
 
-    if (!url || !titleMatch) {
+    if (!(url && titleMatch)) {
       continue;
     }
 
@@ -165,9 +180,9 @@ export function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
     const title = titleMatch[1]?.trim() || normalized.url;
 
     sources.push({
+      href: normalized.href,
       title,
       url: normalized.url,
-      href: normalized.href,
     });
   }
 
@@ -196,7 +211,9 @@ function parseExaStructuredResults(results: unknown): WebSearchSource[] {
   return dedupeSources(sources);
 }
 
-export function parseWebSearchSourcesFromResult(result: unknown): WebSearchSource[] {
+export function parseWebSearchSourcesFromResult(
+  result: unknown
+): WebSearchSource[] {
   if (result == null) {
     return [];
   }
@@ -220,9 +237,7 @@ export function parseWebSearchSourcesFromResult(result: unknown): WebSearchSourc
   }
 
   const textResult =
-    readString(record.text) ??
-    parseMcpTextContent(record.content) ??
-    null;
+    readString(record.text) ?? parseMcpTextContent(record.content) ?? null;
 
   if (textResult) {
     const exaSources = parseExaWebSearchTextResult(textResult);
@@ -259,13 +274,13 @@ export function parseWebSearchSourcesFromResult(result: unknown): WebSearchSourc
 }
 
 export interface ExtractedWebSearchBlock {
-  toolCallId: string;
   query?: string | null;
   result?: unknown;
+  toolCallId: string;
 }
 
 export function extractWebSearchBlocksFromProviderContent(
-  providerContent: unknown,
+  providerContent: unknown
 ): ExtractedWebSearchBlock[] {
   if (!Array.isArray(providerContent)) {
     return [];
@@ -291,8 +306,8 @@ export function extractWebSearchBlocksFromProviderContent(
       }
 
       const entry: ExtractedWebSearchBlock = {
-        toolCallId,
         query: parseWebSearchQuery(record.input),
+        toolCallId,
       };
       pending.set(toolCallId, entry);
       ordered.push(entry);
@@ -323,9 +338,9 @@ export function extractWebSearchBlocksFromProviderContent(
 
       const action = readRecord(record.action);
       ordered.push({
-        toolCallId,
         query: parseWebSearchQuery(action),
         result: action ?? record,
+        toolCallId,
       });
     }
   }
@@ -333,7 +348,9 @@ export function extractWebSearchBlocksFromProviderContent(
   return ordered;
 }
 
-export function buildWebSearchToolState(item: ChatListItem): WebSearchToolState {
+export function buildWebSearchToolState(
+  item: ChatListItem
+): WebSearchToolState {
   const status = item.toolStatus === "running" ? "running" : "done";
   const query =
     parseWebSearchQuery(item.toolInput) ??

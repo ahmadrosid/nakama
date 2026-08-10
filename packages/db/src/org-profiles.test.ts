@@ -2,29 +2,33 @@ import { describe, expect, test } from "bun:test";
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
+  GENERATE_IMAGE_TOOL_ID,
 } from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "./adapters/in-memory";
-import { ensureBuiltinToolDefinitions } from "./seed";
 import {
-  ensureOrgSuperBotProfiles,
   ensureBundledSkillsAssigned,
+  ensureOrgSuperBotProfiles,
   seedOrgDefaultProfile,
   seedOrgSuperBotProfile,
 } from "./org-profiles";
+import { ensureBuiltinToolDefinitions } from "./seed";
 
-async function upsertSkill(db: ReturnType<typeof createInMemoryDatabaseAdapter>, name: string) {
+async function upsertSkill(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  name: string
+) {
   const now = new Date().toISOString();
 
   await db.upsertSkill({
-    id: `skill_${name}`,
-    name,
+    createdAt: now,
+    createdBy: "bundled",
     description: `${name} skill`,
-    sourcePath: `/tmp/skills/${name}`,
-    hasTool: false,
     disableModelInvocation: false,
     enabled: true,
-    createdBy: "bundled",
-    createdAt: now,
+    hasTool: false,
+    id: `skill_${name}`,
+    name,
+    sourcePath: `/tmp/skills/${name}`,
     updatedAt: now,
   });
 }
@@ -76,7 +80,9 @@ describe("seedOrgDefaultProfile", () => {
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
-    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map(
+      (skill) => skill.name
+    );
 
     expect(skillNames).toContain("create-automation");
     expect(skillNames).toContain("update-profile-memory");
@@ -109,13 +115,16 @@ describe("seedOrgSuperBotProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
-    const toolIds = (await db.listToolsForProfile(profile.id)).map((tool) => tool.id);
+    const toolIds = (await db.listToolsForProfile(profile.id)).map(
+      (tool) => tool.id
+    );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
       expect(toolIds).toContain(toolId);
     }
 
     expect(toolIds).toContain(BASH_TOOL_ID);
+    expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
   });
 
   test("assigns super bot bundled skills", async () => {
@@ -126,7 +135,9 @@ describe("seedOrgSuperBotProfile", () => {
     await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
-    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map(
+      (skill) => skill.name
+    );
 
     expect(skillNames).toContain("create-automation");
     expect(skillNames).toContain("create-profile");
@@ -153,7 +164,9 @@ describe("seedOrgSuperBotProfile", () => {
 
     await seedOrgSuperBotProfile(db, "org_a");
 
-    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map(
+      (skill) => skill.name
+    );
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
     expect(skillNames).toContain("save-artifact");
@@ -167,7 +180,9 @@ describe("seedOrgSuperBotProfile", () => {
 
     await seedOrgSuperBotProfile(db, "org_a");
 
-    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map(
+      (skill) => skill.name
+    );
     expect(skillNames).toContain("create-profile");
   });
 });
@@ -183,7 +198,9 @@ describe("ensureBundledSkillsAssigned", () => {
 
     await ensureBundledSkillsAssigned(db);
 
-    const skillNames = (await db.listSkillsForProfile(profile.id)).map((skill) => skill.name);
+    const skillNames = (await db.listSkillsForProfile(profile.id)).map(
+      (skill) => skill.name
+    );
     expect(skillNames).toContain("create-automation");
     expect(skillNames).not.toContain("create-profile");
     expect(skillNames).not.toContain("agent-browser");
@@ -196,17 +213,19 @@ describe("ensureOrgSuperBotProfiles", () => {
     const now = new Date().toISOString();
 
     await db.upsertOrganization({
+      createdAt: now,
       id: "org_legacy",
       name: "Legacy Org",
       slug: "legacy-org",
-      createdAt: now,
       updatedAt: now,
     });
     await seedOrgDefaultProfile(db, "org_legacy");
 
-    expect((await db.listProfilesForOrg("org_legacy")).some((profile) => profile.isSuper)).toBe(
-      false,
-    );
+    expect(
+      (await db.listProfilesForOrg("org_legacy")).some(
+        (profile) => profile.isSuper
+      )
+    ).toBe(false);
 
     await ensureOrgSuperBotProfiles(db);
 

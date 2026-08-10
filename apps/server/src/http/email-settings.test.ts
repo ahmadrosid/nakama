@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createHonoApp } from "./app";
+import { join } from "node:path";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
-import { AgentService } from "../services/agent-service";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { createHonoApp } from "./app";
 import { setupFreshInstallSession } from "./test-session-helpers";
 
 describe("email settings routes", () => {
@@ -14,7 +14,7 @@ describe("email settings routes", () => {
 
   afterEach(async () => {
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
 
@@ -29,15 +29,15 @@ describe("email settings routes", () => {
     const authService = new AuthService();
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
-      automationService: {} as any,
-      taskService: {} as any,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      workerManager: {} as any,
-      mcpService: {} as any,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as any,
       databaseAdapter,
+      mcpService: {} as any,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+      taskService: {} as any,
       webDistDir: null,
+      workerManager: {} as any,
     });
 
     const session = await setupFreshInstallSession(app, databaseAdapter);
@@ -45,7 +45,7 @@ describe("email settings routes", () => {
     const getEmpty = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email", {
         headers: session.headers(),
-      }),
+      })
     );
     expect(getEmpty.status).toBe(200);
     const emptyBody = (await getEmpty.json()) as Record<string, unknown>;
@@ -54,45 +54,51 @@ describe("email settings routes", () => {
 
     const putResponse = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email", {
-        method: "PUT",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({
+          from: "admin@example.com",
           imapHost: "imap.example.com",
+          password: "secret-pass",
           smtpHost: "smtp.example.com",
           username: "admin@example.com",
-          password: "secret-pass",
-          from: "admin@example.com",
         }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
     );
     expect(putResponse.status).toBe(200);
-    const saved = (await putResponse.json()) as { configured: boolean; passwordMasked: string | null };
+    const saved = (await putResponse.json()) as {
+      configured: boolean;
+      passwordMasked: string | null;
+    };
     expect(saved.configured).toBe(true);
     expect(saved.passwordMasked).not.toBe("secret-pass");
 
     const putWithoutPassword = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email", {
-        method: "PUT",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({
           smtpHost: "smtp2.example.com",
         }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
     );
     expect(putWithoutPassword.status).toBe(200);
 
     const getSaved = await app.fetch(
       new Request("http://localhost:4310/v1/settings/email", {
         headers: session.headers(),
-      }),
+      })
     );
-    const savedBody = (await getSaved.json()) as { smtpHost: string | null; passwordMasked: string | null };
+    const savedBody = (await getSaved.json()) as {
+      smtpHost: string | null;
+      passwordMasked: string | null;
+    };
     expect(savedBody.smtpHost).toBe("smtp2.example.com");
     expect(savedBody.passwordMasked).toBeTruthy();
   });

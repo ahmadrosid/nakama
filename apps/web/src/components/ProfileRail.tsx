@@ -1,17 +1,17 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { SidebarNotifications } from "@/components/SidebarNotifications";
-import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { SidebarNotifications } from "@/components/SidebarNotifications";
+import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
-import { useAuth } from "@/context/use-auth";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
+import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   buildChatBasePath,
   isChatSessionPath,
@@ -25,19 +25,22 @@ export function ProfileRail() {
   const { data: profiles = [] } = useProfilesQuery();
   const { user } = useAuth();
   const { resolvedTheme } = useTheme();
-  const { profileId: liveChatProfileId, setProfileId: setLiveChatProfileId, switchChatProfile } =
-    useActiveChatProfile();
+  const {
+    profileId: liveChatProfileId,
+    setProfileId: setLiveChatProfileId,
+    switchChatProfile,
+  } = useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
 
   const activeProfileId = resolveActiveProfileIdFromLocation({
-    pathname: location.pathname,
-    search: location.search,
-    profiles,
-    liveChatProfileId,
     historyPath: PAGE_PATHS.history,
+    liveChatProfileId,
+    pathname: location.pathname,
+    profiles,
+    search: location.search,
   });
 
   function handleSelectProfile(profileId: string) {
@@ -45,11 +48,16 @@ export function ProfileRail() {
       return;
     }
 
-    if (location.pathname === PAGE_PATHS.history) {
+    if (
+      location.pathname === PAGE_PATHS.history ||
+      location.pathname === PAGE_PATHS.files
+    ) {
       setLiveChatProfileId(profileId);
-      const params = new URLSearchParams(location.search);
-      params.set("profile", profileId);
-      navigate(`${PAGE_PATHS.history}?${params.toString()}`);
+      if (location.pathname === PAGE_PATHS.history) {
+        const params = new URLSearchParams(location.search);
+        params.set("profile", profileId);
+        navigate(`${PAGE_PATHS.history}?${params.toString()}`);
+      }
       return;
     }
 
@@ -68,18 +76,18 @@ export function ProfileRail() {
   return (
     <div
       aria-label="Profiles"
-      className="flex h-full w-14 shrink-0 flex-col items-center gap-2 border-r border-border/50 bg-sidebar/60 py-3"
+      className="flex h-full w-14 shrink-0 flex-col items-center gap-2 border-border/50 border-r bg-sidebar/60 py-3"
     >
       <a
-        href="/chat"
         aria-label="Nakama"
-        title="Nakama"
         className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity hover:opacity-80"
+        href="/chat"
+        title="Nakama"
       >
         <img
-          src={logoSrc}
           alt=""
           className="size-8 rounded-lg object-contain"
+          src={logoSrc}
         />
       </a>
 
@@ -88,28 +96,28 @@ export function ProfileRail() {
           const active = profile.id === activeProfileId;
           const trigger = (
             <button
-              type="button"
-              onClick={() => handleSelectProfile(profile.id)}
-              aria-label={profile.name}
               aria-current={active ? "true" : undefined}
-              title={profile.name}
+              aria-label={profile.name}
               className={cn(
                 "group relative flex size-7 shrink-0 items-center justify-center rounded-md transition-all duration-150",
                 active
                   ? "bg-background shadow-sm ring-2 ring-primary ring-offset-1 ring-offset-sidebar/60"
-                  : "hover:bg-muted/40",
+                  : "hover:bg-muted/40"
               )}
+              onClick={() => handleSelectProfile(profile.id)}
+              title={profile.name}
+              type="button"
             >
               <ProfileAvatar
-                profile={profile}
-                size="sm"
                 active={active}
                 className={cn(
                   "size-7 rounded-md transition-all duration-150",
                   active
                     ? "opacity-100 saturate-100"
-                    : "opacity-45 grayscale group-hover:opacity-70 group-hover:grayscale-0",
+                    : "opacity-45 grayscale group-hover:opacity-70 group-hover:grayscale-0"
                 )}
+                profile={profile}
+                size="sm"
               />
             </button>
           );

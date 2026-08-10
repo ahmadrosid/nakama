@@ -1,7 +1,7 @@
 export interface DraftAnswerState {
+  customAnswer: string;
   selectedChoiceId: string | null;
   selectedChoiceLabel: string | null;
-  customAnswer: string;
 }
 
 export function isCustomChoice(choice: { id: string; label: string }): boolean {

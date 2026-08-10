@@ -1,12 +1,12 @@
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import { wordCountFromPastedFilename } from "@/lib/pasted-text";
 import { cn } from "@/lib/utils";
 
 interface TextAttachmentPreviewProps {
-  filename: string;
-  wordCount?: number;
-  onRemove?: () => void;
   className?: string;
+  filename: string;
+  onRemove?: () => void;
+  wordCount?: number;
 }
 
 export function TextAttachmentPreview({
@@ -15,30 +15,33 @@ export function TextAttachmentPreview({
   onRemove,
   className,
 }: TextAttachmentPreviewProps) {
-  const resolvedWordCount = wordCount ?? wordCountFromPastedFilename(filename) ?? undefined;
+  const resolvedWordCount =
+    wordCount ?? wordCountFromPastedFilename(filename) ?? undefined;
 
   return (
     <div
       className={cn(
         "relative inline-flex max-w-full shrink-0 items-center rounded-lg border border-border bg-muted px-3 py-2",
         onRemove ? "pr-8" : undefined,
-        className,
+        className
       )}
     >
       <div className="min-w-0">
-        <p className="text-xs font-medium text-foreground">Pasted text</p>
-        {resolvedWordCount != null ? (
-          <p className="text-[10px] text-muted-foreground">{resolvedWordCount} words</p>
-        ) : null}
+        <p className="font-medium text-foreground text-xs">Pasted text</p>
+        {resolvedWordCount == null ? null : (
+          <p className="text-[10px] text-muted-foreground">
+            {resolvedWordCount} words
+          </p>
+        )}
       </div>
       {onRemove ? (
         <button
-          type="button"
-          className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition-colors hover:text-foreground"
           aria-label={`Remove ${filename}`}
+          className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-transparent text-muted-foreground transition-colors hover:text-foreground"
           onClick={onRemove}
+          type="button"
         >
-          <XIcon className="size-3" />
+          <Cancel01Icon className="size-3" />
         </button>
       ) : null}
     </div>

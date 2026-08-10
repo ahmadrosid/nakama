@@ -12,10 +12,18 @@ const port = Number(process.env.CASSETTE_VIEWER_PORT ?? 8766);
 const root = import.meta.dir;
 
 function contentType(pathname: string): string {
-  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
-  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
-  if (pathname.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
+  if (pathname.endsWith(".html")) {
+    return "text/html; charset=utf-8";
+  }
+  if (pathname.endsWith(".json")) {
+    return "application/json; charset=utf-8";
+  }
+  if (pathname.endsWith(".js")) {
+    return "text/javascript; charset=utf-8";
+  }
+  if (pathname.endsWith(".css")) {
+    return "text/css; charset=utf-8";
+  }
   return "application/octet-stream";
 }
 
@@ -36,7 +44,6 @@ async function listCassetteFiles(): Promise<string[]> {
 }
 
 const server = Bun.serve({
-  port,
   async fetch(request) {
     const url = new URL(request.url);
 
@@ -46,7 +53,7 @@ const server = Bun.serve({
         { cassettes },
         {
           headers: { "Cache-Control": "no-store" },
-        },
+        }
       );
     }
 
@@ -63,11 +70,14 @@ const server = Bun.serve({
 
     return new Response(file, {
       headers: {
-        "Content-Type": contentType(url.pathname === "/" ? "/viewer.html" : url.pathname),
         "Cache-Control": "no-store",
+        "Content-Type": contentType(
+          url.pathname === "/" ? "/viewer.html" : url.pathname
+        ),
       },
     });
   },
+  port,
 });
 
 const viewerUrl = `http://localhost:${server.port}/viewer.html`;

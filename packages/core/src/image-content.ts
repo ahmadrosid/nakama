@@ -6,7 +6,7 @@ export const IMAGE_VISION_SYSTEM_PROMPT =
 export const IMAGE_DESCRIPTION_PREFIX = "[Image]\n";
 
 export function extractImageParts(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): Extract<MessageContentPart, { type: "image" }>[] {
   if (typeof content === "string") {
     return [];
@@ -14,7 +14,7 @@ export function extractImageParts(
 
   return content.filter(
     (part): part is Extract<MessageContentPart, { type: "image" }> =>
-      part.type === "image",
+      part.type === "image"
   );
 }
 
@@ -36,14 +36,16 @@ export function parseImageDescriptionText(text: string): string | null {
 
 export function replaceImagePartsWithDescriptions(
   content: string | MessageContentPart[],
-  descriptions: string[],
+  descriptions: string[]
 ): string | MessageContentPart[] {
   if (typeof content === "string") {
     if (descriptions.length === 0) {
       return content;
     }
 
-    return descriptions.map((description) => formatImageDescriptionText(description)).join("\n\n");
+    return descriptions
+      .map((description) => formatImageDescriptionText(description))
+      .join("\n\n");
   }
 
   const parts: MessageContentPart[] = [];
@@ -76,7 +78,7 @@ export function replaceImagePartsWithDescriptions(
 }
 
 export function resolveUserContentForNonVisionProvider(
-  content: string | MessageContentPart[],
+  content: string | MessageContentPart[]
 ): string | MessageContentPart[] {
   if (typeof content === "string") {
     return content;
@@ -87,8 +89,8 @@ export function resolveUserContentForNonVisionProvider(
   for (const part of content) {
     if (part.type === "image" && part.description?.trim()) {
       parts.push({
-        type: "text",
         text: formatImageDescriptionText(part.description),
+        type: "text",
       });
       continue;
     }
@@ -96,10 +98,14 @@ export function resolveUserContentForNonVisionProvider(
     parts.push(part);
   }
 
-  return parts.length === 1 && parts[0]?.type === "text" ? parts[0].text : parts;
+  return parts.length === 1 && parts[0]?.type === "text"
+    ? parts[0].text
+    : parts;
 }
 
-export function resolveMessagesForNonVisionProvider(messages: readonly ChatMessage[]): ChatMessage[] {
+export function resolveMessagesForNonVisionProvider(
+  messages: readonly ChatMessage[]
+): ChatMessage[] {
   return messages.map((message) => {
     if (message.role !== "user") {
       return message;

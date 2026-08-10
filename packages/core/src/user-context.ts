@@ -10,7 +10,7 @@ export const USER_CONTEXT_TEMPLATE = `# About Me
 `;
 
 export function normalizeUserContextContent(
-  raw: string | null | undefined,
+  raw: string | null | undefined
 ): string | undefined {
   const trimmed = raw?.trim();
   return trimmed ? trimmed : undefined;
@@ -18,7 +18,7 @@ export function normalizeUserContextContent(
 
 export function buildUserContextStatus(
   raw: string | null | undefined,
-  includeContent: boolean,
+  includeContent: boolean
 ): {
   active: boolean;
   content?: string;
@@ -33,6 +33,6 @@ export function buildUserContextStatus(
 
   return {
     active: content !== undefined,
-    ...(content !== undefined ? { content } : {}),
+    ...(content === undefined ? {} : { content }),
   };
 }

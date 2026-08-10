@@ -2,7 +2,7 @@ import type { ChatListItem } from "@/lib/chat-history";
 
 export function findRetryPrompt(
   messages: ChatListItem[],
-  assistantMessage: ChatListItem,
+  assistantMessage: ChatListItem
 ): ChatListItem | null {
   if (typeof assistantMessage.historyIndex !== "number") {
     return null;
@@ -13,14 +13,14 @@ export function findRetryPrompt(
       (message) =>
         message.role === "user" &&
         typeof message.historyIndex === "number" &&
-        message.historyIndex < assistantMessage.historyIndex!,
+        message.historyIndex < assistantMessage.historyIndex!
     ) ?? null
   );
 }
 
 export function findRetryCheckpoint(
   messages: ChatListItem[],
-  promptMessage: ChatListItem,
+  promptMessage: ChatListItem
 ): ChatListItem | null {
   if (typeof promptMessage.historyIndex !== "number") {
     return null;
@@ -30,7 +30,7 @@ export function findRetryCheckpoint(
     messages.findLast(
       (message) =>
         typeof message.historyIndex === "number" &&
-        message.historyIndex < promptMessage.historyIndex!,
+        message.historyIndex < promptMessage.historyIndex!
     ) ?? null
   );
 }

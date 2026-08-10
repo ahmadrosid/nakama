@@ -1,8 +1,12 @@
-import { Trash2Icon } from "lucide-react";
-import { useMemo } from "react";
-import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
-import type { ProfileDetail, SkillSummary, SkillUsageSummary } from "@nakama/core/contract";
+import type {
+  ProfileDetail,
+  SkillSummary,
+  SkillUsageSummary,
+} from "@nakama/core/contract";
 import { BUNDLED_SKILL_NAMES } from "@nakama/core/skills/bundled-names";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
+import { Delete02Icon } from "hugeicons-react";
+import { useMemo } from "react";
 import { SkillAssignPicker } from "@/components/SkillAssignPicker";
 import { Button } from "@/components/ui/button";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
@@ -12,12 +16,12 @@ const UNUSED_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
 const EMPTY_SKILL_USAGE: SkillUsageSummary = {
-  viewCount: 0,
-  useCount: 0,
-  patchCount: 0,
-  lastViewedAt: null,
-  lastUsedAt: null,
   lastPatchedAt: null,
+  lastUsedAt: null,
+  lastViewedAt: null,
+  patchCount: 0,
+  useCount: 0,
+  viewCount: 0,
 };
 
 function isBundledSkill(skill: SkillSummary): boolean {
@@ -76,7 +80,7 @@ function SkillStatusBadge({ skill }: { skill: SkillSummary }) {
   }
 
   return (
-    <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+    <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
       Unused
     </span>
   );
@@ -98,30 +102,36 @@ function ProfileSkillRow({
   return (
     <li className="group flex items-center justify-between gap-2 px-3 py-2 hover:bg-muted/40">
       <button
-        type="button"
-        disabled={busy}
-        className="min-w-0 flex-1 text-left disabled:opacity-50"
         aria-label={`View details for ${skill.name}`}
+        className="min-w-0 flex-1 text-left disabled:opacity-50"
+        disabled={busy}
         onClick={() => onViewDetail(skill.id)}
+        type="button"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm font-medium leading-tight text-foreground">{skill.name}</p>
+          <p className="truncate font-medium text-foreground text-sm leading-tight">
+            {skill.name}
+          </p>
           <SkillStatusBadge skill={skill} />
         </div>
         {usageHint ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{usageHint}</p>
+          <p className="mt-0.5 truncate text-muted-foreground text-xs">
+            {usageHint}
+          </p>
         ) : null}
       </button>
       <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
+        aria-label={`Delete ${skill.name}`}
         className="shrink-0 text-muted-foreground/60 hover:text-destructive"
         disabled={busy}
-        aria-label={`Delete ${skill.name}`}
-        onClick={() => onRemove({ kind: "skill", id: skill.id, name: skill.name })}
+        onClick={() =>
+          onRemove({ id: skill.id, kind: "skill", name: skill.name })
+        }
+        size="icon-sm"
+        type="button"
+        variant="ghost"
       >
-        <Trash2Icon className="size-4" aria-hidden />
+        <Delete02Icon aria-hidden className="size-4" />
       </Button>
     </li>
   );
@@ -129,7 +139,7 @@ function ProfileSkillRow({
 
 function SkillGroupHeader({ label }: { label: string }) {
   return (
-    <li className="border-b border-border bg-muted/20 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+    <li className="border-border border-b bg-muted/20 px-3 py-1.5 font-medium text-muted-foreground text-xs">
       {label}
     </li>
   );
@@ -160,15 +170,15 @@ export function ProfileSkillsSection({
 }) {
   const sortedSkills = useMemo(
     () => detail.skills.toSorted(compareAssignedSkills),
-    [detail.skills],
+    [detail.skills]
   );
   const customSkills = useMemo(
     () => sortedSkills.filter((skill) => !isBundledSkill(skill)),
-    [sortedSkills],
+    [sortedSkills]
   );
   const bundledSkills = useMemo(
     () => sortedSkills.filter((skill) => isBundledSkill(skill)),
-    [sortedSkills],
+    [sortedSkills]
   );
   const showGroupHeaders = customSkills.length > 0 && bundledSkills.length > 0;
 
@@ -178,44 +188,54 @@ export function ProfileSkillsSection({
         <div>
           <h3 className="type-section-title">Skills</h3>
           {detail.skills.length > 0 ? (
-            <p className="type-body mt-1 text-xs">{detail.skills.length} assigned</p>
+            <p className="type-body mt-1 text-xs">
+              {detail.skills.length} assigned
+            </p>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCreateOpen}>
+          <Button
+            disabled={busy}
+            onClick={onCreateOpen}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             Create skill
           </Button>
           <SkillAssignPicker
-            skills={allSkills}
             assignedSkillIds={assignedSkillIds}
-            disabled={busy}
-            buttonLabel="Add skills"
-            onAssign={onAssign}
-            onDelete={onDelete}
             bashAssigned={detail.tools.some((tool) => tool.id === BASH_TOOL_ID)}
+            buttonLabel="Add skills"
+            disabled={busy}
+            onAssign={onAssign}
             onAssignBash={onAssignBash}
+            onDelete={onDelete}
+            skills={allSkills}
           />
         </div>
       </div>
 
       {allSkills.length === 0 ? (
-        <p className="type-body text-xs text-muted-foreground">
+        <p className="type-body text-muted-foreground text-xs">
           Create one above, or add{" "}
-          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> folders to{" "}
-          <code className="rounded bg-muted px-1 py-0.5">agent/skills</code>.
+          <code className="rounded bg-muted px-1 py-0.5">SKILL.md</code> folders
+          to <code className="rounded bg-muted px-1 py-0.5">agent/skills</code>.
         </p>
       ) : detail.skills.length === 0 ? null : (
         <div className="overflow-hidden rounded-md border border-border">
           {customSkills.length > 0 ? (
             <ul className="divide-y divide-border">
-              {showGroupHeaders ? <SkillGroupHeader label="Your skills" /> : null}
+              {showGroupHeaders ? (
+                <SkillGroupHeader label="Your skills" />
+              ) : null}
               {customSkills.map((skill) => (
                 <ProfileSkillRow
-                  key={skill.id}
-                  skill={skill}
                   busy={busy}
-                  onViewDetail={onViewDetail}
+                  key={skill.id}
                   onRemove={onRemove}
+                  onViewDetail={onViewDetail}
+                  skill={skill}
                 />
               ))}
             </ul>
@@ -223,7 +243,9 @@ export function ProfileSkillsSection({
           {bundledSkills.length > 0 ? (
             <ul
               className={
-                customSkills.length > 0 ? "divide-y divide-border border-t border-border" : "divide-y divide-border"
+                customSkills.length > 0
+                  ? "divide-y divide-border border-border border-t"
+                  : "divide-y divide-border"
               }
             >
               {showGroupHeaders || customSkills.length === 0 ? (
@@ -231,11 +253,11 @@ export function ProfileSkillsSection({
               ) : null}
               {bundledSkills.map((skill) => (
                 <ProfileSkillRow
-                  key={skill.id}
-                  skill={skill}
                   busy={busy}
-                  onViewDetail={onViewDetail}
+                  key={skill.id}
                   onRemove={onRemove}
+                  onViewDetail={onViewDetail}
+                  skill={skill}
                 />
               ))}
             </ul>

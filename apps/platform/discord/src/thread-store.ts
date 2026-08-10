@@ -1,6 +1,6 @@
-import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
-import { getDiscordConfigDir } from "@nakama/core/discord-config";
 import { dirname, join } from "node:path";
+import { getDiscordConfigDir } from "@nakama/core/discord-config";
+import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 
 /** Persisted ownership of Discord threads the bot started. */
 export class ThreadStore {
@@ -27,7 +27,11 @@ export class ThreadStore {
       return;
     }
 
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       this.owned = new Set();
       return;
     }

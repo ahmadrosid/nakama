@@ -19,16 +19,18 @@ export function skillSuggestionPreview(suggestion: SkillSuggestion): {
         ? `Replace:\n${truncate(oldPart, 180)}\n\nWith:\n${truncate(newPart, 180)}`
         : null;
     return {
-      title,
       description: "Suggested improvement from this chat turn.",
       excerpt,
+      title,
     };
   }
 
   const content = suggestion.content ?? "";
-  const description = extractSkillDescription(content) ?? "Suggested new skill from this chat turn.";
+  const description =
+    extractSkillDescription(content) ??
+    "Suggested new skill from this chat turn.";
   const excerpt = truncate(stripFrontmatter(content), 280) || null;
-  return { title, description, excerpt };
+  return { description, excerpt, title };
 }
 
 export function extractSkillDescription(content: string): string | null {
@@ -41,7 +43,10 @@ export function extractSkillDescription(content: string): string | null {
     if (!trimmed.toLowerCase().startsWith("description:")) {
       continue;
     }
-    const value = trimmed.slice("description:".length).trim().replace(/^["']|["']$/g, "");
+    const value = trimmed
+      .slice("description:".length)
+      .trim()
+      .replace(/^["']|["']$/g, "");
     return value || null;
   }
   return null;

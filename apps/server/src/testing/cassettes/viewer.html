@@ -1,78 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LLM Cassette Viewer</title>
-  <style>
-    html, body {
-      margin: 0;
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>LLM Cassette Viewer</title>
+    <style>
+    html,
+    body {
       height: 100%;
+      margin: 0;
     }
 
     body {
-      font: 14px/1.5 system-ui, sans-serif;
-      color: #111;
-      background: #fafafa;
       display: flex;
       flex-direction: column;
       min-height: 100%;
+      font:
+        14px / 1.5 system-ui,
+        sans-serif;
+      color: #111;
+      background: #fafafa;
     }
 
     header {
-      padding: 0.85rem 1.25rem;
-      border-bottom: 1px solid #ddd;
-      background: #fff;
       display: flex;
+      flex-shrink: 0;
       flex-wrap: wrap;
       gap: 0.75rem 1rem;
       align-items: center;
-      flex-shrink: 0;
+      padding: 0.85rem 1.25rem;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
     }
 
     h1 {
       margin: 0;
-      font-size: 1.05rem;
       margin-right: 0.25rem;
+      font-size: 1.05rem;
     }
 
-    .sub, .muted { color: #666; font-size: 0.9rem; }
+    .sub,
+    .muted {
+      font-size: 0.9rem;
+      color: #666;
+    }
 
     .controls {
       display: flex;
+      flex: 1;
       flex-wrap: wrap;
       gap: 0.5rem;
       align-items: center;
-      flex: 1;
     }
 
     select {
+      flex: 1;
       min-width: 220px;
       max-width: min(420px, 100%);
-      flex: 1;
-      border: 1px solid #ccc;
-      background: #fff;
-      border-radius: 4px;
       padding: 0.35rem 0.5rem;
       font: inherit;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
 
-    button, label.file-btn {
-      border: 1px solid #ccc;
-      background: #fff;
-      border-radius: 4px;
+    button,
+    label.file-btn {
       padding: 0.35rem 0.65rem;
       font: inherit;
       cursor: pointer;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
 
-    input[type="file"] { display: none; }
+    input[type="file"] {
+      display: none;
+    }
 
     main {
+      box-sizing: border-box;
       flex: 1;
       width: 100%;
       padding: 1rem 1.5rem 2rem;
-      box-sizing: border-box;
       overflow: auto;
     }
 
@@ -96,7 +106,10 @@
       color: #444;
     }
 
-    .meta b { color: #111; font-weight: 600; }
+    .meta b {
+      font-weight: 600;
+      color: #111;
+    }
 
     h2 {
       margin: 1.25rem 0 0.5rem;
@@ -104,41 +117,49 @@
     }
 
     pre {
-      margin: 0;
       padding: 0.75rem;
+      margin: 0;
+      overflow: auto;
+      font:
+        12px / 1.45 ui-monospace,
+        monospace;
+      word-break: break-word;
+      white-space: pre-wrap;
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 4px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font: 12px/1.45 ui-monospace, monospace;
-      overflow: auto;
     }
 
     .fn {
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      background: #fff;
       margin-bottom: 0.75rem;
       overflow: hidden;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
     }
 
     .fn-head {
       padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid #eee;
-      font: 13px ui-monospace, monospace;
+      font:
+        13px ui-monospace,
+        monospace;
       background: #f5f5f5;
+      border-bottom: 1px solid #eee;
     }
 
-    .fn-head strong { font-weight: 600; }
+    .fn-head strong {
+      font-weight: 600;
+    }
 
     .fn-id {
       float: right;
-      color: #888;
       font-size: 11px;
+      color: #888;
     }
 
-    .fn-body { padding: 0.75rem; }
+    .fn-body {
+      padding: 0.75rem;
+    }
 
     .kv {
       display: grid;
@@ -148,15 +169,21 @@
       font-size: 0.9rem;
     }
 
-    .kv:last-child { margin-bottom: 0; }
-
-    .kv .k {
-      font: 12px ui-monospace, monospace;
-      color: #555;
-      padding-top: 0.1rem;
+    .kv:last-child {
+      margin-bottom: 0;
     }
 
-    .kv .v { min-width: 0; }
+    .kv .k {
+      padding-top: 0.1rem;
+      font:
+        12px ui-monospace,
+        monospace;
+      color: #555;
+    }
+
+    .kv .v {
+      min-width: 0;
+    }
 
     .list {
       display: grid;
@@ -164,77 +191,104 @@
     }
 
     .item {
-      border: 1px solid #eee;
-      border-radius: 4px;
       padding: 0.55rem 0.65rem;
       background: #fcfcfc;
+      border: 1px solid #eee;
+      border-radius: 4px;
     }
 
     .item-index {
-      font: 11px ui-monospace, monospace;
-      color: #888;
       margin-bottom: 0.35rem;
+      font:
+        11px ui-monospace,
+        monospace;
+      color: #888;
     }
 
-    details { margin-top: 0.5rem; }
+    details {
+      margin-top: 0.5rem;
+    }
     details summary {
-      cursor: pointer;
-      color: #666;
       font-size: 0.85rem;
+      color: #666;
+      cursor: pointer;
     }
 
     .msg {
-      border: 1px solid #eee;
-      border-radius: 4px;
       margin-bottom: 0.5rem;
       overflow: hidden;
       background: #fff;
+      border: 1px solid #eee;
+      border-radius: 4px;
     }
 
     .msg-role {
       padding: 0.3rem 0.65rem;
-      font: 11px ui-monospace, monospace;
+      font:
+        11px ui-monospace,
+        monospace;
+      color: #666;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #666;
       background: #f5f5f5;
       border-bottom: 1px solid #eee;
     }
 
-    .msg-role.user { background: #eef6ff; color: #1e40af; }
-    .msg-role.assistant { background: #f5f5f5; }
-    .msg-role.system { background: #f7f7f7; color: #888; }
-    .msg-role.tool { background: #f3faf4; color: #166534; }
+    .msg-role.user {
+      color: #1e40af;
+      background: #eef6ff;
+    }
+    .msg-role.assistant {
+      background: #f5f5f5;
+    }
+    .msg-role.system {
+      color: #888;
+      background: #f7f7f7;
+    }
+    .msg-role.tool {
+      color: #166534;
+      background: #f3faf4;
+    }
 
-    .msg-body { padding: 0.55rem 0.65rem; }
+    .msg-body {
+      padding: 0.55rem 0.65rem;
+    }
 
-    .error { color: #a00; }
-    .empty { color: #666; padding: 1.5rem 0; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Cassette Viewer</h1>
-    <div class="controls">
-      <select id="cassette" aria-label="Cassette">
-        <option value="">Select cassette…</option>
-      </select>
-      <label class="file-btn">
-        Open…
-        <input id="file" type="file" accept="application/json,.json" multiple />
-      </label>
-      <button type="button" id="reload">Reload</button>
-      <span class="sub" id="status"></span>
-    </div>
-  </header>
+    .error {
+      color: #a00;
+    }
+    .empty {
+      padding: 1.5rem 0;
+      color: #666;
+    }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Cassette Viewer</h1>
+      <div class="controls">
+        <select aria-label="Cassette" id="cassette">
+          <option value="">Select cassette…</option>
+        </select>
+        <label class="file-btn">
+          Open…
+          <input accept="application/json,.json" id="file" multiple type="file">
+        </label>
+        <button id="reload" type="button">Reload</button>
+        <span class="sub" id="status"></span>
+      </div>
+    </header>
 
-  <main id="main">
-    <article id="view">
-      <p class="empty">Select a cassette. You can also drop a .json file here.</p>
-    </article>
-  </main>
+    <main id="main">
+      <article id="view">
+        <p class="empty">
+          Select a cassette. You can also drop a .json file here.
+        </p>
+      </article>
+    </main>
 
-  <script>
+    <script>
+    "use strict";
     const cache = new Map();
     const selectEl = document.getElementById("cassette");
     const viewEl = document.getElementById("view");
@@ -258,8 +312,12 @@
     }
 
     function parseArgs(raw) {
-      if (raw == null) return {};
-      if (typeof raw === "object") return raw;
+      if (raw == null) {
+        return {};
+      }
+      if (typeof raw === "object") {
+        return raw;
+      }
       try {
         return JSON.parse(raw);
       } catch {
@@ -268,7 +326,9 @@
     }
 
     function isPlainObject(value) {
-      return value != null && typeof value === "object" && !Array.isArray(value);
+      return (
+        value != null && typeof value === "object" && !Array.isArray(value)
+      );
     }
 
     function renderScalar(value) {
@@ -279,7 +339,9 @@
         return `<code>${esc(String(value))}</code>`;
       }
       if (typeof value === "string") {
-        if (!value) return `<span class="muted">(empty)</span>`;
+        if (!value) {
+          return `<span class="muted">(empty)</span>`;
+        }
         if (value.includes("\n") || value.length > 80) {
           return `<pre>${esc(value)}</pre>`;
         }
@@ -290,25 +352,28 @@
 
     function renderObject(value) {
       const entries = Object.entries(value);
-      if (!entries.length) return `<span class="muted">(empty object)</span>`;
+      if (!entries.length) {
+        return `<span class="muted">(empty object)</span>`;
+      }
       return entries
         .map(
           ([key, child]) => `
             <div class="kv">
               <div class="k">${esc(key)}</div>
               <div class="v">${renderValue(child)}</div>
-            </div>`,
+            </div>`
         )
         .join("");
     }
 
     function renderArray(value) {
-      if (!value.length) return `<span class="muted">(empty array)</span>`;
+      if (!value.length) {
+        return `<span class="muted">(empty array)</span>`;
+      }
 
       const allScalar = value.every(
         (item) =>
-          item === null ||
-          ["string", "number", "boolean"].includes(typeof item),
+          item === null || ["string", "number", "boolean"].includes(typeof item)
       );
 
       if (allScalar) {
@@ -334,8 +399,12 @@
     }
 
     function renderValue(value) {
-      if (Array.isArray(value)) return renderArray(value);
-      if (isPlainObject(value)) return renderObject(value);
+      if (Array.isArray(value)) {
+        return renderArray(value);
+      }
+      if (isPlainObject(value)) {
+        return renderObject(value);
+      }
       return renderScalar(value);
     }
 
@@ -361,12 +430,18 @@
     }
 
     function messageText(message) {
-      if (typeof message?.content === "string") return message.content;
+      if (typeof message?.content === "string") {
+        return message.content;
+      }
       if (Array.isArray(message?.content)) {
         return message.content
           .map((part) => {
-            if (typeof part === "string") return part;
-            if (part && typeof part.text === "string") return part.text;
+            if (typeof part === "string") {
+              return part;
+            }
+            if (part && typeof part.text === "string") {
+              return part.text;
+            }
             return pretty(part);
           })
           .join("\n");
@@ -413,7 +488,7 @@
         body.system.trim() &&
         !messages.some((message) => message?.role === "system")
       ) {
-        messages.unshift({ role: "system", content: body.system });
+        messages.unshift({ content: body.system, role: "system" });
       }
       const toolCount = Array.isArray(body.tools) ? body.tools.length : 0;
 
@@ -495,7 +570,11 @@
 
         ${
           exchanges.length
-            ? exchanges.map((exchange, index) => renderExchange(exchange, index, exchanges.length)).join("")
+            ? exchanges
+                .map((exchange, index) =>
+                  renderExchange(exchange, index, exchanges.length)
+                )
+                .join("")
             : `<p class="muted">No exchanges in cassette.</p>`
         }
 
@@ -508,7 +587,9 @@
     }
 
     function setActive(name) {
-      if (!name || !cache.has(name)) return;
+      if (!(name && cache.has(name))) {
+        return;
+      }
       selectEl.value = name;
       renderCassette(name, cache.get(name));
     }
@@ -525,7 +606,9 @@
 
     async function loadFromUrl(name) {
       const res = await fetch(`./${name}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`${name}: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`${name}: ${res.status}`);
+      }
       const data = await res.json();
       cache.set(name, data);
       upsertOption(name);
@@ -533,10 +616,14 @@
 
     async function listCassetteNames() {
       const res = await fetch("./api/cassettes", { cache: "no-store" });
-      if (!res.ok) throw new Error(`api/cassettes: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`api/cassettes: ${res.status}`);
+      }
       const data = await res.json();
       const names = Array.isArray(data?.cassettes) ? data.cassettes : [];
-      return names.filter((name) => typeof name === "string" && name.endsWith(".json"));
+      return names.filter(
+        (name) => typeof name === "string" && name.endsWith(".json")
+      );
     }
 
     async function loadKnown() {
@@ -579,7 +666,9 @@
         reader.onload = () => {
           try {
             const data = JSON.parse(String(reader.result));
-            const name = file.name.endsWith(".json") ? file.name : `${file.name}.json`;
+            const name = file.name.endsWith(".json")
+              ? file.name
+              : `${file.name}.json`;
             cache.set(name, data);
             upsertOption(name);
             setActive(name);
@@ -594,22 +683,28 @@
     }
 
     selectEl.addEventListener("change", () => {
-      if (selectEl.value) setActive(selectEl.value);
-    });
-
-    document.getElementById("file").addEventListener("change", async (event) => {
-      for (const file of [...(event.target.files ?? [])]) {
-        try {
-          await ingestFile(file);
-          statusEl.textContent = file.name;
-        } catch (err) {
-          statusEl.innerHTML = `<span class="error">${esc(err.message)}</span>`;
-        }
+      if (selectEl.value) {
+        setActive(selectEl.value);
       }
-      event.target.value = "";
     });
 
-    document.getElementById("reload").addEventListener("click", () => loadKnown());
+    document
+      .getElementById("file")
+      .addEventListener("change", async (event) => {
+        for (const file of [...(event.target.files ?? [])]) {
+          try {
+            await ingestFile(file);
+            statusEl.textContent = file.name;
+          } catch (err) {
+            statusEl.innerHTML = `<span class="error">${esc(err.message)}</span>`;
+          }
+        }
+        event.target.value = "";
+      });
+
+    document
+      .getElementById("reload")
+      .addEventListener("click", () => loadKnown());
 
     for (const eventName of ["dragenter", "dragover"]) {
       mainEl.addEventListener(eventName, (event) => {
@@ -627,7 +722,9 @@
     mainEl.addEventListener("drop", async (event) => {
       event.preventDefault();
       mainEl.classList.remove("drag-over");
-      for (const file of [...(event.dataTransfer?.files ?? [])].filter((f) => f.name.endsWith(".json"))) {
+      for (const file of [...(event.dataTransfer?.files ?? [])].filter((f) =>
+        f.name.endsWith(".json")
+      )) {
         try {
           await ingestFile(file);
           statusEl.textContent = file.name;
@@ -638,6 +735,6 @@
     });
 
     loadKnown();
-  </script>
-</body>
+    </script>
+  </body>
 </html>

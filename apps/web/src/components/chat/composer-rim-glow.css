@@ -20,10 +20,8 @@
 .composer-rim-layer {
   position: absolute;
   z-index: 0;
-  pointer-events: none;
   display: block;
-  border-radius: inherit;
-  opacity: 0;
+  pointer-events: none;
   background: conic-gradient(
     from var(--ai-from),
     var(--ai-c1) 0deg,
@@ -37,12 +35,14 @@
     var(--ai-tail) 349deg,
     var(--ai-c1) 360deg
   );
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
+  border-radius: inherit;
+  opacity: 0;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 
 .composer-rim[data-playing="true"] .composer-rim-layer {
@@ -61,7 +61,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .composer-rim[data-playing="true"] .composer-rim-layer {
-    animation: none;
     opacity: 0;
+    animation: none;
   }
 }

@@ -1,9 +1,9 @@
 export interface SoulStackFiles {
-  soul?: string;
-  style?: string;
+  examples?: string;
   instructions?: string;
   memory?: string;
-  examples?: string;
+  soul?: string;
+  style?: string;
 }
 
 export interface LoadedSoulStack {
@@ -13,20 +13,20 @@ export interface LoadedSoulStack {
 }
 
 export interface SoulFileStatus {
-  soul: boolean;
-  style: boolean;
+  examples: boolean;
   instructions: boolean;
   memory: boolean;
-  examples: boolean;
+  soul: boolean;
+  style: boolean;
 }
 
 export interface SoulStatus {
-  directory: string;
   active: boolean;
+  directory: string;
   files: SoulFileStatus;
 }
 
 export interface InitSoulResult {
-  directory: string;
   created: string[];
+  directory: string;
 }

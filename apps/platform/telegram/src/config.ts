@@ -11,7 +11,7 @@ export interface TelegramBridgeConfig {
 }
 
 export async function loadConfig(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): Promise<TelegramBridgeConfig> {
   const file = await loadTelegramConfigFile();
   const resolved = resolveTelegramConfigFromSources({ env, file });
@@ -19,7 +19,7 @@ export async function loadConfig(
   if (!resolved) {
     const hasEnvToken = Boolean(env.TELEGRAM_BOT_TOKEN?.trim());
 
-    if (!hasEnvToken && !file) {
+    if (!(hasEnvToken || file)) {
       throw new Error(formatNotConfiguredMessage());
     }
 

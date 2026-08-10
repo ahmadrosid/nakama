@@ -25,17 +25,18 @@ function toCatalogEntry(timezone: {
   tzName: string;
 }): TimezoneCatalogEntry {
   const city = cityFromZoneName(timezone.zoneName);
-  const countryName = countryNames.of(timezone.countryCode) ?? timezone.countryCode;
+  const countryName =
+    countryNames.of(timezone.countryCode) ?? timezone.countryCode;
   const aliases = getTimezoneCityAliases(timezone.zoneName);
 
   return {
-    id: timezone.zoneName,
+    abbreviation: timezone.abbreviation,
+    city,
     countryCode: timezone.countryCode,
     countryName,
-    city,
+    id: timezone.zoneName,
     label: `${city} · ${timezone.gmtOffsetName}`,
     offset: timezone.gmtOffsetName,
-    abbreviation: timezone.abbreviation,
     tzName: timezone.tzName,
     ...(aliases.length > 0 ? { aliases } : {}),
   };
@@ -69,7 +70,9 @@ export async function getTimezoneCatalog(): Promise<ListTimezonesResponse> {
     groups: [...groups.values()]
       .map((group) => ({
         ...group,
-        timezones: group.timezones.sort((left, right) => left.city.localeCompare(right.city)),
+        timezones: group.timezones.sort((left, right) =>
+          left.city.localeCompare(right.city)
+        ),
       }))
       .sort((left, right) => left.countryName.localeCompare(right.countryName)),
   };

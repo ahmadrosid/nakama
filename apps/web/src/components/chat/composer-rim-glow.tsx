@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import "./composer-rim-glow.css";
 
 type Layer = { mask: string; pad: number };
@@ -14,11 +14,11 @@ const RIM_LAYERS: Array<{
   alpha: number;
   ring?: number;
 }> = [
-  { strokeWidth: 0, blur: 0, alpha: 0.55, ring: 1 },
-  { strokeWidth: 3, blur: 3, alpha: 0.16 },
-  { strokeWidth: 6, blur: 6, alpha: 0.1 },
-  { strokeWidth: 10, blur: 8, alpha: 0.06 },
-  { strokeWidth: 14, blur: 12, alpha: 0.14 },
+  { alpha: 0.55, blur: 0, ring: 1, strokeWidth: 0 },
+  { alpha: 0.16, blur: 3, strokeWidth: 3 },
+  { alpha: 0.1, blur: 6, strokeWidth: 6 },
+  { alpha: 0.06, blur: 8, strokeWidth: 10 },
+  { alpha: 0.14, blur: 12, strokeWidth: 14 },
 ];
 
 const CACHE_MAX = 24;
@@ -31,7 +31,7 @@ function padOf(strokeWidth: number, blur: number): number {
 }
 
 function radiusOf(el: HTMLElement): number {
-  const r = parseFloat(getComputedStyle(el).borderRadius) || 0;
+  const r = Number.parseFloat(getComputedStyle(el).borderRadius) || 0;
   const { width, height } = el.getBoundingClientRect();
   return Math.min(r, width / 2, height / 2);
 }
@@ -45,7 +45,9 @@ function buildMask(o: {
   alpha: number;
   ring?: number;
 }): string {
-  if (typeof document === "undefined") return "";
+  if (typeof document === "undefined") {
+    return "";
+  }
 
   const key = [
     Math.round(o.width),
@@ -57,17 +59,23 @@ function buildMask(o: {
     o.ring ?? 0,
   ].join("|");
   const hit = maskCache.get(key);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) {
+    return hit;
+  }
 
   const pad = padOf(o.strokeWidth, o.blur);
   const w = Math.max(1, Math.ceil(o.width) + pad * 2);
   const h = Math.max(1, Math.ceil(o.height) + pad * 2);
 
-  if (!scratch) scratch = document.createElement("canvas");
+  if (!scratch) {
+    scratch = document.createElement("canvas");
+  }
   scratch.width = w;
   scratch.height = h;
   const ctx = scratch.getContext("2d");
-  if (!ctx) return "";
+  if (!ctx) {
+    return "";
+  }
   ctx.clearRect(0, 0, w, h);
 
   if (o.blur) {
@@ -78,7 +86,9 @@ function buildMask(o: {
   }
 
   const g = ctx.createConicGradient(0, w / 2, h / 2);
-  for (const s of RIM_STOPS) g.addColorStop(s.stop / 360, s.color);
+  for (const s of RIM_STOPS) {
+    g.addColorStop(s.stop / 360, s.color);
+  }
   ctx.strokeStyle = g;
   ctx.fillStyle = g;
   ctx.globalAlpha = o.alpha;
@@ -87,8 +97,11 @@ function buildMask(o: {
   const y = (h - o.height) / 2;
   const r = Math.min(o.radius, o.width / 2, o.height / 2);
   ctx.beginPath();
-  if (r > 0) ctx.roundRect(x, y, o.width, o.height, r);
-  else ctx.rect(x, y, o.width, o.height);
+  if (r > 0) {
+    ctx.roundRect(x, y, o.width, o.height, r);
+  } else {
+    ctx.rect(x, y, o.width, o.height);
+  }
 
   if (o.strokeWidth) {
     ctx.lineWidth = o.strokeWidth;
@@ -101,7 +114,11 @@ function buildMask(o: {
       ctx.filter = "none";
       const r2 = Math.max(
         0,
-        Math.min(o.radius - o.ring, (o.width - o.ring * 2) / 2, (o.height - o.ring * 2) / 2),
+        Math.min(
+          o.radius - o.ring,
+          (o.width - o.ring * 2) / 2,
+          (o.height - o.ring * 2) / 2
+        )
       );
       ctx.beginPath();
       ctx.roundRect(
@@ -109,7 +126,7 @@ function buildMask(o: {
         y + o.ring,
         Math.max(0, o.width - o.ring * 2),
         Math.max(0, o.height - o.ring * 2),
-        r2,
+        r2
       );
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
@@ -119,7 +136,9 @@ function buildMask(o: {
   const url = scratch.toDataURL("image/png");
   if (maskCache.size >= CACHE_MAX) {
     const oldest = maskCache.keys().next().value;
-    if (oldest !== undefined) maskCache.delete(oldest);
+    if (oldest !== undefined) {
+      maskCache.delete(oldest);
+    }
   }
   maskCache.set(key, url);
   return url;
@@ -158,45 +177,54 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-function useRimLayers(ref: RefObject<HTMLElement | null>, enabled: boolean): Layer[] {
+function useRimLayers(
+  ref: RefObject<HTMLElement | null>,
+  enabled: boolean
+): Layer[] {
   const [layers, setLayers] = useState<Layer[]>([]);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !enabled) {
+    if (!(el && enabled)) {
       setLayers([]);
       return;
     }
 
     const build = () => {
       const box = el.getBoundingClientRect();
-      if (!box.width || !box.height) return;
+      if (!(box.width && box.height)) {
+        return;
+      }
       const radius = radiusOf(el);
       setLayers(
         RIM_LAYERS.map((l) => ({
           mask: buildMask({
-            width: box.width,
+            alpha: l.alpha,
+            blur: l.blur,
             height: box.height,
             radius,
-            strokeWidth: l.strokeWidth,
-            blur: l.blur,
-            alpha: l.alpha,
             ring: l.ring,
+            strokeWidth: l.strokeWidth,
+            width: box.width,
           }),
           pad: padOf(l.strokeWidth, l.blur),
-        })).filter((l) => l.mask),
+        })).filter((l) => l.mask)
       );
     };
 
     build();
     let settle: number | null = null;
     const ro = new ResizeObserver(() => {
-      if (settle !== null) window.clearTimeout(settle);
+      if (settle !== null) {
+        window.clearTimeout(settle);
+      }
       settle = window.setTimeout(build, 120);
     });
     ro.observe(el);
     return () => {
-      if (settle !== null) window.clearTimeout(settle);
+      if (settle !== null) {
+        window.clearTimeout(settle);
+      }
       ro.disconnect();
     };
   }, [ref, enabled]);
@@ -204,10 +232,15 @@ function useRimLayers(ref: RefObject<HTMLElement | null>, enabled: boolean): Lay
   return layers;
 }
 
-function useStreamingOrbit(ref: RefObject<HTMLElement | null>, active: boolean): void {
+function useStreamingOrbit(
+  ref: RefObject<HTMLElement | null>,
+  active: boolean
+): void {
   useEffect(() => {
     const host = ref.current;
-    if (!host) return;
+    if (!host) {
+      return;
+    }
 
     if (!active) {
       host.dataset.playing = "false";
@@ -252,15 +285,17 @@ export function ComposerRimGlow({
   const layers = useRimLayers(hostRef, enabled);
   useStreamingOrbit(hostRef, enabled);
 
-  if (!enabled || layers.length === 0) return null;
+  if (!enabled || layers.length === 0) {
+    return null;
+  }
 
   return (
     <>
       {layers.map((l, i) => (
         <span
-          key={i}
           aria-hidden="true"
           className="composer-rim-layer"
+          key={i}
           style={{
             inset: `${-l.pad}px`,
             maskImage: `url(${l.mask})`,

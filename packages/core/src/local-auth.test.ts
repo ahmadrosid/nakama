@@ -1,22 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   LocalAuthTokenManagedExternallyError,
   loadLocalAuthToken,
   rotateLocalAuthToken,
   verifyLocalAuthToken,
 } from "./local-auth";
-import { getUserConfigDir, getUserConfigPath, saveUserConfig } from "./user-config";
+import {
+  getUserConfigDir,
+  getUserConfigPath,
+  saveUserConfig,
+} from "./user-config";
 
 describe("loadLocalAuthToken", () => {
   let configDir = "";
 
   afterEach(async () => {
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
 
@@ -35,7 +39,10 @@ describe("loadLocalAuthToken", () => {
     expect(rawConfig).toContain("local_auth_token_hash=");
     expect(rawConfig).not.toContain(token!);
 
-    const storedToken = await readFile(join(getUserConfigDir(), "local-auth-token"), "utf8");
+    const storedToken = await readFile(
+      join(getUserConfigDir(), "local-auth-token"),
+      "utf8"
+    );
     expect(storedToken.trim()).toBe(token);
   });
 
@@ -46,13 +53,13 @@ describe("loadLocalAuthToken", () => {
 
     await saveUserConfig({
       defaultProviderId: null,
-      providers: [],
       localAuthTokenHash: createHash("sha256").update(tokenValue).digest("hex"),
+      providers: [],
     });
     await writeFile(
       join(getUserConfigDir(), "local-auth-token"),
       `${tokenValue}\n`,
-      "utf8",
+      "utf8"
     );
 
     const token = await loadLocalAuthToken("whatsapp@nakama.internal");
@@ -60,7 +67,9 @@ describe("loadLocalAuthToken", () => {
 
     const rawConfig = await readFile(getUserConfigPath(), "utf8");
     expect(rawConfig).toContain("local_auth_token_hash=");
-    expect(rawConfig).not.toContain("local_auth_token=tc_local_configured_token");
+    expect(rawConfig).not.toContain(
+      "local_auth_token=tc_local_configured_token"
+    );
   });
 
   test("verifies the configured local auth token", async () => {
@@ -102,7 +111,7 @@ describe("loadLocalAuthToken", () => {
   test("rotateLocalAuthToken refuses when the token comes from env", async () => {
     process.env.nakama_LOCAL_AUTH_TOKEN = "tc_local_from_env";
     await expect(rotateLocalAuthToken()).rejects.toBeInstanceOf(
-      LocalAuthTokenManagedExternallyError,
+      LocalAuthTokenManagedExternallyError
     );
   });
 });

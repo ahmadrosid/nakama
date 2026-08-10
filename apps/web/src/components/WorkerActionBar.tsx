@@ -1,43 +1,57 @@
+import {
+  Loading03Icon,
+  PlayIcon,
+  Rotate02Icon,
+  ScrollIcon,
+  StopIcon,
+} from "hugeicons-react";
 import { useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import { Loader2Icon, PlayIcon, RotateCcwIcon, ScrollTextIcon, SquareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRestartWorker, useStartWorker, useStopWorker } from "@/hooks/use-worker-actions";
 import { WorkerLogDialog } from "@/components/WorkerLogDialog";
+import {
+  useRestartWorker,
+  useStartWorker,
+  useStopWorker,
+} from "@/hooks/use-worker-actions";
 import { cn } from "@/lib/utils";
 
 const glyphTransition =
   "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+type ActionIcon = typeof PlayIcon;
 
 function ActionGlyph({
   icon: Icon,
   busy,
   iconClassName,
 }: {
-  icon: LucideIcon;
+  icon: ActionIcon;
   busy: boolean;
   iconClassName?: string;
 }) {
   return (
-    <span className="relative size-3.5 shrink-0" aria-hidden={!busy}>
+    <span aria-hidden={!busy} className="relative size-3.5 shrink-0">
       <Icon
+        aria-hidden
         className={cn(
           glyphTransition,
-          busy ? "scale-[0.25] opacity-0 blur-[4px]" : "scale-100 opacity-100 blur-0",
-          iconClassName,
+          busy
+            ? "scale-[0.25] opacity-0 blur-[4px]"
+            : "scale-100 opacity-100 blur-0",
+          iconClassName
         )}
         strokeWidth={2}
-        aria-hidden
       />
-      <Loader2Icon
+      <Loading03Icon
+        aria-hidden={!busy}
         className={cn(
           glyphTransition,
           "animate-spin",
-          busy ? "scale-100 opacity-100 blur-0" : "scale-[0.25] opacity-0 blur-[4px]",
+          busy
+            ? "scale-100 opacity-100 blur-0"
+            : "scale-[0.25] opacity-0 blur-[4px]"
         )}
         strokeWidth={2}
-        aria-hidden={!busy}
-        {...(busy ? { role: "status" as const, "aria-label": "Loading" } : {})}
+        {...(busy ? { "aria-label": "Loading", role: "status" as const } : {})}
       />
     </span>
   );
@@ -61,14 +75,18 @@ export function WorkerActionBar({
   const stopWorker = useStopWorker();
   const restartWorker = useRestartWorker();
 
-  const starting = startWorker.isPending && startWorker.variables === workerName;
+  const starting =
+    startWorker.isPending && startWorker.variables === workerName;
   const stopping = stopWorker.isPending && stopWorker.variables === workerName;
-  const restarting = restartWorker.isPending && restartWorker.variables === workerName;
+  const restarting =
+    restartWorker.isPending && restartWorker.variables === workerName;
   const isBusy = starting || stopping || restarting;
 
   if (!pm2Managed) {
     return (
-      <span className={cn("text-xs text-muted-foreground", className)}>PM2 not available</span>
+      <span className={cn("text-muted-foreground text-xs", className)}>
+        PM2 not available
+      </span>
     );
   }
 
@@ -78,60 +96,64 @@ export function WorkerActionBar({
         {running ? (
           <>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              aria-busy={stopping || undefined}
               className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
               disabled={isBusy}
-              aria-busy={stopping || undefined}
               onClick={() => stopWorker.mutate(workerName)}
+              size="sm"
+              type="button"
+              variant="outline"
             >
-              <ActionGlyph icon={SquareIcon} busy={stopping} />
+              <ActionGlyph busy={stopping} icon={StopIcon} />
               Stop
             </Button>
             <Button
+              aria-busy={restarting || undefined}
+              disabled={isBusy}
+              onClick={() => restartWorker.mutate(workerName)}
+              size="sm"
               type="button"
               variant="outline"
-              size="sm"
-              disabled={isBusy}
-              aria-busy={restarting || undefined}
-              onClick={() => restartWorker.mutate(workerName)}
             >
-              <ActionGlyph icon={RotateCcwIcon} busy={restarting} />
+              <ActionGlyph busy={restarting} icon={Rotate02Icon} />
               Restart
             </Button>
           </>
         ) : (
           <Button
+            aria-busy={starting || undefined}
+            disabled={isBusy}
+            onClick={() => startWorker.mutate(workerName)}
+            size="sm"
             type="button"
             variant="outline"
-            size="sm"
-            disabled={isBusy}
-            aria-busy={starting || undefined}
-            onClick={() => startWorker.mutate(workerName)}
           >
-            <ActionGlyph icon={PlayIcon} busy={starting} iconClassName="translate-x-px" />
+            <ActionGlyph
+              busy={starting}
+              icon={PlayIcon}
+              iconClassName="translate-x-px"
+            />
             Start
           </Button>
         )}
         {showLogs ? (
           <Button
-            type="button"
-            variant="ghost"
-            size="sm"
             className="ml-auto"
             onClick={() => setLogDialogOpen(true)}
+            size="sm"
+            type="button"
+            variant="ghost"
           >
-            <ScrollTextIcon className="size-3.5" strokeWidth={2} aria-hidden />
+            <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
             View logs
           </Button>
         ) : null}
       </div>
       {showLogs ? (
         <WorkerLogDialog
-          workerName={workerName}
-          open={logDialogOpen}
           onOpenChange={setLogDialogOpen}
+          open={logDialogOpen}
+          workerName={workerName}
         />
       ) : null}
     </>
@@ -150,19 +172,19 @@ export function WorkerViewLogsButton({
   return (
     <>
       <Button
-        type="button"
-        variant="ghost"
-        size="sm"
         className={cn("text-muted-foreground", className)}
         onClick={() => setLogDialogOpen(true)}
+        size="sm"
+        type="button"
+        variant="ghost"
       >
-        <ScrollTextIcon className="size-3.5" strokeWidth={2} aria-hidden />
+        <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs
       </Button>
       <WorkerLogDialog
-        workerName={workerName}
-        open={logDialogOpen}
         onOpenChange={setLogDialogOpen}
+        open={logDialogOpen}
+        workerName={workerName}
       />
     </>
   );

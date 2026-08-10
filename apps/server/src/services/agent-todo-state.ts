@@ -1,8 +1,8 @@
 import {
-  finalizeAgentTodosIfComplete,
-  hasActiveAgentTodos,
   type AgentTodo,
   type AgentTodoStatus,
+  finalizeAgentTodosIfComplete,
+  hasActiveAgentTodos,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 
@@ -43,8 +43,8 @@ export class AgentTodoState {
 
   async write(sessionId: string, input: TodoWriteInput): Promise<AgentTodo[]> {
     const updates = input.todos.map((todo) => ({
-      id: todo.id.trim(),
       content: todo.content?.trim(),
+      id: todo.id.trim(),
       status: todo.status,
     }));
 
@@ -67,13 +67,15 @@ export class AgentTodoState {
       for (const update of updates) {
         const existing = byId.get(update.id);
 
-        if (!existing && !update.content) {
-          throw new Error(`content is required when creating todo "${update.id}".`);
+        if (!(existing || update.content)) {
+          throw new Error(
+            `content is required when creating todo "${update.id}".`
+          );
         }
 
         byId.set(update.id, {
-          id: update.id,
           content: update.content ?? existing?.content ?? "",
+          id: update.id,
           status: update.status,
         });
       }
@@ -87,8 +89,8 @@ export class AgentTodoState {
       }
 
       next = updates.map((update) => ({
-        id: update.id,
         content: update.content!,
+        id: update.id,
         status: update.status,
       }));
     }
@@ -106,7 +108,7 @@ export class AgentTodoState {
       next = next.map((todo) =>
         todo.status === "in_progress" && todo.id !== keep
           ? { ...todo, status: "pending" as const }
-          : todo,
+          : todo
       );
     }
 

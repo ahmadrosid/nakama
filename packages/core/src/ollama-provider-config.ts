@@ -5,7 +5,9 @@ export type { OllamaHostMode };
 export const OLLAMA_LOCAL_DEFAULT_BASE_URL = "http://localhost:11434/v1";
 export const OLLAMA_CLOUD_DEFAULT_BASE_URL = "https://ollama.com/v1";
 
-export function parseOllamaHostMode(value: string | undefined): OllamaHostMode | null {
+export function parseOllamaHostMode(
+  value: string | undefined
+): OllamaHostMode | null {
   const normalized = value?.trim().toLowerCase();
 
   if (normalized === "local" || normalized === "cloud") {
@@ -16,7 +18,9 @@ export function parseOllamaHostMode(value: string | undefined): OllamaHostMode |
 }
 
 export function defaultOllamaBaseUrl(hostMode: OllamaHostMode): string {
-  return hostMode === "cloud" ? OLLAMA_CLOUD_DEFAULT_BASE_URL : OLLAMA_LOCAL_DEFAULT_BASE_URL;
+  return hostMode === "cloud"
+    ? OLLAMA_CLOUD_DEFAULT_BASE_URL
+    : OLLAMA_LOCAL_DEFAULT_BASE_URL;
 }
 
 export function defaultOllamaLabel(hostMode: OllamaHostMode): string {
@@ -49,5 +53,7 @@ export function isOllamaCloudInstance(instance: {
   hostMode?: OllamaHostMode;
   baseUrl?: string;
 }): boolean {
-  return instance.type === "ollama" && resolveOllamaHostMode(instance) === "cloud";
+  return (
+    instance.type === "ollama" && resolveOllamaHostMode(instance) === "cloud"
+  );
 }

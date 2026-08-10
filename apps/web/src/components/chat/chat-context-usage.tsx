@@ -1,13 +1,13 @@
 import {
-  contextUsageRatio,
-  formatContextUsageLabel,
-  type ChatContextUsage,
-} from "@/lib/chat-context-usage";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type ChatContextUsage,
+  contextUsageRatio,
+  formatContextUsageLabel,
+} from "@/lib/chat-context-usage";
 import { cn } from "@/lib/utils";
 
 /** Match BrainIcon / select chevron visual weight in the composer toolbar. */
@@ -44,47 +44,47 @@ export function ChatContextUsageRing({
       <TooltipTrigger
         render={
           <button
-            type="button"
+            aria-label={label}
             className={cn(
               "inline-flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              className,
+              className
             )}
-            aria-label={label}
+            type="button"
           >
             <svg
-              width={RING_SIZE}
+              aria-hidden
+              className="-rotate-90"
               height={RING_SIZE}
               viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-              className="-rotate-90"
-              aria-hidden
+              width={RING_SIZE}
             >
               <circle
+                className="stroke-muted-foreground/25"
                 cx={RING_SIZE / 2}
                 cy={RING_SIZE / 2}
-                r={radius}
                 fill="none"
+                r={radius}
                 strokeWidth={STROKE_WIDTH}
-                className="stroke-muted-foreground/25"
               />
               <circle
-                cx={RING_SIZE / 2}
-                cy={RING_SIZE / 2}
-                r={radius}
-                fill="none"
-                strokeWidth={STROKE_WIDTH}
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={dashOffset}
                 className={cn(
                   "transition-[stroke-dashoffset,stroke] duration-300",
-                  progressStrokeClass(ratio),
+                  progressStrokeClass(ratio)
                 )}
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                fill="none"
+                r={radius}
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="round"
+                strokeWidth={STROKE_WIDTH}
               />
             </svg>
           </button>
         }
       />
-      <TooltipContent side="top" className="text-xs">
+      <TooltipContent className="text-xs" side="top">
         {label}
       </TooltipContent>
     </Tooltip>

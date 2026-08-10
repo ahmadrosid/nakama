@@ -4,6 +4,8 @@ import type {
 } from "@nakama/core/contract";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
+import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useAutomationRunsQuery,
   useAutomationsQuery,
@@ -13,11 +15,12 @@ import {
   useRunAutomationMutation,
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
+import {
+  formatFutureRelativeTime,
+  formatSessionRelativeTime,
+} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { formatFutureRelativeTime, formatSessionRelativeTime } from "@/lib/chat-history";
 import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
@@ -53,28 +56,35 @@ export function useAutomationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<StoredAutomation | null>(null);
-  const [deleteRunTarget, setDeleteRunTarget] = useState<AutomationRunRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StoredAutomation | null>(
+    null
+  );
+  const [deleteRunTarget, setDeleteRunTarget] =
+    useState<AutomationRunRecord | null>(null);
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
 
-  const busy = updateMutation.isPending || deleteMutation.isPending || deleteRunMutation.isPending;
+  const busy =
+    updateMutation.isPending ||
+    deleteMutation.isPending ||
+    deleteRunMutation.isPending;
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
   const loading = initialLoading && automations.length === 0;
-  const refreshing = automationsRefreshing || (runsLoading && Boolean(selectedId));
+  const refreshing =
+    automationsRefreshing || (runsLoading && Boolean(selectedId));
 
-  const selected = automations.find((automation) => automation.id === selectedId) ?? null;
+  const selected =
+    automations.find((automation) => automation.id === selectedId) ?? null;
 
   const filteredAutomations = useMemo(() => {
     const query = trimmedSearch.toLowerCase();
-    return automations.filter((automation) => {
-      return (
+    return automations.filter(
+      (automation) =>
         !query ||
         automation.name.toLowerCase().includes(query) ||
         automation.description.toLowerCase().includes(query) ||
         automation.id.toLowerCase().includes(query)
-      );
-    });
+    );
   }, [automations, trimmedSearch]);
 
   const selectedRunSummary = useMemo(() => {
@@ -106,24 +116,35 @@ export function useAutomationsPage() {
       return;
     }
 
-    if (!selectedId || !automations.some((automation) => automation.id === selectedId)) {
+    if (
+      !(
+        selectedId &&
+        automations.some((automation) => automation.id === selectedId)
+      )
+    ) {
       setSelectedId(automations[0]!.id);
     }
   }, [automations, selectedId, searchParams]);
 
   useEffect(() => {
-    if (!selectedId || !runsLoaded) {
+    if (!(selectedId && runsLoaded)) {
       return;
     }
 
     const hasUnreadRuns = runs.some((run) => run.read === false);
     const hasListUnread = (unreadByAutomationId[selectedId] ?? 0) > 0;
-    if (!hasUnreadRuns && !hasListUnread) {
+    if (!(hasUnreadRuns || hasListUnread)) {
       return;
     }
 
     void markReadMutation.mutate(selectedId);
-  }, [runs, runsLoaded, selectedId, unreadByAutomationId, markReadMutation.mutate]);
+  }, [
+    runs,
+    runsLoaded,
+    selectedId,
+    unreadByAutomationId,
+    markReadMutation.mutate,
+  ]);
 
   async function handleSaveEdit() {
     if (!editDraft || busy) {
@@ -136,12 +157,12 @@ export function useAutomationsPage() {
       await updateMutation.mutateAsync({
         automationId: editDraft.id,
         input: {
-          name: editDraft.name,
+          delivery: editDraft.delivery ?? null,
           description: editDraft.description,
+          enabled: editDraft.enabled,
+          name: editDraft.name,
           prompt: editDraft.prompt,
           trigger: editDraft.trigger,
-          enabled: editDraft.enabled,
-          delivery: editDraft.delivery ?? null,
         },
       });
       setEditDraft(null);
@@ -169,7 +190,7 @@ export function useAutomationsPage() {
   }
 
   async function handleDeleteRunConfirm() {
-    if (!selectedId || !deleteRunTarget || busy) {
+    if (!(selectedId && deleteRunTarget) || busy) {
       return;
     }
 
@@ -241,48 +262,52 @@ export function useAutomationsPage() {
     : "";
 
   const selectedSubtitle = selected
-    ? [formatTrigger(selected.trigger), selected.enabled ? "enabled" : "disabled", runScheduleHint]
+    ? [
+        formatTrigger(selected.trigger),
+        selected.enabled ? "enabled" : "disabled",
+        runScheduleHint,
+      ]
         .filter(Boolean)
         .join(" · ")
     : "";
 
   return {
     automations,
-    unreadByAutomationId,
-    selectedId,
-    setSelectedId,
-    runs,
-    runsLoading,
-    busy,
-    searchQuery,
-    setSearchQuery,
-    runningId,
-    error,
-    deleteTarget,
-    setDeleteTarget,
-    deleteRunTarget,
-    setDeleteRunTarget,
-    editDraft,
-    setEditDraft,
-    trimmedSearch,
-    isSearching,
-    loading,
-    refreshing,
-    initialLoading,
     automationsRefreshing,
-    selected,
+    busy,
+    deleteRunTarget,
+    deleteTarget,
+    editDraft,
+    error,
     filteredAutomations,
-    selectedRunSummary,
-    selectedSubtitle,
-    handleSaveEdit,
+    goToCreateAutomation,
     handleDeleteConfirm,
     handleDeleteRunConfirm,
     handleRun,
+    handleSaveEdit,
+    initialLoading,
+    isSearching,
+    loading,
     openEdit,
-    updateEditDraft,
-    refresh,
-    goToCreateAutomation,
     refetchRuns,
+    refresh,
+    refreshing,
+    runningId,
+    runs,
+    runsLoading,
+    searchQuery,
+    selected,
+    selectedId,
+    selectedRunSummary,
+    selectedSubtitle,
+    setDeleteRunTarget,
+    setDeleteTarget,
+    setEditDraft,
+    setSearchQuery,
+    setSelectedId,
+    trimmedSearch,
+    unreadByAutomationId,
+    updateEditDraft,
   };
 }
 

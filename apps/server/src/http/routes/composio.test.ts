@@ -4,31 +4,38 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveComposioConfig } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { createHonoApp } from "../app";
-import { AuthService } from "../../services/auth-service";
 import { AgentService } from "../../services/agent-service";
-import { OrgService } from "../../services/org-service";
-import { ComposioService } from "../../services/composio-service";
+import { AuthService } from "../../services/auth-service";
 import type { ComposioApiClient } from "../../services/composio-api-client";
+import { ComposioService } from "../../services/composio-service";
+import { OrgService } from "../../services/org-service";
+import { createHonoApp } from "../app";
 import { loginUserSession } from "../test-session-helpers";
 
 const TEST_API_KEY = "ck_test";
 
 function createMockClient(): ComposioApiClient {
   return {
-    async listCatalogToolkits() {
-      return [{ slug: "gmail", name: "Gmail", description: "Google Mail", logoUrl: null }];
+    async createProfileSession() {
+      return {
+        headers: { Authorization: "Bearer test" },
+        sessionId: "sess_1",
+        url: "https://mcp.composio.dev/sess_1",
+      };
     },
+    async deleteConnectedAccount() {},
     async linkToolkitAccount() {
       return { redirectUrl: "https://example.com/oauth" };
     },
-    async deleteConnectedAccount() {},
-    async createProfileSession() {
-      return {
-        sessionId: "sess_1",
-        url: "https://mcp.composio.dev/sess_1",
-        headers: { Authorization: "Bearer test" },
-      };
+    async listCatalogToolkits() {
+      return [
+        {
+          description: "Google Mail",
+          logoUrl: null,
+          name: "Gmail",
+          slug: "gmail",
+        },
+      ];
     },
     async listSessionTools() {
       return [];
@@ -36,7 +43,9 @@ function createMockClient(): ComposioApiClient {
   };
 }
 
-async function seedOrgAdmin(databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>) {
+async function seedOrgAdmin(
+  databaseAdapter: ReturnType<typeof createInMemoryDatabaseAdapter>
+) {
   const email = "admin@example.com";
   const password = "password123";
   const orgId = "org_test";
@@ -44,39 +53,39 @@ async function seedOrgAdmin(databaseAdapter: ReturnType<typeof createInMemoryDat
   const authService = new AuthService();
 
   await databaseAdapter.createUser({
-    id: "user_admin",
-    email,
-    passwordHash: await authService.hashPassword(password),
     createdAt: now,
+    email,
+    id: "user_admin",
+    passwordHash: await authService.hashPassword(password),
     updatedAt: now,
   });
   await databaseAdapter.upsertOrganization({
+    createdAt: now,
     id: orgId,
     name: "Test Org",
     slug: "test-org",
-    createdAt: now,
     updatedAt: now,
   });
   await databaseAdapter.upsertOrgMember({
-    orgId,
-    userId: "user_admin",
-    role: "admin",
     createdAt: now,
+    orgId,
+    role: "admin",
+    userId: "user_admin",
   });
 
   const profileId = "profile_test";
   await databaseAdapter.upsertProfile({
-    id: profileId,
-    orgId,
-    name: "Default",
-    systemPrompt: "You are helpful.",
-    model: "openrouter/auto",
-    isSuper: false,
     createdAt: now,
+    id: profileId,
+    isSuper: false,
+    model: "openrouter/auto",
+    name: "Default",
+    orgId,
+    systemPrompt: "You are helpful.",
     updatedAt: now,
   });
 
-  return { email, password, orgId, profileId };
+  return { email, orgId, password, profileId };
 }
 
 async function createApp() {
@@ -88,71 +97,83 @@ async function createApp() {
   const authService = new AuthService();
   const composioService = new ComposioService(databaseAdapter, authService);
   composioService.reloadConfiguration();
-  (composioService as unknown as { apiClientCache: { key: string; client: ComposioApiClient } | null }).apiClientCache =
-    {
-      key: TEST_API_KEY,
-      client: createMockClient(),
-    };
+  (
+    composioService as unknown as {
+      apiClientCache: { key: string; client: ComposioApiClient } | null;
+    }
+  ).apiClientCache = {
+    client: createMockClient(),
+    key: TEST_API_KEY,
+  };
 
   return {
-    databaseAdapter,
-    composioService,
     app: createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
-      automationService: {} as any,
-      taskService: {} as any,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      workerManager: {} as any,
-      mcpService: {} as any,
-      composioService,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as any,
+      composioService,
       databaseAdapter,
+      mcpService: {} as any,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+      taskService: {} as any,
       webDistDir: null,
+      workerManager: {} as any,
     }),
+    composioService,
+    databaseAdapter,
   };
 }
 
 describe("composio routes", () => {
   test("org admin can enable toolkit and assign it to a profile", async () => {
     const { app, databaseAdapter } = await createApp();
-    const { email, password, orgId, profileId } = await seedOrgAdmin(databaseAdapter);
+    const { email, password, orgId, profileId } =
+      await seedOrgAdmin(databaseAdapter);
     const session = await loginUserSession(app, email, password, orgId);
 
     const enableResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits/gmail/enable", {
-        method: "POST",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({ toolkitSlug: "gmail" }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
     );
 
     expect(enableResponse.status).toBe(200);
-    const enabled = (await enableResponse.json()) as { toolkitSlug: string; id: string };
+    const enabled = (await enableResponse.json()) as {
+      toolkitSlug: string;
+      id: string;
+    };
     expect(enabled.toolkitSlug).toBe("gmail");
 
     const assignResponse = await app.fetch(
       new Request(
         `http://localhost:4310/v1/profiles/${encodeURIComponent(profileId)}/composio-toolkits`,
         {
-          method: "PUT",
-          headers: session.headers({
-            "X-CSRF-Token": session.csrfToken,
-            "Content-Type": "application/json",
-          }),
           body: JSON.stringify({
             assignments: [{ toolkitId: enabled.id }],
           }),
-        },
-      ),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "PUT",
+        }
+      )
     );
 
     expect(assignResponse.status).toBe(200);
     await expect(assignResponse.json()).resolves.toMatchObject({
-      assignments: [expect.objectContaining({ toolkitSlug: "gmail", toolkitId: enabled.id })],
+      assignments: [
+        expect.objectContaining({
+          toolkitId: enabled.id,
+          toolkitSlug: "gmail",
+        }),
+      ],
     });
   });
 
@@ -163,26 +184,26 @@ describe("composio routes", () => {
 
     const enableResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits/gmail/enable", {
-        method: "POST",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({ toolkitSlug: "gmail" }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
     );
 
     expect(enableResponse.status).toBe(200);
 
     const connectResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits/gmail/connect", {
-        method: "POST",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({ callbackOrigin: "http://localhost:3003" }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
     );
 
     expect(connectResponse.status).toBe(200);
@@ -190,7 +211,11 @@ describe("composio routes", () => {
       redirectUrl: "https://example.com/oauth",
     });
 
-    const connections = await databaseAdapter.listComposioUserConnectionsForUser(orgId, "user_admin");
+    const connections =
+      await databaseAdapter.listComposioUserConnectionsForUser(
+        orgId,
+        "user_admin"
+      );
     expect(connections).toHaveLength(1);
     expect(connections[0]?.userId).toBe("user_admin");
     expect(connections[0]?.status).toBe("oauth_in_progress");
@@ -203,37 +228,42 @@ describe("composio routes", () => {
     const authService = new AuthService();
 
     await databaseAdapter.createUser({
-      id: "user_member",
-      email: "member@example.com",
-      passwordHash: await authService.hashPassword("password123"),
       createdAt: now,
+      email: "member@example.com",
+      id: "user_member",
+      passwordHash: await authService.hashPassword("password123"),
       updatedAt: now,
     });
     await databaseAdapter.upsertOrgMember({
-      orgId,
-      userId: "user_member",
-      role: "member",
       createdAt: now,
+      orgId,
+      role: "member",
+      userId: "user_member",
     });
 
-    const session = await loginUserSession(app, "member@example.com", "password123", orgId);
+    const session = await loginUserSession(
+      app,
+      "member@example.com",
+      "password123",
+      orgId
+    );
     const listResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits", {
         headers: session.headers(),
-      }),
+      })
     );
 
     expect(listResponse.status).toBe(200);
 
     const enableResponse = await app.fetch(
       new Request("http://localhost:4310/v1/composio/toolkits/gmail/enable", {
-        method: "POST",
-        headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
-          "Content-Type": "application/json",
-        }),
         body: JSON.stringify({ toolkitSlug: "gmail" }),
-      }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
     );
 
     expect(enableResponse.status).toBe(403);
@@ -243,9 +273,12 @@ describe("composio routes", () => {
     const { app } = await createApp();
 
     const response = await app.fetch(
-      new Request("http://localhost:4310/v1/composio/oauth/callback?state=not-valid", {
-        headers: { Accept: "application/json" },
-      }),
+      new Request(
+        "http://localhost:4310/v1/composio/oauth/callback?state=not-valid",
+        {
+          headers: { Accept: "application/json" },
+        }
+      )
     );
 
     expect(response.status).not.toBe(401);

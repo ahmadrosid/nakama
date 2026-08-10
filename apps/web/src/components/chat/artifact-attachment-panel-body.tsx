@@ -1,11 +1,11 @@
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { Spinner } from "@/components/ui/spinner";
-import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import {
   ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
 } from "@/lib/artifact-html-preview";
+import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import { cn } from "@/lib/utils";
 
 /** Highlighting a very large file blocks the main thread, so show it as plain text. */
@@ -41,7 +41,10 @@ export type ArtifactAttachmentPanelBodyProps =
     });
 
 function toCodeFence(content: string, language: string): string {
-  const longestRun = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
+  const longestRun = Math.max(
+    0,
+    ...[...content.matchAll(/`+/g)].map((match) => match[0].length)
+  );
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return `${fence}${language}\n${content}\n${fence}`;
 }
@@ -49,10 +52,11 @@ function toCodeFence(content: string, language: string): string {
 function usesPlainCodeBlock(
   content: string,
   format: "markdown" | "plain",
-  language: string | null,
+  language: string | null
 ): boolean {
   return (
-    format !== "markdown" && !(language !== null && content.length <= MAX_HIGHLIGHTED_CHARS)
+    format !== "markdown" &&
+    !(language !== null && content.length <= MAX_HIGHLIGHTED_CHARS)
   );
 }
 
@@ -85,7 +89,7 @@ function renderTextContent({
     );
   }
 
-  return <CodeBlock code={content} lang={language} fillHeight={fillHeight} />;
+  return <CodeBlock code={content} fillHeight={fillHeight} lang={language} />;
 }
 
 function LoadingState({ compact = false }: { compact?: boolean }) {
@@ -93,8 +97,8 @@ function LoadingState({ compact = false }: { compact?: boolean }) {
     <div
       className={
         compact
-          ? "flex items-center gap-2 text-sm text-muted-foreground"
-          : "flex flex-1 items-center justify-center gap-2 p-4 text-sm text-muted-foreground"
+          ? "flex items-center gap-2 text-muted-foreground text-sm"
+          : "flex flex-1 items-center justify-center gap-2 p-4 text-muted-foreground text-sm"
       }
     >
       <Spinner className="size-4" />
@@ -105,8 +109,15 @@ function LoadingState({ compact = false }: { compact?: boolean }) {
 
 function UnavailablePreview({ padded }: { padded: boolean }) {
   return (
-    <p className={padded ? "p-4 text-sm text-muted-foreground" : "text-sm text-muted-foreground"}>
-      Preview is not available for this file type. Download the artifact instead.
+    <p
+      className={
+        padded
+          ? "p-4 text-muted-foreground text-sm"
+          : "text-muted-foreground text-sm"
+      }
+    >
+      Preview is not available for this file type. Download the artifact
+      instead.
     </p>
   );
 }
@@ -121,19 +132,19 @@ function ArtifactAttachmentImageBody({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {loading ? <LoadingState /> : null}
-      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-      {!loading && !error && imagePreviewUrl ? (
+      {error ? <p className="p-4 text-destructive text-sm">{error}</p> : null}
+      {!(loading || error) && imagePreviewUrl ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <img
-            src={imagePreviewUrl}
             alt={artifact.filename}
             className="max-h-[min(70vh,48rem)] max-w-full rounded-lg border border-border bg-muted/20 object-contain"
+            src={imagePreviewUrl}
           />
         </div>
       ) : null}
-      {!loading && !error && !imagePreviewUrl && !canPreview ? (
+      {loading || error || imagePreviewUrl || canPreview ? null : (
         <UnavailablePreview padded />
-      ) : null}
+      )}
     </div>
   );
 }
@@ -148,22 +159,22 @@ function ArtifactAttachmentVideoBody({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {loading ? <LoadingState /> : null}
-      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-      {!loading && !error && videoPreviewUrl ? (
+      {error ? <p className="p-4 text-destructive text-sm">{error}</p> : null}
+      {!(loading || error) && videoPreviewUrl ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <video
-            src={videoPreviewUrl}
+            aria-label={artifact.filename}
+            className="max-h-[min(70vh,48rem)] w-full max-w-[min(100%,24rem)] rounded-lg border border-border bg-black object-contain"
             controls
             playsInline
             preload="metadata"
-            className="max-h-[min(70vh,48rem)] w-full max-w-[min(100%,24rem)] rounded-lg border border-border bg-black object-contain"
-            aria-label={artifact.filename}
+            src={videoPreviewUrl}
           />
         </div>
       ) : null}
-      {!loading && !error && !videoPreviewUrl && !canPreview ? (
+      {loading || error || videoPreviewUrl || canPreview ? null : (
         <UnavailablePreview padded />
-      ) : null}
+      )}
     </div>
   );
 }
@@ -179,16 +190,18 @@ function ArtifactAttachmentHtmlBody({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {loading ? <LoadingState /> : null}
-      {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
-      {!loading && !error && content ? (
+      {error ? <p className="p-4 text-destructive text-sm">{error}</p> : null}
+      {!(loading || error) && content ? (
         <iframe
-          title={artifact.filename}
-          srcDoc={htmlForArtifactPreview(content)}
-          sandbox={htmlSandbox}
           className="min-h-0 w-full flex-1 border-0 bg-background"
+          sandbox={htmlSandbox}
+          srcDoc={htmlForArtifactPreview(content)}
+          title={artifact.filename}
         />
       ) : null}
-      {!loading && !error && !content && !canPreview ? <UnavailablePreview padded /> : null}
+      {loading || error || content || canPreview ? null : (
+        <UnavailablePreview padded />
+      )}
     </div>
   );
 }
@@ -203,32 +216,36 @@ function ArtifactAttachmentTextBody({
   canPreview,
 }: Extract<ArtifactAttachmentPanelBodyProps, { kind: "text" }>) {
   const showCodeBlock = Boolean(
-    content && usesPlainCodeBlock(content, format, language),
+    content && usesPlainCodeBlock(content, format, language)
   );
 
   return (
     <div
       className={cn(
-        showCodeBlock ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4",
+        showCodeBlock ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4"
       )}
     >
       {loading ? <LoadingState compact /> : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {!loading && !error && content
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
+      {!(loading || error) && content
         ? renderTextContent({
             content,
+            fillHeight: showCodeBlock,
             format,
             language,
             streaming,
-            fillHeight: showCodeBlock,
           })
         : null}
-      {!loading && !error && !canPreview ? <UnavailablePreview padded={false} /> : null}
+      {loading || error || canPreview ? null : (
+        <UnavailablePreview padded={false} />
+      )}
     </div>
   );
 }
 
-export function ArtifactAttachmentPanelBody(props: ArtifactAttachmentPanelBodyProps) {
+export function ArtifactAttachmentPanelBody(
+  props: ArtifactAttachmentPanelBodyProps
+) {
   switch (props.kind) {
     case "image":
       return <ArtifactAttachmentImageBody {...props} />;

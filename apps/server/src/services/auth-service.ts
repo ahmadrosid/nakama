@@ -1,5 +1,5 @@
-import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
+import bcrypt from "bcryptjs";
 
 const SALT_ROUNDS = 10;
 const SESSION_EXPIRY_DAYS = 7;
@@ -19,9 +19,11 @@ export class AuthService {
     expiresAt: string;
   } {
     return {
-      sessionToken: generateOpaqueToken(),
       csrfToken: generateOpaqueToken(),
-      expiresAt: new Date(Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(
+        Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString(),
+      sessionToken: generateOpaqueToken(),
     };
   }
 

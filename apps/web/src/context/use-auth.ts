@@ -1,5 +1,8 @@
 import { useContext } from "react";
-import { AuthContext, type AuthContextValue } from "@/context/auth-context-shared";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
 
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);

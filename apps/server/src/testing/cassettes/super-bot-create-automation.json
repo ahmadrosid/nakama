@@ -49,12 +49,7 @@
                   "additionalProperties": true
                 }
               },
-              "required": [
-                "name",
-                "description",
-                "prompt",
-                "trigger"
-              ],
+              "required": ["name", "description", "prompt", "trigger"],
               "additionalProperties": false
             }
           }
@@ -84,9 +79,7 @@
                   "description": "Automation id to delete."
                 }
               },
-              "required": [
-                "automationId"
-              ],
+              "required": ["automationId"],
               "additionalProperties": false
             }
           }
@@ -104,9 +97,7 @@
                   "description": "Automation id to run (use list_automations to find it)."
                 }
               },
-              "required": [
-                "automationId"
-              ],
+              "required": ["automationId"],
               "additionalProperties": false
             }
           }

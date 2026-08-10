@@ -1,39 +1,40 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>Nakama</title>
-    <link rel="icon" type="image/png" href="/nakama-logo-dither.png" />
+    <link href="/nakama-logo-dither.png" rel="icon" type="image/png">
     <script>
-      (function () {
-        var stored = localStorage.getItem("nakama-theme");
-        var resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
+    "use strict";
+    (() => {
+      var stored = localStorage.getItem("nakama-theme");
+      var resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      if (stored === "light" || stored === "dark") {
+        resolved = stored;
+      } else if (stored === "system") {
+        resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
           ? "dark"
           : "light";
-        if (stored === "light" || stored === "dark") {
-          resolved = stored;
-        } else if (stored === "system") {
-          resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-        }
-        document.documentElement.classList.toggle("dark", resolved === "dark");
-        document.documentElement.style.colorScheme = resolved;
-        var favicon = document.querySelector('link[rel="icon"]');
-        if (favicon) {
-          favicon.setAttribute(
-            "href",
-            resolved === "light"
-              ? "/nakama-logo-dither-light.png"
-              : "/nakama-logo-dither.png",
-          );
-        }
-      })();
+      }
+      document.documentElement.classList.toggle("dark", resolved === "dark");
+      document.documentElement.style.colorScheme = resolved;
+      var favicon = document.querySelector('link[rel="icon"]');
+      if (favicon) {
+        favicon.setAttribute(
+          "href",
+          resolved === "light"
+            ? "/nakama-logo-dither-light.png"
+            : "/nakama-logo-dither.png"
+        );
+      }
+    })();
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script src="/src/main.tsx" type="module"></script>
   </body>
 </html>

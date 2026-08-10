@@ -1,8 +1,8 @@
 import type { DatabaseAdapter } from "@nakama/db";
 
 export interface SkillUsageRecordingContext {
-  sessionId: string;
   seenCatalogSkillIds: Set<string>;
+  sessionId: string;
 }
 
 export class SkillUsageService {
@@ -12,7 +12,7 @@ export class SkillUsageService {
     orgId: string,
     profileId: string,
     skillIds: string[],
-    context?: SkillUsageRecordingContext,
+    context?: SkillUsageRecordingContext
   ): Promise<void> {
     if (skillIds.length === 0) {
       return;
@@ -43,7 +43,7 @@ export class SkillUsageService {
   async recordMatches(
     orgId: string,
     profileId: string,
-    skillIds: string[],
+    skillIds: string[]
   ): Promise<void> {
     if (skillIds.length === 0) {
       return;
@@ -62,14 +62,18 @@ export class SkillUsageService {
     }
   }
 
-  async recordPatch(orgId: string, profileId: string, skillId: string): Promise<void> {
+  async recordPatch(
+    orgId: string,
+    profileId: string,
+    skillId: string
+  ): Promise<void> {
     const now = new Date().toISOString();
     await this.safeIncrement({
       orgId,
-      profileId,
-      skillId,
       patchDelta: 1,
       patchedAt: now,
+      profileId,
+      skillId,
     });
   }
 

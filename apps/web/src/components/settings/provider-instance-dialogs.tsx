@@ -1,8 +1,8 @@
-import type {
-  ProviderInstanceSummary,
-} from "@nakama/core/contract";
-import type { ModelListRow } from "@/components/ModelListEditor";
+import type { ProviderInstanceSummary } from "@nakama/core/contract";
+import { ViewIcon, ViewOffIcon } from "hugeicons-react";
+import type { ReactNode } from "react";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
+import type { ModelListRow } from "@/components/ModelListEditor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,8 +20,6 @@ import {
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
-import type { ReactNode } from "react";
 
 export function ProviderReplaceKeyDialog({
   open,
@@ -49,42 +47,52 @@ export function ProviderReplaceKeyDialog({
   onSave: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {instance.hasApiKey ? "Update API key" : "Add API key"} for {instance.label}
+            {instance.hasApiKey ? "Update API key" : "Add API key"} for{" "}
+            {instance.label}
           </DialogTitle>
         </DialogHeader>
         <InputGroup>
           <InputGroupInput
-            type={showApiKey ? "text" : "password"}
             autoComplete="off"
-            placeholder={apiKeyPlaceholder(providerType)}
-            value={apiKey}
             disabled={busy}
             onChange={(event) => onApiKeyChange(event.target.value)}
+            placeholder={apiKeyPlaceholder(providerType)}
+            type={showApiKey ? "text" : "password"}
+            value={apiKey}
           />
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              size="icon-sm"
               aria-label={showApiKey ? "Hide API key" : "Show API key"}
               onClick={onToggleShowApiKey}
+              size="icon-sm"
             >
-              {showApiKey ? <EyeOffIcon /> : <EyeIcon />}
+              {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
         {dialogError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {dialogError}
           </p>
         ) : null}
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button type="button" disabled={busy || !apiKey.trim()} onClick={onSave}>
+          <Button
+            disabled={busy || !apiKey.trim()}
+            onClick={onSave}
+            type="button"
+          >
             {busy ? <Spinner className="mr-2" /> : null}
             Save
           </Button>
@@ -114,23 +122,30 @@ function ProviderModelsDialogShell({
   children: ReactNode;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(96vw,56rem)] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
+          {description ? (
+            <DialogDescription>{description}</DialogDescription>
+          ) : null}
         </DialogHeader>
         {children}
         {dialogError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {dialogError}
           </p>
         ) : null}
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button type="button" disabled={busy} onClick={onSave}>
+          <Button disabled={busy} onClick={onSave} type="button">
             Save
           </Button>
         </DialogFooter>
@@ -178,30 +193,30 @@ export function ProviderCompatibleEditDialog({
 }) {
   return (
     <ProviderModelsDialogShell
-      open={open}
       busy={busy}
       dialogError={dialogError}
-      title="Edit provider"
       onOpenChange={onOpenChange}
       onSave={onSave}
+      open={open}
+      title="Edit provider"
     >
       <CustomProviderFields
-        displayName={editLabel}
-        baseUrl={editBaseUrl}
         apiKey={apiKey}
+        baseUrl={editBaseUrl}
+        baseUrlError={null}
+        browseLabel={browseLabel}
+        browseSource={browseSource}
         customModels={manageModels}
         disabled={busy}
+        displayName={editLabel}
         displayNameError={null}
-        baseUrlError={null}
-        modelsError={null}
-        browseSource={browseSource}
-        remoteProvider={remoteProvider}
-        providerInstanceId={providerInstanceId}
         hostMode={hostMode}
-        browseLabel={browseLabel}
-        onDisplayNameChange={onDisplayNameChange}
+        modelsError={null}
         onBaseUrlChange={onBaseUrlChange}
         onCustomModelsChange={onCustomModelsChange}
+        onDisplayNameChange={onDisplayNameChange}
+        providerInstanceId={providerInstanceId}
+        remoteProvider={remoteProvider}
       />
     </ProviderModelsDialogShell>
   );
@@ -224,13 +239,13 @@ export function ProviderManageModelsDialog({
 }) {
   return (
     <ProviderModelsDialogShell
-      open={open}
       busy={busy}
-      dialogError={dialogError}
-      title="Manage models"
       description="Edit the shortlist available in chat for this provider."
+      dialogError={dialogError}
       onOpenChange={onOpenChange}
       onSave={onSave}
+      open={open}
+      title="Manage models"
     >
       {children}
     </ProviderModelsDialogShell>

@@ -3,13 +3,13 @@ import type { AgentQuestionAnswer, AgentQuestionnaire } from "./contract";
 const ANSWERS_HEADER = "Answers";
 
 export function hasActiveAgentQuestionnaire(
-  questionnaire: AgentQuestionnaire | null | undefined,
+  questionnaire: AgentQuestionnaire | null | undefined
 ): boolean {
   return Boolean(questionnaire && questionnaire.questions.length > 0);
 }
 
 export function formatAgentQuestionnaireAnswersMessage(
-  answers: readonly AgentQuestionAnswer[],
+  answers: readonly AgentQuestionAnswer[]
 ): string {
   const lines = [ANSWERS_HEADER];
 
@@ -20,7 +20,9 @@ export function formatAgentQuestionnaireAnswersMessage(
   return lines.join("\n");
 }
 
-export function formatAgentQuestionnaireMessage(questionnaire: AgentQuestionnaire): string {
+export function formatAgentQuestionnaireMessage(
+  questionnaire: AgentQuestionnaire
+): string {
   const lines = [questionnaire.title.trim(), ""];
 
   questionnaire.questions.forEach((question, questionIndex) => {
@@ -48,7 +50,7 @@ export function formatAgentQuestionnaireMessage(questionnaire: AgentQuestionnair
 
 export function tryParseChannelQuestionnaireAnswers(
   questionnaire: AgentQuestionnaire,
-  text: string,
+  text: string
 ): AgentQuestionAnswer[] | null {
   const trimmed = text.trim();
 
@@ -66,9 +68,9 @@ export function tryParseChannelQuestionnaireAnswers(
 
     return [
       {
-        questionId: question.id,
-        prompt: question.prompt,
         answer,
+        prompt: question.prompt,
+        questionId: question.id,
       },
     ];
   }
@@ -82,7 +84,7 @@ export function tryParseChannelQuestionnaireAnswers(
       continue;
     }
 
-    const match = line.match(/^(\d+)\s*[.):\-]\s*(.+)$/);
+    const match = line.match(/^(\d+)\s*[.):-]\s*(.+)$/);
 
     if (!match) {
       return null;
@@ -119,9 +121,9 @@ export function tryParseChannelQuestionnaireAnswers(
     }
 
     answers.push({
-      questionId: question.id,
-      prompt: question.prompt,
       answer,
+      prompt: question.prompt,
+      questionId: question.id,
     });
   }
 
@@ -129,7 +131,7 @@ export function tryParseChannelQuestionnaireAnswers(
 }
 
 export function parseAgentQuestionnaireAnswersMessage(
-  value: string,
+  value: string
 ): AgentQuestionAnswer[] | null {
   const trimmed = value.trim();
 
@@ -157,9 +159,9 @@ export function parseAgentQuestionnaireAnswersMessage(
     if (line.startsWith("Q: ")) {
       if (currentPrompt && currentAnswer) {
         answers.push({
-          questionId: `answer_${answers.length + 1}`,
-          prompt: currentPrompt,
           answer: currentAnswer,
+          prompt: currentPrompt,
+          questionId: `answer_${answers.length + 1}`,
         });
       }
 
@@ -178,9 +180,9 @@ export function parseAgentQuestionnaireAnswersMessage(
 
   if (currentPrompt && currentAnswer) {
     answers.push({
-      questionId: `answer_${answers.length + 1}`,
-      prompt: currentPrompt,
       answer: currentAnswer,
+      prompt: currentPrompt,
+      questionId: `answer_${answers.length + 1}`,
     });
   }
 
@@ -189,7 +191,7 @@ export function parseAgentQuestionnaireAnswersMessage(
 
 function resolveQuestionAnswer(
   question: AgentQuestionnaire["questions"][number],
-  raw: string,
+  raw: string
 ): string | null {
   const trimmed = raw.trim();
 
@@ -216,7 +218,7 @@ function resolveQuestionAnswer(
   }
 
   const labelMatch = question.choices.find(
-    (choice) => choice.label.trim().toLowerCase() === trimmed.toLowerCase(),
+    (choice) => choice.label.trim().toLowerCase() === trimmed.toLowerCase()
   );
   if (labelMatch) {
     return labelMatch.label;

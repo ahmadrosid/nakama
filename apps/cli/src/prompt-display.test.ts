@@ -16,15 +16,26 @@ describe("splitInputDisplayLines", () => {
   });
 
   test("wraps long input across terminal width", () => {
-    expect(splitInputDisplayLines("abcdefghij", 2, 6)).toEqual(["abcd", "efgh", "ij"]);
+    expect(splitInputDisplayLines("abcdefghij", 2, 6)).toEqual([
+      "abcd",
+      "efgh",
+      "ij",
+    ]);
   });
 
   test("accounts for prompt prefix on wrapped lines", () => {
-    expect(splitInputDisplayLines("1234567890", 4, 8)).toEqual(["1234", "5678", "90"]);
+    expect(splitInputDisplayLines("1234567890", 4, 8)).toEqual([
+      "1234",
+      "5678",
+      "90",
+    ]);
   });
 
   test("splits on explicit newlines", () => {
-    expect(splitInputDisplayLines("hello\nworld", 2, 80)).toEqual(["hello", "world"]);
+    expect(splitInputDisplayLines("hello\nworld", 2, 80)).toEqual([
+      "hello",
+      "world",
+    ]);
   });
 
   test("preserves blank lines", () => {

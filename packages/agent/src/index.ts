@@ -1,10 +1,10 @@
 import type { AutomationDefinition, ToolDefinition } from "@nakama/core";
 import {
-  createAgentChatSession,
   type AgentChatSession,
   type AgentChatSessionOptions,
   type AgentDependencies,
   type AgentRequest,
+  createAgentChatSession,
 } from "./chat";
 import { parseAutomationResponse } from "./parse";
 import {
@@ -15,13 +15,13 @@ import {
 export interface AgentHarness {
   createAutomationFromPrompt(
     request: AgentRequest,
-    options?: { tools?: ToolDefinition[] },
+    options?: { tools?: ToolDefinition[] }
   ): Promise<AutomationDefinition>;
   createChatSession(options?: AgentChatSessionOptions): AgentChatSession;
 }
 
 export function createAgentHarness(
-  dependencies: AgentDependencies = {},
+  dependencies: AgentDependencies = {}
 ): AgentHarness {
   const defaultTools = dependencies.tools ?? [];
   const harness: AgentHarness = {
@@ -33,8 +33,8 @@ export function createAgentHarness(
       }
 
       const result = await dependencies.provider.generateText({
-        system: buildAutomationSystemPrompt(tools),
         prompt: buildAutomationUserPrompt(request.prompt, request.channel),
+        system: buildAutomationSystemPrompt(tools),
       });
 
       return parseAutomationResponse(result.content, {
@@ -59,30 +59,30 @@ export type {
 } from "./chat";
 export type { CompactionConfig } from "./history-compaction";
 export { usableContextTokens } from "./history-compaction";
-export type { DraftTaskPromptInput } from "./task-prompt";
-export { draftTaskPromptFromFields } from "./task-prompt";
-export { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
+export type { MergeOrgMemoryWithApprovedBulletOptions } from "./org-memory-merge";
 export {
-  suggestToolParamsFromPrompt,
-  parseSuggestedParams,
-  buildSuggestParamsUserPrompt,
-} from "./tool-playground-params";
+  mergeOrgMemoryWithApprovedBullet,
+  mergeOrgMemoryWithApprovedBulletFallback,
+} from "./org-memory-merge";
 export {
   buildSessionTitlePrompt,
   generateSessionTitleFromMessages,
   normalizeSessionTitle,
 } from "./session-title";
-export {
-  buildSkillPostTurnReviewPrompt,
-  generateSkillPostTurnReview,
-  parseSkillPostTurnReviewResponse,
-} from "./skill-post-turn-review";
 export type {
   SkillCatalogEntry,
   SkillPostTurnReviewOutcome,
 } from "./skill-post-turn-review";
 export {
-  mergeOrgMemoryWithApprovedBullet,
-  mergeOrgMemoryWithApprovedBulletFallback,
-} from "./org-memory-merge";
-export type { MergeOrgMemoryWithApprovedBulletOptions } from "./org-memory-merge";
+  buildSkillPostTurnReviewPrompt,
+  generateSkillPostTurnReview,
+  parseSkillPostTurnReviewResponse,
+} from "./skill-post-turn-review";
+export type { DraftTaskPromptInput } from "./task-prompt";
+export { draftTaskPromptFromFields } from "./task-prompt";
+export { canRunToolCallsInParallel, executeToolCall } from "./tool-loop";
+export {
+  buildSuggestParamsUserPrompt,
+  parseSuggestedParams,
+  suggestToolParamsFromPrompt,
+} from "./tool-playground-params";

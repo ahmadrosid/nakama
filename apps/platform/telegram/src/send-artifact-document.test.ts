@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { TELEGRAM_ARTIFACT_DOCUMENT_MAX_BYTES, sendTelegramArtifactDocument } from "./send-artifact-document";
+import {
+  sendTelegramArtifactDocument,
+  TELEGRAM_ARTIFACT_DOCUMENT_MAX_BYTES,
+} from "./send-artifact-document";
 
 describe("sendTelegramArtifactDocument", () => {
   test("rejects files over the telegram cap", async () => {
     const result = await sendTelegramArtifactDocument(
-      { chat: { id: 1 }, api: { sendDocument: async () => ({}) } } as never,
+      { api: { sendDocument: async () => ({}) }, chat: { id: 1 } } as never,
       {
-        filename: "big.md",
         bytes: new Uint8Array(TELEGRAM_ARTIFACT_DOCUMENT_MAX_BYTES + 1),
-      },
+        filename: "big.md",
+      }
     );
 
     expect(result.ok).toBe(false);

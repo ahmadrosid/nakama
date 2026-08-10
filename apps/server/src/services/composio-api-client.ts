@@ -2,42 +2,46 @@ import { Composio } from "@composio/core";
 import type { ComposioCachedToolSummary } from "@nakama/core";
 
 export interface ComposioCatalogToolkit {
-  slug: string;
-  name: string;
   description: string | null;
   logoUrl: string | null;
+  name: string;
+  slug: string;
 }
 
 export interface ComposioLinkResult {
-  redirectUrl: string;
   connectedAccountId?: string;
+  redirectUrl: string;
 }
 
 export interface ComposioSessionMcpEndpoint {
+  headers?: Record<string, string>;
   sessionId: string;
   url: string;
-  headers?: Record<string, string>;
 }
 
 export interface ComposioApiClient {
-  listCatalogToolkits(options?: { limit?: number }): Promise<ComposioCatalogToolkit[]>;
-  linkToolkitAccount(
-    userId: string,
-    toolkitSlug: string,
-    callbackUrl: string,
-  ): Promise<ComposioLinkResult>;
-  deleteConnectedAccount(connectedAccountId: string): Promise<void>;
   createProfileSession(
     userId: string,
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
-    connectedAccountsByToolkit?: Record<string, string>,
+    connectedAccountsByToolkit?: Record<string, string>
   ): Promise<ComposioSessionMcpEndpoint>;
-  listSessionTools(session: ComposioSessionMcpEndpoint): Promise<ComposioCachedToolSummary[]>;
+  deleteConnectedAccount(connectedAccountId: string): Promise<void>;
+  linkToolkitAccount(
+    userId: string,
+    toolkitSlug: string,
+    callbackUrl: string
+  ): Promise<ComposioLinkResult>;
+  listCatalogToolkits(options?: {
+    limit?: number;
+  }): Promise<ComposioCatalogToolkit[]>;
+  listSessionTools(
+    session: ComposioSessionMcpEndpoint
+  ): Promise<ComposioCachedToolSummary[]>;
 }
 
 export function extractComposioListItems<T>(
-  response: { items?: T[] } | T[] | null | undefined,
+  response: { items?: T[] } | T[] | null | undefined
 ): T[] {
   if (Array.isArray(response)) {
     return response;
@@ -67,10 +71,11 @@ export function parseCatalogToolkitItem(item: {
   }
 
   return {
-    slug: slug.toLowerCase(),
-    name: typeof item.name === "string" ? item.name : slug,
-    description: typeof item.meta?.description === "string" ? item.meta.description : null,
+    description:
+      typeof item.meta?.description === "string" ? item.meta.description : null,
     logoUrl: typeof item.meta?.logo === "string" ? item.meta.logo : null,
+    name: typeof item.name === "string" ? item.name : slug,
+    slug: slug.toLowerCase(),
   };
 }
 
@@ -109,9 +114,11 @@ export function parseLinkRedirectUrl(response: unknown): string | null {
   return null;
 }
 
-export function parseConnectionRequestId(response: unknown): string | undefined {
+export function parseConnectionRequestId(
+  response: unknown
+): string | undefined {
   if (!response || typeof response !== "object") {
-    return undefined;
+    return;
   }
 
   const record = response as Record<string, unknown>;
@@ -126,8 +133,6 @@ export function parseConnectionRequestId(response: unknown): string | undefined 
   if (typeof record.connected_account_id === "string") {
     return record.connected_account_id;
   }
-
-  return undefined;
 }
 
 export function unwrapComposioError(error: unknown): Error {
@@ -151,19 +156,19 @@ type ComposioAuthConfigClient = {
     }): Promise<{ items: Array<{ id?: string }> }>;
     create(
       toolkitSlug: string,
-      options?: { type?: string },
+      options?: { type?: string }
     ): Promise<{ id?: string }>;
   };
 };
 
 export async function resolveAuthConfigId(
   composio: ComposioAuthConfigClient,
-  toolkitSlug: string,
+  toolkitSlug: string
 ): Promise<string> {
   const slug = toolkitSlug.toLowerCase();
   const listed = await composio.authConfigs.list({
-    toolkit: slug,
     isComposioManaged: true,
+    toolkit: slug,
   });
 
   const existingId = listed.items.find((item) => item.id)?.id;
@@ -186,31 +191,38 @@ export function parseSessionToolItems(
     description?: unknown;
     inputParameters?: unknown;
     input_parameters?: unknown;
-  }>,
+  }>
 ): ComposioCachedToolSummary[] {
   return items
     .map((tool) => {
-      const slug = typeof tool.slug === "string" ? tool.slug : typeof tool.name === "string" ? tool.name : null;
+      const slug =
+        typeof tool.slug === "string"
+          ? tool.slug
+          : typeof tool.name === "string"
+            ? tool.name
+            : null;
 
       if (!slug) {
         return null;
       }
 
       const inputSchema =
-        typeof tool.inputParameters === "object" && tool.inputParameters !== null
+        typeof tool.inputParameters === "object" &&
+        tool.inputParameters !== null
           ? (tool.inputParameters as Record<string, unknown>)
-          : typeof tool.input_parameters === "object" && tool.input_parameters !== null
+          : typeof tool.input_parameters === "object" &&
+              tool.input_parameters !== null
             ? (tool.input_parameters as Record<string, unknown>)
             : {};
 
       return {
-        slug,
-        name: typeof tool.name === "string" ? tool.name : slug,
         description:
           typeof tool.description === "string" && tool.description.trim()
             ? tool.description
             : slug,
         inputSchema,
+        name: typeof tool.name === "string" ? tool.name : slug,
+        slug,
       };
     })
     .filter((tool): tool is ComposioCachedToolSummary => tool !== null);
@@ -223,7 +235,9 @@ export class SdkComposioApiClient implements ComposioApiClient {
     this.composio = new Composio({ apiKey });
   }
 
-  async listCatalogToolkits(options?: { limit?: number }): Promise<ComposioCatalogToolkit[]> {
+  async listCatalogToolkits(options?: {
+    limit?: number;
+  }): Promise<ComposioCatalogToolkit[]> {
     const limit = options?.limit ?? 200;
     const response = await this.composio.toolkits.getToolkits({ limit });
     const items = extractComposioListItems(response);
@@ -236,14 +250,21 @@ export class SdkComposioApiClient implements ComposioApiClient {
   async linkToolkitAccount(
     userId: string,
     toolkitSlug: string,
-    callbackUrl: string,
+    callbackUrl: string
   ): Promise<ComposioLinkResult> {
     try {
-      const authConfigId = await resolveAuthConfigId(this.composio, toolkitSlug);
-      const response = await this.composio.connectedAccounts.link(userId, authConfigId, {
-        callbackUrl,
-        allowMultiple: true,
-      });
+      const authConfigId = await resolveAuthConfigId(
+        this.composio,
+        toolkitSlug
+      );
+      const response = await this.composio.connectedAccounts.link(
+        userId,
+        authConfigId,
+        {
+          allowMultiple: true,
+          callbackUrl,
+        }
+      );
 
       const redirectUrl = parseLinkRedirectUrl(response);
 
@@ -252,8 +273,8 @@ export class SdkComposioApiClient implements ComposioApiClient {
       }
 
       return {
-        redirectUrl,
         connectedAccountId: parseConnectionRequestId(response),
+        redirectUrl,
       };
     } catch (error) {
       throw unwrapComposioError(error);
@@ -268,36 +289,48 @@ export class SdkComposioApiClient implements ComposioApiClient {
     userId: string,
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
-    connectedAccountsByToolkit: Record<string, string> = {},
+    connectedAccountsByToolkit: Record<string, string> = {}
   ): Promise<ComposioSessionMcpEndpoint> {
     return this.openSession(
       await this.composio.create(
         userId,
-        this.sessionConfig(toolkitSlugs, allowedToolsByToolkit, connectedAccountsByToolkit),
-      ),
+        this.sessionConfig(
+          toolkitSlugs,
+          allowedToolsByToolkit,
+          connectedAccountsByToolkit
+        )
+      )
     );
   }
 
-  async listSessionTools(session: ComposioSessionMcpEndpoint): Promise<ComposioCachedToolSummary[]> {
-    const tools = await this.composio.tools.getRawToolRouterSessionTools(session.sessionId);
+  async listSessionTools(
+    session: ComposioSessionMcpEndpoint
+  ): Promise<ComposioCachedToolSummary[]> {
+    const tools = await this.composio.tools.getRawToolRouterSessionTools(
+      session.sessionId
+    );
     return parseSessionToolItems(extractComposioListItems(tools));
   }
 
   private sessionConfig(
     toolkitSlugs: string[],
     allowedToolsByToolkit: Record<string, string[] | null>,
-    connectedAccountsByToolkit: Record<string, string> = {},
+    connectedAccountsByToolkit: Record<string, string> = {}
   ) {
     const tools: Record<string, { enable: string[] }> = {};
 
-    for (const [toolkitSlug, allowedActions] of Object.entries(allowedToolsByToolkit)) {
+    for (const [toolkitSlug, allowedActions] of Object.entries(
+      allowedToolsByToolkit
+    )) {
       if (allowedActions && allowedActions.length > 0) {
         tools[toolkitSlug] = { enable: allowedActions };
       }
     }
 
     const connectedAccounts =
-      Object.keys(connectedAccountsByToolkit).length > 0 ? connectedAccountsByToolkit : undefined;
+      Object.keys(connectedAccountsByToolkit).length > 0
+        ? connectedAccountsByToolkit
+        : undefined;
 
     return {
       mcp: true as const,
@@ -315,19 +348,21 @@ export class SdkComposioApiClient implements ComposioApiClient {
     const sessionId = session.sessionId;
     const url = session.mcp?.url;
 
-    if (!sessionId || !url) {
+    if (!(sessionId && url)) {
       throw new Error("Composio session did not include MCP endpoint details.");
     }
 
     return {
+      headers: session.mcp?.headers,
       sessionId,
       url,
-      headers: session.mcp?.headers,
     };
   }
 }
 
-export function createComposioApiClient(apiKey: string | undefined): ComposioApiClient | null {
+export function createComposioApiClient(
+  apiKey: string | undefined
+): ComposioApiClient | null {
   if (!apiKey?.trim()) {
     return null;
   }

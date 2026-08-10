@@ -1,6 +1,6 @@
-@import 'tailwindcss';
-@import 'fumadocs-ui/css/neutral.css';
-@import 'fumadocs-ui/css/preset.css';
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
 
 @theme {
   --color-fd-primary: #d97706;
@@ -57,10 +57,10 @@
 }
 
 .prose img {
+  max-width: 100%;
+  margin: 1rem 0;
   border: 1px solid var(--color-fd-border);
   border-radius: 8px;
-  margin: 1rem 0;
-  max-width: 100%;
 }
 
 .hero-section {
@@ -76,13 +76,13 @@
 }
 
 .hero-cta-primary {
-  border-radius: 9999px;
-  background: var(--landing-brand);
   padding: 0.75rem 1.35rem;
   font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
   color: #fff;
+  letter-spacing: -0.01em;
+  background: var(--landing-brand);
+  border-radius: 9999px;
   transition:
     transform 0.2s ease,
     background-color 0.2s ease;
@@ -104,14 +104,14 @@
 .hero-cta-secondary {
   display: inline-flex;
   align-items: center;
-  border-radius: 9999px;
-  border: 1px solid rgba(28, 25, 23, 0.12);
-  background: rgba(255, 255, 255, 0.72);
   padding: 0.75rem 1.35rem;
   font-size: 0.875rem;
   font-weight: 500;
-  letter-spacing: -0.01em;
   color: #1c1917;
+  letter-spacing: -0.01em;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  border-radius: 9999px;
   backdrop-filter: blur(8px);
   transition:
     border-color 0.2s ease,
@@ -120,20 +120,28 @@
 }
 
 .dark .hero-cta-secondary {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.03);
   color: #fff;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .hero-cta-secondary:hover {
-  border-color: color-mix(in oklab, var(--landing-brand) 40%, rgba(28, 25, 23, 0.12));
   background: rgba(255, 255, 255, 0.92);
+  border-color: color-mix(
+    in oklab,
+    var(--landing-brand) 40%,
+    rgba(28, 25, 23, 0.12)
+  );
   transform: translateY(-1px);
 }
 
 .dark .hero-cta-secondary:hover {
-  border-color: color-mix(in oklab, var(--landing-brand) 40%, rgba(255, 255, 255, 0.2));
   background: rgba(255, 255, 255, 0.06);
+  border-color: color-mix(
+    in oklab,
+    var(--landing-brand) 40%,
+    rgba(255, 255, 255, 0.2)
+  );
 }
 
 .feature-card {
@@ -144,13 +152,20 @@
 }
 
 .feature-card:hover {
-  border-color: color-mix(in oklab, var(--landing-brand) 28%, rgba(28, 25, 23, 0.1));
+  border-color: color-mix(
+    in oklab,
+    var(--landing-brand) 28%,
+    rgba(28, 25, 23, 0.1)
+  );
   box-shadow: 0 12px 40px -16px rgba(234, 88, 12, 0.18);
   transform: translateY(-2px);
 }
 
 .dark .feature-card:hover {
-  border-color: color-mix(in oklab, var(--landing-brand) 28%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(
+    in oklab,
+    var(--landing-brand) 28%,
+    rgba(255, 255, 255, 0.1)
+  );
   box-shadow: 0 12px 40px -16px rgba(252, 119, 68, 0.25);
 }
-

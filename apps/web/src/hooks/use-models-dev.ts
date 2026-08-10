@@ -1,25 +1,25 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
 import { client } from "@/lib/client";
 import type { SelectedProvider } from "@/lib/models";
+import { queryKeys } from "@/lib/query-keys";
 
 export interface ModelsDevRow {
-  providerId: string;
-  providerName: string;
   apiUrl: string;
+  context: number;
+  deprecated: boolean;
+  experimental: boolean;
+  isFree: boolean;
+  isZen: boolean;
   modelId: string;
   modelName: string;
-  isFree: boolean;
-  deprecated: boolean;
-  context: number;
-  toolCall: boolean;
-  reasoning: boolean;
-  vision: boolean;
-  isZen: boolean;
   nakamaProvider: SelectedProvider;
+  providerId: string;
+  providerName: string;
+  reasoning: boolean;
   supported: boolean;
+  toolCall: boolean;
   unsupportedReason?: string;
-  experimental: boolean;
+  vision: boolean;
 }
 
 const OFFICIAL_PROVIDER_IDS = new Set([
@@ -32,42 +32,49 @@ const OFFICIAL_PROVIDER_IDS = new Set([
 ]);
 
 const NPM_MAP: Record<string, SelectedProvider> = {
-  "@ai-sdk/openai": "openai",
   "@ai-sdk/anthropic": "anthropic",
   "@ai-sdk/google": "gemini",
+  "@ai-sdk/openai": "openai",
 };
 
 const PROVIDER_ID_OVERRIDES: Record<string, SelectedProvider> = {
-  openrouter: "openrouter",
-  opencode: "openai_compatible",
   deepseek: "deepseek",
+  opencode: "openai_compatible",
+  openrouter: "openrouter",
 };
 
 const UNSUPPORTED_NPM: Record<string, string> = {
   "@ai-sdk/amazon-bedrock": "Requires AWS SigV4 auth",
   "@ai-sdk/azure": "Requires Azure deployment routing",
+  "@ai-sdk/gateway": "Requires Vercel AI Gateway",
   "@ai-sdk/google-vertex": "Requires Google Cloud OAuth",
   "@ai-sdk/google-vertex/anthropic": "Requires Google Cloud OAuth",
-  "@ai-sdk/gateway": "Requires Vercel AI Gateway",
-  "ai-gateway-provider": "Requires Cloudflare AI Gateway",
-  "merge-gateway-ai-sdk-provider": "Requires custom gateway auth",
   "@jerome-benoit/sap-ai-provider-v2": "Requires SAP-specific auth",
+  "ai-gateway-provider": "Requires Cloudflare AI Gateway",
   "gitlab-ai-provider": "Requires GitLab Duo auth",
+  "merge-gateway-ai-sdk-provider": "Requires custom gateway auth",
   "venice-ai-sdk-provider": "Requires Venice-specific auth",
 };
 
 function resolvenakamaProvider(
   providerId: string,
-  npm: string | undefined,
+  npm: string | undefined
 ): SelectedProvider {
   const override = PROVIDER_ID_OVERRIDES[providerId];
-  if (override) return override;
-  if (npm && NPM_MAP[npm]) return NPM_MAP[npm];
+  if (override) {
+    return override;
+  }
+  if (npm && NPM_MAP[npm]) {
+    return NPM_MAP[npm];
+  }
   return "openai_compatible";
 }
 
 async function fetchModelsDev(): Promise<ModelsDevRow[]> {
-  const data = (await client.getExternalModelCatalog("models-dev")) as Record<string, unknown>;
+  const data = (await client.getExternalModelCatalog("models-dev")) as Record<
+    string,
+    unknown
+  >;
   const rows: ModelsDevRow[] = [];
 
   for (const [providerId, p] of Object.entries(data)) {
@@ -75,7 +82,8 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
     const providerName = (provider.name as string | undefined) ?? providerId;
     const apiUrl = (provider.api as string | undefined) ?? "";
     const npm = provider.npm as string | undefined;
-    const models = (provider.models as Record<string, unknown> | undefined) ?? {};
+    const models =
+      (provider.models as Record<string, unknown> | undefined) ?? {};
     const nakamaProvider = resolvenakamaProvider(providerId, npm);
     const unsupportedReason = npm ? UNSUPPORTED_NPM[npm] : undefined;
     const supported = !unsupportedReason;
@@ -95,25 +103,26 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
       }
 
       const limit = (model.limit as Record<string, number> | undefined) ?? {};
-      const modalities = (model.modalities as Record<string, string[]> | undefined) ?? {};
+      const modalities =
+        (model.modalities as Record<string, string[]> | undefined) ?? {};
 
       const inputModalities = new Set(modalities.input ?? []);
 
       rows.push({
-        providerId,
-        providerName,
         apiUrl,
+        context: (limit.context as number | undefined) ?? 0,
+        deprecated: (model.status as string | undefined) === "deprecated",
+        isFree: inputCost === 0 && outputCost === 0,
+        isZen: providerId === "opencode",
         modelId,
         modelName: (model.name as string | undefined) ?? modelId,
-        isFree: inputCost === 0 && outputCost === 0,
-        deprecated: (model.status as string | undefined) === "deprecated",
-        context: (limit.context as number | undefined) ?? 0,
-        toolCall: !!(model.tool_call as boolean | undefined),
-        reasoning: !!(model.reasoning as boolean | undefined),
-        vision: inputModalities.has("image"),
-        isZen: providerId === "opencode",
         nakamaProvider,
+        providerId,
+        providerName,
+        reasoning: !!(model.reasoning as boolean | undefined),
         supported,
+        toolCall: !!(model.tool_call as boolean | undefined),
+        vision: inputModalities.has("image"),
         ...(unsupportedReason ? { unsupportedReason } : {}),
         experimental,
       });
@@ -124,8 +133,8 @@ async function fetchModelsDev(): Promise<ModelsDevRow[]> {
 }
 
 export const modelsDevQueryOptions = queryOptions({
-  queryKey: queryKeys.modelsDev,
   queryFn: fetchModelsDev,
+  queryKey: queryKeys.modelsDev,
   staleTime: 1000 * 60 * 30,
 });
 

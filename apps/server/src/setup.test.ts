@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createProviderInstanceId,
   getUserConfigPath,
   isProviderConfigured,
   loadUserConfig,
-  saveUserConfig,
 } from "@nakama/core";
 import { ensureProviderConfigured } from "./setup";
 
@@ -21,16 +20,16 @@ describe("isProviderConfigured", () => {
           defaultProviderId: id,
           providers: [
             {
-              id,
-              type: "openai",
-              label: "OpenAI",
               apiKey: "",
               createdAt: "2026-06-07T10:00:00.000Z",
+              id,
+              label: "OpenAI",
+              type: "openai",
             },
           ],
         },
-        { OPENAI_API_KEY: "sk-test" },
-      ),
+        { OPENAI_API_KEY: "sk-test" }
+      )
     ).toBe(true);
   });
 });
@@ -45,7 +44,9 @@ describe("ensureProviderConfigured", () => {
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
   ] as const;
-  const previousEnv: Partial<Record<(typeof envKeys)[number], string | undefined>> = {};
+  const previousEnv: Partial<
+    Record<(typeof envKeys)[number], string | undefined>
+  > = {};
 
   afterEach(async () => {
     for (const key of envKeys) {
@@ -57,7 +58,7 @@ describe("ensureProviderConfigured", () => {
     }
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
   });

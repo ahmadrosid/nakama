@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import { PathGuardError } from "./builtin";
 import { runSearchFiles } from "./search-files";
 
@@ -10,38 +10,54 @@ describe("search_files tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, { recursive: true, force: true });
+      await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
   });
 
   test("returns matching snippets with relative file paths", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
-    await writeFile(path.join(workspaceRoot, "notes.txt"), "alpha one\nbeta two\n", "utf8");
-    await writeFile(path.join(workspaceRoot, "guide.md"), "alpha docs\n", "utf8");
+    await writeFile(
+      path.join(workspaceRoot, "notes.txt"),
+      "alpha one\nbeta two\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(workspaceRoot, "guide.md"),
+      "alpha docs\n",
+      "utf8"
+    );
 
     const result = await runSearchFiles(
       { query: "alpha" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.query).toBe("alpha");
     expect(result.root).toBe(await realpath(workspaceRoot));
     expect(result.matchCount).toBe(2);
-    expect(result.matches.some((match) => match.file === "notes.txt")).toBe(true);
-    expect(result.matches.some((match) => match.file === "guide.md")).toBe(true);
+    expect(result.matches.some((match) => match.file === "notes.txt")).toBe(
+      true
+    );
+    expect(result.matches.some((match) => match.file === "guide.md")).toBe(
+      true
+    );
     expect(result.truncated).toBe(false);
   });
 
   test("supports fixed-string mode", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
-    await writeFile(path.join(workspaceRoot, "literal.txt"), "abc.def\n", "utf8");
+    await writeFile(
+      path.join(workspaceRoot, "literal.txt"),
+      "abc.def\n",
+      "utf8"
+    );
 
     const result = await runSearchFiles(
       { query: "abc.def", regex: false },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.matchCount).toBe(1);
@@ -50,13 +66,21 @@ describe("search_files tool", () => {
 
   test("applies glob filters", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
-    await writeFile(path.join(workspaceRoot, "one.md"), "needle here\n", "utf8");
-    await writeFile(path.join(workspaceRoot, "two.ts"), "needle here\n", "utf8");
+    await writeFile(
+      path.join(workspaceRoot, "one.md"),
+      "needle here\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(workspaceRoot, "two.ts"),
+      "needle here\n",
+      "utf8"
+    );
 
     const result = await runSearchFiles(
-      { query: "needle", glob: "*.md" },
+      { glob: "*.md", query: "needle" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.matchCount).toBe(1);
@@ -66,13 +90,21 @@ describe("search_files tool", () => {
   test("searches only inside requested subpath", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
     await mkdir(path.join(workspaceRoot, "data"), { recursive: true });
-    await writeFile(path.join(workspaceRoot, "data", "inside.txt"), "scoped needle\n", "utf8");
-    await writeFile(path.join(workspaceRoot, "outside.txt"), "scoped needle\n", "utf8");
+    await writeFile(
+      path.join(workspaceRoot, "data", "inside.txt"),
+      "scoped needle\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(workspaceRoot, "outside.txt"),
+      "scoped needle\n",
+      "utf8"
+    );
 
     const result = await runSearchFiles(
-      { query: "scoped", path: "data" },
+      { path: "data", query: "scoped" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.matchCount).toBe(1);
@@ -84,10 +116,10 @@ describe("search_files tool", () => {
 
     await expect(
       runSearchFiles(
-        { query: "x", path: "../../../etc/passwd" },
+        { path: "../../../etc/passwd", query: "x" },
         { orgId: "org_test", profileId: "profile_test" },
-        { workspaceRoot },
-      ),
+        { workspaceRoot }
+      )
     ).rejects.toThrow(PathGuardError);
   });
 
@@ -95,19 +127,22 @@ describe("search_files tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
 
     await expect(
-      runSearchFiles({ query: "x" }, {}, { workspaceRoot }),
+      runSearchFiles({ query: "x" }, {}, { workspaceRoot })
     ).rejects.toThrow("orgId and profileId are required.");
   });
 
   test("truncates based on maxResults", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
-    const lines = Array.from({ length: 40 }, (_, index) => `hit ${index + 1}`).join("\n");
+    const lines = Array.from(
+      { length: 40 },
+      (_, index) => `hit ${index + 1}`
+    ).join("\n");
     await writeFile(path.join(workspaceRoot, "many.txt"), `${lines}\n`, "utf8");
 
     const result = await runSearchFiles(
-      { query: "hit", maxResults: 5 },
+      { maxResults: 5, query: "hit" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.matchCount).toBe(5);
@@ -116,12 +151,16 @@ describe("search_files tool", () => {
 
   test("returns empty results when query has no matches", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
-    await writeFile(path.join(workspaceRoot, "plain.txt"), "hello world\n", "utf8");
+    await writeFile(
+      path.join(workspaceRoot, "plain.txt"),
+      "hello world\n",
+      "utf8"
+    );
 
     const result = await runSearchFiles(
       { query: "missing-term" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.matchCount).toBe(0);

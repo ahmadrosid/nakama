@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { consumeTerminalInput, isMouseEventReport, isTerminalResponse } from "./terminal-input";
 import { appendStreamText, ScreenBuffer } from "./screen-buffer";
+import {
+  consumeTerminalInput,
+  isMouseEventReport,
+  isTerminalResponse,
+} from "./terminal-input";
 
 describe("isTerminalResponse", () => {
   test("detects cursor position reports", () => {
@@ -77,7 +81,12 @@ describe("appendStreamText", () => {
 
   test("carries color to the next chunk", () => {
     const first = appendStreamText([], "", "\x1b[31mabc", 10);
-    const second = appendStreamText(first.lines, first.activeLine, "def\x1b[0m", 10);
+    const second = appendStreamText(
+      first.lines,
+      first.activeLine,
+      "def\x1b[0m",
+      10
+    );
 
     expect(second.activeLine).toBe("\x1b[31mabcdef\x1b[0m");
   });

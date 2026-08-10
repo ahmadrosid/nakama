@@ -1,19 +1,21 @@
 import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import type { ToolContext, ToolDefinition } from "../contract";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
+import type { ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
 import { getProfileSoulDir } from "../soul/resolve";
-import { getCustomToolsDir, guardFilePath, PathGuardError, type PathGuardOptions } from "./paths";
-import { searchFilesTool } from "./search-files";
-import { knowledgeBaseSearchTool } from "./knowledge-base-search";
-import { webSearchTool } from "./web-search";
-import { webFetchTool } from "./web-fetch";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
+import { knowledgeBaseSearchTool } from "./knowledge-base-search";
+import {
+  getCustomToolsDir,
+  guardFilePath,
+  PathGuardError,
+  type PathGuardOptions,
+} from "./paths";
 import {
   jsonSchemaFromZod,
   parseToolInput,
@@ -22,53 +24,56 @@ import {
   requiredTrimmedString,
   trimmedOptionalString,
 } from "./schema";
+import { searchFilesTool } from "./search-files";
+import { webFetchTool } from "./web-fetch";
+import { webSearchTool } from "./web-search";
 
 export const writeFileInputSchema = z
   .object({
-    path: requiredTrimmedString("path"),
     content: requiredTrimmedString("content"),
     cwd: trimmedOptionalString,
+    path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const writeDocxInputSchema = z
   .object({
-    path: requiredTrimmedString("path"),
-    markdown: requiredTrimmedString("markdown"),
     cwd: trimmedOptionalString,
+    markdown: requiredTrimmedString("markdown"),
+    path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const deleteFileInputSchema = z
   .object({
-    path: requiredTrimmedString("path"),
     cwd: trimmedOptionalString,
+    path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const editFileInputSchema = z
   .object({
-    path: requiredTrimmedString("path"),
+    cwd: trimmedOptionalString,
     edits: z
       .array(
         z
           .object({
-            oldText: requiredTrimmedString("oldText"),
             newText: z.string({ error: "newText is required." }),
+            oldText: requiredTrimmedString("oldText"),
           })
-          .strict(),
+          .strict()
       )
       .min(1, "edits must contain at least one replacement."),
-    cwd: trimmedOptionalString,
+    path: requiredTrimmedString("path"),
   })
   .strict();
 
 export const readFileInputSchema = z
   .object({
-    path: requiredTrimmedString("path"),
     cwd: trimmedOptionalString,
-    offset: readFileOffsetSchema,
     limit: readFileLimitSchema,
+    offset: readFileOffsetSchema,
+    path: requiredTrimmedString("path"),
   })
   .strict();
 
@@ -79,28 +84,28 @@ export type EditFileInput = z.infer<typeof editFileInputSchema>;
 export type ReadFileInput = z.infer<typeof readFileInputSchema>;
 
 export interface WriteFileOutput {
-  path: string;
   bytesWritten: number;
+  path: string;
 }
 
 export interface DeleteFileOutput {
-  path: string;
   deleted: true;
+  path: string;
 }
 
 export interface EditFileOutput {
-  path: string;
-  replacements: number;
   bytesWritten: number;
   fuzzyMatches: number;
+  path: string;
+  replacements: number;
 }
 
 export interface ReadFileOutput {
-  path: string;
-  content: string;
   bytesRead: number;
-  startLine: number;
+  content: string;
   endLine: number;
+  path: string;
+  startLine: number;
   totalLines: number;
   truncated: boolean;
 }
@@ -121,7 +126,10 @@ function normalizeArtifactPath(relativePath: string): string {
 
 function isArtifactPath(relativePath: string): boolean {
   const normalized = normalizeArtifactPath(relativePath);
-  return normalized.startsWith("artifacts/") && !normalized.endsWith(ARTIFACT_META_SUFFIX);
+  return (
+    normalized.startsWith("artifacts/") &&
+    !normalized.endsWith(ARTIFACT_META_SUFFIX)
+  );
 }
 
 function artifactRemapKey(context: ToolContext, relativePath: string): string {
@@ -153,11 +161,14 @@ export function setDefaultFileGuardOptions(options: PathGuardOptions): void {
   defaultGuardOptions = { ...options };
 }
 
-function requireProfileScope(context: ToolContext): { orgId: string; profileId: string } {
+function requireProfileScope(context: ToolContext): {
+  orgId: string;
+  profileId: string;
+} {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
 
-  if (!orgId || !profileId) {
+  if (!(orgId && profileId)) {
     throw new Error("orgId and profileId are required.");
   }
 
@@ -175,7 +186,7 @@ function requireProfileScope(context: ToolContext): { orgId: string; profileId: 
  */
 export function refuseProfileSkillMarkdownWrite(
   context: ToolContext,
-  resolvedPath: string,
+  resolvedPath: string
 ): void {
   if (!context.forbidProfileSkillMarkdownWrites) {
     return;
@@ -194,7 +205,7 @@ export function refuseProfileSkillMarkdownWrite(
   }
 
   throw new Error(
-    `Use skill_manage to create, patch, edit, delete, or manage supporting files for profile skills; writing skills/${skillName}/${rest} via file tools is not allowed when skill_manage is available.`,
+    `Use skill_manage to create, patch, edit, delete, or manage supporting files for profile skills; writing skills/${skillName}/${rest} via file tools is not allowed when skill_manage is available.`
   );
 }
 
@@ -221,16 +232,17 @@ export function refuseSkillLocalToolFileWrite(resolvedPath: string): void {
   }
 
   throw new Error(
-    `Skill-local tools (${fileName}) under skills/${skillName}/ cannot be written by agents in Phase 1.`,
+    `Skill-local tools (${fileName}) under skills/${skillName}/ cannot be written by agents in Phase 1.`
   );
 }
 
 function buildFileGuardOptions(
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const { orgId, profileId } = requireProfileScope(context);
-  const workspaceRoot = options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+  const workspaceRoot =
+    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
 
   return {
     ...defaultGuardOptions,
@@ -240,9 +252,9 @@ function buildFileGuardOptions(
 }
 
 export const writeFileTool: ToolDefinition<WriteFileInput, WriteFileOutput> = {
-  name: "write_file",
   description:
     "Write text content to a file in the active profile workspace. Creates parent directories if needed. Cannot produce Word documents — use write_docx for .docx.",
+  name: "write_file",
   parameters: jsonSchemaFromZod(writeFileInputSchema),
   run(input, context) {
     return runWriteFile(input, context);
@@ -259,13 +271,13 @@ function refuseWordExtension(targetPath: string): void {
 
   if (isDocxFile(filename)) {
     throw new Error(
-      "write_file writes UTF-8 text and cannot produce a valid .docx (it is a ZIP archive). Use the write_docx tool with Markdown content instead.",
+      "write_file writes UTF-8 text and cannot produce a valid .docx (it is a ZIP archive). Use the write_docx tool with Markdown content instead."
     );
   }
 
   if (isLegacyDocFile(filename)) {
     throw new Error(
-      "write_file cannot produce a valid .doc. Use the write_docx tool to create a .docx instead.",
+      "write_file cannot produce a valid .doc. Use the write_docx tool to create a .docx instead."
     );
   }
 }
@@ -273,7 +285,7 @@ function refuseWordExtension(targetPath: string): void {
 export async function runWriteFile(
   input: unknown,
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
   const parsed = parseToolInput(writeFileInputSchema, input);
   refuseWordExtension(parsed.path);
@@ -284,28 +296,38 @@ export async function runWriteFile(
     parsed.path,
     parsed.cwd ?? null,
     contentBytes,
-    guardOptions,
+    guardOptions
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const { orgId, profileId } = requireProfileScope(context);
-  const workspaceRoot = options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+  const workspaceRoot =
+    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
   let filePath = guarded.resolved;
   const normalizedPath = normalizeArtifactPath(parsed.path);
 
-  if (normalizedPath.endsWith(ARTIFACT_META_SUFFIX) && normalizedPath.startsWith("artifacts/")) {
+  if (
+    normalizedPath.endsWith(ARTIFACT_META_SUFFIX) &&
+    normalizedPath.startsWith("artifacts/")
+  ) {
     const remapped = artifactRemap.get(
-      artifactRemapKey(context, normalizedPath.slice(0, -ARTIFACT_META_SUFFIX.length)),
+      artifactRemapKey(
+        context,
+        normalizedPath.slice(0, -ARTIFACT_META_SUFFIX.length)
+      )
     );
     if (remapped) {
-      filePath = path.resolve(workspaceRoot, `${remapped}${ARTIFACT_META_SUFFIX}`);
+      filePath = path.resolve(
+        workspaceRoot,
+        `${remapped}${ARTIFACT_META_SUFFIX}`
+      );
     }
   } else if (isArtifactPath(parsed.path)) {
     const uniquePath = await uniqueArtifactPath(filePath);
     if (uniquePath !== filePath) {
       artifactRemap.set(
         artifactRemapKey(context, parsed.path),
-        normalizeArtifactPath(path.relative(workspaceRoot, uniquePath)),
+        normalizeArtifactPath(path.relative(workspaceRoot, uniquePath))
       );
       filePath = uniquePath;
     }
@@ -314,13 +336,13 @@ export async function runWriteFile(
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, parsed.content, "utf8");
 
-  return { path: filePath, bytesWritten: contentBytes };
+  return { bytesWritten: contentBytes, path: filePath };
 }
 
 export const writeDocxTool: ToolDefinition<WriteDocxInput, WriteFileOutput> = {
-  name: "write_docx",
   description:
     "Create a real Microsoft Word (.docx) document from Markdown. Headings, bold/italic, lists, tables, and code blocks are converted. Use this whenever the user asks for a Word document — write_file cannot produce one.",
+  name: "write_docx",
   parameters: jsonSchemaFromZod(writeDocxInputSchema),
   run(input, context) {
     return runWriteDocx(input, context);
@@ -330,7 +352,7 @@ export const writeDocxTool: ToolDefinition<WriteDocxInput, WriteFileOutput> = {
 export async function runWriteDocx(
   input: unknown,
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
   const parsed = parseToolInput(writeDocxInputSchema, input);
 
@@ -340,7 +362,12 @@ export async function runWriteDocx(
 
   const bytes = await markdownToDocx(parsed.markdown);
   const guardOptions = buildFileGuardOptions(context, options);
-  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, bytes.length, guardOptions);
+  const guarded = await guardFilePath(
+    parsed.path,
+    parsed.cwd ?? null,
+    bytes.length,
+    guardOptions
+  );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
   // Same rule as write_file: never silently overwrite an existing artifact.
@@ -351,39 +378,45 @@ export async function runWriteDocx(
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, bytes);
 
-  return { path: filePath, bytesWritten: bytes.length };
+  return { bytesWritten: bytes.length, path: filePath };
 }
 
-export const deleteFileTool: ToolDefinition<DeleteFileInput, DeleteFileOutput> = {
-  name: "delete_file",
-  description:
-    "Delete a file from disk. Only files within the profile workspace or custom tools directory can be deleted.",
-  parameters: jsonSchemaFromZod(deleteFileInputSchema),
-  run(input, context) {
-    return runDeleteFile(input, context);
-  },
-};
+export const deleteFileTool: ToolDefinition<DeleteFileInput, DeleteFileOutput> =
+  {
+    description:
+      "Delete a file from disk. Only files within the profile workspace or custom tools directory can be deleted.",
+    name: "delete_file",
+    parameters: jsonSchemaFromZod(deleteFileInputSchema),
+    run(input, context) {
+      return runDeleteFile(input, context);
+    },
+  };
 
 export async function runDeleteFile(
   input: unknown,
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): Promise<DeleteFileOutput> {
   const parsed = parseToolInput(deleteFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
 
-  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, undefined, guardOptions);
+  const guarded = await guardFilePath(
+    parsed.path,
+    parsed.cwd ?? null,
+    undefined,
+    guardOptions
+  );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
   await unlink(guarded.resolved);
 
-  return { path: guarded.resolved, deleted: true };
+  return { deleted: true, path: guarded.resolved };
 }
 
 export const editFileTool: ToolDefinition<EditFileInput, EditFileOutput> = {
-  name: "edit_file",
   description:
     "Edit an existing text file with one or more exact replacements. Each oldText must be present once, non-overlapping, and is matched against the original file.",
+  name: "edit_file",
   parameters: jsonSchemaFromZod(editFileInputSchema),
   run(input, context) {
     return runEditFile(input, context);
@@ -393,7 +426,7 @@ export const editFileTool: ToolDefinition<EditFileInput, EditFileOutput> = {
 export async function runEditFile(
   input: unknown,
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): Promise<EditFileOutput> {
   const parsed = parseToolInput(editFileInputSchema, input);
   // Editing a Word document as UTF-8 text would corrupt the archive.
@@ -401,7 +434,12 @@ export async function runEditFile(
 
   const guardOptions = buildFileGuardOptions(context, options);
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
-  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, undefined, guardOptions);
+  const guarded = await guardFilePath(
+    parsed.path,
+    parsed.cwd ?? null,
+    undefined,
+    guardOptions
+  );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseSkillLocalToolFileWrite(guarded.resolved);
   const filePath = guarded.resolved;
@@ -409,7 +447,7 @@ export async function runEditFile(
   if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
     throw new PathGuardError(
       `Editing ${path.basename(filePath)} is not allowed`,
-      "SPECIAL_FILE",
+      "SPECIAL_FILE"
     );
   }
 
@@ -427,13 +465,14 @@ export async function runEditFile(
   if (fileStat.size > maxBytes) {
     throw new PathGuardError(
       `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
-      "TOO_LARGE",
+      "TOO_LARGE"
     );
   }
 
   const rawBuffer = await readFile(filePath);
   const hasBom =
-    rawBuffer.length >= 3 && rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
+    rawBuffer.length >= 3 &&
+    rawBuffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
   const content = rawBuffer.toString("utf8", hasBom ? 3 : 0);
   const lineEnding = detectLineEnding(content);
   const plans = parsed.edits
@@ -445,51 +484,58 @@ export async function runEditFile(
   const outputContent = hasBom ? `\uFEFF${nextContent}` : nextContent;
   const bytesWritten = Buffer.byteLength(outputContent, "utf8");
 
-  await guardFilePath(parsed.path, parsed.cwd ?? null, bytesWritten, guardOptions);
+  await guardFilePath(
+    parsed.path,
+    parsed.cwd ?? null,
+    bytesWritten,
+    guardOptions
+  );
   await writeFile(filePath, outputContent, "utf8");
 
   return {
-    path: filePath,
-    replacements: plans.length,
     bytesWritten,
     fuzzyMatches: plans.filter((plan) => plan.fuzzy).length,
+    path: filePath,
+    replacements: plans.length,
   };
 }
 
 interface PlannedEdit {
-  index: number;
-  start: number;
   end: number;
-  newText: string;
   fuzzy: boolean;
+  index: number;
+  newText: string;
+  start: number;
 }
 
 function planEdit(
   content: string,
   edit: EditFileInput["edits"][number],
   index: number,
-  lineEnding: string,
+  lineEnding: string
 ): PlannedEdit {
   if (edit.oldText === edit.newText) {
-    throw new Error(`Edit ${index + 1} makes no change: oldText and newText are identical.`);
+    throw new Error(
+      `Edit ${index + 1} makes no change: oldText and newText are identical.`
+    );
   }
 
   const exactMatches = findAllOccurrences(content, edit.oldText);
 
   if (exactMatches.length > 1) {
     throw new Error(
-      `Edit ${index + 1} is ambiguous: oldText matched ${exactMatches.length} times.`,
+      `Edit ${index + 1} is ambiguous: oldText matched ${exactMatches.length} times.`
     );
   }
 
   if (exactMatches.length === 1) {
     const start = exactMatches[0]!;
     return {
-      index,
-      start,
       end: start + edit.oldText.length,
-      newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
       fuzzy: false,
+      index,
+      newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
+      start,
     };
   }
 
@@ -500,17 +546,19 @@ function planEdit(
   }
 
   if (fuzzyMatches.length > 1) {
-    throw new Error(`Edit ${index + 1} is ambiguous after normalized matching.`);
+    throw new Error(
+      `Edit ${index + 1} is ambiguous after normalized matching.`
+    );
   }
 
   const match = fuzzyMatches[0]!;
 
   return {
-    index,
-    start: match.start,
     end: match.end,
-    newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
     fuzzy: true,
+    index,
+    newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
+    start: match.start,
   };
 }
 
@@ -530,7 +578,10 @@ function detectLineEnding(content: string): string {
   return "\n";
 }
 
-function normalizeReplacementLineEndings(value: string, lineEnding: string): string {
+function normalizeReplacementLineEndings(
+  value: string,
+  lineEnding: string
+): string {
   return value.replace(/\r\n|\r|\n/g, lineEnding);
 }
 
@@ -549,17 +600,20 @@ function findAllOccurrences(content: string, search: string): number[] {
 }
 
 interface NormalizedMatch {
-  start: number;
   end: number;
+  start: number;
 }
 
 interface NormalizedChar {
   char: string;
-  start: number;
   end: number;
+  start: number;
 }
 
-function findNormalizedMatches(content: string, search: string): NormalizedMatch[] {
+function findNormalizedMatches(
+  content: string,
+  search: string
+): NormalizedMatch[] {
   const normalizedContent = normalizeForEditMatch(content);
   const normalizedSearch = normalizeForEditMatch(search);
   const needle = normalizedSearch.text;
@@ -581,14 +635,17 @@ function findNormalizedMatches(content: string, search: string): NormalizedMatch
     const lastChar = normalizedContent.chars[index + needle.length - 1];
 
     if (firstChar && lastChar) {
-      matches.push({ start: firstChar.start, end: lastChar.end });
+      matches.push({ end: lastChar.end, start: firstChar.start });
     }
 
     index += needle.length;
   }
 }
 
-function normalizeForEditMatch(value: string): { text: string; chars: NormalizedChar[] } {
+function normalizeForEditMatch(value: string): {
+  text: string;
+  chars: NormalizedChar[];
+} {
   const chars: NormalizedChar[] = [];
 
   for (let index = 0; index < value.length; ) {
@@ -607,14 +664,14 @@ function normalizeForEditMatch(value: string): { text: string; chars: Normalized
       continue;
     }
 
-    chars.push({ char: normalizedChar, start, end: index });
+    chars.push({ char: normalizedChar, end: index, start });
   }
 
   const filteredChars = removeTrailingWhitespaceTokens(chars);
 
   return {
-    text: filteredChars.map((char) => char.char).join(""),
     chars: filteredChars,
+    text: filteredChars.map((char) => char.char).join(""),
   };
 }
 
@@ -632,7 +689,7 @@ function normalizeEditChar(char: string): string | null {
   }
 
   if (char === "\u201C" || char === "\u201D") {
-    return "\"";
+    return '"';
   }
 
   if (char === "\u2013" || char === "\u2014") {
@@ -642,7 +699,9 @@ function normalizeEditChar(char: string): string | null {
   return char;
 }
 
-function removeTrailingWhitespaceTokens(chars: NormalizedChar[]): NormalizedChar[] {
+function removeTrailingWhitespaceTokens(
+  chars: NormalizedChar[]
+): NormalizedChar[] {
   const keep = new Array<boolean>(chars.length).fill(true);
   let runStart: number | null = null;
 
@@ -673,7 +732,7 @@ function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
 
     if (current.start < previous.end) {
       throw new Error(
-        `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`,
+        `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`
       );
     }
   }
@@ -711,11 +770,11 @@ async function readFileAsText(filePath: string): Promise<string> {
 }
 
 export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
-  name: "read_file",
   description:
     "Read text from a file in the active profile workspace. Word .docx files are converted to Markdown. Use offset/limit for large files.",
-  parameters: jsonSchemaFromZod(readFileInputSchema),
+  name: "read_file",
   parallelSafe: true,
+  parameters: jsonSchemaFromZod(readFileInputSchema),
   run(input, context) {
     return runReadFile(input, context);
   },
@@ -724,19 +783,24 @@ export const readFileTool: ToolDefinition<ReadFileInput, ReadFileOutput> = {
 export async function runReadFile(
   input: unknown,
   context: ToolContext,
-  options: FileToolRunOptions = {},
+  options: FileToolRunOptions = {}
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
   const guardOptions = buildFileGuardOptions(context, options);
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
-  const guarded = await guardFilePath(parsed.path, parsed.cwd ?? null, undefined, guardOptions);
+  const guarded = await guardFilePath(
+    parsed.path,
+    parsed.cwd ?? null,
+    undefined,
+    guardOptions
+  );
   const filePath = guarded.resolved;
 
   if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
     throw new PathGuardError(
       `Reading ${path.basename(filePath)} is not allowed`,
-      "SPECIAL_FILE",
+      "SPECIAL_FILE"
     );
   }
 
@@ -754,7 +818,7 @@ export async function runReadFile(
   if (fileStat.size > maxBytes) {
     throw new PathGuardError(
       `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
-      "TOO_LARGE",
+      "TOO_LARGE"
     );
   }
 
@@ -763,21 +827,26 @@ export async function runReadFile(
   const totalLines = lines.length;
   const startLine = Math.min(
     Math.max(1, parsed.offset),
-    totalLines === 0 ? 1 : totalLines + 1,
+    totalLines === 0 ? 1 : totalLines + 1
   );
   const startIndex = startLine - 1;
   const endIndex =
-    parsed.limit != null ? Math.min(startIndex + parsed.limit, totalLines) : totalLines;
+    parsed.limit == null
+      ? totalLines
+      : Math.min(startIndex + parsed.limit, totalLines);
   const slice = lines.slice(startIndex, endIndex);
   const content = slice.join("\n");
-  const endLine = slice.length > 0 ? startLine + slice.length - 1 : Math.max(0, startLine - 1);
+  const endLine =
+    slice.length > 0
+      ? startLine + slice.length - 1
+      : Math.max(0, startLine - 1);
 
   return {
-    path: filePath,
-    content,
     bytesRead: Buffer.byteLength(content, "utf8"),
-    startLine,
+    content,
     endLine,
+    path: filePath,
+    startLine,
     totalLines,
     truncated: endIndex < totalLines,
   };

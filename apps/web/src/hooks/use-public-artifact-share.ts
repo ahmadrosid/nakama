@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { htmlForArtifactPreview } from "@/lib/artifact-html-preview";
 import {
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
@@ -7,23 +8,24 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client } from "@/lib/client";
-import { htmlForArtifactPreview } from "@/lib/artifact-html-preview";
 
 export interface PublicShareMetadata {
   filename: string;
+  inlineAllowed: boolean;
   mimeType: string;
   sizeBytes: number;
-  inlineAllowed: boolean;
 }
 
 export interface PublicArtifactShareData {
-  metadata: PublicShareMetadata;
   content: string | null;
+  metadata: PublicShareMetadata;
 }
 
-async function loadPublicArtifactShare(token: string): Promise<PublicArtifactShareData> {
+async function loadPublicArtifactShare(
+  token: string
+): Promise<PublicArtifactShareData> {
   const metaResponse = await fetch(
-    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}?meta=1`,
+    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}?meta=1`
   );
 
   if (!metaResponse.ok) {
@@ -31,22 +33,26 @@ async function loadPublicArtifactShare(token: string): Promise<PublicArtifactSha
   }
 
   const metadata = (await metaResponse.json()) as PublicShareMetadata;
-  const resolvedMime = resolveArtifactMimeType(metadata.mimeType, metadata.filename);
+  const resolvedMime = resolveArtifactMimeType(
+    metadata.mimeType,
+    metadata.filename
+  );
   const previewAsHtml = isHtmlArtifactMimeType(resolvedMime);
   // Binary media uses the public share URL as <img>/<video> src — no need to buffer bytes here.
   const previewAsBinaryMedia =
-    isImageArtifactMimeType(resolvedMime) || isVideoArtifactMimeType(resolvedMime);
+    isImageArtifactMimeType(resolvedMime) ||
+    isVideoArtifactMimeType(resolvedMime);
 
   if (previewAsBinaryMedia) {
-    return { metadata, content: null };
+    return { content: null, metadata };
   }
 
-  if (!metadata.inlineAllowed && !previewAsHtml) {
-    return { metadata, content: null };
+  if (!(metadata.inlineAllowed || previewAsHtml)) {
+    return { content: null, metadata };
   }
 
   const contentResponse = await fetch(
-    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`,
+    `${client.baseUrl}/v1/public/artifact-shares/${encodeURIComponent(token)}`
   );
 
   if (!contentResponse.ok) {
@@ -56,30 +62,30 @@ async function loadPublicArtifactShare(token: string): Promise<PublicArtifactSha
   const bytes = new Uint8Array(await contentResponse.arrayBuffer());
   const contentType = resolveArtifactMimeType(
     contentResponse.headers.get("Content-Type") ?? metadata.mimeType,
-    metadata.filename,
+    metadata.filename
   );
 
   if (isHtmlArtifactMimeType(contentType)) {
     return {
-      metadata,
       content: htmlForArtifactPreview(new TextDecoder().decode(bytes)),
+      metadata,
     };
   }
 
   if (looksLikeUtf8Text(bytes)) {
     return {
-      metadata,
       content: new TextDecoder().decode(bytes),
+      metadata,
     };
   }
 
-  return { metadata, content: null };
+  return { content: null, metadata };
 }
 
 export function usePublicArtifactShare(token: string) {
   return useQuery({
-    queryKey: ["public-artifact-share", token],
-    queryFn: () => loadPublicArtifactShare(token),
     enabled: token.length > 0,
+    queryFn: () => loadPublicArtifactShare(token),
+    queryKey: ["public-artifact-share", token],
   });
 }

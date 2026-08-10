@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { createHonoApp } from "../app";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
-import { AutomationService } from "../../services/automation-service";
-import { AutomationRunner } from "../../services/automation-runner";
 import { loadLocalAuthToken } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AuthService } from "../../services/auth-service";
+import { AutomationService } from "../../services/automation-service";
+import { OrgService } from "../../services/org-service";
+import { createHonoApp } from "../app";
 import { seedLocalClientUser } from "../test-org-helpers";
 
 const PROFILE_ID = "profile_default";
@@ -25,37 +24,39 @@ function createServerOptions(overrides: Record<string, unknown> = {}) {
 
   return {
     agent,
-    automationService,
-    taskService: {} as any,
-    systemStatus: {} as any,
-    workerManager: {} as any,
-    mcpService: {} as any,
     authService,
-    orgService,
+    automationService,
     databaseAdapter,
+    mcpService: {} as any,
+    orgService,
+    systemStatus: {} as any,
+    taskService: {} as any,
     webDistDir: null,
+    workerManager: {} as any,
     ...overrides,
   };
 }
 
-async function seedOrgAndProfile(db: ReturnType<typeof createInMemoryDatabaseAdapter>): Promise<void> {
+async function seedOrgAndProfile(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+): Promise<void> {
   const now = new Date().toISOString();
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Default Org",
     slug: "default-org",
-    createdAt: now,
     updatedAt: now,
   });
   await db.upsertProfile({
-    id: PROFILE_ID,
-    name: "Default Bot",
-    systemPrompt: "",
-    model: null,
-    isSuper: false,
-    orgId: ORG_ID,
-    isDefault: true,
     createdAt: now,
+    id: PROFILE_ID,
+    isDefault: true,
+    isSuper: false,
+    model: null,
+    name: "Default Bot",
+    orgId: ORG_ID,
+    systemPrompt: "",
     updatedAt: now,
   });
 }
@@ -72,18 +73,18 @@ describe("internal automation routes", () => {
     await options.automationService.create(
       ORG_ID,
       {
-        name: "Hourly",
         description: "Ping",
+        name: "Hourly",
         prompt: "Ping",
-        trigger: { type: "schedule", cron: "0 * * * *", timezone: "UTC" },
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/internal/automations/schedules", {
         headers: { Authorization: `Bearer ${token}` },
-      }),
+      })
     );
 
     expect(response.status).toBe(200);
@@ -91,9 +92,9 @@ describe("internal automation routes", () => {
     expect(schedules).toHaveLength(1);
     expect(schedules[0]).toMatchObject({
       cron: "0 * * * *",
-      timezone: "UTC",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
+      timezone: "UTC",
     });
   });
 
@@ -102,7 +103,7 @@ describe("internal automation routes", () => {
     const app = createHonoApp(options);
 
     const response = await app.fetch(
-      new Request("http://localhost:4310/v1/internal/automations/schedules"),
+      new Request("http://localhost:4310/v1/internal/automations/schedules")
     );
 
     expect(response.status).toBe(401);
@@ -116,12 +117,12 @@ describe("internal automation routes", () => {
     const automation = await options.automationService.create(
       ORG_ID,
       {
-        name: "Hourly",
         description: "Ping",
+        name: "Hourly",
         prompt: "Ping",
-        trigger: { type: "schedule", cron: "0 * * * *", timezone: "UTC" },
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const app = createHonoApp(options);
@@ -131,10 +132,10 @@ describe("internal automation routes", () => {
       new Request(
         `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run`,
         {
-          method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
-      ),
+          method: "POST",
+        }
+      )
     );
 
     expect(response.status).toBe(204);
@@ -152,10 +153,10 @@ describe("internal automation routes", () => {
       new Request(
         "http://localhost:4310/v1/internal/automations/unknown-automation/run",
         {
-          method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
-      ),
+          method: "POST",
+        }
+      )
     );
 
     expect(response.status).toBe(404);
@@ -165,7 +166,10 @@ describe("internal automation routes", () => {
     const options = createServerOptions({
       agent: {
         providerConfigured: true,
-        runAutomation: async () => ({ skipped: true, error: "Already running" }),
+        runAutomation: async () => ({
+          error: "Already running",
+          skipped: true,
+        }),
       } as any,
     });
     await seedOrgAndProfile(options.databaseAdapter);
@@ -174,12 +178,12 @@ describe("internal automation routes", () => {
     const automation = await options.automationService.create(
       ORG_ID,
       {
-        name: "Hourly",
         description: "Ping",
+        name: "Hourly",
         prompt: "Ping",
-        trigger: { type: "schedule", cron: "0 * * * *", timezone: "UTC" },
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const app = createHonoApp(options);
@@ -189,10 +193,10 @@ describe("internal automation routes", () => {
       new Request(
         `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run`,
         {
-          method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-        },
-      ),
+          method: "POST",
+        }
+      )
     );
 
     expect(response.status).toBe(409);

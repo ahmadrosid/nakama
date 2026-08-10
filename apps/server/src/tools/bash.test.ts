@@ -1,7 +1,16 @@
-import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import { PathGuardError } from "@nakama/core";
 import { runBash } from "./bash";
 
@@ -10,7 +19,7 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, { recursive: true, force: true });
+      await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
   });
@@ -21,7 +30,7 @@ describe("bash tool", () => {
     const result = await runBash(
       { command: "pwd" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
@@ -37,7 +46,7 @@ describe("bash tool", () => {
     const result = await runBash(
       { command: "pwd", cwd: "nested" },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
@@ -51,13 +60,15 @@ describe("bash tool", () => {
       runBash(
         { command: "pwd", cwd: "/tmp" },
         { orgId: "org_test", profileId: "profile_test" },
-        { workspaceRoot },
-      ),
+        { workspaceRoot }
+      )
     ).rejects.toBeInstanceOf(PathGuardError);
   });
 
   test("requires profileId", async () => {
-    await expect(runBash({ command: "pwd" }, {})).rejects.toThrow("profileId is required.");
+    await expect(runBash({ command: "pwd" }, {})).rejects.toThrow(
+      "profileId is required."
+    );
   });
 
   test("accepts delegation-scale timeouts up to 30 minutes", async () => {
@@ -66,7 +77,7 @@ describe("bash tool", () => {
     const result = await runBash(
       { command: "echo ok", timeoutMs: 30 * 60_000 },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
@@ -82,7 +93,7 @@ describe("bash tool", () => {
         env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:4310" },
       },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
@@ -96,10 +107,10 @@ describe("bash tool", () => {
       '{"type":"system","subtype":"init","model":"composer-2","cwd":"/tmp/repo"}',
       ...Array.from({ length: 80 }, (_, i) =>
         JSON.stringify({
-          type: "tool_call",
           subtype: "started",
           tool_call: { readToolCall: { args: { path: `pad-${i}.ts` } } },
-        }),
+          type: "tool_call",
+        })
       ),
       '{"type":"assistant","message":{"content":[{"type":"text","text":"Patched the flaky test."}]}}',
       '{"type":"result","subtype":"success","result":"All checks passed.","duration_ms":42}',
@@ -109,25 +120,28 @@ describe("bash tool", () => {
     await writeFile(
       agentPath,
       `#!/bin/bash\ncat <<'EOF'\n${stream}EOF\n`,
-      "utf8",
+      "utf8"
     );
     await chmod(agentPath, 0o755);
 
     const result = await runBash(
       {
-        command: "./agent -p 'fix the flaky test' --output-format stream-json --yolo",
         codingAgent: true,
+        command:
+          "./agent -p 'fix the flaky test' --output-format stream-json --yolo",
       },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("# Cursor Agent result");
     expect(result.stdout).toContain("Patched the flaky test.");
     expect(result.stdout).toContain("All checks passed.");
-    expect(result.stdout).toContain("Full coding-agent log: artifacts/coding-agent-runs/");
-    expect(result.stdout).not.toContain("...[truncated]\n{\"type\":\"system\"");
+    expect(result.stdout).toContain(
+      "Full coding-agent log: artifacts/coding-agent-runs/"
+    );
+    expect(result.stdout).not.toContain('...[truncated]\n{"type":"system"');
 
     const logDir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
     const logs = await readdir(logDir);
@@ -141,16 +155,20 @@ describe("bash tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const agentPath = path.join(workspaceRoot, "agent");
     const body = `${"n".repeat(40_000)}TAIL_MARKER_OK`;
-    await writeFile(agentPath, `#!/bin/bash\ncat <<'EOF'\n${body}EOF\n`, "utf8");
+    await writeFile(
+      agentPath,
+      `#!/bin/bash\ncat <<'EOF'\n${body}EOF\n`,
+      "utf8"
+    );
     await chmod(agentPath, 0o755);
 
     const result = await runBash(
       {
-        command: "./agent -p 'hello' --output-format text --yolo",
         codingAgent: true,
+        command: "./agent -p 'hello' --output-format text --yolo",
       },
       { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot },
+      { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);

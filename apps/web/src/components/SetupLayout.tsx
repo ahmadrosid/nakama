@@ -11,7 +11,7 @@ export function SetupLayout({ children }: SetupLayoutProps) {
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background">
       {error ? (
-        <div className="shrink-0 border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+        <div className="shrink-0 border-red-200 border-b bg-red-50 px-6 py-3 text-red-800 text-sm dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
           {error}
         </div>
       ) : null}

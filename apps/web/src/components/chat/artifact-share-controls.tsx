@@ -1,4 +1,9 @@
-import { EyeIcon, Loader2Icon, Share2Icon } from "lucide-react";
+import { Loading03Icon, Share04Icon, ViewIcon } from "hugeicons-react";
+import { ArtifactSharePublishDialog } from "@/components/chat/artifact-share-publish-dialog";
+import {
+  type ArtifactShareControlsState,
+  useArtifactShareControls,
+} from "@/components/chat/use-artifact-share-controls";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
@@ -6,11 +11,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ArtifactSharePublishDialog } from "@/components/chat/artifact-share-publish-dialog";
-import {
-  useArtifactShareControls,
-  type ArtifactShareControlsState,
-} from "@/components/chat/use-artifact-share-controls";
 
 export function ArtifactShareMenuItem({
   share,
@@ -23,6 +23,7 @@ export function ArtifactShareMenuItem({
       disabled={share.busy || !share.orgId}
       onClick={share.handleShareClick}
     >
+      <Share04Icon aria-hidden />
       Share artifact
     </DropdownMenuItem>
   );
@@ -37,37 +38,40 @@ export function ArtifactSharePublishDialogFromState({
 }) {
   return (
     <ArtifactSharePublishDialog
-      open={share.publishDialogOpen}
       artifactPath={artifactPath}
-      publishIntent={share.publishIntent}
-      publishedUrl={share.publishedUrl}
-      publishWarning={share.publishWarning}
-      publishDialogSucceeded={share.publishDialogSucceeded}
-      isShared={share.isShared}
       copied={share.copied}
-      publishPending={share.publishMutation.isPending}
-      revokePending={share.revokeMutation.isPending}
+      isShared={share.isShared}
+      onClose={share.closePublishDialog}
+      onConfirmPublish={() => void share.confirmPublish()}
+      onCopyLink={(url) => void share.copyLink(url)}
       onOpenChange={(open) => {
         if (!open) {
           share.closePublishDialog();
         }
       }}
-      onClose={share.closePublishDialog}
-      onCopyLink={(url) => void share.copyLink(url)}
       onRefreshFromDialog={share.openRefreshFromDialog}
       onRevoke={() => void share.handleRevokeFromDialog()}
       onRotateLink={() => void share.handleRotateLink()}
-      onConfirmPublish={() => void share.confirmPublish()}
+      open={share.publishDialogOpen}
+      publishDialogSucceeded={share.publishDialogSucceeded}
+      publishedUrl={share.publishedUrl}
+      publishIntent={share.publishIntent}
+      publishPending={share.publishMutation.isPending}
+      publishWarning={share.publishWarning}
+      revokePending={share.revokeMutation.isPending}
     />
   );
 }
 
 function buildPublishDialog(
   share: ArtifactShareControlsState,
-  artifactPath: string,
+  artifactPath: string
 ) {
   return (
-    <ArtifactSharePublishDialogFromState share={share} artifactPath={artifactPath} />
+    <ArtifactSharePublishDialogFromState
+      artifactPath={artifactPath}
+      share={share}
+    />
   );
 }
 
@@ -82,7 +86,7 @@ export function ArtifactShareControls({
   compact?: boolean;
   asMenuItem?: boolean;
 }) {
-  const share = useArtifactShareControls({ profileId, artifactPath });
+  const share = useArtifactShareControls({ artifactPath, profileId });
   const publishDialog = buildPublishDialog(share, artifactPath);
 
   if (asMenuItem) {
@@ -96,18 +100,21 @@ export function ArtifactShareControls({
           <TooltipTrigger
             render={
               <Button
+                aria-label="Share"
+                disabled={share.busy || !share.orgId}
+                onClick={share.handleShareClick}
+                size="icon-sm"
+                title="Share"
                 type="button"
                 variant="outline"
-                size="icon-sm"
-                disabled={share.busy || !share.orgId}
-                aria-label="Share"
-                title="Share"
-                onClick={share.handleShareClick}
               >
                 {share.busy ? (
-                  <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
+                  <Loading03Icon
+                    aria-hidden
+                    className="size-3.5 animate-spin"
+                  />
                 ) : (
-                  <Share2Icon className="size-3.5" aria-hidden />
+                  <Share04Icon aria-hidden className="size-3.5" />
                 )}
               </Button>
             }
@@ -124,52 +131,52 @@ export function ArtifactShareControls({
   return (
     <>
       <div className="inline-flex items-center gap-1">
-        {!share.isShared ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={share.busy || !share.orgId}
-            onClick={() => share.openPublishDialog("publish")}
-          >
-            {share.busy ? (
-              <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
-            ) : (
-              <Share2Icon className="size-3.5" aria-hidden />
-            )}
-            Publish
-          </Button>
-        ) : (
+        {share.isShared ? (
           <>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
               disabled={share.busy}
               onClick={share.openViewShareDialog}
+              size="sm"
+              type="button"
+              variant="outline"
             >
-              <EyeIcon className="size-3.5" aria-hidden />
+              <ViewIcon aria-hidden className="size-3.5" />
               View
             </Button>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
               disabled={share.busy}
               onClick={() => void share.handleCopyExisting()}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               {share.copied ? "Copied" : "Copy link"}
             </Button>
             <Button
-              type="button"
-              variant="ghost"
-              size="sm"
               disabled={share.busy}
               onClick={() => void share.handleRevoke()}
+              size="sm"
+              type="button"
+              variant="ghost"
             >
               Revoke
             </Button>
           </>
+        ) : (
+          <Button
+            disabled={share.busy || !share.orgId}
+            onClick={() => share.openPublishDialog("publish")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {share.busy ? (
+              <Loading03Icon aria-hidden className="size-3.5 animate-spin" />
+            ) : (
+              <Share04Icon aria-hidden className="size-3.5" />
+            )}
+            Publish
+          </Button>
         )}
       </div>
       {publishDialog}

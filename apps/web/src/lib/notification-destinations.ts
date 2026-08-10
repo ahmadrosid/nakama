@@ -2,14 +2,14 @@ import type { TelegramNotificationDestinationConfig } from "@nakama/core/contrac
 
 export function buildNotificationWebhookUrl(
   origin: string,
-  webhookPath: string,
+  webhookPath: string
 ): string {
   const base = origin.replace(/\/$/, "");
   return `${base}${webhookPath}`;
 }
 
 export function formatTelegramDestinationLabel(
-  telegram: TelegramNotificationDestinationConfig,
+  telegram: TelegramNotificationDestinationConfig
 ): string {
   if (telegram.topicId) {
     return `Chat ${telegram.chatId} / Topic ${telegram.topicId}`;
@@ -23,9 +23,7 @@ export function parseTelegramTopicLink(input: string): {
   topicId: number;
 } | null {
   const value = input.trim();
-  const match = value.match(
-    /^https?:\/\/t\.me\/c\/(\d+)\/(\d+)\/?$/i,
-  );
+  const match = value.match(/^https?:\/\/t\.me\/c\/(\d+)\/(\d+)\/?$/i);
 
   if (!match) {
     return null;

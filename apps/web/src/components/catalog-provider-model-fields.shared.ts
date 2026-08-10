@@ -8,10 +8,11 @@ export const CATALOG_SHORTLIST_PROVIDERS = [
   "opencode_go",
 ] as const;
 
-export type CatalogShortlistProvider = (typeof CATALOG_SHORTLIST_PROVIDERS)[number];
+export type CatalogShortlistProvider =
+  (typeof CATALOG_SHORTLIST_PROVIDERS)[number];
 
 export function isCatalogShortlistProvider(
-  provider: SelectedProvider,
+  provider: SelectedProvider
 ): provider is CatalogShortlistProvider {
   return (CATALOG_SHORTLIST_PROVIDERS as readonly string[]).includes(provider);
 }

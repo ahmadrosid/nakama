@@ -9,7 +9,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  font:
+    13px / 1.4 system-ui,
+    -apple-system,
+    sans-serif;
   color: var(--c-text);
 }
 
@@ -20,25 +23,25 @@
 
 .wsRow {
   display: flex;
-  align-items: center;
   gap: 6px;
-  min-height: 20px;
+  align-items: center;
   width: 100%;
+  min-height: 20px;
 }
 
 .wsRowButton {
   display: flex;
-  align-items: center;
   gap: 6px;
-  min-height: 20px;
+  align-items: center;
   width: 100%;
+  min-height: 20px;
   padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
   font: inherit;
   color: var(--c-muted);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
   transition: color 0.16s var(--ease);
 }
 
@@ -95,30 +98,30 @@
 .wsShimmer {
   overflow: hidden;
   text-overflow: ellipsis;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--c-text) 45%, transparent) 0%,
     var(--c-text) 44%,
     color-mix(in srgb, var(--c-text) 45%, transparent) 80%
   );
-  background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  background-size: 220% 100%;
   animation: ws-shimmer 2.7s linear infinite;
 }
 
 .wsShimmer.isDone {
-  animation: none;
-  background: none;
-  -webkit-text-fill-color: var(--c-text);
   color: var(--c-text);
+  -webkit-text-fill-color: var(--c-text);
+  background: none;
+  animation: none;
 }
 
 .wsRowButton .wsShimmer.isDone {
-  -webkit-text-fill-color: currentColor;
   color: currentColor;
+  -webkit-text-fill-color: currentColor;
 }
 
 .wsChevronIcon {
@@ -127,7 +130,9 @@
   height: 14px;
   margin-left: auto;
   color: var(--c-subtle);
-  transition: transform 0.2s var(--ease), color 0.16s var(--ease);
+  transition:
+    transform 0.2s var(--ease),
+    color 0.16s var(--ease);
 }
 
 .wsRowButton:hover .wsChevronIcon {
@@ -142,13 +147,15 @@
   display: grid;
   grid-template-rows: 1fr;
   opacity: 1;
-  transition: grid-template-rows 0.32s var(--ease), opacity 0.22s var(--ease);
+  transition:
+    grid-template-rows 0.32s var(--ease),
+    opacity 0.22s var(--ease);
 }
 
 .wsCollapsible.isCollapsed {
   grid-template-rows: 0fr;
-  opacity: 0;
   pointer-events: none;
+  opacity: 0;
 }
 
 .wsCollapsibleInner {
@@ -162,23 +169,23 @@
 }
 
 .wsList {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0 2px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  padding: 4px 0 2px;
+  margin: 0;
+  list-style: none;
 }
 
 .wsSite {
   display: flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
+  min-width: 0;
   font-size: 12px;
   line-height: 18px;
   color: var(--c-muted);
-  min-width: 0;
   opacity: 0;
   transform: translateY(4px);
   animation: ws-enter 0.34s var(--ease) forwards;
@@ -190,8 +197,8 @@
 
 .wsSiteLink {
   display: flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
   min-width: 0;
   color: inherit;
   text-decoration: none;
@@ -199,12 +206,12 @@
 
 .wsBullet {
   position: relative;
-  width: 12px;
-  height: 12px;
-  flex: none;
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
+  width: 12px;
+  height: 12px;
 }
 
 .wsDots {
@@ -214,9 +221,9 @@
   align-items: center;
   justify-content: center;
   color: var(--c-subtle);
+  pointer-events: none;
   opacity: 1;
   transition: opacity 0.32s var(--ease);
-  pointer-events: none;
 }
 
 .wsDots svg,
@@ -238,7 +245,9 @@
   color: var(--c-subtle);
   opacity: 0;
   transform: scale(0.88);
-  transition: opacity 0.32s var(--ease), transform 0.36s var(--ease);
+  transition:
+    opacity 0.32s var(--ease),
+    transform 0.36s var(--ease);
 }
 
 .wsSite[data-state="loading"] .wsGlobe {
@@ -249,7 +258,9 @@
 .wsSite[data-state="done"] .wsGlobe {
   opacity: 0;
   transform: scale(0.775);
-  transition: opacity 0.22s var(--ease), transform 0.26s var(--ease);
+  transition:
+    opacity 0.22s var(--ease),
+    transform 0.26s var(--ease);
 }
 
 .wsCheck {
@@ -259,7 +270,9 @@
   color: var(--c-success);
   opacity: 0;
   transform: scale(1.175);
-  transition: opacity 0.24s var(--ease) 0.06s, transform 0.28s var(--ease) 0.06s;
+  transition:
+    opacity 0.24s var(--ease) 0.06s,
+    transform 0.28s var(--ease) 0.06s;
 }
 
 .wsSite[data-state="done"] .wsCheck {
@@ -268,10 +281,10 @@
 }
 
 .wsTitle {
-  color: var(--c-text);
-  font-weight: 450;
-  white-space: nowrap;
   flex: none;
+  font-weight: 450;
+  color: var(--c-text);
+  white-space: nowrap;
 }
 
 .wsSite[data-state="pending"] .wsTitle {
@@ -279,31 +292,31 @@
 }
 
 .wsSite[data-state="loading"] .wsTitle {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--c-text) 50%, transparent) 0%,
     var(--c-text) 44%,
     color-mix(in srgb, var(--c-text) 50%, transparent) 80%
   );
-  background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  background-size: 220% 100%;
   animation: ws-shimmer 2.7s linear infinite;
 }
 
 .wsSep {
-  color: var(--c-subtle);
   flex: none;
+  color: var(--c-subtle);
 }
 
 .wsUrl {
-  color: var(--c-muted);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--c-muted);
   white-space: nowrap;
   transition: color 0.16s var(--ease);
 }
@@ -311,11 +324,13 @@
 .wsArrow {
   display: inline-flex;
   flex: none;
-  color: var(--c-subtle);
   margin-left: -2px;
+  color: var(--c-subtle);
   opacity: 0;
   transform: rotate(45deg) translate(0, 2px);
-  transition: opacity 0.16s var(--ease), transform 0.22s var(--ease);
+  transition:
+    opacity 0.16s var(--ease),
+    transform 0.22s var(--ease);
 }
 
 .wsSite[data-state="done"]:hover .wsArrow {
@@ -346,15 +361,15 @@
 @media (prefers-reduced-motion: reduce) {
   .wsShimmer,
   .wsSite[data-state="loading"] .wsTitle {
-    animation: none;
-    background: none;
-    -webkit-text-fill-color: var(--c-text);
     color: var(--c-text);
+    -webkit-text-fill-color: var(--c-text);
+    background: none;
+    animation: none;
   }
 
   .wsSite {
-    animation: none;
     opacity: 1;
     transform: none;
+    animation: none;
   }
 }

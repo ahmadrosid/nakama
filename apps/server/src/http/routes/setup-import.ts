@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
-  NakamaApiError,
   type DataImportPreviewResponse,
+  NakamaApiError,
   type PreviewDataImportRequest,
   type RestoreDataImportRequest,
   type SetupRestoreDataImportResponse,
@@ -12,13 +12,18 @@ import {
   previewNakamaDataImport,
   restoreNakamaDataImport,
 } from "../../services/data-portability";
-import { errorResponse, json, readJson } from "../shared";
 import type { ServerOptions } from "../context";
+import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
-export function registerSetupImportRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerSetupImportRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { databaseAdapter } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const importRequestSchema = z
     .object({
       data: z.string(),
@@ -30,57 +35,81 @@ export function registerSetupImportRoutes(app: HonoApp, options: ServerOptions):
       data: z.string(),
     })
     .openapi("SetupRestoreDataImportRequest");
-  const previewResponseSchema = z.object({}).passthrough().openapi("SetupDataImportPreviewResponse");
-  const restoreResponseSchema = z.object({}).passthrough().openapi("SetupRestoreDataImportResponse");
+  const previewResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("SetupDataImportPreviewResponse");
+  const restoreResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("SetupRestoreDataImportResponse");
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/auth/setup/import/preview",
-      tags: ["Auth"],
-      summary: "Preview Nakama data import during first-time setup",
       operationId: "previewSetupDataImport",
+      path: "/v1/auth/setup/import/preview",
       request: {
         body: {
-          required: true,
           content: { "application/json": { schema: importRequestSchema } },
+          required: true,
         },
       },
       responses: {
         200: {
-          description: "Import preview",
           content: { "application/json": { schema: previewResponseSchema } },
+          description: "Import preview",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Preview Nakama data import during first-time setup",
+      tags: ["Auth"],
+    })
   );
 
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
-      path: "/v1/auth/setup/import/restore",
-      tags: ["Auth"],
-      summary: "Restore Nakama data import during first-time setup",
       operationId: "restoreSetupDataImport",
+      path: "/v1/auth/setup/import/restore",
       request: {
         body: {
-          required: true,
           content: { "application/json": { schema: restoreRequestSchema } },
+          required: true,
         },
       },
       responses: {
         200: {
-          description: "Import restored",
           content: { "application/json": { schema: restoreResponseSchema } },
+          description: "Import restored",
         },
-        400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-        500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
       },
-    }),
+      summary: "Restore Nakama data import during first-time setup",
+      tags: ["Auth"],
+    })
   );
 
   app.post("/v1/auth/setup/import/preview", async (c) => {
@@ -97,7 +126,9 @@ export function registerSetupImportRoutes(app: HonoApp, options: ServerOptions):
     const body = await readJson<PreviewDataImportRequest>(c.req.raw);
 
     try {
-      const preview = await previewNakamaDataImport(decodeArchiveRequestData(body.data));
+      const preview = await previewNakamaDataImport(
+        decodeArchiveRequestData(body.data)
+      );
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
@@ -119,9 +150,12 @@ export function registerSetupImportRoutes(app: HonoApp, options: ServerOptions):
 
     let restore;
     try {
-      restore = await restoreNakamaDataImport(decodeArchiveRequestData(body.data), {
-        confirm: body.confirm,
-      });
+      restore = await restoreNakamaDataImport(
+        decodeArchiveRequestData(body.data),
+        {
+          confirm: body.confirm,
+        }
+      );
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }
@@ -143,12 +177,14 @@ export function registerSetupImportRoutes(app: HonoApp, options: ServerOptions):
   });
 }
 
-async function assertSetupImportAllowed(databaseAdapter: DatabaseAdapter): Promise<void> {
+async function assertSetupImportAllowed(
+  databaseAdapter: DatabaseAdapter
+): Promise<void> {
   const humanUserCount = await databaseAdapter.countHumanUsers();
   if (humanUserCount > 0) {
     throw new NakamaApiError(
       "Setup import is only available before the first admin account is created.",
-      409,
+      409
     );
   }
 }

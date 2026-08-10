@@ -1,13 +1,19 @@
+import type {
+  AutomationDelivery,
+  AutomationDeliveryNotifyOn,
+  AutomationRunStatus,
+} from "./contract";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
-import type { AutomationDelivery, AutomationDeliveryNotifyOn, AutomationRunStatus } from "./contract";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function normalizeAutomationDelivery(value: unknown): AutomationDelivery | undefined {
+export function normalizeAutomationDelivery(
+  value: unknown
+): AutomationDelivery | undefined {
   if (value === undefined || value === null) {
-    return undefined;
+    return;
   }
 
   if (typeof value !== "object" || value === null) {
@@ -18,7 +24,9 @@ export function normalizeAutomationDelivery(value: unknown): AutomationDelivery 
   const channel = record.channel;
 
   if (channel !== "telegram" && channel !== "whatsapp" && channel !== "email") {
-    throw new Error('delivery.channel must be "telegram", "whatsapp", or "email".');
+    throw new Error(
+      'delivery.channel must be "telegram", "whatsapp", or "email".'
+    );
   }
 
   const delivery: AutomationDelivery = { channel };
@@ -32,7 +40,11 @@ export function normalizeAutomationDelivery(value: unknown): AutomationDelivery 
   }
 
   if (record.chatId !== undefined) {
-    if (typeof record.chatId !== "number" || !Number.isInteger(record.chatId) || record.chatId <= 0) {
+    if (
+      typeof record.chatId !== "number" ||
+      !Number.isInteger(record.chatId) ||
+      record.chatId <= 0
+    ) {
       throw new Error("delivery.chatId must be a positive integer.");
     }
 
@@ -40,8 +52,14 @@ export function normalizeAutomationDelivery(value: unknown): AutomationDelivery 
   }
 
   if (record.notifyOn !== undefined) {
-    if (record.notifyOn !== "success" && record.notifyOn !== "failure" && record.notifyOn !== "both") {
-      throw new Error('delivery.notifyOn must be "success", "failure", or "both".');
+    if (
+      record.notifyOn !== "success" &&
+      record.notifyOn !== "failure" &&
+      record.notifyOn !== "both"
+    ) {
+      throw new Error(
+        'delivery.notifyOn must be "success", "failure", or "both".'
+      );
     }
 
     delivery.notifyOn = record.notifyOn;
@@ -51,14 +69,14 @@ export function normalizeAutomationDelivery(value: unknown): AutomationDelivery 
 }
 
 export function resolveDeliveryNotifyOn(
-  delivery: AutomationDelivery,
+  delivery: AutomationDelivery
 ): AutomationDeliveryNotifyOn {
   return delivery.notifyOn ?? "success";
 }
 
 export function shouldDeliverForRun(
   delivery: AutomationDelivery,
-  status: AutomationRunStatus,
+  status: AutomationRunStatus
 ): boolean {
   const notifyOn = resolveDeliveryNotifyOn(delivery);
 
@@ -83,7 +101,7 @@ export interface ValidateAutomationDeliveryOptions {
 
 export async function validateAutomationDelivery(
   delivery: AutomationDelivery | undefined,
-  options: ValidateAutomationDeliveryOptions = {},
+  options: ValidateAutomationDeliveryOptions = {}
 ): Promise<void> {
   if (!delivery) {
     return;
@@ -93,11 +111,15 @@ export async function validateAutomationDelivery(
     const config = await loadTelegramConfigFile();
 
     if (!config?.botToken.trim()) {
-      throw new Error("Telegram is not configured. Set up Integrations → Telegram first.");
+      throw new Error(
+        "Telegram is not configured. Set up Integrations → Telegram first."
+      );
     }
 
     if (config.pairedUserIds.length === 0 && delivery.chatId === undefined) {
-      throw new Error("Telegram is not paired. Link your account in Integrations → Telegram first.");
+      throw new Error(
+        "Telegram is not paired. Link your account in Integrations → Telegram first."
+      );
     }
 
     return;
@@ -107,11 +129,15 @@ export async function validateAutomationDelivery(
     const config = await loadWhatsAppConfigFile();
 
     if (!config?.phoneNumber.trim()) {
-      throw new Error("WhatsApp is not configured. Set up Integrations → WhatsApp first.");
+      throw new Error(
+        "WhatsApp is not configured. Set up Integrations → WhatsApp first."
+      );
     }
 
     if (!config.pairedJid) {
-      throw new Error("WhatsApp is not paired. Link your account in Integrations → WhatsApp first.");
+      throw new Error(
+        "WhatsApp is not paired. Link your account in Integrations → WhatsApp first."
+      );
     }
 
     return;

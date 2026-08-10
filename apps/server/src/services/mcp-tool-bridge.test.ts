@@ -11,7 +11,7 @@ import {
 describe("mcp tool bridge", () => {
   test("namespaces tool names by server", () => {
     expect(namespacedMcpToolName("filesystem", "read_file")).toBe(
-      "filesystem__read_file",
+      "filesystem__read_file"
     );
   });
 
@@ -19,34 +19,39 @@ describe("mcp tool bridge", () => {
     expect(sanitizeLlmToolNamePart("list/tools")).toBe("list_tools");
     expect(sanitizeLlmToolNamePart("my server")).toBe("my_server");
     expect(namespacedMcpToolName("user.tolaria", "tools.list")).toBe(
-      "user_tolaria__tools_list",
+      "user_tolaria__tools_list"
     );
-    expect(isValidLlmToolName(namespacedMcpToolName("user.tolaria", "tools.list"))).toBe(
-      true,
-    );
+    expect(
+      isValidLlmToolName(namespacedMcpToolName("user.tolaria", "tools.list"))
+    ).toBe(true);
   });
 
   test("deduplicates sanitized tool names", () => {
     const manager = new McpClientManager();
     const servers: StoredMcpServerRecord[] = [
       {
-        id: "mcp_1",
-        name: "github",
-        transport: "http",
-        config: { url: "https://example.com/mcp" },
-        enabled: true,
-        status: "disconnected",
-        lastError: null,
         cachedTools: [
-          { name: "tools.list", description: "List tools" },
-          { name: "tools_list", description: "List tools again" },
+          { description: "List tools", name: "tools.list" },
+          { description: "List tools again", name: "tools_list" },
         ],
+        config: { url: "https://example.com/mcp" },
         createdAt: "2026-01-01T00:00:00.000Z",
+        enabled: true,
+        id: "mcp_1",
+        lastError: null,
+        name: "github",
+        status: "disconnected",
+        transport: "http",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager, "org_test", "profile_test");
+    const tools = buildMcpToolDefinitions(
+      servers,
+      manager,
+      "org_test",
+      "profile_test"
+    );
 
     expect(tools.map((tool) => tool.name)).toEqual([
       "github__tools_list",
@@ -59,26 +64,34 @@ describe("mcp tool bridge", () => {
     const manager = new McpClientManager();
     const servers: StoredMcpServerRecord[] = [
       {
-        id: "mcp_1",
-        name: "filesystem",
-        transport: "http",
-        config: { url: "https://example.com/mcp" },
-        enabled: true,
-        status: "disconnected",
-        lastError: null,
         cachedTools: [
           {
-            name: "read_file",
             description: "Read a file",
-            inputSchema: { type: "object", properties: { path: { type: "string" } } },
+            inputSchema: {
+              properties: { path: { type: "string" } },
+              type: "object",
+            },
+            name: "read_file",
           },
         ],
+        config: { url: "https://example.com/mcp" },
         createdAt: "2026-01-01T00:00:00.000Z",
+        enabled: true,
+        id: "mcp_1",
+        lastError: null,
+        name: "filesystem",
+        status: "disconnected",
+        transport: "http",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager, "org_test", "profile_test");
+    const tools = buildMcpToolDefinitions(
+      servers,
+      manager,
+      "org_test",
+      "profile_test"
+    );
 
     expect(tools).toHaveLength(1);
     expect(tools[0]?.name).toBe("filesystem__read_file");
@@ -88,20 +101,25 @@ describe("mcp tool bridge", () => {
     const manager = new McpClientManager();
     const servers: StoredMcpServerRecord[] = [
       {
-        id: "mcp_1",
-        name: "filesystem",
-        transport: "http",
+        cachedTools: [{ description: "Read a file", name: "read_file" }],
         config: { url: "https://example.com/mcp" },
-        enabled: true,
-        status: "disconnected",
-        lastError: null,
-        cachedTools: [{ name: "read_file", description: "Read a file" }],
         createdAt: "2026-01-01T00:00:00.000Z",
+        enabled: true,
+        id: "mcp_1",
+        lastError: null,
+        name: "filesystem",
+        status: "disconnected",
+        transport: "http",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     ];
 
-    const tools = buildMcpToolDefinitions(servers, manager, "org_test", "profile_test");
+    const tools = buildMcpToolDefinitions(
+      servers,
+      manager,
+      "org_test",
+      "profile_test"
+    );
     const result = await tools[0]!.run({}, {});
 
     expect(result).toEqual({

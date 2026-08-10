@@ -1,7 +1,7 @@
-import type { Context } from "hono";
 import { NakamaApiError } from "@nakama/core";
-import type { AppEnv } from "./types";
+import type { Context } from "hono";
 import { getRequestAuth, type RequestAuthContext } from "./shared";
+import type { AppEnv } from "./types";
 
 export function requireOrgAdmin(auth: RequestAuthContext): void {
   if (auth.orgRole !== "admin") {
@@ -21,7 +21,9 @@ export function requirePlatformAdmin(auth: RequestAuthContext): void {
   }
 }
 
-export function requireOrgAdminFromContext(c: Context<AppEnv>): RequestAuthContext {
+export function requireOrgAdminFromContext(
+  c: Context<AppEnv>
+): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdmin(auth);
   return auth;
@@ -36,20 +38,24 @@ export function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
 }
 
 export function requireOrgAdminOrPlatformAdminFromContext(
-  c: Context<AppEnv>,
+  c: Context<AppEnv>
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdminOrPlatformAdmin(auth);
   return auth;
 }
 
-export function requireNotViewerFromContext(c: Context<AppEnv>): RequestAuthContext {
+export function requireNotViewerFromContext(
+  c: Context<AppEnv>
+): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireNotViewer(auth);
   return auth;
 }
 
-export function requirePlatformAdminFromContext(c: Context<AppEnv>): RequestAuthContext {
+export function requirePlatformAdminFromContext(
+  c: Context<AppEnv>
+): RequestAuthContext {
   const auth = getRequestAuth(c);
   requirePlatformAdmin(auth);
   return auth;

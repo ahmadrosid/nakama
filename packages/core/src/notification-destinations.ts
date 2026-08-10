@@ -16,7 +16,7 @@ function isPositiveInteger(value: unknown): value is number {
 
 function normalizeTelegramConfig(
   value: unknown,
-  fieldName: string,
+  fieldName: string
 ): TelegramNotificationDestinationConfig {
   if (typeof value !== "object" || value === null) {
     throw new Error(`${fieldName} must be an object.`);
@@ -35,17 +35,19 @@ function normalizeTelegramConfig(
   }
 
   if (!isPositiveInteger(topicId)) {
-    throw new Error(`${fieldName}.topicId must be a positive integer when provided.`);
+    throw new Error(
+      `${fieldName}.topicId must be a positive integer when provided.`
+    );
   }
 
   return { chatId, topicId };
 }
 
 export function normalizeNotificationWebhookLevel(
-  value: unknown,
+  value: unknown
 ): NotificationWebhookLevel | undefined {
   if (value === undefined || value === null) {
-    return undefined;
+    return;
   }
 
   if (
@@ -61,7 +63,7 @@ export function normalizeNotificationWebhookLevel(
 }
 
 export function normalizeNotificationWebhookRequest(
-  value: unknown,
+  value: unknown
 ): NotificationWebhookRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("notification payload must be an object.");
@@ -81,15 +83,17 @@ export function normalizeNotificationWebhookRequest(
 
   return {
     body: body.trim(),
-    ...(typeof title === "string" && title.trim() ? { title: title.trim() } : {}),
-    ...(record.level !== undefined
-      ? { level: normalizeNotificationWebhookLevel(record.level) }
+    ...(typeof title === "string" && title.trim()
+      ? { title: title.trim() }
       : {}),
+    ...(record.level === undefined
+      ? {}
+      : { level: normalizeNotificationWebhookLevel(record.level) }),
   };
 }
 
 export function normalizeCreateNotificationDestinationRequest(
-  value: unknown,
+  value: unknown
 ): CreateNotificationDestinationRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("destination request must be an object.");
@@ -107,14 +111,14 @@ export function normalizeCreateNotificationDestinationRequest(
   }
 
   return {
-    name: name.trim(),
     channel: "telegram",
+    name: name.trim(),
     telegram: normalizeTelegramConfig(record.telegram, "telegram"),
   };
 }
 
 export function normalizeUpdateNotificationDestinationRequest(
-  value: unknown,
+  value: unknown
 ): UpdateNotificationDestinationRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("destination request must be an object.");

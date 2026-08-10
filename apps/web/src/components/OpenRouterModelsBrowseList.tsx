@@ -14,8 +14,8 @@ import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 export type OpenRouterBrowseSelectHandler = (row: OpenRouterModelRow) => void;
 
 interface OpenRouterModelsBrowseListProps {
-  onSelect: OpenRouterBrowseSelectHandler;
   className?: string;
+  onSelect: OpenRouterBrowseSelectHandler;
 }
 
 export function OpenRouterModelsBrowseList({
@@ -36,18 +36,37 @@ export function OpenRouterModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<OpenRouterModelRow>
-      rows={catalogRows}
-      onSelect={onSelect}
       className={className}
-      query={{ isLoading, error }}
       isDeprecated={(row) => row.deprecated}
+      onSelect={onSelect}
+      query={{ error, isLoading }}
+      rows={catalogRows}
+      status={({ filteredCount, filteredRows }) => {
+        const freeCount = filteredRows.filter((row) => row.isFree).length;
+        return `${filteredCount} models · ${freeCount} free`;
+      }}
+      toDisplayRow={(row) => ({
+        badges: [
+          ...(row.isFree ? [{ label: "FREE", tone: "emerald" as const }] : []),
+          ...(row.deprecated
+            ? [{ label: "deprecated", tone: "amber" as const }]
+            : []),
+        ],
+        capabilities: formatBrowseCapabilities(row),
+        contextLength: row.contextLength,
+        description: row.description || undefined,
+        id: row.id,
+        name: row.name,
+      })}
       toolbarTrailing={
         <Select
-          value={costFilter}
           onValueChange={(value) => setCostFilter(value as "all" | "free")}
+          value={costFilter}
         >
           <SelectTrigger className="w-27.5">
-            <SelectValue>{costFilter === "free" ? "Free only" : "All"}</SelectValue>
+            <SelectValue>
+              {costFilter === "free" ? "Free only" : "All"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
@@ -55,21 +74,6 @@ export function OpenRouterModelsBrowseList({
           </SelectContent>
         </Select>
       }
-      toDisplayRow={(row) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description || undefined,
-        contextLength: row.contextLength,
-        badges: [
-          ...(row.isFree ? [{ label: "FREE", tone: "emerald" as const }] : []),
-          ...(row.deprecated ? [{ label: "deprecated", tone: "amber" as const }] : []),
-        ],
-        capabilities: formatBrowseCapabilities(row),
-      })}
-      status={({ filteredCount, filteredRows }) => {
-        const freeCount = filteredRows.filter((row) => row.isFree).length;
-        return `${filteredCount} models · ${freeCount} free`;
-      }}
     />
   );
 }

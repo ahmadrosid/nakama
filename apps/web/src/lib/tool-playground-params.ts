@@ -23,7 +23,7 @@ function exampleValueForSchema(field: JsonSchema): unknown {
 }
 
 export function exampleParametersFromSchema(
-  schema: JsonSchema | undefined,
+  schema: JsonSchema | undefined
 ): Record<string, unknown> {
   const properties = schema?.properties;
 
@@ -32,10 +32,15 @@ export function exampleParametersFromSchema(
   }
 
   return Object.fromEntries(
-    Object.entries(properties).map(([name, field]) => [name, exampleValueForSchema(field)]),
+    Object.entries(properties).map(([name, field]) => [
+      name,
+      exampleValueForSchema(field),
+    ])
   );
 }
 
-export function buildExampleParametersJson(schema: JsonSchema | undefined): string {
+export function buildExampleParametersJson(
+  schema: JsonSchema | undefined
+): string {
   return JSON.stringify(exampleParametersFromSchema(schema), null, 2);
 }

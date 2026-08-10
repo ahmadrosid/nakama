@@ -13,7 +13,7 @@ export interface ChannelOrgRecord {
 type ChannelOrgMap = Record<string, ChannelOrgRecord>;
 
 export function getChannelOrgSelectionPath(
-  channel: ChannelOrgSelectionChannel,
+  channel: ChannelOrgSelectionChannel
 ): string {
   return join(getUserConfigDir(), channel, "org-selection.json");
 }
@@ -36,7 +36,11 @@ export class ChannelOrgStore {
 
     const parsed = JSON.parse(raw) as unknown;
 
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       this.map = {};
       return;
     }
@@ -60,15 +64,19 @@ export class ChannelOrgStore {
   }
 
   async save(): Promise<void> {
-    await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
-    });
+    await writePrivateTextFile(
+      this.path,
+      `${JSON.stringify(this.map, null, 2)}\n`,
+      {
+        ensureDir: dirname(this.path),
+      }
+    );
   }
 }
 
 export function formatOrgSelectionPrompt(
   orgs: UserOrgSummary[],
-  currentOrgId?: string | null,
+  currentOrgId?: string | null
 ): string {
   const current = currentOrgId
     ? orgs.find((org) => org.id === currentOrgId)
@@ -78,9 +86,7 @@ export function formatOrgSelectionPrompt(
     "",
     ...orgs.map((org, index) => `${index + 1}. ${org.name} (${org.slug})`),
     "",
-    current
-      ? `Current: ${current.name}`
-      : "Current: none selected",
+    current ? `Current: ${current.name}` : "Current: none selected",
     "",
     "/org — show this list again",
   ];
@@ -90,7 +96,7 @@ export function formatOrgSelectionPrompt(
 
 export function findOrgBySelectionInput(
   input: string,
-  orgs: UserOrgSummary[],
+  orgs: UserOrgSummary[]
 ): UserOrgSummary | null {
   const trimmed = input.trim();
   if (!trimmed || trimmed.startsWith("/")) {
@@ -108,7 +114,7 @@ export function findOrgBySelectionInput(
       (org) =>
         org.id === trimmed ||
         org.slug.toLowerCase() === normalized ||
-        org.name.toLowerCase() === normalized,
+        org.name.toLowerCase() === normalized
     ) ?? null
   );
 }
@@ -153,7 +159,7 @@ export async function prepareChannelOrgContext(options: {
     if (options.getSelectedOrgId() !== org.id) {
       await options.saveSelectedOrgId(org.id);
     }
-    return { status: "ready", orgId: org.id, orgName: org.name };
+    return { orgId: org.id, orgName: org.name, status: "ready" };
   }
 
   const storedOrgId = options.getSelectedOrgId();
@@ -167,21 +173,21 @@ export async function prepareChannelOrgContext(options: {
     if (picked) {
       await options.saveSelectedOrgId(picked.id);
       return {
-        status: "ready",
+        justSelected: true,
         orgId: picked.id,
         orgName: picked.name,
-        justSelected: true,
+        status: "ready",
       };
     }
   }
 
   if (storedOrg) {
-    return { status: "ready", orgId: storedOrg.id, orgName: storedOrg.name };
+    return { orgId: storedOrg.id, orgName: storedOrg.name, status: "ready" };
   }
 
   return {
-    status: "prompt",
     message: formatOrgSelectionPrompt(orgs, storedOrgId),
+    status: "prompt",
   };
 }
 

@@ -1,16 +1,21 @@
 import { join } from "node:path";
 import type { WhatsAppWorkerStatus } from "./contract";
 import {
+  pathExists,
+  readTextOrNull,
+  removeFile,
+  writePrivateTextFile,
+} from "./fs";
+import {
   getWhatsAppConfigDir,
   loadWhatsAppSettingsPublic,
   type WhatsAppSettingsPublic,
 } from "./whatsapp-config";
-import { pathExists, readTextOrNull, removeFile, writePrivateTextFile } from "./fs";
 
 export interface WhatsAppWorkerHeartbeat {
+  connected?: boolean;
   pid: number;
   updatedAt: string;
-  connected?: boolean;
 }
 
 const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
@@ -29,13 +34,13 @@ export function resolveWhatsAppWorkerStatus(
   settings: WhatsAppSettingsPublic,
   running: boolean,
   qrCode: string | null,
-  connected = false,
+  connected = false
 ): WhatsAppWorkerStatus {
   const configured = settings.configured;
   const paired = settings.pairedJid !== null;
   const ok = !configured || running;
 
-  return { configured, paired, running, connected, ok, qrCode };
+  return { configured, connected, ok, paired, qrCode, running };
 }
 
 export function isWhatsAppProcessAlive(pid: number): boolean {
@@ -53,7 +58,7 @@ export function isWhatsAppProcessAlive(pid: number): boolean {
 
 export function isWhatsAppHeartbeatAlive(
   heartbeat: WhatsAppWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): boolean {
   if (!heartbeat) {
     return false;
@@ -73,7 +78,7 @@ export function isWhatsAppHeartbeatAlive(
 }
 
 export function parseWhatsAppWorkerHeartbeat(
-  raw: string,
+  raw: string
 ): WhatsAppWorkerHeartbeat | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -96,14 +101,14 @@ export function parseWhatsAppWorkerHeartbeat(
 export async function writeWhatsAppWorkerHeartbeat(
   pid = process.pid,
   updatedAt = new Date().toISOString(),
-  connected = false,
+  connected = false
 ): Promise<void> {
-  const payload: WhatsAppWorkerHeartbeat = { pid, updatedAt, connected };
+  const payload: WhatsAppWorkerHeartbeat = { connected, pid, updatedAt };
 
   await writePrivateTextFile(
     getWhatsAppWorkerHeartbeatPath(),
     `${JSON.stringify(payload)}\n`,
-    { ensureDir: getWhatsAppConfigDir() },
+    { ensureDir: getWhatsAppConfigDir() }
   );
 }
 
@@ -145,9 +150,12 @@ export async function readWhatsAppWorkerHeartbeat(): Promise<WhatsAppWorkerHeart
 }
 
 export async function isWhatsAppWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS,
+  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
 ): Promise<boolean> {
-  return isWhatsAppHeartbeatAlive(await readWhatsAppWorkerHeartbeat(), maxAgeMs);
+  return isWhatsAppHeartbeatAlive(
+    await readWhatsAppWorkerHeartbeat(),
+    maxAgeMs
+  );
 }
 
 export async function getWhatsAppWorkerStatus(): Promise<WhatsAppWorkerStatus> {

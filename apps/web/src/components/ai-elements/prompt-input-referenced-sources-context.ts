@@ -1,11 +1,11 @@
-import { createContext } from "react";
 import type { SourceDocumentUIPart } from "ai";
+import { createContext } from "react";
 
 export interface ReferencedSourcesContext {
-  sources: (SourceDocumentUIPart & { id: string })[];
   add: (sources: SourceDocumentUIPart[] | SourceDocumentUIPart) => void;
-  remove: (id: string) => void;
   clear: () => void;
+  remove: (id: string) => void;
+  sources: (SourceDocumentUIPart & { id: string })[];
 }
 
 export const LocalReferencedSourcesContext =

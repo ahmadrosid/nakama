@@ -9,8 +9,8 @@ export function splitExternalUrl(url: string): {
     const prefix = `${parsed.protocol}//`;
     const host = parsed.host;
     const suffix = url.slice(prefix.length + host.length);
-    return { prefix, host, suffix };
+    return { host, prefix, suffix };
   } catch {
-    return { prefix: "", host: url, suffix: "" };
+    return { host: url, prefix: "", suffix: "" };
   }
 }

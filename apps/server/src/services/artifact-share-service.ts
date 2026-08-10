@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import {
-  NakamaApiError,
   buildArtifactSharePath,
   deleteArtifactShareSnapshot,
   generateArtifactShareToken,
   isBrowserExecutableArtifactMimeType,
+  NakamaApiError,
   readArtifactFile,
   readArtifactShareSnapshot,
   resolveArtifactMimeType,
@@ -12,13 +12,13 @@ import {
 } from "@nakama/core";
 import type {
   ArtifactShareStatusResponse,
-  PublishArtifactShareResponse,
   PublicArtifactShareResponse,
+  PublishArtifactShareResponse,
   RevokeArtifactShareResponse,
 } from "@nakama/core/contract";
 import type { DatabaseAdapter, StoredArtifactShareRecord } from "@nakama/db";
-import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
 import type { AuthService } from "./auth-service";
+import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
 import { ProfileService } from "./profile-service";
 
 export class ArtifactShareService {
@@ -26,7 +26,7 @@ export class ArtifactShareService {
 
   constructor(
     private readonly db: DatabaseAdapter,
-    private readonly authService: AuthService,
+    private readonly authService: AuthService
   ) {
     this.profileService = new ProfileService(db);
   }
@@ -46,9 +46,9 @@ export class ArtifactShareService {
     }
 
     const artifact = await readArtifactFile({
+      filename: sourcePath,
       orgId: input.orgId,
       profileId: input.profileId,
-      filename: sourcePath,
     });
 
     const filename = sourcePath.split("/").pop() ?? "artifact";
@@ -56,7 +56,7 @@ export class ArtifactShareService {
     const existing = await this.db.getActiveArtifactShareByPath(
       input.orgId,
       input.profileId,
-      sourcePath,
+      sourcePath
     );
 
     const now = new Date().toISOString();
@@ -69,10 +69,10 @@ export class ArtifactShareService {
       await deleteArtifactShareSnapshot(existing.storagePath);
 
       const storagePath = await writeArtifactShareSnapshot({
+        bytes: artifact.bytes,
+        filename,
         orgId: input.orgId,
         shareId: existing.id,
-        filename,
-        bytes: artifact.bytes,
       });
 
       await this.db.updateArtifactShareSnapshot(existing.id, {
@@ -93,41 +93,45 @@ export class ArtifactShareService {
       token = generateArtifactShareToken();
       const shareId = `share_${crypto.randomUUID().replace(/-/g, "")}`;
       const storagePath = await writeArtifactShareSnapshot({
+        bytes: artifact.bytes,
+        filename,
         orgId: input.orgId,
         shareId,
-        filename,
-        bytes: artifact.bytes,
       });
 
       record = {
+        createdAt: now,
+        createdByUserId: input.userId,
+        filename,
         id: shareId,
+        mimeType,
         orgId: input.orgId,
         profileId: input.profileId,
-        sourcePath,
-        filename,
-        mimeType,
-        sizeBytes: artifact.bytes.byteLength,
-        tokenHash: this.authService.hashToken(token),
-        storagePath,
-        createdByUserId: input.userId,
-        createdAt: now,
         revokedAt: null,
+        sizeBytes: artifact.bytes.byteLength,
+        sourcePath,
+        storagePath,
+        tokenHash: this.authService.hashToken(token),
       };
 
       await this.db.createArtifactShare(record);
     }
 
     const baseUrl = resolveComposioCallbackBaseUrl({ request: input.request });
-    const webPublicUrlConfigured = Boolean(baseUrl && !baseUrl.includes("127.0.0.1"));
-    const shareUrl = token ? `${baseUrl}${buildArtifactSharePath(token)}` : null;
+    const webPublicUrlConfigured = Boolean(
+      baseUrl && !baseUrl.includes("127.0.0.1")
+    );
+    const shareUrl = token
+      ? `${baseUrl}${buildArtifactSharePath(token)}`
+      : null;
 
     return {
       id: record.id,
-      token: token ?? "",
-      shareUrl,
-      sharePath: token ? buildArtifactSharePath(token) : "",
-      webPublicUrlConfigured,
       refreshed,
+      sharePath: token ? buildArtifactSharePath(token) : "",
+      shareUrl,
+      token: token ?? "",
+      webPublicUrlConfigured,
     };
   }
 
@@ -142,7 +146,7 @@ export class ArtifactShareService {
     const share = await this.db.getActiveArtifactShareByPath(
       input.orgId,
       input.profileId,
-      input.sourcePath.trim(),
+      input.sourcePath.trim()
     );
 
     if (!share) {
@@ -150,15 +154,17 @@ export class ArtifactShareService {
     }
 
     const baseUrl = resolveComposioCallbackBaseUrl({ request: input.request });
-    const webPublicUrlConfigured = Boolean(baseUrl && !baseUrl.includes("127.0.0.1"));
+    const webPublicUrlConfigured = Boolean(
+      baseUrl && !baseUrl.includes("127.0.0.1")
+    );
 
     return {
-      id: share.id,
       active: true,
+      createdAt: share.createdAt,
+      id: share.id,
       sharePath: "",
       shareUrl: null,
       webPublicUrlConfigured,
-      createdAt: share.createdAt,
     };
   }
 
@@ -172,19 +178,22 @@ export class ArtifactShareService {
     const share = await this.db.getArtifactShareById(
       input.orgId,
       input.profileId,
-      input.shareId,
+      input.shareId
     );
 
     if (!share || share.revokedAt) {
       throw new NakamaApiError("Not found", 404);
     }
 
-    const revoked = await this.db.revokeArtifactShare(share.id, new Date().toISOString());
+    const revoked = await this.db.revokeArtifactShare(
+      share.id,
+      new Date().toISOString()
+    );
     if (revoked) {
       await deleteArtifactShareSnapshot(share.storagePath);
     }
 
-    return { revoked, id: share.id };
+    return { id: share.id, revoked };
   }
 
   async readPublicArtifactShare(token: string): Promise<{
@@ -197,7 +206,7 @@ export class ArtifactShareService {
     }
 
     const share = await this.db.getArtifactShareByTokenHash(
-      this.authService.hashToken(trimmed),
+      this.authService.hashToken(trimmed)
     );
 
     if (!share) {
@@ -214,14 +223,17 @@ export class ArtifactShareService {
       bytes,
       metadata: {
         filename: share.filename,
+        inlineAllowed,
         mimeType,
         sizeBytes: share.sizeBytes,
-        inlineAllowed,
       },
     };
   }
 
-  private async requireProfile(orgId: string, profileId: string): Promise<void> {
+  private async requireProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<void> {
     const profile = await this.profileService.getProfile(orgId, profileId);
     if (!profile) {
       throw new NakamaApiError("Not found", 404);

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  type ChatArtifactRef,
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
   isTextArtifactMimeType,
   isVideoArtifactMimeType,
   looksLikeUtf8Text,
   resolveArtifactMimeType,
-  type ChatArtifactRef,
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 
@@ -52,9 +52,11 @@ export function useArtifactPreviewContent({
   const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
   const mediaPreviewUrl = useBlobObjectUrl(mediaBlob);
   const isBinaryMedia = isImage || isVideo;
+  // Load image bytes eagerly so chat chips can show a real thumbnail before the panel opens.
+  const shouldLoad = open || isImage;
 
   useEffect(() => {
-    if (!open || !canPreview) {
+    if (!(shouldLoad && canPreview)) {
       return;
     }
 
@@ -80,14 +82,19 @@ export function useArtifactPreviewContent({
           return;
         }
 
-        const contentType = resolveArtifactMimeType(result.contentType, artifact.filename);
+        const contentType = resolveArtifactMimeType(
+          result.contentType,
+          artifact.filename
+        );
         const servedAsHtml = isHtmlArtifactMimeType(contentType);
         const servedAsImage = isImageArtifactMimeType(contentType);
         const servedAsVideo = isVideoArtifactMimeType(contentType);
 
         if (isImage) {
           if (!servedAsImage) {
-            setError("Preview is not available for this file type. Download instead.");
+            setError(
+              "Preview is not available for this file type. Download instead."
+            );
             return;
           }
 
@@ -97,7 +104,9 @@ export function useArtifactPreviewContent({
 
         if (isVideo) {
           if (!servedAsVideo) {
-            setError("Preview is not available for this file type. Download instead.");
+            setError(
+              "Preview is not available for this file type. Download instead."
+            );
             return;
           }
 
@@ -106,16 +115,22 @@ export function useArtifactPreviewContent({
         }
 
         if (isHtml ? !servedAsHtml : servedAsHtml) {
-          setError("Preview is not available for this file type. Download instead.");
+          setError(
+            "Preview is not available for this file type. Download instead."
+          );
           return;
         }
 
         if (
-          !isHtml &&
-          !isTextArtifactMimeType(contentType) &&
-          !looksLikeUtf8Text(new Uint8Array(result.data))
+          !(
+            isHtml ||
+            isTextArtifactMimeType(contentType) ||
+            looksLikeUtf8Text(new Uint8Array(result.data))
+          )
         ) {
-          setError("Preview is not available for this file type. Download instead.");
+          setError(
+            "Preview is not available for this file type. Download instead."
+          );
           return;
         }
 
@@ -136,7 +151,7 @@ export function useArtifactPreviewContent({
       cancelled = true;
     };
   }, [
-    open,
+    shouldLoad,
     canPreview,
     content,
     mediaBlob,
@@ -151,11 +166,11 @@ export function useArtifactPreviewContent({
   ]);
 
   return {
-    loading,
-    error,
     content,
+    error,
     imagePreviewUrl: isImage ? mediaPreviewUrl : null,
-    videoPreviewUrl: isVideo ? mediaPreviewUrl : null,
+    loading,
     setContent,
+    videoPreviewUrl: isVideo ? mediaPreviewUrl : null,
   };
 }

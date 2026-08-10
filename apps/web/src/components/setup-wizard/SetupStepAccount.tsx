@@ -1,11 +1,11 @@
+import { Upload04Icon } from "hugeicons-react";
 import { useRef, useState } from "react";
-import { UploadIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
 import { SetupStepBackupImport } from "@/components/setup-wizard/SetupStepBackupImport";
+import type { SetupAccountDraft } from "@/components/setup-wizard/setup-wizard.shared";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 interface SetupStepAccountProps {
   onNext: (account: SetupAccountDraft) => void;
@@ -53,96 +53,111 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
     }
 
     onNext({
-      name: name.trim(),
       email: email.trim(),
-      phone: phone.trim(),
+      name: name.trim(),
       password,
+      phone: phone.trim(),
     });
   };
 
   return (
     <Card className="p-6">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="setup-name" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-name"
+          >
             Your name
           </label>
           <Input
             id="setup-name"
-            value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Jane Admin"
             required
+            value={name}
           />
         </div>
         <div>
-          <label htmlFor="setup-email" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-email"
+          >
             Email
           </label>
           <Input
             id="setup-email"
-            type="email"
-            value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="admin@example.com"
             required
+            type="email"
+            value={email}
           />
         </div>
         <div>
-          <label htmlFor="setup-phone" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-phone"
+          >
             Phone{" "}
-            <span className="font-normal text-muted-foreground">(optional)</span>
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
           </label>
           <Input
             id="setup-phone"
-            type="tel"
-            value={phone}
             onChange={(event) => setPhone(event.target.value)}
             placeholder="+628123456789"
+            type="tel"
+            value={phone}
           />
         </div>
         <div>
-          <label htmlFor="setup-password" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-password"
+          >
             Password
           </label>
           <Input
             id="setup-password"
-            type="password"
-            value={password}
+            minLength={8}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="••••••••"
             required
-            minLength={8}
+            type="password"
+            value={password}
           />
         </div>
         <div>
-          <label htmlFor="setup-confirm" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="setup-confirm"
+          >
             Confirm Password
           </label>
           <Input
             id="setup-confirm"
-            type="password"
-            value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="••••••••"
             required
+            type="password"
+            value={confirmPassword}
           />
         </div>
         {error && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
             {error}
           </div>
         )}
-        <Button type="submit" className="w-full">
+        <Button className="w-full" type="submit">
           Continue
         </Button>
-        <div className="flex justify-center border-t border-border pt-4">
+        <div className="flex justify-center border-border border-t pt-4">
           <input
-            ref={backupInputRef}
-            type="file"
             accept=".zip,application/zip"
-            className="sr-only"
             aria-label="Choose a backup file"
+            className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
               event.target.value = "";
@@ -152,15 +167,16 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
               setInitialBackupFile(file);
               setMode("backup");
             }}
+            ref={backupInputRef}
+            type="file"
           />
           <Button
+            onClick={() => backupInputRef.current?.click()}
+            size="sm"
             type="button"
             variant="ghost"
-            size="sm"
-            onClick={() => backupInputRef.current?.click()}
           >
-            <UploadIcon className="size-3.5" aria-hidden />
-            I have a backup
+            <Upload04Icon aria-hidden className="size-3.5" />I have a backup
           </Button>
         </div>
       </form>

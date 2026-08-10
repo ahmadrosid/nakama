@@ -25,11 +25,18 @@ export function pastedTextFilename(wordCount: number): string {
 export function createPastedTextFile(text: string): File {
   const normalized = normalizePastedText(text);
   const wordCount = countWords(normalized);
-  return new File([normalized], pastedTextFilename(wordCount), { type: "text/plain" });
+  return new File([normalized], pastedTextFilename(wordCount), {
+    type: "text/plain",
+  });
 }
 
-export function isPastedTextDocument(filename: string, mediaType: string): boolean {
-  return mediaType.startsWith("text/plain") && PASTED_TEXT_FILENAME_RE.test(filename);
+export function isPastedTextDocument(
+  filename: string,
+  mediaType: string
+): boolean {
+  return (
+    mediaType.startsWith("text/plain") && PASTED_TEXT_FILENAME_RE.test(filename)
+  );
 }
 
 export function wordCountFromPastedFilename(filename: string): number | null {
@@ -47,7 +54,7 @@ export interface DisplayDocument {
 }
 
 export function documentDisplayFromContentPart(
-  part: Extract<MessageContentPart, { type: "document" }>,
+  part: Extract<MessageContentPart, { type: "document" }>
 ): DisplayDocument {
   return {
     filename: part.filename,

@@ -5,7 +5,7 @@ import type {
   ComposioUserConnectionSummary,
   ListComposioToolkitsResponse,
 } from "@nakama/core/contract";
-import { MoreHorizontalIcon, SearchIcon } from "lucide-react";
+import { MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
@@ -48,8 +48,12 @@ interface ToolkitRowModel {
   userConnection: ComposioUserConnectionSummary | undefined;
 }
 
-function matchesToolkitSearch(toolkit: ComposioCatalogToolkitSummary, query: string): boolean {
-  const haystack = `${toolkit.name} ${toolkit.slug} ${toolkit.description ?? ""}`.toLowerCase();
+function matchesToolkitSearch(
+  toolkit: ComposioCatalogToolkitSummary,
+  query: string
+): boolean {
+  const haystack =
+    `${toolkit.name} ${toolkit.slug} ${toolkit.description ?? ""}`.toLowerCase();
   return haystack.includes(query);
 }
 
@@ -61,7 +65,9 @@ function isActiveToolkit(row: ToolkitRowModel): boolean {
   return row.userConnection !== undefined;
 }
 
-function userConnectionLabel(status: ComposioUserConnectionStatus | undefined): string {
+function userConnectionLabel(
+  status: ComposioUserConnectionStatus | undefined
+): string {
   switch (status) {
     case "connected":
       return "Connected";
@@ -75,7 +81,7 @@ function userConnectionLabel(status: ComposioUserConnectionStatus | undefined): 
 }
 
 function userConnectionTone(
-  status: ComposioUserConnectionStatus | undefined,
+  status: ComposioUserConnectionStatus | undefined
 ): "success" | "warning" | "error" | "muted" {
   switch (status) {
     case "connected":
@@ -99,14 +105,14 @@ function StatusPill({
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        "shrink-0 rounded-full border px-2 py-0.5 font-medium text-[11px]",
         tone === "success" &&
           "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200",
         tone === "warning" &&
           "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200",
         tone === "error" &&
           "border-red-200 bg-red-50 text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-200",
-        tone === "muted" && "border-border bg-muted/50 text-muted-foreground",
+        tone === "muted" && "border-border bg-muted/50 text-muted-foreground"
       )}
     >
       {label}
@@ -115,13 +121,13 @@ function StatusPill({
 }
 
 interface ComposioToolkitRowProps {
-  row: ToolkitRowModel;
-  isOrgAdmin: boolean;
   busy: boolean;
-  onEnable: (slug: string) => void;
+  isOrgAdmin: boolean;
   onDisable: (slug: string) => void;
-  onSync: (slug: string) => void;
   onDisconnect: (slug: string) => void;
+  onEnable: (slug: string) => void;
+  onSync: (slug: string) => void;
+  row: ToolkitRowModel;
 }
 
 function ComposioToolkitRow({
@@ -140,16 +146,18 @@ function ComposioToolkitRow({
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
-      <ComposioToolkitLogo name={catalog.name} logoUrl={catalog.logoUrl} />
+      <ComposioToolkitLogo logoUrl={catalog.logoUrl} name={catalog.name} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <p
-            className="truncate text-sm font-medium text-foreground"
+            className="truncate font-medium text-foreground text-sm"
             title={catalog.description ?? catalog.name}
           >
             {catalog.name}
           </p>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{catalog.slug}</span>
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            {catalog.slug}
+          </span>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <StatusPill
@@ -163,12 +171,19 @@ function ComposioToolkitRow({
             />
           ) : null}
         </div>
-        {lastError ? <p className="mt-1 truncate text-xs text-destructive">{lastError}</p> : null}
+        {lastError ? (
+          <p className="mt-1 truncate text-destructive text-xs">{lastError}</p>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
         {isOrgAdmin && !orgEnabled ? (
-          <Button type="button" size="sm" disabled={busy} onClick={() => onEnable(catalog.slug)}>
+          <Button
+            disabled={busy}
+            onClick={() => onEnable(catalog.slug)}
+            size="sm"
+            type="button"
+          >
             Enable
           </Button>
         ) : null}
@@ -177,16 +192,28 @@ function ComposioToolkitRow({
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button type="button" size="icon-sm" variant="outline" disabled={busy} aria-label="Toolkit actions" />
+                <Button
+                  aria-label="Toolkit actions"
+                  disabled={busy}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                />
               }
             >
               <MoreHorizontalIcon className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSync(catalog.slug)}>Sync tools</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDisconnect(catalog.slug)}>Disconnect</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSync(catalog.slug)}>
+                Sync tools
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDisconnect(catalog.slug)}>
+                Disconnect
+              </DropdownMenuItem>
               {isOrgAdmin ? (
-                <DropdownMenuItem onClick={() => onDisable(catalog.slug)}>Disable for org</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDisable(catalog.slug)}>
+                  Disable for org
+                </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -194,11 +221,11 @@ function ComposioToolkitRow({
 
         {isOrgAdmin && orgEnabled && userStatus !== "connected" ? (
           <Button
-            type="button"
-            size="sm"
-            variant="outline"
             disabled={busy}
             onClick={() => onDisable(catalog.slug)}
+            size="sm"
+            type="button"
+            variant="outline"
           >
             Disable
           </Button>
@@ -209,13 +236,13 @@ function ComposioToolkitRow({
 }
 
 interface ComposioToolkitListProps {
+  busy: boolean;
   data: ListComposioToolkitsResponse;
   isOrgAdmin: boolean;
-  busy: boolean;
-  onEnable: (slug: string) => void;
   onDisable: (slug: string) => void;
-  onSync: (slug: string) => void;
   onDisconnect: (slug: string) => void;
+  onEnable: (slug: string) => void;
+  onSync: (slug: string) => void;
 }
 
 function ComposioToolkitList({
@@ -235,14 +262,21 @@ function ComposioToolkitList({
   const isSearching = query.length > 0;
 
   const rows = useMemo(() => {
-    const orgBySlug = new Map(data.orgToolkits.map((toolkit) => [toolkit.toolkitSlug, toolkit]));
+    const orgBySlug = new Map(
+      data.orgToolkits.map((toolkit) => [toolkit.toolkitSlug, toolkit])
+    );
     const userByToolkitId = new Map(
-      data.userConnections.map((connection) => [connection.toolkitId, connection]),
+      data.userConnections.map((connection) => [
+        connection.toolkitId,
+        connection,
+      ])
     );
 
     return data.catalog.map((catalogToolkit) => {
       const orgToolkit = orgBySlug.get(catalogToolkit.slug);
-      const userConnection = orgToolkit ? userByToolkitId.get(orgToolkit.id) : undefined;
+      const userConnection = orgToolkit
+        ? userByToolkitId.get(orgToolkit.id)
+        : undefined;
 
       return { catalog: catalogToolkit, orgToolkit, userConnection };
     });
@@ -251,16 +285,19 @@ function ComposioToolkitList({
   const activeRows = useMemo(() => rows.filter(isActiveToolkit), [rows]);
   const enabledCount = useMemo(
     () => rows.filter((row) => row.orgToolkit?.status === "enabled").length,
-    [rows],
+    [rows]
   );
   const connectedCount = useMemo(
-    () => rows.filter((row) => row.userConnection?.status === "connected").length,
-    [rows],
+    () =>
+      rows.filter((row) => row.userConnection?.status === "connected").length,
+    [rows]
   );
 
   const filteredRows = useMemo(() => {
     if (isSearching) {
-      const matches = rows.filter((row) => matchesToolkitSearch(row.catalog, query));
+      const matches = rows.filter((row) =>
+        matchesToolkitSearch(row.catalog, query)
+      );
       return isOrgAdmin
         ? matches.toSorted(compareToolkitRows)
         : matches.filter((row) => row.orgToolkit?.status === "enabled");
@@ -274,14 +311,17 @@ function ComposioToolkitList({
   }, [activeRows, isOrgAdmin, isSearching, query, rows]);
 
   const displayedRows = filteredRows.slice(0, visibleCount);
-  const remainingCount = Math.max(filteredRows.length - displayedRows.length, 0);
+  const remainingCount = Math.max(
+    filteredRows.length - displayedRows.length,
+    0
+  );
 
   return (
     <>
-      <div className="space-y-3 border-b border-border px-4 py-3">
+      <div className="space-y-3 border-border border-b px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-foreground">SaaS toolkits</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground text-sm">SaaS toolkits</p>
+          <p className="mt-0.5 text-muted-foreground text-xs">
             {isOrgAdmin
               ? "Enable an app for your org. Members connect their own accounts from chat when they need a toolkit."
               : "Ask your agent in chat to connect org-enabled apps. Chat uses your credentials, not a shared org login."}
@@ -289,32 +329,34 @@ function ComposioToolkitList({
         </div>
 
         <div className="relative">
-          <SearchIcon
-            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+          <Search01Icon
             aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            value={search}
+            className="h-9 border-border/60 bg-muted/20 pl-8 text-sm shadow-none"
             onChange={(event) => {
               setSearch(event.target.value);
               setVisibleCount(CATALOG_PAGE_SIZE);
             }}
             placeholder={
-              isOrgAdmin ? "Search apps to enable (Gmail, Slack, GitHub…)" : "Search enabled apps…"
+              isOrgAdmin
+                ? "Search apps to enable (Gmail, Slack, GitHub…)"
+                : "Search enabled apps…"
             }
-            className="h-9 border-border/60 bg-muted/20 pl-8 text-sm shadow-none"
+            value={search}
           />
         </div>
 
-        <p className="text-xs text-muted-foreground tabular-nums">
+        <p className="text-muted-foreground text-xs tabular-nums">
           {isSearching ? (
             <>
               {filteredRows.length} match{filteredRows.length === 1 ? "" : "es"}
             </>
           ) : isOrgAdmin ? (
             <>
-              {enabledCount} enabled · {connectedCount} connected by you · {data.catalog.length}{" "}
-              available
+              {enabledCount} enabled · {connectedCount} connected by you ·{" "}
+              {data.catalog.length} available
             </>
           ) : (
             <>
@@ -325,9 +367,11 @@ function ComposioToolkitList({
       </div>
 
       {data.catalog.length === 0 ? (
-        <div className="px-4 py-6 text-sm text-muted-foreground">No toolkits available yet.</div>
+        <div className="px-4 py-6 text-muted-foreground text-sm">
+          No toolkits available yet.
+        </div>
       ) : filteredRows.length === 0 ? (
-        <div className="space-y-1 px-4 py-8 text-center text-sm text-muted-foreground">
+        <div className="space-y-1 px-4 py-8 text-center text-muted-foreground text-sm">
           {isSearching ? (
             <>
               <p>No apps match &ldquo;{search.trim()}&rdquo;.</p>
@@ -336,7 +380,9 @@ function ComposioToolkitList({
           ) : (
             <>
               <p>No apps are enabled for your org yet.</p>
-              <p className="text-xs">Ask an org admin to enable toolkits first.</p>
+              <p className="text-xs">
+                Ask an org admin to enable toolkits first.
+              </p>
             </>
           )}
         </div>
@@ -346,28 +392,32 @@ function ComposioToolkitList({
             <div className="divide-y divide-border">
               {displayedRows.map((row) => (
                 <ComposioToolkitRow
-                  key={row.catalog.slug}
-                  row={row}
-                  isOrgAdmin={isOrgAdmin}
                   busy={busy}
-                  onEnable={onEnable}
+                  isOrgAdmin={isOrgAdmin}
+                  key={row.catalog.slug}
                   onDisable={onDisable}
-                  onSync={onSync}
                   onDisconnect={onDisconnect}
+                  onEnable={onEnable}
+                  onSync={onSync}
+                  row={row}
                 />
               ))}
             </div>
           </div>
 
           {remainingCount > 0 ? (
-            <div className="border-t border-border px-4 py-3 text-center">
+            <div className="border-border border-t px-4 py-3 text-center">
               <Button
+                onClick={() =>
+                  setVisibleCount((current) => current + CATALOG_PAGE_SIZE)
+                }
+                size="sm"
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => setVisibleCount((current) => current + CATALOG_PAGE_SIZE)}
               >
-                Show more (<span className="tabular-nums">{remainingCount}</span> remaining)
+                Show more (
+                <span className="tabular-nums">{remainingCount}</span>{" "}
+                remaining)
               </Button>
             </div>
           ) : null}
@@ -377,35 +427,42 @@ function ComposioToolkitList({
   );
 }
 
-function ComposioConnectionsSkeleton({ bordered = false }: { bordered?: boolean }) {
+function ComposioConnectionsSkeleton({
+  bordered = false,
+}: {
+  bordered?: boolean;
+}) {
   return (
-    <IntegrationCardShell bordered={bordered} busyLabel="Loading Composio toolkits">
-        <div className="space-y-3 border-b border-border px-4 py-3">
-          <div className="space-y-2">
-            <div className="skeleton-shimmer h-4 w-28 rounded" />
-            <div className="skeleton-shimmer h-3 w-full max-w-sm rounded" />
-          </div>
-          <div className="skeleton-shimmer h-9 w-full rounded-md" />
-          <div className="skeleton-shimmer h-3 w-48 rounded" />
+    <IntegrationCardShell
+      bordered={bordered}
+      busyLabel="Loading Composio toolkits"
+    >
+      <div className="space-y-3 border-border border-b px-4 py-3">
+        <div className="space-y-2">
+          <div className="skeleton-shimmer h-4 w-28 rounded" />
+          <div className="skeleton-shimmer h-3 w-full max-w-sm rounded" />
         </div>
+        <div className="skeleton-shimmer h-9 w-full rounded-md" />
+        <div className="skeleton-shimmer h-3 w-48 rounded" />
+      </div>
 
-        <div className="divide-y divide-border">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="skeleton-shimmer h-4 w-24 rounded" />
-                  <div className="skeleton-shimmer h-3 w-16 rounded" />
-                </div>
-                <div className="flex gap-1.5">
-                  <div className="skeleton-shimmer h-5 w-24 rounded-full" />
-                  <div className="skeleton-shimmer h-5 w-20 rounded-full" />
-                </div>
+      <div className="divide-y divide-border">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="flex items-center gap-3 px-4 py-2.5" key={index}>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="skeleton-shimmer h-4 w-24 rounded" />
+                <div className="skeleton-shimmer h-3 w-16 rounded" />
               </div>
-              <div className="skeleton-shimmer h-8 w-20 shrink-0 rounded-md" />
+              <div className="flex gap-1.5">
+                <div className="skeleton-shimmer h-5 w-24 rounded-full" />
+                <div className="skeleton-shimmer h-5 w-20 rounded-full" />
+              </div>
             </div>
-          ))}
-        </div>
+            <div className="skeleton-shimmer h-8 w-20 shrink-0 rounded-md" />
+          </div>
+        ))}
+      </div>
     </IntegrationCardShell>
   );
 }
@@ -432,7 +489,7 @@ export function ComposioConnectionsCard({
     disconnectMutation.isPending ||
     syncMutation.isPending;
 
-  const shellProps = { embedded, bordered };
+  const shellProps = { bordered, embedded };
 
   if (toolkitsQuery.isLoading) {
     return <ComposioConnectionsSkeleton bordered={bordered} />;
@@ -441,7 +498,9 @@ export function ComposioConnectionsCard({
   if (toolkitsQuery.error) {
     return (
       <IntegrationCardShell {...shellProps}>
-        <div className="p-4 text-sm text-destructive">{formatError(toolkitsQuery.error)}</div>
+        <div className="p-4 text-destructive text-sm">
+          {formatError(toolkitsQuery.error)}
+        </div>
       </IntegrationCardShell>
     );
   }
@@ -452,7 +511,7 @@ export function ComposioConnectionsCard({
   if (!configured) {
     return (
       <IntegrationCardShell {...shellProps}>
-        <div className="space-y-2 p-4 text-sm text-muted-foreground">
+        <div className="space-y-2 p-4 text-muted-foreground text-sm">
           <p className="font-medium text-foreground">
             {isOrgAdmin
               ? "Save your Composio API key first"
@@ -476,12 +535,14 @@ export function ComposioConnectionsCard({
     return (
       <IntegrationCardShell {...shellProps}>
         <div className="space-y-2 p-4 text-sm">
-          <p className="font-medium text-foreground">Could not load Composio toolkits</p>
+          <p className="font-medium text-foreground">
+            Could not load Composio toolkits
+          </p>
           <p className="text-destructive">{data.catalogError}</p>
           {isOrgAdmin ? (
             <p className="text-muted-foreground">
-              Verify the saved project API key under Settings → Project Settings → API Keys, then
-              save it again above.
+              Verify the saved project API key under Settings → Project Settings
+              → API Keys, then save it again above.
             </p>
           ) : null}
         </div>
@@ -492,13 +553,13 @@ export function ComposioConnectionsCard({
   return (
     <IntegrationCardShell {...shellProps}>
       <ComposioToolkitList
-          data={data}
-          isOrgAdmin={isOrgAdmin}
-          busy={busy}
-          onEnable={(slug) => enableMutation.mutate(slug)}
-          onDisable={(slug) => disableMutation.mutate(slug)}
-          onSync={(slug) => syncMutation.mutate(slug)}
-          onDisconnect={(slug) => disconnectMutation.mutate(slug)}
+        busy={busy}
+        data={data}
+        isOrgAdmin={isOrgAdmin}
+        onDisable={(slug) => disableMutation.mutate(slug)}
+        onDisconnect={(slug) => disconnectMutation.mutate(slug)}
+        onEnable={(slug) => enableMutation.mutate(slug)}
+        onSync={(slug) => syncMutation.mutate(slug)}
       />
     </IntegrationCardShell>
   );

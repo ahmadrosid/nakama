@@ -1,19 +1,19 @@
-import type { ChatListItem } from "@/lib/chat-history";
 import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
+import type { ChatListItem } from "@/lib/chat-history";
 import {
   parseStreamingArtifactToolInput,
   type StreamingArtifactToolInput,
 } from "@/lib/streaming-artifact-input";
 
 export interface StreamingArtifactView {
-  toolCallId: string;
-  tool: string;
-  parsed: StreamingArtifactToolInput;
   message: ChatListItem;
+  parsed: StreamingArtifactToolInput;
+  tool: string;
+  toolCallId: string;
 }
 
 export function findLatestStreamingArtifact(
-  messages: ChatListItem[],
+  messages: ChatListItem[]
 ): StreamingArtifactView | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -28,22 +28,22 @@ export function findLatestStreamingArtifact(
 
     const parsed = parseStreamingArtifactToolInput(
       message.tool,
-      message.toolInputAccumulatedJson,
+      message.toolInputAccumulatedJson
     );
 
     if (!parsed.eligible) {
       continue;
     }
 
-    if (!message.toolCallId || !message.tool) {
+    if (!(message.toolCallId && message.tool)) {
       continue;
     }
 
     return {
-      toolCallId: message.toolCallId,
-      tool: message.tool,
-      parsed,
       message,
+      parsed,
+      tool: message.tool,
+      toolCallId: message.toolCallId,
     };
   }
 
@@ -51,9 +51,9 @@ export function findLatestStreamingArtifact(
 }
 
 export interface CompletedContentArtifact {
-  toolCallId: string;
-  tool: string;
   relativePath: string;
+  tool: string;
+  toolCallId: string;
 }
 
 function isContentArtifactTool(tool: string | undefined): boolean {
@@ -66,7 +66,11 @@ function relativePathFromCompletedTool(message: ChatListItem): string | null {
       ? (message.toolResult as { path?: string; error?: string })
       : null;
 
-  if (!result || typeof result.error === "string" || typeof result.path !== "string") {
+  if (
+    !result ||
+    typeof result.error === "string" ||
+    typeof result.path !== "string"
+  ) {
     return null;
   }
 
@@ -81,17 +85,17 @@ function relativePathFromCompletedTool(message: ChatListItem): string | null {
 
 export function findCompletedContentArtifact(
   messages: ChatListItem[],
-  toolCallId: string,
+  toolCallId: string
 ): CompletedContentArtifact | null {
   const message = messages.find(
     (entry) =>
       entry.toolCallId === toolCallId &&
       entry.role === "tool" &&
       entry.toolStatus === "done" &&
-      isContentArtifactTool(entry.tool),
+      isContentArtifactTool(entry.tool)
   );
 
-  if (!message?.toolCallId || !message.tool) {
+  if (!(message?.toolCallId && message.tool)) {
     return null;
   }
 
@@ -102,9 +106,9 @@ export function findCompletedContentArtifact(
   }
 
   return {
-    toolCallId: message.toolCallId,
-    tool: message.tool,
     relativePath,
+    tool: message.tool,
+    toolCallId: message.toolCallId,
   };
 }
 
@@ -114,10 +118,14 @@ export function upsertStreamingToolMessage(
     toolCallId: string;
     tool: string;
     accumulatedArguments: string;
-  },
+  }
 ): ChatListItem[] {
-  const parsed = parseStreamingArtifactToolInput(event.tool, event.accumulatedArguments);
-  const isArtifactTool = event.tool === "write_file" || event.tool === "write_docx";
+  const parsed = parseStreamingArtifactToolInput(
+    event.tool,
+    event.accumulatedArguments
+  );
+  const isArtifactTool =
+    event.tool === "write_file" || event.tool === "write_docx";
 
   if (!isArtifactTool) {
     return messages;
@@ -129,27 +137,27 @@ export function upsertStreamingToolMessage(
 
   const contentField = event.tool === "write_docx" ? "markdown" : "content";
   const toolInput =
-    parsed.relativePath != null
-      ? {
+    parsed.relativePath == null
+      ? undefined
+      : {
           path: `artifacts/${parsed.relativePath}`,
-          ...(parsed.content != null ? { [contentField]: parsed.content } : {}),
-        }
-      : undefined;
+          ...(parsed.content == null ? {} : { [contentField]: parsed.content }),
+        };
 
   const nextMessage: ChatListItem = {
+    artifactStreaming: true,
+    content: event.tool,
     id: event.toolCallId,
     role: "tool",
-    content: event.tool,
-    toolCallId: event.toolCallId,
     tool: event.tool,
-    toolStatus: "running",
-    artifactStreaming: true,
+    toolCallId: event.toolCallId,
     toolInputAccumulatedJson: event.accumulatedArguments,
+    toolStatus: "running",
     ...(toolInput ? { toolInput } : {}),
   };
 
   const existingIndex = messages.findIndex(
-    (message) => message.toolCallId === event.toolCallId,
+    (message) => message.toolCallId === event.toolCallId
   );
 
   if (existingIndex >= 0) {
@@ -164,7 +172,7 @@ export function upsertStreamingToolMessage(
   const next = messages.map((message) =>
     message.role === "assistant" && message.streaming
       ? { ...message, streaming: false }
-      : message,
+      : message
   );
 
   return [...next, nextMessage];

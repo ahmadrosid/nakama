@@ -2,11 +2,11 @@ import {
   Client,
   Events,
   GatewayIntentBits,
-  Partials,
   type Message,
+  Partials,
 } from "discord.js";
+import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { DiscordBridgeConfig } from "./config";
-import { createChatHandler, type ChatHandlerDeps } from "./chat-handler";
 import {
   getDiscordErrorCode,
   isIgnorableInteractionError,
@@ -15,7 +15,7 @@ import { registerSlashCommands } from "./slash-commands";
 
 export async function createBot(
   config: DiscordBridgeConfig,
-  deps: Omit<ChatHandlerDeps, "config" | "getBotInfo">,
+  deps: Omit<ChatHandlerDeps, "config" | "getBotInfo">
 ): Promise<Client<true>> {
   const client = new Client({
     intents: [
@@ -49,7 +49,7 @@ export async function createBot(
       "[discord] message",
       message.author.id,
       message.channelId,
-      message.content?.slice(0, 80),
+      message.content?.slice(0, 80)
     );
     try {
       await handler.handleMessage(message);
@@ -63,7 +63,11 @@ export async function createBot(
       return;
     }
 
-    console.log("[discord] slash", interaction.commandName, interaction.user.id);
+    console.log(
+      "[discord] slash",
+      interaction.commandName,
+      interaction.user.id
+    );
 
     // Acknowledge immediately — Discord expires interactions after ~3s.
     // Any work (locks, API calls) must happen after this.
@@ -72,7 +76,7 @@ export async function createBot(
     } catch (error) {
       if (isIgnorableInteractionError(error)) {
         console.warn(
-          `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(error)}).`,
+          `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(error)}).`
         );
         return;
       }
@@ -86,13 +90,15 @@ export async function createBot(
     } catch (error) {
       if (isIgnorableInteractionError(error)) {
         console.warn(
-          `Slash command /${interaction.commandName} interaction expired (${getDiscordErrorCode(error)}).`,
+          `Slash command /${interaction.commandName} interaction expired (${getDiscordErrorCode(error)}).`
         );
         return;
       }
 
       console.error("Slash command error:", error);
-      await interaction.editReply({ content: "Something went wrong." }).catch(() => {});
+      await interaction
+        .editReply({ content: "Something went wrong." })
+        .catch(() => {});
     }
   });
 

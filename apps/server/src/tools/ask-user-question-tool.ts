@@ -1,34 +1,38 @@
-import { nanoid, type AgentQuestionnaire, type ToolDefinition } from "@nakama/core";
+import {
+  type AgentQuestionnaire,
+  nanoid,
+  type ToolDefinition,
+} from "@nakama/core";
 import type { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
 
 export function createAskUserQuestionTools(
-  questionnaireState: AgentQuestionnaireState,
+  questionnaireState: AgentQuestionnaireState
 ): ToolDefinition[] {
   return [
     {
-      name: "ask_user_question",
       description:
         "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
+      name: "ask_user_question",
       parameters: {
-        type: "object",
+        additionalProperties: false,
         properties: {
-          title: { type: "string" },
           questions: {
-            type: "array",
             items: {
-              type: "object",
+              additionalProperties: false,
               properties: {
-                prompt: { type: "string" },
-                choices: { type: "array", items: { type: "string" } },
                 allowCustomAnswer: { type: "boolean" },
+                choices: { items: { type: "string" }, type: "array" },
+                prompt: { type: "string" },
               },
               required: ["prompt", "choices"],
-              additionalProperties: false,
+              type: "object",
             },
+            type: "array",
           },
+          title: { type: "string" },
         },
         required: ["title", "questions"],
-        additionalProperties: false,
+        type: "object",
       },
       async run(input, context) {
         const sessionId = context.sessionId;
@@ -62,7 +66,7 @@ function slugId(value: string, fallback: string): string {
 }
 
 function readChoices(
-  input: unknown,
+  input: unknown
 ): Array<{ id?: string; label: string }> | null {
   if (!Array.isArray(input)) {
     return null;
@@ -107,7 +111,7 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
   const title = typeof record.title === "string" ? record.title.trim() : "";
   const questions = Array.isArray(record.questions) ? record.questions : null;
 
-  if (!title || !questions) {
+  if (!(title && questions)) {
     return null;
   }
 
@@ -117,32 +121,37 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
     }
 
     const question = item as Record<string, unknown>;
-    const prompt = typeof question.prompt === "string" ? question.prompt.trim() : "";
+    const prompt =
+      typeof question.prompt === "string" ? question.prompt.trim() : "";
     const rawChoices = readChoices(question.choices);
     const allowCustomAnswer =
-      typeof question.allowCustomAnswer === "boolean" ? question.allowCustomAnswer : false;
+      typeof question.allowCustomAnswer === "boolean"
+        ? question.allowCustomAnswer
+        : false;
     const placeholder =
       typeof question.placeholder === "string" && question.placeholder.trim()
         ? question.placeholder.trim()
         : undefined;
-    const explicitId = typeof question.id === "string" ? question.id.trim() : "";
+    const explicitId =
+      typeof question.id === "string" ? question.id.trim() : "";
 
-    if (!prompt || !rawChoices) {
+    if (!(prompt && rawChoices)) {
       return null;
     }
 
     const questionId = explicitId || slugId(prompt, `q${questionIndex + 1}`);
     const choices = rawChoices.map((choice, choiceIndex) => ({
-      id: choice.id || slugId(choice.label, `${questionId}_c${choiceIndex + 1}`),
+      id:
+        choice.id || slugId(choice.label, `${questionId}_c${choiceIndex + 1}`),
       label: choice.label,
     }));
 
     return {
-      id: questionId,
-      prompt,
-      choices,
       allowCustomAnswer,
+      choices,
+      id: questionId,
       placeholder,
+      prompt,
     };
   });
 
@@ -152,7 +161,7 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
 
   return {
     id: nanoid(),
-    title,
     questions: parsed as AgentQuestionnaire["questions"],
+    title,
   };
 }

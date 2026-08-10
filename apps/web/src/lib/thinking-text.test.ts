@@ -8,11 +8,9 @@ describe("splitThinkingLines", () => {
   });
 
   test("splits paragraph breaks and single newlines", () => {
-    expect(splitThinkingLines("First line\nSecond line\n\nThird paragraph")).toEqual([
-      "First line",
-      "Second line",
-      "Third paragraph",
-    ]);
+    expect(
+      splitThinkingLines("First line\nSecond line\n\nThird paragraph")
+    ).toEqual(["First line", "Second line", "Third paragraph"]);
   });
 
   test("splits long prose into sentences", () => {

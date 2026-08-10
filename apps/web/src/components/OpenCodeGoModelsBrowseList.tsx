@@ -1,13 +1,13 @@
-import { useDeferredValue, useMemo, useState } from "react";
 import type { ProviderModelOption } from "@nakama/core/contract";
+import { useDeferredValue, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface OpenCodeGoModelsBrowseListProps {
-  models: ProviderModelOption[];
-  usedIds?: Set<string>;
-  onSelect: (model: ProviderModelOption) => void;
   className?: string;
+  models: ProviderModelOption[];
+  onSelect: (model: ProviderModelOption) => void;
+  usedIds?: Set<string>;
 }
 
 export function OpenCodeGoModelsBrowseList({
@@ -34,43 +34,50 @@ export function OpenCodeGoModelsBrowseList({
     return result.filter(
       (model) =>
         model.name.toLowerCase().includes(query) ||
-        model.id.toLowerCase().includes(query),
+        model.id.toLowerCase().includes(query)
     );
   }, [models, usedIds, deferredSearch]);
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <div className="border-b border-border px-3 py-2">
+      <div className="border-border border-b px-3 py-2">
         <Input
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="Search model name or ID…"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
         />
       </div>
 
-      <div className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
         {filtered.length} available
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-            {models.length === 0 ? "No catalog models loaded." : "No models found"}
+          <div className="px-3 py-8 text-center text-muted-foreground text-sm">
+            {models.length === 0
+              ? "No catalog models loaded."
+              : "No models found"}
           </div>
         ) : (
           filtered.map((model) => (
             <button
+              className="flex w-full flex-col gap-0.5 border-border/60 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
               key={model.id}
-              type="button"
-              className="flex w-full flex-col gap-0.5 border-b border-border/60 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
               onClick={() => onSelect(model)}
+              type="button"
             >
-              <span className="text-sm font-medium text-foreground">{model.name}</span>
-              <span className="font-mono text-[11px] text-muted-foreground">{model.id}</span>
+              <span className="font-medium text-foreground text-sm">
+                {model.name}
+              </span>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {model.id}
+              </span>
               {model.inputPerMillionUsd !== undefined &&
               model.outputPerMillionUsd !== undefined ? (
                 <span className="text-[11px] text-muted-foreground">
-                  ${model.inputPerMillionUsd}/M in · ${model.outputPerMillionUsd}/M out
+                  ${model.inputPerMillionUsd}/M in · $
+                  {model.outputPerMillionUsd}/M out
                 </span>
               ) : null}
             </button>

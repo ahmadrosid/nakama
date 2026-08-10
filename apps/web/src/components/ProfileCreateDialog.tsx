@@ -1,5 +1,13 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { useEffect, useMemo, useReducer, useRef, type ChangeEvent, type FormEvent } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
+import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
@@ -20,11 +27,11 @@ import { formatError } from "@/lib/client";
 import { fileToImageAttachment } from "@/lib/profile-images";
 
 interface ProfileCreateDialogProps {
-  open: boolean;
-  tools: ToolSummary[];
+  onAskSuperBot?: () => void;
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
-  onAskSuperBot?: () => void;
+  open: boolean;
+  tools: ToolSummary[];
 }
 
 const defaultCreatePrompt = "You are a helpful assistant.";
@@ -43,19 +50,23 @@ type ProfileCreateFormAction =
   | { type: "patch"; values: Partial<ProfileCreateFormState> }
   | { type: "add-tool"; toolId: string }
   | { type: "remove-tool"; toolId: string }
-  | { type: "set-avatar-preview"; preview: string | null; revokePrevious?: boolean };
+  | {
+      type: "set-avatar-preview";
+      preview: string | null;
+      revokePrevious?: boolean;
+    };
 
 const initialProfileCreateFormState: ProfileCreateFormState = {
-  submitError: null,
+  avatarPreview: null,
   name: "",
   profileId: "",
-  avatarPreview: null,
+  submitError: null,
   toolIds: [],
 };
 
 function profileCreateFormReducer(
   state: ProfileCreateFormState,
-  action: ProfileCreateFormAction,
+  action: ProfileCreateFormAction
 ): ProfileCreateFormState {
   switch (action.type) {
     case "reset":
@@ -105,13 +116,13 @@ export function ProfileCreateDialog({
   onAskSuperBot,
 }: ProfileCreateDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <ProfileCreateDialogContent
-          tools={tools}
+          onAskSuperBot={onAskSuperBot}
           onCreated={onCreated}
           onOpenChange={onOpenChange}
-          onAskSuperBot={onAskSuperBot}
+          tools={tools}
         />
       ) : null}
     </Dialog>
@@ -133,19 +144,25 @@ function ProfileCreateDialogContent({
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
-  const [form, dispatch] = useReducer(profileCreateFormReducer, initialProfileCreateFormState);
+  const [form, dispatch] = useReducer(
+    profileCreateFormReducer,
+    initialProfileCreateFormState
+  );
   const profileIdEditedRef = useRef(false);
   const avatarFileRef = useRef<File | null>(null);
 
   const busy =
-    createMutation.isPending || uploadAvatarMutation.isPending || assignToolMutation.isPending;
+    createMutation.isPending ||
+    uploadAvatarMutation.isPending ||
+    assignToolMutation.isPending;
   const profileIdTrimmed = form.profileId.trim();
   const profileIdValid =
     Boolean(profileIdTrimmed) && PROFILE_ID_PATTERN.test(profileIdTrimmed);
   const profileIdHasValue = form.profileId.length > 0;
-  const profileIdHelpText = !profileIdHasValue || profileIdValid
-    ? "From name. Letters, numbers, `_`, `-` only."
-    : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+  const profileIdHelpText =
+    !profileIdHasValue || profileIdValid
+      ? "From name. Letters, numbers, `_`, `-` only."
+      : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
   const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
@@ -158,7 +175,9 @@ function ProfileCreateDialogContent({
 
     dispatch({
       type: "patch",
-      values: { profileId: form.name.trim() ? slugifyProfileName(form.name) : "" },
+      values: {
+        profileId: form.name.trim() ? slugifyProfileName(form.name) : "",
+      },
     });
   }, [form.name]);
 
@@ -172,35 +191,39 @@ function ProfileCreateDialogContent({
     }
 
     dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ type: "set-avatar-preview", preview: null, revokePrevious: true });
+    dispatch({
+      preview: null,
+      revokePrevious: true,
+      type: "set-avatar-preview",
+    });
     avatarFileRef.current = file;
     dispatch({
-      type: "set-avatar-preview",
       preview: URL.createObjectURL(file),
       revokePrevious: false,
+      type: "set-avatar-preview",
     });
   }
 
   function handleToolSelect(toolId: string) {
     dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ type: "add-tool", toolId });
+    dispatch({ toolId, type: "add-tool" });
   }
 
   function handleRemoveTool(toolId: string) {
     dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ type: "remove-tool", toolId });
+    dispatch({ toolId, type: "remove-tool" });
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!form.name.trim() || !profileIdValid || busy) {
+    if (!(form.name.trim() && profileIdValid) || busy) {
       dispatch({
         type: "patch",
         values: {
-          submitError: !form.name.trim()
-            ? "Name is required."
-            : "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`.",
+          submitError: form.name.trim()
+            ? "Profile id must start with a letter or number and only use letters, numbers, `_`, or `-`."
+            : "Name is required.",
         },
       });
       return;
@@ -219,17 +242,18 @@ function ProfileCreateDialogContent({
       if (avatarFile) {
         const attachment = await fileToImageAttachment(avatarFile);
 
-        if (!attachment) {
+        if (attachment) {
+          await uploadAvatarMutation.mutateAsync({
+            attachment,
+            profileId: response.profile.id,
+          });
+        } else {
           dispatch({
             type: "patch",
             values: {
-              submitError: "Profile created, but the selected image could not be read.",
+              submitError:
+                "Profile created, but the selected image could not be read.",
             },
-          });
-        } else {
-          await uploadAvatarMutation.mutateAsync({
-            profileId: response.profile.id,
-            attachment,
           });
         }
       }
@@ -239,8 +263,8 @@ function ProfileCreateDialogContent({
           assignToolMutation.mutateAsync({
             profileId: response.profile.id,
             toolId,
-          }),
-        ),
+          })
+        )
       );
 
       onOpenChange(false);
@@ -252,7 +276,10 @@ function ProfileCreateDialogContent({
 
   return (
     <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-6 overflow-hidden p-6 sm:max-w-4xl">
-      <form className="flex min-h-0 flex-1 flex-col gap-6" onSubmit={handleSubmit}>
+      <form
+        className="flex min-h-0 flex-1 flex-col gap-6"
+        onSubmit={handleSubmit}
+      >
         <DialogHeader className="gap-2">
           <DialogTitle>Create profile</DialogTitle>
           <DialogDescription>
@@ -262,13 +289,13 @@ function ProfileCreateDialogContent({
                 {" "}
                 Or{" "}
                 <button
-                  type="button"
                   className="text-foreground underline underline-offset-2"
                   disabled={busy}
                   onClick={() => {
                     onOpenChange(false);
                     onAskSuperBot();
                   }}
+                  type="button"
                 >
                   ask Super Bot
                 </button>{" "}
@@ -279,40 +306,58 @@ function ProfileCreateDialogContent({
         </DialogHeader>
 
         <ProfileCreateDialogForm
-          busy={busy}
-          submitError={form.submitError}
-          name={form.name}
-          profileId={form.profileId}
-          profileIdHasValue={profileIdHasValue}
-          profileIdValid={profileIdValid}
-          profileIdHelpText={profileIdHelpText}
-          avatarPreview={form.avatarPreview}
           avatarInputRef={createAvatarInputRef}
-          tools={tools}
-          selectableTools={selectableTools}
-          selectedTools={selectedTools}
-          onNameChange={(value) => {
-            dispatch({ type: "patch", values: { submitError: null, name: value } });
-          }}
-          onProfileIdChange={(value) => {
-            dispatch({ type: "patch", values: { submitError: null, profileId: value } });
-            profileIdEditedRef.current = true;
-          }}
+          avatarPreview={form.avatarPreview}
+          busy={busy}
+          name={form.name}
           onAvatarSelected={handleAvatarSelected}
           onClearAvatar={() => {
             dispatch({ type: "patch", values: { submitError: null } });
-            dispatch({ type: "set-avatar-preview", preview: null, revokePrevious: true });
+            dispatch({
+              preview: null,
+              revokePrevious: true,
+              type: "set-avatar-preview",
+            });
             avatarFileRef.current = null;
           }}
-          onToolSelect={handleToolSelect}
+          onNameChange={(value) => {
+            dispatch({
+              type: "patch",
+              values: { name: value, submitError: null },
+            });
+          }}
+          onProfileIdChange={(value) => {
+            dispatch({
+              type: "patch",
+              values: { profileId: value, submitError: null },
+            });
+            profileIdEditedRef.current = true;
+          }}
           onRemoveTool={handleRemoveTool}
+          onToolSelect={handleToolSelect}
+          profileId={form.profileId}
+          profileIdHasValue={profileIdHasValue}
+          profileIdHelpText={profileIdHelpText}
+          profileIdValid={profileIdValid}
+          selectableTools={selectableTools}
+          selectedTools={selectedTools}
+          submitError={form.submitError}
+          tools={tools}
         />
 
         <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 pt-2 pb-2 sm:justify-end">
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={busy || !form.name.trim() || !profileIdValid}>
+          <Button
+            disabled={busy || !form.name.trim() || !profileIdValid}
+            type="submit"
+          >
             {busy ? <Spinner className="size-4" /> : "Create"}
           </Button>
         </DialogFooter>

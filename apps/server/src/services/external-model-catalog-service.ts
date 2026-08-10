@@ -1,7 +1,7 @@
 const CATALOG_URLS = {
+  cerebras: "https://api.cerebras.ai/public/v1/models",
   "models-dev": "https://models.dev/api.json",
   openrouter: "https://openrouter.ai/api/v1/models?output_modalities=text",
-  cerebras: "https://api.cerebras.ai/public/v1/models",
 } as const;
 
 export type ExternalModelCatalogId = keyof typeof CATALOG_URLS;
@@ -15,11 +15,15 @@ type CacheEntry = {
 
 const cache = new Map<ExternalModelCatalogId, CacheEntry>();
 
-export function isExternalModelCatalogId(value: string): value is ExternalModelCatalogId {
+export function isExternalModelCatalogId(
+  value: string
+): value is ExternalModelCatalogId {
   return value in CATALOG_URLS;
 }
 
-export async function getExternalModelCatalog(catalogId: ExternalModelCatalogId): Promise<unknown> {
+export async function getExternalModelCatalog(
+  catalogId: ExternalModelCatalogId
+): Promise<unknown> {
   const cached = cache.get(catalogId);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
     return cached.payload;

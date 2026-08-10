@@ -10,20 +10,20 @@ import {
 describe("stripMarkdownForTelegram", () => {
   test("removes bold and inline code", () => {
     expect(stripMarkdownForTelegram("Hello **world** and `code`")).toBe(
-      "Hello world and code",
+      "Hello world and code"
     );
   });
 
   test("unwraps fenced code blocks", () => {
-    expect(stripMarkdownForTelegram("Before\n```js\nconst x = 1;\n```\nAfter")).toBe(
-      "Before\nconst x = 1;\nAfter",
-    );
+    expect(
+      stripMarkdownForTelegram("Before\n```js\nconst x = 1;\n```\nAfter")
+    ).toBe("Before\nconst x = 1;\nAfter");
   });
 
   test("strips headings and link syntax", () => {
-    expect(stripMarkdownForTelegram("## Title\n[docs](https://example.com)")).toBe(
-      "Title\ndocs (https://example.com)",
-    );
+    expect(
+      stripMarkdownForTelegram("## Title\n[docs](https://example.com)")
+    ).toBe("Title\ndocs (https://example.com)");
   });
 
   test("preserves legacy share tokens with underscores in bare URLs", () => {
@@ -41,22 +41,26 @@ describe("stripMarkdownForTelegram", () => {
   test("preserves current nkshare tokens in bare URLs", () => {
     const shareUrl =
       "https://app.example/s/nksharea7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
-    expect(stripMarkdownForTelegram(`file.html: ${shareUrl}`)).toContain("nkshare");
+    expect(stripMarkdownForTelegram(`file.html: ${shareUrl}`)).toContain(
+      "nkshare"
+    );
   });
 
   test("still strips italic markers outside URLs", () => {
-    expect(stripMarkdownForTelegram("see _share_ then https://example.com/a_b")).toBe(
-      "see share then https://example.com/a_b",
-    );
+    expect(
+      stripMarkdownForTelegram("see _share_ then https://example.com/a_b")
+    ).toBe("see share then https://example.com/a_b");
   });
 });
 
 describe("renderTelegramRichText", () => {
   test("renders common markdown as Telegram HTML", () => {
     expect(
-      renderTelegramRichText("Hello **world**, `code`, and [docs](https://example.com)."),
+      renderTelegramRichText(
+        "Hello **world**, `code`, and [docs](https://example.com)."
+      )
     ).toBe(
-      'Hello <b>world</b>, <code>code</code>, and <a href="https://example.com">docs</a>.',
+      'Hello <b>world</b>, <code>code</code>, and <a href="https://example.com">docs</a>.'
     );
   });
 
@@ -65,34 +69,34 @@ describe("renderTelegramRichText", () => {
   });
 
   test("does not italicize underscores or double-escape query params in links", () => {
-    expect(renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")).toBe(
-      '<a href="https://example.com/a_b?x=1&amp;y=2">docs</a>',
-    );
+    expect(
+      renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")
+    ).toBe('<a href="https://example.com/a_b?x=1&amp;y=2">docs</a>');
   });
 
   test("leaves links with parentheses in the url unrendered", () => {
-    expect(renderTelegramRichText("[docs](https://example.com/path_(draft))")).toBe(
-      "[docs](https://example.com/path_(draft))",
-    );
+    expect(
+      renderTelegramRichText("[docs](https://example.com/path_(draft))")
+    ).toBe("[docs](https://example.com/path_(draft))");
   });
 
   test("preserves snake case identifiers with underscores", () => {
     expect(renderTelegramRichText("Use active_org_id for org context.")).toBe(
-      "Use active_org_id for org context.",
+      "Use active_org_id for org context."
     );
   });
 
   test("escapes raw html while preserving fenced code blocks", () => {
-    expect(renderTelegramRichText("Before <tag>\n```js\n  const x = 1 < 2;\n```")).toBe(
-      "Before &lt;tag&gt;\n<pre><code>  const x = 1 &lt; 2;</code></pre>",
-    );
+    expect(
+      renderTelegramRichText("Before <tag>\n```js\n  const x = 1 < 2;\n```")
+    ).toBe("Before &lt;tag&gt;\n<pre><code>  const x = 1 &lt; 2;</code></pre>");
   });
 });
 
 describe("prepareTelegramReply", () => {
   test("preserves markdown for rich telegram delivery", () => {
     expect(prepareTelegramReply("  Hello **world** and `code`  ")).toBe(
-      "Hello **world** and `code`",
+      "Hello **world** and `code`"
     );
   });
 });

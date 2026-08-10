@@ -6,20 +6,20 @@ describe("mail fakes", () => {
   test("list, read, and search messages", async () => {
     const reader = createFakeMailReader([
       {
-        uid: 1,
-        subject: "Hello world",
-        from: "alice@example.com",
         date: "2026-06-21T00:00:00.000Z",
         folder: "INBOX",
+        from: "alice@example.com",
+        subject: "Hello world",
         text: "hello there",
+        uid: 1,
       },
       {
-        uid: 2,
-        subject: "Billing update",
-        from: "billing@example.com",
         date: "2026-06-21T01:00:00.000Z",
         folder: "INBOX",
+        from: "billing@example.com",
+        subject: "Billing update",
         text: "invoice attached",
+        uid: 2,
       },
     ]);
 
@@ -41,9 +41,9 @@ describe("mail fakes", () => {
   test("records sent messages", async () => {
     const sender = createFakeMailSender();
     const result = await sender.send({
-      to: "recipient@example.com",
       subject: "Test",
       text: "Hello",
+      to: "recipient@example.com",
     });
 
     expect(result.messageId).toBe("fake-message-id");
@@ -55,7 +55,7 @@ describe("mail fakes", () => {
 describe("sanitizeMailError", () => {
   test("redacts password-like content", () => {
     expect(sanitizeMailError(new Error("AUTH failed password=abcd1234"))).toBe(
-      "AUTH failed password=[REDACTED]",
+      "AUTH failed password=[REDACTED]"
     );
   });
 });

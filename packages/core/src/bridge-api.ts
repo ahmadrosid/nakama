@@ -44,9 +44,9 @@ export function parseListUserOrgsResponse(body: unknown): ListUserOrgsResponse {
   }
 
   const orgs = (body as { orgs: unknown }).orgs;
-  if (!Array.isArray(orgs) || !orgs.every(isUserOrgSummary)) {
+  if (!(Array.isArray(orgs) && orgs.every(isUserOrgSummary))) {
     throw new Error(
-      "Invalid /v1/auth/orgs response: each org needs id, name, slug, and role",
+      "Invalid /v1/auth/orgs response: each org needs id, name, slug, and role"
     );
   }
 
@@ -64,13 +64,15 @@ function isProfileSummary(value: unknown): value is ProfileSummary {
 
 export function parseListProfilesResponse(body: unknown): ListProfilesResponse {
   if (typeof body !== "object" || body === null || !("profiles" in body)) {
-    throw new Error("Invalid /v1/profiles response: expected { profiles: [...] }");
+    throw new Error(
+      "Invalid /v1/profiles response: expected { profiles: [...] }"
+    );
   }
 
   const profiles = (body as { profiles: unknown }).profiles;
-  if (!Array.isArray(profiles) || !profiles.every(isProfileSummary)) {
+  if (!(Array.isArray(profiles) && profiles.every(isProfileSummary))) {
     throw new Error(
-      "Invalid /v1/profiles response: each profile needs at least id and name",
+      "Invalid /v1/profiles response: each profile needs at least id and name"
     );
   }
 

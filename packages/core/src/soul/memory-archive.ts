@@ -1,6 +1,11 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists, readText, readTextIfExists, writePrivateTextFile } from "../fs";
+import {
+  pathExists,
+  readText,
+  readTextIfExists,
+  writePrivateTextFile,
+} from "../fs";
 import {
   formatMemoryArchiveYearMonth,
   getMemoryArchiveDir,
@@ -13,8 +18,8 @@ export const MEMORY_ARCHIVE_TEMPLATE = `# Archived Memory
 `;
 
 export interface MemorySection {
-  date: string;
   bullets: string[];
+  date: string;
 }
 
 export interface ParsedMemory {
@@ -23,8 +28,8 @@ export interface ParsedMemory {
 }
 
 export interface ArchiveMemoryResult {
-  archived: number;
   activeBytes: number;
+  archived: number;
   archivePath: string;
 }
 
@@ -40,7 +45,7 @@ export function parseMemoryContent(content: string): ParsedMemory {
     const dateMatch = line.match(/^## (\d{4}-\d{2}-\d{2})$/);
     if (dateMatch) {
       if (currentDate) {
-        sections.push({ date: currentDate, bullets: currentBullets });
+        sections.push({ bullets: currentBullets, date: currentDate });
       }
       phase = "sections";
       currentDate = dateMatch[1];
@@ -59,7 +64,7 @@ export function parseMemoryContent(content: string): ParsedMemory {
   }
 
   if (currentDate) {
-    sections.push({ date: currentDate, bullets: currentBullets });
+    sections.push({ bullets: currentBullets, date: currentDate });
   }
 
   return {
@@ -88,7 +93,7 @@ export function rebuildMemoryContent(parsed: ParsedMemory): string {
 
 export function partitionMemoryEntries(
   parsed: ParsedMemory,
-  entries: string[],
+  entries: string[]
 ): {
   active: ParsedMemory;
   archivedSections: MemorySection[];
@@ -119,18 +124,18 @@ export function partitionMemoryEntries(
     }
 
     if (keptBullets.length > 0) {
-      activeSections.push({ date: section.date, bullets: keptBullets });
+      activeSections.push({ bullets: keptBullets, date: section.date });
     }
   }
 
   const archivedSections = [...archivedByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([date, bullets]) => ({ date, bullets }));
+    .map(([date, bullets]) => ({ bullets, date }));
 
   return {
     active: { preamble: parsed.preamble, sections: activeSections },
-    archivedSections,
     archivedCount,
+    archivedSections,
     unmatched: [...unmatched],
   };
 }
@@ -138,7 +143,7 @@ export function partitionMemoryEntries(
 export function formatArchiveAppend(
   archivedAt: Date,
   sections: MemorySection[],
-  reason?: string,
+  reason?: string
 ): string {
   const lines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
 
@@ -156,7 +161,10 @@ export function formatArchiveAppend(
   return `${lines.join("\n")}\n`;
 }
 
-async function migrateLegacyMemoryArchiveDir(orgId: string, profileId: string): Promise<void> {
+async function migrateLegacyMemoryArchiveDir(
+  orgId: string,
+  profileId: string
+): Promise<void> {
   const soulDir = getProfileSoulDir(orgId, profileId);
   const legacyDir = join(soulDir, "data", "memory-archive");
   const currentDir = join(soulDir, "memory-archive");
@@ -172,7 +180,7 @@ export async function archiveProfileMemoryBullets(
   orgId: string,
   profileId: string,
   entries: string[],
-  options: { reason?: string; archivedAt?: Date } = {},
+  options: { reason?: string; archivedAt?: Date } = {}
 ): Promise<ArchiveMemoryResult> {
   const soulDir = getProfileSoulDir(orgId, profileId);
   const memoryPath = join(soulDir, "MEMORY.md");
@@ -191,7 +199,7 @@ export async function archiveMemoryBullets(
   memoryPath: string,
   archiveDir: string,
   entries: string[],
-  options: { reason?: string; archivedAt?: Date } = {},
+  options: { reason?: string; archivedAt?: Date } = {}
 ): Promise<ArchiveMemoryResult> {
   const existing = await readTextIfExists(memoryPath);
 
@@ -200,10 +208,8 @@ export async function archiveMemoryBullets(
   }
 
   const parsed = parseMemoryContent(existing);
-  const { active, archivedSections, archivedCount, unmatched } = partitionMemoryEntries(
-    parsed,
-    entries,
-  );
+  const { active, archivedSections, archivedCount, unmatched } =
+    partitionMemoryEntries(parsed, entries);
 
   if (unmatched.length > 0) {
     throw new Error(`Memory entries not found: ${unmatched.join(", ")}`);
@@ -216,7 +222,11 @@ export async function archiveMemoryBullets(
   const archivedAt = options.archivedAt ?? new Date();
   const yearMonth = formatMemoryArchiveYearMonth(archivedAt);
   const archivePath = join(archiveDir, `${yearMonth}.md`);
-  const archiveAppend = formatArchiveAppend(archivedAt, archivedSections, options.reason);
+  const archiveAppend = formatArchiveAppend(
+    archivedAt,
+    archivedSections,
+    options.reason
+  );
   const archiveExists = await pathExists(archivePath);
   const archiveContent = archiveExists
     ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${archiveAppend}`
@@ -225,12 +235,14 @@ export async function archiveMemoryBullets(
   const activeContent = rebuildMemoryContent(active);
   const activeBytes = Buffer.byteLength(activeContent, "utf8");
 
-  await writePrivateTextFile(archivePath, archiveContent, { ensureDir: archiveDir });
+  await writePrivateTextFile(archivePath, archiveContent, {
+    ensureDir: archiveDir,
+  });
   await writePrivateTextFile(memoryPath, activeContent);
 
   return {
-    archived: archivedCount,
     activeBytes,
+    archived: archivedCount,
     archivePath,
   };
 }

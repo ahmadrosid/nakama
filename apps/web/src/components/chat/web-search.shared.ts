@@ -3,9 +3,9 @@ export type WebSearchSiteState = "pending" | "loading" | "done";
 export type WebSourceCardMode = "search" | "fetch";
 
 export interface WebSearchSource {
+  href?: string;
   title: string;
   url: string;
-  href?: string;
 }
 
 export interface WebSearchToolState {

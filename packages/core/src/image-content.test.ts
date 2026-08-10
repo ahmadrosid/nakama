@@ -20,8 +20,8 @@ describe("extractImageParts", () => {
 
   test("extracts image parts from content array", () => {
     const parts = extractImageParts([
-      { type: "text", text: "What is this?" },
-      { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+      { text: "What is this?", type: "text" },
+      { data: tinyPngBase64, mediaType: "image/png", type: "image" },
     ]);
 
     expect(parts).toHaveLength(1);
@@ -33,35 +33,35 @@ describe("replaceImagePartsWithDescriptions", () => {
   test("annotates image parts with descriptions", () => {
     const result = replaceImagePartsWithDescriptions(
       [
-        { type: "text", text: "What is this?" },
-        { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+        { text: "What is this?", type: "text" },
+        { data: tinyPngBase64, mediaType: "image/png", type: "image" },
       ],
-      ["A red square on white background."],
+      ["A red square on white background."]
     );
 
     expect(result).toEqual([
-      { type: "text", text: "What is this?" },
+      { text: "What is this?", type: "text" },
       {
-        type: "image",
-        mediaType: "image/png",
         data: tinyPngBase64,
         description: "A red square on white background.",
+        mediaType: "image/png",
+        type: "image",
       },
     ]);
   });
 
   test("returns plain string when only image descriptions remain for string content", () => {
     const result = replaceImagePartsWithDescriptions(
-      [{ type: "image", mediaType: "image/png", data: tinyPngBase64 }],
-      ["A chart with three bars."],
+      [{ data: tinyPngBase64, mediaType: "image/png", type: "image" }],
+      ["A chart with three bars."]
     );
 
     expect(result).toEqual([
       {
-        type: "image",
-        mediaType: "image/png",
         data: tinyPngBase64,
         description: "A chart with three bars.",
+        mediaType: "image/png",
+        type: "image",
       },
     ]);
   });
@@ -78,24 +78,30 @@ describe("image description text helpers", () => {
 describe("resolveUserContentForNonVisionProvider", () => {
   test("converts described image parts to text", () => {
     const result = resolveUserContentForNonVisionProvider([
-      { type: "text", text: "What is this?" },
+      { text: "What is this?", type: "text" },
       {
-        type: "image",
-        mediaType: "image/png",
         data: tinyPngBase64,
         description: "A red square.",
+        mediaType: "image/png",
+        type: "image",
       },
     ]);
 
     expect(result).toEqual([
-      { type: "text", text: "What is this?" },
-      { type: "text", text: "[Image]\nA red square." },
+      { text: "What is this?", type: "text" },
+      { text: "[Image]\nA red square.", type: "text" },
     ]);
   });
 
   test("passes through image parts without descriptions", () => {
-    const imagePart = { type: "image", mediaType: "image/png", data: tinyPngBase64 } as const;
-    expect(resolveUserContentForNonVisionProvider([imagePart])).toEqual([imagePart]);
+    const imagePart = {
+      data: tinyPngBase64,
+      mediaType: "image/png",
+      type: "image",
+    } as const;
+    expect(resolveUserContentForNonVisionProvider([imagePart])).toEqual([
+      imagePart,
+    ]);
   });
 });
 
@@ -103,22 +109,22 @@ describe("resolveMessagesForNonVisionProvider", () => {
   test("maps only user messages", () => {
     const messages: ChatMessage[] = [
       {
-        role: "user",
         content: [
           {
-            type: "image",
-            mediaType: "image/png",
             data: tinyPngBase64,
             description: "A chart.",
+            mediaType: "image/png",
+            type: "image",
           },
         ],
+        role: "user",
       },
-      { role: "assistant", content: "Looks like a chart." },
+      { content: "Looks like a chart.", role: "assistant" },
     ];
 
     expect(resolveMessagesForNonVisionProvider(messages)).toEqual([
-      { role: "user", content: "[Image]\nA chart." },
-      { role: "assistant", content: "Looks like a chart." },
+      { content: "[Image]\nA chart.", role: "user" },
+      { content: "Looks like a chart.", role: "assistant" },
     ]);
   });
 });

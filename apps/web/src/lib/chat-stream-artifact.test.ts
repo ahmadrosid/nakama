@@ -9,62 +9,65 @@ import {
 describe("upsertStreamingToolMessage", () => {
   test("creates a streaming tool row for artifact write_file deltas", () => {
     const next = upsertStreamingToolMessage([], {
-      toolCallId: "call_1",
-      tool: "write_file",
       accumulatedArguments: '{"path":"artifacts/a.md","content":"# Hi"}',
+      tool: "write_file",
+      toolCallId: "call_1",
     });
 
     expect(next).toHaveLength(1);
     expect(next[0]).toMatchObject({
-      toolCallId: "call_1",
       artifactStreaming: true,
+      toolCallId: "call_1",
+      toolInput: { content: "# Hi", path: "artifacts/a.md" },
       toolStatus: "running",
-      toolInput: { path: "artifacts/a.md", content: "# Hi" },
     });
   });
 
   test("updates an existing streaming tool row", () => {
     const initial: ChatListItem[] = [
       {
+        artifactStreaming: true,
+        content: "write_file",
         id: "call_1",
         role: "tool",
-        content: "write_file",
-        toolCallId: "call_1",
         tool: "write_file",
-        toolStatus: "running",
-        artifactStreaming: true,
+        toolCallId: "call_1",
         toolInputAccumulatedJson: '{"path":"artifacts/a.md","content":"#"}',
+        toolStatus: "running",
       },
     ];
 
     const next = upsertStreamingToolMessage(initial, {
-      toolCallId: "call_1",
-      tool: "write_file",
       accumulatedArguments: '{"path":"artifacts/a.md","content":"# Hi"}',
+      tool: "write_file",
+      toolCallId: "call_1",
     });
 
     expect(next).toHaveLength(1);
-    expect(next[0]?.toolInput).toEqual({ path: "artifacts/a.md", content: "# Hi" });
+    expect(next[0]?.toolInput).toEqual({
+      content: "# Hi",
+      path: "artifacts/a.md",
+    });
   });
 
   test("ignores non-artifact tools", () => {
     expect(
       upsertStreamingToolMessage([], {
-        toolCallId: "call_1",
-        tool: "bash",
         accumulatedArguments: '{"command":"ls"}',
-      }),
+        tool: "bash",
+        toolCallId: "call_1",
+      })
     ).toEqual([]);
   });
 
   test("ignores meta sidecar writes", () => {
     expect(
       upsertStreamingToolMessage([], {
-        toolCallId: "call_meta",
-        tool: "write_file",
         accumulatedArguments:
           '{"path":"artifacts/report.md.nakama-meta.json","content":"{}"}',
-      }),
+        tool: "write_file",
+        toolCallId: "call_meta",
+      })
     ).toEqual([]);
   });
 });
@@ -73,65 +76,66 @@ describe("findLatestStreamingArtifact", () => {
   test("returns the latest eligible streaming artifact", () => {
     const messages: ChatListItem[] = [
       {
+        artifactStreaming: true,
+        content: "write_file",
         id: "call_1",
         role: "tool",
-        content: "write_file",
-        toolCallId: "call_1",
         tool: "write_file",
-        toolStatus: "running",
-        artifactStreaming: true,
+        toolCallId: "call_1",
         toolInputAccumulatedJson: '{"path":"artifacts/a.md","content":"hello"}',
+        toolStatus: "running",
       },
     ];
 
     expect(findLatestStreamingArtifact(messages)?.parsed).toEqual({
-      eligible: true,
-      relativePath: "a.md",
-      filename: "a.md",
       content: "hello",
+      eligible: true,
+      filename: "a.md",
+      relativePath: "a.md",
     });
   });
 });
 
 describe("findCompletedContentArtifact", () => {
-  const ARTIFACTS_ROOT = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+  const ARTIFACTS_ROOT =
+    "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
 
   test("returns completed content artifact path", () => {
     const messages: ChatListItem[] = [
       {
+        content: "write_file completed",
         id: "call_1",
         role: "tool",
-        content: "write_file completed",
-        toolCallId: "call_1",
         tool: "write_file",
-        toolStatus: "done",
+        toolCallId: "call_1",
         toolResult: {
-          path: `${ARTIFACTS_ROOT}/report.md`,
           bytesWritten: 12,
+          path: `${ARTIFACTS_ROOT}/report.md`,
         },
+        toolStatus: "done",
       },
     ];
 
     expect(findCompletedContentArtifact(messages, "call_1")).toEqual({
-      toolCallId: "call_1",
-      tool: "write_file",
       relativePath: "report.md",
+      tool: "write_file",
+      toolCallId: "call_1",
     });
   });
 
   test("ignores completed meta sidecar writes", () => {
     const messages: ChatListItem[] = [
       {
+        content: "write_file completed",
         id: "call_meta",
         role: "tool",
-        content: "write_file completed",
-        toolCallId: "call_meta",
         tool: "write_file",
-        toolStatus: "done",
+        toolCallId: "call_meta",
         toolResult: {
-          path: `${ARTIFACTS_ROOT}/report.md.nakama-meta.json`,
           bytesWritten: 12,
+          path: `${ARTIFACTS_ROOT}/report.md.nakama-meta.json`,
         },
+        toolStatus: "done",
       },
     ];
 

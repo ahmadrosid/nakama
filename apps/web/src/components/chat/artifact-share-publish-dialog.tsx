@@ -1,4 +1,5 @@
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
+import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { PublishIntent } from "@/components/chat/use-artifact-share-controls";
 
 type ArtifactSharePublishDialogProps = {
   open: boolean;
@@ -53,35 +53,35 @@ export function ArtifactSharePublishDialog({
   onConfirmPublish,
 }: ArtifactSharePublishDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         {publishDialogSucceeded ? (
           <ArtifactShareSuccessView
-            publishIntent={publishIntent}
-            publishedUrl={publishedUrl}
-            publishWarning={publishWarning}
-            isShared={isShared}
             copied={copied}
-            revokePending={revokePending}
+            isShared={isShared}
+            onClose={onClose}
             onCopyLink={onCopyLink}
             onRefreshFromDialog={onRefreshFromDialog}
             onRevoke={onRevoke}
-            onClose={onClose}
+            publishedUrl={publishedUrl}
+            publishIntent={publishIntent}
+            publishWarning={publishWarning}
+            revokePending={revokePending}
           />
         ) : publishIntent === "recover" ? (
           <ArtifactShareRecoverView
-            publishPending={publishPending}
-            revokePending={revokePending}
             onClose={onClose}
             onRotateLink={onRotateLink}
+            publishPending={publishPending}
+            revokePending={revokePending}
           />
         ) : (
           <ArtifactShareConfirmView
             artifactPath={artifactPath}
-            publishIntent={publishIntent}
-            publishPending={publishPending}
             onClose={onClose}
             onConfirmPublish={onConfirmPublish}
+            publishIntent={publishIntent}
+            publishPending={publishPending}
           />
         )}
       </DialogContent>
@@ -129,48 +129,52 @@ function ArtifactShareSuccessView({
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Input
-            readOnly
-            value={publishedUrl ?? ""}
             aria-label="Published artifact share link"
             className="font-mono text-xs"
             onFocus={(event) => event.currentTarget.select()}
+            readOnly
+            value={publishedUrl ?? ""}
           />
           <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
             aria-label="Copy share link"
             onClick={() => publishedUrl && void onCopyLink(publishedUrl)}
+            size="icon-sm"
+            type="button"
+            variant="outline"
           >
             {copied ? (
-              <CheckIcon className="size-3.5" aria-hidden />
+              <CheckmarkCircle01Icon aria-hidden className="size-3.5" />
             ) : (
-              <CopyIcon className="size-3.5" aria-hidden />
+              <Copy01Icon aria-hidden className="size-3.5" />
             )}
           </Button>
         </div>
         {publishWarning ? (
-          <p className="text-xs text-muted-foreground">{publishWarning}</p>
+          <p className="text-muted-foreground text-xs">{publishWarning}</p>
         ) : null}
       </div>
       <DialogFooter className={cn(isShared && "sm:justify-between")}>
         {isShared ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={onRefreshFromDialog}>
+            <Button
+              onClick={onRefreshFromDialog}
+              type="button"
+              variant="outline"
+            >
               Update snapshot
             </Button>
             <Button
+              disabled={revokePending}
+              onClick={() => void onRevoke()}
               type="button"
               variant="destructive"
-              onClick={() => void onRevoke()}
-              disabled={revokePending}
             >
               {revokePending ? <Spinner className="size-4" /> : null}
               Revoke
             </Button>
           </div>
         ) : null}
-        <Button type="button" onClick={onClose}>
+        <Button onClick={onClose} type="button">
           Done
         </Button>
       </DialogFooter>
@@ -194,22 +198,24 @@ function ArtifactShareRecoverView({
       <DialogHeader>
         <DialogTitle>Share link not saved here</DialogTitle>
         <DialogDescription>
-          This artifact is published, but this browser does not have the link. Nakama only shows
-          the full URL once at publish time and stores a hash on the server, so it cannot be
-          looked up again later. Rotate the link to mint a new URL — the previous link will stop
-          working.
+          This artifact is published, but this browser does not have the link.
+          Nakama only shows the full URL once at publish time and stores a hash
+          on the server, so it cannot be looked up again later. Rotate the link
+          to mint a new URL — the previous link will stop working.
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button onClick={onClose} type="button" variant="outline">
           Cancel
         </Button>
         <Button
-          type="button"
-          onClick={() => void onRotateLink()}
           disabled={publishPending || revokePending}
+          onClick={() => void onRotateLink()}
+          type="button"
         >
-          {publishPending || revokePending ? <Spinner className="size-4" /> : null}
+          {publishPending || revokePending ? (
+            <Spinner className="size-4" />
+          ) : null}
           Rotate link
         </Button>
       </DialogFooter>
@@ -234,32 +240,39 @@ function ArtifactShareConfirmView({
     <>
       <DialogHeader>
         <DialogTitle>
-          {publishIntent === "refresh" ? "Update shared snapshot?" : "Publish artifact link?"}
+          {publishIntent === "refresh"
+            ? "Update shared snapshot?"
+            : "Publish artifact link?"}
         </DialogTitle>
-        <DialogDescription>
+        <DialogDescription className="min-w-0 max-w-full break-words">
           {publishIntent === "refresh" ? (
             <>
               Replace the published snapshot with the current contents of{" "}
-              <span className="font-medium text-foreground">{artifactPath}</span>. The share link
-              stays the same.
+              <span className="break-all font-medium text-foreground">
+                {artifactPath}
+              </span>
+              . The share link stays the same.
             </>
           ) : (
             <>
               Create a public snapshot of{" "}
-              <span className="font-medium text-foreground">{artifactPath}</span> that anyone can
-              open without logging in. Later edits to the live file will not change what is shared.
+              <span className="break-all font-medium text-foreground">
+                {artifactPath}
+              </span>{" "}
+              that anyone can open without logging in. Later edits to the live
+              file will not change what is shared.
             </>
           )}
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button onClick={onClose} type="button" variant="outline">
           Cancel
         </Button>
         <Button
-          type="button"
-          onClick={() => void onConfirmPublish()}
           disabled={publishPending}
+          onClick={() => void onConfirmPublish()}
+          type="button"
         >
           {publishPending ? <Spinner className="size-4" /> : null}
           {publishIntent === "refresh" ? "Update snapshot" : "Publish"}

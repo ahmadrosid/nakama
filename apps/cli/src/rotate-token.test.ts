@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   LocalAuthTokenManagedExternallyError,
   loadLocalAuthToken,
@@ -48,13 +48,13 @@ describe("rotate-token command", () => {
       expect(logs.some((line) => line.includes(rotated!))).toBe(true);
     } finally {
       delete process.env.NAKAMA_CONFIG_DIR;
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
   test("formatRotateTokenError surfaces env-managed token errors", () => {
     expect(
-      formatRotateTokenError(new LocalAuthTokenManagedExternallyError()),
+      formatRotateTokenError(new LocalAuthTokenManagedExternallyError())
     ).toContain("NAKAMA_LOCAL_AUTH_TOKEN");
   });
 });

@@ -1,6 +1,9 @@
-import type { DocumentAttachment } from "@nakama/core/contract";
 import { DOCX_MEDIA_TYPE } from "@nakama/core/artifact-mime";
-import { normalizeDocumentMediaType, parseDocumentDataUrl } from "@nakama/core/message-content";
+import type { DocumentAttachment } from "@nakama/core/contract";
+import {
+  normalizeDocumentMediaType,
+  parseDocumentDataUrl,
+} from "@nakama/core/message-content";
 
 export const KNOWLEDGE_BASE_ACCEPT = `.pdf,.docx,.txt,.md,.csv,application/pdf,${DOCX_MEDIA_TYPE},text/plain,text/csv,text/markdown`;
 
@@ -21,7 +24,9 @@ export function isKnowledgeBaseFile(file: File): boolean {
   );
 }
 
-export function fileToDocumentAttachment(file: File): Promise<DocumentAttachment | null> {
+export function fileToDocumentAttachment(
+  file: File
+): Promise<DocumentAttachment | null> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onloadend = () => {

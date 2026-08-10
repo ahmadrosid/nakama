@@ -16,13 +16,17 @@ export function ToolDetailSections({
       {showHeader ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <h2 className="text-sm font-semibold text-foreground">{tool.name}</h2>
-            <span className="inline-flex w-fit items-center rounded-full bg-muted px-1.5 py-px text-[11px] font-medium text-muted-foreground">
+            <h2 className="font-semibold text-foreground text-sm">
+              {tool.name}
+            </h2>
+            <span className="inline-flex w-fit items-center rounded-full bg-muted px-1.5 py-px font-medium text-[11px] text-muted-foreground">
               {tool.handlerType}
             </span>
           </div>
           {tool.description ? (
-            <p className="text-sm leading-relaxed text-muted-foreground">{tool.description}</p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {tool.description}
+            </p>
           ) : null}
         </div>
       ) : (

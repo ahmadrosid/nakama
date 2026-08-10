@@ -27,7 +27,7 @@ export class WhatsAppAuthStore {
 
   async tryPair(
     pairingCodeInput: string,
-    jid: string,
+    jid: string
   ): Promise<{ ok: boolean; message: string }> {
     const result = await verifyAndPairWhatsAppUser(pairingCodeInput, jid);
     await this.reload();

@@ -5,9 +5,12 @@ export interface SkillWriteApprovalSources {
 
 /** Profile override wins when non-null; otherwise org default (false when unset). */
 export function resolveSkillWriteApprovalRequired(
-  sources: SkillWriteApprovalSources,
+  sources: SkillWriteApprovalSources
 ): boolean {
-  if (sources.profileSkillsWriteApproval !== undefined && sources.profileSkillsWriteApproval !== null) {
+  if (
+    sources.profileSkillsWriteApproval !== undefined &&
+    sources.profileSkillsWriteApproval !== null
+  ) {
     return sources.profileSkillsWriteApproval;
   }
   return sources.orgSkillsWriteApproval === true;

@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { ProfileSummary } from "@nakama/core/contract";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -8,8 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
@@ -47,7 +47,7 @@ function OrgProfilePostTurnReviewOverrideSelect({
 }) {
   const updateMutation = useUpdateProfileMutation();
   const [value, setValue] = useState<OverrideValue>(() =>
-    toOverrideValue(profile.skillsPostTurnReview),
+    toOverrideValue(profile.skillsPostTurnReview)
   );
   const busy = updateMutation.isPending;
 
@@ -55,8 +55,8 @@ function OrgProfilePostTurnReviewOverrideSelect({
     setValue(nextValue);
     try {
       await updateMutation.mutateAsync({
-        profileId: profile.id,
         input: { skillsPostTurnReview: fromOverrideValue(nextValue) },
+        profileId: profile.id,
       });
       toast("Profile post-turn review setting saved.");
     } catch (err) {
@@ -68,7 +68,6 @@ function OrgProfilePostTurnReviewOverrideSelect({
   return (
     <>
       <Select
-        value={value}
         disabled={disabled || busy}
         onValueChange={(next) => {
           if (!next) {
@@ -76,8 +75,12 @@ function OrgProfilePostTurnReviewOverrideSelect({
           }
           void handleOverrideChange(next as OverrideValue);
         }}
+        value={value}
       >
-        <SelectTrigger className="h-8 max-w-xs" aria-label="Post-turn skill review override">
+        <SelectTrigger
+          aria-label="Post-turn skill review override"
+          className="h-8 max-w-xs"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -99,7 +102,8 @@ function OrgProfilePostTurnReviewField({
   disabled?: boolean;
 }) {
   const [profileId, setProfileId] = useState<string>("");
-  const selectedProfile = profiles.find((profile) => profile.id === profileId) ?? null;
+  const selectedProfile =
+    profiles.find((profile) => profile.id === profileId) ?? null;
 
   if (profiles.length === 0) {
     return null;
@@ -107,14 +111,16 @@ function OrgProfilePostTurnReviewField({
 
   return (
     <div className="px-4 py-3">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">Per-profile override</p>
+      <p className="mb-2 font-medium text-muted-foreground text-xs">
+        Per-profile override
+      </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Select
-          value={profileId}
           disabled={disabled}
           onValueChange={(next) => setProfileId(next ? String(next) : "")}
+          value={profileId}
         >
-          <SelectTrigger className="h-8 max-w-xs" aria-label="Profile">
+          <SelectTrigger aria-label="Profile" className="h-8 max-w-xs">
             <SelectValue placeholder="Select profile" />
           </SelectTrigger>
           <SelectContent>
@@ -127,13 +133,16 @@ function OrgProfilePostTurnReviewField({
         </Select>
         {selectedProfile ? (
           <OrgProfilePostTurnReviewOverrideSelect
+            disabled={disabled}
             key={`${selectedProfile.id}:${String(selectedProfile.skillsPostTurnReview)}`}
             profile={selectedProfile}
-            disabled={disabled}
           />
         ) : (
-          <Select value="inherit" disabled>
-            <SelectTrigger className="h-8 max-w-xs" aria-label="Post-turn skill review override">
+          <Select disabled value="inherit">
+            <SelectTrigger
+              aria-label="Post-turn skill review override"
+              className="h-8 max-w-xs"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -144,8 +153,9 @@ function OrgProfilePostTurnReviewField({
           </Select>
         )}
       </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">
-        Overrides the org-wide post-turn review setting for the selected profile only.
+      <p className="mt-1.5 text-muted-foreground text-xs">
+        Overrides the org-wide post-turn review setting for the selected profile
+        only.
       </p>
     </div>
   );
@@ -166,7 +176,11 @@ export function SkillsPostTurnReviewOrgCard() {
     setBusy(true);
     try {
       await updateOrg(activeOrg!.id, { skillsPostTurnReview: checked });
-      toast(checked ? "Post-turn skill review enabled." : "Post-turn skill review disabled.");
+      toast(
+        checked
+          ? "Post-turn skill review enabled."
+          : "Post-turn skill review disabled."
+      );
     } catch (err) {
       toast(formatError(err));
     } finally {
@@ -176,27 +190,29 @@ export function SkillsPostTurnReviewOrgCard() {
 
   return (
     <Card className="w-full overflow-hidden shadow-none">
-      <div className="border-b border-border px-4 py-3">
+      <div className="border-border border-b px-4 py-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium text-foreground">Post-turn skill review</p>
-            <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
-              Suggest skill updates after complex chats. Apply directly, or stage for admin review when
-              write approval is on.
+            <p className="font-medium text-foreground text-sm">
+              Post-turn skill review
+            </p>
+            <p className="max-w-prose text-muted-foreground text-xs leading-relaxed">
+              Suggest skill updates after complex chats. Apply directly, or
+              stage for admin review when write approval is on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
             <Switch
+              aria-label="Enable post-turn skill review"
               checked={enabled}
               disabled={busy}
               onCheckedChange={(checked) => void handleToggle(checked)}
-              aria-label="Enable post-turn skill review"
             />
           </div>
         </div>
       </div>
-      <OrgProfilePostTurnReviewField profiles={profiles} disabled={busy} />
+      <OrgProfilePostTurnReviewField disabled={busy} profiles={profiles} />
     </Card>
   );
 }

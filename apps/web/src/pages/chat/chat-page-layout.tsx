@@ -19,7 +19,7 @@ export function ChatPageColumn({
         attachmentPanel.isFullscreen
           ? "pointer-events-none w-0 flex-none overflow-hidden px-0 opacity-0"
           : "flex-1 px-6",
-        centered && "justify-center",
+        centered && "justify-center"
       )}
     >
       {children}
@@ -43,17 +43,25 @@ export function ChatWelcome({
   return (
     <div className="flex flex-col gap-2 px-4 pb-2">
       <h2 className="type-section-title text-xl tracking-tight">
-        Hi, good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}!
+        Hi, good{" "}
+        {new Date().getHours() < 12
+          ? "morning"
+          : new Date().getHours() < 18
+            ? "afternoon"
+            : "evening"}
+        !
       </h2>
       <div className="flex items-center gap-2 self-start">
-        <span className="type-body text-sm text-muted-foreground">Select profile</span>
+        <span className="type-body text-muted-foreground text-sm">
+          Select profile
+        </span>
         <ChatProfileSwitcher
-          variant="prominent"
+          activeProfile={profile}
+          disabled={profileSwitchDisabled}
+          onProfileSwitch={onProfileSwitch}
           profileId={profileId}
           profiles={profiles}
-          activeProfile={profile}
-          onProfileSwitch={onProfileSwitch}
-          disabled={profileSwitchDisabled}
+          variant="prominent"
         />
       </div>
     </div>

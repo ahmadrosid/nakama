@@ -9,14 +9,16 @@ import type {
 import { createContext } from "react";
 
 export interface AppContextValue {
-  health: HealthResponse | null;
-  models: ModelsResponse | null;
-  loading: boolean;
-  error: string | null;
-  createProvider: (request: CreateProviderRequest) => Promise<CreateProviderResponse>;
   configureProvider: (
-    request: ConfigureProviderRequest,
+    request: ConfigureProviderRequest
   ) => Promise<ConfigureProviderResponse>;
+  createProvider: (
+    request: CreateProviderRequest
+  ) => Promise<CreateProviderResponse>;
+  error: string | null;
+  health: HealthResponse | null;
+  loading: boolean;
+  models: ModelsResponse | null;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);

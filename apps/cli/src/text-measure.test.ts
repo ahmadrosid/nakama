@@ -76,10 +76,7 @@ describe("wrapText", () => {
 
   test("carries active color across wrapped lines", () => {
     const wrapped = wrapText("\x1b[31mred text\x1b[0m", 4);
-    expect(wrapped).toEqual([
-      "\x1b[31mred \x1b[0m",
-      "\x1b[31mtext\x1b[0m",
-    ]);
+    expect(wrapped).toEqual(["\x1b[31mred \x1b[0m", "\x1b[31mtext\x1b[0m"]);
   });
 
   test("wraps wide characters correctly", () => {
@@ -108,7 +105,7 @@ describe("truncateText", () => {
 
   test("ignores ansi codes when measuring", () => {
     expect(truncateText("\x1b[31mhello world\x1b[0m", 8)).toBe(
-      "\x1b[31mhello w…\x1b[0m",
+      "\x1b[31mhello w…\x1b[0m"
     );
   });
 

@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createHonoApp } from "../http/app";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
-import { AuthService } from "../services/auth-service";
-import { OrgService } from "../services/org-service";
-import { AgentService } from "../services/agent-service";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
 } from "../services/agent-browser-service";
+import { AgentService } from "../services/agent-service";
+import { AuthService } from "../services/auth-service";
+import { OrgService } from "../services/org-service";
 
 describe("agent-browser service", () => {
   const originalPath = process.env.PATH ?? "";
@@ -33,7 +33,7 @@ describe("agent-browser service", () => {
     }
 
     if (tempBinDir) {
-      await rm(tempBinDir, { recursive: true, force: true });
+      await rm(tempBinDir, { force: true, recursive: true });
       tempBinDir = "";
     }
   });
@@ -66,8 +66,12 @@ describe("agent-browser settings routes", () => {
   let configDir = "";
 
   beforeEach(async () => {
-    tempBinDir = await mkdtemp(join(tmpdir(), "nakama-agent-browser-route-bin-"));
-    configDir = await mkdtemp(join(tmpdir(), "nakama-agent-browser-route-config-"));
+    tempBinDir = await mkdtemp(
+      join(tmpdir(), "nakama-agent-browser-route-bin-")
+    );
+    configDir = await mkdtemp(
+      join(tmpdir(), "nakama-agent-browser-route-config-")
+    );
     process.env.PATH = tempBinDir;
     process.env.NAKAMA_CONFIG_DIR = configDir;
     process.env.NAKAMA_DISABLE_FIX_PATH = "1";
@@ -83,11 +87,11 @@ describe("agent-browser settings routes", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (tempBinDir) {
-      await rm(tempBinDir, { recursive: true, force: true });
+      await rm(tempBinDir, { force: true, recursive: true });
       tempBinDir = "";
     }
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
   });
@@ -99,15 +103,15 @@ describe("agent-browser settings routes", () => {
     const authService = new AuthService();
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
-      automationService: {} as any,
-      taskService: {} as any,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      workerManager: {} as any,
-      mcpService: {} as any,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as any,
       databaseAdapter,
+      mcpService: {} as any,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+      taskService: {} as any,
       webDistDir: null,
+      workerManager: {} as any,
     });
 
     const session = await setupFreshInstallSession(app, databaseAdapter);
@@ -115,7 +119,7 @@ describe("agent-browser settings routes", () => {
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/settings/agent-browser", {
         headers: session.headers(),
-      }),
+      })
     );
 
     expect(response.status).toBe(200);
@@ -137,27 +141,27 @@ describe("agent-browser settings routes", () => {
     const authService = new AuthService();
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
-      automationService: {} as any,
-      taskService: {} as any,
-      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
-      workerManager: {} as any,
-      mcpService: {} as any,
       authService,
-      orgService: new OrgService(databaseAdapter, authService),
+      automationService: {} as any,
       databaseAdapter,
+      mcpService: {} as any,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as any,
+      taskService: {} as any,
       webDistDir: null,
+      workerManager: {} as any,
     });
 
     const session = await setupFreshInstallSession(app, databaseAdapter);
 
     const installResponse = await app.fetch(
       new Request("http://localhost:4310/v1/settings/agent-browser/install", {
-        method: "POST",
         headers: session.headers({
-          "X-CSRF-Token": session.csrfToken,
           Accept: "text/event-stream",
+          "X-CSRF-Token": session.csrfToken,
         }),
-      }),
+        method: "POST",
+      })
     );
 
     expect(installResponse.status).toBe(200);
@@ -170,7 +174,7 @@ describe("agent-browser settings routes", () => {
 async function installFakeBinary(
   binDir: string,
   name: string,
-  mode: "ready" | "login-required" | "noop" | "installable",
+  mode: "ready" | "login-required" | "noop" | "installable"
 ): Promise<void> {
   const scriptPath = join(binDir, name);
   let script = "";

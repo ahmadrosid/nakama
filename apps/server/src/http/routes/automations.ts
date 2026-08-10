@@ -10,171 +10,326 @@ import type {
   RunAutomationResponse,
   UpdateAutomationRequest,
 } from "@nakama/core";
-import { errorResponse, getRequestAuth, json, parseChannel, readJson } from "../shared";
+import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
 } from "../org-guards";
+import {
+  errorResponse,
+  getRequestAuth,
+  json,
+  parseChannel,
+  readJson,
+} from "../shared";
 import type { HonoApp } from "../types";
-import type { ServerOptions } from "../context";
 
-export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): void {
+export function registerAutomationRoutes(
+  app: HonoApp,
+  options: ServerOptions
+): void {
   const { agent, automationService } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const automationIdParam = z.object({
-    automationId: z.string().openapi({ param: { name: "automationId", in: "path" } }),
+    automationId: z
+      .string()
+      .openapi({ param: { in: "path", name: "automationId" } }),
   });
   const automationRunParam = automationIdParam.extend({
-    runId: z.string().openapi({ param: { name: "runId", in: "path" } }),
+    runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
   });
-  const draftAutomationSchema = z.object({}).passthrough().openapi("DraftAutomationRequest");
-  const draftAutomationResponseSchema = z.object({}).passthrough().openapi("DraftAutomationResponse");
-  const listAutomationsSchema = z.object({}).passthrough().openapi("ListAutomationsResponse");
-  const createAutomationSchema = z.object({}).passthrough().openapi("CreateAutomationRequest");
-  const automationSchema = z.object({}).passthrough().openapi("AutomationResponse");
-  const updateAutomationSchema = z.object({}).passthrough().openapi("UpdateAutomationRequest");
-  const runAutomationSchema = z.object({}).passthrough().openapi("RunAutomationResponse");
-  const listAutomationRunsSchema = z.object({}).passthrough().openapi("ListAutomationRunsResponse");
+  const draftAutomationSchema = z
+    .object({})
+    .passthrough()
+    .openapi("DraftAutomationRequest");
+  const draftAutomationResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("DraftAutomationResponse");
+  const listAutomationsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListAutomationsResponse");
+  const createAutomationSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CreateAutomationRequest");
+  const automationSchema = z
+    .object({})
+    .passthrough()
+    .openapi("AutomationResponse");
+  const updateAutomationSchema = z
+    .object({})
+    .passthrough()
+    .openapi("UpdateAutomationRequest");
+  const runAutomationSchema = z
+    .object({})
+    .passthrough()
+    .openapi("RunAutomationResponse");
+  const listAutomationRunsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListAutomationRunsResponse");
   const markAutomationRunsReadSchema = z
     .object({})
     .passthrough()
     .openapi("MarkAutomationRunsReadResponse");
 
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/automations/draft",
-    tags: ["Automations"],
-    summary: "Draft an automation from a prompt",
-    operationId: "draftAutomation",
-    request: { body: { required: true, content: { "application/json": { schema: draftAutomationSchema } } } },
-    responses: {
-      200: { description: "Automation draft", content: { "application/json": { schema: draftAutomationResponseSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/automations",
-    tags: ["Automations"],
-    summary: "List saved automations",
-    operationId: "listAutomations",
-    responses: {
-      200: { description: "Saved automations", content: { "application/json": { schema: listAutomationsSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/automations",
-    tags: ["Automations"],
-    summary: "Create a saved automation",
-    operationId: "createAutomation",
-    request: { body: { required: true, content: { "application/json": { schema: createAutomationSchema } } } },
-    responses: {
-      201: { description: "Automation created", content: { "application/json": { schema: automationSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/automations/{automationId}",
-    tags: ["Automations"],
-    summary: "Get a saved automation",
-    operationId: "getAutomation",
-    request: { params: automationIdParam },
-    responses: {
-      200: { description: "Automation", content: { "application/json": { schema: automationSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "put",
-    path: "/v1/automations/{automationId}",
-    tags: ["Automations"],
-    summary: "Update a saved automation",
-    operationId: "updateAutomation",
-    request: { params: automationIdParam, body: { required: true, content: { "application/json": { schema: updateAutomationSchema } } } },
-    responses: {
-      200: { description: "Automation updated", content: { "application/json": { schema: automationSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "delete",
-    path: "/v1/automations/{automationId}",
-    tags: ["Automations"],
-    summary: "Delete a saved automation",
-    operationId: "deleteAutomation",
-    request: { params: automationIdParam },
-    responses: {
-      204: { description: "Automation deleted" },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/automations/{automationId}/run",
-    tags: ["Automations"],
-    summary: "Run an automation now",
-    operationId: "runAutomation",
-    request: { params: automationIdParam },
-    responses: {
-      200: { description: "Automation run", content: { "application/json": { schema: runAutomationSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/automations/{automationId}/runs",
-    tags: ["Automations"],
-    summary: "List automation run history",
-    operationId: "listAutomationRuns",
-    request: { params: automationIdParam },
-    responses: {
-      200: { description: "Automation runs", content: { "application/json": { schema: listAutomationRunsSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/automations/{automationId}/runs/mark-read",
-    tags: ["Automations"],
-    summary: "Mark automation runs as read for the current user",
-    operationId: "markAutomationRunsRead",
-    request: { params: automationIdParam },
-    responses: {
-      200: {
-        description: "Automation runs marked read",
-        content: { "application/json": { schema: markAutomationRunsReadSchema } },
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "draftAutomation",
+      path: "/v1/automations/draft",
+      request: {
+        body: {
+          content: { "application/json": { schema: draftAutomationSchema } },
+          required: true,
+        },
       },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "delete",
-    path: "/v1/automations/{automationId}/runs/{runId}",
-    tags: ["Automations"],
-    summary: "Delete an automation run history item",
-    operationId: "deleteAutomationRun",
-    request: { params: automationRunParam },
-    responses: {
-      204: { description: "Automation run deleted" },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: draftAutomationResponseSchema },
+          },
+          description: "Automation draft",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Draft an automation from a prompt",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listAutomations",
+      path: "/v1/automations",
+      responses: {
+        200: {
+          content: { "application/json": { schema: listAutomationsSchema } },
+          description: "Saved automations",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List saved automations",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createAutomation",
+      path: "/v1/automations",
+      request: {
+        body: {
+          content: { "application/json": { schema: createAutomationSchema } },
+          required: true,
+        },
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: automationSchema } },
+          description: "Automation created",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Create a saved automation",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getAutomation",
+      path: "/v1/automations/{automationId}",
+      request: { params: automationIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: automationSchema } },
+          description: "Automation",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get a saved automation",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "updateAutomation",
+      path: "/v1/automations/{automationId}",
+      request: {
+        body: {
+          content: { "application/json": { schema: updateAutomationSchema } },
+          required: true,
+        },
+        params: automationIdParam,
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: automationSchema } },
+          description: "Automation updated",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Update a saved automation",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteAutomation",
+      path: "/v1/automations/{automationId}",
+      request: { params: automationIdParam },
+      responses: {
+        204: { description: "Automation deleted" },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Delete a saved automation",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "runAutomation",
+      path: "/v1/automations/{automationId}/run",
+      request: { params: automationIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: runAutomationSchema } },
+          description: "Automation run",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Run an automation now",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listAutomationRuns",
+      path: "/v1/automations/{automationId}/runs",
+      request: { params: automationIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: listAutomationRunsSchema } },
+          description: "Automation runs",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List automation run history",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "markAutomationRunsRead",
+      path: "/v1/automations/{automationId}/runs/mark-read",
+      request: { params: automationIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: markAutomationRunsReadSchema },
+          },
+          description: "Automation runs marked read",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Mark automation runs as read for the current user",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteAutomationRun",
+      path: "/v1/automations/{automationId}/runs/{runId}",
+      request: { params: automationRunParam },
+      responses: {
+        204: { description: "Automation run deleted" },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Delete an automation run history item",
+      tags: ["Automations"],
+    })
+  );
 
   app.post("/v1/automations/draft", async (c) => {
     requireNotViewerFromContext(c);
     const body = await readJson<DraftAutomationRequest>(c.req.raw);
-    const automation = await agent.draftAutomation(body.prompt, parseChannel(body.channel));
+    const automation = await agent.draftAutomation(
+      body.prompt,
+      parseChannel(body.channel)
+    );
     return json<DraftAutomationResponse>({ automation });
   });
 
@@ -189,10 +344,15 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateAutomationRequest>(c.req.raw);
-    const automation = await automationService.create(orgId, body, body.profileId, {
-      orgRole: auth.orgRole,
-      isPlatformAdmin: auth.isPlatformAdmin,
-    });
+    const automation = await automationService.create(
+      orgId,
+      body,
+      body.profileId,
+      {
+        isPlatformAdmin: auth.isPlatformAdmin,
+        orgRole: auth.orgRole,
+      }
+    );
     return json<AutomationResponse>({ automation }, 201);
   });
 
@@ -200,7 +360,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const orgId = requireActiveOrgIdFromContext(c);
     const automation = await automationService.get(
       decodeURIComponent(c.req.param("automationId")),
-      orgId,
+      orgId
     );
     if (!automation) {
       return errorResponse("Automation not found", 404);
@@ -215,7 +375,11 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const body = await readJson<UpdateAutomationRequest>(c.req.raw);
 
     try {
-      const automation = await automationService.update(automationId, orgId, body);
+      const automation = await automationService.update(
+        automationId,
+        orgId,
+        body
+      );
       return json<AutomationResponse>({ automation });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
@@ -230,7 +394,7 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const orgId = requireActiveOrgIdFromContext(c);
     const deleted = await automationService.delete(
       decodeURIComponent(c.req.param("automationId")),
-      orgId,
+      orgId
     );
     if (!deleted) {
       return errorResponse("Automation not found", 404);
@@ -255,7 +419,12 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
       return errorResponse(result.error ?? "Automation run skipped.", 409);
     }
 
-    const runs = await automationService.listRuns(automationId, orgId, 1, auth.user.id);
+    const runs = await automationService.listRuns(
+      automationId,
+      orgId,
+      1,
+      auth.user.id
+    );
     const run = runs[0];
     if (!run) {
       return errorResponse("Automation run record not found.", 500);
@@ -270,7 +439,12 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const automationId = decodeURIComponent(c.req.param("automationId"));
 
     try {
-      const runs = await automationService.listRuns(automationId, orgId, 20, auth.user.id);
+      const runs = await automationService.listRuns(
+        automationId,
+        orgId,
+        20,
+        auth.user.id
+      );
       return json<ListAutomationRunsResponse>({ runs });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
@@ -287,7 +461,11 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const runId = decodeURIComponent(c.req.param("runId"));
 
     try {
-      const deleted = await automationService.deleteRun(automationId, runId, orgId);
+      const deleted = await automationService.deleteRun(
+        automationId,
+        runId,
+        orgId
+      );
       if (!deleted) {
         return errorResponse("Automation run not found.", 404);
       }
@@ -306,7 +484,11 @@ export function registerAutomationRoutes(app: HonoApp, options: ServerOptions): 
     const automationId = decodeURIComponent(c.req.param("automationId"));
 
     try {
-      const result = await automationService.markRunsRead(automationId, orgId, auth.user.id);
+      const result = await automationService.markRunsRead(
+        automationId,
+        orgId,
+        auth.user.id
+      );
       return json<MarkAutomationRunsReadResponse>(result);
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {

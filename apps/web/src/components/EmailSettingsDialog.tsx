@@ -1,6 +1,11 @@
+import type {
+  EmailSettingsResponse,
+  UpdateEmailSettingsRequest,
+} from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useReducer } from "react";
-import type { EmailSettingsResponse, UpdateEmailSettingsRequest } from "@nakama/core/contract";
+import { EmailSettingsFooter } from "@/components/email-settings-footer";
+import { EmailSettingsFormFields } from "@/components/email-settings-form-fields";
 import {
   Dialog,
   DialogContent,
@@ -9,14 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { EmailSettingsFooter } from "@/components/email-settings-footer";
-import { EmailSettingsFormFields } from "@/components/email-settings-form-fields";
+import { useAuth } from "@/context/use-auth";
 import {
   emailSettingsQueryOptions,
   useSaveEmailSettings,
   useSendEmailTest,
 } from "@/hooks/use-email-settings";
-import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
 
 type EmailSettingsState = {
@@ -37,20 +40,20 @@ type EmailSettingsState = {
 };
 
 const initialEmailSettingsState: EmailSettingsState = {
+  formError: null,
+  from: "",
+  fromName: "",
+  hint: null,
   imapHost: "",
   imapPort: "993",
   imapSecure: true,
+  password: "",
+  showPassword: false,
   smtpHost: "",
   smtpPort: "587",
   smtpSecure: false,
-  username: "",
-  password: "",
-  from: "",
-  fromName: "",
-  showPassword: false,
   testRecipient: "",
-  hint: null,
-  formError: null,
+  username: "",
 };
 
 type EmailSettingsAction =
@@ -65,14 +68,14 @@ type EmailSettingsAction =
 
 function emailSettingsReducer(
   state: EmailSettingsState,
-  action: EmailSettingsAction,
+  action: EmailSettingsAction
 ): EmailSettingsState {
   switch (action.type) {
     case "clear-on-close":
       return {
         ...state,
-        hint: null,
         formError: null,
+        hint: null,
         showPassword: false,
       };
     case "sync-from-settings": {
@@ -81,16 +84,16 @@ function emailSettingsReducer(
       const username = settings.username ?? fallbackEmail;
       return {
         ...state,
+        from: settings.from ?? username,
+        fromName: settings.fromName ?? "",
         imapHost: settings.imapHost ?? "",
         imapPort: String(settings.imapPort ?? 993),
         imapSecure: settings.imapSecure ?? true,
+        password: "",
         smtpHost: settings.smtpHost ?? "",
         smtpPort: String(settings.smtpPort ?? 587),
         smtpSecure: settings.smtpSecure ?? false,
         username,
-        from: settings.from ?? username,
-        fromName: settings.fromName ?? "",
-        password: "",
       };
     }
     case "patch":
@@ -110,13 +113,20 @@ export function EmailSettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { user } = useAuth();
-  const { data: settings, isLoading, error: loadError } = useQuery({
+  const {
+    data: settings,
+    isLoading,
+    error: loadError,
+  } = useQuery({
     ...emailSettingsQueryOptions,
     enabled: open,
   });
   const saveMutation = useSaveEmailSettings();
   const testMutation = useSendEmailTest();
-  const [state, dispatch] = useReducer(emailSettingsReducer, initialEmailSettingsState);
+  const [state, dispatch] = useReducer(
+    emailSettingsReducer,
+    initialEmailSettingsState
+  );
 
   const passwordPlaceholder = settings?.passwordMasked
     ? `Saved (${settings.passwordMasked})`
@@ -133,8 +143,8 @@ export function EmailSettingsDialog({
     }
 
     dispatch({
-      type: "sync-from-settings",
       settings,
+      type: "sync-from-settings",
       userEmail: user?.email,
     });
   }, [open, settings, user?.email]);
@@ -143,6 +153,8 @@ export function EmailSettingsDialog({
     dispatch({ type: "patch", values: { formError: null, hint: null } });
 
     const request: UpdateEmailSettingsRequest = {
+      from: state.from.trim(),
+      fromName: state.fromName.trim(),
       imapHost: state.imapHost.trim(),
       imapPort: Number(state.imapPort),
       imapSecure: state.imapSecure,
@@ -150,25 +162,23 @@ export function EmailSettingsDialog({
       smtpPort: Number(state.smtpPort),
       smtpSecure: state.smtpSecure,
       username: state.username.trim(),
-      from: state.from.trim(),
-      fromName: state.fromName.trim(),
       ...(state.password.trim() ? { password: state.password.trim() } : {}),
     };
 
     saveMutation.mutate(request, {
+      onError: (err) => {
+        dispatch({ type: "patch", values: { formError: formatError(err) } });
+      },
       onSuccess: (saved) => {
         dispatch({
           type: "patch",
           values: {
-            password: "",
             hint: saved.configured
               ? "Settings saved."
               : "Saved, but mailbox is not fully configured yet.",
+            password: "",
           },
         });
-      },
-      onError: (err) => {
-        dispatch({ type: "patch", values: { formError: formatError(err) } });
       },
     });
   };
@@ -179,20 +189,23 @@ export function EmailSettingsDialog({
     testMutation.mutate(
       { to: state.testRecipient.trim() || undefined },
       {
-        onSuccess: (result) => {
-          dispatch({ type: "patch", values: { hint: `Test email sent to ${result.to}.` } });
-        },
         onError: (err) => {
           dispatch({ type: "patch", values: { formError: formatError(err) } });
         },
-      },
+        onSuccess: (result) => {
+          dispatch({
+            type: "patch",
+            values: { hint: `Test email sent to ${result.to}.` },
+          });
+        },
+      }
     );
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border px-4 py-3">
+        <DialogHeader className="border-border border-b px-4 py-3">
           <div className="flex items-center gap-2 pr-6">
             <div className="min-w-0 flex-1">
               <DialogTitle>Email mailbox</DialogTitle>
@@ -201,7 +214,7 @@ export function EmailSettingsDialog({
               </DialogDescription>
             </div>
             {settings?.configured ? (
-              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
+              <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300 text-xs">
                 Configured
               </span>
             ) : null}
@@ -209,40 +222,28 @@ export function EmailSettingsDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-4 py-4 text-muted-foreground text-sm">
             <Spinner />
             Loading email settings…
           </div>
         ) : loadError ? (
-          <div className="px-4 py-4 text-sm text-destructive" role="alert">
+          <div className="px-4 py-4 text-destructive text-sm" role="alert">
             {formatError(loadError)}
           </div>
         ) : (
           <>
             <EmailSettingsFormFields
-              fromName={state.fromName}
               from={state.from}
-              username={state.username}
-              password={state.password}
-              showPassword={state.showPassword}
-              passwordPlaceholder={passwordPlaceholder}
+              fromName={state.fromName}
               imapHost={state.imapHost}
               imapPort={state.imapPort}
               imapSecure={state.imapSecure}
-              smtpHost={state.smtpHost}
-              smtpPort={state.smtpPort}
-              smtpSecure={state.smtpSecure}
+              onFromChange={(value) =>
+                dispatch({ type: "patch", values: { from: value } })
+              }
               onFromNameChange={(value) =>
                 dispatch({ type: "patch", values: { fromName: value } })
               }
-              onFromChange={(value) => dispatch({ type: "patch", values: { from: value } })}
-              onUsernameChange={(value) =>
-                dispatch({ type: "patch", values: { username: value } })
-              }
-              onPasswordChange={(value) =>
-                dispatch({ type: "patch", values: { password: value } })
-              }
-              onShowPasswordToggle={() => dispatch({ type: "toggle-show-password" })}
               onImapHostChange={(value) =>
                 dispatch({ type: "patch", values: { imapHost: value } })
               }
@@ -251,6 +252,12 @@ export function EmailSettingsDialog({
               }
               onImapSecureChange={(value) =>
                 dispatch({ type: "patch", values: { imapSecure: value } })
+              }
+              onPasswordChange={(value) =>
+                dispatch({ type: "patch", values: { password: value } })
+              }
+              onShowPasswordToggle={() =>
+                dispatch({ type: "toggle-show-password" })
               }
               onSmtpHostChange={(value) =>
                 dispatch({ type: "patch", values: { smtpHost: value } })
@@ -261,20 +268,30 @@ export function EmailSettingsDialog({
               onSmtpSecureChange={(value) =>
                 dispatch({ type: "patch", values: { smtpSecure: value } })
               }
+              onUsernameChange={(value) =>
+                dispatch({ type: "patch", values: { username: value } })
+              }
+              password={state.password}
+              passwordPlaceholder={passwordPlaceholder}
+              showPassword={state.showPassword}
+              smtpHost={state.smtpHost}
+              smtpPort={state.smtpPort}
+              smtpSecure={state.smtpSecure}
+              username={state.username}
             />
 
             <EmailSettingsFooter
-              hint={state.hint}
-              formError={state.formError}
-              testRecipient={state.testRecipient}
-              testPending={testMutation.isPending}
-              savePending={saveMutation.isPending}
               configured={settings?.configured ?? false}
+              formError={state.formError}
+              hint={state.hint}
+              onSave={handleSave}
               onTestRecipientChange={(value) =>
                 dispatch({ type: "patch", values: { testRecipient: value } })
               }
               onTestSend={handleTestSend}
-              onSave={handleSave}
+              savePending={saveMutation.isPending}
+              testPending={testMutation.isPending}
+              testRecipient={state.testRecipient}
             />
           </>
         )}

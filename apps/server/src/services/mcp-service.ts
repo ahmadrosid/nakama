@@ -14,16 +14,20 @@ import type {
 } from "@nakama/core";
 import { createId, NakamaApiError } from "@nakama/core";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
-import type { CachedMcpTool, DatabaseAdapter, StoredMcpServerRecord, StoredProfileRecord } from "@nakama/db";
+import type {
+  DatabaseAdapter,
+  StoredMcpServerRecord,
+  StoredProfileRecord,
+} from "@nakama/db";
 import {
-  McpClientManager,
+  type McpClientManager,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
 
 export class McpService {
   constructor(
     private readonly db: DatabaseAdapter,
-    private readonly manager: McpClientManager,
+    private readonly manager: McpClientManager
   ) {}
 
   async listServers(): Promise<ListMcpServersResponse> {
@@ -32,7 +36,7 @@ export class McpService {
 
     return {
       servers: servers.map((server) =>
-        toMcpServerSummary(server, profileCounts[server.id] ?? 0),
+        toMcpServerSummary(server, profileCounts[server.id] ?? 0)
       ),
     };
   }
@@ -44,7 +48,9 @@ export class McpService {
     return { server: toMcpServerDetail(server, profileCounts[serverId] ?? 0) };
   }
 
-  async createServer(request: CreateMcpServerRequest): Promise<McpServerResponse> {
+  async createServer(
+    request: CreateMcpServerRequest
+  ): Promise<McpServerResponse> {
     const name = request.name.trim();
 
     if (!name) {
@@ -62,15 +68,15 @@ export class McpService {
 
     const now = new Date().toISOString();
     const record: StoredMcpServerRecord = {
-      id: createId("mcp"),
-      name,
-      transport,
-      config: request.config,
-      enabled: request.enabled ?? true,
-      status: "disconnected",
-      lastError: null,
       cachedTools: [],
+      config: request.config,
       createdAt: now,
+      enabled: request.enabled ?? true,
+      id: createId("mcp"),
+      lastError: null,
+      name,
+      status: "disconnected",
+      transport,
       updatedAt: now,
     };
 
@@ -86,7 +92,7 @@ export class McpService {
 
   async updateServer(
     serverId: string,
-    request: UpdateMcpServerRequest,
+    request: UpdateMcpServerRequest
   ): Promise<McpServerResponse> {
     const server = await this.requireServer(serverId);
     const nextName = request.name?.trim() ?? server.name;
@@ -112,7 +118,7 @@ export class McpService {
         : mergeMcpConfig(
             transport,
             resolveMcpConfig(server.transport, server.config),
-            request.config,
+            request.config
           )
       : resolveMcpConfig(server.transport, server.config);
 
@@ -124,10 +130,10 @@ export class McpService {
 
     const updated: StoredMcpServerRecord = {
       ...server,
-      name: nextName,
-      transport,
       config,
       enabled: request.enabled ?? server.enabled,
+      name: nextName,
+      transport,
       updatedAt: new Date().toISOString(),
     };
 
@@ -150,7 +156,9 @@ export class McpService {
     const server = await this.requireServer(serverId);
 
     if (isPreinstalledMcpServerId(server.id)) {
-      throw new Error(`Preinstalled MCP server "${server.name}" cannot be deleted.`);
+      throw new Error(
+        `Preinstalled MCP server "${server.name}" cannot be deleted.`
+      );
     }
 
     const profiles = await this.db.listProfilesForMcpServer(serverId);
@@ -161,7 +169,7 @@ export class McpService {
         formatMcpServerInUseMessage(profileRefs),
         409,
         undefined,
-        profileRefs,
+        profileRefs
       );
     }
 
@@ -185,9 +193,9 @@ export class McpService {
       const cachedTools = await this.manager.connect(server);
       const updated: StoredMcpServerRecord = {
         ...server,
-        status: "connected",
-        lastError: null,
         cachedTools,
+        lastError: null,
+        status: "connected",
         updatedAt: new Date().toISOString(),
       };
 
@@ -198,8 +206,8 @@ export class McpService {
       const message = error instanceof Error ? error.message : String(error);
       const updated: StoredMcpServerRecord = {
         ...server,
-        status: "error",
         lastError: message,
+        status: "error",
         updatedAt: new Date().toISOString(),
       };
 
@@ -216,12 +224,15 @@ export class McpService {
     }
 
     try {
-      const cachedTools = await this.manager.listTools(serverId, server.transport);
+      const cachedTools = await this.manager.listTools(
+        serverId,
+        server.transport
+      );
       const updated: StoredMcpServerRecord = {
         ...server,
-        status: "connected",
-        lastError: null,
         cachedTools,
+        lastError: null,
+        status: "connected",
         updatedAt: new Date().toISOString(),
       };
 
@@ -232,8 +243,8 @@ export class McpService {
       const message = error instanceof Error ? error.message : String(error);
       const updated: StoredMcpServerRecord = {
         ...server,
-        status: "error",
         lastError: message,
+        status: "error",
         updatedAt: new Date().toISOString(),
       };
 
@@ -245,7 +256,7 @@ export class McpService {
   async testServer(
     transport: McpTransport,
     config: McpServerConfig,
-    serverId?: string,
+    serverId?: string
   ): Promise<TestMcpServerResponse> {
     const normalizedTransport = normalizeTransport(transport);
     const resolvedConfig = serverId
@@ -253,16 +264,19 @@ export class McpService {
           normalizedTransport,
           resolveMcpConfig(
             normalizedTransport,
-            (await this.requireServer(serverId)).config,
+            (await this.requireServer(serverId)).config
           ),
-          config,
+          config
         )
       : config;
 
     validateConfig(normalizedTransport, resolvedConfig);
 
     try {
-      const tools = await this.manager.testConnection(normalizedTransport, resolvedConfig);
+      const tools = await this.manager.testConnection(
+        normalizedTransport,
+        resolvedConfig
+      );
 
       return {
         ok: true,
@@ -271,10 +285,10 @@ export class McpService {
       };
     } catch (error) {
       return {
+        error: error instanceof Error ? error.message : String(error),
         ok: false,
         toolCount: 0,
         tools: [],
-        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -292,13 +306,16 @@ export class McpService {
       } catch (error) {
         console.warn(
           `Could not connect MCP server "${server.name}":`,
-          error instanceof Error ? error.message : error,
+          error instanceof Error ? error.message : error
         );
       }
     }
   }
 
-  async assignServerToProfile(profileId: string, serverId: string): Promise<void> {
+  async assignServerToProfile(
+    profileId: string,
+    serverId: string
+  ): Promise<void> {
     const profile = await this.db.getProfile(profileId);
 
     if (!profile) {
@@ -309,14 +326,20 @@ export class McpService {
     await this.db.assignMcpServerToProfile(profileId, serverId);
   }
 
-  async unassignServerFromProfile(profileId: string, serverId: string): Promise<void> {
+  async unassignServerFromProfile(
+    profileId: string,
+    serverId: string
+  ): Promise<void> {
     const profile = await this.db.getProfile(profileId);
 
     if (!profile) {
       throw new Error("Profile not found.");
     }
 
-    const removed = await this.db.unassignMcpServerFromProfile(profileId, serverId);
+    const removed = await this.db.unassignMcpServerFromProfile(
+      profileId,
+      serverId
+    );
 
     if (!removed) {
       throw new Error("MCP server is not assigned to this profile.");
@@ -331,13 +354,15 @@ export class McpService {
     const servers = await this.db.listMcpServers();
 
     return {
-      serverCount: servers.length,
-      connectedCount: this.manager.getConnectedCount(),
       assignedProfileCount: await this.db.countProfileMcpAssignments(),
+      connectedCount: this.manager.getConnectedCount(),
+      serverCount: servers.length,
     };
   }
 
-  private async requireServer(serverId: string): Promise<StoredMcpServerRecord> {
+  private async requireServer(
+    serverId: string
+  ): Promise<StoredMcpServerRecord> {
     const server = await this.db.getMcpServer(serverId);
 
     if (!server) {
@@ -350,30 +375,30 @@ export class McpService {
 
 function toMcpServerSummary(
   server: StoredMcpServerRecord,
-  assignedProfileCount?: number,
+  assignedProfileCount?: number
 ): McpServerSummary {
   return {
-    id: server.id,
-    name: server.name,
-    transport: server.transport,
+    assignedProfileCount,
+    createdAt: server.createdAt,
     enabled: server.enabled,
+    id: server.id,
+    lastError: server.lastError,
+    name: server.name,
     status: server.status,
     toolCount: server.cachedTools.length,
-    assignedProfileCount,
-    lastError: server.lastError,
-    createdAt: server.createdAt,
+    transport: server.transport,
     updatedAt: server.updatedAt,
   };
 }
 
 function toMcpServerDetail(
   server: StoredMcpServerRecord,
-  assignedProfileCount?: number,
+  assignedProfileCount?: number
 ): McpServerDetail {
   return {
     ...toMcpServerSummary(server, assignedProfileCount),
-    config: redactMcpConfig(server.transport, server.config),
     cachedTools: toCachedMcpToolSummaries(server.cachedTools),
+    config: redactMcpConfig(server.transport, server.config),
   };
 }
 
@@ -393,7 +418,10 @@ function formatMcpServerInUseMessage(profiles: ProfileRef[]): string {
 
 const REDACTED_SECRET_VALUE = "••••••••";
 
-function resolveMcpConfig(transport: McpTransport, config: unknown): McpServerConfig {
+function resolveMcpConfig(
+  transport: McpTransport,
+  config: unknown
+): McpServerConfig {
   if (typeof config !== "object" || config === null) {
     return transport === "http" ? { url: "" } : { command: "" };
   }
@@ -404,37 +432,47 @@ function resolveMcpConfig(transport: McpTransport, config: unknown): McpServerCo
 function mergeMcpConfig(
   transport: McpTransport,
   previous: McpServerConfig,
-  next: McpServerConfig,
+  next: McpServerConfig
 ): McpServerConfig {
   if (transport === "http") {
     return mergeMcpHttpConfig(previous as McpHttpConfig, next as McpHttpConfig);
   }
 
-  return mergeMcpStdioConfig(previous as McpStdioConfig, next as McpStdioConfig);
+  return mergeMcpStdioConfig(
+    previous as McpStdioConfig,
+    next as McpStdioConfig
+  );
 }
 
-function mergeMcpHttpConfig(previous: McpHttpConfig, next: McpHttpConfig): McpHttpConfig {
+function mergeMcpHttpConfig(
+  previous: McpHttpConfig,
+  next: McpHttpConfig
+): McpHttpConfig {
   const url = next.url?.trim() || previous.url;
 
   return {
-    url,
     headers: mergeRedactedStringRecord(previous.headers, next.headers),
+    url,
   };
 }
 
-function mergeMcpStdioConfig(previous: McpStdioConfig, next: McpStdioConfig): McpStdioConfig {
+function mergeMcpStdioConfig(
+  previous: McpStdioConfig,
+  next: McpStdioConfig
+): McpStdioConfig {
   const command = next.command?.trim() || previous.command;
 
   return {
+    args:
+      next.args === undefined ? previous.args : normalizeStringArray(next.args),
     command,
-    args: next.args !== undefined ? normalizeStringArray(next.args) : previous.args,
     env: mergeRedactedStringRecord(previous.env, next.env),
   };
 }
 
 function mergeRedactedStringRecord(
   previous: Record<string, string> | undefined,
-  next: Record<string, string> | undefined,
+  next: Record<string, string> | undefined
 ): Record<string, string> | undefined {
   if (!next) {
     return previous;
@@ -460,7 +498,10 @@ function mergeRedactedStringRecord(
       continue;
     }
 
-    if (trimmedValue === REDACTED_SECRET_VALUE && trimmedKey in previousRecord) {
+    if (
+      trimmedValue === REDACTED_SECRET_VALUE &&
+      trimmedKey in previousRecord
+    ) {
       merged[trimmedKey] = previousRecord[trimmedKey]!;
       continue;
     }
@@ -471,16 +512,21 @@ function mergeRedactedStringRecord(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-function normalizeStringArray(value: string[] | undefined): string[] | undefined {
+function normalizeStringArray(
+  value: string[] | undefined
+): string[] | undefined {
   if (!value) {
-    return undefined;
+    return;
   }
 
   const items = value.map((entry) => entry.trim()).filter(Boolean);
   return items.length > 0 ? items : undefined;
 }
 
-function redactMcpConfig(transport: McpTransport, config: unknown): McpServerConfig {
+function redactMcpConfig(
+  transport: McpTransport,
+  config: unknown
+): McpServerConfig {
   if (transport === "stdio") {
     const stdio =
       typeof config === "object" && config !== null
@@ -488,8 +534,8 @@ function redactMcpConfig(transport: McpTransport, config: unknown): McpServerCon
         : { command: "" };
 
     return {
-      command: stdio.command,
       args: stdio.args,
+      command: stdio.command,
       env: redactStringRecord(stdio.env),
     };
   }
@@ -500,16 +546,16 @@ function redactMcpConfig(transport: McpTransport, config: unknown): McpServerCon
       : { url: "" };
 
   return {
-    url: http.url,
     headers: redactStringRecord(http.headers),
+    url: http.url,
   };
 }
 
 function redactStringRecord(
-  value: Record<string, string> | undefined,
+  value: Record<string, string> | undefined
 ): Record<string, string> | undefined {
   if (!value) {
-    return undefined;
+    return;
   }
 
   const redacted: Record<string, string> = {};
@@ -535,7 +581,9 @@ function normalizeTransport(transport: string | undefined): McpTransport {
   throw new Error('MCP transport must be "http" or "stdio".');
 }
 
-function validateTransport(transport: string): asserts transport is McpTransport {
+function validateTransport(
+  transport: string
+): asserts transport is McpTransport {
   normalizeTransport(transport);
 }
 
@@ -569,6 +617,8 @@ function validateConfig(transport: McpTransport, config: unknown): void {
   }
 }
 
-export function toMcpServerSummaries(servers: StoredMcpServerRecord[]): McpServerSummary[] {
+export function toMcpServerSummaries(
+  servers: StoredMcpServerRecord[]
+): McpServerSummary[] {
   return servers.map((server) => toMcpServerSummary(server));
 }

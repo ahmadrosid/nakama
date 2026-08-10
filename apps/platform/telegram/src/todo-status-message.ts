@@ -1,6 +1,6 @@
 import type { AgentTodo } from "@nakama/core/contract";
-import type { TelegramRichMessenger } from "./rich-message";
 import { renderTelegramTodoStatus } from "./format";
+import type { TelegramRichMessenger } from "./rich-message";
 
 type TelegramTodoRunState = "working" | "completed" | "stopped" | "failed";
 
@@ -37,7 +37,9 @@ export class TelegramTodoStatusMessage {
     await this.enqueueTerminalState("failed");
   }
 
-  private async enqueueTerminalState(state: TelegramTodoRunState): Promise<void> {
+  private async enqueueTerminalState(
+    state: TelegramTodoRunState
+  ): Promise<void> {
     if (this.lastTodos.length === 0) {
       return;
     }
@@ -45,12 +47,18 @@ export class TelegramTodoStatusMessage {
     await this.enqueueRender(state, this.lastTodos);
   }
 
-  private async enqueueRender(state: TelegramTodoRunState, todos: AgentTodo[]): Promise<void> {
+  private async enqueueRender(
+    state: TelegramTodoRunState,
+    todos: AgentTodo[]
+  ): Promise<void> {
     this.pending = this.pending.then(() => this.render(state, todos));
     await this.pending;
   }
 
-  private async render(state: TelegramTodoRunState, todos: AgentTodo[]): Promise<void> {
+  private async render(
+    state: TelegramTodoRunState,
+    todos: AgentTodo[]
+  ): Promise<void> {
     const next = renderTelegramTodoStatus(todos, state);
 
     if (next === this.lastRendered) {

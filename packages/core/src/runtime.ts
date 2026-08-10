@@ -24,8 +24,8 @@ export function readRuntimeServerUrl(): string | null {
 export function writeRuntimeServerUrl(url: string): string {
   const normalized = normalizeBaseUrl(url);
   mkdirSync(join(getUserConfigDir(), "runtime"), {
-    recursive: true,
     mode: PRIVATE_DIR_MODE,
+    recursive: true,
   });
   writeFileSync(serverUrlPath(), `${normalized}\n`, {
     encoding: "utf8",
@@ -47,18 +47,21 @@ export function clearRuntimeServerUrl(expectedUrl?: string): void {
 }
 
 export function resolveServerUrl(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): string {
   return normalizeBaseUrl(
-    env.nakama_SERVER_URL?.trim() || readRuntimeServerUrl() || DEFAULT_SERVER_URL,
+    env.nakama_SERVER_URL?.trim() ||
+      readRuntimeServerUrl() ||
+      DEFAULT_SERVER_URL
   );
 }
 
 /** Public web app origin for OAuth callbacks from non-browser clients (Telegram, WhatsApp, CLI). */
 export function resolveWebPublicUrl(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): string | undefined {
-  const configured = env.NAKAMA_WEB_PUBLIC_URL?.trim() || env.NAKAMA_PUBLIC_URL?.trim();
+  const configured =
+    env.NAKAMA_WEB_PUBLIC_URL?.trim() || env.NAKAMA_PUBLIC_URL?.trim();
   if (configured) {
     return normalizeBaseUrl(configured);
   }

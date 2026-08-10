@@ -1,4 +1,8 @@
-import type { ModelsResponse, ProfileSummary, ProviderModelOption } from "@nakama/core";
+import type {
+  ModelsResponse,
+  ProfileSummary,
+  ProviderModelOption,
+} from "@nakama/core";
 
 export function parseModelCommandArg(raw: string): {
   providerId: string | null;
@@ -9,19 +13,20 @@ export function parseModelCommandArg(raw: string): {
 
   if (separator > 0) {
     return {
-      providerId: trimmed.slice(0, separator),
       modelId: trimmed.slice(separator + 2),
+      providerId: trimmed.slice(0, separator),
     };
   }
 
-  return { providerId: null, modelId: trimmed };
+  return { modelId: trimmed, providerId: null };
 }
 
 export function resolveModelSwitchTarget(
   cached: ModelsResponse,
-  rawArg: string,
+  rawArg: string
 ): { providerId: string; modelId: string } | "unknown" | "ambiguous" {
-  const { providerId: explicitProviderId, modelId } = parseModelCommandArg(rawArg);
+  const { providerId: explicitProviderId, modelId } =
+    parseModelCommandArg(rawArg);
 
   if (!modelId) {
     return "unknown";
@@ -31,15 +36,17 @@ export function resolveModelSwitchTarget(
     const match = cached.models.find(
       (model) =>
         model.id === modelId &&
-        (model.providerId ?? model.provider) === explicitProviderId,
+        (model.providerId ?? model.provider) === explicitProviderId
     );
 
     if (match?.providerId) {
-      return { providerId: match.providerId, modelId };
+      return { modelId, providerId: match.providerId };
     }
 
-    if (cached.providers.some((provider) => provider.id === explicitProviderId)) {
-      return { providerId: explicitProviderId, modelId };
+    if (
+      cached.providers.some((provider) => provider.id === explicitProviderId)
+    ) {
+      return { modelId, providerId: explicitProviderId };
     }
 
     return "unknown";
@@ -48,21 +55,23 @@ export function resolveModelSwitchTarget(
   const matches = cached.models.filter((model) => model.id === modelId);
 
   if (matches.length === 1 && matches[0]!.providerId) {
-    return { providerId: matches[0]!.providerId, modelId };
+    return { modelId, providerId: matches[0]!.providerId };
   }
 
   if (matches.length > 1) {
-    const onCurrent = matches.find((model) => model.providerId === cached.currentProviderId);
+    const onCurrent = matches.find(
+      (model) => model.providerId === cached.currentProviderId
+    );
 
     if (onCurrent?.providerId) {
-      return { providerId: onCurrent.providerId, modelId };
+      return { modelId, providerId: onCurrent.providerId };
     }
 
     return "ambiguous";
   }
 
   if (cached.currentProviderId) {
-    return { providerId: cached.currentProviderId, modelId };
+    return { modelId, providerId: cached.currentProviderId };
   }
 
   return "unknown";
@@ -70,7 +79,7 @@ export function resolveModelSwitchTarget(
 
 export function effectiveModelState(
   profile: ProfileSummary,
-  models: ModelsResponse | null,
+  models: ModelsResponse | null
 ): { modelId: string | null; providerId: string | null } {
   if (!profile.model?.trim()) {
     return { modelId: null, providerId: models?.currentProviderId ?? null };
@@ -83,7 +92,7 @@ export function effectiveModelState(
   }
 
   if (providerId) {
-    return { providerId, modelId };
+    return { modelId, providerId };
   }
 
   const match = models?.models.find((model) => model.id === modelId);
@@ -96,7 +105,7 @@ export function effectiveModelState(
 
 export function isActiveModelOption(
   model: ProviderModelOption,
-  active: { modelId: string | null; providerId: string | null },
+  active: { modelId: string | null; providerId: string | null }
 ): boolean {
   if (!active.modelId || model.id !== active.modelId) {
     return false;
@@ -114,31 +123,31 @@ export function formatModelCommandArg(model: ProviderModelOption): string {
 }
 
 export interface SlashCommand {
-  name: string;
   description: string;
+  name: string;
 }
 
 export interface PromptSuggestion {
-  label: string;
   description: string;
   insertValue: string;
+  label: string;
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: "/help", description: "show commands" },
-  { name: "/paste", description: "attach image from clipboard" },
-  { name: "/clear", description: "clear history" },
-  { name: "/compact", description: "compact conversation history" },
-  { name: "/status", description: "show server and model status" },
-  { name: "/create", description: "draft an automation" },
-  { name: "/soul", description: "show or initialize profile soul files" },
-  { name: "/user", description: "show or initialize USER.md" },
-  { name: "/models", description: "choose a model" },
-  { name: "/model", description: "show or switch model" },
-  { name: "/thinking", description: "show or change extended thinking" },
-  { name: "/debug", description: "toggle layout debug overlay" },
-  { name: "/profile", description: "show or switch bot profile" },
-  { name: "/exit", description: "quit" },
+  { description: "show commands", name: "/help" },
+  { description: "attach image from clipboard", name: "/paste" },
+  { description: "clear history", name: "/clear" },
+  { description: "compact conversation history", name: "/compact" },
+  { description: "show server and model status", name: "/status" },
+  { description: "draft an automation", name: "/create" },
+  { description: "show or initialize profile soul files", name: "/soul" },
+  { description: "show or initialize USER.md", name: "/user" },
+  { description: "choose a model", name: "/models" },
+  { description: "show or switch model", name: "/model" },
+  { description: "show or change extended thinking", name: "/thinking" },
+  { description: "toggle layout debug overlay", name: "/debug" },
+  { description: "show or switch bot profile", name: "/profile" },
+  { description: "quit", name: "/exit" },
 ];
 
 const COMMANDS_WITH_ARGS = new Set([
@@ -151,16 +160,16 @@ const COMMANDS_WITH_ARGS = new Set([
 ]);
 
 export interface ResolveSuggestionsOptions {
+  currentModel?: string | null;
+  currentProfileId?: string | null;
+  currentProviderId?: string | null;
   input: string;
   models?: ProviderModelOption[];
-  currentModel?: string | null;
-  currentProviderId?: string | null;
   profiles?: ProfileSummary[];
-  currentProfileId?: string | null;
 }
 
 export function resolveSuggestions(
-  options: ResolveSuggestionsOptions,
+  options: ResolveSuggestionsOptions
 ): PromptSuggestion[] {
   const {
     input,
@@ -200,9 +209,9 @@ export function resolveSuggestions(
           .join(", ");
 
         return {
-          label: profile.id,
           description: `${profile.name}${markers ? ` (${markers})` : ""}`,
           insertValue: `/profile ${profile.id}`,
+          label: profile.id,
         };
       });
   }
@@ -234,9 +243,9 @@ export function resolveSuggestions(
           .join(", ");
 
         return {
-          label: model.id,
           description: `${model.name} [${model.providerLabel ?? model.provider}]${markers ? ` (${markers})` : ""}`,
           insertValue: `/model ${formatModelCommandArg(model)}`,
+          label: model.id,
         };
       });
   }
@@ -245,14 +254,19 @@ export function resolveSuggestions(
 
   if (soulMatch) {
     const query = (soulMatch[1] ?? "").trim().toLowerCase();
-    const subcommands = [{ name: "init", description: "scaffold soul templates for current profile" }];
+    const subcommands = [
+      {
+        description: "scaffold soul templates for current profile",
+        name: "init",
+      },
+    ];
 
     return subcommands
       .filter((command) => !query || command.name.startsWith(query))
       .map((command) => ({
-        label: command.name,
         description: command.description,
         insertValue: `/soul ${command.name}`,
+        label: command.name,
       }));
   }
 
@@ -260,14 +274,16 @@ export function resolveSuggestions(
 
   if (userMatch) {
     const query = (userMatch[1] ?? "").trim().toLowerCase();
-    const subcommands = [{ name: "init", description: "scaffold USER.md template" }];
+    const subcommands = [
+      { description: "scaffold USER.md template", name: "init" },
+    ];
 
     return subcommands
       .filter((command) => !query || command.name.startsWith(query))
       .map((command) => ({
-        label: command.name,
         description: command.description,
         insertValue: `/user ${command.name}`,
+        label: command.name,
       }));
   }
 
@@ -287,16 +303,16 @@ export function resolveSuggestions(
       command.description.toLowerCase().includes(query.slice(1))
     );
   }).map((command) => ({
-    label: command.name,
     description: command.description,
     insertValue: COMMANDS_WITH_ARGS.has(command.name)
       ? `${command.name} `
       : command.name,
+    label: command.name,
   }));
 }
 
 export function formatSlashCommands(): string {
   return SLASH_COMMANDS.map(
-    (command) => `${command.name.padEnd(16)} ${command.description}`,
+    (command) => `${command.name.padEnd(16)} ${command.description}`
   ).join("\n");
 }

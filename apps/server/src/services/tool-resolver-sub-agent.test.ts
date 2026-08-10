@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { SUB_AGENT_TOOL_ID } from "@nakama/core/tools/protected";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import {
-  registerSubAgentTool,
-  resolveToolsFromStorage,
-} from "./tool-resolver";
 import { createSubAgentTool } from "../tools/sub-agent-tool";
+import { registerSubAgentTool, resolveToolsFromStorage } from "./tool-resolver";
 
 describe("resolveToolsFromStorage sub_agent", () => {
   test("resolves registered sub_agent tool from storage", async () => {
@@ -15,20 +12,20 @@ describe("resolveToolsFromStorage sub_agent", () => {
     registerSubAgentTool(
       createSubAgentTool({
         runSubAgentPrompt: async () => ({
+          output: "ok",
           status: "success",
           summary: "ok",
-          output: "ok",
         }),
-      } as never),
+      } as never)
     );
 
     await db.upsertTool({
+      createdAt: now,
+      description: "Sub-agent",
+      handlerConfig: {},
+      handlerType: "sub_agent",
       id: SUB_AGENT_TOOL_ID,
       name: "sub_agent",
-      description: "Sub-agent",
-      handlerType: "sub_agent",
-      handlerConfig: {},
-      createdAt: now,
       updatedAt: now,
     });
 

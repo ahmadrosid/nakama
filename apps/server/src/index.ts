@@ -3,54 +3,60 @@ import { fileURLToPath } from "node:url";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();
+
+import { mergeOrgMemoryWithApprovedBullet } from "@nakama/agent";
+import {
+  clearRuntimeServerUrl,
+  DEFAULT_SERVER_HOST,
+  DEFAULT_SERVER_PORT,
+  ensureBundledSkillFiles,
+  getUserConfigDir,
+  loadConfig,
+  NAKAMA_API_VERSION,
+  writeRuntimeServerUrl,
+} from "@nakama/core";
+import { serverHasTaskChat } from "@nakama/core/ensure-server";
+import {
+  createDatabase,
+  type Database,
+  ensureBundledSkillsAssigned,
+  seedDatabase,
+} from "@nakama/db";
 import { createHonoApp } from "./http/app";
 import { AgentService } from "./services/agent-service";
-import { AutomationRunner } from "./services/automation-runner";
+import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
+import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
-import { TaskRunner } from "./services/task-runner";
-import { TaskService } from "./services/task-service";
-import { SystemStatusService } from "./services/system-status-service";
-import { WorkerManagerService } from "./services/worker-manager-service";
+import { ComposioService } from "./services/composio-service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
-import { ensureProviderConfigured } from "./setup";
-import { resolveWebDistDir } from "./static-web";
 import { McpClientManager } from "./services/mcp-client-manager";
-import { McpService } from "./services/mcp-service";
 import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
-import { ComposioService } from "./services/composio-service";
-import { SkillsService } from "./services/skills-service";
-import { AuthService } from "./services/auth-service";
-import { OrgService } from "./services/org-service";
+import { McpService } from "./services/mcp-service";
 import { OrgMemoryService } from "./services/org-memory-service";
+import { OrgService } from "./services/org-service";
 import { SkillProposalService } from "./services/skill-proposal-service";
 import { SkillSuggestionService } from "./services/skill-suggestion-service";
+import { SkillsService } from "./services/skills-service";
+import { SystemStatusService } from "./services/system-status-service";
+import { TaskRunner } from "./services/task-runner";
+import { TaskService } from "./services/task-service";
 import {
-  mergeOrgMemoryWithApprovedBullet,
-} from "@nakama/agent";
+  registerGenerateImageTool,
+  registerSubAgentTool,
+} from "./services/tool-resolver";
+import { WorkerManagerService } from "./services/worker-manager-service";
+import { ensureProviderConfigured } from "./setup";
+import { resolveWebDistDir } from "./static-web";
 import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./tools/automation-tools";
+import { createGenerateImageTool } from "./tools/generate-image-tool";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
-import { registerSubAgentTool } from "./services/tool-resolver";
-import { NAKAMA_API_VERSION } from "@nakama/core";
-import {
-  DEFAULT_SERVER_HOST,
-  DEFAULT_SERVER_PORT,
-  clearRuntimeServerUrl,
-  getUserConfigDir,
-  loadConfig,
-  writeRuntimeServerUrl,
-} from "@nakama/core";
-import {
-  serverHasTaskChat,
-} from "@nakama/core/ensure-server";
-import { ensureBundledSkillFiles } from "@nakama/core";
-import { createDatabase, ensureBundledSkillsAssigned, seedDatabase, type Database } from "@nakama/db";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -64,7 +70,7 @@ if (existingServerUrl) {
   const runtimeServerUrl = writeRuntimeServerUrl(existingServerUrl);
   console.log(`Nakama server already running on ${runtimeServerUrl}`);
   console.log(
-    "Stop it before restarting to pick up code changes (for example: kill $(lsof -ti :4310)).",
+    "Stop it before restarting to pick up code changes (for example: kill $(lsof -ti :4310))."
   );
   console.log("Or run: bun run dev:server");
   process.exit(0);
@@ -72,17 +78,35 @@ if (existingServerUrl) {
 
 const { provider, userConfig } = await ensureProviderConfigured();
 const config = loadConfig();
-const database = await createDatabase(config.databaseUrl, { baseDir: getUserConfigDir() });
+const database = await createDatabase(config.databaseUrl, {
+  baseDir: getUserConfigDir(),
+});
 
 await seedDatabase(database.adapter);
 
 const authService = new AuthService();
 
 const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
-const agent = new AgentService(userConfig, provider, database.adapter, llmUsageTracker);
+const agent = new AgentService(
+  userConfig,
+  provider,
+  database.adapter,
+  llmUsageTracker
+);
 registerSubAgentTool(createSubAgentTool(agent));
+registerGenerateImageTool(
+  createGenerateImageTool({
+    db: database.adapter,
+    ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
+    getUserConfig: () => agent.getUserConfig(),
+    recordUsage: (modelId, inputTokens, outputTokens) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens);
+    },
+  })
+);
 await agent.ensureVisionSettingsLoaded();
 await agent.ensureTranscriptionSettingsLoaded();
+await agent.ensureImageGenerationSettingsLoaded();
 const mcpClientManager = new McpClientManager();
 const mcpService = new McpService(database.adapter, mcpClientManager);
 const composioService = new ComposioService(database.adapter, authService);
@@ -94,21 +118,31 @@ agent.setComposioService(composioService);
 agent.setSkillsService(skillsService);
 
 const automationService = new AutomationService(database.adapter, {
-  getUserTimezone: () => agent.getUserTimezone(),
   canSendEmail: (profileId, _orgId) =>
     hasAutomationEmailDeliveryPath(database.adapter, profileId),
+  getUserTimezone: () => agent.getUserTimezone(),
 });
-const automationDeliveryService = new AutomationDeliveryService(automationService, {
-  email: createMcpAwareEmailOutboundAdapter(database.adapter, mcpClientManager),
-});
+const automationDeliveryService = new AutomationDeliveryService(
+  automationService,
+  {
+    email: createMcpAwareEmailOutboundAdapter(
+      database.adapter,
+      mcpClientManager
+    ),
+  }
+);
 const automationRunner = new AutomationRunner(
   automationService,
   agent,
-  automationDeliveryService,
+  automationDeliveryService
 );
 
-agent.setAutomationTools(createAutomationTools(automationService, automationRunner));
-agent.setAutomationRunHistoryTools(createAutomationRunHistoryTools(automationService));
+agent.setAutomationTools(
+  createAutomationTools(automationService, automationRunner)
+);
+agent.setAutomationRunHistoryTools(
+  createAutomationRunHistoryTools(automationService)
+);
 agent.setAutomationRunner(automationRunner);
 
 const taskService = new TaskService(database.adapter);
@@ -123,19 +157,22 @@ const orgMemoryService = new OrgMemoryService(database.adapter, {
   approvedBulletMerger: {
     merge(content, bullet, options) {
       return mergeOrgMemoryWithApprovedBullet(content, bullet, {
-        pin: options.pin,
         dateUtc: options.dateUtc,
+        pin: options.pin,
         provider,
       });
     },
   },
 });
-const skillProposalService = new SkillProposalService(database.adapter, skillsService);
+const skillProposalService = new SkillProposalService(
+  database.adapter,
+  skillsService
+);
 agent.setSkillProposalService(skillProposalService);
 const skillSuggestionService = new SkillSuggestionService(
   database.adapter,
   skillsService,
-  skillProposalService,
+  skillProposalService
 );
 agent.setSkillSuggestionService(skillSuggestionService);
 
@@ -146,39 +183,39 @@ const systemStatus = new SystemStatusService(
   workerManager,
   mcpService,
   composioService,
-  database.adapter,
+  database.adapter
 );
 
 const webDistDir = resolveWebDistDir(projectRoot);
 const app = createHonoApp({
   agent,
-  automationService,
-  taskService,
-  systemStatus,
-  workerManager,
-  mcpService,
-  composioService,
   authService,
-  orgService,
-  orgMemoryService,
-  skillProposalService,
-  skillSuggestionService,
+  automationService,
+  composioService,
   databaseAdapter: database.adapter,
-  webDistDir,
+  mcpService,
   onDataRestored: async () => {
     await database.reopen();
     await agent.reloadAfterDataRestore();
   },
+  orgMemoryService,
+  orgService,
+  skillProposalService,
+  skillSuggestionService,
+  systemStatus,
+  taskService,
+  webDistDir,
+  workerManager,
 });
 
 const server = startServer({
-  host,
-  preferredPort: requestedPort,
   canFallbackToNextPort,
   fetch: app.fetch,
+  host,
+  preferredPort: requestedPort,
 });
 const serverUrl = writeRuntimeServerUrl(
-  `http://${server.hostname}:${server.port}`,
+  `http://${server.hostname}:${server.port}`
 );
 
 registerRuntimeCleanup(server, serverUrl, database, mcpClientManager);
@@ -191,10 +228,10 @@ console.log(`Nakama server listening on ${serverUrl}`);
 console.log(`Nakama database ready at ${config.databaseUrl}`);
 
 void initializeOptionalServices({
-  mcpService,
-  skillsService,
   agent,
   database,
+  mcpService,
+  skillsService,
 });
 
 try {
@@ -210,7 +247,7 @@ if (webDistDir) {
 const humanUserCount = await database.adapter.countHumanUsers();
 if (humanUserCount > 0 && !agent.providerConfigured) {
   console.warn(
-    `Provider not configured — complete the setup wizard at ${serverUrl}/setup to enable chat and automations.`,
+    `Provider not configured — complete the setup wizard at ${serverUrl}/setup to enable chat and automations.`
   );
 }
 
@@ -221,7 +258,7 @@ function parsePort(value: string | undefined): number {
 
   const port = Number(value);
 
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
     throw new Error(`Invalid NAKAMA_PORT: ${value}`);
   }
 
@@ -267,21 +304,20 @@ function startServer(options: {
   fetch: (request: Request) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
-    ? Math.min(options.preferredPort + 2000, 65535)
+    ? Math.min(options.preferredPort + 2000, 65_535)
     : options.preferredPort;
   let lastError: unknown;
 
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
-
     try {
       return Bun.serve({
-        hostname: options.host,
-        port,
-        idleTimeout: 255,
         fetch: options.fetch,
+        hostname: options.host,
+        idleTimeout: 255,
+        port,
       });
     } catch (error) {
-      if (!isAddressInUseError(error) || !options.canFallbackToNextPort) {
+      if (!(isAddressInUseError(error) && options.canFallbackToNextPort)) {
         throw error;
       }
 
@@ -289,18 +325,25 @@ function startServer(options: {
     }
   }
 
-  throw lastError ?? new Error("Failed to find an open port for the Nakama server.");
+  throw (
+    lastError ?? new Error("Failed to find an open port for the Nakama server.")
+  );
 }
 
 function isAddressInUseError(error: unknown): error is { code: string } {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "EADDRINUSE";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EADDRINUSE"
+  );
 }
 
 function registerRuntimeCleanup(
   server: ReturnType<typeof Bun.serve>,
   serverUrl: string,
   database: Database,
-  mcpClientManager: McpClientManager,
+  mcpClientManager: McpClientManager
 ): void {
   let cleanedUp = false;
 
@@ -328,7 +371,7 @@ function registerRuntimeCleanup(
 
 async function findRunningNakamaServerUrl(
   host: string,
-  port: number,
+  port: number
 ): Promise<string | null> {
   const serverUrl = `http://${normalizeHealthCheckHost(host)}:${port}`;
   const controller = new AbortController();

@@ -8,23 +8,23 @@ import {
 describe("bridge API contract", () => {
   test("assertBridgeClientMethods rejects incomplete clients", () => {
     expect(() => assertBridgeClientMethods({ listProfiles: () => {} })).toThrow(
-      /listUserOrgs/,
+      /listUserOrgs/
     );
   });
 
   test("parseListUserOrgsResponse accepts valid payloads", () => {
     expect(
       parseListUserOrgsResponse({
-        orgs: [{ id: "org_a", name: "Acme", slug: "acme", role: "admin" }],
-      }),
+        orgs: [{ id: "org_a", name: "Acme", role: "admin", slug: "acme" }],
+      })
     ).toEqual({
-      orgs: [{ id: "org_a", name: "Acme", slug: "acme", role: "admin" }],
+      orgs: [{ id: "org_a", name: "Acme", role: "admin", slug: "acme" }],
     });
   });
 
   test("parseListUserOrgsResponse rejects renamed fields", () => {
     expect(() => parseListUserOrgsResponse({ organizations: [] })).toThrow(
-      /expected \{ orgs/,
+      /expected \{ orgs/
     );
   });
 
@@ -32,13 +32,15 @@ describe("bridge API contract", () => {
     expect(
       parseListProfilesResponse({
         profiles: [{ id: "default", name: "Default Bot" }],
-      }),
+      })
     ).toEqual({
       profiles: [{ id: "default", name: "Default Bot" }],
     });
   });
 
   test("parseListProfilesResponse rejects renamed fields", () => {
-    expect(() => parseListProfilesResponse({ items: [] })).toThrow(/expected \{ profiles/);
+    expect(() => parseListProfilesResponse({ items: [] })).toThrow(
+      /expected \{ profiles/
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { RefreshCwIcon } from "lucide-react";
+import { RefreshIcon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,7 @@ export function AutomationDetailPanel(state: DetailState) {
           <p
             className={cn(
               "type-body mt-1 line-clamp-2 min-h-[2.5rem] text-sm",
-              selected.description ? "text-foreground" : "text-transparent",
+              selected.description ? "text-foreground" : "text-transparent"
             )}
           >
             {selected.description || "No description"}
@@ -69,37 +69,43 @@ export function AutomationDetailPanel(state: DetailState) {
         <AutomationDetailActions
           automation={selected}
           busy={busy}
-          runningId={runningId}
-          onRun={handleRun}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
           className="hidden lg:flex"
+          onDelete={setDeleteTarget}
+          onEdit={openEdit}
+          onRun={handleRun}
+          runningId={runningId}
         />
       </div>
 
       <AutomationDetailActions
         automation={selected}
         busy={busy}
-        runningId={runningId}
-        onRun={handleRun}
-        onEdit={openEdit}
-        onDelete={setDeleteTarget}
         className="mb-5 lg:hidden"
+        onDelete={setDeleteTarget}
+        onEdit={openEdit}
+        onRun={handleRun}
+        runningId={runningId}
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
         <SoftPill label={`${runs.length} total`} />
-        <SoftPill label={`${selectedRunSummary.completed} success`} tone="success" />
+        <SoftPill
+          label={`${selectedRunSummary.completed} success`}
+          tone="success"
+        />
         <SoftPill label={`${selectedRunSummary.failed} failed`} tone="danger" />
         {selectedRunSummary.running > 0 ? (
-          <SoftPill label={`${selectedRunSummary.running} running`} tone="default" />
+          <SoftPill
+            label={`${selectedRunSummary.running} running`}
+            tone="default"
+          />
         ) : null}
         {selectedRunSummary.unread > 0 ? (
           <SoftPill label={`${selectedRunSummary.unread} unread`} />
         ) : null}
       </div>
 
-      <div className="flex flex-col border-t border-border pt-5">
+      <div className="flex flex-col border-border border-t pt-5">
         <div className="mb-4 flex h-10 items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="type-section-title">Run history</h3>
@@ -112,18 +118,18 @@ export function AutomationDetailPanel(state: DetailState) {
             </p>
           </div>
           <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
+            aria-label="Refresh run history"
             className="shrink-0"
             disabled={runsLoading || busy}
-            aria-label="Refresh run history"
             onClick={() => void refetchRuns()}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
           >
             {runsLoading ? (
               <Spinner className="size-4" />
             ) : (
-              <RefreshCwIcon className="size-4" aria-hidden />
+              <RefreshIcon aria-hidden className="size-4" />
             )}
           </Button>
         </div>
@@ -132,13 +138,18 @@ export function AutomationDetailPanel(state: DetailState) {
           <ListSkeleton rows={3} />
         ) : runs.length === 0 ? (
           <div className="flex min-h-[10rem] items-center justify-center">
-            <p className="type-body text-xs text-muted-foreground">No runs yet.</p>
+            <p className="type-body text-muted-foreground text-xs">
+              No runs yet.
+            </p>
           </div>
         ) : (
-          <RunHistoryList runs={runs} busy={busy} onDeleteRun={setDeleteRunTarget} />
+          <RunHistoryList
+            busy={busy}
+            onDeleteRun={setDeleteRunTarget}
+            runs={runs}
+          />
         )}
       </div>
-
     </div>
   );
 }

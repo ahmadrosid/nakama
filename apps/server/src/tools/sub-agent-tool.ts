@@ -10,8 +10,8 @@ import {
 export const SUB_AGENT_TOOL_NAME = "sub_agent";
 
 export interface SubAgentToolInput {
-  task: string;
   context?: string;
+  task: string;
   timeoutMs?: number;
 }
 
@@ -19,29 +19,29 @@ export type SubAgentToolOutput = SubAgentRunResult;
 
 export function createSubAgentTool(agentService: AgentService): ToolDefinition {
   return {
-    name: SUB_AGENT_TOOL_NAME,
     description:
       "Delegate focused work to a same-profile sub-agent (research, review, planning, debugging). Provide a clear task and optional context. Returns status, summary, and output for you to synthesize for the user. The parent may launch multiple sub-agents in parallel for independent tasks. Sub-agents cannot nest sub-agents. For repo coding work, use bash with coding-agent instead.",
+    name: SUB_AGENT_TOOL_NAME,
     parallelSafe: true,
     parameters: {
-      type: "object",
+      additionalProperties: false,
       properties: {
-        task: {
-          type: "string",
-          description: "Clear instruction for the sub-agent to complete.",
-        },
         context: {
-          type: "string",
           description: "Optional scoped background the sub-agent should know.",
+          type: "string",
+        },
+        task: {
+          description: "Clear instruction for the sub-agent to complete.",
+          type: "string",
         },
         timeoutMs: {
-          type: "number",
           description:
             "Timeout in milliseconds. Defaults to 300000 (5 minutes), max 600000 (10 minutes). Counts toward the parent web stream budget when streaming.",
+          type: "number",
         },
       },
       required: ["task"],
-      additionalProperties: false,
+      type: "object",
     },
     async run(input, context) {
       return runSubAgentTool(input, context, agentService);
@@ -52,7 +52,7 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
 export async function runSubAgentTool(
   input: unknown,
   context: ToolContext,
-  agentService: AgentService,
+  agentService: AgentService
 ): Promise<SubAgentToolOutput> {
   const depth = context.agentDepth ?? 0;
 
@@ -63,7 +63,7 @@ export async function runSubAgentTool(
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
 
-  if (!orgId || !profileId) {
+  if (!(orgId && profileId)) {
     return failSubAgentResult("orgId and profileId are required.");
   }
 
@@ -78,16 +78,16 @@ export async function runSubAgentTool(
 
   try {
     return await agentService.runSubAgentPrompt({
+      agentDepth: depth + 1,
+      clientOrigin: context.clientOrigin,
+      context: scopedContext,
+      onActivity: context.emitSubAgentActivity,
       orgId,
       profileId,
+      sessionId: context.sessionId,
       task,
-      context: scopedContext,
       timeoutMs,
       userId: context.userId,
-      sessionId: context.sessionId,
-      clientOrigin: context.clientOrigin,
-      agentDepth: depth + 1,
-      onActivity: context.emitSubAgentActivity,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -91,7 +91,7 @@ export function usePromptInputFileState({
         return fileType === normalizedPattern;
       });
     },
-    [accept],
+    [accept]
   );
 
   const addLocal = useCallback(
@@ -106,7 +106,9 @@ export function usePromptInputFileState({
             onError?.({
               code: "max_file_size",
               message:
-                error instanceof Error ? error.message : "Could not process the selected files.",
+                error instanceof Error
+                  ? error.message
+                  : "Could not process the selected files.",
             });
             return;
           }
@@ -136,8 +138,13 @@ export function usePromptInputFileState({
             ? Math.max(0, maxFiles - filesRef.current.length)
             : undefined;
         const capped =
-          typeof remainingCapacity === "number" ? sized.slice(0, remainingCapacity) : sized;
-        if (typeof remainingCapacity === "number" && sized.length > remainingCapacity) {
+          typeof remainingCapacity === "number"
+            ? sized.slice(0, remainingCapacity)
+            : sized;
+        if (
+          typeof remainingCapacity === "number" &&
+          sized.length > remainingCapacity
+        ) {
           onError?.({
             code: "max_files",
             message: "Too many files. Some were not added.",
@@ -159,7 +166,7 @@ export function usePromptInputFileState({
         });
       })();
     },
-    [matchesAccept, maxFiles, maxFileSize, onError, prepareFiles],
+    [matchesAccept, maxFiles, maxFileSize, onError, prepareFiles]
   );
 
   const removeLocal = useCallback(
@@ -171,7 +178,7 @@ export function usePromptInputFileState({
         }
         return prev.filter((file) => file.id !== id);
       }),
-    [],
+    []
   );
 
   const addWithProviderValidation = useCallback(
@@ -186,7 +193,9 @@ export function usePromptInputFileState({
             onError?.({
               code: "max_file_size",
               message:
-                error instanceof Error ? error.message : "Could not process the selected files.",
+                error instanceof Error
+                  ? error.message
+                  : "Could not process the selected files.",
             });
             return;
           }
@@ -230,7 +239,15 @@ export function usePromptInputFileState({
         }
       })();
     },
-    [matchesAccept, maxFileSize, maxFiles, onError, prepareFiles, files.length, controller],
+    [
+      matchesAccept,
+      maxFileSize,
+      maxFiles,
+      onError,
+      prepareFiles,
+      files.length,
+      controller,
+    ]
   );
 
   const clearAttachments = useCallback(
@@ -245,7 +262,7 @@ export function usePromptInputFileState({
             }
             return [];
           }),
-    [usingProvider, controller],
+    [usingProvider, controller]
   );
 
   const add = usingProvider ? addWithProviderValidation : addLocal;
@@ -337,7 +354,7 @@ export function usePromptInputFileState({
         }
       }
     },
-    [usingProvider],
+    [usingProvider]
   );
 
   const handleChange: ChangeEventHandler<HTMLInputElement> = useCallback(
@@ -347,7 +364,7 @@ export function usePromptInputFileState({
       }
       event.currentTarget.value = "";
     },
-    [add],
+    [add]
   );
 
   const attachmentsCtx = useMemo<AttachmentsContext>(
@@ -359,21 +376,21 @@ export function usePromptInputFileState({
       openFileDialog,
       remove,
     }),
-    [files, add, remove, clearAttachments, openFileDialog],
+    [files, add, remove, clearAttachments, openFileDialog]
   );
 
   return {
-    usingProvider,
+    add,
+    attachmentsCtx,
+    clear,
+    clearAttachments,
     controller,
     files,
-    inputRef,
     formRef,
-    add,
-    remove,
-    clearAttachments,
-    clear,
-    openFileDialog,
     handleChange,
-    attachmentsCtx,
+    inputRef,
+    openFileDialog,
+    remove,
+    usingProvider,
   };
 }

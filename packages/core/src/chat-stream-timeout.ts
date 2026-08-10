@@ -4,14 +4,14 @@ export const MAX_CHAT_STREAM_TIMEOUT_MS = 3_600_000;
 
 function readTimeoutEnvValue(
   env: Record<string, string | undefined>,
-  key: string,
+  key: string
 ): string | undefined {
   const value = env[key]?.trim();
   return value || undefined;
 }
 
 export function resolveChatStreamTimeoutMs(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): number {
   const raw = readTimeoutEnvValue(env, "NAKAMA_CHAT_STREAM_TIMEOUT_MS");
   if (!raw) {
@@ -25,6 +25,6 @@ export function resolveChatStreamTimeoutMs(
 
   return Math.min(
     MAX_CHAT_STREAM_TIMEOUT_MS,
-    Math.max(MIN_CHAT_STREAM_TIMEOUT_MS, Math.floor(parsed)),
+    Math.max(MIN_CHAT_STREAM_TIMEOUT_MS, Math.floor(parsed))
   );
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dedupeSkillsByName, isGlobalSkillSourcePath } from "./dedupe";
@@ -24,19 +24,19 @@ describe("dedupeSkillsByName", () => {
     const globalPath = join(getGlobalSkillsDir(), "coding-backend-claude-code");
     const profilePath = join(
       getProfileSkillsDir(ORG_ID, PROFILE_ID),
-      "coding-backend-claude-code",
+      "coding-backend-claude-code"
     );
 
     const deduped = dedupeSkillsByName([
       {
+        id: "skill_profile_copy",
         name: "coding-backend-claude-code",
         sourcePath: profilePath,
-        id: "skill_profile_copy",
       },
       {
+        id: "skill_global_copy",
         name: "coding-backend-claude-code",
         sourcePath: globalPath,
-        id: "skill_global_copy",
       },
     ]);
 
@@ -60,12 +60,17 @@ describe("isGlobalSkillSourcePath", () => {
 
   test("detects global and profile skill directories", () => {
     expect(
-      isGlobalSkillSourcePath(join(getGlobalSkillsDir(), "coding-backend-claude-code")),
+      isGlobalSkillSourcePath(
+        join(getGlobalSkillsDir(), "coding-backend-claude-code")
+      )
     ).toBe(true);
     expect(
       isGlobalSkillSourcePath(
-        join(getProfileSkillsDir(ORG_ID, PROFILE_ID), "coding-backend-claude-code"),
-      ),
+        join(
+          getProfileSkillsDir(ORG_ID, PROFILE_ID),
+          "coding-backend-claude-code"
+        )
+      )
     ).toBe(false);
   });
 });

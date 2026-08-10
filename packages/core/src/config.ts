@@ -1,10 +1,10 @@
-export * from "./user-config";
-export * from "./runtime";
 export * from "./chat-stream-timeout";
+export * from "./runtime";
+export * from "./user-config";
 
 export function readEnvValue(
   env: Record<string, string | undefined>,
-  key: string,
+  key: string
 ): string | undefined {
   const value = env[key]?.trim();
   return value || undefined;
@@ -15,7 +15,7 @@ export interface AppConfig {
 }
 
 export function loadConfig(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): AppConfig {
   return {
     databaseUrl: env.DATABASE_URL ?? "file:data/sqlite/nakama.sqlite",

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  parseProviderName,
-  resolveProvider,
-} from "./provider-resolution";
+import { parseProviderName, resolveProvider } from "./provider-resolution";
 
 describe("parseProviderName", () => {
   test("accepts known providers", () => {
@@ -26,9 +23,9 @@ describe("resolveProvider", () => {
   test("prefers NAKAMA_PROVIDER over env keys", () => {
     const provider = resolveProvider({
       env: {
+        GEMINI_API_KEY: "test-key",
         NAKAMA_PROVIDER: "gemini",
         OPENAI_API_KEY: "sk-test",
-        GEMINI_API_KEY: "test-key",
       },
     });
 
@@ -37,8 +34,8 @@ describe("resolveProvider", () => {
 
   test("uses configured provider from user config", () => {
     const provider = resolveProvider({
-      env: {},
       configuredProvider: "openrouter",
+      env: {},
     });
 
     expect(provider).toBe("openrouter");

@@ -22,27 +22,37 @@ import type {
 } from "@nakama/core";
 import {
   createId,
-  deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
   deleteProfileAvatar,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
   listKnowledgeBaseDocuments,
   listKnowledgeBaseSources,
-  readProfileAvatar,
-  resolveSoulStackForProfile,
-  saveProfileAvatar,
   NakamaApiError,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
+  readProfileAvatar,
+  deleteKnowledgeBaseDocument as removeKnowledgeBaseDocument,
+  resolveSoulStackForProfile,
+  saveProfileAvatar,
   writeSoulFile,
 } from "@nakama/core";
 import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
-import type { DatabaseAdapter, StoredProfileRecord, StoredToolRecord } from "@nakama/db";
-import { ensureBuiltinToolDefinitions, ensureProfileDefaultBundledSkills } from "@nakama/db";
-import { loadJavascriptTool, validateJavascriptToolModule } from "./javascript-tool-loader";
+import type {
+  DatabaseAdapter,
+  StoredProfileRecord,
+  StoredToolRecord,
+} from "@nakama/db";
+import {
+  ensureBuiltinToolDefinitions,
+  ensureProfileDefaultBundledSkills,
+} from "@nakama/db";
+import {
+  loadJavascriptTool,
+  validateJavascriptToolModule,
+} from "./javascript-tool-loader";
 import { toMcpServerSummaries } from "./mcp-service";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
@@ -57,10 +67,10 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.web_fetch,
 ] as const;
 const SOUL_FILE_KEY_BY_NAME = {
-  "SOUL.md": "soul",
-  "STYLE.md": "style",
   "INSTRUCTIONS.md": "instructions",
   "MEMORY.md": "memory",
+  "SOUL.md": "soul",
+  "STYLE.md": "style",
 } as const;
 
 function slugifyProfileName(name: string): string {
@@ -80,7 +90,7 @@ export class ProfileService {
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
     const profiles = await this.db.listProfilesForOrg(orgId);
     const summaries = await Promise.all(
-      profiles.map((profile) => this.toProfileSummary(profile)),
+      profiles.map((profile) => this.toProfileSummary(profile))
     );
 
     return { profiles: summaries };
@@ -96,15 +106,18 @@ export class ProfileService {
     return {
       profile: {
         ...(await this.toProfileSummary(profile)),
-        systemPrompt: profile.systemPrompt,
-        tools: tools.map(toToolSummary),
         mcpServers: toMcpServerSummaries(mcpServers),
         skills: toSkillSummaries(skills, skillUsage),
+        systemPrompt: profile.systemPrompt,
+        tools: tools.map(toToolSummary),
       },
     };
   }
 
-  async createProfile(orgId: string, request: CreateProfileRequest): Promise<ProfileResponse> {
+  async createProfile(
+    orgId: string,
+    request: CreateProfileRequest
+  ): Promise<ProfileResponse> {
     const name = request.name.trim();
 
     if (!name) {
@@ -116,14 +129,15 @@ export class ProfileService {
     const profileId = await this.resolveNewProfileId(request.id, name);
     const now = new Date().toISOString();
     const profile: StoredProfileRecord = {
-      id: profileId,
-      name,
-      systemPrompt: request.systemPrompt?.trim() ?? "You are a helpful personal assistant.",
-      model: request.model ?? null,
-      isSuper: request.isSuper ?? false,
-      orgId,
-      isDefault: false,
       createdAt: now,
+      id: profileId,
+      isDefault: false,
+      isSuper: request.isSuper ?? false,
+      model: request.model ?? null,
+      name,
+      orgId,
+      systemPrompt:
+        request.systemPrompt?.trim() ?? "You are a helpful personal assistant.",
       updatedAt: now,
     };
 
@@ -140,24 +154,24 @@ export class ProfileService {
   async updateProfile(
     orgId: string,
     profileId: string,
-    request: UpdateProfileRequest,
+    request: UpdateProfileRequest
   ): Promise<ProfileResponse> {
     const profile = await this.requireProfile(orgId, profileId);
     const now = new Date().toISOString();
 
     await this.db.upsertProfile({
       ...profile,
-      name: request.name?.trim() ?? profile.name,
-      systemPrompt: request.systemPrompt?.trim() ?? profile.systemPrompt,
       model: request.model === undefined ? profile.model : request.model,
-      skillsWriteApproval:
-        request.skillsWriteApproval === undefined
-          ? profile.skillsWriteApproval
-          : request.skillsWriteApproval,
+      name: request.name?.trim() ?? profile.name,
       skillsPostTurnReview:
         request.skillsPostTurnReview === undefined
           ? profile.skillsPostTurnReview
           : request.skillsPostTurnReview,
+      skillsWriteApproval:
+        request.skillsWriteApproval === undefined
+          ? profile.skillsWriteApproval
+          : request.skillsWriteApproval,
+      systemPrompt: request.systemPrompt?.trim() ?? profile.systemPrompt,
       updatedAt: now,
     });
 
@@ -168,7 +182,9 @@ export class ProfileService {
     const profile = await this.requireProfile(orgId, profileId);
 
     if (profile.isDefault) {
-      throw new Error("The default profile for an organization cannot be deleted.");
+      throw new Error(
+        "The default profile for an organization cannot be deleted."
+      );
     }
 
     const deleted = await this.db.deleteProfile(profileId);
@@ -194,7 +210,10 @@ export class ProfileService {
     return readToolSource(tool);
   }
 
-  async listProfileTools(orgId: string, profileId: string): Promise<ListToolsResponse> {
+  async listProfileTools(
+    orgId: string,
+    profileId: string
+  ): Promise<ListToolsResponse> {
     await this.requireProfile(orgId, profileId);
     const tools = await this.db.listToolsForProfile(profileId);
     return { tools: tools.map(toToolSummary) };
@@ -237,18 +256,20 @@ export class ProfileService {
     }
 
     const handlerType = readToolHandlerType(request.handlerType);
-    const handlerConfig = readJavascriptToolHandlerConfig(request.handlerConfig);
+    const handlerConfig = readJavascriptToolHandlerConfig(
+      request.handlerConfig
+    );
 
     await validateJavascriptToolModule(handlerConfig.modulePath);
 
     const now = new Date().toISOString();
     const record: StoredToolRecord = {
+      createdAt: now,
+      description,
+      handlerConfig,
+      handlerType,
       id: createId("tool"),
       name,
-      description,
-      handlerType,
-      handlerConfig,
-      createdAt: now,
       updatedAt: now,
     };
 
@@ -260,7 +281,7 @@ export class ProfileService {
   async assignTool(
     orgId: string,
     profileId: string,
-    request: AssignToolRequest,
+    request: AssignToolRequest
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -278,7 +299,7 @@ export class ProfileService {
   async unassignTool(
     orgId: string,
     profileId: string,
-    toolId: string,
+    toolId: string
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -294,7 +315,7 @@ export class ProfileService {
   async assignMcpServer(
     orgId: string,
     profileId: string,
-    request: AssignMcpServerRequest,
+    request: AssignMcpServerRequest
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -312,11 +333,14 @@ export class ProfileService {
   async unassignMcpServer(
     orgId: string,
     profileId: string,
-    serverId: string,
+    serverId: string
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
-    const removed = await this.db.unassignMcpServerFromProfile(profileId, serverId);
+    const removed = await this.db.unassignMcpServerFromProfile(
+      profileId,
+      serverId
+    );
 
     if (!removed) {
       throw new Error("MCP server is not assigned to this profile.");
@@ -328,7 +352,7 @@ export class ProfileService {
   async assignSkill(
     orgId: string,
     profileId: string,
-    request: AssignSkillRequest,
+    request: AssignSkillRequest
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -346,7 +370,7 @@ export class ProfileService {
   async unassignSkill(
     orgId: string,
     profileId: string,
-    skillId: string,
+    skillId: string
   ): Promise<ProfileResponse> {
     await this.requireProfile(orgId, profileId);
 
@@ -362,7 +386,7 @@ export class ProfileService {
   async uploadProfileAvatar(
     orgId: string,
     profileId: string,
-    attachment: ImageAttachment,
+    attachment: ImageAttachment
   ): Promise<ProfileResponse> {
     const profile = await this.requireProfile(orgId, profileId);
 
@@ -379,7 +403,7 @@ export class ProfileService {
 
   async getProfileAvatar(
     orgId: string,
-    profileId: string,
+    profileId: string
   ): Promise<{ mediaType: string; bytes: Buffer }> {
     await this.requireProfile(orgId, profileId);
 
@@ -393,7 +417,7 @@ export class ProfileService {
   }
 
   async getProfileAvatarByProfileId(
-    profileId: string,
+    profileId: string
   ): Promise<{ mediaType: string; bytes: Buffer }> {
     const profile = await this.db.getProfile(profileId);
 
@@ -419,25 +443,35 @@ export class ProfileService {
     });
   }
 
-  async listKnowledgeBase(orgId: string, profileId: string): Promise<ListKnowledgeBaseResponse> {
+  async listKnowledgeBase(
+    orgId: string,
+    profileId: string
+  ): Promise<ListKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
     const documents = await listKnowledgeBaseDocuments(orgId, profileId);
     const sources = await listKnowledgeBaseSources();
-    return { documents, sources, profileId };
+    return { documents, profileId, sources };
   }
 
   async uploadKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    document: DocumentAttachment,
+    document: DocumentAttachment
   ): Promise<UploadKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
 
     try {
-      const uploaded = await persistKnowledgeBaseDocument(orgId, profileId, document);
+      const uploaded = await persistKnowledgeBaseDocument(
+        orgId,
+        profileId,
+        document
+      );
       return { document: uploaded, profileId };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to upload knowledge base document.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload knowledge base document.";
       throw new NakamaApiError(message, 400);
     }
   }
@@ -445,28 +479,32 @@ export class ProfileService {
   async deleteKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
-    documentId: string,
+    documentId: string
   ): Promise<DeleteKnowledgeBaseResponse> {
     await this.requireProfile(orgId, profileId);
-    const deleted = await removeKnowledgeBaseDocument(orgId, profileId, documentId);
+    const deleted = await removeKnowledgeBaseDocument(
+      orgId,
+      profileId,
+      documentId
+    );
 
     if (!deleted) {
       throw new NakamaApiError("Knowledge base document not found.", 404);
     }
 
-    return { deleted: true, profileId, documentId };
+    return { deleted: true, documentId, profileId };
   }
 
   private async resolveNewProfileId(
     requestedId: string | undefined,
-    name: string,
+    name: string
   ): Promise<string> {
     const trimmed = requestedId?.trim() || slugifyProfileName(name);
 
     if (!PROFILE_ID_PATTERN.test(trimmed)) {
       throw new NakamaApiError(
         "Profile id must start with a letter or number and use only letters, numbers, underscores, and hyphens (max 64 characters).",
-        400,
+        400
       );
     }
 
@@ -479,7 +517,10 @@ export class ProfileService {
     return trimmed;
   }
 
-  private async requireProfile(orgId: string, profileId: string): Promise<StoredProfileRecord> {
+  private async requireProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredProfileRecord> {
     const profile = await this.db.getProfileForOrg(profileId, orgId);
 
     if (!profile) {
@@ -509,7 +550,9 @@ export class ProfileService {
     return tool;
   }
 
-  private async toProfileSummary(profile: StoredProfileRecord): Promise<ProfileSummary> {
+  private async toProfileSummary(
+    profile: StoredProfileRecord
+  ): Promise<ProfileSummary> {
     const orgId = profile.orgId;
 
     if (!orgId) {
@@ -521,18 +564,18 @@ export class ProfileService {
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
     return {
-      id: profile.id,
-      name: profile.name,
-      model: profile.model,
-      isSuper: profile.isSuper,
-      isDefault: profile.isDefault ?? false,
-      skillsWriteApproval: profile.skillsWriteApproval ?? null,
-      skillsPostTurnReview: profile.skillsPostTurnReview ?? null,
-      toolCount: tools.length,
-      mcpServerCount: mcpServers.length,
-      soulActive: soulStack !== null,
-      hasAvatar: await hasProfileAvatar(orgId, profile.id),
       createdAt: profile.createdAt,
+      hasAvatar: await hasProfileAvatar(orgId, profile.id),
+      id: profile.id,
+      isDefault: profile.isDefault ?? false,
+      isSuper: profile.isSuper,
+      mcpServerCount: mcpServers.length,
+      model: profile.model,
+      name: profile.name,
+      skillsPostTurnReview: profile.skillsPostTurnReview ?? null,
+      skillsWriteApproval: profile.skillsWriteApproval ?? null,
+      soulActive: soulStack !== null,
+      toolCount: tools.length,
       updatedAt: profile.updatedAt,
     };
   }
@@ -540,14 +583,17 @@ export class ProfileService {
 
 function toToolSummary(record: StoredToolRecord): ToolSummary {
   return {
-    id: record.id,
-    name: record.name,
     description: record.description,
     handlerType: record.handlerType,
+    id: record.id,
+    name: record.name,
   };
 }
 
-async function enrichToolParameters(detail: ToolDetail, record?: StoredToolRecord): Promise<ToolDetail> {
+async function enrichToolParameters(
+  detail: ToolDetail,
+  record?: StoredToolRecord
+): Promise<ToolDetail> {
   if (detail.handlerType !== "javascript") {
     return detail;
   }
@@ -555,12 +601,12 @@ async function enrichToolParameters(detail: ToolDetail, record?: StoredToolRecor
   const source =
     record ??
     ({
+      createdAt: detail.createdAt,
+      description: detail.description,
+      handlerConfig: detail.handlerConfig,
+      handlerType: detail.handlerType,
       id: detail.id,
       name: detail.name,
-      description: detail.description,
-      handlerType: detail.handlerType,
-      handlerConfig: detail.handlerConfig,
-      createdAt: detail.createdAt,
       updatedAt: detail.updatedAt,
     } satisfies StoredToolRecord);
 
@@ -575,8 +621,8 @@ async function enrichToolParameters(detail: ToolDetail, record?: StoredToolRecor
 function toToolDetail(record: StoredToolRecord): ToolDetail {
   return {
     ...toToolSummary(record),
-    handlerConfig: record.handlerConfig,
     createdAt: record.createdAt,
+    handlerConfig: record.handlerConfig,
     updatedAt: record.updatedAt,
   };
 }
@@ -588,12 +634,14 @@ function readToolHandlerType(handlerType: string | undefined): "javascript" {
     return "javascript";
   }
 
-  throw new Error('Only JavaScript tools can be created. Use handlerType "javascript".');
+  throw new Error(
+    'Only JavaScript tools can be created. Use handlerType "javascript".'
+  );
 }
 
 async function writeGeneratedSoulFiles(
   soulDir: string,
-  soulFiles: CreateProfileRequest["soulFiles"] | undefined,
+  soulFiles: CreateProfileRequest["soulFiles"] | undefined
 ): Promise<void> {
   if (soulFiles === undefined) {
     return;
@@ -616,13 +664,13 @@ async function writeGeneratedSoulFiles(
     await writeSoulFile(
       soulDir,
       SOUL_FILE_KEY_BY_NAME[fileName as keyof typeof SOUL_FILE_KEY_BY_NAME],
-      content,
+      content
     );
   }
 }
 
 function validateGeneratedSoulFiles(
-  soulFiles: CreateProfileRequest["soulFiles"] | undefined,
+  soulFiles: CreateProfileRequest["soulFiles"] | undefined
 ): void {
   if (soulFiles === undefined) {
     return;
@@ -639,12 +687,12 @@ function validateGeneratedSoulFiles(
   }
 }
 
-function readJavascriptToolHandlerConfig(
-  handlerConfig: unknown,
-): { modulePath: string } {
+function readJavascriptToolHandlerConfig(handlerConfig: unknown): {
+  modulePath: string;
+} {
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
     throw new Error(
-      'JavaScript tools require handlerConfig.modulePath ending in ".js".',
+      'JavaScript tools require handlerConfig.modulePath ending in ".js".'
     );
   }
 
@@ -652,7 +700,7 @@ function readJavascriptToolHandlerConfig(
 
   if (typeof modulePath !== "string" || !modulePath.trim().endsWith(".js")) {
     throw new Error(
-      'JavaScript tools require handlerConfig.modulePath ending in ".js".',
+      'JavaScript tools require handlerConfig.modulePath ending in ".js".'
     );
   }
 

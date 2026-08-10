@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "../fs";
@@ -30,7 +37,7 @@ describe("createSkillFile", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
@@ -39,15 +46,24 @@ describe("createSkillFile", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const directory = await createSkillFile({
-      name: "weather",
-      description: "Get weather forecasts. Use when the user asks about weather.",
       body: "Call the weather tool with a city name.",
+      description:
+        "Get weather forecasts. Use when the user asks about weather.",
+      name: "weather",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
     });
 
     expect(directory).toBe(
-      join(configDir, "orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "weather"),
+      join(
+        configDir,
+        "orgs",
+        ORG_ID,
+        "profiles",
+        PROFILE_ID,
+        "skills",
+        "weather"
+      )
     );
 
     const content = await readFile(join(directory, "SKILL.md"), "utf8");
@@ -57,9 +73,9 @@ describe("createSkillFile", () => {
 
   test("composeSkillMarkdown includes disable-model-invocation when set", () => {
     const content = composeSkillMarkdown({
-      name: "deploy",
       description: "Deploy the app.",
       disableModelInvocation: true,
+      name: "deploy",
     });
 
     expect(content).toContain("disable-model-invocation: true");
@@ -70,8 +86,8 @@ describe("createSkillFile", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     const directory = await createSkillFile({
-      name: "notes",
       description: "Capture notes for the user.",
+      name: "notes",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
     });
@@ -101,7 +117,7 @@ describe("writeRawProfileSkillMarkdown", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
@@ -120,9 +136,9 @@ include-body-on-match: true
 `;
 
     const result = await writeRawProfileSkillMarkdown({
+      content,
       orgId: ORG_ID,
       profileId: PROFILE_ID,
-      content,
     });
 
     expect(result.created).toBe(true);
@@ -143,7 +159,7 @@ include-body-on-match: true
       "profiles",
       PROFILE_ID,
       "skills",
-      "orphan",
+      "orphan"
     );
     await mkdir(directory, { recursive: true });
     await writeFile(
@@ -156,12 +172,11 @@ include-body-on-match: true
 
 Old body.
 `,
-      "utf8",
+      "utf8"
     );
 
     const result = await writeRawProfileSkillMarkdown({
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
+      allowExisting: true,
       content: `---
 name: orphan
 description: Leftover from write_file.
@@ -170,7 +185,8 @@ include-body-on-match: true
 
 Old body.
 `,
-      allowExisting: true,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
     });
 
     expect(result.created).toBe(false);
@@ -183,8 +199,6 @@ Old body.
 
     await expect(
       writeRawProfileSkillMarkdown({
-        orgId: ORG_ID,
-        profileId: PROFILE_ID,
         content: `---
 name: manage-skills
 description: Should not overwrite bundled.
@@ -192,7 +206,9 @@ description: Should not overwrite bundled.
 
 Nope.
 `,
-      }),
+        orgId: ORG_ID,
+        profileId: PROFILE_ID,
+      })
     ).rejects.toThrow(/bundled/i);
   });
 
@@ -208,17 +224,17 @@ description: First write.
 Body.
 `;
     await writeRawProfileSkillMarkdown({
+      content,
       orgId: ORG_ID,
       profileId: PROFILE_ID,
-      content,
     });
 
     await expect(
       writeRawProfileSkillMarkdown({
+        content,
         orgId: ORG_ID,
         profileId: PROFILE_ID,
-        content,
-      }),
+      })
     ).rejects.toThrow(/already exists/);
   });
 });
@@ -230,7 +246,7 @@ describe("patchSkillFile", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
@@ -239,8 +255,6 @@ describe("patchSkillFile", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await writeRawProfileSkillMarkdown({
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
       content: `---
 name: deploy
 description: Deploy the service.
@@ -249,14 +263,16 @@ include-body-on-match: true
 
 Use staging first.
 `,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
     });
 
     const result = await patchSkillFile({
+      name: "deploy",
+      newString: "Use staging first.\nThen promote to prod.",
+      oldString: "Use staging first.",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
-      name: "deploy",
-      oldString: "Use staging first.",
-      newString: "Use staging first.\nThen promote to prod.",
     });
 
     expect(result.name).toBe("deploy");
@@ -270,8 +286,6 @@ Use staging first.
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await writeRawProfileSkillMarkdown({
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
       content: `---
 name: repeat
 description: Repeat steps.
@@ -280,26 +294,28 @@ description: Repeat steps.
 step
 step
 `,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
     });
 
     await expect(
       patchSkillFile({
+        name: "repeat",
+        newString: "x",
+        oldString: "missing",
         orgId: ORG_ID,
         profileId: PROFILE_ID,
-        name: "repeat",
-        oldString: "missing",
-        newString: "x",
-      }),
+      })
     ).rejects.toThrow(/not found|missing/i);
 
     await expect(
       patchSkillFile({
+        name: "repeat",
+        newString: "done",
+        oldString: "step",
         orgId: ORG_ID,
         profileId: PROFILE_ID,
-        name: "repeat",
-        oldString: "step",
-        newString: "done",
-      }),
+      })
     ).rejects.toThrow(/multiple|duplicate/i);
   });
 
@@ -309,12 +325,12 @@ step
 
     await expect(
       patchSkillFile({
+        name: "manage-skills",
+        newString: "b",
+        oldString: "a",
         orgId: ORG_ID,
         profileId: PROFILE_ID,
-        name: "manage-skills",
-        oldString: "a",
-        newString: "b",
-      }),
+      })
     ).rejects.toThrow(/bundled/i);
   });
 });
@@ -326,16 +342,19 @@ describe("resolveProfileSkillDirectory", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
   test("resolves under profile skills dir and rejects escape names", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-skill-resolve-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    await mkdir(join(configDir, "orgs", ORG_ID, "profiles", PROFILE_ID, "skills"), {
-      recursive: true,
-    });
+    await mkdir(
+      join(configDir, "orgs", ORG_ID, "profiles", PROFILE_ID, "skills"),
+      {
+        recursive: true,
+      }
+    );
 
     expect(resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "ok-skill")).toBe(
       join(
@@ -345,29 +364,49 @@ describe("resolveProfileSkillDirectory", () => {
         "profiles",
         PROFILE_ID,
         "skills",
-        "ok-skill",
-      ),
+        "ok-skill"
+      )
     );
 
-    expect(() => resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "../x")).toThrow();
+    expect(() =>
+      resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "../x")
+    ).toThrow();
   });
 
   test("refuses symlink escape outside the profile skills dir", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-skill-symlink-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
-    const skillsRoot = join(configDir, "orgs", ORG_ID, "profiles", PROFILE_ID, "skills");
+    const skillsRoot = join(
+      configDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      PROFILE_ID,
+      "skills"
+    );
     const outside = join(configDir, "outside-secret");
     await mkdir(skillsRoot, { recursive: true });
     await mkdir(outside, { recursive: true });
-    await writeFile(join(outside, "SKILL.md"), "---\nname: leaked\ndescription: x\n---\n");
+    await writeFile(
+      join(outside, "SKILL.md"),
+      "---\nname: leaked\ndescription: x\n---\n"
+    );
     await symlink(outside, join(skillsRoot, "leaked"));
 
-    expect(isPathWithinProfileSkillsDir(ORG_ID, PROFILE_ID, join(skillsRoot, "leaked"))).toBe(
-      false,
-    );
+    expect(
+      isPathWithinProfileSkillsDir(
+        ORG_ID,
+        PROFILE_ID,
+        join(skillsRoot, "leaked")
+      )
+    ).toBe(false);
     expect(() =>
-      assertPathWithinProfileSkillsDir(ORG_ID, PROFILE_ID, join(skillsRoot, "leaked", "SKILL.md")),
+      assertPathWithinProfileSkillsDir(
+        ORG_ID,
+        PROFILE_ID,
+        join(skillsRoot, "leaked", "SKILL.md")
+      )
     ).toThrow(/outside the profile skills directory/);
   });
 });
@@ -379,7 +418,7 @@ describe("profile skill supporting files", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
     }
   });
 
@@ -388,8 +427,6 @@ describe("profile skill supporting files", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     await writeRawProfileSkillMarkdown({
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
       content: `---
 name: deploy
 description: Deploy the service.
@@ -397,13 +434,26 @@ description: Deploy the service.
 
 Use staging first.
 `,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
     });
 
-    expect(() => assertSupportingFileAllowed("/tmp/skills/demo/SKILL.md")).toThrow();
-    expect(() => assertSupportingFileAllowed("/tmp/skills/demo/Tool.js")).toThrow();
-    expect(() => assertSupportingFileAllowed("/tmp/skills/demo/skill.md")).toThrow();
     expect(() =>
-      resolveProfileSkillSupportingFilePath(ORG_ID, PROFILE_ID, "deploy", "../escape.md"),
+      assertSupportingFileAllowed("/tmp/skills/demo/SKILL.md")
+    ).toThrow();
+    expect(() =>
+      assertSupportingFileAllowed("/tmp/skills/demo/Tool.js")
+    ).toThrow();
+    expect(() =>
+      assertSupportingFileAllowed("/tmp/skills/demo/skill.md")
+    ).toThrow();
+    expect(() =>
+      resolveProfileSkillSupportingFilePath(
+        ORG_ID,
+        PROFILE_ID,
+        "deploy",
+        "../escape.md"
+      )
     ).toThrow();
 
     const skillDir = resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "deploy");
@@ -412,29 +462,29 @@ Use staging first.
     await symlink(outside, symlinkPath);
     await expect(
       writeProfileSkillSupportingFile({
+        content: "ESCAPED\n",
+        name: "deploy",
         orgId: ORG_ID,
         profileId: PROFILE_ID,
-        name: "deploy",
         relativePath: "sidecar.md",
-        content: "ESCAPED\n",
-      }),
+      })
     ).rejects.toThrow(/symbolic link/i);
     expect(await pathExists(outside)).toBe(false);
 
     const written = await writeProfileSkillSupportingFile({
+      content: "- staging\n",
+      name: "deploy",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
-      name: "deploy",
       relativePath: "docs/checklist.md",
-      content: "- staging\n",
     });
     expect(written.relativePath).toBe("docs/checklist.md");
     expect(await readFile(written.absolutePath, "utf8")).toContain("- staging");
 
     await removeProfileSkillSupportingFile({
+      name: "deploy",
       orgId: ORG_ID,
       profileId: PROFILE_ID,
-      name: "deploy",
       relativePath: "docs/checklist.md",
     });
     expect(await pathExists(written.absolutePath)).toBe(false);

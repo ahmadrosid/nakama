@@ -1,5 +1,5 @@
+import { CodeIcon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
-import { BracesIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,8 +38,12 @@ function parseAllowedTelegramUsers(input: string): AllowedTelegramUser[] {
         message?: { from?: { id?: unknown; username?: unknown } };
       };
       const user = payload.message?.from ?? payload.from;
-      const id = typeof user?.id === "number" ? String(user.id) : String(user?.id ?? "").trim();
-      const username = typeof user?.username === "string" ? user.username.trim() : "";
+      const id =
+        typeof user?.id === "number"
+          ? String(user.id)
+          : String(user?.id ?? "").trim();
+      const username =
+        typeof user?.username === "string" ? user.username.trim() : "";
 
       if (!/^[1-9]\d*$/.test(id)) {
         throw new Error("Missing Telegram from.id.");
@@ -65,13 +69,13 @@ function parseAllowedTelegramUsers(input: string): AllowedTelegramUser[] {
 }
 
 interface TelegramAllowedUsersDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   allowedUsers: AllowedTelegramUser[];
   onAllowedUsersChange: (users: AllowedTelegramUser[]) => void;
-  profileId: string;
-  onSaved?: () => void;
   onError?: (message: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSaved?: () => void;
+  open: boolean;
+  profileId: string;
 }
 
 export function TelegramAllowedUsersDialog({
@@ -91,7 +95,10 @@ export function TelegramAllowedUsersDialog({
   const [importError, setImportError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  function saveAllowedUsers(nextUsers: AllowedTelegramUser[], afterSuccess?: () => void) {
+  function saveAllowedUsers(
+    nextUsers: AllowedTelegramUser[],
+    afterSuccess?: () => void
+  ) {
     onAllowedUsersChange(nextUsers);
     setFormError(null);
 
@@ -101,16 +108,16 @@ export function TelegramAllowedUsersDialog({
         profileId: profileId.trim() || "default",
       },
       {
-        onSuccess: () => {
-          onSaved?.();
-          afterSuccess?.();
-        },
         onError: (err) => {
           const message = formatError(err);
           setFormError(message);
           onError?.(message);
         },
-      },
+        onSuccess: () => {
+          onSaved?.();
+          afterSuccess?.();
+        },
+      }
     );
   }
 
@@ -178,7 +185,7 @@ export function TelegramAllowedUsersDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog onOpenChange={onOpenChange} open={open}>
         <DialogContent className="p-6 sm:max-w-lg">
           <DialogHeader className="gap-2">
             <DialogTitle>Telegram Users</DialogTitle>
@@ -186,39 +193,41 @@ export function TelegramAllowedUsersDialog({
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium">Add user ID</p>
+              <p className="font-medium text-sm">Add user ID</p>
               <Button
+                className="text-muted-foreground hover:text-foreground"
+                disabled={saveMutation.isPending}
+                onClick={openImportDialog}
+                size="xs"
                 type="button"
                 variant="ghost"
-                size="xs"
-                disabled={saveMutation.isPending}
-                className="text-muted-foreground hover:text-foreground"
-                onClick={openImportDialog}
               >
-                <BracesIcon aria-hidden />
+                <CodeIcon aria-hidden />
                 Import JSON
               </Button>
             </div>
             <InputGroup>
               <InputGroupInput
-                value={newAllowedUserInput}
-                disabled={saveMutation.isPending}
                 className="font-mono text-sm ring-0 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="213193924"
+                disabled={saveMutation.isPending}
                 onChange={(event) => {
                   setNewAllowedUserInput(event.target.value);
                   if (formError) {
                     setFormError(null);
                   }
                 }}
+                placeholder="213193924"
+                value={newAllowedUserInput}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
+                  disabled={
+                    saveMutation.isPending || !newAllowedUserInput.trim()
+                  }
+                  onClick={addAllowedUserId}
+                  size="sm"
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  disabled={saveMutation.isPending || !newAllowedUserInput.trim()}
-                  onClick={addAllowedUserId}
                 >
                   Add user
                 </InputGroupButton>
@@ -227,7 +236,7 @@ export function TelegramAllowedUsersDialog({
             {formError ? (
               <div className="">
                 <p
-                  className="rounded-md bg-destructive/10 px-2.5 py-1 text-xs text-destructive"
+                  className="rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
                   role="alert"
                 >
                   {formError}
@@ -237,37 +246,39 @@ export function TelegramAllowedUsersDialog({
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">Users</p>
+            <p className="font-medium text-sm">Users</p>
 
             <div className="h-40 space-y-2 overflow-y-auto">
               {allowedUsers.length > 0 ? (
                 allowedUsers.map((user) => (
                   <div
-                    key={user.id}
                     className="flex min-h-12 items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"
+                    key={user.id}
                   >
                     <div className="min-w-0">
                       {user.username ? (
-                        <p className="truncate text-sm font-medium">@{user.username}</p>
+                        <p className="truncate font-medium text-sm">
+                          @{user.username}
+                        </p>
                       ) : null}
-                      <code className="block truncate text-xs text-muted-foreground">
+                      <code className="block truncate text-muted-foreground text-xs">
                         {user.id}
                       </code>
                     </div>
                     <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      disabled={saveMutation.isPending}
                       aria-label={`Remove Telegram user ID ${user.id}`}
+                      disabled={saveMutation.isPending}
                       onClick={() => removeAllowedUserId(user.id)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
                     >
-                      <Trash2Icon className="size-4" aria-hidden="true" />
+                      <Delete02Icon aria-hidden="true" className="size-4" />
                     </Button>
                   </div>
                 ))
               ) : (
-                <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                <p className="px-3 py-4 text-center text-muted-foreground text-xs">
                   No users added.
                 </p>
               )}
@@ -275,28 +286,37 @@ export function TelegramAllowedUsersDialog({
           </div>
 
           <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog onOpenChange={setImportOpen} open={importOpen}>
         <DialogContent className="gap-5 p-6 sm:max-w-lg">
           <DialogHeader className="gap-2">
             <DialogTitle>Import Telegram user</DialogTitle>
             <DialogDescription>
-              Paste raw Telegram update JSON. The sender ID and username will be added.
+              Paste raw Telegram update JSON. The sender ID and username will be
+              added.
             </DialogDescription>
           </DialogHeader>
 
           <Textarea
-            value={importDraft}
-            disabled={saveMutation.isPending}
             autoFocus
-            rows={10}
-            className="font-mono text-sm max-h-48"
+            className="max-h-48 font-mono text-sm"
+            disabled={saveMutation.isPending}
+            onChange={(event) => {
+              setImportDraft(event.target.value);
+              if (importError) {
+                setImportError(null);
+              }
+            }}
             placeholder={`{
   "message": {
     "from": {
@@ -305,17 +325,13 @@ export function TelegramAllowedUsersDialog({
     }
   }
 }`}
-            onChange={(event) => {
-              setImportDraft(event.target.value);
-              if (importError) {
-                setImportError(null);
-              }
-            }}
+            rows={10}
+            value={importDraft}
           />
 
           {importError ? (
             <p
-              className="rounded-md bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+              className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
               role="alert"
             >
               {importError}
@@ -323,13 +339,17 @@ export function TelegramAllowedUsersDialog({
           ) : null}
 
           <DialogFooter className="gap-3 border-t-0 bg-transparent p-0 sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
+            <Button
+              onClick={() => setImportOpen(false)}
+              type="button"
+              variant="outline"
+            >
               Cancel
             </Button>
             <Button
-              type="button"
               disabled={saveMutation.isPending || !importDraft.trim()}
               onClick={handleImportApply}
+              type="button"
             >
               Add user
             </Button>

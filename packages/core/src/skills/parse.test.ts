@@ -13,7 +13,7 @@ description: Get weather forecasts. Use when the user asks about weather.
 
 Call the weather tool with a city name.
 `,
-      "/tmp/skills/weather/SKILL.md",
+      "/tmp/skills/weather/SKILL.md"
     );
 
     expect(parsed.frontmatter.name).toBe("weather");
@@ -22,9 +22,9 @@ Call the weather tool with a city name.
   });
 
   test("rejects missing frontmatter", () => {
-    expect(() => parseSkillMarkdown("# No frontmatter", "/tmp/SKILL.md")).toThrow(
-      "YAML frontmatter",
-    );
+    expect(() =>
+      parseSkillMarkdown("# No frontmatter", "/tmp/SKILL.md")
+    ).toThrow("YAML frontmatter");
   });
 
   test("normalizes uppercase skill names to lowercase", () => {
@@ -34,7 +34,7 @@ name: Opencode
 description: Test skill.
 ---
 `,
-      "/tmp/skills/Opencode/SKILL.md",
+      "/tmp/skills/Opencode/SKILL.md"
     );
 
     expect(parsed.frontmatter.name).toBe("opencode");
@@ -48,7 +48,7 @@ description: Schedule automations.
 include-body-on-match: true
 ---
 `,
-      "/tmp/skills/create-automation/SKILL.md",
+      "/tmp/skills/create-automation/SKILL.md"
     );
 
     expect(parsed.frontmatter.includeBodyOnMatch).toBe(true);

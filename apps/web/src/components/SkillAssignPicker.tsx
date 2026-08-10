@@ -3,12 +3,13 @@ import {
   BUNDLED_SKILL_NAMES,
   RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
 } from "@nakama/core/skills/bundled-names";
-import { CheckIcon, DownloadIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useState, type SyntheticEvent } from "react";
 import {
-  useAgentBrowserSettings,
-  useInstallAgentBrowser,
-} from "@/hooks/use-agent-browser-settings";
+  Add01Icon,
+  CheckmarkCircle01Icon,
+  Delete02Icon,
+  Download04Icon,
+} from "hugeicons-react";
+import { type SyntheticEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -27,6 +28,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  useAgentBrowserSettings,
+  useInstallAgentBrowser,
+} from "@/hooks/use-agent-browser-settings";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -39,15 +44,15 @@ function isUserLibrarySkill(skill: SkillSummary): boolean {
 }
 
 interface SkillAssignPickerProps {
-  skills: SkillSummary[];
   assignedSkillIds?: ReadonlySet<string>;
-  disabled?: boolean;
-  buttonLabel?: string;
-  onAssign: (skillId: string) => void | Promise<void>;
-  onDelete?: (skillId: string) => void | Promise<void>;
   bashAssigned?: boolean;
-  onAssignBash?: () => void | Promise<void>;
+  buttonLabel?: string;
   className?: string;
+  disabled?: boolean;
+  onAssign: (skillId: string) => void | Promise<void>;
+  onAssignBash?: () => void | Promise<void>;
+  onDelete?: (skillId: string) => void | Promise<void>;
+  skills: SkillSummary[];
 }
 
 function formatSkillMeta(skill: SkillSummary): string {
@@ -76,7 +81,7 @@ function skillDescription(skill: SkillSummary): string | null {
 function assignSkill(
   skillId: string,
   onAssign: (skillId: string) => void | Promise<void>,
-  setOpen: (open: boolean) => void,
+  setOpen: (open: boolean) => void
 ) {
   void onAssign(skillId);
   setOpen(false);
@@ -109,24 +114,31 @@ function AgentBrowserPrerequisitesNotice({
   installError: string | null;
 }) {
   return (
-    <div className="min-w-0 space-y-2 overflow-hidden border-b border-border/60 px-6 py-3 text-xs text-amber-600 dark:text-amber-300">
+    <div className="min-w-0 space-y-2 overflow-hidden border-border/60 border-b px-6 py-3 text-amber-600 text-xs dark:text-amber-300">
       {agentBrowserNeedsInstall ? (
         <p className="min-w-0 break-words">
-          Install the agent-browser CLI and Chrome on this server before assigning this skill.
+          Install the agent-browser CLI and Chrome on this server before
+          assigning this skill.
         </p>
       ) : null}
       {bashNeedsAssign ? (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">This profile also needs the bash tool.</span>
+          <span className="min-w-0 break-words">
+            This profile also needs the bash tool.
+          </span>
           {onAssignBash ? (
             <Button
-              type="button"
-              variant="outline"
-              size="xs"
               disabled={disabled || assigningBash}
               onClick={(event) => void onAssignBashClick(event)}
+              size="xs"
+              type="button"
+              variant="outline"
             >
-              {assigningBash ? <Spinner className="size-3.5" /> : <PlusIcon aria-hidden />}
+              {assigningBash ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <Add01Icon aria-hidden />
+              )}
               Add bash
             </Button>
           ) : null}
@@ -135,7 +147,7 @@ function AgentBrowserPrerequisitesNotice({
       {installProgress ? (
         <div className="min-w-0 max-w-full overflow-hidden rounded-md bg-amber-500/5 px-2 py-1.5">
           <p
-            className="line-clamp-3 min-w-0 break-all font-mono text-[11px] leading-snug text-amber-700/90 dark:text-amber-200/90"
+            className="line-clamp-3 min-w-0 break-all font-mono text-[11px] text-amber-700/90 leading-snug dark:text-amber-200/90"
             title={installProgress}
           >
             {installProgress}
@@ -160,10 +172,20 @@ function SkillDeleteConfirmActions({
 }) {
   return (
     <div className="flex justify-end gap-2 px-6 py-4">
-      <Button type="button" variant="outline" disabled={deleting} onClick={onCancel}>
+      <Button
+        disabled={deleting}
+        onClick={onCancel}
+        type="button"
+        variant="outline"
+      >
         Cancel
       </Button>
-      <Button type="button" variant="destructive" disabled={deleting} onClick={onConfirm}>
+      <Button
+        disabled={deleting}
+        onClick={onConfirm}
+        type="button"
+        variant="destructive"
+      >
         {deleting ? "Deleting…" : "Delete"}
       </Button>
     </div>
@@ -201,61 +223,71 @@ function AvailableSkillActions({
     <div className="pointer-events-auto flex shrink-0 items-center gap-1">
       {rowAction === "add-bash" ? (
         <Button
+          className="[&_svg]:pointer-events-auto"
+          disabled={disabled || assigningBash}
+          onClick={(event) => void onAssignBash(event)}
+          onPointerDown={stopCommandItemSelect}
+          size="xs"
           type="button"
           variant="outline"
-          size="xs"
-          disabled={disabled || assigningBash}
-          className="[&_svg]:pointer-events-auto"
-          onPointerDown={stopCommandItemSelect}
-          onClick={(event) => void onAssignBash(event)}
         >
-          {assigningBash ? <Spinner className="size-3.5" /> : <PlusIcon aria-hidden />}
+          {assigningBash ? (
+            <Spinner className="size-3.5" />
+          ) : (
+            <Add01Icon aria-hidden />
+          )}
           Add bash
         </Button>
       ) : rowAction === "install" ? (
         <Button
+          className="[&_svg]:pointer-events-auto"
+          disabled={disabled || installingAgentBrowser}
+          onClick={onInstall}
+          onPointerDown={stopCommandItemSelect}
+          size="xs"
           type="button"
           variant="outline"
-          size="xs"
-          disabled={disabled || installingAgentBrowser}
-          className="[&_svg]:pointer-events-auto"
-          onPointerDown={stopCommandItemSelect}
-          onClick={onInstall}
         >
-          {installingAgentBrowser ? <Spinner className="size-3.5" /> : <DownloadIcon aria-hidden />}
+          {installingAgentBrowser ? (
+            <Spinner className="size-3.5" />
+          ) : (
+            <Download04Icon aria-hidden />
+          )}
           Install
         </Button>
       ) : (
         <Button
+          className="[&_svg]:pointer-events-auto"
+          disabled={disabled || skillDisabled}
+          onClick={onAdd}
+          onPointerDown={stopCommandItemSelect}
+          size="xs"
           type="button"
           variant="outline"
-          size="xs"
-          disabled={disabled || skillDisabled}
-          className="[&_svg]:pointer-events-auto"
-          onPointerDown={stopCommandItemSelect}
-          onClick={onAdd}
         >
-          <PlusIcon aria-hidden />
+          <Add01Icon aria-hidden />
           Add
         </Button>
       )}
       {onDelete ? (
         <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground/60 hover:text-destructive [&_svg]:pointer-events-auto"
-          disabled={disabled || !canDelete}
-          title={canDelete ? undefined : "Bundled system skills cannot be deleted"}
           aria-label={
             canDelete
               ? `Delete ${skill.name} from library`
               : `${skill.name} is a bundled skill and cannot be deleted`
           }
-          onPointerDown={stopCommandItemSelect}
+          className="text-muted-foreground/60 hover:text-destructive [&_svg]:pointer-events-auto"
+          disabled={disabled || !canDelete}
           onClick={(event) => onRequestDelete(skill, event)}
+          onPointerDown={stopCommandItemSelect}
+          size="icon-sm"
+          title={
+            canDelete ? undefined : "Bundled system skills cannot be deleted"
+          }
+          type="button"
+          variant="ghost"
         >
-          <Trash2Icon className="size-4" aria-hidden />
+          <Delete02Icon aria-hidden className="size-4" />
         </Button>
       ) : null}
     </div>
@@ -302,48 +334,56 @@ function AvailableSkillCommandItem({
 
   return (
     <CommandItem
-      value={`${skill.name} ${skill.description}`}
-      disabled={commandItemDisabled}
       className={cn(
         "items-center gap-3 px-3 py-2.5",
         agentBrowserDisabled && "cursor-default",
-        onDelete && "[&>svg:last-child]:hidden",
+        onDelete && "[&>svg:last-child]:hidden"
       )}
+      disabled={commandItemDisabled}
       onSelect={onSelect}
+      value={`${skill.name} ${skill.description}`}
     >
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="truncate text-sm font-medium leading-tight">{skill.name}</p>
+        <p className="truncate font-medium text-sm leading-tight">
+          {skill.name}
+        </p>
         {description ? (
-          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{description}</p>
+          <p className="line-clamp-2 text-muted-foreground text-xs leading-snug">
+            {description}
+          </p>
         ) : (
-          <p className="text-xs leading-snug text-muted-foreground">Not on this profile yet</p>
+          <p className="text-muted-foreground text-xs leading-snug">
+            Not on this profile yet
+          </p>
         )}
         {meta ? (
-          <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
+          <p className="text-muted-foreground/80 text-xs leading-snug">
+            {meta}
+          </p>
         ) : null}
         {skillDisabled ? (
-          <p className="text-xs text-amber-600 dark:text-amber-300">
+          <p className="text-amber-600 text-xs dark:text-amber-300">
             {skill.name === AGENT_BROWSER_SKILL_NAME
-              ? !bashAssigned
-                ? "Add the bash tool to this profile first."
-                : "Install agent-browser on this server first."
+              ? bashAssigned
+                ? "Install agent-browser on this server first."
+                : "Add the bash tool to this profile first."
               : "Set up a coding agent first."}
           </p>
         ) : null}
       </div>
       <AvailableSkillActions
-        skill={skill}
-        rowAction={rowAction}
-        disabled={disabled}
         assigningBash={assigningBash}
-        installingAgentBrowser={installingAgentBrowser}
-        skillDisabled={skillDisabled}
         canDelete={canDelete}
-        onDelete={onDelete}
-        onAssignBash={onAssignBash}
-        onInstall={onInstall}
+        disabled={disabled}
+        installingAgentBrowser={installingAgentBrowser}
         onAdd={onAdd}
+        onAssignBash={onAssignBash}
+        onDelete={onDelete}
+        onInstall={onInstall}
         onRequestDelete={onRequestDelete}
+        rowAction={rowAction}
+        skill={skill}
+        skillDisabled={skillDisabled}
       />
     </CommandItem>
   );
@@ -361,42 +401,46 @@ function OnProfileSkillCommandItem({
 
   return (
     <CommandItem
-      value={`${skill.name} ${skill.description}`}
       className={cn(
         "cursor-default items-center gap-3 bg-muted/20 px-3 py-2.5 data-selected:bg-muted/20",
-        onDelete && "[&>svg:last-child]:hidden",
+        onDelete && "[&>svg:last-child]:hidden"
       )}
       onSelect={() => {}}
+      value={`${skill.name} ${skill.description}`}
     >
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium leading-tight text-muted-foreground">
+          <p className="truncate font-medium text-muted-foreground text-sm leading-tight">
             {skill.name}
           </p>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <CheckIcon className="size-3" aria-hidden />
+          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
+            <CheckmarkCircle01Icon aria-hidden className="size-3" />
             On profile
           </span>
         </div>
         {description ? (
-          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{description}</p>
+          <p className="line-clamp-2 text-muted-foreground text-xs leading-snug">
+            {description}
+          </p>
         ) : null}
         {meta ? (
-          <p className="text-xs leading-snug text-muted-foreground/80">{meta}</p>
+          <p className="text-muted-foreground/80 text-xs leading-snug">
+            {meta}
+          </p>
         ) : null}
       </div>
       {onDelete ? (
         <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
+          aria-label={`${skill.name} is on this profile and cannot be deleted from the library`}
           className="shrink-0 self-center text-muted-foreground/60 [&_svg]:pointer-events-auto"
           disabled
-          title="Remove this skill from the profile before deleting it from the library"
-          aria-label={`${skill.name} is on this profile and cannot be deleted from the library`}
           onPointerDown={stopCommandItemSelect}
+          size="icon-sm"
+          title="Remove this skill from the profile before deleting it from the library"
+          type="button"
+          variant="ghost"
         >
-          <Trash2Icon className="size-4" aria-hidden />
+          <Delete02Icon aria-hidden className="size-4" />
         </Button>
       ) : null}
     </CommandItem>
@@ -415,23 +459,41 @@ export function SkillAssignPicker({
   className,
 }: SkillAssignPickerProps) {
   const [open, setOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [assigningBash, setAssigningBash] = useState(false);
-  const [agentBrowserInstallProgress, setAgentBrowserInstallProgress] = useState<string | null>(null);
-  const [agentBrowserInstallError, setAgentBrowserInstallError] = useState<string | null>(null);
+  const [agentBrowserInstallProgress, setAgentBrowserInstallProgress] =
+    useState<string | null>(null);
+  const [agentBrowserInstallError, setAgentBrowserInstallError] = useState<
+    string | null
+  >(null);
 
-  const librarySkills = skills.filter((skill) => !runtimeOnlySkillNames.has(skill.name));
-  const hasAgentBrowserSkill = librarySkills.some((skill) => skill.name === AGENT_BROWSER_SKILL_NAME);
-  const { data: agentBrowserSettings } = useAgentBrowserSettings(open && hasAgentBrowserSkill);
+  const librarySkills = skills.filter(
+    (skill) => !runtimeOnlySkillNames.has(skill.name)
+  );
+  const hasAgentBrowserSkill = librarySkills.some(
+    (skill) => skill.name === AGENT_BROWSER_SKILL_NAME
+  );
+  const { data: agentBrowserSettings } = useAgentBrowserSettings(
+    open && hasAgentBrowserSkill
+  );
   const installAgentBrowserMutation = useInstallAgentBrowser();
 
-  const availableSkills = librarySkills.filter((skill) => !assignedSkillIds.has(skill.id));
-  const onProfileSkills = librarySkills.filter((skill) => assignedSkillIds.has(skill.id));
+  const availableSkills = librarySkills.filter(
+    (skill) => !assignedSkillIds.has(skill.id)
+  );
+  const onProfileSkills = librarySkills.filter((skill) =>
+    assignedSkillIds.has(skill.id)
+  );
   const canDeleteLibrarySkills = Boolean(onDelete);
-  const agentBrowserNeedsInstall = hasAgentBrowserSkill && agentBrowserSettings?.ready === false;
+  const agentBrowserNeedsInstall =
+    hasAgentBrowserSkill && agentBrowserSettings?.ready === false;
   const bashNeedsAssign = hasAgentBrowserSkill && !bashAssigned;
-  const showAgentBrowserPrereqs = hasAgentBrowserSkill && (agentBrowserNeedsInstall || bashNeedsAssign);
+  const showAgentBrowserPrereqs =
+    hasAgentBrowserSkill && (agentBrowserNeedsInstall || bashNeedsAssign);
   const installingAgentBrowser = installAgentBrowserMutation.isPending;
 
   function isAgentBrowserDisabled(skill: SkillSummary): boolean {
@@ -483,7 +545,7 @@ export function SkillAssignPicker({
   }
 
   async function confirmDelete() {
-    if (!onDelete || !pendingDelete || deleting) {
+    if (!(onDelete && pendingDelete) || deleting) {
       return;
     }
 
@@ -512,20 +574,20 @@ export function SkillAssignPicker({
         },
       },
       {
+        onError: (error) => {
+          setAgentBrowserInstallProgress(null);
+          setAgentBrowserInstallError(formatError(error));
+        },
         onSuccess: (status) => {
           setAgentBrowserInstallProgress(null);
           if (!status.ready) {
             setAgentBrowserInstallError(
               status.statusMessage ??
-                "Install finished, but agent-browser is not ready yet. Try again or install manually.",
+                "Install finished, but agent-browser is not ready yet. Try again or install manually."
             );
           }
         },
-        onError: (error) => {
-          setAgentBrowserInstallProgress(null);
-          setAgentBrowserInstallError(formatError(error));
-        },
-      },
+      }
     );
   }
 
@@ -550,18 +612,17 @@ export function SkillAssignPicker({
   return (
     <>
       <Button
+        className={className}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        size="sm"
         type="button"
         variant="outline"
-        size="sm"
-        disabled={disabled}
-        className={className}
-        onClick={() => setOpen(true)}
       >
         {buttonLabel}
       </Button>
 
       <Dialog
-        open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
           if (!nextOpen) {
@@ -571,10 +632,13 @@ export function SkillAssignPicker({
             setAgentBrowserInstallError(null);
           }
         }}
+        open={open}
       >
         <DialogContent className="min-w-0 gap-0 overflow-x-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
-            <DialogTitle>{pendingDelete ? "Delete skill?" : "Manage skills"}</DialogTitle>
+          <DialogHeader className="gap-1 border-border border-b px-6 py-4 text-left">
+            <DialogTitle>
+              {pendingDelete ? "Delete skill?" : "Manage skills"}
+            </DialogTitle>
             <DialogDescription>
               {pendingDelete
                 ? `Delete "${pendingDelete.name}" from your library? This removes it from every profile.`
@@ -593,47 +657,38 @@ export function SkillAssignPicker({
               {showAgentBrowserPrereqs ? (
                 <AgentBrowserPrerequisitesNotice
                   agentBrowserNeedsInstall={agentBrowserNeedsInstall}
-                  bashNeedsAssign={bashNeedsAssign}
-                  onAssignBash={onAssignBash}
-                  disabled={disabled}
                   assigningBash={assigningBash}
-                  onAssignBashClick={handleAssignBash}
-                  installProgress={agentBrowserInstallProgress}
+                  bashNeedsAssign={bashNeedsAssign}
+                  disabled={disabled}
                   installError={agentBrowserInstallError}
+                  installProgress={agentBrowserInstallProgress}
+                  onAssignBash={onAssignBash}
+                  onAssignBashClick={handleAssignBash}
                 />
               ) : null}
 
               <Command className="min-w-0 rounded-none bg-transparent">
-                <div className="min-w-0 border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+                <div className="min-w-0 border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
                   <CommandInput placeholder="Search skills…" />
                 </div>
                 <CommandList className="max-h-72 min-w-0 p-2">
                   <CommandEmpty>No skills found.</CommandEmpty>
 
                   {availableSkills.length > 0 ? (
-                    <CommandGroup heading="Add to profile" className="space-y-1">
+                    <CommandGroup
+                      className="space-y-1"
+                      heading="Add to profile"
+                    >
                       {availableSkills.map((skill) => (
                         <AvailableSkillCommandItem
-                          key={skill.id}
-                          skill={skill}
-                          disabled={disabled}
                           agentBrowserDisabled={isAgentBrowserDisabled(skill)}
-                          commandItemDisabled={isCommandItemDisabled()}
-                          skillDisabled={isSkillDisabled(skill)}
-                          rowAction={agentBrowserRowAction(skill)}
                           assigningBash={assigningBash}
-                          installingAgentBrowser={installingAgentBrowser}
-                          canDelete={canDeleteSkill(skill)}
-                          onDelete={onDelete}
                           bashAssigned={bashAssigned}
-                          onSelect={() => {
-                            if (isSkillDisabled(skill)) {
-                              return;
-                            }
-                            assignSkill(skill.id, onAssign, setOpen);
-                          }}
-                          onAssignBash={handleAssignBash}
-                          onInstall={handleInstallAgentBrowser}
+                          canDelete={canDeleteSkill(skill)}
+                          commandItemDisabled={isCommandItemDisabled()}
+                          disabled={disabled}
+                          installingAgentBrowser={installingAgentBrowser}
+                          key={skill.id}
                           onAdd={(event) => {
                             stopCommandItemSelect(event);
                             if (isSkillDisabled(skill)) {
@@ -641,7 +696,19 @@ export function SkillAssignPicker({
                             }
                             assignSkill(skill.id, onAssign, setOpen);
                           }}
+                          onAssignBash={handleAssignBash}
+                          onDelete={onDelete}
+                          onInstall={handleInstallAgentBrowser}
                           onRequestDelete={requestDelete}
+                          onSelect={() => {
+                            if (isSkillDisabled(skill)) {
+                              return;
+                            }
+                            assignSkill(skill.id, onAssign, setOpen);
+                          }}
+                          rowAction={agentBrowserRowAction(skill)}
+                          skill={skill}
+                          skillDisabled={isSkillDisabled(skill)}
                         />
                       ))}
                     </CommandGroup>
@@ -652,12 +719,15 @@ export function SkillAssignPicker({
                   ) : null}
 
                   {onProfileSkills.length > 0 ? (
-                    <CommandGroup heading="Already on this profile" className="space-y-1">
+                    <CommandGroup
+                      className="space-y-1"
+                      heading="Already on this profile"
+                    >
                       {onProfileSkills.map((skill) => (
                         <OnProfileSkillCommandItem
                           key={skill.id}
-                          skill={skill}
                           onDelete={onDelete}
+                          skill={skill}
                         />
                       ))}
                     </CommandGroup>

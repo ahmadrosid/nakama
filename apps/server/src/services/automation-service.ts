@@ -21,14 +21,14 @@ import {
   validateAutomationInput,
 } from "@nakama/core";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
-import { DatabaseAutomationStore, type DatabaseAdapter } from "@nakama/db";
+import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
 
 /** Caller role context used to gate access to admin-only profiles (e.g. Super Bot). */
 export type ProfileAccess = Parameters<typeof canAccessSuperBotProfile>[0];
 
 export interface AutomationServiceOptions {
-  getUserTimezone: () => Promise<string>;
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
+  getUserTimezone: () => Promise<string>;
   onChange?: () => void | Promise<void>;
 }
 
@@ -36,7 +36,10 @@ export class AutomationService {
   private readonly store: DatabaseAutomationStore;
   private readonly db: DatabaseAdapter;
   private readonly getUserTimezone: () => Promise<string>;
-  private readonly canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
+  private readonly canSendEmail?: (
+    profileId: string,
+    orgId: string
+  ) => Promise<boolean>;
   private onChange?: () => void | Promise<void>;
 
   constructor(db: DatabaseAdapter, options: AutomationServiceOptions) {
@@ -54,18 +57,25 @@ export class AutomationService {
   /** All automations — used by the scheduler across orgs. */
   async listAll(): Promise<StoredAutomation[]> {
     const automations = await this.store.list();
-    return Promise.all(automations.map((automation) => this.enrichAutomation(automation)));
+    return Promise.all(
+      automations.map((automation) => this.enrichAutomation(automation))
+    );
   }
 
-  async listForOrg(orgId: string, userId?: string): Promise<{
+  async listForOrg(
+    orgId: string,
+    userId?: string
+  ): Promise<{
     automations: StoredAutomation[];
     unread?: AutomationUnreadSummary;
   }> {
     const automations = await this.store.listForOrg(orgId);
     const enriched = await Promise.all(
-      automations.map((automation) => this.enrichAutomation(automation)),
+      automations.map((automation) => this.enrichAutomation(automation))
     );
-    const unread = userId ? await this.getUnreadSummary(orgId, userId) : undefined;
+    const unread = userId
+      ? await this.getUnreadSummary(orgId, userId)
+      : undefined;
 
     return { automations: enriched, unread };
   }
@@ -83,7 +93,7 @@ export class AutomationService {
     orgId: string,
     input: CreateAutomationRequest,
     profileIdOverride?: string,
-    access?: ProfileAccess,
+    access?: ProfileAccess
   ): Promise<StoredAutomation> {
     const userTimezone = await this.getUserTimezone();
     const trigger = resolveScheduleTimezone(input.trigger, userTimezone);
@@ -97,7 +107,7 @@ export class AutomationService {
     const profileId = await this.resolveProfileId(
       orgId,
       profileIdOverride ?? input.profileId,
-      access,
+      access
     );
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
@@ -108,16 +118,16 @@ export class AutomationService {
 
     const now = new Date().toISOString();
     const automation: StoredAutomation = {
+      description: input.description.trim() || input.prompt.trim(),
+      enabled: input.enabled ?? true,
       id: createId("automation"),
       name: input.name.trim(),
-      description: input.description.trim() || input.prompt.trim(),
-      prompt: input.prompt.trim(),
-      trigger,
-      steps: [],
-      version: 1,
-      profileId,
       orgId,
-      enabled: input.enabled ?? true,
+      profileId,
+      prompt: input.prompt.trim(),
+      steps: [],
+      trigger,
+      version: 1,
       ...(delivery ? { delivery } : {}),
       createdAt: now,
       updatedAt: now,
@@ -131,7 +141,7 @@ export class AutomationService {
   async update(
     id: string,
     orgId: string,
-    input: UpdateAutomationRequest,
+    input: UpdateAutomationRequest
   ): Promise<StoredAutomation> {
     const existing = await this.get(id, orgId);
 
@@ -166,14 +176,14 @@ export class AutomationService {
 
     const updated: StoredAutomation = {
       ...existing,
-      name: input.name?.trim() || existing.name,
+      delivery,
       description: input.description?.trim() ?? existing.description,
+      enabled: input.enabled ?? existing.enabled,
+      name: input.name?.trim() || existing.name,
       prompt: input.prompt?.trim() || existing.prompt,
       trigger,
-      enabled: input.enabled ?? existing.enabled,
-      delivery,
-      version: existing.version + 1,
       updatedAt: new Date().toISOString(),
+      version: existing.version + 1,
     };
 
     await this.store.save(updated);
@@ -200,7 +210,7 @@ export class AutomationService {
     automationId: string,
     orgId?: string,
     limit = 20,
-    userId?: string,
+    userId?: string
   ): Promise<AutomationRunRecord[]> {
     const automation = orgId
       ? await this.get(automationId, orgId)
@@ -219,7 +229,11 @@ export class AutomationService {
     return runs.map((run) => toRunRecord(run, readThroughAt));
   }
 
-  async deleteRun(automationId: string, runId: string, orgId: string): Promise<boolean> {
+  async deleteRun(
+    automationId: string,
+    runId: string,
+    orgId: string
+  ): Promise<boolean> {
     const automation = await this.get(automationId, orgId);
 
     if (!automation) {
@@ -232,7 +246,7 @@ export class AutomationService {
   async markRunsRead(
     automationId: string,
     orgId: string,
-    userId: string,
+    userId: string
   ): Promise<{ readThroughAt: string }> {
     const automation = await this.get(automationId, orgId);
 
@@ -241,29 +255,39 @@ export class AutomationService {
     }
 
     const readThroughAt = new Date().toISOString();
-    await this.db.upsertAutomationRunReadThrough(userId, orgId, automationId, readThroughAt);
+    await this.db.upsertAutomationRunReadThrough(
+      userId,
+      orgId,
+      automationId,
+      readThroughAt
+    );
     return { readThroughAt };
   }
 
-  async getUnreadSummary(orgId: string, userId: string): Promise<AutomationUnreadSummary> {
+  async getUnreadSummary(
+    orgId: string,
+    userId: string
+  ): Promise<AutomationUnreadSummary> {
     const counts = await this.db.countUnreadAutomationRunsByOrg(userId, orgId);
     return summarizeAutomationUnreadCounts(counts);
   }
 
-  async getActiveRun(automationId: string): Promise<AutomationRunRecord | null> {
+  async getActiveRun(
+    automationId: string
+  ): Promise<AutomationRunRecord | null> {
     const run = await this.db.getActiveAutomationRun(automationId);
     return run ? toRunRecord(run) : null;
   }
 
   async createRun(automationId: string): Promise<AutomationRunRecord> {
     const run = {
-      id: createId("run"),
       automationId,
-      status: "running" as const,
-      startedAt: new Date().toISOString(),
       completedAt: null,
-      output: null,
       error: null,
+      id: createId("run"),
+      output: null,
+      startedAt: new Date().toISOString(),
+      status: "running" as const,
     };
 
     await this.db.insertAutomationRun(run);
@@ -273,7 +297,7 @@ export class AutomationService {
   async completeRun(
     runId: string,
     automationId: string,
-    result: { output?: string; error?: string },
+    result: { output?: string; error?: string }
   ): Promise<AutomationRunRecord> {
     const active = await this.db.getActiveAutomationRun(automationId);
     const run = active?.id === runId ? active : null;
@@ -284,10 +308,10 @@ export class AutomationService {
 
     const updated = {
       ...run,
-      status: result.error ? ("failed" as const) : ("completed" as const),
       completedAt: new Date().toISOString(),
-      output: result.output ?? null,
       error: result.error ?? null,
+      output: result.output ?? null,
+      status: result.error ? ("failed" as const) : ("completed" as const),
     };
 
     await this.db.updateAutomationRun(updated);
@@ -300,7 +324,7 @@ export class AutomationService {
     result: {
       deliveryStatus: AutomationDeliveryStatus;
       deliveryError: string | null;
-    },
+    }
   ): Promise<AutomationRunRecord> {
     const runs = await this.db.listAutomationRuns(automationId, 100);
     const run = runs.find((entry) => entry.id === runId);
@@ -311,8 +335,8 @@ export class AutomationService {
 
     const updated = {
       ...run,
-      deliveryStatus: result.deliveryStatus,
       deliveryError: result.deliveryError,
+      deliveryStatus: result.deliveryStatus,
     };
 
     await this.db.updateAutomationRun(updated);
@@ -321,7 +345,7 @@ export class AutomationService {
 
   computeNextRunAt(
     trigger: AutomationTrigger,
-    userTimezone = DEFAULT_TIMEZONE,
+    userTimezone = DEFAULT_TIMEZONE
   ): string | null {
     return computeAutomationNextRunAt(trigger, userTimezone);
   }
@@ -329,7 +353,7 @@ export class AutomationService {
   private async resolveProfileId(
     orgId: string,
     profileId?: string,
-    access?: ProfileAccess,
+    access?: ProfileAccess
   ): Promise<string> {
     const trimmed = profileId?.trim();
 
@@ -337,7 +361,10 @@ export class AutomationService {
       const profile = await this.db.getProfileForOrg(trimmed, orgId);
       if (profile) {
         if (profile.isSuper && access && !canAccessSuperBotProfile(access)) {
-          throw new NakamaApiError("Super Bot is only available to org admins.", 403);
+          throw new NakamaApiError(
+            "Super Bot is only available to org admins.",
+            403
+          );
         }
         return profile.id;
       }
@@ -353,16 +380,18 @@ export class AutomationService {
     return defaultProfile.id;
   }
 
-  private async enrichAutomation(automation: StoredAutomation): Promise<StoredAutomation> {
+  private async enrichAutomation(
+    automation: StoredAutomation
+  ): Promise<StoredAutomation> {
     const userTimezone = await this.getUserTimezone();
     const runs = await this.db.listAutomationRuns(automation.id, 1);
 
     return {
       ...automation,
+      lastRunAt: runs[0]?.startedAt ?? null,
       nextRunAt: isWorkerSchedulable(automation)
         ? this.computeNextRunAt(automation.trigger, userTimezone)
         : null,
-      lastRunAt: runs[0]?.startedAt ?? null,
     };
   }
 
@@ -371,7 +400,10 @@ export class AutomationService {
   }
 }
 
-function automationBelongsToOrg(automation: StoredAutomation, orgId: string): boolean {
+function automationBelongsToOrg(
+  automation: StoredAutomation,
+  orgId: string
+): boolean {
   return automation.orgId === orgId;
 }
 
@@ -387,18 +419,19 @@ function toRunRecord(
     deliveryStatus?: string | null;
     deliveryError?: string | null;
   },
-  readThroughAt?: string | null,
+  readThroughAt?: string | null
 ): AutomationRunRecord {
   const record: AutomationRunRecord = {
-    id: run.id,
     automationId: run.automationId,
-    status: run.status,
-    startedAt: run.startedAt,
     completedAt: run.completedAt,
-    output: run.output,
-    error: run.error,
-    deliveryStatus: (run.deliveryStatus as AutomationRunRecord["deliveryStatus"]) ?? null,
     deliveryError: run.deliveryError ?? null,
+    deliveryStatus:
+      (run.deliveryStatus as AutomationRunRecord["deliveryStatus"]) ?? null,
+    error: run.error,
+    id: run.id,
+    output: run.output,
+    startedAt: run.startedAt,
+    status: run.status,
   };
 
   if (readThroughAt !== undefined) {

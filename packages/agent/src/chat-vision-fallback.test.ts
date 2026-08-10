@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type ProviderClient,
   replaceImagePartsWithDescriptions,
   resolveMessagesForNonVisionProvider,
-  type ProviderClient,
 } from "@nakama/core";
 import { createAgentHarness } from "./index";
 
@@ -13,18 +13,21 @@ describe("preprocessUserContent vision fallback", () => {
   test("stores described images and sends text to the primary provider", async () => {
     const calls: Array<string | { type: string }[]> = [];
     const provider: ProviderClient = {
-      name: "openai_compatible",
-      async generateText() {
-        return { content: "unused" };
-      },
       async generateChat(input) {
         calls.push(input.messages.at(-1)?.content ?? "");
         return {
+          assistantMessage: {
+            content: "A small red square.",
+            role: "assistant",
+          },
           content: "A small red square.",
           toolCalls: [],
-          assistantMessage: { role: "assistant", content: "A small red square." },
         };
       },
+      async generateText() {
+        return { content: "unused" };
+      },
+      name: "openai_compatible",
       async streamChat(input, handlers) {
         const result = await this.generateChat(input);
         handlers.onChunk(result.content);
@@ -46,7 +49,7 @@ describe("preprocessUserContent vision fallback", () => {
             ...input,
             messages: resolveMessagesForNonVisionProvider(input.messages),
           },
-          handlers,
+          handlers
         );
       },
     };
@@ -63,28 +66,30 @@ describe("preprocessUserContent vision fallback", () => {
           return content;
         }
 
-        return replaceImagePartsWithDescriptions(content, ["A small red square."]);
+        return replaceImagePartsWithDescriptions(content, [
+          "A small red square.",
+        ]);
       },
     });
 
     const reply = await session.send({
+      images: [{ data: tinyPngBase64, mediaType: "image/png" }],
       message: "What is this?",
-      images: [{ mediaType: "image/png", data: tinyPngBase64 }],
     });
 
     expect(reply).toBe("A small red square.");
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual([
-      { type: "text", text: "What is this?" },
-      { type: "text", text: "[Image]\nA small red square." },
+      { text: "What is this?", type: "text" },
+      { text: "[Image]\nA small red square.", type: "text" },
     ]);
     expect(session.getHistory()[0]?.content).toEqual([
-      { type: "text", text: "What is this?" },
+      { text: "What is this?", type: "text" },
       {
-        type: "image",
-        mediaType: "image/png",
         data: tinyPngBase64,
         description: "A small red square.",
+        mediaType: "image/png",
+        type: "image",
       },
     ]);
   });

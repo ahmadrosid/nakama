@@ -1,10 +1,5 @@
 import { join } from "node:path";
-import {
-  ensureDir,
-  pathExists,
-  readText,
-  writePrivateTextFile,
-} from "../fs";
+import { ensureDir, pathExists, readText, writePrivateTextFile } from "../fs";
 import {
   BAD_OUTPUTS_TEMPLATE,
   GOOD_OUTPUTS_TEMPLATE,
@@ -16,15 +11,19 @@ import {
 import type { InitSoulResult } from "./types";
 
 const INIT_FILES = [
-  { path: "SOUL.md", content: SOUL_TEMPLATE },
-  { path: "STYLE.md", content: STYLE_TEMPLATE },
-  { path: "INSTRUCTIONS.md", content: INSTRUCTIONS_TEMPLATE },
-  { path: "MEMORY.md", content: MEMORY_TEMPLATE },
-  { path: "examples/good-outputs.md", content: GOOD_OUTPUTS_TEMPLATE },
-  { path: "examples/bad-outputs.md", content: BAD_OUTPUTS_TEMPLATE },
+  { content: SOUL_TEMPLATE, path: "SOUL.md" },
+  { content: STYLE_TEMPLATE, path: "STYLE.md" },
+  { content: INSTRUCTIONS_TEMPLATE, path: "INSTRUCTIONS.md" },
+  { content: MEMORY_TEMPLATE, path: "MEMORY.md" },
+  { content: GOOD_OUTPUTS_TEMPLATE, path: "examples/good-outputs.md" },
+  { content: BAD_OUTPUTS_TEMPLATE, path: "examples/bad-outputs.md" },
 ] as const;
 
-const LEGACY_SOUL_MARKERS = ["# Your Name", "[Your Name]", "[Belief 1]"] as const;
+const LEGACY_SOUL_MARKERS = [
+  "# Your Name",
+  "[Your Name]",
+  "[Belief 1]",
+] as const;
 
 export function isLegacySoulPlaceholder(content: string): boolean {
   const trimmed = content.trim();
@@ -35,7 +34,10 @@ export function isLegacySoulPlaceholder(content: string): boolean {
   return LEGACY_SOUL_MARKERS.some((marker) => trimmed.includes(marker));
 }
 
-function shouldSeedSoulFile(relativePath: string, existingContent: string | undefined): boolean {
+function shouldSeedSoulFile(
+  relativePath: string,
+  existingContent: string | undefined
+): boolean {
   if (!existingContent?.trim()) {
     return true;
   }
@@ -49,7 +51,7 @@ function shouldSeedSoulFile(relativePath: string, existingContent: string | unde
 
 async function readExistingSoulFile(path: string): Promise<string | undefined> {
   if (!(await pathExists(path))) {
-    return undefined;
+    return;
   }
 
   return readText(path);
@@ -58,7 +60,7 @@ async function readExistingSoulFile(path: string): Promise<string | undefined> {
 async function ensureSoulTemplateFile(
   targetPath: string,
   relativePath: string,
-  content: string,
+  content: string
 ): Promise<boolean> {
   const existing = await readExistingSoulFile(targetPath);
 
@@ -70,7 +72,9 @@ async function ensureSoulTemplateFile(
   return true;
 }
 
-export async function initSoulDirectory(directory: string): Promise<InitSoulResult> {
+export async function initSoulDirectory(
+  directory: string
+): Promise<InitSoulResult> {
   await ensureDir(directory);
   await ensureDir(join(directory, "examples"));
   await ensureDir(join(directory, "knowledge-base"));
@@ -86,5 +90,5 @@ export async function initSoulDirectory(directory: string): Promise<InitSoulResu
     }
   }
 
-  return { directory, created };
+  return { created, directory };
 }

@@ -2,8 +2,8 @@ import type { ProviderClient } from "@nakama/core";
 import { normalizeTaskPrompt } from "@nakama/core";
 
 export interface DraftTaskPromptInput {
-  title: string;
   description?: string;
+  title: string;
 }
 
 const TASK_PROMPT_SYSTEM = [
@@ -21,7 +21,10 @@ const TASK_PROMPT_SYSTEM = [
   "- Do not mention Nakama, profiles, or the board UI",
 ].join("\n");
 
-export function buildTaskPromptUserPrompt(title: string, description?: string): string {
+export function buildTaskPromptUserPrompt(
+  title: string,
+  description?: string
+): string {
   const lines = [`Title: ${title}`];
 
   const trimmedDescription = description?.trim();
@@ -33,7 +36,10 @@ export function buildTaskPromptUserPrompt(title: string, description?: string): 
   return lines.join("\n");
 }
 
-export function fallbackTaskPrompt(title: string, description?: string): string {
+export function fallbackTaskPrompt(
+  title: string,
+  description?: string
+): string {
   const parts = [`Complete the following task: ${title}`];
   const trimmedDescription = description?.trim();
 
@@ -48,7 +54,7 @@ export function fallbackTaskPrompt(title: string, description?: string): string 
 
 export async function draftTaskPromptFromFields(
   input: DraftTaskPromptInput,
-  options: { provider?: ProviderClient },
+  options: { provider?: ProviderClient }
 ): Promise<string> {
   const title = input.title.trim();
 
@@ -64,9 +70,9 @@ export async function draftTaskPromptFromFields(
 
   try {
     const result = await options.provider.generateText({
-      system: TASK_PROMPT_SYSTEM,
-      prompt: buildTaskPromptUserPrompt(title, input.description),
       format: "text",
+      prompt: buildTaskPromptUserPrompt(title, input.description),
+      system: TASK_PROMPT_SYSTEM,
     });
     const prompt = normalizeTaskPrompt(result.content);
 

@@ -1,16 +1,16 @@
+import type { UpdateDiscordSettingsRequest } from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { UpdateDiscordSettingsRequest } from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const discordSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.discord.settings,
   queryFn: () => client.getDiscordSettings(),
+  queryKey: queryKeys.discord.settings,
 });
 
 export function useDiscordSettings() {

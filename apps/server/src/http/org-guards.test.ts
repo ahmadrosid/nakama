@@ -1,15 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
-import { requireNotViewer, requireOrgAdmin, requirePlatformAdmin } from "./org-guards";
+import {
+  requireNotViewer,
+  requireOrgAdmin,
+  requirePlatformAdmin,
+} from "./org-guards";
 import type { RequestAuthContext } from "./shared";
 
 function auth(orgRole: RequestAuthContext["orgRole"]): RequestAuthContext {
   return {
-    mode: "browser-session",
-    user: { id: "user_1", email: "user@example.com" },
-    isPlatformAdmin: false,
     activeOrgId: "org_1",
+    isPlatformAdmin: false,
+    mode: "browser-session",
     orgRole,
+    user: { email: "user@example.com", id: "user_1" },
   };
 }
 
@@ -24,7 +28,7 @@ describe("org guards", () => {
     try {
       requireOrgAdmin(auth("member"));
     } catch (error) {
-      expect(error).toMatchObject({ status: 403, message: "Forbidden" });
+      expect(error).toMatchObject({ message: "Forbidden", status: 403 });
     }
   });
 
@@ -37,7 +41,7 @@ describe("org guards", () => {
     try {
       requireNotViewer(auth("viewer"));
     } catch (error) {
-      expect(error).toMatchObject({ status: 403, message: "Forbidden" });
+      expect(error).toMatchObject({ message: "Forbidden", status: 403 });
     }
   });
 
@@ -46,7 +50,7 @@ describe("org guards", () => {
       requirePlatformAdmin({
         ...auth("admin"),
         isPlatformAdmin: true,
-      }),
+      })
     ).not.toThrow();
   });
 
@@ -54,7 +58,7 @@ describe("org guards", () => {
     try {
       requirePlatformAdmin(auth("admin"));
     } catch (error) {
-      expect(error).toMatchObject({ status: 403, message: "Forbidden" });
+      expect(error).toMatchObject({ message: "Forbidden", status: 403 });
     }
   });
 });

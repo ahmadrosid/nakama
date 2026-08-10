@@ -1,5 +1,5 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowDown01Icon } from "hugeicons-react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,26 +42,26 @@ export function ChatProfileSwitcher({
         render={
           variant === "prominent" ? (
             <Button
+              aria-label={switchLabel}
+              className={cn(
+                "h-7 gap-1.5 rounded-full px-1.5 font-medium text-foreground text-xs hover:bg-muted/60",
+                className
+              )}
+              disabled={disabled}
+              size="sm"
+              title={activeProfile?.name ?? "Switch profile"}
               type="button"
               variant="ghost"
-              size="sm"
-              disabled={disabled}
-              aria-label={switchLabel}
-              title={activeProfile?.name ?? "Switch profile"}
-              className={cn(
-                "h-7 gap-1.5 rounded-full px-1.5 text-xs font-medium text-foreground hover:bg-muted/60",
-                className,
-              )}
             />
           ) : (
             <Button
+              aria-label={switchLabel}
+              className={cn(composerIconButtonClass, "p-0", className)}
+              disabled={disabled}
+              size="icon-sm"
+              title={activeProfile?.name ?? "Switch profile"}
               type="button"
               variant="ghost"
-              size="icon-sm"
-              disabled={disabled}
-              aria-label={switchLabel}
-              title={activeProfile?.name ?? "Switch profile"}
-              className={cn(composerIconButtonClass, "p-0", className)}
             />
           )
         }
@@ -69,35 +69,48 @@ export function ChatProfileSwitcher({
         {variant === "prominent" ? (
           <>
             {activeProfile ? (
-              <ProfileAvatar profile={activeProfile} size="xs" active className="size-4" />
+              <ProfileAvatar
+                active
+                className="size-4"
+                profile={activeProfile}
+                size="xs"
+              />
             ) : (
-              <span className="inline-flex size-4 items-center justify-center rounded-full bg-background text-[9px] font-medium">
+              <span className="inline-flex size-4 items-center justify-center rounded-full bg-background font-medium text-[9px]">
                 ?
               </span>
             )}
             <span className="max-w-[10rem] truncate">
               {activeProfile ? profileLabel(activeProfile) : "Select profile"}
             </span>
-            <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+            <ArrowDown01Icon
+              aria-hidden
+              className="size-3 shrink-0 text-muted-foreground"
+            />
           </>
         ) : activeProfile ? (
-          <ProfileAvatar profile={activeProfile} size="sm" active className="size-7" />
+          <ProfileAvatar
+            active
+            className="size-7"
+            profile={activeProfile}
+            size="sm"
+          />
         ) : (
-          <span className="text-xs font-medium">?</span>
+          <span className="font-medium text-xs">?</span>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52 w-auto">
+      <DropdownMenuContent align="start" className="w-auto min-w-52">
         {profiles.map((profile) => (
           <DropdownMenuItem
-            key={profile.id}
             disabled={profile.id === profileId}
+            key={profile.id}
             onClick={() => onProfileSwitch(profile.id)}
           >
             <span className="flex min-w-0 items-center gap-2.5">
               <ProfileAvatar
+                active={profile.id === profileId}
                 profile={profile}
                 size="sm"
-                active={profile.id === profileId}
               />
               <span className="whitespace-nowrap">{profileLabel(profile)}</span>
             </span>

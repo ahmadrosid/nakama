@@ -1,10 +1,13 @@
 import { createClient } from "@nakama/client";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
-import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import {
   clearAutomationWorkerHeartbeat,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core/automation-worker";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
+import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
 
@@ -27,14 +30,14 @@ try {
   spawnedChild = child;
 
   const client = createClient({
-    baseUrl: serverUrl,
     authToken: await loadLocalAuthToken(),
+    baseUrl: serverUrl,
   });
 
   const health = await client.health();
   if (!health.providerConfigured) {
     console.warn(
-      "Server has no provider configured. Automations will run in offline mode until an API key is set.",
+      "Server has no provider configured. Automations will run in offline mode until an API key is set."
     );
   }
 
@@ -46,7 +49,10 @@ try {
   scheduler.beginPolling(config.pollIntervalMs);
 
   heartbeatTimer = setInterval(() => {
-    const status = scheduler?.getStatus?.() ?? { running: true, scheduledJobs: 0 };
+    const status = scheduler?.getStatus?.() ?? {
+      running: true,
+      scheduledJobs: 0,
+    };
     void writeAutomationWorkerHeartbeat(status.running, status.scheduledJobs);
   }, config.heartbeatIntervalMs);
 

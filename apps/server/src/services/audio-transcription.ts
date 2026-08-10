@@ -1,7 +1,7 @@
 import {
   findProviderInstance,
-  normalizeBaseUrl,
   NakamaApiError,
+  normalizeBaseUrl,
   type UserConfig,
 } from "@nakama/core";
 import { modelSupportsTranscription } from "../providers/models";
@@ -14,7 +14,7 @@ export const TRANSCRIPTION_MODEL_REQUIRED_MESSAGE =
   "Configure an audio transcription model in Settings before sending voice messages.";
 
 export function resolveTranscriptionProviderSelection(
-  userConfig: UserConfig | null | undefined,
+  userConfig: UserConfig | null | undefined
 ): ResolvedProfileProviderSelection | null {
   const transcriptionModel = userConfig?.transcriptionModel?.trim();
 
@@ -27,26 +27,26 @@ export function resolveTranscriptionProviderSelection(
   if (!decoded || decoded.providerId === "__unknown__") {
     throw new NakamaApiError(
       "Configured audio transcription model is invalid. Update it in Settings.",
-      400,
+      400
     );
   }
 
   const instance = findProviderInstance(
     { providers: userConfig?.providers ?? [] },
-    decoded.providerId,
+    decoded.providerId
   );
 
   if (!instance) {
     throw new NakamaApiError(
       "Configured audio transcription provider is missing. Update it in Settings.",
-      400,
+      400
     );
   }
 
   if (instance.type !== "openai") {
     throw new NakamaApiError(
       "Audio transcription requires an OpenAI provider. Update it in Settings.",
-      400,
+      400
     );
   }
 
@@ -55,7 +55,7 @@ export function resolveTranscriptionProviderSelection(
   if (!modelSupportsTranscription(modelId, instance.type)) {
     throw new NakamaApiError(
       `Configured audio transcription model "${modelId}" is not supported.`,
-      400,
+      400
     );
   }
 
@@ -69,27 +69,29 @@ export async function transcribeAudioWithOpenAI(
   apiKey: string,
   baseUrl: string | undefined,
   model: string,
-  audio: { bytes: Uint8Array; filename: string; mediaType: string },
+  audio: { bytes: Uint8Array; filename: string; mediaType: string }
 ): Promise<string> {
-  const normalizedBase = normalizeBaseUrl(baseUrl ?? "https://api.openai.com/v1");
+  const normalizedBase = normalizeBaseUrl(
+    baseUrl ?? "https://api.openai.com/v1"
+  );
   const formData = new FormData();
   const blob = new Blob([audio.bytes], { type: audio.mediaType });
   formData.append("file", blob, audio.filename);
   formData.append("model", model);
 
   const response = await fetch(`${normalizedBase}/audio/transcriptions`, {
-    method: "POST",
+    body: formData,
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
-    body: formData,
+    method: "POST",
   });
 
   if (!response.ok) {
     const body = await response.text();
     throw new NakamaApiError(
       `Audio transcription failed (${response.status}): ${body}`,
-      502,
+      502
     );
   }
 

@@ -1,16 +1,16 @@
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { AttachmentDetailPanel } from "@/components/chat/attachment-detail-panel";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
 import {
-  ChatAttachmentPanelContext,
   type ChatAttachmentPanelConfig,
+  ChatAttachmentPanelContext,
 } from "@/context/chat-attachment-panel-context-shared";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,10 @@ export function ChatAttachmentPanelProvider({
     }
 
     setEnterSlide(true);
-    const timeout = window.setTimeout(() => setEnterSlide(false), ENTER_SLIDE_MS);
+    const timeout = window.setTimeout(
+      () => setEnterSlide(false),
+      ENTER_SLIDE_MS
+    );
     return () => window.clearTimeout(timeout);
   }, [openId, presentation]);
 
@@ -70,18 +73,21 @@ export function ChatAttachmentPanelProvider({
     }
   }, []);
 
-  const update = useCallback((id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => {
-    if (patch.defaultWidth != null) {
-      setWidth(clampAttachmentPanelWidth(patch.defaultWidth));
-    }
-
-    setConfig((current) => {
-      if (!current || current.id !== id) {
-        return current;
+  const update = useCallback(
+    (id: string, patch: Partial<Omit<ChatAttachmentPanelConfig, "id">>) => {
+      if (patch.defaultWidth != null) {
+        setWidth(clampAttachmentPanelWidth(patch.defaultWidth));
       }
-      return { ...current, ...patch };
-    });
-  }, []);
+
+      setConfig((current) => {
+        if (!current || current.id !== id) {
+          return current;
+        }
+        return { ...current, ...patch };
+      });
+    },
+    []
+  );
 
   const handlePanelClose = useCallback(() => {
     configRef.current?.onClose?.();
@@ -90,14 +96,14 @@ export function ChatAttachmentPanelProvider({
 
   const value = useMemo(
     () => ({
-      isOpen: config !== null,
       activeId: config?.id ?? null,
+      hide,
       isFullscreen: config?.fullscreen ?? false,
+      isOpen: config !== null,
       show,
       update,
-      hide,
     }),
-    [config, show, update, hide],
+    [config, show, update, hide]
   );
 
   const overlay = presentation === "overlay";
@@ -108,7 +114,7 @@ export function ChatAttachmentPanelProvider({
       <div
         className={cn(
           "min-h-0 flex-1 overflow-hidden",
-          overlay ? "relative" : "flex",
+          overlay ? "relative" : "flex"
         )}
       >
         {overlay ? (
@@ -122,29 +128,29 @@ export function ChatAttachmentPanelProvider({
           <>
             {overlay && !fullscreen ? (
               <button
-                type="button"
                 aria-label="Close artifact preview"
-                className="absolute inset-0 z-20 bg-background/50 animate-in fade-in-0 duration-200 transition-none"
+                className="fade-in-0 absolute inset-0 z-20 animate-in bg-background/50 transition-none duration-200"
                 onClick={handlePanelClose}
+                type="button"
               />
             ) : null}
             <AttachmentDetailPanel
-              title={config.title}
-              subtitle={config.subtitle}
-              headerActions={config.headerActions}
               bodyClassName={config.bodyClassName}
-              resizable={config.resizable ?? !fullscreen}
-              fullscreen={fullscreen}
-              width={width}
-              onWidthChange={setWidth}
-              onClose={handlePanelClose}
               className={cn(
                 overlay &&
                   "absolute inset-y-0 right-0 z-30 h-full max-h-full overflow-hidden shadow-xl",
                 overlay &&
                   enterSlide &&
-                  "animate-in slide-in-from-right duration-200 transition-none",
+                  "slide-in-from-right animate-in transition-none duration-200"
               )}
+              fullscreen={fullscreen}
+              headerActions={config.headerActions}
+              onClose={handlePanelClose}
+              onWidthChange={setWidth}
+              resizable={config.resizable ?? !fullscreen}
+              subtitle={config.subtitle}
+              title={config.title}
+              width={width}
             >
               {config.content}
             </AttachmentDetailPanel>

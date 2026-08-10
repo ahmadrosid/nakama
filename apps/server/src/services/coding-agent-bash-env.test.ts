@@ -1,53 +1,54 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import type { ProviderInstance } from "@nakama/core";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 
 const anthropicProvider: ProviderInstance = {
-  id: "prov_anthropic",
-  type: "anthropic",
-  label: "Anthropic",
   apiKey: "sk-ant-test",
   createdAt: "2026-01-01T00:00:00.000Z",
+  id: "prov_anthropic",
+  label: "Anthropic",
+  type: "anthropic",
 };
 
 const openaiProvider: ProviderInstance = {
-  id: "prov_openai",
-  type: "openai",
-  label: "OpenAI",
   apiKey: "sk-openai-test",
   createdAt: "2026-01-01T00:00:00.000Z",
+  id: "prov_openai",
+  label: "OpenAI",
+  type: "openai",
 };
 
 describe("enrichCodingAgentBashInput", () => {
   test("merges provider passthrough env when coding agent command is detected", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
-      id: "workspace-settings",
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "echo",
+          enabled: true,
           id: "coding-harness-claude-code",
           kind: "claude_code",
           name: "Claude Code",
-          command: "echo",
-          args: [],
-          enabled: true,
         },
       ],
+      id: "workspace-settings",
+      imageModel: null,
       selectedCodingAgentHarness: null,
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
     await db.upsertProfile({
+      createdAt: new Date().toISOString(),
       id: "profile_test",
-      orgId: "org_test",
-      name: "Test",
-      systemPrompt: "test",
-      model: "anthropic:claude-sonnet-4-6",
       isDefault: true,
       isSuper: false,
-      createdAt: new Date().toISOString(),
+      model: "anthropic:claude-sonnet-4-6",
+      name: "Test",
+      orgId: "org_test",
+      systemPrompt: "test",
       updatedAt: new Date().toISOString(),
     });
 
@@ -56,9 +57,9 @@ describe("enrichCodingAgentBashInput", () => {
       { command: "echo hello" },
       { orgId: "org_test", profileId: "profile_test" },
       {
-        providers: [anthropicProvider],
         defaultProviderId: anthropicProvider.id,
-      },
+        providers: [anthropicProvider],
+      }
     )) as { env?: Record<string, string> };
 
     expect(enriched.env?.ANTHROPIC_API_KEY).toBe("sk-ant-test");
@@ -68,39 +69,40 @@ describe("enrichCodingAgentBashInput", () => {
   test("resolves spawn env from command binary even when another harness is selected", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
-      id: "workspace-settings",
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "claude",
+          enabled: true,
           id: "coding-harness-claude-code",
           kind: "claude_code",
           name: "Claude Code",
-          command: "claude",
-          args: [],
-          enabled: true,
         },
         {
+          args: [],
+          command: "echo",
+          enabled: true,
           id: "coding-harness-codex",
           kind: "codex",
           name: "Codex",
-          command: "echo",
-          args: [],
-          enabled: true,
         },
       ],
+      id: "workspace-settings",
+      imageModel: null,
       selectedCodingAgentHarness: "coding-harness-claude-code",
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
     await db.upsertProfile({
+      createdAt: new Date().toISOString(),
       id: "profile_test",
-      orgId: "org_test",
-      name: "Test",
-      systemPrompt: "test",
-      model: "openai:gpt-4.1",
       isDefault: true,
       isSuper: false,
-      createdAt: new Date().toISOString(),
+      model: "openai:gpt-4.1",
+      name: "Test",
+      orgId: "org_test",
+      systemPrompt: "test",
       updatedAt: new Date().toISOString(),
     });
 
@@ -109,9 +111,9 @@ describe("enrichCodingAgentBashInput", () => {
       { command: "echo exec task" },
       { orgId: "org_test", profileId: "profile_test" },
       {
-        providers: [openaiProvider],
         defaultProviderId: openaiProvider.id,
-      },
+        providers: [openaiProvider],
+      }
     )) as { env?: Record<string, string> };
 
     expect(enriched.env?.OPENAI_API_KEY).toBe("sk-openai-test");
@@ -121,75 +123,80 @@ describe("enrichCodingAgentBashInput", () => {
   test("fails closed when codingAgent is set without a known harness binary", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
-      id: "workspace-settings",
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "claude",
+          enabled: true,
           id: "coding-harness-claude-code",
           kind: "claude_code",
           name: "Claude Code",
-          command: "claude",
-          args: [],
-          enabled: true,
         },
       ],
+      id: "workspace-settings",
+      imageModel: null,
       selectedCodingAgentHarness: "coding-harness-claude-code",
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
 
     await expect(
       enrichCodingAgentBashInput(
         db,
-        { command: "ls -la", codingAgent: true },
+        { codingAgent: true, command: "ls -la" },
         { orgId: "org_test", profileId: "profile_test" },
         {
-          providers: [anthropicProvider],
           defaultProviderId: anthropicProvider.id,
-        },
-      ),
+          providers: [anthropicProvider],
+        }
+      )
     ).rejects.toThrow(/known coding-agent CLI/);
   });
 
   test("does not merge provider credentials for Cursor Agent when routing is active", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
-      id: "workspace-settings",
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "echo",
+          enabled: true,
           id: "coding-harness-cursor-agent",
           kind: "cursor_agent",
           name: "Cursor Agent",
-          command: "echo",
-          args: [],
-          enabled: true,
         },
       ],
+      id: "workspace-settings",
+      imageModel: null,
       selectedCodingAgentHarness: null,
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
     await db.upsertProfile({
+      createdAt: new Date().toISOString(),
       id: "profile_test",
-      orgId: "org_test",
-      name: "Test",
-      systemPrompt: "test",
-      model: "anthropic:claude-sonnet-4-6",
       isDefault: true,
       isSuper: false,
-      createdAt: new Date().toISOString(),
+      model: "anthropic:claude-sonnet-4-6",
+      name: "Test",
+      orgId: "org_test",
+      systemPrompt: "test",
       updatedAt: new Date().toISOString(),
     });
 
     const enriched = (await enrichCodingAgentBashInput(
       db,
-      { command: "echo -p 'task' --output-format text --yolo", codingAgent: true },
+      {
+        codingAgent: true,
+        command: "echo -p 'task' --output-format text --yolo",
+      },
       { orgId: "org_test", profileId: "profile_test" },
       {
-        providers: [anthropicProvider],
         defaultProviderId: anthropicProvider.id,
-      },
+        providers: [anthropicProvider],
+      }
     )) as { env?: Record<string, string>; codingAgent?: boolean };
 
     expect(enriched.codingAgent).toBe(true);

@@ -76,24 +76,29 @@ export function estimateToolToken(tool: LlmToolDefinition): ToolTokenEstimate {
   const parametersChars = JSON.stringify(tool.parameters).length;
 
   return {
-    name: tool.name,
     chars: serialized.length,
-    tokens: estimateTokens(serialized),
     descriptionChars,
+    name: tool.name,
     parametersChars,
+    tokens: estimateTokens(serialized),
   };
 }
 
 /** Split system prompt on markdown `#` headings for a coarse section cost map. */
-export function estimateSystemSections(system: string): SystemSectionEstimate[] {
+export function estimateSystemSections(
+  system: string
+): SystemSectionEstimate[] {
   const lines = system.split("\n");
   const sections: { title: string; body: string[] }[] = [
-    { title: "(preamble)", body: [] },
+    { body: [], title: "(preamble)" },
   ];
 
   for (const line of lines) {
     if (line.startsWith("# ")) {
-      sections.push({ title: line.slice(2).trim() || "(untitled)", body: [line] });
+      sections.push({
+        body: [line],
+        title: line.slice(2).trim() || "(untitled)",
+      });
       continue;
     }
 
@@ -108,34 +113,40 @@ export function estimateSystemSections(system: string): SystemSectionEstimate[] 
       }
 
       return {
-        title: section.title,
         chars: text.length,
+        title: section.title,
         tokens: estimateTokens(text),
       };
     })
     .filter((section): section is SystemSectionEstimate => section !== null)
-    .sort((left, right) => right.tokens - left.tokens || left.title.localeCompare(right.title));
+    .sort(
+      (left, right) =>
+        right.tokens - left.tokens || left.title.localeCompare(right.title)
+    );
 }
 
 export function estimateChatInputBreakdown(
-  input: GenerateChatInput,
+  input: GenerateChatInput
 ): ChatTokenEstimateBreakdown {
   const systemChars = input.system.length;
   const systemTokens = estimateTokens(input.system);
   const systemSections = estimateSystemSections(input.system);
   const toolsBySize = (input.tools ?? [])
     .map(estimateToolToken)
-    .sort((left, right) => right.tokens - left.tokens || left.name.localeCompare(right.name));
+    .sort(
+      (left, right) =>
+        right.tokens - left.tokens || left.name.localeCompare(right.name)
+    );
   const toolsJson = input.tools?.length ? JSON.stringify(input.tools) : "";
   const toolsChars = toolsJson.length;
   const toolsTokens = toolsChars > 0 ? estimateTokens(toolsJson) : 0;
   const toolsCount = input.tools?.length ?? 0;
 
   const messagesByRole = {
-    user: 0,
     assistant: 0,
-    tool: 0,
     other: 0,
+    tool: 0,
+    user: 0,
   };
   let messagesTokens = 0;
 
@@ -154,16 +165,16 @@ export function estimateChatInputBreakdown(
   }
 
   return {
-    systemChars,
-    systemTokens,
-    systemSections,
-    toolsChars,
-    toolsTokens,
-    toolsCount,
-    toolsBySize,
-    messagesTokens,
     messageCount: input.messages.length,
     messagesByRole,
+    messagesTokens,
+    systemChars,
+    systemSections,
+    systemTokens,
+    toolsBySize,
+    toolsChars,
+    toolsCount,
+    toolsTokens,
     totalEstimatedInputTokens: systemTokens + toolsTokens + messagesTokens,
   };
 }
@@ -194,15 +205,17 @@ function estimateChatOutputTokens(result: ChatCompletionResult): number {
 export function wrapProviderWithUsageTracking(
   provider: ProviderClient,
   tracker: LlmUsageTracker,
-  modelId: string,
+  modelId: string
 ): ProviderClient {
   function withRecordedUsage(
     input: GenerateChatInput,
-    result: ChatCompletionResult,
+    result: ChatCompletionResult
   ): ChatCompletionResult {
     const estimated = result.usage?.inputTokens == null;
-    const inputTokens = result.usage?.inputTokens ?? estimateChatInputTokens(input);
-    const outputTokens = result.usage?.outputTokens ?? estimateChatOutputTokens(result);
+    const inputTokens =
+      result.usage?.inputTokens ?? estimateChatInputTokens(input);
+    const outputTokens =
+      result.usage?.outputTokens ?? estimateChatOutputTokens(result);
     tracker.record(modelId, inputTokens, outputTokens);
 
     return {
@@ -218,23 +231,27 @@ export function wrapProviderWithUsageTracking(
 
   return {
     ...provider,
-    async generateChat(input: GenerateChatInput): Promise<ChatCompletionResult> {
-      const result = await provider.generateChat(input);
-      return withRecordedUsage(input, result);
-    },
-    async streamChat(
-      input: GenerateChatInput,
-      handlers: StreamChatHandlers,
+    async generateChat(
+      input: GenerateChatInput
     ): Promise<ChatCompletionResult> {
-      const result = await provider.streamChat(input, handlers);
+      const result = await provider.generateChat(input);
       return withRecordedUsage(input, result);
     },
     async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const result = await provider.generateText(input);
-      const inputTokens = result.usage?.inputTokens ?? estimateTextInputTokens(input);
-      const outputTokens = result.usage?.outputTokens ?? estimateTokens(result.content);
+      const inputTokens =
+        result.usage?.inputTokens ?? estimateTextInputTokens(input);
+      const outputTokens =
+        result.usage?.outputTokens ?? estimateTokens(result.content);
       tracker.record(modelId, inputTokens, outputTokens);
       return result;
+    },
+    async streamChat(
+      input: GenerateChatInput,
+      handlers: StreamChatHandlers
+    ): Promise<ChatCompletionResult> {
+      const result = await provider.streamChat(input, handlers);
+      return withRecordedUsage(input, result);
     },
   };
 }

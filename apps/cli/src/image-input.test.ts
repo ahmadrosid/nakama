@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mergeSendInput, parseImageLine } from "./image-input";
 
 const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
+  "base64"
 );
 
 describe("parseImageLine", () => {
@@ -22,8 +22,8 @@ describe("parseImageLine", () => {
     const result = await parseImageLine(`@${path} what is this?`);
 
     expect(result).toEqual({
+      images: [{ data: tinyPng.toString("base64"), mediaType: "image/png" }],
       message: "what is this?",
-      images: [{ mediaType: "image/png", data: tinyPng.toString("base64") }],
     });
   });
 });
@@ -31,26 +31,26 @@ describe("parseImageLine", () => {
 describe("mergeSendInput", () => {
   test("prefers path-based input over clipboard images", () => {
     const fromPath = {
+      images: [{ data: "abc", mediaType: "image/png" }],
       message: "from file",
-      images: [{ mediaType: "image/png", data: "abc" }],
     };
 
     expect(
       mergeSendInput("ignored", {
         fromPath,
-        promptImages: [{ mediaType: "image/jpeg", data: "def" }],
-      }),
+        promptImages: [{ data: "def", mediaType: "image/jpeg" }],
+      })
     ).toBe(fromPath);
   });
 
   test("uses clipboard images when no path input", () => {
     expect(
       mergeSendInput("describe this", {
-        promptImages: [{ mediaType: "image/png", data: "abc" }],
-      }),
+        promptImages: [{ data: "abc", mediaType: "image/png" }],
+      })
     ).toEqual({
+      images: [{ data: "abc", mediaType: "image/png" }],
       message: "describe this",
-      images: [{ mediaType: "image/png", data: "abc" }],
     });
   });
 });

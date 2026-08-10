@@ -1,13 +1,18 @@
-import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { emptyHeaderRow, type McpHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
+import { Add01Icon, Cancel01Icon, Delete02Icon } from "hugeicons-react";
+import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
+import {
+  emptyHeaderRow,
+  type McpHeaderRow,
+} from "@/components/soul-tools/mcp-tab/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 import { cn } from "@/lib/utils";
 
 function mcpArgKey(arg: string, index: number, args: string[]): string {
-  const priorMatches = args.slice(0, index).filter((value) => value === arg).length;
+  const priorMatches = args
+    .slice(0, index)
+    .filter((value) => value === arg).length;
   return priorMatches === 0 ? arg : `${arg}:${priorMatches + 1}`;
 }
 
@@ -29,12 +34,17 @@ export function McpFormField({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3">
-        <LabelTag className="text-xs text-muted-foreground" {...(htmlFor ? { htmlFor } : {})}>
+        <LabelTag
+          className="text-muted-foreground text-xs"
+          {...(htmlFor ? { htmlFor } : {})}
+        >
           {label}
         </LabelTag>
         {hint || action ? (
           <div className="flex shrink-0 items-center gap-2">
-            {hint ? <span className="text-xs text-muted-foreground/80">{hint}</span> : null}
+            {hint ? (
+              <span className="text-muted-foreground/80 text-xs">{hint}</span>
+            ) : null}
             {action}
           </div>
         ) : null}
@@ -112,39 +122,39 @@ export function McpArgsEditor({
   return (
     <div
       className={cn(
-        "no-scrollbar flex h-8 w-full min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-sm transition-colors outline-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
+        "no-scrollbar flex h-8 w-full min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-sm outline-none transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
         disabled &&
-          "pointer-events-none cursor-not-allowed bg-input/50 opacity-50 dark:disabled:bg-input/80",
+          "pointer-events-none cursor-not-allowed bg-input/50 opacity-50 dark:disabled:bg-input/80"
       )}
     >
       {args.map((arg, index) => (
         <span
+          className="inline-flex h-5 max-w-full shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/50 pr-0.5 pl-1.5 text-foreground text-xs"
           key={mcpArgKey(arg, index, args)}
-          className="inline-flex h-5 max-w-full shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/50 pl-1.5 pr-0.5 text-xs text-foreground"
         >
           <span className="truncate">{arg}</span>
           <button
-            type="button"
-            disabled={disabled}
-            className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none"
             aria-label={`Remove argument ${arg}`}
+            className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none"
+            disabled={disabled}
             onClick={() => removeArg(index)}
+            type="button"
           >
-            <XIcon className="size-2.5" aria-hidden />
+            <Cancel01Icon aria-hidden className="size-2.5" />
           </button>
         </span>
       ))}
       <input
-        id={inputId}
-        type="text"
-        value={draft}
-        disabled={disabled}
-        className="min-w-[4rem] flex-1 border-0 bg-transparent p-0 font-mono text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-        placeholder={args.length === 0 ? "-y" : "Add argument"}
         aria-label="Add argument"
+        className="min-w-[4rem] flex-1 border-0 bg-transparent p-0 font-mono text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+        disabled={disabled}
+        id={inputId}
+        onBlur={() => addArg(draft)}
         onChange={(event) => handleDraftChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        onBlur={() => addArg(draft)}
+        placeholder={args.length === 0 ? "-y" : "Add argument"}
+        type="text"
+        value={draft}
       />
     </div>
   );
@@ -173,8 +183,8 @@ export function McpHeadersEditor({
   function updateRow(index: number, field: keyof McpHeaderRow, value: string) {
     onChange(
       headers.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, [field]: value } : row,
-      ),
+        rowIndex === index ? { ...row, [field]: value } : row
+      )
     );
   }
 
@@ -187,53 +197,63 @@ export function McpHeadersEditor({
     <div className="space-y-2">
       <ul className="space-y-2">
         {headers.map((row, index) => (
-          <li key={rowKeysRef.current[index]} className="flex items-start gap-2">
+          <li
+            className="flex items-start gap-2"
+            key={rowKeysRef.current[index]}
+          >
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
               <Input
-                value={row.key}
-                disabled={disabled}
-                className="font-mono text-sm"
                 aria-label={`${keyLabel} name ${index + 1}`}
-                placeholder={keyLabel === "Header" ? "Authorization" : "API_KEY"}
-                onChange={(event) => updateRow(index, "key", event.target.value)}
+                className="font-mono text-sm"
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRow(index, "key", event.target.value)
+                }
+                placeholder={
+                  keyLabel === "Header" ? "Authorization" : "API_KEY"
+                }
+                value={row.key}
               />
               <Input
-                value={row.value}
-                disabled={disabled}
-                className="font-mono text-sm"
                 aria-label={`${valueLabel} ${index + 1}`}
-                placeholder={
-                  valuePlaceholder ?? (isEdit ? "Leave blank to keep" : "Bearer token")
+                className="font-mono text-sm"
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRow(index, "value", event.target.value)
                 }
-                onChange={(event) => updateRow(index, "value", event.target.value)}
+                placeholder={
+                  valuePlaceholder ??
+                  (isEdit ? "Leave blank to keep" : "Bearer token")
+                }
+                value={row.value}
               />
             </div>
             <Button
+              aria-label={`Remove header ${index + 1}`}
+              className="mt-0.5 shrink-0"
+              disabled={disabled || headers.length <= 1}
+              onClick={() => removeRow(index)}
+              size="icon-sm"
               type="button"
               variant="ghost"
-              size="icon-sm"
-              disabled={disabled || headers.length <= 1}
-              className="mt-0.5 shrink-0"
-              aria-label={`Remove header ${index + 1}`}
-              onClick={() => removeRow(index)}
             >
-              <Trash2Icon className="size-4" aria-hidden />
+              <Delete02Icon aria-hidden className="size-4" />
             </Button>
           </li>
         ))}
       </ul>
 
       <Button
-        type="button"
-        variant="outline"
-        size="sm"
         disabled={disabled}
         onClick={() => {
           rowKeysRef.current.push(createClientId());
           onChange([...headers, emptyHeaderRow()]);
         }}
+        size="sm"
+        type="button"
+        variant="outline"
       >
-        <PlusIcon className="size-4" aria-hidden />
+        <Add01Icon aria-hidden className="size-4" />
         Add header
       </Button>
     </div>

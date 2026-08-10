@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import { NakamaApiError } from "@nakama/core/api-error";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,12 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/use-auth";
 import {
   useInitUserContextMutation,
   useUserContextQuery,
   useWriteUserContextMutation,
 } from "@/hooks/use-resource-mutations";
-import { useAuth } from "@/context/use-auth";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -29,11 +29,11 @@ function formatUserContextError(error: unknown): string {
 }
 
 interface UserContextEditorDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaveSuccess?: () => void;
   /** When opening and USER.md is missing, scaffold then show the editor. */
   ensureExistsOnOpen?: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaveSuccess?: () => void;
+  open: boolean;
 }
 
 /** Controlled USER.md editor dialog — used from the account menu and settings row. */
@@ -49,7 +49,10 @@ export function UserContextEditorDialog({
     isLoading,
     error: loadError,
     refetch,
-  } = useUserContextQuery({ includeContent: true, orgId: activeOrg?.id ?? null });
+  } = useUserContextQuery({
+    includeContent: true,
+    orgId: activeOrg?.id ?? null,
+  });
   const initMutation = useInitUserContextMutation();
   const writeMutation = useWriteUserContextMutation();
 
@@ -80,7 +83,12 @@ export function UserContextEditorDialog({
       return;
     }
 
-    if (!ensureExistsOnOpen || ensureAttemptedRef.current || isLoading || !status) {
+    if (
+      !ensureExistsOnOpen ||
+      ensureAttemptedRef.current ||
+      isLoading ||
+      !status
+    ) {
       return;
     }
 
@@ -117,7 +125,15 @@ export function UserContextEditorDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, ensureExistsOnOpen, isActive, isLoading, status, initMutation, refetch]);
+  }, [
+    open,
+    ensureExistsOnOpen,
+    isActive,
+    isLoading,
+    status,
+    initMutation,
+    refetch,
+  ]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
@@ -145,7 +161,7 @@ export function UserContextEditorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent className="flex max-h-[min(90dvh,40rem)] w-[calc(100%-1.5rem)] flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Personalisation (USER.md)</DialogTitle>
@@ -160,10 +176,9 @@ export function UserContextEditorDialog({
           </div>
         ) : (
           <Textarea
-            value={content}
-            disabled={busy}
-            className="min-h-[min(50dvh,20rem)] flex-1 font-mono text-sm"
             aria-label="USER.md content"
+            className="min-h-[min(50dvh,20rem)] flex-1 font-mono text-sm"
+            disabled={busy}
             onChange={(event) => {
               setContent(event.target.value);
               setHint(null);
@@ -171,33 +186,38 @@ export function UserContextEditorDialog({
                 setFormError(null);
               }
             }}
+            value={content}
           />
         )}
 
         {formError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {formError}
           </p>
         ) : hint ? (
-          <p className="text-sm text-emerald-200" role="status">
+          <p className="text-emerald-200 text-sm" role="status">
             {hint}
           </p>
         ) : loadError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {formatError(loadError)}
           </p>
         ) : null}
 
         <DialogFooter>
           <Button
-            type="button"
-            variant="outline"
             disabled={busy}
             onClick={() => handleOpenChange(false)}
+            type="button"
+            variant="outline"
           >
             Cancel
           </Button>
-          <Button type="button" disabled={busy || !isDirty || !!loadError} onClick={() => void handleSave()}>
+          <Button
+            disabled={busy || !isDirty || !!loadError}
+            onClick={() => void handleSave()}
+            type="button"
+          >
             {writeMutation.isPending ? (
               <>
                 <Spinner className="mr-2" />
@@ -214,19 +234,25 @@ export function UserContextEditorDialog({
 }
 
 interface UserContextSettingsProps {
-  onSaveSuccess?: () => void;
   autoInit?: boolean;
+  onSaveSuccess?: () => void;
 }
 
 /** USER.md editor row for setup wizard — render inside a parent card. */
-export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserContextSettingsProps = {}) {
+export function UserContextSettings({
+  onSaveSuccess,
+  autoInit = false,
+}: UserContextSettingsProps = {}) {
   const { activeOrg } = useAuth();
   const {
     data: status,
     isLoading,
     error: loadError,
     refetch,
-  } = useUserContextQuery({ includeContent: true, orgId: activeOrg?.id ?? null });
+  } = useUserContextQuery({
+    includeContent: true,
+    orgId: activeOrg?.id ?? null,
+  });
   const initMutation = useInitUserContextMutation();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -239,7 +265,13 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
 
   // Auto-create USER.md in wizard contexts so the user can immediately edit
   useEffect(() => {
-    if (!autoInit || autoInitAttemptedRef.current || isActive || isLoading || !status) {
+    if (
+      !autoInit ||
+      autoInitAttemptedRef.current ||
+      isActive ||
+      isLoading ||
+      !status
+    ) {
       return;
     }
 
@@ -264,7 +296,9 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
         if (result.created) {
           setEditorOpen(true);
         }
-        setHint(result.created ? "Template created." : "USER.md already exists.");
+        setHint(
+          result.created ? "Template created." : "USER.md already exists."
+        );
       } catch (error) {
         if (!cancelled) {
           setFormError(formatUserContextError(error));
@@ -317,19 +351,21 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="text-sm font-medium text-foreground">Personalisation</p>
+          <p className="font-medium text-foreground text-sm">Personalisation</p>
           {statusLine ? (
             <p
               className={cn(
                 "text-xs",
-                formError || loadError ? "text-destructive" : "text-emerald-200",
+                formError || loadError ? "text-destructive" : "text-emerald-200"
               )}
               role={formError || loadError ? "alert" : "status"}
             >
               {statusLine}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">USER.md — personalisation for this org</p>
+            <p className="text-muted-foreground text-xs">
+              USER.md — personalisation for this org
+            </p>
           )}
         </div>
 
@@ -337,21 +373,21 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
           <Spinner />
         ) : loadError ? null : isActive ? (
           <Button
-            type="button"
-            size="sm"
-            variant="outline"
             disabled={busy}
             onClick={() => setEditorOpen(true)}
+            size="sm"
+            type="button"
+            variant="outline"
           >
             Edit
           </Button>
         ) : autoInit ? (
           <Button
-            type="button"
-            size="sm"
-            variant="outline"
             disabled={busy}
             onClick={() => void handleInitAndEdit()}
+            size="sm"
+            type="button"
+            variant="outline"
           >
             {initMutation.isPending ? (
               <>
@@ -363,7 +399,13 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
             )}
           </Button>
         ) : (
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void handleInit()}>
+          <Button
+            disabled={busy}
+            onClick={() => void handleInit()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             {initMutation.isPending ? (
               <>
                 <Spinner className="mr-2" />
@@ -377,9 +419,9 @@ export function UserContextSettings({ onSaveSuccess, autoInit = false }: UserCon
       </div>
 
       <UserContextEditorDialog
-        open={editorOpen}
         onOpenChange={setEditorOpen}
         onSaveSuccess={onSaveSuccess}
+        open={editorOpen}
       />
     </>
   );

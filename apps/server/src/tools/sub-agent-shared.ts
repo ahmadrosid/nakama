@@ -1,51 +1,51 @@
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
 export const MAX_SUB_AGENT_TIMEOUT_MS = 600_000;
 export const MAX_SUB_AGENT_OUTPUT_CHARS = 32_000;
-export const MAX_SUB_AGENT_SUMMARY_CHARS = 2_000;
+export const MAX_SUB_AGENT_SUMMARY_CHARS = 2000;
 const TRUNCATION_MARKER = "\n...[truncated]";
 
 export interface SubAgentRunInput {
+  agentDepth: number;
+  clientOrigin?: string;
+  context?: string;
+  onActivity?: (label: string) => void;
   orgId: string;
   profileId: string;
+  sessionId?: string;
   task: string;
-  context?: string;
   timeoutMs?: number;
   userId?: string;
-  sessionId?: string;
-  clientOrigin?: string;
-  agentDepth: number;
-  onActivity?: (label: string) => void;
 }
 
 export interface SubAgentRunResult {
+  error?: string;
+  output: string;
   status: "success" | "fail" | "timeout";
   summary: string;
-  output: string;
-  error?: string;
 }
 
 export function buildSubAgentResult(
   status: SubAgentRunResult["status"],
   text: string,
-  error?: string,
+  error?: string
 ): SubAgentRunResult {
   const output = truncateField(text, MAX_SUB_AGENT_OUTPUT_CHARS);
   const summary = truncateField(text, MAX_SUB_AGENT_SUMMARY_CHARS);
 
   return {
+    output,
     status,
     summary,
-    output,
     ...(error ? { error } : {}),
   };
 }
 
 export function failSubAgentResult(error: string): SubAgentRunResult {
   return {
+    error,
+    output: "",
     status: "fail",
     summary: error,
-    output: "",
-    error,
   };
 }
 

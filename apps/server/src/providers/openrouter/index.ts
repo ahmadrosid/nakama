@@ -1,5 +1,18 @@
-import { HTTPClient, OpenRouter } from "@openrouter/sdk";
+import type {
+  ChatCompletionResult,
+  ChatMessage,
+  CustomModelEntry,
+  GenerateChatInput,
+  GenerateTextInput,
+  GenerateTextResult,
+  LlmToolDefinition,
+  ProviderChatOptions,
+  ProviderClient,
+  StreamChatHandlers,
+  ToolCall,
+} from "@nakama/core";
 import type { Fetcher } from "@openrouter/sdk";
+import { HTTPClient, OpenRouter } from "@openrouter/sdk";
 import type {
   ChatFunctionTool,
   ChatMessages,
@@ -10,19 +23,6 @@ import type {
   ChatToolCall,
 } from "@openrouter/sdk/models";
 import { OpenRouterError } from "@openrouter/sdk/models/errors";
-import type {
-  ChatCompletionResult,
-  ChatMessage,
-  CustomModelEntry,
-  GenerateChatInput,
-  GenerateTextResult,
-  GenerateTextInput,
-  LlmToolDefinition,
-  ProviderChatOptions,
-  ProviderClient,
-  StreamChatHandlers,
-  ToolCall,
-} from "@nakama/core";
 import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
@@ -39,10 +39,10 @@ const PROVIDER_LABEL = "OpenRouter";
 
 export interface OpenRouterProviderOptions {
   apiKey: string;
-  model?: string;
   customModels?: CustomModelEntry[];
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetcher?: Fetcher;
+  model?: string;
 }
 
 type OpenAIMessage =
@@ -62,8 +62,8 @@ type OpenAIMessage =
 function createOpenRouterClient(apiKey: string, fetcher?: Fetcher): OpenRouter {
   return new OpenRouter({
     apiKey,
-    httpReferer: OPENROUTER_REFERER,
     appTitle: OPENROUTER_APP_TITLE,
+    httpReferer: OPENROUTER_REFERER,
     ...(fetcher ? { httpClient: new HTTPClient({ fetcher }) } : {}),
   });
 }
@@ -71,7 +71,7 @@ function createOpenRouterClient(apiKey: string, fetcher?: Fetcher): OpenRouter {
 function formatOpenRouterError(error: unknown): Error {
   if (error instanceof OpenRouterError) {
     return new Error(
-      `${PROVIDER_LABEL} request failed (${error.statusCode}): ${error.body}`,
+      `${PROVIDER_LABEL} request failed (${error.statusCode}): ${error.body}`
     );
   }
 
@@ -90,35 +90,37 @@ async function withOpenRouterError<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-function toSdkTools(tools: LlmToolDefinition[] | undefined): ChatFunctionTool[] | undefined {
+function toSdkTools(
+  tools: LlmToolDefinition[] | undefined
+): ChatFunctionTool[] | undefined {
   if (!tools?.length) {
-    return undefined;
+    return;
   }
 
   return tools.map((tool) => ({
-    type: "function" as const,
     function: {
-      name: tool.name,
       description: tool.description,
+      name: tool.name,
       parameters: tool.parameters,
     },
+    type: "function" as const,
   }));
 }
 
 function openAIMessageToSdkMessage(message: OpenAIMessage): ChatMessages {
   if (message.role === "assistant") {
     return {
-      role: "assistant",
       content: message.content,
+      role: "assistant",
       ...(message.tool_calls?.length
         ? {
             toolCalls: message.tool_calls.map((call) => ({
+              function: {
+                arguments: call.function.arguments,
+                name: call.function.name,
+              },
               id: call.id,
               type: "function" as const,
-              function: {
-                name: call.function.name,
-                arguments: call.function.arguments,
-              },
             })),
           }
         : {}),
@@ -127,9 +129,9 @@ function openAIMessageToSdkMessage(message: OpenAIMessage): ChatMessages {
 
   if (message.role === "tool") {
     return {
+      content: message.content,
       role: "tool",
       toolCallId: message.tool_call_id,
-      content: message.content,
     };
   }
 
@@ -138,7 +140,7 @@ function openAIMessageToSdkMessage(message: OpenAIMessage): ChatMessages {
 
 async function toSdkMessages(
   system: string,
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): Promise<ChatMessages[]> {
   const openAIMessages = await toOpenAIMessages(system, messages, "openrouter");
   return openAIMessages.map(openAIMessageToSdkMessage);
@@ -153,15 +155,15 @@ function parseSdkToolCalls(toolCalls: ChatToolCall[] | undefined): ToolCall[] {
     const name = call.function?.name?.trim();
     const id = call.id?.trim();
 
-    if (!name || !id) {
+    if (!(name && id)) {
       return [];
     }
 
     return [
       {
+        arguments: parseJsonRecord(call.function.arguments ?? "{}"),
         id,
         name,
-        arguments: parseJsonRecord(call.function.arguments ?? "{}"),
       },
     ];
   });
@@ -170,13 +172,15 @@ function parseSdkToolCalls(toolCalls: ChatToolCall[] | undefined): ToolCall[] {
 function buildOpenRouterReasoningRequest(
   model: string,
   providerOptions: ProviderChatOptions | undefined,
-  customModels: CustomModelEntry[] | undefined,
+  customModels: CustomModelEntry[] | undefined
 ): Pick<ChatRequest, "reasoning"> | undefined {
   if (
-    !providerOptions?.thinking?.enabled ||
-    !openRouterModelSupportsThinking(model, customModels)
+    !(
+      providerOptions?.thinking?.enabled &&
+      openRouterModelSupportsThinking(model, customModels)
+    )
   ) {
-    return undefined;
+    return;
   }
 
   const reasoning: ChatRequestReasoning = {
@@ -188,7 +192,7 @@ function buildOpenRouterReasoningRequest(
 }
 
 function parseMessageReasoning(
-  reasoning: string | null | undefined,
+  reasoning: string | null | undefined
 ): string | undefined {
   const trimmed = reasoning?.trim();
   return trimmed || undefined;
@@ -215,8 +219,8 @@ function parseChatResult(result: {
 
   return buildChatCompletionResult({
     content,
-    toolCalls,
     thinking,
+    toolCalls,
     usage: extractOpenAITokenUsage(result.usage),
   });
 }
@@ -233,32 +237,32 @@ async function buildChatRequestBase(options: {
   const reasoningRequest = buildOpenRouterReasoningRequest(
     options.model,
     options.providerOptions,
-    options.customModels,
+    options.customModels
   );
 
   return {
-    model: options.model,
     messages: await toSdkMessages(options.system, options.messages),
-    ...(tools?.length ? { tools, toolChoice: "auto" as const } : {}),
+    model: options.model,
+    ...(tools?.length ? { toolChoice: "auto" as const, tools } : {}),
     ...reasoningRequest,
   };
 }
 
 interface PendingToolCall {
+  arguments: string;
   id: string;
   name: string;
-  arguments: string;
 }
 
 function mergePendingToolCall(
   pending: Map<number, PendingToolCall>,
-  toolDelta: ChatStreamToolCall,
+  toolDelta: ChatStreamToolCall
 ): void {
   const index = toolDelta.index ?? 0;
   const current = pending.get(index) ?? {
+    arguments: "",
     id: "",
     name: "",
-    arguments: "",
   };
 
   if (toolDelta.id) {
@@ -276,20 +280,22 @@ function mergePendingToolCall(
   pending.set(index, current);
 }
 
-function finalizePendingToolCalls(pending: Map<number, PendingToolCall>): ToolCall[] {
+function finalizePendingToolCalls(
+  pending: Map<number, PendingToolCall>
+): ToolCall[] {
   return [...pending.entries()]
     .sort(([left], [right]) => left - right)
     .map(([, call]) => call)
     .flatMap((call) => {
-      if (!call.id || !call.name) {
+      if (!(call.id && call.name)) {
         return [];
       }
 
       return [
         {
+          arguments: parseJsonRecord(call.arguments),
           id: call.id,
           name: call.name,
-          arguments: parseJsonRecord(call.arguments),
         },
       ];
     });
@@ -297,7 +303,7 @@ function finalizePendingToolCalls(pending: Map<number, PendingToolCall>): ToolCa
 
 async function readOpenRouterStream(
   stream: AsyncIterable<ChatStreamChunk>,
-  handlers: StreamChatHandlers,
+  handlers: StreamChatHandlers
 ): Promise<ChatCompletionResult> {
   let content = "";
   let thinking = "";
@@ -305,7 +311,10 @@ async function readOpenRouterStream(
   const pending = new Map<number, PendingToolCall>();
 
   for await (const chunk of stream) {
-    usage = extractOpenAITokenUsage((chunk as { usage?: Record<string, unknown> }).usage) ?? usage;
+    usage =
+      extractOpenAITokenUsage(
+        (chunk as { usage?: Record<string, unknown> }).usage
+      ) ?? usage;
     const delta = chunk.choices?.[0]?.delta;
 
     if (delta?.reasoning) {
@@ -343,8 +352,8 @@ async function readOpenRouterStream(
 
   return buildChatCompletionResult({
     content,
-    toolCalls,
     thinking: thinkingText,
+    toolCalls,
     usage,
   });
 }
@@ -352,14 +361,30 @@ async function readOpenRouterStream(
 export { openRouterModelSupportsThinking } from "./thinking";
 
 export function createOpenRouterProvider(
-  options: OpenRouterProviderOptions,
+  options: OpenRouterProviderOptions
 ): ProviderClient {
   const model = options.model ?? "anthropic/claude-sonnet-4-6";
   const customModels = options.customModels;
   const client = createOpenRouterClient(options.apiKey, options.fetcher);
 
   return {
-    name: "openrouter",
+    generateChat(input: GenerateChatInput) {
+      return withOpenRouterError(async () => {
+        const chatRequest = await buildChatRequestBase({
+          customModels,
+          messages: input.messages,
+          model,
+          providerOptions: input.providerOptions,
+          system: input.system,
+          tools: input.tools,
+        });
+        const result = await client.chat.send({
+          chatRequest: { ...chatRequest, stream: false as const },
+        });
+
+        return parseChatResult(result);
+      });
+    },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -369,12 +394,12 @@ export function createOpenRouterProvider(
       return withOpenRouterError(async () => {
         const result = await client.chat.send({
           chatRequest: {
+            messages: [
+              { content: system, role: "system" },
+              { content: input.prompt, role: "user" },
+            ],
             model,
             stream: false,
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: input.prompt },
-            ],
             ...(useJson
               ? { responseFormat: { type: "json_object" as const } }
               : {}),
@@ -383,7 +408,7 @@ export function createOpenRouterProvider(
 
         const content = result.choices?.[0]?.message?.content?.trim();
         const usage = extractOpenAITokenUsage(
-          (result as { usage?: Record<string, unknown> }).usage,
+          (result as { usage?: Record<string, unknown> }).usage
         );
 
         if (!content) {
@@ -396,32 +421,16 @@ export function createOpenRouterProvider(
         } satisfies GenerateTextResult;
       });
     },
-    generateChat(input: GenerateChatInput) {
-      return withOpenRouterError(async () => {
-        const chatRequest = await buildChatRequestBase({
-          model,
-          system: input.system,
-          messages: input.messages,
-          tools: input.tools,
-          providerOptions: input.providerOptions,
-          customModels,
-        });
-        const result = await client.chat.send({
-          chatRequest: { ...chatRequest, stream: false as const },
-        });
-
-        return parseChatResult(result);
-      });
-    },
+    name: "openrouter",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withOpenRouterError(async () => {
         const chatRequest = await buildChatRequestBase({
-          model,
-          system: input.system,
-          messages: input.messages,
-          tools: input.tools,
-          providerOptions: input.providerOptions,
           customModels,
+          messages: input.messages,
+          model,
+          providerOptions: input.providerOptions,
+          system: input.system,
+          tools: input.tools,
         });
         const stream = await client.chat.send({
           chatRequest: { ...chatRequest, stream: true as const },

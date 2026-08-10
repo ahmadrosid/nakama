@@ -10,140 +10,267 @@ import type {
   TaskResponse,
   UpdateTaskRequest,
 } from "@nakama/core";
-import { errorResponse, json, readJson } from "../shared";
+import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
 } from "../org-guards";
+import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
-import type { ServerOptions } from "../context";
 
 export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
   const { agent, taskService } = options;
-  const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
+  const errorSchema = z
+    .object({ error: z.string() })
+    .openapi("ApiErrorResponse");
   const taskIdParam = z.object({
-    taskId: z.string().openapi({ param: { name: "taskId", in: "path" } }),
+    taskId: z.string().openapi({ param: { in: "path", name: "taskId" } }),
   });
-  const listTasksSchema = z.object({}).passthrough().openapi("ListTasksResponse");
-  const draftTaskPromptSchema = z.object({}).passthrough().openapi("DraftTaskPromptRequest");
-  const draftTaskPromptResponseSchema = z.object({}).passthrough().openapi("DraftTaskPromptResponse");
-  const createTaskSchema = z.object({}).passthrough().openapi("CreateTaskRequest");
-  const updateTaskSchema = z.object({}).passthrough().openapi("UpdateTaskRequest");
+  const listTasksSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListTasksResponse");
+  const draftTaskPromptSchema = z
+    .object({})
+    .passthrough()
+    .openapi("DraftTaskPromptRequest");
+  const draftTaskPromptResponseSchema = z
+    .object({})
+    .passthrough()
+    .openapi("DraftTaskPromptResponse");
+  const createTaskSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CreateTaskRequest");
+  const updateTaskSchema = z
+    .object({})
+    .passthrough()
+    .openapi("UpdateTaskRequest");
   const taskSchema = z.object({}).passthrough().openapi("TaskResponse");
   const runTaskSchema = z.object({}).passthrough().openapi("RunTaskResponse");
-  const listTaskRunsSchema = z.object({}).passthrough().openapi("ListTaskRunsResponse");
-  const taskMessagesSchema = z.object({}).passthrough().openapi("TaskMessagesResponse");
+  const listTaskRunsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("ListTaskRunsResponse");
+  const taskMessagesSchema = z
+    .object({})
+    .passthrough()
+    .openapi("TaskMessagesResponse");
 
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/tasks/draft-prompt",
-    tags: ["Tasks"],
-    summary: "Draft an agent prompt from task title and description",
-    operationId: "draftTaskPrompt",
-    request: { body: { required: true, content: { "application/json": { schema: draftTaskPromptSchema } } } },
-    responses: {
-      200: { description: "Generated prompt", content: { "application/json": { schema: draftTaskPromptResponseSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/tasks",
-    tags: ["Tasks"],
-    summary: "List all tasks",
-    operationId: "listTasks",
-    responses: { 200: { description: "Tasks", content: { "application/json": { schema: listTasksSchema } } } },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/tasks",
-    tags: ["Tasks"],
-    summary: "Create a task",
-    operationId: "createTask",
-    request: { body: { required: true, content: { "application/json": { schema: createTaskSchema } } } },
-    responses: {
-      201: { description: "Task created", content: { "application/json": { schema: taskSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/tasks/{taskId}",
-    tags: ["Tasks"],
-    summary: "Get a task",
-    operationId: "getTask",
-    request: { params: taskIdParam },
-    responses: {
-      200: { description: "Task", content: { "application/json": { schema: taskSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "put",
-    path: "/v1/tasks/{taskId}",
-    tags: ["Tasks"],
-    summary: "Update a task",
-    operationId: "updateTask",
-    request: { params: taskIdParam, body: { required: true, content: { "application/json": { schema: updateTaskSchema } } } },
-    responses: {
-      200: { description: "Task updated", content: { "application/json": { schema: taskSchema } } },
-      400: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "delete",
-    path: "/v1/tasks/{taskId}",
-    tags: ["Tasks"],
-    summary: "Delete a task",
-    operationId: "deleteTask",
-    request: { params: taskIdParam },
-    responses: {
-      204: { description: "Task deleted" },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "post",
-    path: "/v1/tasks/{taskId}/run",
-    tags: ["Tasks"],
-    summary: "Run a task now",
-    operationId: "runTask",
-    request: { params: taskIdParam },
-    responses: {
-      200: { description: "Task run", content: { "application/json": { schema: runTaskSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      409: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-      500: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/tasks/{taskId}/runs",
-    tags: ["Tasks"],
-    summary: "List task run history",
-    operationId: "listTaskRuns",
-    request: { params: taskIdParam },
-    responses: {
-      200: { description: "Task runs", content: { "application/json": { schema: listTaskRunsSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
-  app.openAPIRegistry.registerPath(createRoute({
-    method: "get",
-    path: "/v1/tasks/{taskId}/messages",
-    tags: ["Tasks"],
-    summary: "Get task chat messages",
-    operationId: "getTaskMessages",
-    request: { params: taskIdParam },
-    responses: {
-      200: { description: "Task chat messages", content: { "application/json": { schema: taskMessagesSchema } } },
-      404: { description: "Error", content: { "application/json": { schema: errorSchema } } },
-    },
-  }));
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "draftTaskPrompt",
+      path: "/v1/tasks/draft-prompt",
+      request: {
+        body: {
+          content: { "application/json": { schema: draftTaskPromptSchema } },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: draftTaskPromptResponseSchema },
+          },
+          description: "Generated prompt",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Draft an agent prompt from task title and description",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listTasks",
+      path: "/v1/tasks",
+      responses: {
+        200: {
+          content: { "application/json": { schema: listTasksSchema } },
+          description: "Tasks",
+        },
+      },
+      summary: "List all tasks",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createTask",
+      path: "/v1/tasks",
+      request: {
+        body: {
+          content: { "application/json": { schema: createTaskSchema } },
+          required: true,
+        },
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: taskSchema } },
+          description: "Task created",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Create a task",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getTask",
+      path: "/v1/tasks/{taskId}",
+      request: { params: taskIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: taskSchema } },
+          description: "Task",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get a task",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "updateTask",
+      path: "/v1/tasks/{taskId}",
+      request: {
+        body: {
+          content: { "application/json": { schema: updateTaskSchema } },
+          required: true,
+        },
+        params: taskIdParam,
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: taskSchema } },
+          description: "Task updated",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Update a task",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "deleteTask",
+      path: "/v1/tasks/{taskId}",
+      request: { params: taskIdParam },
+      responses: {
+        204: { description: "Task deleted" },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Delete a task",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "runTask",
+      path: "/v1/tasks/{taskId}/run",
+      request: { params: taskIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: runTaskSchema } },
+          description: "Task run",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Run a task now",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listTaskRuns",
+      path: "/v1/tasks/{taskId}/runs",
+      request: { params: taskIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: listTaskRunsSchema } },
+          description: "Task runs",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "List task run history",
+      tags: ["Tasks"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getTaskMessages",
+      path: "/v1/tasks/{taskId}/messages",
+      request: { params: taskIdParam },
+      responses: {
+        200: {
+          content: { "application/json": { schema: taskMessagesSchema } },
+          description: "Task chat messages",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get task chat messages",
+      tags: ["Tasks"],
+    })
+  );
 
   app.get("/v1/tasks", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
@@ -159,7 +286,10 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
       const prompt = await agent.draftTaskPrompt(body.title, body.description);
       return json<DraftTaskPromptResponse>({ prompt });
     } catch (error) {
-      if (error instanceof Error && error.message === "Task title is required.") {
+      if (
+        error instanceof Error &&
+        error.message === "Task title is required."
+      ) {
         return errorResponse(error.message, 400);
       }
       throw error;
@@ -173,8 +303,8 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
 
     try {
       const task = await taskService.create(orgId, body, body.profileId, {
-        orgRole: auth.orgRole,
         isPlatformAdmin: auth.isPlatformAdmin,
+        orgRole: auth.orgRole,
       });
       return json<TaskResponse>({ task }, 201);
     } catch (error) {
@@ -197,7 +327,10 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.get("/v1/tasks/:taskId", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const task = await taskService.get(decodeURIComponent(c.req.param("taskId")), orgId);
+    const task = await taskService.get(
+      decodeURIComponent(c.req.param("taskId")),
+      orgId
+    );
     if (!task) {
       return errorResponse("Task not found.", 404);
     }
@@ -212,7 +345,10 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
 
     try {
       const task = await taskService.update(taskId, orgId, body, {
-        access: { orgRole: auth.orgRole, isPlatformAdmin: auth.isPlatformAdmin },
+        access: {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          orgRole: auth.orgRole,
+        },
       });
       return json<TaskResponse>({ task });
     } catch (error) {
@@ -239,7 +375,7 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
     const orgId = requireActiveOrgIdFromContext(c);
     const deleted = await taskService.delete(
       decodeURIComponent(c.req.param("taskId")),
-      orgId,
+      orgId
     );
     if (!deleted) {
       return errorResponse("Task not found.", 404);
@@ -258,7 +394,12 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     if (task.status !== "in_progress") {
-      await taskService.update(taskId, orgId, { status: "in_progress" }, { triggerRun: false });
+      await taskService.update(
+        taskId,
+        orgId,
+        { status: "in_progress" },
+        { triggerRun: false }
+      );
     }
 
     const result = await agent.runTask(taskId);
@@ -303,8 +444,8 @@ export function registerTaskRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     return json<TaskMessagesResponse>({
-      sessionId: result.sessionId,
       messages: result.messages,
+      sessionId: result.sessionId,
     });
   });
 }

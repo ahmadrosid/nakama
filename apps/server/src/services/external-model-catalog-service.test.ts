@@ -36,7 +36,7 @@ describe("getExternalModelCatalog", () => {
     globalThis.fetch = async () => new Response("nope", { status: 502 });
 
     await expect(getExternalModelCatalog("openrouter")).rejects.toThrow(
-      "Failed to fetch model catalog (502)",
+      "Failed to fetch model catalog (502)"
     );
   });
 });

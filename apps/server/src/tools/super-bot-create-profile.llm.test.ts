@@ -11,29 +11,34 @@
  * Replay (default when cassette exists; CI-safe):
  *   bun test src/tools/super-bot-create-profile.llm.test.ts
  */
+
+import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "bun:test";
 import {
+  type ChatMessage,
   DEFAULT_BUNDLED_SKILL_NAMES,
   loadUserConfig,
-  readBundledSkillBody,
-  toLlmToolDefinition,
-  type ChatMessage,
   type ProviderInstance,
+  readBundledSkillBody,
   type ToolCall,
+  toLlmToolDefinition,
 } from "@nakama/core";
 import {
-  SUPER_BOT_SYSTEM_PROMPT,
-  SUPER_BOT_TOOL_AUTHORING_RULES,
   createInMemoryDatabaseAdapter,
   ensureBuiltinToolDefinitions,
+  SUPER_BOT_SYSTEM_PROMPT,
+  SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { createProviderForInstance } from "../providers/create";
 import { ProfileService } from "../services/profile-service";
 import { SuperBotSessionState } from "../services/super-bot-session-state";
-import { cassetteFilePath, loadCassette, withMswCassette } from "../testing/llm-msw-cassette";
+import {
+  cassetteFilePath,
+  loadCassette,
+  withMswCassette,
+} from "../testing/llm-msw-cassette";
 import { createSuperBotTools } from "./super-bot-tools";
 
 const cassetteName = "super-bot-create-profile";
@@ -64,7 +69,7 @@ afterEach(async () => {
   }
 
   if (tempConfigDir) {
-    await rm(tempConfigDir, { recursive: true, force: true });
+    await rm(tempConfigDir, { force: true, recursive: true });
     tempConfigDir = null;
   }
 });
@@ -72,8 +77,9 @@ afterEach(async () => {
 async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
   const configured =
-    config?.providers.find((provider) => provider.type === "deepseek" && provider.apiKey.trim()) ??
-    null;
+    config?.providers.find(
+      (provider) => provider.type === "deepseek" && provider.apiKey.trim()
+    ) ?? null;
 
   if (configured) {
     return configured;
@@ -85,30 +91,30 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   }
 
   return {
-    id: "env-deepseek",
-    type: "deepseek",
-    label: "DeepSeek",
     apiKey,
     createdAt: new Date().toISOString(),
+    id: "env-deepseek",
+    label: "DeepSeek",
+    type: "deepseek",
   };
 }
 
 async function seedDefaultBundledSkills(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
-  root: string,
+  root: string
 ): Promise<void> {
   const now = new Date().toISOString();
   for (const name of DEFAULT_BUNDLED_SKILL_NAMES) {
     await db.upsertSkill({
-      id: `skill_${name.replaceAll("-", "_")}`,
-      name,
+      createdAt: now,
+      createdBy: "bundled",
       description: `Bundled skill ${name}`,
-      sourcePath: join(root, "skills", name),
-      hasTool: false,
       disableModelInvocation: false,
       enabled: true,
-      createdBy: "bundled",
-      createdAt: now,
+      hasTool: false,
+      id: `skill_${name.replaceAll("-", "_")}`,
+      name,
+      sourcePath: join(root, "skills", name),
       updatedAt: now,
     });
   }
@@ -136,12 +142,14 @@ test(
 
     if (!existing && mode !== "record" && !instance) {
       throw new Error(
-        "Missing DeepSeek credentials to record super-bot-create-profile cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record.",
+        "Missing DeepSeek credentials to record super-bot-create-profile cassette. Set DEEPSEEK_API_KEY or configure a DeepSeek provider, then run with LLM_VCR_MODE=record."
       );
     }
 
     previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    tempConfigDir = await mkdtemp(join(tmpdir(), "nakama-super-bot-create-profile-"));
+    tempConfigDir = await mkdtemp(
+      join(tmpdir(), "nakama-super-bot-create-profile-")
+    );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
@@ -153,8 +161,10 @@ test(
     sessionState.beginTurn(SESSION_ID);
     const tools = createSuperBotTools(profileService, sessionState);
     const toolDefs = tools.map(toLlmToolDefinition);
-    const toolContext = { sessionId: SESSION_ID, orgId: ORG_ID };
-    const createProfileTool = tools.find((entry) => entry.name === "create_profile");
+    const toolContext = { orgId: ORG_ID, sessionId: SESSION_ID };
+    const createProfileTool = tools.find(
+      (entry) => entry.name === "create_profile"
+    );
     if (!createProfileTool) {
       throw new Error("create_profile tool missing");
     }
@@ -164,13 +174,13 @@ test(
       async () => {
         const liveProvider = createProviderForInstance(
           instance ?? {
-            id: "replay-deepseek",
-            type: "deepseek",
-            label: "DeepSeek",
             apiKey: "sk-replay-placeholder",
             createdAt: new Date().toISOString(),
+            id: "replay-deepseek",
+            label: "DeepSeek",
+            type: "deepseek",
           },
-          modelId,
+          modelId
         );
 
         if (!liveProvider) {
@@ -178,20 +188,22 @@ test(
         }
 
         const system = await buildSuperBotSystemPrompt();
-        const messages: ChatMessage[] = [{ role: "user", content: USER_ASK }];
+        const messages: ChatMessage[] = [{ content: USER_ASK, role: "user" }];
         let createCall: ToolCall | null = null;
         let confirmed = false;
 
         for (let turn = 0; turn < MAX_TURNS; turn += 1) {
           const result = await liveProvider.generateChat({
-            system,
             messages,
+            system,
             tools: toolDefs,
           });
 
           messages.push(result.assistantMessage);
 
-          const found = result.toolCalls?.find((call) => call.name === "create_profile");
+          const found = result.toolCalls?.find(
+            (call) => call.name === "create_profile"
+          );
           if (found) {
             createCall = found;
             break;
@@ -204,10 +216,10 @@ test(
                 ? await tool.run(call.arguments, toolContext)
                 : { error: `Unknown tool: ${call.name}` };
               messages.push({
+                content: JSON.stringify(output),
+                name: call.name,
                 role: "tool",
                 toolCallId: call.id,
-                name: call.name,
-                content: JSON.stringify(output),
               });
             }
             continue;
@@ -216,7 +228,7 @@ test(
           // Confirm-first skill drafts in chat before create_profile.
           if (!confirmed) {
             confirmed = true;
-            messages.push({ role: "user", content: "yes" });
+            messages.push({ content: "yes", role: "user" });
             continue;
           }
 
@@ -238,7 +250,9 @@ test(
         expect(typeof soul["INSTRUCTIONS.md"]).toBe("string");
         expect(String(soul["SOUL.md"]).trim().length).toBeGreaterThan(0);
         expect(String(soul["STYLE.md"]).trim().length).toBeGreaterThan(0);
-        expect(String(soul["INSTRUCTIONS.md"]).trim().length).toBeGreaterThan(0);
+        expect(String(soul["INSTRUCTIONS.md"]).trim().length).toBeGreaterThan(
+          0
+        );
         if ("MEMORY.md" in soul) {
           expect(String(soul["MEMORY.md"] ?? "").trim()).toBe("");
         }
@@ -258,20 +272,33 @@ test(
         expect(created.profile.isSuper).toBe(false);
         expect(created.profile.systemPrompt.trim().length).toBeGreaterThan(0);
 
-        const assignedToolNames = created.profile.tools.map((tool) => tool.name);
+        const assignedToolNames = created.profile.tools.map(
+          (tool) => tool.name
+        );
         for (const toolName of DEFAULT_TOOL_NAMES) {
           expect(assignedToolNames).toContain(toolName);
         }
 
-        const assignedSkillNames = created.profile.skills.map((skill) => skill.name);
+        const assignedSkillNames = created.profile.skills.map(
+          (skill) => skill.name
+        );
         for (const skillName of DEFAULT_BUNDLED_SKILL_NAMES) {
           expect(assignedSkillNames).toContain(skillName);
         }
 
-        const soulDir = join(tempConfigDir!, "orgs", ORG_ID, "profiles", created.profile.id);
+        const soulDir = join(
+          tempConfigDir!,
+          "orgs",
+          ORG_ID,
+          "profiles",
+          created.profile.id
+        );
         const soulMd = await readFile(join(soulDir, "SOUL.md"), "utf8");
         const styleMd = await readFile(join(soulDir, "STYLE.md"), "utf8");
-        const instructionsMd = await readFile(join(soulDir, "INSTRUCTIONS.md"), "utf8");
+        const instructionsMd = await readFile(
+          join(soulDir, "INSTRUCTIONS.md"),
+          "utf8"
+        );
         const memoryMd = await readFile(join(soulDir, "MEMORY.md"), "utf8");
 
         expect(soulMd.trim().length).toBeGreaterThan(0);
@@ -282,8 +309,8 @@ test(
         expect(styleMd).toBe(String(soul["STYLE.md"]));
         expect(instructionsMd).toBe(String(soul["INSTRUCTIONS.md"]));
       },
-      { url: deepseekChatCompletionsUrl },
+      { url: deepseekChatCompletionsUrl }
     );
   },
-  { timeout: 180_000 },
+  { timeout: 180_000 }
 );

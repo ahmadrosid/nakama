@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { NakamaApiError } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
-  seedOrgDefaultProfile,
   type DatabaseAdapter,
+  seedOrgDefaultProfile,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillSuggestionService } from "./skill-suggestion-service";
@@ -27,15 +27,15 @@ async function seedOrg(
   options: {
     orgSkillsWriteApproval?: boolean;
     profileSkillsWriteApproval?: boolean | null;
-  } = {},
+  } = {}
 ) {
   const now = new Date().toISOString();
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Test Org",
-    slug: "test-org",
     skillsWriteApproval: options.orgSkillsWriteApproval ?? false,
-    createdAt: now,
+    slug: "test-org",
     updatedAt: now,
   });
   const profile = await seedOrgDefaultProfile(db, ORG_ID);
@@ -53,7 +53,7 @@ function buildServices(db: DatabaseAdapter) {
   const skills = new SkillsService(db);
   const proposals = new SkillProposalService(db, skills);
   const suggestions = new SkillSuggestionService(db, skills, proposals);
-  return { skills, proposals, suggestions };
+  return { proposals, skills, suggestions };
 }
 
 describe("SkillSuggestionService", () => {
@@ -75,10 +75,14 @@ describe("SkillSuggestionService", () => {
 
     const created = await suggestions.createSuggestion({
       orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
       profileId: profile.id,
-      sessionId: "session_1",
       proposedByUserId: "user_1",
-      outcome: { action: "create", name: "deploy-notes", content: sampleSkillMarkdown },
+      sessionId: "session_1",
     });
 
     expect(created.status).toBe("pending");
@@ -86,7 +90,9 @@ describe("SkillSuggestionService", () => {
     expect(created.source).toBe("post_turn_review");
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(false);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      false
+    );
 
     const rows = await suggestions.listSuggestions(ORG_ID);
     expect(rows).toHaveLength(1);
@@ -100,17 +106,27 @@ describe("SkillSuggestionService", () => {
 
     const created = await suggestions.createSuggestion({
       orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
       profileId: profile.id,
-      outcome: { action: "create", name: "deploy-notes", content: sampleSkillMarkdown },
     });
 
-    const result = await suggestions.applySuggestion(ORG_ID, created.id, "admin_user");
+    const result = await suggestions.applySuggestion(
+      ORG_ID,
+      created.id,
+      "admin_user"
+    );
     expect(result.outcome).toBe("applied");
     expect(result.suggestion.status).toBe("applied");
     expect(result.suggestion.appliedAt).toBeTruthy();
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(true);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      true
+    );
   });
 
   test("apply is idempotent when suggestion is already applied", async () => {
@@ -120,14 +136,26 @@ describe("SkillSuggestionService", () => {
 
     const created = await suggestions.createSuggestion({
       orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
       profileId: profile.id,
-      outcome: { action: "create", name: "deploy-notes", content: sampleSkillMarkdown },
     });
 
-    const first = await suggestions.applySuggestion(ORG_ID, created.id, "admin_user");
+    const first = await suggestions.applySuggestion(
+      ORG_ID,
+      created.id,
+      "admin_user"
+    );
     expect(first.outcome).toBe("applied");
 
-    const second = await suggestions.applySuggestion(ORG_ID, created.id, "admin_user");
+    const second = await suggestions.applySuggestion(
+      ORG_ID,
+      created.id,
+      "admin_user"
+    );
     expect(second.outcome).toBe("already_applied");
   });
 
@@ -138,24 +166,36 @@ describe("SkillSuggestionService", () => {
 
     const created = await suggestions.createSuggestion({
       orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
       profileId: profile.id,
       sessionId: "session_1",
-      outcome: { action: "create", name: "deploy-notes", content: sampleSkillMarkdown },
     });
 
     // Gate flips on after the suggestion was created but before it's applied.
     const org = await db.getOrganizationById(ORG_ID);
     await db.upsertOrganization({ ...org!, skillsWriteApproval: true });
 
-    const result = await suggestions.applySuggestion(ORG_ID, created.id, "admin_user");
+    const result = await suggestions.applySuggestion(
+      ORG_ID,
+      created.id,
+      "admin_user"
+    );
     expect(result.outcome).toBe("staged_as_proposal");
     expect(result.proposalId).toBeTruthy();
     expect(result.suggestion.status).toBe("applied");
 
     const listed = await skills.listSkills();
-    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(false);
+    expect(listed.skills.some((skill) => skill.name === "deploy-notes")).toBe(
+      false
+    );
 
-    const { proposals: pending } = await proposals.listProposals(ORG_ID, { profileId: profile.id });
+    const { proposals: pending } = await proposals.listProposals(ORG_ID, {
+      profileId: profile.id,
+    });
     expect(pending).toHaveLength(1);
     expect(pending[0]?.id).toBe(result.proposalId!);
     expect(pending[0]?.status).toBe("pending");
@@ -169,25 +209,25 @@ describe("SkillSuggestionService", () => {
     // Directly persist a suggestion targeting a bundled skill (bypassing the
     // createSuggestion guard) to exercise the apply-time guard too.
     await db.createSkillSuggestion({
+      action: "patch",
+      appliedAt: null,
+      content: null,
+      createdAt: new Date().toISOString(),
       id: "sksug_bundled",
       orgId: ORG_ID,
-      profileId: profile.id,
-      sessionId: null,
-      proposedByUserId: null,
-      action: "patch",
-      skillName: "manage-skills",
-      content: null,
-      patchOldString: "old",
       patchNewString: "new",
-      status: "pending",
+      patchOldString: "old",
+      profileId: profile.id,
+      proposedByUserId: null,
+      sessionId: null,
+      skillName: "manage-skills",
       source: "post_turn_review",
+      status: "pending",
       warnings: null,
-      createdAt: new Date().toISOString(),
-      appliedAt: null,
     });
 
     await expect(
-      suggestions.applySuggestion(ORG_ID, "sksug_bundled", "admin_user"),
+      suggestions.applySuggestion(ORG_ID, "sksug_bundled", "admin_user")
     ).rejects.toThrow(/bundled/i);
   });
 
@@ -199,9 +239,14 @@ describe("SkillSuggestionService", () => {
     await expect(
       suggestions.createSuggestion({
         orgId: ORG_ID,
+        outcome: {
+          action: "patch",
+          name: "manage-skills",
+          newString: "b",
+          oldString: "a",
+        },
         profileId: profile.id,
-        outcome: { action: "patch", name: "manage-skills", oldString: "a", newString: "b" },
-      }),
+      })
     ).rejects.toThrow(/bundled/i);
   });
 
@@ -212,15 +257,19 @@ describe("SkillSuggestionService", () => {
 
     const created = await suggestions.createSuggestion({
       orgId: ORG_ID,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
       profileId: profile.id,
-      outcome: { action: "create", name: "deploy-notes", content: sampleSkillMarkdown },
     });
 
     await expect(
-      suggestions.applySuggestion("org_other", created.id, "admin_user"),
+      suggestions.applySuggestion("org_other", created.id, "admin_user")
     ).rejects.toBeInstanceOf(NakamaApiError);
     await expect(
-      suggestions.applySuggestion("org_other", created.id, "admin_user"),
+      suggestions.applySuggestion("org_other", created.id, "admin_user")
     ).rejects.toMatchObject({ status: 404 });
   });
 });

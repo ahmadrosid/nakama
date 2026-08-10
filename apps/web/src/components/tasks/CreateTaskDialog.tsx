@@ -1,5 +1,6 @@
 import type { ProfileSummary } from "@nakama/core/contract";
-import { SparklesIcon } from "lucide-react";
+import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
+import { SparklesIcon } from "hugeicons-react";
 import { useReducer } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -22,21 +23,20 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useDraftTaskPromptMutation } from "@/hooks/use-tasks";
-import { normalizeTaskPrompt } from "@nakama/core/normalize-task-prompt";
 import { formatError } from "@/lib/client";
 import { resolveInitialProfileId } from "@/lib/profiles";
 
 interface CreateTaskDialogProps {
-  open: boolean;
-  profiles: ProfileSummary[];
   busy: boolean;
-  onOpenChange: (open: boolean) => void;
   onCreate: (input: {
     title: string;
     description: string;
     prompt: string;
     profileId: string;
   }) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  profiles: ProfileSummary[];
 }
 
 type CreateTaskFormState = {
@@ -51,19 +51,21 @@ type CreateTaskFormAction =
   | { type: "reset"; profiles: ProfileSummary[] }
   | { type: "patch"; values: Partial<CreateTaskFormState> };
 
-function createInitialFormState(profiles: ProfileSummary[]): CreateTaskFormState {
+function createInitialFormState(
+  profiles: ProfileSummary[]
+): CreateTaskFormState {
   return {
-    title: "",
     description: "",
-    prompt: "",
-    profileId: resolveInitialProfileId(profiles),
     generateError: null,
+    profileId: resolveInitialProfileId(profiles),
+    prompt: "",
+    title: "",
   };
 }
 
 function createTaskFormReducer(
   state: CreateTaskFormState,
-  action: CreateTaskFormAction,
+  action: CreateTaskFormAction
 ): CreateTaskFormState {
   switch (action.type) {
     case "reset":
@@ -83,13 +85,13 @@ export function CreateTaskDialog({
   onCreate,
 }: CreateTaskDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <CreateTaskDialogContent
-          profiles={profiles}
           busy={busy}
-          onOpenChange={onOpenChange}
           onCreate={onCreate}
+          onOpenChange={onOpenChange}
+          profiles={profiles}
         />
       ) : null}
     </Dialog>
@@ -110,19 +112,19 @@ function CreateTaskDialogContent({
   const [form, dispatch] = useReducer(
     createTaskFormReducer,
     profiles,
-    createInitialFormState,
+    createInitialFormState
   );
   const draftPromptMutation = useDraftTaskPromptMutation();
   const generating = draftPromptMutation.isPending;
 
   async function handleSubmit() {
     await onCreate({
-      title: form.title,
       description: form.description,
-      prompt: form.prompt,
       profileId: form.profileId,
+      prompt: form.prompt,
+      title: form.title,
     });
-    dispatch({ type: "reset", profiles });
+    dispatch({ profiles, type: "reset" });
     onOpenChange(false);
   }
 
@@ -137,12 +139,18 @@ function CreateTaskDialogContent({
 
     try {
       const generated = await draftPromptMutation.mutateAsync({
-        title: trimmedTitle,
         description: form.description.trim() || undefined,
+        title: trimmedTitle,
       });
-      dispatch({ type: "patch", values: { prompt: normalizeTaskPrompt(generated) } });
+      dispatch({
+        type: "patch",
+        values: { prompt: normalizeTaskPrompt(generated) },
+      });
     } catch (error) {
-      dispatch({ type: "patch", values: { generateError: formatError(error) } });
+      dispatch({
+        type: "patch",
+        values: { generateError: formatError(error) },
+      });
     }
   }
 
@@ -151,89 +159,103 @@ function CreateTaskDialogContent({
       <DialogHeader>
         <DialogTitle>Create task</DialogTitle>
         <DialogDescription>
-          Add a work item for an agent profile. Move it to To Do and press play on the card to
-          run.
+          Add a work item for an agent profile. Move it to To Do and press play
+          on the card to run.
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-4">
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="task-title">
+          <label className="block font-medium text-sm" htmlFor="task-title">
             Title
           </label>
           <Input
             id="task-title"
-            value={form.title}
             onChange={(event) =>
               dispatch({ type: "patch", values: { title: event.target.value } })
             }
             placeholder="Research competitors"
+            value={form.title}
           />
         </div>
 
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="task-description">
+          <label
+            className="block font-medium text-sm"
+            htmlFor="task-description"
+          >
             Description
           </label>
           <Input
             id="task-description"
-            value={form.description}
             onChange={(event) =>
-              dispatch({ type: "patch", values: { description: event.target.value } })
+              dispatch({
+                type: "patch",
+                values: { description: event.target.value },
+              })
             }
             placeholder="Optional context for the board"
+            value={form.description}
           />
         </div>
 
         <div className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium" htmlFor="task-prompt">
+            <label className="block font-medium text-sm" htmlFor="task-prompt">
               Agent prompt
             </label>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
               disabled={generating || !form.title.trim()}
               onClick={() => void handleGeneratePrompt()}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               {generating ? (
                 <Spinner className="size-3.5" />
               ) : (
-                <SparklesIcon className="size-3.5" aria-hidden />
+                <SparklesIcon aria-hidden className="size-3.5" />
               )}
               Generate
             </Button>
           </div>
           <Textarea
             id="task-prompt"
-            value={form.prompt}
             onChange={(event) =>
-              dispatch({ type: "patch", values: { prompt: event.target.value } })
+              dispatch({
+                type: "patch",
+                values: { prompt: event.target.value },
+              })
             }
             placeholder="Find the top 5 competitors and summarize their positioning"
             rows={4}
+            value={form.prompt}
           />
           {form.generateError ? (
-            <p className="text-sm text-red-700 dark:text-red-300">{form.generateError}</p>
+            <p className="text-red-700 text-sm dark:text-red-300">
+              {form.generateError}
+            </p>
           ) : null}
         </div>
 
         <div className="space-y-2.5">
-          <label className="block text-sm font-medium" htmlFor="task-profile">
+          <label className="block font-medium text-sm" htmlFor="task-profile">
             Profile
           </label>
           <Select
-            value={form.profileId}
             onValueChange={(value) => {
               if (value) {
                 dispatch({ type: "patch", values: { profileId: value } });
               }
             }}
+            value={form.profileId}
           >
             <SelectTrigger id="task-profile">
               <SelectValue placeholder="Select profile">
-                {profiles.find((profile) => profile.id === form.profileId)?.name}
+                {
+                  profiles.find((profile) => profile.id === form.profileId)
+                    ?.name
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -251,13 +273,19 @@ function CreateTaskDialogContent({
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <Button
+          onClick={() => onOpenChange(false)}
+          type="button"
+          variant="outline"
+        >
           Cancel
         </Button>
         <Button
-          type="button"
-          disabled={busy || generating || !form.title.trim() || !form.prompt.trim()}
+          disabled={
+            busy || generating || !form.title.trim() || !form.prompt.trim()
+          }
           onClick={() => void handleSubmit()}
+          type="button"
         >
           Create task
         </Button>

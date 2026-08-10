@@ -10,9 +10,15 @@ import {
 } from "./document-content";
 
 const FIXTURES = join(import.meta.dir, "__fixtures__");
-const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString("base64");
-const SAMPLE_DOCX_B64 = readFileSync(join(FIXTURES, "sample.docx")).toString("base64");
-const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString("base64");
+const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString(
+  "base64"
+);
+const SAMPLE_DOCX_B64 = readFileSync(join(FIXTURES, "sample.docx")).toString(
+  "base64"
+);
+const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString(
+  "base64"
+);
 
 const DOCX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -21,37 +27,51 @@ const XLSX_MEDIA_TYPE =
 
 describe("providerSupportsNativeDocument", () => {
   test("anthropic supports pdf and text documents", () => {
-    expect(providerSupportsNativeDocument("anthropic", "application/pdf")).toBe(true);
-    expect(providerSupportsNativeDocument("anthropic", "text/plain")).toBe(true);
+    expect(providerSupportsNativeDocument("anthropic", "application/pdf")).toBe(
+      true
+    );
+    expect(providerSupportsNativeDocument("anthropic", "text/plain")).toBe(
+      true
+    );
   });
 
   test("openai supports docx", () => {
     expect(
       providerSupportsNativeDocument(
         "openai",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      )
     ).toBe(true);
   });
 
   test("openrouter supports the same native documents as openai", () => {
-    expect(providerSupportsNativeDocument("openrouter", "application/pdf")).toBe(true);
+    expect(
+      providerSupportsNativeDocument("openrouter", "application/pdf")
+    ).toBe(true);
     expect(
       providerSupportsNativeDocument(
         "openrouter",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      )
     ).toBe(true);
   });
 
   test("cerebras does not advertise native document support", () => {
-    expect(providerSupportsNativeDocument("cerebras", "application/pdf")).toBe(false);
-    expect(providerSupportsNativeDocument("cerebras", "text/plain")).toBe(false);
-    expect(providerSupportsNativeDocument("fireworks", "application/pdf")).toBe(false);
+    expect(providerSupportsNativeDocument("cerebras", "application/pdf")).toBe(
+      false
+    );
+    expect(providerSupportsNativeDocument("cerebras", "text/plain")).toBe(
+      false
+    );
+    expect(providerSupportsNativeDocument("fireworks", "application/pdf")).toBe(
+      false
+    );
   });
 
   test("gemini supports pdf and text documents", () => {
-    expect(providerSupportsNativeDocument("gemini", "application/pdf")).toBe(true);
+    expect(providerSupportsNativeDocument("gemini", "application/pdf")).toBe(
+      true
+    );
     expect(providerSupportsNativeDocument("gemini", "text/plain")).toBe(true);
   });
 });
@@ -72,39 +92,42 @@ describe("resolveDocumentPartForProvider", () => {
   test("returns native document part when supported", async () => {
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data: "JVBERi0=",
         filename: "report.pdf",
         mediaType: "application/pdf",
-        data: "JVBERi0=",
+        type: "document",
       },
-      "anthropic",
+      "anthropic"
     );
 
     expect(result).toEqual({
-      type: "document",
+      data: "JVBERi0=",
       filename: "report.pdf",
       mediaType: "application/pdf",
-      data: "JVBERi0=",
+      type: "document",
     });
   });
 
   test("uses registered parser when native support is unavailable", async () => {
     clearDocumentTextParsers();
-    registerDocumentTextParser("application/octet-stream", () => "parsed file text");
+    registerDocumentTextParser(
+      "application/octet-stream",
+      () => "parsed file text"
+    );
 
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data: "YWJj",
         filename: "data.bin",
         mediaType: "application/octet-stream",
-        data: "YWJj",
+        type: "document",
       },
-      "openai",
+      "openai"
     );
 
     expect(result).toEqual({
-      type: "text",
       text: "[File: data.bin]\nparsed file text",
+      type: "text",
     });
 
     clearDocumentTextParsers();
@@ -116,25 +139,27 @@ describe("resolveDocumentPartForProvider", () => {
     await expect(
       resolveDocumentPartForProvider(
         {
-          type: "document",
+          data: "YWJj",
           filename: "data.bin",
           mediaType: "application/octet-stream",
-          data: "YWJj",
+          type: "document",
         },
-        "openai",
-      ),
-    ).rejects.toThrow('Provider "openai" does not support application/octet-stream');
+        "openai"
+      )
+    ).rejects.toThrow(
+      'Provider "openai" does not support application/octet-stream'
+    );
   });
 
   test("parses pdf to text for providers without native document support", async () => {
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data: SAMPLE_PDF_B64,
         filename: "report.pdf",
         mediaType: "application/pdf",
-        data: SAMPLE_PDF_B64,
+        type: "document",
       },
-      "openai_compatible",
+      "openai_compatible"
     );
 
     expect(result.type).toBe("text");
@@ -145,12 +170,12 @@ describe("resolveDocumentPartForProvider", () => {
   test("parses docx to text for providers without native document support", async () => {
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data: SAMPLE_DOCX_B64,
         filename: "notes.docx",
         mediaType: DOCX_MEDIA_TYPE,
-        data: SAMPLE_DOCX_B64,
+        type: "document",
       },
-      "cerebras",
+      "cerebras"
     );
 
     expect(result.type).toBe("text");
@@ -161,12 +186,12 @@ describe("resolveDocumentPartForProvider", () => {
   test("always converts excel to text even for native-capable providers", async () => {
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data: SAMPLE_XLSX_B64,
         filename: "budget.xlsx",
         mediaType: XLSX_MEDIA_TYPE,
-        data: SAMPLE_XLSX_B64,
+        type: "document",
       },
-      "anthropic",
+      "anthropic"
     );
 
     expect(result.type).toBe("text");
@@ -180,17 +205,17 @@ describe("resolveDocumentPartForProvider", () => {
 
     const result = await resolveDocumentPartForProvider(
       {
-        type: "document",
+        data,
         filename: "Pasted text (3 words).txt",
         mediaType: "text/plain",
-        data,
+        type: "document",
       },
-      "opencode_go",
+      "opencode_go"
     );
 
     expect(result).toEqual({
-      type: "text",
       text: "[File: Pasted text (3 words).txt]\nalpha beta gamma",
+      type: "text",
     });
   });
 });

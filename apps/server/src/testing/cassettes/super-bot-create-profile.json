@@ -43,9 +43,7 @@
                   "description": "Profile id to fetch."
                 }
               },
-              "required": [
-                "profileId"
-              ],
+              "required": ["profileId"],
               "additionalProperties": false
             }
           }
@@ -98,9 +96,7 @@
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "additionalProperties": false
             }
           }
@@ -122,10 +118,7 @@
                   "description": "Tool id to assign."
                 }
               },
-              "required": [
-                "profileId",
-                "toolId"
-              ],
+              "required": ["profileId", "toolId"],
               "additionalProperties": false
             }
           }
@@ -168,10 +161,7 @@
                   "additionalProperties": true
                 }
               },
-              "required": [
-                "name",
-                "description"
-              ],
+              "required": ["name", "description"],
               "additionalProperties": false
             }
           }
@@ -258,9 +248,7 @@
                       "description": "Profile id to fetch."
                     }
                   },
-                  "required": [
-                    "profileId"
-                  ],
+                  "required": ["profileId"],
                   "additionalProperties": false
                 }
               }
@@ -313,9 +301,7 @@
                       "additionalProperties": false
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false
                 }
               }
@@ -337,10 +323,7 @@
                       "description": "Tool id to assign."
                     }
                   },
-                  "required": [
-                    "profileId",
-                    "toolId"
-                  ],
+                  "required": ["profileId", "toolId"],
                   "additionalProperties": false
                 }
               }
@@ -383,10 +366,7 @@
                       "additionalProperties": true
                     }
                   },
-                  "required": [
-                    "name",
-                    "description"
-                  ],
+                  "required": ["name", "description"],
                   "additionalProperties": false
                 }
               }
@@ -481,9 +461,7 @@
                       "description": "Profile id to fetch."
                     }
                   },
-                  "required": [
-                    "profileId"
-                  ],
+                  "required": ["profileId"],
                   "additionalProperties": false
                 }
               }
@@ -536,9 +514,7 @@
                       "additionalProperties": false
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false
                 }
               }
@@ -560,10 +536,7 @@
                       "description": "Tool id to assign."
                     }
                   },
-                  "required": [
-                    "profileId",
-                    "toolId"
-                  ],
+                  "required": ["profileId", "toolId"],
                   "additionalProperties": false
                 }
               }
@@ -606,10 +579,7 @@
                       "additionalProperties": true
                     }
                   },
-                  "required": [
-                    "name",
-                    "description"
-                  ],
+                  "required": ["name", "description"],
                   "additionalProperties": false
                 }
               }

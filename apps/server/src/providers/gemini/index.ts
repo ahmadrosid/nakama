@@ -1,27 +1,36 @@
-import { ApiError, GoogleGenAI, type GenerateContentResponse, type Part } from "@google/genai";
+import {
+  ApiError,
+  type GenerateContentResponse,
+  GoogleGenAI,
+  type Part,
+} from "@google/genai";
 import type {
   ChatCompletionResult,
   GenerateChatInput,
-  GenerateTextResult,
   GenerateTextInput,
+  GenerateTextResult,
   ProviderClient,
   StreamChatHandlers,
 } from "@nakama/core";
+import {
+  buildChatCompletionResult,
+  extractGeminiTokenUsage,
+  notifyToolInputDelta,
+} from "../shared";
 import { buildGeminiChatConfig, buildGeminiGenerateConfig } from "./config";
 import {
   extractTextAndThinkingFromParts,
   parseGeminiFunctionCalls,
   toGeminiContents,
 } from "./messages";
-import { buildChatCompletionResult, extractGeminiTokenUsage, notifyToolInputDelta } from "../shared";
 
 const PROVIDER_LABEL = "Gemini";
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 export interface GeminiProviderOptions {
   apiKey: string;
-  model?: string;
   baseUrl?: string;
+  model?: string;
 }
 
 function createGeminiClient(apiKey: string, baseUrl?: string): GoogleGenAI {
@@ -35,7 +44,7 @@ function createGeminiClient(apiKey: string, baseUrl?: string): GoogleGenAI {
 function formatGeminiError(error: unknown): Error {
   if (error instanceof ApiError) {
     return new Error(
-      `${PROVIDER_LABEL} request failed (${error.status}): ${error.message}`,
+      `${PROVIDER_LABEL} request failed (${error.status}): ${error.message}`
     );
   }
 
@@ -55,7 +64,7 @@ async function withGeminiError<T>(run: () => Promise<T>): Promise<T> {
 }
 
 function parseGenerateContentResponse(
-  response: GenerateContentResponse,
+  response: GenerateContentResponse
 ): ChatCompletionResult {
   const parts = response.candidates?.[0]?.content?.parts;
   const { content, thinking } = extractTextAndThinkingFromParts(parts);
@@ -67,25 +76,25 @@ function parseGenerateContentResponse(
 
   return buildChatCompletionResult({
     content,
-    toolCalls,
     thinking,
+    toolCalls,
     usage: extractGeminiTokenUsage(response.usageMetadata),
   });
 }
 
 interface PendingFunctionCall {
+  argsJson: string;
   id: string;
   name: string;
-  argsJson: string;
 }
 
 function mergePendingFunctionCall(
   pending: Map<string, PendingFunctionCall>,
   call: { id?: string; name?: string; args?: Record<string, unknown> },
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): void {
   const id = call.id?.trim() || "pending";
-  const current = pending.get(id) ?? { id, name: "", argsJson: "{}" };
+  const current = pending.get(id) ?? { argsJson: "{}", id, name: "" };
 
   if (call.name) {
     current.name = call.name;
@@ -100,8 +109,8 @@ function mergePendingFunctionCall(
     current.argsJson = nextJson;
     notifyToolInputDelta(
       handlers,
-      { id: current.id, name: current.name, arguments: current.argsJson },
-      delta,
+      { arguments: current.argsJson, id: current.id, name: current.name },
+      delta
     );
   }
 
@@ -109,18 +118,18 @@ function mergePendingFunctionCall(
 }
 
 function finalizePendingFunctionCalls(
-  pending: Map<string, PendingFunctionCall>,
+  pending: Map<string, PendingFunctionCall>
 ): ReturnType<typeof parseGeminiFunctionCalls> {
   return [...pending.values()].flatMap((call) => {
-    if (!call.id || !call.name) {
+    if (!(call.id && call.name)) {
       return [];
     }
 
     return parseGeminiFunctionCalls([
       {
+        args: JSON.parse(call.argsJson) as Record<string, unknown>,
         id: call.id,
         name: call.name,
-        args: JSON.parse(call.argsJson) as Record<string, unknown>,
       },
     ]);
   });
@@ -129,7 +138,7 @@ function finalizePendingFunctionCalls(
 function accumulateStreamParts(
   parts: Part[] | undefined,
   state: { content: string; thinking: string },
-  handlers?: StreamChatHandlers,
+  handlers?: StreamChatHandlers
 ): void {
   if (!parts?.length) {
     return;
@@ -141,9 +150,9 @@ function accumulateStreamParts(
     if (!text) {
       if (part.functionCall) {
         handlers?.onToolStart?.({
-          toolCallId: part.functionCall.id ?? "pending",
-          tool: part.functionCall.name ?? "",
           input: (part.functionCall.args ?? {}) as Record<string, unknown>,
+          tool: part.functionCall.name ?? "",
+          toolCallId: part.functionCall.id ?? "pending",
         });
       }
 
@@ -162,7 +171,7 @@ function accumulateStreamParts(
 
 async function readGeminiStream(
   stream: AsyncGenerator<GenerateContentResponse>,
-  handlers: StreamChatHandlers,
+  handlers: StreamChatHandlers
 ): Promise<ChatCompletionResult> {
   const state = { content: "", thinking: "" };
   const pending = new Map<string, PendingFunctionCall>();
@@ -187,20 +196,30 @@ async function readGeminiStream(
 
   return buildChatCompletionResult({
     content: state.content,
-    toolCalls,
     thinking,
+    toolCalls,
     usage,
   });
 }
 
 export function createGeminiProvider(
-  options: GeminiProviderOptions,
+  options: GeminiProviderOptions
 ): ProviderClient {
   const model = options.model ?? DEFAULT_MODEL;
   const client = createGeminiClient(options.apiKey, options.baseUrl);
 
   return {
-    name: "gemini",
+    generateChat(input: GenerateChatInput) {
+      return withGeminiError(async () => {
+        const response = await client.models.generateContent({
+          config: buildGeminiChatConfig(input, input.system, model),
+          contents: await toGeminiContents(input.messages),
+          model,
+        });
+
+        return parseGenerateContentResponse(response);
+      });
+    },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -209,13 +228,13 @@ export function createGeminiProvider(
 
       return withGeminiError(async () => {
         const response = await client.models.generateContent({
-          model,
-          contents: input.prompt,
           config: buildGeminiGenerateConfig({
-            system,
             model,
             responseMimeType: useJson ? "application/json" : undefined,
+            system,
           }),
+          contents: input.prompt,
+          model,
         });
 
         const content = response.text?.trim();
@@ -231,23 +250,13 @@ export function createGeminiProvider(
         } satisfies GenerateTextResult;
       });
     },
-    generateChat(input: GenerateChatInput) {
-      return withGeminiError(async () => {
-        const response = await client.models.generateContent({
-          model,
-          contents: await toGeminiContents(input.messages),
-          config: buildGeminiChatConfig(input, input.system, model),
-        });
-
-        return parseGenerateContentResponse(response);
-      });
-    },
+    name: "gemini",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withGeminiError(async () => {
         const stream = await client.models.generateContentStream({
-          model,
-          contents: await toGeminiContents(input.messages),
           config: buildGeminiChatConfig(input, input.system, model),
+          contents: await toGeminiContents(input.messages),
+          model,
         });
 
         return readGeminiStream(stream, handlers);

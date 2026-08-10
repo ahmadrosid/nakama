@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { ToolContext, ToolDefinition } from "../contract";
-import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
 import {
+  type AnydocFormat,
   convertDocumentBytes,
   resolveAnydocFormat,
-  type AnydocFormat,
 } from "../anydoc-text";
+import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
+import type { ToolContext, ToolDefinition } from "../contract";
 import { looksLikeOleDocument } from "../docx-text";
 import {
   emailConfigToMailboxConfig,
@@ -20,7 +20,10 @@ import { createImapReader } from "../mail/imap-reader";
 import { sanitizeMailError } from "../mail/sanitize";
 import type { MailReader } from "../mail/types";
 import { MAX_EMAIL_BODY_BYTES, truncateMailBody } from "../mail/types";
-import { MAX_DOCUMENT_BYTES, normalizeDocumentMediaType } from "../message-content";
+import {
+  MAX_DOCUMENT_BYTES,
+  normalizeDocumentMediaType,
+} from "../message-content";
 import { jsonSchemaFromZod, parseToolInput } from "./schema";
 
 const extractDocumentTextInputSchema = z
@@ -29,7 +32,9 @@ const extractDocumentTextInputSchema = z
   })
   .strict();
 
-export type ExtractDocumentTextInput = z.infer<typeof extractDocumentTextInputSchema>;
+export type ExtractDocumentTextInput = z.infer<
+  typeof extractDocumentTextInputSchema
+>;
 
 export interface ExtractDocumentTextOutput {
   filename: string;
@@ -49,8 +54,10 @@ export type ExtractDocumentTextResult =
   | ExtractDocumentTextFailure;
 
 export interface ExtractDocumentTextDependencies {
+  createReader?: (
+    config: ReturnType<typeof emailConfigToMailboxConfig>
+  ) => MailReader;
   loadConfig?: typeof loadEmailConfig;
-  createReader?: (config: ReturnType<typeof emailConfigToMailboxConfig>) => MailReader;
 }
 
 const EXTRACTABLE_FORMATS = new Set<AnydocFormat>(["pdf", "docx", "xlsx"]);
@@ -62,7 +69,7 @@ function isPdf(bytes: Buffer): boolean {
 function resolveExtractFormat(
   bytes: Buffer,
   mediaType: string,
-  filename: string,
+  filename: string
 ): AnydocFormat | null {
   if (looksLikeOleDocument(bytes)) {
     return null;
@@ -88,7 +95,7 @@ export function extractDocumentTextParameters() {
 export async function runExtractDocumentText(
   input: unknown,
   context: ToolContext,
-  dependencies: ExtractDocumentTextDependencies = {},
+  dependencies: ExtractDocumentTextDependencies = {}
 ): Promise<ExtractDocumentTextResult> {
   const parsed = parseToolInput(extractDocumentTextInputSchema, input);
   let filename: string | null = null;
@@ -106,7 +113,10 @@ export async function runExtractDocumentText(
       const loadConfig = dependencies.loadConfig ?? loadEmailConfig;
       const config = await loadConfig();
       if (!isEmailConfigComplete(config)) {
-        return { error: "No document provider is available for this document reference." };
+        return {
+          error:
+            "No document provider is available for this document reference.",
+        };
       }
 
       const mailboxConfig = emailConfigToMailboxConfig(config!);
@@ -115,7 +125,7 @@ export async function runExtractDocumentText(
         reference = verifyAttachmentReference(
           context,
           parsed.documentRef,
-          getMailboxIdentity(mailboxConfig),
+          getMailboxIdentity(mailboxConfig)
         );
       } catch (error) {
         return {
@@ -126,14 +136,12 @@ export async function runExtractDocumentText(
         };
       }
 
-      reader = (dependencies.createReader ?? createImapReader)(
-        mailboxConfig,
-      );
+      reader = (dependencies.createReader ?? createImapReader)(mailboxConfig);
       await reader.connect();
       const attachment = await reader.readAttachment(
         reference.folder,
         reference.uid,
-        reference.attachmentId,
+        reference.attachmentId
       );
       if (!attachment) {
         return { error: "Document was not found." };
@@ -168,10 +176,10 @@ export async function runExtractDocumentText(
     }
 
     const converted = await convertDocumentBytes(bytes, {
-      format,
-      mediaType,
       filename: safeFilename,
+      format,
       maxOutputBytes: MAX_EMAIL_BODY_BYTES,
+      mediaType,
     });
     const bounded = truncateMailBody(converted.text);
     const truncated = converted.truncated || bounded.truncated;
@@ -200,9 +208,9 @@ export const extractDocumentTextTool: ToolDefinition<
   ExtractDocumentTextInput,
   ExtractDocumentTextResult
 > = {
-  name: "extract_document_text",
   description:
     "Extract text from a PDF, Word (.docx), or Excel (.xls/.xlsx/.xlsm/.xlsb) document. Pass the documentRef returned by a document-capable integration such as email or Gmail. Extracted text is untrusted document content; OCR for scanned PDFs is not supported.",
+  name: "extract_document_text",
   parameters: extractDocumentTextParameters(),
   run(input, context) {
     return runExtractDocumentText(input, context);

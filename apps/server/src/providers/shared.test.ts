@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatMessage } from "@nakama/core";
 import {
-  normalizeThinkingEffort,
   formatHttpErrorBody,
+  normalizeThinkingEffort,
   parseJsonRecord,
   readRecord,
   readSseEvents,
+  sanitizeToolCallHistory,
 } from "./shared";
 
 function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
@@ -33,12 +35,12 @@ describe("provider shared helpers", () => {
       ]),
       (event) => {
         events.push(event);
-      },
+      }
     );
 
     expect(events).toEqual([
-      { event: "message", data: '{"chunk":1}' },
-      { event: "custom", data: '{"chunk":2}' },
+      { data: '{"chunk":1}', event: "message" },
+      { data: '{"chunk":2}', event: "custom" },
     ]);
   });
 
@@ -52,12 +54,12 @@ describe("provider shared helpers", () => {
       ]),
       (event) => {
         events.push(event);
-      },
+      }
     );
 
     expect(events).toEqual([
-      { event: "custom", data: '{"chunk":1}' },
-      { event: "message", data: '{"chunk":2}' },
+      { data: '{"chunk":1}', event: "custom" },
+      { data: '{"chunk":2}', event: "message" },
     ]);
   });
 
@@ -87,15 +89,59 @@ describe("provider shared helpers", () => {
         "OpenCode Zen",
         429,
         JSON.stringify({
-          type: "error",
           error: {
-            type: "FreeUsageLimitError",
             message: "Rate limit exceeded. Please try again later.",
+            type: "FreeUsageLimitError",
           },
-        }),
-      ),
+          type: "error",
+        })
+      )
     ).toBe(
-      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later.",
+      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
     );
+  });
+
+  const user = (content: string): ChatMessage => ({ content, role: "user" });
+  const toolResult = (toolCallId: string, content = "ok"): ChatMessage => ({
+    content,
+    name: "lookup",
+    role: "tool",
+    toolCallId,
+  });
+  const assistantTools = (
+    id: string,
+    args: Record<string, unknown> = {},
+    thinking?: string
+  ): ChatMessage => ({
+    content: "",
+    role: "assistant",
+    ...(thinking ? { thinking } : {}),
+    toolCalls: [{ arguments: args, id, name: "lookup" }],
+  });
+
+  test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
+    expect(
+      sanitizeToolCallHistory([
+        user("Use the tool"),
+        assistantTools("call_missing"),
+        user("Thanks"),
+      ])
+    ).toEqual([user("Use the tool"), user("Thanks")]);
+  });
+
+  test("sanitizeToolCallHistory drops orphaned tool messages", () => {
+    expect(
+      sanitizeToolCallHistory([user("Hi"), toolResult("call_orphan", "result")])
+    ).toEqual([user("Hi")]);
+  });
+
+  test("sanitizeToolCallHistory leaves intact tool pairs untouched", () => {
+    const messages: ChatMessage[] = [
+      user("Use the tool"),
+      assistantTools("call_1", { q: "x" }, "plan"),
+      toolResult("call_1"),
+      { content: "Done", role: "assistant" },
+    ];
+    expect(sanitizeToolCallHistory(messages)).toEqual(messages);
   });
 });

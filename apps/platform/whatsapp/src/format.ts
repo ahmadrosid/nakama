@@ -1,7 +1,7 @@
 import { formatClientError } from "@nakama/core/api-error";
 import type { AgentTodo } from "@nakama/core/contract";
 
-const WHATSAPP_MAX_MESSAGE_LENGTH = 65536;
+const WHATSAPP_MAX_MESSAGE_LENGTH = 65_536;
 const WHATSAPP_CHAT_BUBBLE_MAX_CHARS = 400;
 
 export function formatError(error: unknown): string {
@@ -11,7 +11,9 @@ export function formatError(error: unknown): string {
 export function stripMarkdownForWhatsApp(text: string): string {
   let result = text.trim();
 
-  result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => code.trim());
+  result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) =>
+    code.trim()
+  );
   result = result.replace(/`([^`]+)`/g, "$1");
   result = result.replace(/^\s{0,3}#{1,6}\s+/gm, "");
   result = result.replace(/\*\*([^*]+)\*\*/g, "*$1*");
@@ -29,7 +31,10 @@ export function splitWhatsAppMessage(text: string): string[] {
     return splitWhatsAppLongMessage(text);
   }
 
-  const paragraphs = text.split(/\n\n+/).map((part) => part.trim()).filter(Boolean);
+  const paragraphs = text
+    .split(/\n\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
   const merged: string[] = [];
   let current = "";
 
@@ -40,7 +45,10 @@ export function splitWhatsAppMessage(text: string): string[] {
         current = "";
       }
 
-      for (const chunk of splitLongParagraph(paragraph, WHATSAPP_CHAT_BUBBLE_MAX_CHARS)) {
+      for (const chunk of splitLongParagraph(
+        paragraph,
+        WHATSAPP_CHAT_BUBBLE_MAX_CHARS
+      )) {
         merged.push(chunk);
       }
 
@@ -120,7 +128,7 @@ type WhatsAppTodoRunState = "working" | "completed" | "stopped" | "failed";
 
 export function renderWhatsAppTodoStatus(
   todos: AgentTodo[],
-  state: WhatsAppTodoRunState,
+  state: WhatsAppTodoRunState
 ): string {
   const header =
     state === "completed"

@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   clearAutomationWorkerHeartbeat,
   getAutomationWorkerHeartbeatStatus,
-  getAutomationWorkerHeartbeatPath,
   isAutomationHeartbeatAlive,
   isAutomationWorkerRunning,
   parseAutomationWorkerHeartbeat,
@@ -23,7 +22,7 @@ async function useTempConfigDir(): Promise<string> {
 
 async function cleanupTempConfigDir(): Promise<void> {
   if (configDir) {
-    await rm(configDir, { recursive: true, force: true });
+    await rm(configDir, { force: true, recursive: true });
     configDir = null;
   }
   delete process.env.NAKAMA_CONFIG_DIR;
@@ -34,14 +33,19 @@ describe("automation-worker heartbeat", () => {
     await useTempConfigDir();
 
     try {
-      await writeAutomationWorkerHeartbeat(true, 3, 1234, "2026-06-25T10:00:00.000Z");
+      await writeAutomationWorkerHeartbeat(
+        true,
+        3,
+        1234,
+        "2026-06-25T10:00:00.000Z"
+      );
       const heartbeat = await readAutomationWorkerHeartbeat();
 
       expect(heartbeat).toEqual({
         pid: 1234,
-        updatedAt: "2026-06-25T10:00:00.000Z",
         running: true,
         scheduledJobs: 3,
+        updatedAt: "2026-06-25T10:00:00.000Z",
       });
     } finally {
       await cleanupTempConfigDir();
@@ -61,9 +65,9 @@ describe("automation-worker heartbeat", () => {
   test("stale heartbeat is not alive", () => {
     const heartbeat = {
       pid: process.pid,
-      updatedAt: new Date(Date.now() - 60_000).toISOString(),
       running: true,
       scheduledJobs: 1,
+      updatedAt: new Date(Date.now() - 60_000).toISOString(),
     };
 
     expect(isAutomationHeartbeatAlive(heartbeat, 45_000)).toBe(false);
@@ -72,9 +76,9 @@ describe("automation-worker heartbeat", () => {
   test("fresh heartbeat with current pid is alive", () => {
     const heartbeat = {
       pid: process.pid,
-      updatedAt: new Date().toISOString(),
       running: true,
       scheduledJobs: 1,
+      updatedAt: new Date().toISOString(),
     };
 
     expect(isAutomationHeartbeatAlive(heartbeat)).toBe(true);
@@ -83,9 +87,9 @@ describe("automation-worker heartbeat", () => {
   test("heartbeat with running=false is not alive", () => {
     const heartbeat = {
       pid: process.pid,
-      updatedAt: new Date().toISOString(),
       running: false,
       scheduledJobs: 0,
+      updatedAt: new Date().toISOString(),
     };
 
     expect(isAutomationHeartbeatAlive(heartbeat)).toBe(false);
@@ -94,7 +98,11 @@ describe("automation-worker heartbeat", () => {
   test("malformed heartbeat is parsed as null", () => {
     expect(parseAutomationWorkerHeartbeat("not json")).toBeNull();
     expect(parseAutomationWorkerHeartbeat('{"pid":123}')).toBeNull();
-    expect(parseAutomationWorkerHeartbeat('{"pid":"123","updatedAt":"x","running":true,"scheduledJobs":1}')).toBeNull();
+    expect(
+      parseAutomationWorkerHeartbeat(
+        '{"pid":"123","updatedAt":"x","running":true,"scheduledJobs":1}'
+      )
+    ).toBeNull();
   });
 
   test("clear heartbeat removes the file", async () => {

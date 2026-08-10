@@ -18,7 +18,9 @@ export function formatTrigger(trigger: AutomationTrigger): string {
   return `Schedule · ${trigger.cron}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
 }
 
-export function summarizeAutomationListMeta(automation: StoredAutomation): string {
+export function summarizeAutomationListMeta(
+  automation: StoredAutomation
+): string {
   if (automation.trigger.type === "manual") {
     return "Manual run";
   }
@@ -31,7 +33,7 @@ export function summarizeAutomationListMeta(automation: StoredAutomation): strin
 }
 
 export function groupRunsByDay(
-  runs: AutomationRunRecord[],
+  runs: AutomationRunRecord[]
 ): Array<{ label: string; runs: AutomationRunRecord[] }> {
   const buckets = new Map<string, AutomationRunRecord[]>();
 
@@ -45,7 +47,10 @@ export function groupRunsByDay(
     }
   }
 
-  return Array.from(buckets, ([label, groupedRuns]) => ({ label, runs: groupedRuns }));
+  return Array.from(buckets, ([label, groupedRuns]) => ({
+    label,
+    runs: groupedRuns,
+  }));
 }
 
 export function formatRunDayLabel(value: string): string {
@@ -56,8 +61,16 @@ export function formatRunDayLabel(value: string): string {
     return "Earlier";
   }
 
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  ).getTime();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
   const diffDays = Math.round((startOfToday - startOfDate) / 86_400_000);
 
   if (diffDays === 0) {
@@ -69,8 +82,8 @@ export function formatRunDayLabel(value: string): string {
   }
 
   return date.toLocaleDateString(undefined, {
-    month: "short",
     day: "numeric",
+    month: "short",
     year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
   });
 }
@@ -121,7 +134,10 @@ function truncatePlainText(text: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength).trimEnd()}…`;
 }
 
-export function formatRunDuration(startedAt: string, completedAt: string | null): string | null {
+export function formatRunDuration(
+  startedAt: string,
+  completedAt: string | null
+): string | null {
   if (!completedAt) {
     return null;
   }

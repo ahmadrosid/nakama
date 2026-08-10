@@ -17,7 +17,9 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "opencode_go",
 ] as const;
 
-export function parseProviderName(value: string | undefined): UserProviderName | null {
+export function parseProviderName(
+  value: string | undefined
+): UserProviderName | null {
   const normalized = value?.trim().toLowerCase();
 
   if (
@@ -38,7 +40,9 @@ export function parseProviderName(value: string | undefined): UserProviderName |
   return null;
 }
 
-export function apiKeyEnvVarForProvider(provider: UserProviderName): string | null {
+export function apiKeyEnvVarForProvider(
+  provider: UserProviderName
+): string | null {
   switch (provider) {
     case "openai":
       return "OPENAI_API_KEY";
@@ -64,20 +68,26 @@ export function apiKeyEnvVarForProvider(provider: UserProviderName): string | nu
 }
 
 export interface ResolveProviderOptions {
-  env?: Record<string, string | undefined>;
   configuredProvider?: string | undefined;
+  env?: Record<string, string | undefined>;
 }
 
-export function resolveProvider(options: ResolveProviderOptions = {}): UserProviderName | null {
+export function resolveProvider(
+  options: ResolveProviderOptions = {}
+): UserProviderName | null {
   const env = options.env ?? process.env;
 
-  const explicitEnvProvider = parseProviderName(readEnvValue(env, "NAKAMA_PROVIDER"));
+  const explicitEnvProvider = parseProviderName(
+    readEnvValue(env, "NAKAMA_PROVIDER")
+  );
 
   if (explicitEnvProvider) {
     return explicitEnvProvider;
   }
 
-  const explicitConfiguredProvider = parseProviderName(options.configuredProvider);
+  const explicitConfiguredProvider = parseProviderName(
+    options.configuredProvider
+  );
 
   if (explicitConfiguredProvider) {
     return explicitConfiguredProvider;

@@ -1,8 +1,8 @@
-import { findCustomModel, type CustomModelEntry } from "@nakama/core";
+import { type CustomModelEntry, findCustomModel } from "@nakama/core";
 
 export function cerebrasModelSupportsThinking(
   model: string,
-  customModels?: CustomModelEntry[],
+  customModels?: CustomModelEntry[]
 ): boolean {
   const trimmed = model.trim();
   const custom = findCustomModel(customModels, trimmed);

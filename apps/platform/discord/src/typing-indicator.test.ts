@@ -5,15 +5,15 @@ import { createTypingLoop } from "./typing-indicator";
 function createFakeMessenger() {
   const calls: string[] = [];
   const messenger: DiscordMessenger = {
+    async edit() {},
     async send() {
       return null;
     },
-    async edit() {},
     async sendTyping() {
       calls.push("typing");
     },
   };
-  return { messenger, calls };
+  return { calls, messenger };
 }
 
 describe("createTypingLoop", () => {

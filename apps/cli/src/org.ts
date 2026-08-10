@@ -27,10 +27,12 @@ export function parseCliOrgArgs(argv = process.argv.slice(2)): CliOrgOptions {
 
 export async function resolveCliOrgId(
   client: NakamaClient,
-  options: CliOrgOptions = {},
+  options: CliOrgOptions = {}
 ): Promise<string> {
   const explicitOrgId =
-    options.orgId?.trim() || process.env.NAKAMA_ORG_ID?.trim() || (await loadSavedCliOrgId());
+    options.orgId?.trim() ||
+    process.env.NAKAMA_ORG_ID?.trim() ||
+    (await loadSavedCliOrgId());
 
   if (explicitOrgId) {
     const orgId = await assertOrgMembership(client, explicitOrgId);
@@ -65,15 +67,18 @@ export async function resolveCliOrgId(
       "Pass --org <id> (or set NAKAMA_ORG_ID).",
       "",
       ...orgs.map((org) => `  ${org.id}  ${org.name}`),
-    ].join("\n"),
+    ].join("\n")
   );
 }
 
-async function assertOrgMembership(client: NakamaClient, orgRef: string): Promise<string> {
+async function assertOrgMembership(
+  client: NakamaClient,
+  orgRef: string
+): Promise<string> {
   const { orgs } = await client.listUserOrgs();
   const normalized = orgRef.trim().toLowerCase();
   const match = orgs.find(
-    (org) => org.id === orgRef || org.slug.toLowerCase() === normalized,
+    (org) => org.id === orgRef || org.slug.toLowerCase() === normalized
   );
 
   if (!match) {

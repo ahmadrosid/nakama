@@ -10,11 +10,15 @@ import {
 
 describe("extractComposioListItems", () => {
   test("accepts bare arrays returned by newer Composio SDK responses", () => {
-    expect(extractComposioListItems([{ slug: "gmail" }])).toEqual([{ slug: "gmail" }]);
+    expect(extractComposioListItems([{ slug: "gmail" }])).toEqual([
+      { slug: "gmail" },
+    ]);
   });
 
   test("accepts legacy { items } wrappers", () => {
-    expect(extractComposioListItems({ items: [{ slug: "slack" }] })).toEqual([{ slug: "slack" }]);
+    expect(extractComposioListItems({ items: [{ slug: "slack" }] })).toEqual([
+      { slug: "slack" },
+    ]);
   });
 
   test("returns empty array for missing data", () => {
@@ -27,52 +31,52 @@ describe("parseCatalogToolkitItem", () => {
   test("maps logo from toolkit meta", () => {
     expect(
       parseCatalogToolkitItem({
-        slug: "gmail",
-        name: "Gmail",
         meta: {
           description: "Email",
           logo: "https://logos.composio.dev/api/gmail",
         },
-      }),
+        name: "Gmail",
+        slug: "gmail",
+      })
     ).toEqual({
-      slug: "gmail",
-      name: "Gmail",
       description: "Email",
       logoUrl: "https://logos.composio.dev/api/gmail",
+      name: "Gmail",
+      slug: "gmail",
     });
   });
 
   test("returns null logo when meta logo is missing", () => {
     expect(
       parseCatalogToolkitItem({
-        slug: "slack",
-        name: "Slack",
         meta: { description: "Chat" },
-      }),
+        name: "Slack",
+        slug: "slack",
+      })
     ).toEqual({
-      slug: "slack",
-      name: "Slack",
       description: "Chat",
       logoUrl: null,
+      name: "Slack",
+      slug: "slack",
     });
   });
 });
 
 describe("parseLinkRedirectUrl", () => {
   test("reads redirectUrl and snake_case variants", () => {
-    expect(parseLinkRedirectUrl({ redirectUrl: "https://oauth.example/start" })).toBe(
-      "https://oauth.example/start",
-    );
-    expect(parseLinkRedirectUrl({ redirect_url: "https://oauth.example/legacy" })).toBe(
-      "https://oauth.example/legacy",
-    );
+    expect(
+      parseLinkRedirectUrl({ redirectUrl: "https://oauth.example/start" })
+    ).toBe("https://oauth.example/start");
+    expect(
+      parseLinkRedirectUrl({ redirect_url: "https://oauth.example/legacy" })
+    ).toBe("https://oauth.example/legacy");
   });
 
   test("reads nested connection request payloads", () => {
     expect(
       parseLinkRedirectUrl({
         connectionRequest: { redirectUrl: "https://oauth.example/nested" },
-      }),
+      })
     ).toBe("https://oauth.example/nested");
   });
 });
@@ -81,32 +85,36 @@ describe("resolveAuthConfigId", () => {
   test("reuses an existing composio-managed auth config", async () => {
     const composio = {
       authConfigs: {
-        async list() {
-          return { items: [{ id: "ac_existing" }] };
-        },
         async create() {
           throw new Error("should not create when existing config is present");
+        },
+        async list() {
+          return { items: [{ id: "ac_existing" }] };
         },
       },
     };
 
-    await expect(resolveAuthConfigId(composio, "gmail")).resolves.toBe("ac_existing");
+    await expect(resolveAuthConfigId(composio, "gmail")).resolves.toBe(
+      "ac_existing"
+    );
   });
 
   test("creates a composio-managed auth config when none exists", async () => {
     const composio = {
       authConfigs: {
-        async list() {
-          return { items: [] };
-        },
         async create(toolkitSlug: string) {
           expect(toolkitSlug).toBe("gmail");
           return { id: "ac_new" };
         },
+        async list() {
+          return { items: [] };
+        },
       },
     };
 
-    await expect(resolveAuthConfigId(composio, "Gmail")).resolves.toBe("ac_new");
+    await expect(resolveAuthConfigId(composio, "Gmail")).resolves.toBe(
+      "ac_new"
+    );
   });
 });
 
@@ -117,7 +125,7 @@ describe("unwrapComposioError", () => {
     });
 
     expect(unwrapComposioError(error).message).toBe(
-      "Failed to create connected account link: auth_config_id is invalid",
+      "Failed to create connected account link: auth_config_id is invalid"
     );
   });
 });
@@ -127,18 +135,18 @@ describe("parseSessionToolItems", () => {
     expect(
       parseSessionToolItems([
         {
-          slug: "GMAIL_SEND_EMAIL",
-          name: "Send Email",
           description: "Send an email",
-          inputParameters: { type: "object", properties: {} },
+          inputParameters: { properties: {}, type: "object" },
+          name: "Send Email",
+          slug: "GMAIL_SEND_EMAIL",
         },
-      ]),
+      ])
     ).toEqual([
       {
-        slug: "GMAIL_SEND_EMAIL",
-        name: "Send Email",
         description: "Send an email",
-        inputSchema: { type: "object", properties: {} },
+        inputSchema: { properties: {}, type: "object" },
+        name: "Send Email",
+        slug: "GMAIL_SEND_EMAIL",
       },
     ]);
   });

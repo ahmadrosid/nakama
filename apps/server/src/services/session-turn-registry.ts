@@ -130,7 +130,11 @@ function compactBuffer(events: StreamEvent[]): StreamEvent[] {
     keep.add(index);
   }
 
-  for (let index = events.length - 1; index >= 0 && keep.size < MAX_BUFFER_EVENTS; index -= 1) {
+  for (
+    let index = events.length - 1;
+    index >= 0 && keep.size < MAX_BUFFER_EVENTS;
+    index -= 1
+  ) {
     if (!keep.has(index)) {
       keep.add(index);
     }
@@ -152,7 +156,7 @@ function trimBuffer(turn: ActiveTurn): void {
     rebuildSnapshotIndexes(turn);
     turn.bufferBytes = turn.events.reduce(
       (total, event) => total + estimateEventBytes(event),
-      0,
+      0
     );
 
     if (turn.events.length > MAX_BUFFER_EVENTS) {
@@ -174,10 +178,10 @@ export class SessionTurnRegistry {
     }
 
     this.turns.set(sessionId, {
-      startedAt: new Date().toISOString(),
-      events: [],
       bufferBytes: 0,
+      events: [],
       snapshotIndexes: new Map(),
+      startedAt: new Date().toISOString(),
       subscribers: new Set(),
     });
 
@@ -226,7 +230,7 @@ export class SessionTurnRegistry {
 
   subscribe(
     sessionId: string,
-    onEvent: (event: StreamEvent) => void,
+    onEvent: (event: StreamEvent) => void
   ): { unsubscribe: () => void } | null {
     const turn = this.turns.get(sessionId);
     if (!turn) {
@@ -238,10 +242,10 @@ export class SessionTurnRegistry {
     }
 
     const subscriber: Subscriber = {
-      push: onEvent,
       close: () => {
         turn.subscribers.delete(subscriber);
       },
+      push: onEvent,
     };
 
     turn.subscribers.add(subscriber);

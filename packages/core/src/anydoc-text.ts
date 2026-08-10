@@ -5,7 +5,7 @@ export const ANYDOC_MAX_CONCURRENT = 2;
 
 function truncateUtf8(
   value: string,
-  maxBytes = ANYDOC_MAX_OUTPUT_BYTES,
+  maxBytes = ANYDOC_MAX_OUTPUT_BYTES
 ): { text: string; truncated: boolean } {
   const bytes = Buffer.byteLength(value, "utf8");
   if (bytes <= maxBytes) {
@@ -43,29 +43,31 @@ export interface AnydocConvertResult {
 }
 
 export interface ConvertDocumentBytesOptions {
-  format?: AnydocFormat | null;
-  mediaType?: string;
-  filename?: string;
-  maxOutputBytes?: number;
-  timeoutMs?: number;
   /** Test seam — defaults to `@firecrawl/anydoc` `toMarkdownBytes`. */
   convertFn?: (
     bytes: Uint8Array,
-    format: AnydocFormat | null,
+    format: AnydocFormat | null
   ) => Promise<string>;
+  filename?: string;
+  format?: AnydocFormat | null;
+  maxOutputBytes?: number;
+  mediaType?: string;
+  timeoutMs?: number;
 }
 
 const MEDIA_TYPE_TO_FORMAT: Record<string, AnydocFormat> = {
-  "application/pdf": "pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-  "application/msword": "doc",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-  "application/vnd.ms-excel": "xlsx",
-  "application/vnd.ms-excel.sheet.macroEnabled.12": "xlsx",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml": "xlsx",
-  "application/vnd.ms-excel.sheet.binary.macroEnabled.12": "xlsx",
-  "text/csv": "csv",
   "application/csv": "csv",
+  "application/msword": "doc",
+  "application/pdf": "pdf",
+  "application/vnd.ms-excel": "xlsx",
+  "application/vnd.ms-excel.sheet.binary.macroEnabled.12": "xlsx",
+  "application/vnd.ms-excel.sheet.macroEnabled.12": "xlsx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml":
+    "xlsx",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "text/csv": "csv",
 };
 
 let activeConversions = 0;
@@ -92,7 +94,7 @@ async function withAnydocSlot<T>(fn: () => Promise<T>): Promise<T> {
 
 export function resolveAnydocFormat(
   mediaType?: string,
-  filename?: string,
+  filename?: string
 ): AnydocFormat | null {
   const normalizedMedia = mediaType?.trim().toLowerCase() ?? "";
   if (normalizedMedia && MEDIA_TYPE_TO_FORMAT[normalizedMedia]) {
@@ -144,7 +146,7 @@ export function resolveAnydocFormat(
 
 export async function convertDocumentBytes(
   bytes: Buffer | Uint8Array,
-  options: ConvertDocumentBytesOptions = {},
+  options: ConvertDocumentBytesOptions = {}
 ): Promise<AnydocConvertResult> {
   const format =
     options.format ?? resolveAnydocFormat(options.mediaType, options.filename);
@@ -160,7 +162,7 @@ export async function convertDocumentBytes(
         // anydoc's Format const-enum typing is stricter than our string union.
         return toMarkdownBytes(
           bytes,
-          resolvedFormat as Parameters<typeof toMarkdownBytes>[1],
+          resolvedFormat as Parameters<typeof toMarkdownBytes>[1]
         );
       });
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -171,7 +173,7 @@ export async function convertDocumentBytes(
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
             () => reject(new Error("Document text extraction timed out.")),
-            timeoutMs,
+            timeoutMs
           );
         }),
       ]);

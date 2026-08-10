@@ -1,65 +1,71 @@
-import type { SystemStatusResponse } from "@nakama/core/contract";
 import { describe, expect, test } from "bun:test";
+import type { SystemStatusResponse } from "@nakama/core/contract";
 import { buildServiceColumns, deriveSummary } from "./status-page.shared";
 
 const healthyStatus: SystemStatusResponse = {
-  checkedAt: "2026-06-22T10:00:00.000Z",
-  server: {
-    ok: true,
-    apiVersion: 1,
-    providerConfigured: true,
-    userConfigured: true,
-    composioConfigured: false,
-    composioAvailable: false,
-  },
   automationWorker: {
-    ok: true,
-    running: true,
-    providerConfigured: true,
-    scheduledJobs: 1,
     activeRuns: 0,
+    ok: true,
     process: {
-      managed: true,
-      status: "online",
       cpuPercent: 0,
+      managed: true,
       memoryMb: 12,
+      status: "online",
       uptimeSeconds: 30,
     },
-  },
-  taskWorker: { ok: true, activeRuns: 0, providerConfigured: true },
-  telegramWorker: { ok: true, configured: true, running: true, paired: true },
-  discordWorker: { ok: true, configured: true, running: true, paired: true, connected: true },
-  whatsappWorker: {
-    ok: true,
-    configured: true,
-    running: true,
-    paired: true,
-    connected: true,
-    qrCode: null,
-  },
-  mcp: { serverCount: 0, connectedCount: 0, assignedProfileCount: 0 },
-  llmUsage: {
     providerConfigured: true,
-    provider: "openai",
-    displayName: "OpenAI",
-    currentModel: "gpt-4o",
-    requestCount: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    estimatedCostUsd: 0,
+    running: true,
+    scheduledJobs: 1,
+  },
+  checkedAt: "2026-06-22T10:00:00.000Z",
+  discordWorker: {
+    configured: true,
+    connected: true,
+    ok: true,
+    paired: true,
+    running: true,
+  },
+  llmUsage: {
     costEstimated: false,
+    currentModel: "gpt-4o",
+    displayName: "OpenAI",
+    estimatedCostUsd: 0,
+    inputTokens: 0,
+    models: [],
+    outputTokens: 0,
+    provider: "openai",
+    providerConfigured: true,
+    requestCount: 0,
     totalTokens: 0,
     trackedSince: "2026-06-22T10:00:00.000Z",
-    models: [],
+  },
+  mcp: { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
+  server: {
+    apiVersion: 1,
+    composioAvailable: false,
+    composioConfigured: false,
+    ok: true,
+    providerConfigured: true,
+    userConfigured: true,
+  },
+  taskWorker: { activeRuns: 0, ok: true, providerConfigured: true },
+  telegramWorker: { configured: true, ok: true, paired: true, running: true },
+  whatsappWorker: {
+    configured: true,
+    connected: true,
+    ok: true,
+    paired: true,
+    qrCode: null,
+    running: true,
   },
 };
 
 describe("StatusPage helpers", () => {
   test("summarizes the overall system state", () => {
     expect(deriveSummary(healthyStatus)).toEqual({
-      tone: "ok",
-      title: "All systems operational",
       description: "Server, workers, and bridges are healthy.",
+      title: "All systems operational",
+      tone: "ok",
     });
   });
 
@@ -74,9 +80,9 @@ describe("StatusPage helpers", () => {
     };
 
     expect(deriveSummary(status)).toEqual({
-      tone: "bad",
-      title: "Automation worker stopped",
       description: "Start the automation worker to resume scheduled runs.",
+      title: "Automation worker stopped",
+      tone: "bad",
     });
   });
 
@@ -85,16 +91,17 @@ describe("StatusPage helpers", () => {
       ...healthyStatus,
       telegramWorker: {
         ...healthyStatus.telegramWorker,
-        running: false,
         ok: false,
+        running: false,
       },
     };
 
     expect(deriveSummary(status)).toEqual({
-      tone: "warn",
-      title: "Telegram bridge offline",
-      description: "Start the Telegram worker (bun run dev:telegram) to receive messages.",
       action: { label: "Open Integrations", to: "/integrations" },
+      description:
+        "Start the Telegram worker (bun run dev:telegram) to receive messages.",
+      title: "Telegram bridge offline",
+      tone: "warn",
     });
   });
 
@@ -108,10 +115,11 @@ describe("StatusPage helpers", () => {
     };
 
     expect(deriveSummary(status)).toEqual({
-      tone: "warn",
-      title: "Running with warnings",
-      description: "Configure an LLM provider before chat or automation runs can succeed.",
       action: { label: "Open Settings", to: "/settings" },
+      description:
+        "Configure an LLM provider before chat or automation runs can succeed.",
+      title: "Running with warnings",
+      tone: "warn",
     });
   });
 
@@ -141,8 +149,8 @@ describe("StatusPage helpers", () => {
     });
 
     expect(columns[0]).toMatchObject({
-      title: "Automation",
       status: "PM2 unavailable",
+      title: "Automation",
       tone: "warn",
     });
   });

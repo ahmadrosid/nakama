@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import {
   appendOrgMemoryHistory,
   createOrgMemoryChangeId,
@@ -17,7 +17,7 @@ describe("org memory history", () => {
 
   afterEach(async () => {
     if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
     if (originalConfigDir === undefined) {
@@ -28,7 +28,9 @@ describe("org memory history", () => {
   });
 
   async function setupOrg(orgId = "org_a"): Promise<string> {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-org-memory-history-"));
+    tempDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-org-memory-history-")
+    );
     process.env.NAKAMA_CONFIG_DIR = tempDir;
     return orgId;
   }
@@ -41,57 +43,65 @@ describe("org memory history", () => {
     await appendOrgMemoryHistory(
       orgId,
       {
-        id: firstId,
-        orgId,
-        createdAt: "2026-07-31T08:00:00.000Z",
-        actorUserId: "user_a",
         action: "edit",
+        actorUserId: "user_a",
+        createdAt: "2026-07-31T08:00:00.000Z",
+        id: firstId,
         label: "First edit",
+        orgId,
       },
-      "## Org Memory\n\n## Pinned\n\n- first\n",
+      "## Org Memory\n\n## Pinned\n\n- first\n"
     );
     await appendOrgMemoryHistory(
       orgId,
       {
-        id: secondId,
-        orgId,
-        createdAt: "2026-07-31T09:00:00.000Z",
-        actorUserId: "user_a",
         action: "approve",
+        actorUserId: "user_a",
+        createdAt: "2026-07-31T09:00:00.000Z",
+        id: secondId,
         label: "Approved proposal",
+        orgId,
       },
-      "## Org Memory\n\n## Pinned\n\n- second\n",
+      "## Org Memory\n\n## Pinned\n\n- second\n"
     );
 
     const changes = await listOrgMemoryHistory(orgId);
     expect(changes.map((entry) => entry.id)).toEqual([secondId, firstId]);
-    await expect(getOrgMemoryHistoryEntry(orgId, secondId)).resolves.toMatchObject({
-      label: "Approved proposal",
+    await expect(
+      getOrgMemoryHistoryEntry(orgId, secondId)
+    ).resolves.toMatchObject({
       content: "## Org Memory\n\n## Pinned\n\n- second\n",
+      label: "Approved proposal",
     });
   });
 
   test("prunes history beyond the configured max entries", async () => {
     const orgId = await setupOrg();
 
-    for (let index = 0; index < ORG_MEMORY_HISTORY_MAX_ENTRIES + 3; index += 1) {
+    for (
+      let index = 0;
+      index < ORG_MEMORY_HISTORY_MAX_ENTRIES + 3;
+      index += 1
+    ) {
       const id = createOrgMemoryChangeId();
       await appendOrgMemoryHistory(
         orgId,
         {
-          id,
-          orgId,
-          createdAt: `2026-07-31T10:${String(index).padStart(2, "0")}:00.000Z`,
-          actorUserId: null,
           action: "edit",
+          actorUserId: null,
+          createdAt: `2026-07-31T10:${String(index).padStart(2, "0")}:00.000Z`,
+          id,
           label: `Edit ${index}`,
+          orgId,
         },
-        `content-${index}\n`,
+        `content-${index}\n`
       );
     }
 
     const changes = await listOrgMemoryHistory(orgId);
     expect(changes).toHaveLength(ORG_MEMORY_HISTORY_MAX_ENTRIES);
-    expect(changes[0]?.label).toBe(`Edit ${ORG_MEMORY_HISTORY_MAX_ENTRIES + 2}`);
+    expect(changes[0]?.label).toBe(
+      `Edit ${ORG_MEMORY_HISTORY_MAX_ENTRIES + 2}`
+    );
   });
 });

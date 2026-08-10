@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  getDefaultModel,
-  isOpenRouterModelSlug,
-  resolveModel,
-} from "./models";
+import { getDefaultModel, isOpenRouterModelSlug, resolveModel } from "./models";
 
 describe("isOpenRouterModelSlug", () => {
   test("accepts vendor/model slugs", () => {
@@ -18,12 +14,14 @@ describe("isOpenRouterModelSlug", () => {
 describe("resolveModel", () => {
   test("passes through custom OpenRouter slugs", () => {
     expect(resolveModel("openrouter", "google/gemini-2.5-pro-preview")).toBe(
-      "google/gemini-2.5-pro-preview",
+      "google/gemini-2.5-pro-preview"
     );
   });
 
   test("falls back to default for invalid OpenRouter slugs", () => {
-    expect(resolveModel("openrouter", "not-a-slug")).toBe(getDefaultModel("openrouter"));
+    expect(resolveModel("openrouter", "not-a-slug")).toBe(
+      getDefaultModel("openrouter")
+    );
   });
 
   test("resolves catalog models for OpenAI", () => {
@@ -37,40 +35,42 @@ describe("resolveModel", () => {
   });
 
   test("resolves custom shortlist models for OpenAI", () => {
-    const customModels = [{ id: "gpt-4o-mini", default: true }];
-    expect(resolveModel("openai", "gpt-4o-mini", customModels)).toBe("gpt-4o-mini");
+    const customModels = [{ default: true, id: "gpt-4o-mini" }];
+    expect(resolveModel("openai", "gpt-4o-mini", customModels)).toBe(
+      "gpt-4o-mini"
+    );
     expect(resolveModel("openai", "gpt-5.4", customModels)).toBe("gpt-4o-mini");
     expect(resolveModel("openai", undefined, customModels)).toBe("gpt-4o-mini");
   });
 
   test("passes through non-catalog models for native providers", () => {
     expect(resolveModel("anthropic", "claude-haiku-4-5-20251001")).toBe(
-      "claude-haiku-4-5-20251001",
+      "claude-haiku-4-5-20251001"
     );
     expect(resolveModel("openai", "gpt-4o-2025-08")).toBe("gpt-4o-2025-08");
     expect(resolveModel("gemini", "gemini-3.0-ultra")).toBe("gemini-3.0-ultra");
   });
 
   test("resolves compatible models from custom list", () => {
-    const customModels = [{ id: "llama3.2", default: true }];
+    const customModels = [{ default: true, id: "llama3.2" }];
     expect(resolveModel("openai_compatible", "llama3.2", customModels)).toBe(
-      "llama3.2",
+      "llama3.2"
     );
     expect(resolveModel("openai_compatible", undefined, customModels)).toBe(
-      "llama3.2",
+      "llama3.2"
     );
   });
 
   test("resolves catalog models for OpenCode Go", () => {
     expect(resolveModel("opencode_go", "opencode-go/kimi-k2.7-code")).toBe(
-      "opencode-go/kimi-k2.7-code",
+      "opencode-go/kimi-k2.7-code"
     );
     expect(getDefaultModel("opencode_go")).toBe("opencode-go/kimi-k2.7-code");
   });
 
   test("passes through unknown OpenCode Go model ids", () => {
     expect(resolveModel("opencode_go", "opencode-go/future-model")).toBe(
-      "opencode-go/future-model",
+      "opencode-go/future-model"
     );
   });
 
@@ -85,31 +85,43 @@ describe("resolveModel", () => {
   });
 
   test("uses cerebras custom model shortlist when provided", () => {
-    const customModels = [{ id: "zai-glm-4.7", name: "GLM 4.7", default: true }];
-    expect(resolveModel("cerebras", "zai-glm-4.7", customModels)).toBe("zai-glm-4.7");
-    expect(resolveModel("cerebras", "unknown-model", customModels)).toBe("zai-glm-4.7");
+    const customModels = [
+      { default: true, id: "zai-glm-4.7", name: "GLM 4.7" },
+    ];
+    expect(resolveModel("cerebras", "zai-glm-4.7", customModels)).toBe(
+      "zai-glm-4.7"
+    );
+    expect(resolveModel("cerebras", "unknown-model", customModels)).toBe(
+      "zai-glm-4.7"
+    );
   });
 
   test("resolves catalog models for Fireworks", () => {
-    expect(resolveModel("fireworks", "accounts/fireworks/models/kimi-k2p6")).toBe(
-      "accounts/fireworks/models/kimi-k2p6",
+    expect(
+      resolveModel("fireworks", "accounts/fireworks/models/kimi-k2p6")
+    ).toBe("accounts/fireworks/models/kimi-k2p6");
+    expect(getDefaultModel("fireworks")).toBe(
+      "accounts/fireworks/models/kimi-k2p6"
     );
-    expect(getDefaultModel("fireworks")).toBe("accounts/fireworks/models/kimi-k2p6");
   });
 
   test("uses fireworks custom model shortlist when provided", () => {
     const customModels = [
       {
+        default: true,
         id: "accounts/fireworks/models/glm-5p2",
         name: "GLM 5.2",
-        default: true,
       },
     ];
-    expect(resolveModel("fireworks", "accounts/fireworks/models/glm-5p2", customModels)).toBe(
-      "accounts/fireworks/models/glm-5p2",
-    );
+    expect(
+      resolveModel(
+        "fireworks",
+        "accounts/fireworks/models/glm-5p2",
+        customModels
+      )
+    ).toBe("accounts/fireworks/models/glm-5p2");
     expect(resolveModel("fireworks", "unknown-model", customModels)).toBe(
-      "accounts/fireworks/models/glm-5p2",
+      "accounts/fireworks/models/glm-5p2"
     );
   });
 });

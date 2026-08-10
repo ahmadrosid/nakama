@@ -7,7 +7,9 @@ let nextId = 0;
 const listeners = new Set<() => void>();
 
 function notify() {
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 export function toast(message: string, durationMs = 4000) {
@@ -27,6 +29,6 @@ export function useToasts() {
       return () => listeners.delete(onStoreChange);
     },
     () => toasts,
-    () => toasts,
+    () => toasts
   );
 }

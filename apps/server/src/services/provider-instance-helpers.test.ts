@@ -7,7 +7,8 @@ import {
 } from "./provider-instance-helpers";
 
 function createProviderInstance(
-  overrides: Partial<ProviderInstance> & Pick<ProviderInstance, "id" | "type" | "label">,
+  overrides: Partial<ProviderInstance> &
+    Pick<ProviderInstance, "id" | "type" | "label">
 ): ProviderInstance {
   return {
     apiKey: "test-key",
@@ -21,20 +22,20 @@ describe("resolveProfileProviderSelection", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({
         id: "zen-1",
-        type: "opencode_go",
         label: "OpenCode Zen",
+        type: "opencode_go",
       }),
       createProviderInstance({
         id: "openai-1",
-        type: "openai",
         label: "OpenAI",
+        type: "openai",
       }),
     ];
 
     const resolved = resolveProfileProviderSelection({
-      providers,
       defaultProviderId: "zen-1",
       profileModel: "openai-1::gpt-5.4",
+      providers,
     });
 
     expect(resolved).not.toBeNull();
@@ -46,20 +47,20 @@ describe("resolveProfileProviderSelection", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({
         id: "zen-1",
-        type: "opencode_go",
         label: "OpenCode Zen",
+        type: "opencode_go",
       }),
       createProviderInstance({
         id: "openai-1",
-        type: "openai",
         label: "OpenAI",
+        type: "openai",
       }),
     ];
 
     const resolved = resolveProfileProviderSelection({
-      providers,
       defaultProviderId: "zen-1",
       profileModel: "gpt-5.4",
+      providers,
     });
 
     expect(resolved).not.toBeNull();
@@ -71,20 +72,20 @@ describe("resolveProfileProviderSelection", () => {
     const providers: ProviderInstance[] = [
       createProviderInstance({
         id: "zen-1",
-        type: "opencode_go",
         label: "OpenCode Zen",
+        type: "opencode_go",
       }),
       createProviderInstance({
         id: "openai-1",
-        type: "openai",
         label: "OpenAI",
+        type: "openai",
       }),
     ];
 
     const resolved = resolveProfileProviderSelection({
-      providers,
       defaultProviderId: "zen-1",
       profileModel: null,
+      providers,
     });
 
     expect(resolved).not.toBeNull();
@@ -94,28 +95,28 @@ describe("resolveProfileProviderSelection", () => {
 
   test("does not treat catalog models as available on unrelated compatible providers", () => {
     const zen = createProviderInstance({
-      id: "zen-1",
-      type: "openai_compatible",
-      label: "OpenCode Zen",
       apiKey: "public",
       baseUrl: "https://opencode.ai/zen/v1",
-      customModels: [{ id: "big-pickle", name: "Big Pickle", default: true }],
+      customModels: [{ default: true, id: "big-pickle", name: "Big Pickle" }],
+      id: "zen-1",
+      label: "OpenCode Zen",
+      type: "openai_compatible",
     });
 
     expect(modelExistsOnInstance(zen, "gpt-5.4")).toBe(false);
     expect(modelExistsOnInstance(zen, "big-pickle")).toBe(true);
 
     const resolved = resolveProfileProviderSelection({
+      defaultProviderId: "zen-1",
+      profileModel: "gpt-5.4",
       providers: [
         zen,
         createProviderInstance({
           id: "openai-1",
-          type: "openai",
           label: "OpenAI",
+          type: "openai",
         }),
       ],
-      defaultProviderId: "zen-1",
-      profileModel: "gpt-5.4",
     });
 
     expect(resolved?.instance.id).toBe("openai-1");
@@ -126,27 +127,27 @@ describe("resolveProfileProviderSelection", () => {
 describe("applyProviderInstanceUpdate", () => {
   test("preserves supportsThinking on compatible custom models", () => {
     const instance = createProviderInstance({
-      id: "compatible-1",
-      type: "openai_compatible",
-      label: "NetraRuntime",
       apiKey: "",
       baseUrl: "https://api.example.com/v1",
       customModels: [
         {
+          default: true,
           id: "qwen3.6-35b",
           name: "Qwen 3.6 35B",
-          default: true,
           supportsThinking: true,
         },
       ],
+      id: "compatible-1",
+      label: "NetraRuntime",
+      type: "openai_compatible",
     });
 
     const updated = applyProviderInstanceUpdate(instance, {
       customModels: [
         {
+          default: true,
           id: "qwen3.6-35b",
           name: "Qwen 3.6 35B",
-          default: true,
           supportsThinking: true,
         },
       ],
@@ -158,13 +159,13 @@ describe("applyProviderInstanceUpdate", () => {
   test("stores custom model shortlist for OpenAI", () => {
     const instance = createProviderInstance({
       id: "openai-1",
-      type: "openai",
       label: "OpenAI",
+      type: "openai",
     });
 
     const updated = applyProviderInstanceUpdate(instance, {
       customModels: [
-        { id: "gpt-5.4", name: "GPT 5.4", default: true },
+        { default: true, id: "gpt-5.4", name: "GPT 5.4" },
         { id: "gpt-4o-mini", name: "GPT-4o mini" },
       ],
     });
@@ -176,10 +177,12 @@ describe("applyProviderInstanceUpdate", () => {
 
   test("validates cerebras models against shortlist and static catalog", () => {
     const withShortlist = createProviderInstance({
+      customModels: [
+        { default: true, id: "gpt-oss-120b", name: "GPT OSS 120B" },
+      ],
       id: "cb-1",
-      type: "cerebras",
       label: "Cerebras",
-      customModels: [{ id: "gpt-oss-120b", name: "GPT OSS 120B", default: true }],
+      type: "cerebras",
     });
 
     expect(modelExistsOnInstance(withShortlist, "gpt-oss-120b")).toBe(true);
@@ -187,38 +190,54 @@ describe("applyProviderInstanceUpdate", () => {
 
     const withoutShortlist = createProviderInstance({
       id: "cb-2",
-      type: "cerebras",
       label: "Cerebras",
+      type: "cerebras",
     });
 
     expect(modelExistsOnInstance(withoutShortlist, "gemma-4-31b")).toBe(true);
-    expect(modelExistsOnInstance(withoutShortlist, "unknown-model")).toBe(false);
+    expect(modelExistsOnInstance(withoutShortlist, "unknown-model")).toBe(
+      false
+    );
   });
 
   test("validates fireworks models against shortlist and static catalog", () => {
     const withShortlist = createProviderInstance({
-      id: "fw-1",
-      type: "fireworks",
-      label: "Fireworks",
       customModels: [
         {
+          default: true,
           id: "accounts/fireworks/models/kimi-k2p6",
           name: "Kimi K2.6",
-          default: true,
         },
       ],
+      id: "fw-1",
+      label: "Fireworks",
+      type: "fireworks",
     });
 
-    expect(modelExistsOnInstance(withShortlist, "accounts/fireworks/models/kimi-k2p6")).toBe(true);
-    expect(modelExistsOnInstance(withShortlist, "accounts/fireworks/models/glm-5p2")).toBe(false);
+    expect(
+      modelExistsOnInstance(
+        withShortlist,
+        "accounts/fireworks/models/kimi-k2p6"
+      )
+    ).toBe(true);
+    expect(
+      modelExistsOnInstance(withShortlist, "accounts/fireworks/models/glm-5p2")
+    ).toBe(false);
 
     const withoutShortlist = createProviderInstance({
       id: "fw-2",
-      type: "fireworks",
       label: "Fireworks",
+      type: "fireworks",
     });
 
-    expect(modelExistsOnInstance(withoutShortlist, "accounts/fireworks/models/glm-5p2")).toBe(true);
-    expect(modelExistsOnInstance(withoutShortlist, "accounts/unknown/models/foo")).toBe(false);
+    expect(
+      modelExistsOnInstance(
+        withoutShortlist,
+        "accounts/fireworks/models/glm-5p2"
+      )
+    ).toBe(true);
+    expect(
+      modelExistsOnInstance(withoutShortlist, "accounts/unknown/models/foo")
+    ).toBe(false);
   });
 });

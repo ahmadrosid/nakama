@@ -1,7 +1,6 @@
 import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { DocumentAttachment, KnowledgeBaseDocument } from "../contract";
-import { createId } from "../ids";
 import {
   ensureDir,
   pathExists,
@@ -10,14 +9,15 @@ import {
   writePrivateBytesFile,
   writePrivateTextFile,
 } from "../fs";
+import { createId } from "../ids";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
+import { getProfileSoulDir } from "../soul/resolve";
 import {
   buildExtractedTextHeader,
   extractText,
   isSupportedKnowledgeBaseMediaType,
   normalizeKnowledgeBaseMediaType,
 } from "./extract";
-import { getProfileSoulDir } from "../soul/resolve";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -29,7 +29,10 @@ interface KnowledgeBaseManifest {
   documents: KnowledgeBaseDocument[];
 }
 
-async function migrateLegacyKnowledgeBaseDir(orgId: string, profileId: string): Promise<void> {
+async function migrateLegacyKnowledgeBaseDir(
+  orgId: string,
+  profileId: string
+): Promise<void> {
   const profileDir = getProfileSoulDir(orgId, profileId);
   const legacyDir = join(profileDir, "data", "knowledge-base");
   const currentDir = getKnowledgeBaseDir(orgId, profileId);
@@ -51,7 +54,7 @@ async function moveIfPresent(from: string, to: string): Promise<void> {
 
 async function flattenKnowledgeBaseLayout(
   orgId: string,
-  profileId: string,
+  profileId: string
 ): Promise<void> {
   const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
   const uploadsDir = join(knowledgeBaseDir, "uploads");
@@ -68,10 +71,10 @@ async function flattenKnowledgeBaseLayout(
       const documentId = entry.name.replace(/\.txt$/i, "");
       await moveIfPresent(
         legacyPath,
-        getKnowledgeBaseExtractedPath(orgId, profileId, documentId),
+        getKnowledgeBaseExtractedPath(orgId, profileId, documentId)
       );
     }
-    await rm(extractedDir, { recursive: true, force: true });
+    await rm(extractedDir, { force: true, recursive: true });
   }
 
   if (await pathExists(uploadsDir)) {
@@ -90,11 +93,16 @@ async function flattenKnowledgeBaseLayout(
 
         await moveIfPresent(
           join(legacyDocumentDir, file.name),
-          getKnowledgeBaseStoredDocumentPath(orgId, profileId, documentDir.name, file.name),
+          getKnowledgeBaseStoredDocumentPath(
+            orgId,
+            profileId,
+            documentDir.name,
+            file.name
+          )
         );
       }
     }
-    await rm(uploadsDir, { recursive: true, force: true });
+    await rm(uploadsDir, { force: true, recursive: true });
   }
 }
 
@@ -110,7 +118,10 @@ function sanitizeFilename(filename: string): string {
   return base.replace(/[^\w.\-() ]+/g, "_") || "document";
 }
 
-async function readManifest(orgId: string, profileId: string): Promise<KnowledgeBaseManifest> {
+async function readManifest(
+  orgId: string,
+  profileId: string
+): Promise<KnowledgeBaseManifest> {
   await migrateLegacyKnowledgeBaseDir(orgId, profileId);
   await flattenKnowledgeBaseLayout(orgId, profileId);
   const manifestPath = getKnowledgeBaseManifestPath(orgId, profileId);
@@ -139,7 +150,7 @@ async function readManifest(orgId: string, profileId: string): Promise<Knowledge
 async function writeManifest(
   orgId: string,
   profileId: string,
-  manifest: KnowledgeBaseManifest,
+  manifest: KnowledgeBaseManifest
 ): Promise<void> {
   await migrateLegacyKnowledgeBaseDir(orgId, profileId);
   await flattenKnowledgeBaseLayout(orgId, profileId);
@@ -151,7 +162,10 @@ async function writeManifest(
   await rename(tempPath, manifestPath);
 }
 
-export async function ensureKnowledgeBaseDirs(orgId: string, profileId: string): Promise<void> {
+export async function ensureKnowledgeBaseDirs(
+  orgId: string,
+  profileId: string
+): Promise<void> {
   await migrateLegacyKnowledgeBaseDir(orgId, profileId);
   await flattenKnowledgeBaseLayout(orgId, profileId);
   await ensureDir(getKnowledgeBaseDir(orgId, profileId));
@@ -159,18 +173,18 @@ export async function ensureKnowledgeBaseDirs(orgId: string, profileId: string):
 
 export async function listKnowledgeBaseDocuments(
   orgId: string,
-  profileId: string,
+  profileId: string
 ): Promise<KnowledgeBaseDocument[]> {
   const manifest = await readManifest(orgId, profileId);
   return [...manifest.documents].sort((left, right) =>
-    right.uploadedAt.localeCompare(left.uploadedAt),
+    right.uploadedAt.localeCompare(left.uploadedAt)
   );
 }
 
 export async function uploadKnowledgeBaseDocument(
   orgId: string,
   profileId: string,
-  attachment: DocumentAttachment,
+  attachment: DocumentAttachment
 ): Promise<KnowledgeBaseDocument> {
   const filename = attachment.filename.trim();
 
@@ -178,11 +192,14 @@ export async function uploadKnowledgeBaseDocument(
     throw new Error("Document filename must not be empty.");
   }
 
-  const mediaType = normalizeKnowledgeBaseMediaType(attachment.mediaType, filename);
+  const mediaType = normalizeKnowledgeBaseMediaType(
+    attachment.mediaType,
+    filename
+  );
 
   if (!isSupportedKnowledgeBaseMediaType(mediaType, filename)) {
     throw new Error(
-      `Unsupported knowledge base document type: ${attachment.mediaType}. Allowed: txt, md, csv, pdf.`,
+      `Unsupported knowledge base document type: ${attachment.mediaType}. Allowed: txt, md, csv, pdf.`
     );
   }
 
@@ -193,7 +210,9 @@ export async function uploadKnowledgeBaseDocument(
   }
 
   if (bytes.length > MAX_DOCUMENT_BYTES) {
-    throw new Error(`Document must be at most ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.`);
+    throw new Error(
+      `Document must be at most ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.`
+    );
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
@@ -201,7 +220,12 @@ export async function uploadKnowledgeBaseDocument(
   const documentId = createId("kb");
   const uploadedAt = new Date().toISOString();
   const safeFilename = sanitizeFilename(filename);
-  const originalPath = getKnowledgeBaseStoredDocumentPath(orgId, profileId, documentId, safeFilename);
+  const originalPath = getKnowledgeBaseStoredDocumentPath(
+    orgId,
+    profileId,
+    documentId,
+    safeFilename
+  );
 
   await writePrivateBytesFile(originalPath, bytes);
 
@@ -215,23 +239,30 @@ export async function uploadKnowledgeBaseDocument(
       throw new Error("No text could be extracted from the document.");
     }
 
-    const header = buildExtractedTextHeader({ filename, mediaType, uploadedAt });
+    const header = buildExtractedTextHeader({
+      filename,
+      mediaType,
+      uploadedAt,
+    });
     await writePrivateTextFile(
       getKnowledgeBaseExtractedPath(orgId, profileId, documentId),
-      `${header}${body}\n`,
+      `${header}${body}\n`
     );
   } catch (extractError) {
     status = "failed";
-    error = extractError instanceof Error ? extractError.message : String(extractError);
+    error =
+      extractError instanceof Error
+        ? extractError.message
+        : String(extractError);
   }
 
   const document: KnowledgeBaseDocument = {
-    id: documentId,
     filename,
+    id: documentId,
     mediaType,
     sizeBytes: bytes.length,
-    uploadedAt,
     status,
+    uploadedAt,
     ...(error ? { error } : {}),
   };
 
@@ -245,10 +276,12 @@ export async function uploadKnowledgeBaseDocument(
 export async function deleteKnowledgeBaseDocument(
   orgId: string,
   profileId: string,
-  documentId: string,
+  documentId: string
 ): Promise<boolean> {
   const manifest = await readManifest(orgId, profileId);
-  const index = manifest.documents.findIndex((document) => document.id === documentId);
+  const index = manifest.documents.findIndex(
+    (document) => document.id === documentId
+  );
 
   if (index < 0) {
     return false;
@@ -262,9 +295,13 @@ export async function deleteKnowledgeBaseDocument(
     orgId,
     profileId,
     documentId,
-    document.filename,
+    document.filename
   );
-  const extractedPath = getKnowledgeBaseExtractedPath(orgId, profileId, documentId);
+  const extractedPath = getKnowledgeBaseExtractedPath(
+    orgId,
+    profileId,
+    documentId
+  );
 
   if (await pathExists(storedPath)) {
     await removeFile(storedPath);

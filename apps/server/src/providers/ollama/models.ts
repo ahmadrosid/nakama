@@ -1,4 +1,4 @@
-import { normalizeBaseUrl, type CustomModelEntry } from "@nakama/core";
+import { type CustomModelEntry, normalizeBaseUrl } from "@nakama/core";
 import { fetchRemoteOpenAIModels } from "../compatible-models";
 
 interface OllamaTagsResponse {
@@ -18,7 +18,7 @@ function ollamaTagsUrl(baseUrl: string): string {
 
 async function fetchOllamaTagsModels(
   baseUrl: string,
-  apiKey: string,
+  apiKey: string
 ): Promise<CustomModelEntry[]> {
   const response = await fetch(ollamaTagsUrl(baseUrl), {
     headers: {
@@ -29,7 +29,7 @@ async function fetchOllamaTagsModels(
 
   if (!response.ok) {
     throw new Error(
-      `Could not fetch Ollama models from /api/tags (${response.status}): ${await response.text()}`,
+      `Could not fetch Ollama models from /api/tags (${response.status}): ${await response.text()}`
     );
   }
 
@@ -39,7 +39,9 @@ async function fetchOllamaTagsModels(
     .filter((id): id is string => Boolean(id));
 
   if (ids.length === 0) {
-    throw new Error("Ollama /api/tags response did not include any model names.");
+    throw new Error(
+      "Ollama /api/tags response did not include any model names."
+    );
   }
 
   return [...new Set(ids)]
@@ -49,7 +51,7 @@ async function fetchOllamaTagsModels(
 
 export async function fetchOllamaModels(
   baseUrl: string,
-  apiKey = "",
+  apiKey = ""
 ): Promise<CustomModelEntry[]> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 

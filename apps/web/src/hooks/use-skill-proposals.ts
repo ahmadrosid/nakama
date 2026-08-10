@@ -10,28 +10,28 @@ export function useSkillProposals(
     sessionId?: string;
     enabled?: boolean;
     refetchInterval?: number | false;
-  } = {},
+  } = {}
 ) {
   const status = options.status ?? "pending";
   return useQuery({
+    enabled: Boolean(orgId) && (options.enabled ?? true),
+    queryFn: () =>
+      client.listSkillProposals(orgId ?? "", {
+        profileId: options.profileId,
+        sessionId: options.sessionId,
+        status,
+      }),
     queryKey: [
       ...queryKeys.skillProposals(orgId ?? "", status, options.profileId),
       options.sessionId ?? "all",
     ],
-    queryFn: () =>
-      client.listSkillProposals(orgId ?? "", {
-        status,
-        profileId: options.profileId,
-        sessionId: options.sessionId,
-      }),
-    enabled: Boolean(orgId) && (options.enabled ?? true),
     refetchInterval: options.refetchInterval,
   });
 }
 
 function invalidateSkillProposalQueries(
   queryClient: ReturnType<typeof useQueryClient>,
-  orgId: string,
+  orgId: string
 ) {
   return queryClient.invalidateQueries({ queryKey: ["skillProposals", orgId] });
 }
@@ -39,7 +39,8 @@ function invalidateSkillProposalQueries(
 export function useApproveSkillProposal(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (proposalId: string) => client.approveSkillProposal(orgId, proposalId),
+    mutationFn: (proposalId: string) =>
+      client.approveSkillProposal(orgId, proposalId),
     onSuccess: () => invalidateSkillProposalQueries(queryClient, orgId),
   });
 }
@@ -47,7 +48,8 @@ export function useApproveSkillProposal(orgId: string) {
 export function useRejectSkillProposal(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (proposalId: string) => client.rejectSkillProposal(orgId, proposalId),
+    mutationFn: (proposalId: string) =>
+      client.rejectSkillProposal(orgId, proposalId),
     onSuccess: () => invalidateSkillProposalQueries(queryClient, orgId),
   });
 }

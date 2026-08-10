@@ -19,7 +19,6 @@ describe("countWords", () => {
   test("returns 0 for empty text", () => {
     expect(countWords("   \n\t  ")).toBe(0);
   });
-
 });
 
 describe("createPastedTextFile", () => {

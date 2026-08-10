@@ -1,25 +1,24 @@
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
-import type { ProviderName } from "@nakama/core";
 import {
-  resolveCodingAgentSpawnBundle,
-  redactSpawnEnvForPrompt,
-  mapNakamaProviderToPi,
   formatModelForHarness,
+  mapNakamaProviderToPi,
+  redactSpawnEnvForPrompt,
+  resolveCodingAgentSpawnBundle,
 } from "./coding-agent-spawn-env";
 
 export interface CodingAgentCommandHarness {
+  args: string[];
+  command: string;
   kind: StoredCodingAgentHarnessKind;
   name: string;
-  command: string;
-  args: string[];
 }
 
 export interface CodingAgentCommandTemplate {
   backend: StoredCodingAgentHarnessKind;
-  harnessName: string;
   command: string;
-  spawnEnv: Record<string, string>;
+  harnessName: string;
   notes: string[];
+  spawnEnv: Record<string, string>;
 }
 
 export function buildHarnessNonInteractiveArgs(
@@ -30,7 +29,7 @@ export function buildHarnessNonInteractiveArgs(
     baseArgs?: string[];
     piProvider?: string | null;
     piModel?: string | null;
-  },
+  }
 ): string[] {
   const baseArgs = [...(options.baseArgs ?? [])];
   const prompt = options.prompt.trim() || "Reply with OK and nothing else.";
@@ -63,14 +62,7 @@ export function buildHarnessNonInteractiveArgs(
   }
 
   if (kind === "cursor_agent") {
-    return [
-      ...baseArgs,
-      "-p",
-      prompt,
-      "--output-format",
-      "text",
-      "--yolo",
-    ];
+    return [...baseArgs, "-p", prompt, "--output-format", "text", "--yolo"];
   }
 
   if (kind === "pi") {
@@ -107,14 +99,14 @@ export async function buildCodingAgentCommandTemplate(
   options: {
     userConfig?: import("@nakama/core").UserConfig | null;
     profileModel?: string | null;
-  } = {},
+  } = {}
 ): Promise<CodingAgentCommandTemplate> {
   const escapedTask = shellEscape(taskPrompt.trim());
   const baseCommand = [harness.command, ...harness.args].join(" ");
   const { spawn, routing } = await resolveCodingAgentSpawnBundle({
-    userConfig: options.userConfig,
-    profileModel: options.profileModel,
     harnessKind: harness.kind,
+    profileModel: options.profileModel,
+    userConfig: options.userConfig,
   });
   const spawnEnv = spawn.env;
   const shared = {
@@ -187,9 +179,15 @@ export async function buildCodingAgentCommandTemplate(
   }
 
   if (harness.kind === "pi") {
-    const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
+    const piProvider = routing.providerType
+      ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl)
+      : null;
     const piModel = routing.model
-      ? formatModelForHarness("pi", routing.providerType ?? "openai", routing.model)
+      ? formatModelForHarness(
+          "pi",
+          routing.providerType ?? "openai",
+          routing.model
+        )
       : null;
     const commandParts = [baseCommand];
 
@@ -234,7 +232,7 @@ export async function buildCodingAgentCommandTemplate(
 }
 
 export function formatCodingAgentCommandContext(
-  template: CodingAgentCommandTemplate,
+  template: CodingAgentCommandTemplate
 ): string {
   const lines = [
     "# Coding Agent Harness",
@@ -255,7 +253,7 @@ export function formatCodingAgentCommandContext(
       "",
       "```json",
       JSON.stringify(redactSpawnEnvForPrompt(template.spawnEnv), null, 2),
-      "```",
+      "```"
     );
   }
 
@@ -270,7 +268,7 @@ export function formatCodingAgentCommandContext(
 }
 
 function getBackendSkillName(
-  backend: StoredCodingAgentHarnessKind,
+  backend: StoredCodingAgentHarnessKind
 ):
   | "coding-backend-codex"
   | "coding-backend-claude-code"

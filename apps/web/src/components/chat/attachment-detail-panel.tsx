@@ -1,30 +1,27 @@
-import { XIcon } from "lucide-react";
+import { Cancel01Icon } from "hugeicons-react";
 import {
+  type PointerEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
-  useState,
-  type PointerEvent,
-  type ReactNode,
 } from "react";
-import { Button } from "@/components/ui/button";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const WIDTH_MOTION_MS = 200;
-
 interface AttachmentDetailPanelProps {
-  title: string;
-  subtitle?: string | null;
-  children: ReactNode;
-  headerActions?: ReactNode;
   bodyClassName?: string;
-  resizable?: boolean;
-  fullscreen?: boolean;
-  width: number;
-  onWidthChange: (width: number) => void;
-  onClose: () => void;
+  children: ReactNode;
   className?: string;
+  fullscreen?: boolean;
+  headerActions?: ReactNode;
+  onClose: () => void;
+  onWidthChange: (width: number) => void;
+  resizable?: boolean;
+  subtitle?: string | null;
+  title: string;
+  width: number;
 }
 
 export function AttachmentDetailPanel({
@@ -40,63 +37,12 @@ export function AttachmentDetailPanel({
   onClose,
   className,
 }: AttachmentDetailPanelProps) {
-  const asideRef = useRef<HTMLElement>(null);
   const draggingRef = useRef(false);
-  const prevFullscreenRef = useRef(fullscreen);
-  const [displayWidth, setDisplayWidth] = useState(width);
-  const [animateWidth, setAnimateWidth] = useState(false);
 
   const clampWidth = useCallback(
     (nextWidth: number) => clampAttachmentPanelWidth(nextWidth),
-    [],
+    []
   );
-
-  useEffect(() => {
-    if (!fullscreen && !animateWidth) {
-      setDisplayWidth(width);
-    }
-  }, [animateWidth, fullscreen, width]);
-
-  useEffect(() => {
-    if (prevFullscreenRef.current === fullscreen) {
-      return;
-    }
-
-    prevFullscreenRef.current = fullscreen;
-    setAnimateWidth(true);
-
-    const frame = window.requestAnimationFrame(() => {
-      if (fullscreen) {
-        const parent = asideRef.current?.parentElement;
-        setDisplayWidth(parent?.clientWidth ?? width);
-        return;
-      }
-
-      setDisplayWidth(width);
-    });
-
-    const timeout = window.setTimeout(() => setAnimateWidth(false), WIDTH_MOTION_MS);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timeout);
-    };
-  }, [fullscreen, width]);
-
-  useEffect(() => {
-    if (!fullscreen) {
-      return;
-    }
-
-    function measure() {
-      const parent = asideRef.current?.parentElement;
-      if (parent) {
-        setDisplayWidth(parent.clientWidth);
-      }
-    }
-
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [fullscreen]);
 
   useEffect(() => {
     if (fullscreen) {
@@ -119,7 +65,7 @@ export function AttachmentDetailPanel({
     (clientX: number) => {
       onWidthChange(clampWidth(window.innerWidth - clientX));
     },
-    [clampWidth, onWidthChange],
+    [clampWidth, onWidthChange]
   );
 
   function handleResizePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -158,51 +104,56 @@ export function AttachmentDetailPanel({
 
   return (
     <aside
-      ref={asideRef}
-      data-slot="attachment-detail-panel"
-      style={{ width: displayWidth }}
       className={cn(
-        "relative flex min-h-0 shrink-0 flex-col border-l border-border bg-background",
-        animateWidth &&
-          "transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        !fullscreen && !animateWidth && "max-w-[50vw] lg:max-w-[75vw]",
-        className,
+        "relative flex min-h-0 shrink-0 flex-col border-border border-l bg-background",
+        fullscreen
+          ? "left-0 w-full min-w-0 flex-1"
+          : "max-w-[50vw] lg:max-w-[75vw]",
+        className
       )}
+      data-slot="attachment-detail-panel"
+      style={fullscreen ? undefined : { width }}
     >
       {resizable && !fullscreen ? (
         <div
-          role="separator"
-          aria-orientation="vertical"
           aria-label="Resize panel"
+          aria-orientation="vertical"
           className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize touch-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent hover:before:bg-border active:before:bg-border"
+          onPointerCancel={handleResizePointerUp}
           onPointerDown={handleResizePointerDown}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
-          onPointerCancel={handleResizePointerUp}
+          role="separator"
         />
       ) : null}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-border border-b px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-medium">{title}</h2>
+            <h2 className="truncate font-medium text-sm">{title}</h2>
             {subtitle ? (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
+              <p className="mt-0.5 truncate text-muted-foreground text-xs">
+                {subtitle}
+              </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {headerActions}
             <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
               aria-label="Close attachment panel"
               onClick={onClose}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
             >
-              <XIcon className="size-4" />
+              <Cancel01Icon className="size-4" />
             </Button>
           </div>
         </div>
-        <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", bodyClassName)}>{children}</div>
+        <div
+          className={cn("min-h-0 flex-1 overflow-y-auto p-4", bodyClassName)}
+        >
+          {children}
+        </div>
       </div>
     </aside>
   );

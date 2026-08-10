@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
+import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
-import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
 import { TranscriptionSettingsCard } from "@/components/settings/TranscriptionSettingsCard";
+import { VisionSettingsCard } from "@/components/settings/VisionSettingsCard";
 import { WebPublicUrlSettingsRow } from "@/components/settings/WebPublicUrlSettingsRow";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
@@ -38,12 +36,12 @@ export function SettingsPage() {
     setTimezoneHint(null);
 
     saveTimezoneMutation.mutate(timezone.trim(), {
+      onError: (err) => {
+        setFormError(formatError(err));
+      },
       onSuccess: (saved) => {
         setTimezone(saved);
         setTimezoneHint(`Saved · ${saved}`);
-      },
-      onError: (err) => {
-        setFormError(formatError(err));
       },
     });
   }, [saveTimezoneMutation, timezone]);
@@ -54,8 +52,10 @@ export function SettingsPage() {
         <CardContent className="divide-y divide-border p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="space-y-0.5">
-              <p className="text-sm font-medium text-foreground">Appearance</p>
-              <p className="text-pretty text-xs text-muted-foreground">Color theme</p>
+              <p className="font-medium text-foreground text-sm">Appearance</p>
+              <p className="text-pretty text-muted-foreground text-xs">
+                Color theme
+              </p>
             </div>
             <ThemeToggle />
           </div>
@@ -64,34 +64,43 @@ export function SettingsPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-medium text-foreground">Timezone</p>
+                  <p className="font-medium text-foreground text-sm">
+                    Timezone
+                  </p>
                   {timezoneHint ? (
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">
+                    <p
+                      className="text-emerald-700 text-xs dark:text-emerald-300"
+                      role="status"
+                    >
                       {timezoneHint}
                     </p>
                   ) : (
-                    <p className="text-pretty text-xs text-muted-foreground">For scheduled automations</p>
+                    <p className="text-pretty text-muted-foreground text-xs">
+                      For scheduled automations
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <TimezoneSelect
-                    id="timezone"
                     className="w-44 min-w-0 sm:w-52"
-                    value={timezone}
                     disabled={saveTimezoneMutation.isPending}
                     emptyLabel="Select timezone"
+                    id="timezone"
                     onValueChange={(nextTimezone) => {
                       if (nextTimezone) {
                         setTimezone(nextTimezone);
                         setTimezoneHint(null);
                       }
                     }}
+                    value={timezone}
                   />
                   <Button
-                    type="button"
-                    size="sm"
-                    disabled={saveTimezoneMutation.isPending || !timezone.trim()}
+                    disabled={
+                      saveTimezoneMutation.isPending || !timezone.trim()
+                    }
                     onClick={handleSaveTimezone}
+                    size="sm"
+                    type="button"
                   >
                     {saveTimezoneMutation.isPending ? (
                       <>
@@ -113,17 +122,21 @@ export function SettingsPage() {
 
       {isOrgAdmin ? (
         <>
-          <ProviderSettingsCard formError={formError} onFormError={setFormError} />
+          <ProviderSettingsCard
+            formError={formError}
+            onFormError={setFormError}
+          />
 
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
               <VisionSettingsCard />
               <TranscriptionSettingsCard />
+              <ImageGenerationSettingsCard />
             </CardContent>
           </Card>
 
           {formError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {formError}
             </p>
           ) : null}

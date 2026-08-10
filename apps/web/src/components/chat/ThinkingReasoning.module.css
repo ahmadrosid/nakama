@@ -22,14 +22,14 @@
 
 .header {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
   align-self: flex-start;
   min-height: 20px;
   padding: 0;
-  border: 0;
-  background: transparent;
   cursor: default;
+  background: transparent;
+  border: 0;
 }
 
 .headerClickable {
@@ -38,8 +38,8 @@
 
 .label {
   font-size: 13px;
-  line-height: 18px;
   font-weight: 500;
+  line-height: 18px;
   color: var(--c-muted);
   letter-spacing: -0.005em;
 }
@@ -50,8 +50,8 @@
 
 .chevron {
   color: var(--c-muted);
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
   transform: rotate(180deg);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .headerExpanded .chevron {
@@ -73,8 +73,8 @@
 
 .collapsibleCollapsed {
   grid-template-rows: 0fr;
-  opacity: 0;
   pointer-events: none;
+  opacity: 0;
 }
 
 .inner {
@@ -102,16 +102,16 @@
 }
 
 .sentence {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
   margin: 0;
-  line-height: 18px;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
   font-size: 13px;
   font-weight: 425;
+  line-height: 18px;
   color: var(--c-muted);
   letter-spacing: -0.005em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 /* Animate only newly appended sentences (not text growing in an existing line). */
@@ -141,9 +141,9 @@
     color-mix(in srgb, var(--c-muted) 100%, transparent) 70%,
     color-mix(in srgb, var(--c-muted) 100%, transparent) 100%
   );
-  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
+  background-size: 300% 100%;
   animation: tr-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
 }
 
@@ -198,9 +198,9 @@
   }
 
   .shimmer {
-    animation: none;
-    background: none;
-    -webkit-text-fill-color: var(--c-muted);
     color: var(--c-muted);
+    -webkit-text-fill-color: var(--c-muted);
+    background: none;
+    animation: none;
   }
 }

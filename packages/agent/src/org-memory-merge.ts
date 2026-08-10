@@ -1,9 +1,9 @@
 import {
   applyApprovedOrgMemoryBullet,
   normalizeOrgMemoryDedupKey,
+  type ProviderClient,
   parseOrgMemoryContent,
   rebuildOrgMemoryContent,
-  type ProviderClient,
 } from "@nakama/core";
 
 const ORG_MEMORY_MERGE_SYSTEM = [
@@ -19,15 +19,15 @@ const ORG_MEMORY_MERGE_SYSTEM = [
 ].join("\n");
 
 export interface MergeOrgMemoryWithApprovedBulletOptions {
-  pin?: boolean;
   dateUtc?: string;
+  pin?: boolean;
   provider?: ProviderClient;
 }
 
 function buildOrgMemoryMergePrompt(
   content: string,
   bullet: string,
-  options: { pin: boolean; dateUtc: string },
+  options: { pin: boolean; dateUtc: string }
 ): string {
   return [
     "Current MEMORY.md:",
@@ -61,9 +61,13 @@ function mergedContentIncludesBullet(content: string, bullet: string): boolean {
   const parsed = parseOrgMemoryContent(content);
   const dedupKey = normalizeOrgMemoryDedupKey(bullet);
   return (
-    parsed.pinned.some((entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey) ||
+    parsed.pinned.some(
+      (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey
+    ) ||
     parsed.sections.some((section) =>
-      section.bullets.some((entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey),
+      section.bullets.some(
+        (entry) => normalizeOrgMemoryDedupKey(entry) === dedupKey
+      )
     )
   );
 }
@@ -71,7 +75,7 @@ function mergedContentIncludesBullet(content: string, bullet: string): boolean {
 export async function mergeOrgMemoryWithApprovedBullet(
   content: string,
   bullet: string,
-  options: MergeOrgMemoryWithApprovedBulletOptions = {},
+  options: MergeOrgMemoryWithApprovedBulletOptions = {}
 ): Promise<string | null> {
   const pin = options.pin ?? false;
   const dateUtc = options.dateUtc ?? new Date().toISOString().slice(0, 10);
@@ -83,13 +87,13 @@ export async function mergeOrgMemoryWithApprovedBullet(
 
   try {
     const result = await provider.generateText({
-      system: ORG_MEMORY_MERGE_SYSTEM,
-      prompt: buildOrgMemoryMergePrompt(content, bullet, { pin, dateUtc }),
       format: "text",
+      prompt: buildOrgMemoryMergePrompt(content, bullet, { dateUtc, pin }),
+      system: ORG_MEMORY_MERGE_SYSTEM,
     });
 
     const merged = normalizeMergedOrgMemoryContent(result.content);
-    if (!merged || !mergedContentIncludesBullet(merged, bullet)) {
+    if (!(merged && mergedContentIncludesBullet(merged, bullet))) {
       return null;
     }
 
@@ -103,10 +107,10 @@ export async function mergeOrgMemoryWithApprovedBullet(
 export function mergeOrgMemoryWithApprovedBulletFallback(
   content: string,
   bullet: string,
-  options: MergeOrgMemoryWithApprovedBulletOptions = {},
+  options: MergeOrgMemoryWithApprovedBulletOptions = {}
 ): string {
   return applyApprovedOrgMemoryBullet(content, bullet, {
-    pin: options.pin,
     dateUtc: options.dateUtc,
+    pin: options.pin,
   });
 }

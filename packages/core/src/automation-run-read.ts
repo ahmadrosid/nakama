@@ -4,7 +4,7 @@ export const AUTOMATION_RUN_READ_EPOCH = "1970-01-01T00:00:00.000Z";
 
 export function isAutomationRunUnread(
   run: Pick<AutomationRunRecord, "status" | "completedAt" | "startedAt">,
-  readThroughAt: string | null | undefined,
+  readThroughAt: string | null | undefined
 ): boolean {
   if (run.status === "running") {
     return false;
@@ -16,7 +16,7 @@ export function isAutomationRunUnread(
 }
 
 export function summarizeAutomationUnreadCounts(
-  counts: Array<{ automationId: string; unreadCount: number }>,
+  counts: Array<{ automationId: string; unreadCount: number }>
 ): { totalUnread: number; byAutomationId: Record<string, number> } {
   const byAutomationId: Record<string, number> = {};
   let totalUnread = 0;
@@ -30,5 +30,5 @@ export function summarizeAutomationUnreadCounts(
     totalUnread += entry.unreadCount;
   }
 
-  return { totalUnread, byAutomationId };
+  return { byAutomationId, totalUnread };
 }

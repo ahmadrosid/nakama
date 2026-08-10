@@ -2,27 +2,23 @@ import { useNavigate } from "react-router-dom";
 import {
   buildChatPath,
   buildNewChatPath,
-  type RequestedChatSession,
   MAX_URL_CHAT_DRAFT_LENGTH,
+  type RequestedChatSession,
   storeChatDraft,
 } from "@/lib/chat-history";
-import { pathForPage, skillDetailPath, toolPlaygroundPath, type PageId } from "@/lib/navigation";
+import {
+  type PageId,
+  pathForPage,
+  skillDetailPath,
+  toolPlaygroundPath,
+} from "@/lib/navigation";
 
 export function useAppNavigation() {
   const navigate = useNavigate();
 
   return {
-    navigateToPage(pageId: PageId) {
-      navigate(pathForPage(pageId));
-    },
     navigateToChat(session: RequestedChatSession) {
       navigate(buildChatPath(session.profileId, session.sessionId));
-    },
-    navigateToToolPlayground(toolId: string) {
-      navigate(toolPlaygroundPath(toolId));
-    },
-    navigateToSkillDetail(skillId: string, options?: { profileId?: string }) {
-      navigate(skillDetailPath(skillId, options));
     },
     navigateToNewChat(profileId?: string | null, options?: { draft?: string }) {
       const draft = options?.draft?.trim();
@@ -39,6 +35,15 @@ export function useAppNavigation() {
       }
 
       navigate(`${url.pathname}?${url.searchParams.toString()}`);
+    },
+    navigateToPage(pageId: PageId) {
+      navigate(pathForPage(pageId));
+    },
+    navigateToSkillDetail(skillId: string, options?: { profileId?: string }) {
+      navigate(skillDetailPath(skillId, options));
+    },
+    navigateToToolPlayground(toolId: string) {
+      navigate(toolPlaygroundPath(toolId));
     },
   };
 }

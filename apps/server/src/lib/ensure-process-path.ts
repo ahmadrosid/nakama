@@ -14,7 +14,10 @@ export function ensureProcessPath(): void {
   ensured = true;
 }
 
-function getBunGlobalPaths(home = homedir()): { binDir: string; globalDir: string } {
+function getBunGlobalPaths(home = homedir()): {
+  binDir: string;
+  globalDir: string;
+} {
   return {
     binDir: path.join(home, ".bun", "bin"),
     globalDir: path.join(home, ".bun", "install", "global"),

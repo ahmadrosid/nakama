@@ -1,5 +1,5 @@
+import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
-import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -80,7 +80,9 @@ export function DiscordAllowedUsersDialog({
       onAllowedUsersChange(next);
       setNewUserId("");
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Invalid user ID.");
+      setLocalError(
+        error instanceof Error ? error.message : "Invalid user ID."
+      );
     }
   }
 
@@ -97,21 +99,21 @@ export function DiscordAllowedUsersDialog({
         profileId: profileId.trim() || "default",
       },
       {
-        onSuccess: () => {
-          onSaved?.();
-          onOpenChange(false);
-        },
         onError: (error) => {
           const message = formatError(error);
           setLocalError(message);
           onError?.(message);
         },
-      },
+        onSuccess: () => {
+          onSaved?.();
+          onOpenChange(false);
+        },
+      }
     );
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Allowed Discord users</DialogTitle>
@@ -123,8 +125,6 @@ export function DiscordAllowedUsersDialog({
         <div className="space-y-3">
           <InputGroup>
             <InputGroupInput
-              placeholder="User ID or comma-separated IDs"
-              value={newUserId}
               onChange={(event) => setNewUserId(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -132,45 +132,60 @@ export function DiscordAllowedUsersDialog({
                   handleAdd();
                 }
               }}
+              placeholder="User ID or comma-separated IDs"
+              value={newUserId}
             />
           </InputGroup>
-          <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
+          <Button onClick={handleAdd} size="sm" type="button" variant="outline">
             Add
           </Button>
 
           {allowedUsers.length > 0 ? (
             <ul className="divide-y divide-border rounded-md border border-border">
               {allowedUsers.map((user) => (
-                <li key={user.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                <li
+                  className="flex items-center justify-between gap-2 px-3 py-2"
+                  key={user.id}
+                >
                   <code className="text-xs">{user.id}</code>
                   <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
                     aria-label={`Remove ${user.id}`}
                     onClick={() => handleRemove(user.id)}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
                   >
-                    <Trash2Icon className="size-4" />
+                    <Delete02Icon className="size-4" />
                   </Button>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-muted-foreground">No manual users yet.</p>
+            <p className="text-muted-foreground text-xs">
+              No manual users yet.
+            </p>
           )}
 
           {localError ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-destructive text-xs" role="alert">
               {localError}
             </p>
           ) : null}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
             Cancel
           </Button>
-          <Button type="button" disabled={saveMutation.isPending} onClick={handleSave}>
+          <Button
+            disabled={saveMutation.isPending}
+            onClick={handleSave}
+            type="button"
+          >
             Save
           </Button>
         </DialogFooter>

@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   createInMemoryDatabaseAdapter,
-  seedOrgDefaultProfile,
   type DatabaseAdapter,
+  seedOrgDefaultProfile,
 } from "@nakama/db";
 import { SkillUsageService } from "./skill-usage-service";
 
@@ -25,15 +22,15 @@ describe("SkillUsageService", () => {
     const now = new Date().toISOString();
     skillId = "skill_deploy";
     await db.upsertSkill({
-      id: skillId,
-      name: "deploy-checklist",
+      createdAt: now,
+      createdBy: "agent",
       description: "Deploy steps",
-      sourcePath: `/tmp/${skillId}`,
-      hasTool: false,
       disableModelInvocation: false,
       enabled: true,
-      createdBy: "agent",
-      createdAt: now,
+      hasTool: false,
+      id: skillId,
+      name: "deploy-checklist",
+      sourcePath: `/tmp/${skillId}`,
       updatedAt: now,
     });
     await db.assignSkillToProfile(profileId, skillId);
@@ -53,7 +50,10 @@ describe("SkillUsageService", () => {
   });
 
   test("recordCatalogViews dedupes within session", async () => {
-    const context = { sessionId: "sess_1", seenCatalogSkillIds: new Set<string>() };
+    const context = {
+      seenCatalogSkillIds: new Set<string>(),
+      sessionId: "sess_1",
+    };
 
     await service.recordCatalogViews(ORG_ID, profileId, [skillId], context);
     await service.recordCatalogViews(ORG_ID, profileId, [skillId], context);

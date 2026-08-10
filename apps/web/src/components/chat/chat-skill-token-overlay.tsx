@@ -1,11 +1,14 @@
 import type { SkillSummary } from "@nakama/core/contract";
-import { getSkillTokenRanges, type SkillTokenRange } from "@/lib/chat-composer-skills";
+import {
+  getSkillTokenRanges,
+  type SkillTokenRange,
+} from "@/lib/chat-composer-skills";
 import { cn } from "@/lib/utils";
 
 interface ChatSkillTokenOverlayProps {
-  value: string;
-  skills: SkillSummary[];
   className?: string;
+  skills: SkillSummary[];
+  value: string;
 }
 
 export function ChatSkillTokenOverlay({
@@ -14,7 +17,7 @@ export function ChatSkillTokenOverlay({
   className,
 }: ChatSkillTokenOverlayProps) {
   const tokenRanges = getSkillTokenRanges(value).filter((range) =>
-    skills.some((skill) => skill.name === range.name),
+    skills.some((skill) => skill.name === range.name)
   );
 
   if (tokenRanges.length === 0) {
@@ -26,7 +29,7 @@ export function ChatSkillTokenOverlay({
       aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 z-0 overflow-hidden whitespace-pre-wrap break-words text-transparent",
-        className,
+        className
       )}
     >
       {renderHighlightedValue(value, tokenRanges)}
@@ -45,11 +48,11 @@ function renderHighlightedValue(value: string, tokenRanges: SkillTokenRange[]) {
 
     parts.push(
       <span
-        key={`${token.start}:${token.end}`}
         className="rounded bg-primary/10 ring-1 ring-primary/20"
+        key={`${token.start}:${token.end}`}
       >
         {value.slice(token.start, token.end)}
-      </span>,
+      </span>
     );
     cursor = token.end;
   }

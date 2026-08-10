@@ -12,21 +12,22 @@ describe("bundled create-automation skill", () => {
     const content = await readBundledSkillMarkdown("create-automation");
     const parsed = parseSkillMarkdown(content, "create-automation/SKILL.md");
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/create-automation",
-      skillFilePath: "/tmp/create-automation/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/create-automation",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/create-automation/SKILL.md",
       toolPath: null,
     };
 
     expect(
-      matchSkillsForMessage([discovered], "Remind me every weekday at 8am to check email").map(
-        (skill) => skill.name,
-      ),
+      matchSkillsForMessage(
+        [discovered],
+        "Remind me every weekday at 8am to check email"
+      ).map((skill) => skill.name)
     ).toEqual(["create-automation"]);
   });
 });
@@ -36,21 +37,22 @@ describe("bundled create-profile skill", () => {
     const content = await readBundledSkillMarkdown("create-profile");
     const parsed = parseSkillMarkdown(content, "create-profile/SKILL.md");
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/create-profile",
-      skillFilePath: "/tmp/create-profile/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/create-profile",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/create-profile/SKILL.md",
       toolPath: null,
     };
 
     expect(
-      matchSkillsForMessage([discovered], "Create a support bot profile for billing").map(
-        (skill) => skill.name,
-      ),
+      matchSkillsForMessage(
+        [discovered],
+        "Create a support bot profile for billing"
+      ).map((skill) => skill.name)
     ).toEqual(["create-profile"]);
   });
 
@@ -77,21 +79,22 @@ describe("bundled manage-skills skill", () => {
     const content = await readBundledSkillMarkdown("manage-skills");
     const parsed = parseSkillMarkdown(content, "manage-skills/SKILL.md");
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/manage-skills",
-      skillFilePath: "/tmp/manage-skills/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/manage-skills",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/manage-skills/SKILL.md",
       toolPath: null,
     };
 
     expect(
-      matchSkillsForMessage([discovered], "Create a reusable skill for bug triage").map(
-        (skill) => skill.name,
-      ),
+      matchSkillsForMessage(
+        [discovered],
+        "Create a reusable skill for bug triage"
+      ).map((skill) => skill.name)
     ).toEqual(["manage-skills"]);
   });
 });
@@ -99,29 +102,33 @@ describe("bundled manage-skills skill", () => {
 describe("bundled archive-profile-memory skill", () => {
   test("description matches archive and cleanup messages", async () => {
     const content = await readBundledSkillMarkdown("archive-profile-memory");
-    const parsed = parseSkillMarkdown(content, "archive-profile-memory/SKILL.md");
+    const parsed = parseSkillMarkdown(
+      content,
+      "archive-profile-memory/SKILL.md"
+    );
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/archive-profile-memory",
-      skillFilePath: "/tmp/archive-profile-memory/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/archive-profile-memory",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/archive-profile-memory/SKILL.md",
       toolPath: null,
     };
 
     expect(
       matchSkillsForMessage([discovered], "Please forget that preference").map(
-        (skill) => skill.name,
-      ),
+        (skill) => skill.name
+      )
     ).toEqual(["archive-profile-memory"]);
 
     expect(
-      matchSkillsForMessage([discovered], "Clean up old memory from last month").map(
-        (skill) => skill.name,
-      ),
+      matchSkillsForMessage(
+        [discovered],
+        "Clean up old memory from last month"
+      ).map((skill) => skill.name)
     ).toEqual(["archive-profile-memory"]);
   });
 });
@@ -129,23 +136,27 @@ describe("bundled archive-profile-memory skill", () => {
 describe("bundled update-profile-memory skill", () => {
   test("description matches remember and preference messages", async () => {
     const content = await readBundledSkillMarkdown("update-profile-memory");
-    const parsed = parseSkillMarkdown(content, "update-profile-memory/SKILL.md");
+    const parsed = parseSkillMarkdown(
+      content,
+      "update-profile-memory/SKILL.md"
+    );
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/update-profile-memory",
-      skillFilePath: "/tmp/update-profile-memory/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/update-profile-memory",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/update-profile-memory/SKILL.md",
       toolPath: null,
     };
 
     expect(
-      matchSkillsForMessage([discovered], "Remember that I prefer dark mode").map(
-        (skill) => skill.name,
-      ),
+      matchSkillsForMessage(
+        [discovered],
+        "Remember that I prefer dark mode"
+      ).map((skill) => skill.name)
     ).toEqual(["update-profile-memory"]);
   });
 });
@@ -155,27 +166,27 @@ describe("bundled save-artifact skill", () => {
     const content = await readBundledSkillMarkdown("save-artifact");
     const parsed = parseSkillMarkdown(content, "save-artifact/SKILL.md");
     const discovered = {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: false,
-      includeBodyOnMatch: true,
-      directory: "/tmp/save-artifact",
-      skillFilePath: "/tmp/save-artifact/SKILL.md",
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory: "/tmp/save-artifact",
+      disableModelInvocation: false,
       hasTool: false,
+      includeBodyOnMatch: true,
+      name: parsed.frontmatter.name,
+      skillFilePath: "/tmp/save-artifact/SKILL.md",
       toolPath: null,
     };
 
     expect(
       matchSkillsForMessage([discovered], "Save this report for later").map(
-        (skill) => skill.name,
-      ),
+        (skill) => skill.name
+      )
     ).toEqual(["save-artifact"]);
 
     expect(
       matchSkillsForMessage([discovered], "move it to artifact please").map(
-        (skill) => skill.name,
-      ),
+        (skill) => skill.name
+      )
     ).toEqual(["save-artifact"]);
   });
 });
@@ -211,9 +222,20 @@ describe("ensureBundledSkillFiles", () => {
   });
 
   test("does not overwrite existing skill files", async () => {
-    const skillPath = join(configDir, "agent", "skills", "create-automation", "SKILL.md");
-    await mkdir(join(configDir, "agent", "skills", "create-automation"), { recursive: true });
-    await Bun.write(skillPath, "---\nname: create-automation\ndescription: custom\n---\n");
+    const skillPath = join(
+      configDir,
+      "agent",
+      "skills",
+      "create-automation",
+      "SKILL.md"
+    );
+    await mkdir(join(configDir, "agent", "skills", "create-automation"), {
+      recursive: true,
+    });
+    await Bun.write(
+      skillPath,
+      "---\nname: create-automation\ndescription: custom\n---\n"
+    );
 
     const created = await ensureBundledSkillFiles();
 
@@ -222,9 +244,20 @@ describe("ensureBundledSkillFiles", () => {
   });
 
   test("force-refreshes manage-skills even when an installed copy exists", async () => {
-    const skillPath = join(configDir, "agent", "skills", "manage-skills", "SKILL.md");
-    await mkdir(join(configDir, "agent", "skills", "manage-skills"), { recursive: true });
-    await Bun.write(skillPath, "---\nname: manage-skills\ndescription: stale\n---\n");
+    const skillPath = join(
+      configDir,
+      "agent",
+      "skills",
+      "manage-skills",
+      "SKILL.md"
+    );
+    await mkdir(join(configDir, "agent", "skills", "manage-skills"), {
+      recursive: true,
+    });
+    await Bun.write(
+      skillPath,
+      "---\nname: manage-skills\ndescription: stale\n---\n"
+    );
 
     const created = await ensureBundledSkillFiles();
     const content = await readFile(skillPath, "utf8");

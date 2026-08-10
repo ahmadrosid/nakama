@@ -1,13 +1,13 @@
 import { Bot } from "grammy";
+import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { TelegramBridgeConfig } from "./config";
-import { createChatHandler, type ChatHandlerDeps } from "./chat-handler";
 import type { TelegramBotInfo } from "./group-message";
 
 export async function createBot(
   config: TelegramBridgeConfig,
   deps: Omit<ChatHandlerDeps, "config" | "getBotInfo"> & {
     getBotInfo?: () => TelegramBotInfo | undefined;
-  },
+  }
 ): Promise<Bot> {
   const bot = new Bot(config.botToken);
   await bot.init();

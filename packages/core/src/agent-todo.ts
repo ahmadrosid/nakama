@@ -2,7 +2,7 @@ import type { AgentTodo } from "./contract";
 
 export function hasActiveAgentTodos(todos: readonly AgentTodo[]): boolean {
   return todos.some(
-    (todo) => todo.status === "pending" || todo.status === "in_progress",
+    (todo) => todo.status === "pending" || todo.status === "in_progress"
   );
 }
 

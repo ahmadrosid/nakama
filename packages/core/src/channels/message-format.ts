@@ -1,10 +1,16 @@
-import type { AutomationDeliveryChannel, AutomationRunStatus } from "../contract";
+import type {
+  AutomationDeliveryChannel,
+  AutomationRunStatus,
+} from "../contract";
 
 const TELEGRAM_MAX_LENGTH = 4096;
 const WHATSAPP_MAX_LENGTH = 4096;
 const EMAIL_BODY_MAX_LENGTH = 100_000;
 
-export function truncateForChannel(text: string, channel: AutomationDeliveryChannel): string {
+export function truncateForChannel(
+  text: string,
+  channel: AutomationDeliveryChannel
+): string {
   const max =
     channel === "email"
       ? EMAIL_BODY_MAX_LENGTH
@@ -38,7 +44,10 @@ export function formatAutomationDeliveryMessage(options: {
   return { subject, text };
 }
 
-export function splitTelegramChunks(text: string, maxLength = TELEGRAM_MAX_LENGTH): string[] {
+export function splitTelegramChunks(
+  text: string,
+  maxLength = TELEGRAM_MAX_LENGTH
+): string[] {
   const trimmed = text.trim();
 
   if (!trimmed) {

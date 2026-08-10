@@ -6,19 +6,26 @@ interface TelegramReplyMessage {
 }
 
 export interface TelegramRichMessenger {
+  edit(messageId: number, text: string): Promise<void>;
   send(text: string): Promise<TelegramReplyMessage | undefined>;
   sendPlain(text: string): Promise<TelegramReplyMessage | undefined>;
   /** Send trimmed text with no markdown stripping (safe for share URLs / tokens). */
   sendRaw(text: string): Promise<TelegramReplyMessage | undefined>;
-  edit(messageId: number, text: string): Promise<void>;
 }
 
-export function createTelegramRichMessenger(ctx: Context): TelegramRichMessenger {
+export function createTelegramRichMessenger(
+  ctx: Context
+): TelegramRichMessenger {
   return {
-    async send(text: string): Promise<TelegramReplyMessage | undefined> {
-      return sendRichMessage(ctx, text).catch(async () => {
-        return sendPlainMessage(ctx, text);
+    async edit(messageId: number, text: string): Promise<void> {
+      await editRichMessage(ctx, messageId, text).catch(async () => {
+        await editPlainMessage(ctx, messageId, text);
       });
+    },
+    async send(text: string): Promise<TelegramReplyMessage | undefined> {
+      return sendRichMessage(ctx, text).catch(async () =>
+        sendPlainMessage(ctx, text)
+      );
     },
     async sendPlain(text: string): Promise<TelegramReplyMessage | undefined> {
       return sendPlainMessage(ctx, text);
@@ -26,17 +33,12 @@ export function createTelegramRichMessenger(ctx: Context): TelegramRichMessenger
     async sendRaw(text: string): Promise<TelegramReplyMessage | undefined> {
       return sendRawMessage(ctx, text);
     },
-    async edit(messageId: number, text: string): Promise<void> {
-      await editRichMessage(ctx, messageId, text).catch(async () => {
-        await editPlainMessage(ctx, messageId, text);
-      });
-    },
   };
 }
 
 async function sendRichMessage(
   ctx: Context,
-  text: string,
+  text: string
 ): Promise<TelegramReplyMessage> {
   return (await ctx.reply(renderTelegramRichText(text), {
     parse_mode: "HTML",
@@ -46,23 +48,30 @@ async function sendRichMessage(
 async function editRichMessage(
   ctx: Context,
   messageId: number,
-  text: string,
+  text: string
 ): Promise<void> {
-  await ctx.api.editMessageText(getChatId(ctx), messageId, renderTelegramRichText(text), {
-    parse_mode: "HTML",
-  });
+  await ctx.api.editMessageText(
+    getChatId(ctx),
+    messageId,
+    renderTelegramRichText(text),
+    {
+      parse_mode: "HTML",
+    }
+  );
 }
 
 async function sendPlainMessage(
   ctx: Context,
-  text: string,
+  text: string
 ): Promise<TelegramReplyMessage> {
-  return (await ctx.reply(prepareTelegramFallbackReply(text))) as TelegramReplyMessage;
+  return (await ctx.reply(
+    prepareTelegramFallbackReply(text)
+  )) as TelegramReplyMessage;
 }
 
 async function sendRawMessage(
   ctx: Context,
-  text: string,
+  text: string
 ): Promise<TelegramReplyMessage> {
   return (await ctx.reply(text.trim())) as TelegramReplyMessage;
 }
@@ -70,9 +79,13 @@ async function sendRawMessage(
 async function editPlainMessage(
   ctx: Context,
   messageId: number,
-  text: string,
+  text: string
 ): Promise<void> {
-  await ctx.api.editMessageText(getChatId(ctx), messageId, prepareTelegramFallbackReply(text));
+  await ctx.api.editMessageText(
+    getChatId(ctx),
+    messageId,
+    prepareTelegramFallbackReply(text)
+  );
 }
 
 function getChatId(ctx: Context): number {

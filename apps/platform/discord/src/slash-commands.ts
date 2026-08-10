@@ -1,34 +1,58 @@
 import {
+  type Client,
   InteractionContextType,
   REST,
   Routes,
   SlashCommandBuilder,
-  type Client,
 } from "discord.js";
 
-const COMMAND_NAMES = ["start", "help", "stop", "clear", "compact", "new", "close", "status"] as const;
+const COMMAND_NAMES = [
+  "start",
+  "help",
+  "stop",
+  "clear",
+  "compact",
+  "new",
+  "close",
+  "status",
+  "allow",
+] as const;
 
 export function buildSlashCommands(): SlashCommandBuilder[] {
   const descriptions: Record<(typeof COMMAND_NAMES)[number], string> = {
-    start: "Welcome and pairing help",
-    help: "Show available commands",
-    stop: "Stop the current agent reply",
+    allow: "Add a Discord user to the bot allowed list",
     clear: "Clear chat history",
-    compact: "Compact conversation history",
-    new: "Start a new conversation",
     close: "Close this bot conversation thread",
+    compact: "Compact conversation history",
+    help: "Show available commands",
+    new: "Start a new conversation",
+    start: "Welcome and pairing help",
     status: "Show server and model status",
+    stop: "Stop the current agent reply",
   };
 
-  return COMMAND_NAMES.map((name) =>
-    new SlashCommandBuilder()
+  return COMMAND_NAMES.map((name) => {
+    const builder = new SlashCommandBuilder()
       .setName(name)
       .setDescription(descriptions[name])
-      .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM),
-  );
+      .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM);
+
+    if (name === "allow") {
+      builder.addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("Discord user to allow")
+          .setRequired(true)
+      );
+    }
+
+    return builder;
+  });
 }
 
-export async function registerSlashCommands(client: Client<true>): Promise<void> {
+export async function registerSlashCommands(
+  client: Client<true>
+): Promise<void> {
   const rest = new REST({ version: "10" }).setToken(client.token);
   const body = buildSlashCommands().map((command) => command.toJSON());
 

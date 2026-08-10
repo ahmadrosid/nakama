@@ -28,22 +28,25 @@ import {
 } from "../shared";
 import { fireworksModelSupportsThinking } from "./thinking";
 
-export const FIREWORKS_INFERENCE_BASE_URL = "https://api.fireworks.ai/inference/v1";
+export const FIREWORKS_INFERENCE_BASE_URL =
+  "https://api.fireworks.ai/inference/v1";
 const PROVIDER_LABEL = "Fireworks";
 
 export interface FireworksProviderOptions {
   apiKey: string;
-  model: string;
   customModels?: CustomModelEntry[];
+  model: string;
 }
 
 interface PendingToolCall {
+  arguments: string;
   id: string;
   name: string;
-  arguments: string;
 }
 
-export function createFireworksProvider(options: FireworksProviderOptions): ProviderClient {
+export function createFireworksProvider(
+  options: FireworksProviderOptions
+): ProviderClient {
   const model = options.model;
   const apiKey = options.apiKey;
   const customModels = options.customModels;
@@ -56,14 +59,22 @@ export function createFireworksProvider(options: FireworksProviderOptions): Prov
 
   const resolveThinking = (input: GenerateChatInput) => {
     if (!fireworksModelSupportsThinking(model, customModels)) {
-      return undefined;
+      return;
     }
 
     return input.providerOptions?.thinking;
   };
 
   return {
-    name: "fireworks",
+    generateChat(input: GenerateChatInput) {
+      return requestChatCompletion(client, {
+        messages: input.messages,
+        model,
+        system: input.system,
+        thinking: resolveThinking(input),
+        tools: input.tools,
+      });
+    },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
       const system = useJson
@@ -71,32 +82,24 @@ export function createFireworksProvider(options: FireworksProviderOptions): Prov
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
 
       return requestCompletion(client, {
-        model,
         messages: [
-          { role: "system", content: system },
-          { role: "user", content: input.prompt },
+          { content: system, role: "system" },
+          { content: input.prompt, role: "user" },
         ],
+        model,
         responseFormat: useJson ? { type: "json_object" } : undefined,
       });
     },
-    generateChat(input: GenerateChatInput) {
-      return requestChatCompletion(client, {
-        model,
-        system: input.system,
-        messages: input.messages,
-        tools: input.tools,
-        thinking: resolveThinking(input),
-      });
-    },
+    name: "fireworks",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return streamChatCompletion({
         apiKey,
+        handlers,
+        messages: input.messages,
         model,
         system: input.system,
-        messages: input.messages,
-        tools: input.tools,
         thinking: resolveThinking(input),
-        handlers,
+        tools: input.tools,
       });
     },
   };
@@ -120,7 +123,9 @@ function formatSdkError(error: unknown): Error {
         : error.error
           ? JSON.stringify(error.error)
           : error.message;
-    return new Error(formatHttpErrorBody(PROVIDER_LABEL, error.status ?? 0, body));
+    return new Error(
+      formatHttpErrorBody(PROVIDER_LABEL, error.status ?? 0, body)
+    );
   }
 
   if (error instanceof Error) {
@@ -132,17 +137,21 @@ function formatSdkError(error: unknown): Error {
 
 async function buildMessages(
   system: string,
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
-  return (await toOpenAIMessages(system, messages, "fireworks")) as OpenAI.Chat.ChatCompletionMessageParam[];
+  return (await toOpenAIMessages(
+    system,
+    messages,
+    "fireworks"
+  )) as OpenAI.Chat.ChatCompletionMessageParam[];
 }
 
 function readReasoningText(
   value: unknown,
-  options?: { preserveWhitespace?: boolean },
+  options?: { preserveWhitespace?: boolean }
 ): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
+    return;
   }
 
   const record = value as Record<string, unknown>;
@@ -154,7 +163,7 @@ function readReasoningText(
         : undefined;
 
   if (direct === undefined) {
-    return undefined;
+    return;
   }
 
   if (options?.preserveWhitespace) {
@@ -173,17 +182,17 @@ async function requestChatCompletion(
     messages: ChatMessage[];
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
-  },
+  }
 ): Promise<ChatCompletionResult> {
   try {
     const completion = await client.chat.completions.create({
-      model: options.model,
       messages: await buildMessages(options.system, options.messages),
+      model: options.model,
       ...buildThinkingBody(options.thinking),
       ...(options.tools?.length
         ? {
-            tools: toOpenAITools(options.tools),
             tool_choice: "auto" as const,
+            tools: toOpenAITools(options.tools),
           }
         : {}),
     } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
@@ -195,7 +204,7 @@ async function requestChatCompletion(
             id?: string;
             function?: { name?: string; arguments?: string };
           }>
-        | undefined,
+        | undefined
     );
     const content = message?.content ?? "";
     const thinking = readReasoningText(message);
@@ -206,8 +215,8 @@ async function requestChatCompletion(
 
     return buildChatCompletionResult({
       content,
-      toolCalls,
       thinking,
+      toolCalls,
       usage: extractOpenAITokenUsage(completion.usage),
     });
   } catch (error) {
@@ -224,32 +233,35 @@ async function streamChatCompletion(options: {
   thinking?: ProviderChatOptions["thinking"];
   handlers: StreamChatHandlers;
 }): Promise<ChatCompletionResult> {
-  const response = await fetch(`${FIREWORKS_INFERENCE_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: options.model,
-      stream: true,
-      messages: await buildMessages(options.system, options.messages),
-      stream_options: { include_usage: true },
-      ...buildThinkingBody(options.thinking),
-      ...(options.tools?.length
-        ? {
-            tools: toOpenAITools(options.tools),
-            tool_choice: "auto",
-          }
-        : {}),
-    }),
-  });
+  const response = await fetch(
+    `${FIREWORKS_INFERENCE_BASE_URL}/chat/completions`,
+    {
+      body: JSON.stringify({
+        messages: await buildMessages(options.system, options.messages),
+        model: options.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...buildThinkingBody(options.thinking),
+        ...(options.tools?.length
+          ? {
+              tool_choice: "auto",
+              tools: toOpenAITools(options.tools),
+            }
+          : {}),
+      }),
+      headers: {
+        Authorization: `Bearer ${options.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }
+  );
 
   const bodyText = response.ok ? null : await response.text();
 
   if (!response.ok) {
     throw new Error(
-      formatHttpErrorBody(PROVIDER_LABEL, response.status, bodyText ?? ""),
+      formatHttpErrorBody(PROVIDER_LABEL, response.status, bodyText ?? "")
     );
   }
 
@@ -260,8 +272,8 @@ async function streamChatCompletion(options: {
       formatHttpErrorBody(
         PROVIDER_LABEL,
         response.status,
-        await response.text(),
-      ),
+        await response.text()
+      )
     );
   }
 
@@ -298,7 +310,9 @@ async function streamChatCompletion(options: {
       options.handlers.onChunk(delta.content);
     }
 
-    const reasoningDelta = readReasoningText(delta, { preserveWhitespace: true });
+    const reasoningDelta = readReasoningText(delta, {
+      preserveWhitespace: true,
+    });
 
     if (reasoningDelta) {
       thinking += reasoningDelta;
@@ -327,7 +341,7 @@ async function streamChatCompletion(options: {
     throw new Error(`${PROVIDER_LABEL} returned an empty response.`);
   }
 
-  return buildChatCompletionResult({ content, toolCalls, thinking, usage });
+  return buildChatCompletionResult({ content, thinking, toolCalls, usage });
 }
 
 async function requestCompletion(
@@ -336,12 +350,12 @@ async function requestCompletion(
     model: string;
     messages: Array<{ role: "system" | "user"; content: string }>;
     responseFormat?: { type: "json_object" };
-  },
+  }
 ): Promise<GenerateTextResult> {
   try {
     const completion = await client.chat.completions.create({
-      model: options.model,
       messages: options.messages,
+      model: options.model,
       ...(options.responseFormat
         ? { response_format: options.responseFormat }
         : {}),
@@ -369,13 +383,13 @@ function mergePendingToolCall(
     index?: number;
     id?: string;
     function?: { name?: string; arguments?: string };
-  },
+  }
 ): void {
   const index = toolDelta.index ?? 0;
   const current = pending.get(index) ?? {
+    arguments: "",
     id: "",
     name: "",
-    arguments: "",
   };
 
   if (toolDelta.id) {
@@ -394,21 +408,21 @@ function mergePendingToolCall(
 }
 
 function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>,
+  pending: Map<number, PendingToolCall>
 ): ToolCall[] {
   return [...pending.entries()]
     .sort(([left], [right]) => left - right)
     .map(([, call]) => call)
     .flatMap((call) => {
-      if (!call.id || !call.name) {
+      if (!(call.id && call.name)) {
         return [];
       }
 
       return [
         {
+          arguments: parseJsonRecord(call.arguments),
           id: call.id,
           name: call.name,
-          arguments: parseJsonRecord(call.arguments),
         },
       ];
     });

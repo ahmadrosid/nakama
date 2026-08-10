@@ -17,5 +17,5 @@ createRoot(document.getElementById("root")!).render(
         </TooltipProvider>
       </ThemeProvider>
     </BrowserRouter>
-  </StrictMode>,
+  </StrictMode>
 );

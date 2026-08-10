@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { UserConfig } from "@nakama/core";
 import type {
   DatabaseAdapter,
   StoredCodingAgentHarnessKind,
@@ -8,32 +9,42 @@ import type {
   StoredCodingAgentHarnessRecord,
 } from "@nakama/db";
 import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
-import type { UserConfig } from "@nakama/core";
-import { ensureProcessPath, ensureBunGlobalInstallDirs, getToolExecutionEnv } from "../lib/ensure-process-path";
-import { mergeCodingAgentSpawnEnv, resolveCodingAgentSpawnBundle, mapNakamaProviderToPi, formatModelForHarness } from "./coding-agent-spawn-env";
+import {
+  ensureBunGlobalInstallDirs,
+  ensureProcessPath,
+  getToolExecutionEnv,
+} from "../lib/ensure-process-path";
 import { buildHarnessNonInteractiveArgs } from "./coding-agent-command";
+import {
+  formatModelForHarness,
+  mapNakamaProviderToPi,
+  mergeCodingAgentSpawnEnv,
+  resolveCodingAgentSpawnBundle,
+} from "./coding-agent-spawn-env";
 
-export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
-  installed: boolean;
-  version: string | null;
+export interface CodingAgentHarnessStatus
+  extends StoredCodingAgentHarnessRecord {
   authenticated: boolean | null;
-  ready: boolean;
+  installed: boolean;
   nextStep: "install" | "retry" | null;
+  ready: boolean;
   statusMessage: string | null;
+  version: string | null;
 }
 
 interface CodingAgentInstallPlan {
-  command: string;
   args: string[];
+  command: string;
   displayCommand: string;
 }
 
-const HARNESS_PACKAGES: Partial<Record<StoredCodingAgentHarnessKind, string>> = {
-  codex: "@openai/codex",
-  claude_code: "@anthropic-ai/claude-code",
-  opencode: "opencode-ai",
-  pi: "@earendil-works/pi-coding-agent",
-};
+const HARNESS_PACKAGES: Partial<Record<StoredCodingAgentHarnessKind, string>> =
+  {
+    claude_code: "@anthropic-ai/claude-code",
+    codex: "@openai/codex",
+    opencode: "opencode-ai",
+    pi: "@earendil-works/pi-coding-agent",
+  };
 
 function detectCodingHarnessPackageManager(): "npm" | "bun" {
   if (Bun.which("npm")) {
@@ -49,7 +60,7 @@ function detectCodingHarnessPackageManager(): "npm" | "bun" {
 
 export function buildCodingHarnessInstallPlan(
   kind: StoredCodingAgentHarnessKind,
-  packageManager: "npm" | "bun" = detectCodingHarnessPackageManager(),
+  packageManager: "npm" | "bun" = detectCodingHarnessPackageManager()
 ): CodingAgentInstallPlan {
   const pkg = HARNESS_PACKAGES[kind];
 
@@ -57,21 +68,21 @@ export function buildCodingHarnessInstallPlan(
     throw new Error(
       kind === "cursor_agent"
         ? "Cursor Agent CLI cannot be auto-installed. Install and authenticate it on the host yourself (verify with `agent --version`)."
-        : `No auto-install package is configured for coding harness kind ${kind}.`,
+        : `No auto-install package is configured for coding harness kind ${kind}.`
     );
   }
 
   if (packageManager === "bun") {
     return {
-      command: "bun",
       args: ["install", "-g", "--trust", pkg],
+      command: "bun",
       displayCommand: `bun install -g --trust ${pkg}`,
     };
   }
 
   return {
-    command: "npm",
     args: ["install", "-g", pkg],
+    command: "npm",
     displayCommand: `npm install -g ${pkg}`,
   };
 }
@@ -84,69 +95,69 @@ export interface CodingAgentWorkspaceSettings {
 const PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface CodingAgentHarnessProbeContext {
-  userConfig?: UserConfig | null;
   profileModel?: string | null;
+  userConfig?: UserConfig | null;
 }
 
 export interface ListCodingAgentHarnessStatusesOptions {
-  /** When true, run live readiness probes for installed harnesses. Default false (use cache). */
-  probe?: boolean;
   /** When set with probe, only probe this harness id. */
   harnessId?: string | null;
+  /** When true, run live readiness probes for installed harnesses. Default false (use cache). */
+  probe?: boolean;
   probeContext?: CodingAgentHarnessProbeContext;
 }
 
 export interface CodingAgentHarnessInstallProgress {
   harnessId: string;
-  name: string;
   message: string;
+  name: string;
 }
 
 const DEFAULT_HARNESSES: StoredCodingAgentHarnessRecord[] = [
   {
+    args: [],
+    command: "codex",
+    enabled: true,
     id: "coding-harness-codex",
     kind: "codex",
     name: "Codex",
-    command: "codex",
-    args: [],
-    enabled: true,
   },
   {
+    args: [],
+    command: "claude",
+    enabled: true,
     id: "coding-harness-claude-code",
     kind: "claude_code",
     name: "Claude Code",
-    command: "claude",
-    args: [],
-    enabled: true,
   },
   {
+    args: [],
+    command: "opencode",
+    enabled: true,
     id: "coding-harness-opencode",
     kind: "opencode",
     name: "OpenCode",
-    command: "opencode",
-    args: [],
-    enabled: true,
   },
   {
+    args: [],
+    command: "pi",
+    enabled: true,
     id: "coding-harness-pi",
     kind: "pi",
     name: "pi.dev",
-    command: "pi",
-    args: [],
-    enabled: true,
   },
   {
+    args: [],
+    command: "agent",
+    enabled: true,
     id: "coding-harness-cursor-agent",
     kind: "cursor_agent",
     name: "Cursor Agent",
-    command: "agent",
-    args: [],
-    enabled: true,
   },
 ];
 
 export async function loadCodingAgentWorkspaceSettings(
-  db: DatabaseAdapter,
+  db: DatabaseAdapter
 ): Promise<CodingAgentWorkspaceSettings> {
   const stored = await db.getWorkspaceSettings();
 
@@ -158,7 +169,7 @@ export async function loadCodingAgentWorkspaceSettings(
 
 export async function listCodingAgentHarnessStatuses(
   db: DatabaseAdapter,
-  options: ListCodingAgentHarnessStatusesOptions = {},
+  options: ListCodingAgentHarnessStatusesOptions = {}
 ): Promise<CodingAgentHarnessStatus[]> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const probe = options.probe ?? false;
@@ -173,8 +184,8 @@ export async function listCodingAgentHarnessStatuses(
           ...harness,
           ...runtime,
           authenticated: null,
-          ready: false,
           nextStep: "install" as const,
+          ready: false,
           statusMessage: `${harness.name} is not installed on this machine yet.`,
         };
       }
@@ -193,8 +204,8 @@ export async function listCodingAgentHarnessStatuses(
           ...harness,
           ...runtime,
           authenticated: light.authenticated,
-          ready: light.ready,
           nextStep: light.nextStep,
+          ready: light.ready,
           statusMessage: light.statusMessage,
         };
       }
@@ -204,29 +215,29 @@ export async function listCodingAgentHarnessStatuses(
           ...harness,
           ...runtime,
           authenticated: null,
-          ready: false,
           nextStep: null,
+          ready: false,
           statusMessage: null,
         },
-        options.probeContext,
+        options.probeContext
       );
 
       return {
         ...harness,
         ...runtime,
         authenticated: probed.authenticated,
-        ready: probed.ready,
         nextStep: probed.nextStep,
+        ready: probed.ready,
         statusMessage: probed.statusMessage,
       };
-    }),
+    })
   );
 }
 
 export async function refreshCodingAgentHarnessProbe(
   db: DatabaseAdapter,
   harnessId: string,
-  probeContext?: CodingAgentHarnessProbeContext,
+  probeContext?: CodingAgentHarnessProbeContext
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const harness = settings.harnesses.find((entry) => entry.id === harnessId);
@@ -244,8 +255,8 @@ export async function refreshCodingAgentHarnessProbe(
       ...harness,
       ...runtime,
       authenticated: null,
-      ready: false,
       nextStep: "install",
+      ready: false,
       statusMessage: `${harness.name} is not installed on this machine yet.`,
     };
   }
@@ -255,19 +266,19 @@ export async function refreshCodingAgentHarnessProbe(
       ...harness,
       ...runtime,
       authenticated: null,
-      ready: false,
       nextStep: null,
+      ready: false,
       statusMessage: null,
     },
-    probeContext,
+    probeContext
   );
 
   const checkedAt = new Date().toISOString();
   const probeCache: StoredCodingAgentHarnessProbeCache = {
-    checkedAt,
     authenticated: probe.authenticated,
-    ready: probe.ready,
+    checkedAt,
     nextStep: probe.nextStep,
+    ready: probe.ready,
     statusMessage: probe.statusMessage,
   };
 
@@ -277,10 +288,10 @@ export async function refreshCodingAgentHarnessProbe(
     ...harness,
     ...runtime,
     authenticated: probe.authenticated,
-    ready: probe.ready,
     nextStep: probe.nextStep,
-    statusMessage: probe.statusMessage,
     probeCache,
+    ready: probe.ready,
+    statusMessage: probe.statusMessage,
   };
 }
 
@@ -293,11 +304,13 @@ export async function saveCodingAgentWorkspaceSettings(
       command?: string;
       enabled?: boolean;
     }>;
-  },
+  }
 ): Promise<CodingAgentWorkspaceSettings> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
-  const byId = new Map(settings.harnesses.map((harness) => [harness.id, harness]));
+  const byId = new Map(
+    settings.harnesses.map((harness) => [harness.id, harness])
+  );
 
   const nextHarnesses = settings.harnesses.map((harness) => {
     const override = input.harnesses?.find((entry) => entry.id === harness.id);
@@ -308,7 +321,9 @@ export async function saveCodingAgentWorkspaceSettings(
 
     return {
       ...harness,
-      command: override.command?.trim() ? override.command.trim() : harness.command,
+      command: override.command?.trim()
+        ? override.command.trim()
+        : harness.command,
       enabled: override.enabled ?? harness.enabled,
     };
   });
@@ -321,12 +336,13 @@ export async function saveCodingAgentWorkspaceSettings(
         : null;
 
   await db.upsertWorkspaceSettings({
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    visionModel: stored?.visionModel ?? null,
-    transcriptionModel: stored?.transcriptionModel ?? null,
     codingAgentHarnesses: nextHarnesses,
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    imageModel: stored?.imageModel ?? null,
     selectedCodingAgentHarness: selectedHarnessId,
+    transcriptionModel: stored?.transcriptionModel ?? null,
     updatedAt: new Date().toISOString(),
+    visionModel: stored?.visionModel ?? null,
   });
 
   return {
@@ -348,7 +364,7 @@ function matchesHarnessBinary(command: string, binary: string): boolean {
 
 export function isCodingAgentCommand(
   command: string,
-  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>,
+  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "command" | "enabled">>
 ): boolean {
   for (const harness of harnesses) {
     if (!harness.enabled) {
@@ -366,7 +382,9 @@ export function isCodingAgentCommand(
 /** First enabled harness whose configured command matches argv0 / prefix. */
 export function inferCodingAgentHarnessKind(
   command: string,
-  harnesses: Array<Pick<StoredCodingAgentHarnessRecord, "kind" | "command" | "enabled">>,
+  harnesses: Array<
+    Pick<StoredCodingAgentHarnessRecord, "kind" | "command" | "enabled">
+  >
 ): StoredCodingAgentHarnessKind | null {
   for (const harness of harnesses) {
     if (!harness.enabled) {
@@ -383,7 +401,7 @@ export function inferCodingAgentHarnessKind(
 
 /** Light PATH discovery — installed harnesses without requiring a saved selection. */
 export async function listInstalledCodingAgentHarnesses(
-  db: DatabaseAdapter,
+  db: DatabaseAdapter
 ): Promise<CodingAgentHarnessStatus[]> {
   const statuses = await listCodingAgentHarnessStatuses(db);
   return statuses.filter((harness) => harness.enabled && harness.installed);
@@ -392,7 +410,7 @@ export async function listInstalledCodingAgentHarnesses(
 export async function resolveCodingAgentHarness(
   db: DatabaseAdapter,
   preferredKind?: StoredCodingAgentHarnessKind | null,
-  probeContext?: CodingAgentHarnessProbeContext,
+  probeContext?: CodingAgentHarnessProbeContext
 ): Promise<CodingAgentHarnessStatus> {
   const statuses = await listCodingAgentHarnessStatuses(db);
   const enabled = statuses.filter((harness) => harness.enabled);
@@ -402,18 +420,23 @@ export async function resolveCodingAgentHarness(
       return new Error(`${harness.name} is selected but not installed.`);
     }
 
-    const message =
-      harness.statusMessage ?? `${harness.name} is not ready.`;
+    const message = harness.statusMessage ?? `${harness.name} is not ready.`;
 
     return new Error(message);
   };
 
-  const ensureReady = async (harness: CodingAgentHarnessStatus): Promise<CodingAgentHarnessStatus> => {
+  const ensureReady = async (
+    harness: CodingAgentHarnessStatus
+  ): Promise<CodingAgentHarnessStatus> => {
     if (harness.ready && isProbeCacheFresh(harness.probeCache)) {
       return harness;
     }
 
-    const refreshed = await refreshCodingAgentHarnessProbe(db, harness.id, probeContext);
+    const refreshed = await refreshCodingAgentHarnessProbe(
+      db,
+      harness.id,
+      probeContext
+    );
 
     if (refreshed.ready) {
       return refreshed;
@@ -426,7 +449,9 @@ export async function resolveCodingAgentHarness(
     const preferred = enabled.find((harness) => harness.kind === preferredKind);
 
     if (!preferred) {
-      throw new Error(`Configured coding agent '${preferredKind}' is unavailable.`);
+      throw new Error(
+        `Configured coding agent '${preferredKind}' is unavailable.`
+      );
     }
 
     return ensureReady(preferred);
@@ -440,19 +465,19 @@ export async function resolveCodingAgentHarness(
 
   if (installed.length > 1) {
     throw new Error(
-      "Multiple coding agents are installed. Ask the user which one to use, then run that CLI via bash.",
+      "Multiple coding agents are installed. Ask the user which one to use, then run that CLI via bash."
     );
   }
 
   throw new Error(
-    "No coding agent CLI is installed on this host. Install one via bash using the skill Prerequisites, then retry.",
+    "No coding agent CLI is installed on this host. Install one via bash using the skill Prerequisites, then retry."
   );
 }
 
 export async function verifyCodingAgentHarness(
   db: DatabaseAdapter,
   harnessId?: string | null,
-  probeContext?: CodingAgentHarnessProbeContext,
+  probeContext?: CodingAgentHarnessProbeContext
 ): Promise<{
   ok: boolean;
   harnessId: string | null;
@@ -474,60 +499,68 @@ export async function verifyCodingAgentHarness(
 
   if (!targetHarnessId) {
     return {
-      ok: false,
-      harnessId: harnessId ?? null,
-      name: null,
-      version: null,
-      installed: false,
       authenticated: null,
-      ready: false,
-      nextStep: "install",
-      statusMessage: "Install a supported coding agent first.",
       error: "No supported coding agent is installed yet.",
+      harnessId: harnessId ?? null,
+      installed: false,
+      name: null,
+      nextStep: "install",
+      ok: false,
+      ready: false,
+      statusMessage: "Install a supported coding agent first.",
+      version: null,
     };
   }
 
   let harness: CodingAgentHarnessStatus;
 
   try {
-    harness = await refreshCodingAgentHarnessProbe(db, targetHarnessId, probeContext);
+    harness = await refreshCodingAgentHarnessProbe(
+      db,
+      targetHarnessId,
+      probeContext
+    );
   } catch {
     return {
-      ok: false,
-      harnessId: targetHarnessId,
-      name: null,
-      version: null,
-      installed: false,
       authenticated: null,
-      ready: false,
-      nextStep: "install",
-      statusMessage: "Install a supported coding agent first.",
       error: "No supported coding agent is installed yet.",
+      harnessId: targetHarnessId,
+      installed: false,
+      name: null,
+      nextStep: "install",
+      ok: false,
+      ready: false,
+      statusMessage: "Install a supported coding agent first.",
+      version: null,
     };
   }
 
   return {
-    ok: harness.ready,
-    harnessId: harness.id,
-    name: harness.name,
-    version: harness.version,
-    installed: harness.installed,
     authenticated: harness.authenticated,
-    ready: harness.ready,
-    nextStep: harness.nextStep,
-    statusMessage: harness.statusMessage,
     error: harness.installed
       ? harness.ready
         ? null
-        : harness.statusMessage ?? `Nakama could not verify ${harness.name} yet.`
+        : (harness.statusMessage ??
+          `Nakama could not verify ${harness.name} yet.`)
       : `${harness.name} is not installed or could not be started with \`${harness.command} --version\`.`,
+    harnessId: harness.id,
+    installed: harness.installed,
+    name: harness.name,
+    nextStep: harness.nextStep,
+    ok: harness.ready,
+    ready: harness.ready,
+    statusMessage: harness.statusMessage,
+    version: harness.version,
   };
 }
 
 function mergeHarnesses(
-  storedHarnesses: StoredCodingAgentHarnessRecord[],
+  storedHarnesses: StoredCodingAgentHarnessRecord[]
 ): StoredCodingAgentHarnessRecord[] {
-  const byKind = new Map<StoredCodingAgentHarnessKind, StoredCodingAgentHarnessRecord>();
+  const byKind = new Map<
+    StoredCodingAgentHarnessKind,
+    StoredCodingAgentHarnessRecord
+  >();
 
   for (const harness of storedHarnesses) {
     byKind.set(harness.kind, harness);
@@ -539,16 +572,16 @@ function mergeHarnesses(
     return stored
       ? {
           ...stored,
-          name: stored.name || defaultHarness.name,
-          command: stored.command || defaultHarness.command,
           args: stored.args.length > 0 ? stored.args : defaultHarness.args,
+          command: stored.command || defaultHarness.command,
+          name: stored.name || defaultHarness.name,
         }
       : { ...defaultHarness, args: [...defaultHarness.args] };
   });
 }
 
 function isProbeCacheFresh(
-  cache: StoredCodingAgentHarnessProbeCache | null | undefined,
+  cache: StoredCodingAgentHarnessProbeCache | null | undefined
 ): boolean {
   if (!cache?.checkedAt) {
     return false;
@@ -565,7 +598,7 @@ function isProbeCacheFresh(
 
 function buildHarnessStatusFromCache(
   harness: StoredCodingAgentHarnessRecord,
-  runtime: Pick<CodingAgentHarnessStatus, "installed" | "version">,
+  runtime: Pick<CodingAgentHarnessStatus, "installed" | "version">
 ): CodingAgentHarnessStatus {
   const cache = harness.probeCache;
 
@@ -574,8 +607,8 @@ function buildHarnessStatusFromCache(
       ...harness,
       ...runtime,
       authenticated: cache.authenticated,
-      ready: cache.ready,
       nextStep: cache.nextStep,
+      ready: cache.ready,
       statusMessage: cache.statusMessage,
     };
   }
@@ -584,8 +617,8 @@ function buildHarnessStatusFromCache(
     ...harness,
     ...runtime,
     authenticated: null,
-    ready: false,
     nextStep: null,
+    ready: false,
     statusMessage: null,
   };
 }
@@ -593,43 +626,48 @@ function buildHarnessStatusFromCache(
 async function saveHarnessProbeCache(
   db: DatabaseAdapter,
   harnessId: string,
-  probeCache: StoredCodingAgentHarnessProbeCache,
+  probeCache: StoredCodingAgentHarnessProbeCache
 ): Promise<void> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const nextHarnesses = settings.harnesses.map((harness) =>
-    harness.id === harnessId ? { ...harness, probeCache } : harness,
+    harness.id === harnessId ? { ...harness, probeCache } : harness
   );
 
   await db.upsertWorkspaceSettings({
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    visionModel: stored?.visionModel ?? null,
-    transcriptionModel: stored?.transcriptionModel ?? null,
     codingAgentHarnesses: nextHarnesses,
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    imageModel: stored?.imageModel ?? null,
     selectedCodingAgentHarness: settings.selectedHarnessId,
+    transcriptionModel: stored?.transcriptionModel ?? null,
     updatedAt: new Date().toISOString(),
+    visionModel: stored?.visionModel ?? null,
   });
 }
 
-async function clearHarnessProbeCache(db: DatabaseAdapter, harnessId: string): Promise<void> {
+async function clearHarnessProbeCache(
+  db: DatabaseAdapter,
+  harnessId: string
+): Promise<void> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const nextHarnesses = settings.harnesses.map((harness) =>
-    harness.id === harnessId ? { ...harness, probeCache: null } : harness,
+    harness.id === harnessId ? { ...harness, probeCache: null } : harness
   );
 
   await db.upsertWorkspaceSettings({
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    visionModel: stored?.visionModel ?? null,
-    transcriptionModel: stored?.transcriptionModel ?? null,
     codingAgentHarnesses: nextHarnesses,
+    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
+    imageModel: stored?.imageModel ?? null,
     selectedCodingAgentHarness: settings.selectedHarnessId,
+    transcriptionModel: stored?.transcriptionModel ?? null,
     updatedAt: new Date().toISOString(),
+    visionModel: stored?.visionModel ?? null,
   });
 }
 
 async function getHarnessRuntimeStatus(
-  command: string,
+  command: string
 ): Promise<Pick<CodingAgentHarnessStatus, "installed" | "version">> {
   const initial = await probeHarnessVersion(command);
 
@@ -673,16 +711,16 @@ async function probeHarnessVersion(command: string): Promise<{
     child.once("error", (error) =>
       resolve({
         installed: false,
-        version: null,
         missing: (error as NodeJS.ErrnoException).code === "ENOENT",
-      }),
+        version: null,
+      })
     );
     child.once("close", (code) =>
       resolve({
         installed: code === 0,
-        version: code === 0 ? extractVersion(stdout, stderr) : null,
         missing: false,
-      }),
+        version: code === 0 ? extractVersion(stdout, stderr) : null,
+      })
     );
   });
 }
@@ -696,11 +734,15 @@ function extractVersion(stdout: string, stderr: string): string | null {
   return output.split(/\r?\n/, 1)[0]?.trim() || null;
 }
 
-export function getCodingHarnessInstallCommand(kind: StoredCodingAgentHarnessKind): string {
+export function getCodingHarnessInstallCommand(
+  kind: StoredCodingAgentHarnessKind
+): string {
   return buildCodingHarnessInstallPlan(kind).displayCommand;
 }
 
-export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind): string {
+export function getCodingHarnessInstallHint(
+  kind: StoredCodingAgentHarnessKind
+): string {
   if (kind === "cursor_agent") {
     return "Install and authenticate Cursor Agent CLI on this machine yourself (verify with `agent --version`), then check again.";
   }
@@ -723,7 +765,7 @@ export function getCodingHarnessInstallHint(kind: StoredCodingAgentHarnessKind):
 export async function installCodingAgentHarness(
   db: DatabaseAdapter,
   harnessId: string,
-  onProgress?: (progress: CodingAgentHarnessInstallProgress) => void,
+  onProgress?: (progress: CodingAgentHarnessInstallProgress) => void
 ): Promise<CodingAgentHarnessStatus> {
   const settings = await loadCodingAgentWorkspaceSettings(db);
   const harness = settings.harnesses.find((entry) => entry.id === harnessId);
@@ -739,8 +781,8 @@ export async function installCodingAgentHarness(
   const emitProgress = (message: string) => {
     onProgress?.({
       harnessId: harness.id,
-      name: harness.name,
       message,
+      name: harness.name,
     });
   };
 
@@ -748,7 +790,10 @@ export async function installCodingAgentHarness(
   emitProgress(installPlan.displayCommand);
 
   const result = await runInstallCommand(installPlan, emitProgress);
-  const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const combinedOutput = [result.stdout, result.stderr]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
   if (result.timedOut) {
     throw new Error(`Install timed out while running ${harness.name}.`);
@@ -758,7 +803,7 @@ export async function installCodingAgentHarness(
     throw new Error(
       combinedOutput
         ? `${harness.name} install failed: ${summarizeInstallOutput(combinedOutput)}`
-        : `${harness.name} install failed.`,
+        : `${harness.name} install failed.`
     );
   }
 
@@ -771,7 +816,7 @@ export async function installCodingAgentHarness(
 
 async function probeHarnessLight(
   harness: CodingAgentHarnessStatus,
-  probeContext?: CodingAgentHarnessProbeContext,
+  probeContext?: CodingAgentHarnessProbeContext
 ): Promise<{
   authenticated: boolean | null;
   ready: boolean;
@@ -781,31 +826,31 @@ async function probeHarnessLight(
   if (harness.kind === "cursor_agent") {
     return {
       authenticated: null,
-      ready: true,
       nextStep: null,
+      ready: true,
       statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
     };
   }
 
   const { routing } = await resolveCodingAgentSpawnBundle({
-    userConfig: probeContext?.userConfig,
-    profileModel: probeContext?.profileModel ?? null,
     harnessKind: harness.kind,
+    profileModel: probeContext?.profileModel ?? null,
+    userConfig: probeContext?.userConfig,
   });
 
   if (routing.active) {
     return {
       authenticated: true,
-      ready: true,
       nextStep: null,
+      ready: true,
       statusMessage: `${harness.name} is installed and provider passthrough is active.`,
     };
   }
 
   return {
     authenticated: routing.configured ? false : null,
-    ready: false,
     nextStep: "retry",
+    ready: false,
     statusMessage:
       routing.error ??
       `${harness.name} is installed but provider passthrough is not active. Check Settings → Provider.`,
@@ -814,7 +859,7 @@ async function probeHarnessLight(
 
 async function probeHarnessExec(
   harness: CodingAgentHarnessStatus,
-  probeContext?: CodingAgentHarnessProbeContext,
+  probeContext?: CodingAgentHarnessProbeContext
 ): Promise<{
   authenticated: boolean | null;
   ready: boolean;
@@ -824,33 +869,44 @@ async function probeHarnessExec(
   if (harness.kind === "cursor_agent") {
     return {
       authenticated: null,
-      ready: true,
       nextStep: null,
+      ready: true,
       statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
     };
   }
 
   const { spawn, routing } = await resolveCodingAgentSpawnBundle({
-    userConfig: probeContext?.userConfig,
-    profileModel: probeContext?.profileModel ?? null,
     harnessKind: harness.kind,
+    profileModel: probeContext?.profileModel ?? null,
+    userConfig: probeContext?.userConfig,
   });
-  const tempDir = await mkdtemp(path.join(tmpdir(), "nakama-coding-agent-probe-"));
+  const tempDir = await mkdtemp(
+    path.join(tmpdir(), "nakama-coding-agent-probe-")
+  );
 
-  const piProvider = routing.providerType ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl) : null;
-  const piModel = routing.model && routing.providerType
-    ? formatModelForHarness("pi", routing.providerType, routing.model)
+  const piProvider = routing.providerType
+    ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl)
     : null;
+  const piModel =
+    routing.model && routing.providerType
+      ? formatModelForHarness("pi", routing.providerType, routing.model)
+      : null;
 
   try {
-    const result = await runProbeCommand(harness, tempDir, spawn.env, { provider: piProvider, model: piModel });
-    const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+    const result = await runProbeCommand(harness, tempDir, spawn.env, {
+      model: piModel,
+      provider: piProvider,
+    });
+    const combinedOutput = [result.stdout, result.stderr]
+      .filter(Boolean)
+      .join("\n")
+      .trim();
 
     if (result.timedOut) {
       return {
         authenticated: null,
-        ready: false,
         nextStep: "retry",
+        ready: false,
         statusMessage: combinedOutput
           ? `Readiness check timed out. Last output from ${harness.name}: ${summarizeProbeOutput(combinedOutput)}`
           : "Readiness check timed out.",
@@ -860,8 +916,8 @@ async function probeHarnessExec(
     if (result.exitCode === 0) {
       return {
         authenticated: true,
-        ready: true,
         nextStep: null,
+        ready: true,
         statusMessage: `${harness.name} is installed and ready via Nakama provider passthrough.`,
       };
     }
@@ -869,8 +925,8 @@ async function probeHarnessExec(
     if (looksLikeAuthenticationFailure(combinedOutput)) {
       return {
         authenticated: false,
-        ready: false,
         nextStep: "retry",
+        ready: false,
         statusMessage:
           routing.error ??
           (combinedOutput
@@ -881,15 +937,15 @@ async function probeHarnessExec(
 
     return {
       authenticated: null,
-      ready: false,
       nextStep: "retry",
+      ready: false,
       statusMessage: combinedOutput
         ? `${harness.name} is installed but the readiness check failed (exit ${result.exitCode}). ${summarizeProbeOutput(combinedOutput)}`
         : `${harness.name} is installed but the readiness check failed (exit ${result.exitCode}).`,
     };
   } finally {
     await spawn.cleanup?.();
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { force: true, recursive: true });
   }
 }
 
@@ -897,7 +953,7 @@ async function runProbeCommand(
   harness: CodingAgentHarnessStatus,
   cwd: string,
   spawnEnv: Record<string, string> = {},
-  piOptions?: { provider?: string | null; model?: string | null },
+  piOptions?: { provider?: string | null; model?: string | null }
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -908,11 +964,11 @@ async function runProbeCommand(
   const timeoutMs = 15_000;
   const prompt = "Reply with OK and nothing else.";
   const args = buildHarnessNonInteractiveArgs(harness.kind, {
-    prompt,
-    cwd,
     baseArgs: harness.args,
-    piProvider: piOptions?.provider,
+    cwd,
     piModel: piOptions?.model,
+    piProvider: piOptions?.provider,
+    prompt,
   });
 
   return new Promise((resolve) => {
@@ -940,8 +996,8 @@ async function runProbeCommand(
       clearTimeout(timeoutId);
       resolve({
         exitCode: null,
-        stdout,
         stderr: `${stderr}\n${String(error)}`.trim(),
+        stdout,
         timedOut,
       });
     });
@@ -949,8 +1005,8 @@ async function runProbeCommand(
       clearTimeout(timeoutId);
       resolve({
         exitCode,
-        stdout: stdout.trim(),
         stderr: stderr.trim(),
+        stdout: stdout.trim(),
         timedOut,
       });
     });
@@ -959,13 +1015,13 @@ async function runProbeCommand(
 
 function looksLikeAuthenticationFailure(output: string): boolean {
   return /log\s?in|login|sign\s?in|authenticate|authentication|not authenticated|api key|token|credential/i.test(
-    output,
+    output
   );
 }
 
 async function runInstallCommand(
   plan: CodingAgentInstallPlan,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string) => void
 ): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -1042,8 +1098,8 @@ async function runInstallCommand(
 
       resolve({
         exitCode: null,
-        stdout,
         stderr: `${stderr}\n${String(error)}`.trim(),
+        stdout,
         timedOut,
       });
     });
@@ -1060,8 +1116,8 @@ async function runInstallCommand(
 
       resolve({
         exitCode,
-        stdout: stdout.trim(),
         stderr: stderr.trim(),
+        stdout: stdout.trim(),
         timedOut,
       });
     });
@@ -1075,11 +1131,15 @@ function summarizeInstallOutput(output: string): string {
     .filter(Boolean);
   const meaningful =
     lines.find((line) => /^error:/i.test(line)) ??
-    lines.find((line) => /(?:EACCES|ENOENT|EPERM|failed|permission denied)/i.test(line)) ??
+    lines.find((line) =>
+      /(?:EACCES|ENOENT|EPERM|failed|permission denied)/i.test(line)
+    ) ??
     lines.find((line) => !/^bun (?:add|install) v/i.test(line)) ??
     lines[0] ??
     output.trim();
-  return meaningful.length > 180 ? `${meaningful.slice(0, 177)}...` : meaningful;
+  return meaningful.length > 180
+    ? `${meaningful.slice(0, 177)}...`
+    : meaningful;
 }
 
 function summarizeProbeOutput(output: string): string {
@@ -1089,8 +1149,14 @@ function summarizeProbeOutput(output: string): string {
     .filter(Boolean);
   const meaningful =
     lines.find((line) => /^(?:error|fatal|panic):/i.test(line)) ??
-    lines.find((line) => /(?:error|failed|not found|invalid|unexpected|exception|traceback)/i.test(line)) ??
+    lines.find((line) =>
+      /(?:error|failed|not found|invalid|unexpected|exception|traceback)/i.test(
+        line
+      )
+    ) ??
     lines[lines.length - 1] ??
     output.trim();
-  return meaningful.length > 240 ? `${meaningful.slice(0, 237)}...` : meaningful;
+  return meaningful.length > 240
+    ? `${meaningful.slice(0, 237)}...`
+    : meaningful;
 }

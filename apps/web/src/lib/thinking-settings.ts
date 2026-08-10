@@ -2,18 +2,24 @@ import type { ThinkingEffort, ThinkingSettings } from "@nakama/core/contract";
 
 export const DEFAULT_THINKING_EFFORT: ThinkingEffort = "medium";
 
-export const THINKING_EFFORT_OPTIONS: Array<{ value: ThinkingEffort; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
+export const THINKING_EFFORT_OPTIONS: Array<{
+  value: ThinkingEffort;
+  label: string;
+}> = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
 ];
 
 export function thinkingEffortLabel(effort: ThinkingEffort): string {
-  return THINKING_EFFORT_OPTIONS.find((option) => option.value === effort)?.label ?? effort;
+  return (
+    THINKING_EFFORT_OPTIONS.find((option) => option.value === effort)?.label ??
+    effort
+  );
 }
 
 export function shouldShowThinkingEffort(
-  activeModelSupportsThinking: boolean | undefined,
+  activeModelSupportsThinking: boolean | undefined
 ): boolean {
   return activeModelSupportsThinking === true;
 }
@@ -22,11 +28,11 @@ export function shouldShowThinkingEffort(
 export const shouldShowThinkingBlocks = shouldShowThinkingEffort;
 
 export function buildAutoEnableThinkingPayload(
-  settings: Pick<ThinkingSettings, "effort">,
+  settings: Pick<ThinkingSettings, "effort">
 ): ThinkingSettings {
   return {
-    enabled: true,
     effort: settings.effort ?? DEFAULT_THINKING_EFFORT,
+    enabled: true,
   };
 }
 
@@ -40,7 +46,7 @@ export function shouldAutoEnableThinking(
     hasRouteSession?: boolean;
     hasSession?: boolean;
     hasMessages?: boolean;
-  },
+  }
 ): boolean {
   if (alreadyMigrated || busy || !settings || settings.enabled !== false) {
     return false;

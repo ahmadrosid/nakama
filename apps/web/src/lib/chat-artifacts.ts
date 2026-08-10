@@ -26,25 +26,37 @@ const ARTIFACT_PATH_IN_TEXT =
 export interface ChatArtifactRef {
   /** Basename for chip label (e.g. `report.md`). */
   filename: string;
+  mimeType: string;
   /** Path relative to the profile artifacts directory (e.g. `weekly/report.md`). */
   path: string;
-  mimeType: string;
-  sizeBytes: number;
   savedAt: string;
+  sizeBytes: number;
 }
 
 interface WriteFileResult {
-  path?: string;
   bytesWritten?: number;
   error?: string;
+  path?: string;
+}
+
+interface GenerateImageResult {
+  error?: string;
+  mimeType?: string;
+  path?: string;
+  sizeBytes?: number;
 }
 
 function isWriteFileTool(message: ChatListItem): boolean {
   // write_docx reports the same { path, bytesWritten } result, so its output becomes
   // an artifact chip too.
   return (
-    message.role === "tool" && (message.tool === "write_file" || message.tool === "write_docx")
+    message.role === "tool" &&
+    (message.tool === "write_file" || message.tool === "write_docx")
   );
+}
+
+function isGenerateImageTool(message: ChatListItem): boolean {
+  return message.role === "tool" && message.tool === "generate_image";
 }
 
 function getWriteFileResult(message: ChatListItem): WriteFileResult | null {
@@ -61,12 +73,20 @@ function getWriteFileResult(message: ChatListItem): WriteFileResult | null {
 
 function isSuccessfulWrite(message: ChatListItem): boolean {
   const result = getWriteFileResult(message);
-  return result != null && typeof result.error !== "string" && typeof result.path === "string";
+  return (
+    result != null &&
+    typeof result.error !== "string" &&
+    typeof result.path === "string"
+  );
 }
 
 function resolvedWritePath(message: ChatListItem): string | null {
   const result = getWriteFileResult(message);
-  if (!result || typeof result.error === "string" || typeof result.path !== "string") {
+  if (
+    !result ||
+    typeof result.error === "string" ||
+    typeof result.path !== "string"
+  ) {
     return null;
   }
 
@@ -75,7 +95,11 @@ function resolvedWritePath(message: ChatListItem): string | null {
 
 function bytesWrittenFromMessage(message: ChatListItem): number {
   const result = getWriteFileResult(message);
-  if (!result || typeof result.bytesWritten !== "number" || !Number.isInteger(result.bytesWritten)) {
+  if (
+    !result ||
+    typeof result.bytesWritten !== "number" ||
+    !Number.isInteger(result.bytesWritten)
+  ) {
     return 0;
   }
 
@@ -91,12 +115,17 @@ function isUnderArtifactsDir(resolvedPath: string): boolean {
 }
 
 function isArtifactMetaRelativePath(relativePath: string): boolean {
-  return relativePath.endsWith(ARTIFACT_META_SUFFIX) || relativePath.includes(".nakama-meta");
+  return (
+    relativePath.endsWith(ARTIFACT_META_SUFFIX) ||
+    relativePath.includes(".nakama-meta")
+  );
 }
 
 function isArtifactMetaResolvedPath(resolvedPath: string): boolean {
-  return isUnderArtifactsDir(resolvedPath) && (
-    resolvedPath.endsWith(ARTIFACT_META_SUFFIX) || resolvedPath.includes(".nakama-meta")
+  return (
+    isUnderArtifactsDir(resolvedPath) &&
+    (resolvedPath.endsWith(ARTIFACT_META_SUFFIX) ||
+      resolvedPath.includes(".nakama-meta"))
   );
 }
 
@@ -109,7 +138,11 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
   const inputPath =
     typeof message.toolInput?.path === "string" ? message.toolInput.path : null;
 
-  if (inputPath && (inputPath.includes(".nakama-meta") || inputPath.endsWith(ARTIFACT_META_SUFFIX))) {
+  if (
+    inputPath &&
+    (inputPath.includes(".nakama-meta") ||
+      inputPath.endsWith(ARTIFACT_META_SUFFIX))
+  ) {
     return true;
   }
 
@@ -119,7 +152,10 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
       : null;
 
   if (typeof result?.path === "string") {
-    return result.path.includes(".nakama-meta") || result.path.endsWith(ARTIFACT_META_SUFFIX);
+    return (
+      result.path.includes(".nakama-meta") ||
+      result.path.endsWith(ARTIFACT_META_SUFFIX)
+    );
   }
 
   return false;
@@ -133,7 +169,9 @@ export function toArtifactsRelativePath(resolvedPath: string): string | null {
 
   const windowsMarker = resolvedPath.toLowerCase().indexOf("\\artifacts\\");
   if (windowsMarker !== -1) {
-    return resolvedPath.slice(windowsMarker + "\\artifacts\\".length).replace(/\\/g, "/");
+    return resolvedPath
+      .slice(windowsMarker + "\\artifacts\\".length)
+      .replace(/\\/g, "/");
   }
 
   if (resolvedPath.startsWith(ARTIFACTS_PREFIX)) {
@@ -151,7 +189,9 @@ function siblingContentPath(metaResolvedPath: string): string | null {
   return metaResolvedPath.slice(0, -ARTIFACT_META_SUFFIX.length);
 }
 
-function parseArtifactMeta(content: unknown): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> | null {
+function parseArtifactMeta(
+  content: unknown
+): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> | null {
   if (typeof content !== "string" || !content.trim()) {
     return null;
   }
@@ -169,11 +209,18 @@ function parseArtifactMeta(content: unknown): Pick<ChatArtifactRef, "mimeType" |
   }
 
   const record = parsed as Record<string, unknown>;
-  const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "";
-  const savedAt = typeof record.savedAt === "string" ? record.savedAt.trim() : "";
+  const mimeType =
+    typeof record.mimeType === "string" ? record.mimeType.trim() : "";
+  const savedAt =
+    typeof record.savedAt === "string" ? record.savedAt.trim() : "";
   const sizeBytes = record.sizeBytes;
 
-  if (!mimeType || !savedAt || typeof sizeBytes !== "number" || !Number.isInteger(sizeBytes) || sizeBytes < 0) {
+  if (
+    !(mimeType && savedAt) ||
+    typeof sizeBytes !== "number" ||
+    !Number.isInteger(sizeBytes) ||
+    sizeBytes < 0
+  ) {
     return null;
   }
 
@@ -209,24 +256,83 @@ function relativePathFromWriteMessage(message: ChatListItem): string | null {
 
 function buildArtifactRef(
   relativePath: string,
-  meta: Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt">,
+  meta: Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt">
 ): ChatArtifactRef {
   const filename = relativePath.split("/").pop() ?? relativePath;
   return {
     filename,
-    path: relativePath,
     mimeType: meta.mimeType,
-    sizeBytes: meta.sizeBytes,
+    path: relativePath,
     savedAt: meta.savedAt,
+    sizeBytes: meta.sizeBytes,
   };
 }
 
-function inferredMetaForPath(relativePath: string, sizeBytes = 0): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> {
+function getGenerateImageResult(
+  message: ChatListItem
+): GenerateImageResult | null {
+  if (!isGenerateImageTool(message) || message.toolResult == null) {
+    return null;
+  }
+
+  if (typeof message.toolResult !== "object" || message.toolResult === null) {
+    return null;
+  }
+
+  return message.toolResult as GenerateImageResult;
+}
+
+function artifactRefFromGenerateImage(
+  message: ChatListItem
+): ChatArtifactRef | null {
+  if (message.toolStatus === "running") {
+    return null;
+  }
+
+  const result = getGenerateImageResult(message);
+  if (!result || typeof result.error === "string") {
+    return null;
+  }
+
+  if (typeof result.path !== "string" || !result.path.trim()) {
+    return null;
+  }
+
+  const mimeType =
+    typeof result.mimeType === "string" ? result.mimeType.trim() : "";
+  if (!mimeType) {
+    return null;
+  }
+
+  if (
+    typeof result.sizeBytes !== "number" ||
+    !Number.isInteger(result.sizeBytes) ||
+    result.sizeBytes < 0
+  ) {
+    return null;
+  }
+
+  const relativePath = toArtifactsRelativePath(result.path.trim());
+  if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
+    return null;
+  }
+
+  return buildArtifactRef(relativePath, {
+    mimeType,
+    savedAt: "",
+    sizeBytes: result.sizeBytes,
+  });
+}
+
+function inferredMetaForPath(
+  relativePath: string,
+  sizeBytes = 0
+): Pick<ChatArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> {
   const filename = relativePath.split("/").pop() ?? relativePath;
   return {
     mimeType: inferArtifactMimeType(filename),
-    sizeBytes,
     savedAt: "",
+    sizeBytes,
   };
 }
 
@@ -240,7 +346,11 @@ export function extractArtifactPathsFromText(content: string): string[] {
 
   for (const match of matches) {
     const relativePath = match.slice(ARTIFACTS_PREFIX.length);
-    if (!relativePath || isArtifactMetaRelativePath(relativePath) || seen.has(relativePath)) {
+    if (
+      !relativePath ||
+      isArtifactMetaRelativePath(relativePath) ||
+      seen.has(relativePath)
+    ) {
       continue;
     }
 
@@ -256,8 +366,13 @@ export function extractArtifactPathsFromText(content: string): string[] {
  * Prefers content + `.nakama-meta.json` sidecar pairs; falls back to content-only
  * writes under artifacts/ and `artifacts/...` mentions in assistant text.
  */
-export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[] {
-  const contentWrites = new Map<string, { relativePath: string; sizeBytes: number }>();
+export function extractTurnArtifacts(
+  messages: ChatListItem[]
+): ChatArtifactRef[] {
+  const contentWrites = new Map<
+    string,
+    { relativePath: string; sizeBytes: number }
+  >();
   const artifactsByPath = new Map<string, ChatArtifactRef>();
 
   for (const message of messages) {
@@ -287,7 +402,7 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
     }
 
     const resolvedPath = resolvedWritePath(message);
-    if (!resolvedPath || !isArtifactMetaResolvedPath(resolvedPath)) {
+    if (!(resolvedPath && isArtifactMetaResolvedPath(resolvedPath))) {
       continue;
     }
 
@@ -306,7 +421,10 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
       continue;
     }
 
-    artifactsByPath.set(contentWrite.relativePath, buildArtifactRef(contentWrite.relativePath, meta));
+    artifactsByPath.set(
+      contentWrite.relativePath,
+      buildArtifactRef(contentWrite.relativePath, meta)
+    );
   }
 
   for (const contentWrite of contentWrites.values()) {
@@ -316,8 +434,20 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
 
     artifactsByPath.set(
       contentWrite.relativePath,
-      buildArtifactRef(contentWrite.relativePath, inferredMetaForPath(contentWrite.relativePath, contentWrite.sizeBytes)),
+      buildArtifactRef(
+        contentWrite.relativePath,
+        inferredMetaForPath(contentWrite.relativePath, contentWrite.sizeBytes)
+      )
     );
+  }
+
+  for (const message of messages) {
+    const generated = artifactRefFromGenerateImage(message);
+    if (!generated) {
+      continue;
+    }
+
+    artifactsByPath.set(generated.path, generated);
   }
 
   for (const message of messages) {
@@ -330,14 +460,21 @@ export function extractTurnArtifacts(messages: ChatListItem[]): ChatArtifactRef[
         continue;
       }
 
-      artifactsByPath.set(relativePath, buildArtifactRef(relativePath, inferredMetaForPath(relativePath)));
+      artifactsByPath.set(
+        relativePath,
+        buildArtifactRef(relativePath, inferredMetaForPath(relativePath))
+      );
     }
   }
 
   return [...artifactsByPath.values()];
 }
 
-export function buildArtifactContentUrl(profileId: string, artifactPath: string, inline = false): string {
+export function buildArtifactContentUrl(
+  profileId: string,
+  artifactPath: string,
+  inline = false
+): string {
   const query = new URLSearchParams({ path: artifactPath });
   if (inline) {
     query.set("inline", "1");

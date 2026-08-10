@@ -5,7 +5,10 @@ type YoutubeEmbedProps = {
   title?: string;
 };
 
-export function YoutubeEmbed({ videoId, title = "YouTube video" }: YoutubeEmbedProps) {
+export function YoutubeEmbed({
+  videoId,
+  title = "YouTube video",
+}: YoutubeEmbedProps) {
   return (
     <span
       className="relative my-3 block aspect-video w-full max-w-xl overflow-hidden rounded-lg border border-border bg-muted"

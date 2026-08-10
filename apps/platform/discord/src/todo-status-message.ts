@@ -1,6 +1,6 @@
 import type { AgentTodo } from "@nakama/core/contract";
-import type { DiscordMessenger } from "./messenger";
 import { renderDiscordTodoStatus } from "./format";
+import type { DiscordMessenger } from "./messenger";
 
 type DiscordTodoRunState = "working" | "completed" | "stopped" | "failed";
 
@@ -33,7 +33,9 @@ export class DiscordTodoStatusMessage {
     await this.enqueueTerminalState("failed");
   }
 
-  private async enqueueTerminalState(state: DiscordTodoRunState): Promise<void> {
+  private async enqueueTerminalState(
+    state: DiscordTodoRunState
+  ): Promise<void> {
     if (this.lastTodos.length === 0) {
       return;
     }
@@ -41,12 +43,18 @@ export class DiscordTodoStatusMessage {
     await this.enqueueRender(state, this.lastTodos);
   }
 
-  private async enqueueRender(state: DiscordTodoRunState, todos: AgentTodo[]): Promise<void> {
+  private async enqueueRender(
+    state: DiscordTodoRunState,
+    todos: AgentTodo[]
+  ): Promise<void> {
     this.pending = this.pending.then(() => this.render(state, todos));
     await this.pending;
   }
 
-  private async render(state: DiscordTodoRunState, todos: AgentTodo[]): Promise<void> {
+  private async render(
+    state: DiscordTodoRunState,
+    todos: AgentTodo[]
+  ): Promise<void> {
     const next = renderDiscordTodoStatus(todos, state);
 
     if (next === this.lastRendered) {

@@ -9,12 +9,14 @@ export interface SkillNameKeyed {
 export function isGlobalSkillSourcePath(sourcePath: string): boolean {
   const globalRoot = path.resolve(getGlobalSkillsDir());
   const resolved = path.resolve(sourcePath);
-  return resolved === globalRoot || resolved.startsWith(`${globalRoot}${path.sep}`);
+  return (
+    resolved === globalRoot || resolved.startsWith(`${globalRoot}${path.sep}`)
+  );
 }
 
 export function pickPreferredSkillSourcePath(
   left: string,
-  right: string,
+  right: string
 ): string {
   const leftIsGlobal = isGlobalSkillSourcePath(left);
   const rightIsGlobal = isGlobalSkillSourcePath(right);
@@ -43,7 +45,7 @@ export function dedupeSkillsByName<T extends SkillNameKeyed>(skills: T[]): T[] {
 
     const preferredSourcePath = pickPreferredSkillSourcePath(
       existing.sourcePath,
-      skill.sourcePath,
+      skill.sourcePath
     );
 
     if (preferredSourcePath === skill.sourcePath) {
@@ -52,6 +54,6 @@ export function dedupeSkillsByName<T extends SkillNameKeyed>(skills: T[]): T[] {
   }
 
   return Array.from(byName.values()).sort((left, right) =>
-    left.name.localeCompare(right.name),
+    left.name.localeCompare(right.name)
   );
 }

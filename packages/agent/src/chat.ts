@@ -14,15 +14,16 @@ import type {
 } from "@nakama/core";
 
 export interface AgentRequest {
-  prompt: string;
   channel: AgentChannel;
+  prompt: string;
 }
 
 export interface AgentDependencies {
+  chatOptions?: ProviderChatOptions;
   provider?: ProviderClient;
   tools?: ToolDefinition[];
-  chatOptions?: ProviderChatOptions;
 }
+
 import {
   getUserMessageText,
   messageContentHasDocuments,
@@ -38,18 +39,31 @@ import {
   UNTRUSTED_DOCUMENT_GUIDANCE,
 } from "./chat-prompt";
 import {
+  type CompactionConfig,
   compactHistory,
   estimateHistoryTokens,
   usableContextTokens,
-  type CompactionConfig,
 } from "./history-compaction";
-import { executeToolCall, canRunToolCallsInParallel, serializeToolResult } from "./tool-loop";
+import {
+  canRunToolCallsInParallel,
+  executeToolCall,
+  serializeToolResult,
+} from "./tool-loop";
 
 const MAX_TOOL_ITERATIONS = 100;
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
+  onSubAgentActivity?: (event: {
+    parentToolCallId: string;
+    label: string;
+  }) => void;
   onThinking?: (delta: string) => void;
+  onToolEnd?: (event: {
+    toolCallId: string;
+    tool: string;
+    result: unknown;
+  }) => void;
   onToolInputDelta?: (event: {
     toolCallId: string;
     tool: string;
@@ -61,25 +75,19 @@ export interface StreamHandlers {
     tool: string;
     input: Record<string, unknown>;
   }) => void;
-  onToolEnd?: (event: {
-    toolCallId: string;
-    tool: string;
-    result: unknown;
-  }) => void;
-  onSubAgentActivity?: (event: { parentToolCallId: string; label: string }) => void;
 }
 
 export type SendMessageArg = string | SendMessageInput;
 
 export interface AgentChatSession {
-  send(input: SendMessageArg): Promise<string>;
-  sendStream(input: SendMessageArg, handlers: StreamHandlers): Promise<string>;
   clear(): void;
   compact(options?: { force?: boolean }): Promise<CompactionResponse>;
+  createAutomation(prompt: string): Promise<AutomationDefinition>;
+  getContextUsage(): ChatContextUsage | null;
   getHistory(): readonly ChatMessage[];
   getHistoryRevision(): number;
-  getContextUsage(): ChatContextUsage | null;
-  createAutomation(prompt: string): Promise<AutomationDefinition>;
+  send(input: SendMessageArg): Promise<string>;
+  sendStream(input: SendMessageArg, handlers: StreamHandlers): Promise<string>;
 }
 
 export interface ResolvePromptContextInput {
@@ -88,24 +96,24 @@ export interface ResolvePromptContextInput {
 
 export interface AgentChatSessionOptions {
   channel?: AgentRequest["channel"];
-  tools?: ToolDefinition[];
-  systemPrompt?: string;
-  userContext?: string;
-  enableToolLoop?: boolean;
-  soul?: boolean;
-  initialHistory?: ChatMessage[];
-  toolContext?: ToolContext;
-  userTimezone?: string;
   compaction?: CompactionConfig;
-  resolvePromptContext?: (
-    context?: ResolvePromptContextInput,
-  ) => string | Promise<string>;
+  enableToolLoop?: boolean;
+  initialHistory?: ChatMessage[];
   preprocessUserContent?: (
-    content: string | MessageContentPart[],
+    content: string | MessageContentPart[]
   ) => Promise<string | MessageContentPart[]>;
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[],
+    messages: readonly ChatMessage[]
   ) => Promise<ChatMessage[]>;
+  resolvePromptContext?: (
+    context?: ResolvePromptContextInput
+  ) => string | Promise<string>;
+  soul?: boolean;
+  systemPrompt?: string;
+  toolContext?: ToolContext;
+  tools?: ToolDefinition[];
+  userContext?: string;
+  userTimezone?: string;
 }
 
 export function createAgentChatSession(
@@ -113,24 +121,24 @@ export function createAgentChatSession(
   harness: {
     createAutomationFromPrompt(
       request: AgentRequest,
-      options?: { tools?: ToolDefinition[] },
+      options?: { tools?: ToolDefinition[] }
     ): Promise<AutomationDefinition>;
   },
-  options: AgentChatSessionOptions = {},
+  options: AgentChatSessionOptions = {}
 ): AgentChatSession {
   const channel = options.channel ?? "cli";
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
   const systemPrompt = buildChatSystemPrompt(tools, {
     basePrompt: options.systemPrompt,
-    userContext: options.userContext,
-    enableToolLoop,
-    soul: options.soul,
-    userTimezone: options.userTimezone,
     channel,
+    enableToolLoop,
     hasDocumentAttachments: messagesIncludeUserDocuments(
-      options.initialHistory ?? [],
+      options.initialHistory ?? []
     ),
+    soul: options.soul,
+    userContext: options.userContext,
+    userTimezone: options.userTimezone,
   });
   const toolContext = options.toolContext ?? {};
   const history: ChatMessage[] = options.initialHistory
@@ -152,23 +160,23 @@ export function createAgentChatSession(
 
   function buildContextUsage(
     usedTokens: number,
-    source: ChatContextUsage["source"],
+    source: ChatContextUsage["source"]
   ): ChatContextUsage | null {
     if (!options.compaction) {
       return null;
     }
 
     return {
-      usedTokens,
-      usableContextTokens: usableContextTokens(options.compaction),
       contextWindow: options.compaction.contextWindow,
       source,
+      usableContextTokens: usableContextTokens(options.compaction),
+      usedTokens,
     };
   }
 
   function rememberContextUsage(
     usedTokens: number,
-    source: ChatContextUsage["source"],
+    source: ChatContextUsage["source"]
   ): void {
     lastContextUsage = buildContextUsage(usedTokens, source);
   }
@@ -182,18 +190,18 @@ export function createAgentChatSession(
     const usedTokens = estimateHistoryTokens(
       history,
       `${systemPrompt}\n\n${dateLine}`,
-      llmToolsForEstimate(),
+      llmToolsForEstimate()
     );
 
     return buildContextUsage(usedTokens, "estimate");
   }
 
   async function runCompaction(force: boolean): Promise<CompactionResponse> {
-    if (!dependencies.provider || !options.compaction) {
+    if (!(dependencies.provider && options.compaction)) {
       return {
         action: "none",
-        messagesBefore: history.length,
         messagesAfter: history.length,
+        messagesBefore: history.length,
       };
     }
 
@@ -203,12 +211,12 @@ export function createAgentChatSession(
         ? toLlmToolDefinitions(localTools)
         : undefined;
     const result = await compactHistory({
+      compaction: options.compaction,
+      force,
       history,
       provider: dependencies.provider,
       systemPrompt,
       tools: llmTools,
-      compaction: options.compaction,
-      force,
     });
 
     if (result.action !== "none") {
@@ -219,16 +227,44 @@ export function createAgentChatSession(
   }
 
   return {
+    clear() {
+      history.length = 0;
+      lastContextUsage = null;
+      bumpHistoryRevision();
+    },
+    compact(options) {
+      return runCompaction(options?.force ?? false);
+    },
+    createAutomation(prompt) {
+      return harness.createAutomationFromPrompt({ channel, prompt }, { tools });
+    },
+    getContextUsage() {
+      return lastContextUsage ?? estimateCurrentContextUsage();
+    },
+    getHistory() {
+      return history;
+    },
+    getHistoryRevision() {
+      return historyRevision;
+    },
     async send(input) {
-      return sendMessage(dependencies, tools, systemPrompt, history, resolveSendInput(input), "send", {
-        enableToolLoop,
-        toolContext,
-        runCompaction,
-        onContextUsage: rememberContextUsage,
-        resolvePromptContext: options.resolvePromptContext,
-        preprocessUserContent: options.preprocessUserContent,
-        rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
-      });
+      return sendMessage(
+        dependencies,
+        tools,
+        systemPrompt,
+        history,
+        resolveSendInput(input),
+        "send",
+        {
+          enableToolLoop,
+          onContextUsage: rememberContextUsage,
+          preprocessUserContent: options.preprocessUserContent,
+          rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
+          resolvePromptContext: options.resolvePromptContext,
+          runCompaction,
+          toolContext,
+        }
+      );
     },
     async sendStream(input, handlers) {
       return sendMessage(
@@ -241,34 +277,14 @@ export function createAgentChatSession(
         {
           enableToolLoop,
           handlers,
-          toolContext,
-          runCompaction,
           onContextUsage: rememberContextUsage,
-          resolvePromptContext: options.resolvePromptContext,
           preprocessUserContent: options.preprocessUserContent,
           rehydrateMessagesForProvider: options.rehydrateMessagesForProvider,
-        },
+          resolvePromptContext: options.resolvePromptContext,
+          runCompaction,
+          toolContext,
+        }
       );
-    },
-    clear() {
-      history.length = 0;
-      lastContextUsage = null;
-      bumpHistoryRevision();
-    },
-    compact(options) {
-      return runCompaction(options?.force ?? false);
-    },
-    getHistory() {
-      return history;
-    },
-    getHistoryRevision() {
-      return historyRevision;
-    },
-    getContextUsage() {
-      return lastContextUsage ?? estimateCurrentContextUsage();
-    },
-    createAutomation(prompt) {
-      return harness.createAutomationFromPrompt({ prompt, channel }, { tools });
     },
   };
 }
@@ -291,23 +307,23 @@ async function sendMessage(
     runCompaction?: (force: boolean) => Promise<CompactionResponse>;
     onContextUsage?: (
       usedTokens: number,
-      source: ChatContextUsage["source"],
+      source: ChatContextUsage["source"]
     ) => void;
     resolvePromptContext?: (
-      context?: ResolvePromptContextInput,
+      context?: ResolvePromptContextInput
     ) => string | Promise<string>;
     preprocessUserContent?: (
-      content: string | MessageContentPart[],
+      content: string | MessageContentPart[]
     ) => Promise<string | MessageContentPart[]>;
     rehydrateMessagesForProvider?: (
-      messages: readonly ChatMessage[],
+      messages: readonly ChatMessage[]
     ) => Promise<ChatMessage[]>;
-  },
+  }
 ): Promise<string> {
   let userContent = normalizeUserContent(
     input.message,
     input.images,
-    input.documents,
+    input.documents
   );
 
   if (options.preprocessUserContent) {
@@ -315,7 +331,7 @@ async function sendMessage(
   }
 
   const userMessage = getUserMessageText(userContent);
-  history.push({ role: "user", content: userContent });
+  history.push({ content: userContent, role: "user" });
   const multimodalTurn =
     messageContentHasImages(userContent) ||
     messageContentHasDocuments(userContent) ||
@@ -332,24 +348,25 @@ async function sendMessage(
       options.handlers.onChunk(reply);
     }
 
-    history.push({ role: "assistant", content: reply });
+    history.push({ content: reply, role: "assistant" });
     return reply;
   }
 
   const { localTools, hasWebSearch } = partitionTools(tools);
-  const enableTools = options.enableToolLoop && (localTools.length > 0 || hasWebSearch);
+  const enableTools =
+    options.enableToolLoop && (localTools.length > 0 || hasWebSearch);
   const llmTools =
-    enableTools && localTools.length > 0 ? toLlmToolDefinitions(localTools) : undefined;
+    enableTools && localTools.length > 0
+      ? toLlmToolDefinitions(localTools)
+      : undefined;
   const providerOptions = buildProviderOptions(dependencies, {
+    multimodalTurn,
     webSearch:
       enableTools &&
       hasWebSearch &&
       dependencies.provider.name !== "openrouter" &&
-      !(
-        dependencies.provider.name === "gemini" && localTools.length > 0
-      ) &&
+      !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
       !multimodalTurn,
-    multimodalTurn,
   });
 
   if (options.runCompaction) {
@@ -391,7 +408,7 @@ async function sendMessage(
       options.handlers,
       effectiveToolContext,
       options.rehydrateMessagesForProvider,
-      options.onContextUsage,
+      options.onContextUsage
     );
 
     return reply;
@@ -435,12 +452,12 @@ async function runConversation(
   handlers?: StreamHandlers,
   toolContext?: ToolContext,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[],
+    messages: readonly ChatMessage[]
   ) => Promise<ChatMessage[]>,
   onContextUsage?: (
     usedTokens: number,
-    source: ChatContextUsage["source"],
-  ) => void,
+    source: ChatContextUsage["source"]
+  ) => void
 ): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     const result = await generateReply(
@@ -451,7 +468,7 @@ async function runConversation(
       providerOptions,
       mode,
       handlers,
-      rehydrateMessagesForProvider,
+      rehydrateMessagesForProvider
     );
 
     const usedTokens =
@@ -459,11 +476,11 @@ async function runConversation(
       estimateHistoryTokens(
         history,
         `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
-        llmTools,
+        llmTools
       );
     onContextUsage?.(
       usedTokens,
-      result.usage && !result.usage.estimated ? "provider" : "estimate",
+      result.usage && !result.usage.estimated ? "provider" : "estimate"
     );
 
     history.push(result.assistantMessage);
@@ -472,13 +489,20 @@ async function runConversation(
       return result.content;
     }
 
-    await executeToolCalls(tools, result.toolCalls, history, handlers, toolContext);
+    await executeToolCalls(
+      tools,
+      result.toolCalls,
+      history,
+      handlers,
+      toolContext
+    );
   }
 
   const lastAssistant = [...history]
     .reverse()
-    .find((message): message is Extract<ChatMessage, { role: "assistant" }> =>
-      message.role === "assistant",
+    .find(
+      (message): message is Extract<ChatMessage, { role: "assistant" }> =>
+        message.role === "assistant"
     );
 
   return lastAssistant?.content ?? "";
@@ -489,7 +513,7 @@ async function executeToolCalls(
   toolCalls: ToolCall[],
   history: ChatMessage[],
   handlers?: StreamHandlers,
-  toolContext: ToolContext = {},
+  toolContext: ToolContext = {}
 ): Promise<void> {
   const contextForCall = (call: ToolCall): ToolContext => {
     if (!handlers?.onSubAgentActivity || call.name !== "sub_agent") {
@@ -500,8 +524,8 @@ async function executeToolCalls(
       ...toolContext,
       emitSubAgentActivity: (label) =>
         handlers.onSubAgentActivity?.({
-          parentToolCallId: call.id,
           label,
+          parentToolCallId: call.id,
         }),
     };
   };
@@ -510,31 +534,33 @@ async function executeToolCalls(
     const results = await Promise.all(
       toolCalls.map(async (call) => {
         handlers?.onToolStart?.({
-          toolCallId: call.id,
-          tool: call.name,
           input: call.arguments,
+          tool: call.name,
+          toolCallId: call.id,
         });
 
         const result = await executeToolCall(tools, call, contextForCall(call));
 
         handlers?.onToolEnd?.({
-          toolCallId: call.id,
-          tool: call.name,
           result,
+          tool: call.name,
+          toolCallId: call.id,
         });
 
         return { call, result };
-      }),
+      })
     );
 
-    const resultsByCallId = new Map(results.map((entry) => [entry.call.id, entry.result]));
+    const resultsByCallId = new Map(
+      results.map((entry) => [entry.call.id, entry.result])
+    );
 
     for (const call of toolCalls) {
       history.push({
+        content: serializeToolResult(resultsByCallId.get(call.id)),
+        name: call.name,
         role: "tool",
         toolCallId: call.id,
-        name: call.name,
-        content: serializeToolResult(resultsByCallId.get(call.id)),
       });
     }
 
@@ -543,34 +569,34 @@ async function executeToolCalls(
 
   for (const call of toolCalls) {
     handlers?.onToolStart?.({
-      toolCallId: call.id,
-      tool: call.name,
       input: call.arguments,
+      tool: call.name,
+      toolCallId: call.id,
     });
 
     const result = await executeToolCall(tools, call, contextForCall(call));
 
     handlers?.onToolEnd?.({
-      toolCallId: call.id,
-      tool: call.name,
       result,
+      tool: call.name,
+      toolCallId: call.id,
     });
 
     history.push({
+      content: serializeToolResult(result),
+      name: call.name,
       role: "tool",
       toolCallId: call.id,
-      name: call.name,
-      content: serializeToolResult(result),
     });
   }
 }
 
 function formatCurrentDate(): string {
   return new Date().toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
     weekday: "long",
     year: "numeric",
-    month: "long",
-    day: "numeric",
   });
 }
 
@@ -583,28 +609,28 @@ async function generateReply(
   mode: "send" | "stream",
   handlers?: StreamHandlers,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[],
-  ) => Promise<ChatMessage[]>,
+    messages: readonly ChatMessage[]
+  ) => Promise<ChatMessage[]>
 ) {
   const dateLine = `Today is ${formatCurrentDate()}.`;
   const messages =
-    rehydrateMessagesForProvider !== undefined
-      ? await rehydrateMessagesForProvider(history)
-      : history;
+    rehydrateMessagesForProvider === undefined
+      ? history
+      : await rehydrateMessagesForProvider(history);
   const input = {
-    system: `${systemPrompt}\n\n${dateLine}`,
     messages,
-    tools,
     providerOptions,
+    system: `${systemPrompt}\n\n${dateLine}`,
+    tools,
   };
 
   if (mode === "stream" && handlers) {
     return provider.streamChat(input, {
       onChunk: handlers.onChunk,
       onThinking: handlers.onThinking,
+      onToolEnd: handlers.onToolEnd,
       onToolInputDelta: handlers.onToolInputDelta,
       onToolStart: handlers.onToolStart,
-      onToolEnd: handlers.onToolEnd,
     });
   }
 
@@ -613,15 +639,17 @@ async function generateReply(
 
 function buildProviderOptions(
   dependencies: AgentDependencies,
-  options: { webSearch: boolean; multimodalTurn: boolean },
+  options: { webSearch: boolean; multimodalTurn: boolean }
 ): ProviderChatOptions | undefined {
   const base = dependencies.chatOptions;
   const thinking =
-    options.multimodalTurn || !base?.thinking?.enabled ? undefined : base.thinking;
+    options.multimodalTurn || !base?.thinking?.enabled
+      ? undefined
+      : base.thinking;
   const webSearch = options.webSearch ? true : undefined;
 
-  if (!webSearch && !thinking) {
-    return undefined;
+  if (!(webSearch || thinking)) {
+    return;
   }
 
   return {

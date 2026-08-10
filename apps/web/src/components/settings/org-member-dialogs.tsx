@@ -1,7 +1,8 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
-import { CopyIcon, MailIcon } from "lucide-react";
+import { Copy01Icon, Mail01Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
+import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,10 +13,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { emailSettingsQueryOptions } from "@/hooks/use-email-settings";
 
 export type OrgMemberAddCredentials = {
@@ -40,44 +48,63 @@ function OrgMemberInviteForm({
   onInviteRoleChange: (role: OrgRole) => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
-  const { data: emailSettings, isLoading: emailSettingsLoading } = useQuery(emailSettingsQueryOptions);
+  const { data: emailSettings, isLoading: emailSettingsLoading } = useQuery(
+    emailSettingsQueryOptions
+  );
   const emailConfigured = emailSettings?.configured === true;
 
   return (
     <>
-      {!emailSettingsLoading && !emailConfigured ? (
-        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          Configure the shared email mailbox before you can invite members by email.{" "}
+      {emailSettingsLoading || emailConfigured ? null : (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
+          Configure the shared email mailbox before you can invite members by
+          email.{" "}
           <Link
-            to="/system?tab=tools"
             className="font-medium text-foreground underline-offset-4 hover:underline"
+            to="/system?tab=tools"
           >
             Configure in System → Tools
           </Link>
         </p>
-      ) : null}
-      <form onSubmit={onSubmit} className="space-y-4">
+      )}
+      <form className="space-y-4" onSubmit={onSubmit}>
         <div>
-          <label htmlFor="invite-email" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="invite-email"
+          >
             Email
           </label>
           <Input
             id="invite-email"
-            type="email"
-            value={inviteEmail}
             onChange={(event) => onInviteEmailChange(event.target.value)}
             placeholder="colleague@example.com"
             required
+            type="email"
+            value={inviteEmail}
           />
         </div>
         <div>
-          <label htmlFor="invite-role" className="mb-1 block text-sm font-medium">
+          <label
+            className="mb-1 block font-medium text-sm"
+            htmlFor="invite-role"
+          >
             Role
           </label>
-          <OrgMemberRoleSelect value={inviteRole} onChange={onInviteRoleChange} />
+          <OrgMemberRoleSelect
+            onChange={onInviteRoleChange}
+            value={inviteRole}
+          />
         </div>
-        {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-        <Button type="submit" size="sm" className="w-full sm:w-auto" disabled={pending}>
+        {formError ? (
+          <p className="text-destructive text-sm">{formError}</p>
+        ) : null}
+        <Button
+          className="w-full sm:w-auto"
+          disabled={pending}
+          size="sm"
+          type="submit"
+        >
           {pending ? "Sending…" : "Send invite"}
         </Button>
       </form>
@@ -107,7 +134,7 @@ export function OrgMemberInvitePopover({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover onOpenChange={onOpenChange} open={open}>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -115,12 +142,12 @@ export function OrgMemberInvitePopover({
               <PopoverTrigger
                 render={
                   <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
                     aria-label="Invite by email"
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
                   >
-                    <MailIcon className="size-3.5" aria-hidden />
+                    <Mail01Icon aria-hidden className="size-3.5" />
                   </Button>
                 }
               />
@@ -131,23 +158,28 @@ export function OrgMemberInvitePopover({
           Invite by email
         </TooltipContent>
       </Tooltip>
-      <PopoverContent align="end" sideOffset={4} className="w-80 overflow-hidden p-0">
-        <div className="space-y-1 border-b border-border px-4 py-3">
-          <p className="text-sm font-medium text-foreground">Invite member</p>
-          <p className="text-xs text-muted-foreground">
-            Send an invite by email. The recipient gets a link to join this organization.
+      <PopoverContent
+        align="end"
+        className="w-80 overflow-hidden p-0"
+        sideOffset={4}
+      >
+        <div className="space-y-1 border-border border-b px-4 py-3">
+          <p className="font-medium text-foreground text-sm">Invite member</p>
+          <p className="text-muted-foreground text-xs">
+            Send an invite by email. The recipient gets a link to join this
+            organization.
           </p>
         </div>
         <div className="space-y-4 p-4">
           <OrgMemberInviteForm
-          inviteEmail={inviteEmail}
-          inviteRole={inviteRole}
-          formError={formError}
-          pending={pending}
-          onInviteEmailChange={onInviteEmailChange}
-          onInviteRoleChange={onInviteRoleChange}
-          onSubmit={onSubmit}
-        />
+            formError={formError}
+            inviteEmail={inviteEmail}
+            inviteRole={inviteRole}
+            onInviteEmailChange={onInviteEmailChange}
+            onInviteRoleChange={onInviteRoleChange}
+            onSubmit={onSubmit}
+            pending={pending}
+          />
         </div>
       </PopoverContent>
     </Popover>
@@ -165,19 +197,19 @@ function CredentialRow({
 }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-sm font-medium">{label}</p>
+      <p className="font-medium text-sm">{label}</p>
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
           {value}
         </code>
         <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
           aria-label={`Copy ${label.toLowerCase()}`}
           onClick={onCopy}
+          size="icon-sm"
+          type="button"
+          variant="outline"
         >
-          <CopyIcon className="size-3.5" />
+          <Copy01Icon className="size-3.5" />
         </Button>
       </div>
     </div>
@@ -220,35 +252,36 @@ export function OrgMemberAddDialog({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         {credentials ? (
           <>
             <DialogHeader>
               <DialogTitle>Member added</DialogTitle>
               <DialogDescription>
-                Share these login credentials once. They will not be shown again.
+                Share these login credentials once. They will not be shown
+                again.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <CredentialRow
                 label="Email"
-                value={credentials.email}
                 onCopy={() => onCopyCredential(credentials.email)}
+                value={credentials.email}
               />
               <CredentialRow
                 label="Temporary password"
-                value={credentials.temporaryPassword}
                 onCopy={() => onCopyCredential(credentials.temporaryPassword)}
+                value={credentials.temporaryPassword}
               />
               {copyHint ? (
-                <p className="text-xs text-muted-foreground" role="status">
+                <p className="text-muted-foreground text-xs" role="status">
                   {copyHint}
                 </p>
               ) : null}
             </div>
             <DialogFooter>
-              <Button type="button" onClick={() => onOpenChange(false)}>
+              <Button onClick={() => onOpenChange(false)} type="button">
                 Done
               </Button>
             </DialogFooter>
@@ -258,53 +291,72 @@ export function OrgMemberAddDialog({
             <DialogHeader>
               <DialogTitle>Add member</DialogTitle>
             </DialogHeader>
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form className="space-y-4" onSubmit={onSubmit}>
               <div>
-                <label htmlFor="add-name" className="mb-1 block text-sm font-medium">
+                <label
+                  className="mb-1 block font-medium text-sm"
+                  htmlFor="add-name"
+                >
                   Name
                 </label>
                 <Input
                   id="add-name"
-                  value={addName}
                   onChange={(event) => onAddNameChange(event.target.value)}
                   placeholder="Jane Doe"
                   required
+                  value={addName}
                 />
               </div>
               <div>
-                <label htmlFor="add-email" className="mb-1 block text-sm font-medium">
+                <label
+                  className="mb-1 block font-medium text-sm"
+                  htmlFor="add-email"
+                >
                   Email
                 </label>
                 <Input
                   id="add-email"
-                  type="email"
-                  value={addEmail}
                   onChange={(event) => onAddEmailChange(event.target.value)}
                   placeholder="jane@example.com"
                   required
+                  type="email"
+                  value={addEmail}
                 />
               </div>
               <div>
-                <label htmlFor="add-phone" className="mb-1 block text-sm font-medium">
+                <label
+                  className="mb-1 block font-medium text-sm"
+                  htmlFor="add-phone"
+                >
                   Phone{" "}
-                  <span className="font-normal text-muted-foreground">(optional)</span>
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
                 </label>
                 <Input
                   id="add-phone"
-                  value={addPhone}
                   onChange={(event) => onAddPhoneChange(event.target.value)}
                   placeholder="+1234567890"
+                  value={addPhone}
                 />
               </div>
               <div>
-                <label htmlFor="add-role" className="mb-1 block text-sm font-medium">
+                <label
+                  className="mb-1 block font-medium text-sm"
+                  htmlFor="add-role"
+                >
                   Role
                 </label>
-                <OrgMemberRoleSelect value={addRole} onChange={onAddRoleChange} />
+                <OrgMemberRoleSelect
+                  onChange={onAddRoleChange}
+                  value={addRole}
+                />
               </div>
-              {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+              {formError ? (
+                <p className="text-destructive text-sm">{formError}</p>
+              ) : null}
               <DialogFooter>
-                <Button type="submit" disabled={pending}>
+                <Button disabled={pending} type="submit">
                   {pending ? "Adding…" : "Add member"}
                 </Button>
               </DialogFooter>
@@ -344,55 +396,69 @@ export function OrgMemberEditDialog({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit member</DialogTitle>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form className="space-y-4" onSubmit={onSubmit}>
           <div>
-            <label htmlFor="edit-name" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="edit-name"
+            >
               Name
             </label>
             <Input
               id="edit-name"
-              value={editName}
               onChange={(event) => onEditNameChange(event.target.value)}
               placeholder="Jane Doe"
+              value={editName}
             />
           </div>
           <div>
-            <label htmlFor="edit-email" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="edit-email"
+            >
               Email
             </label>
             <Input
+              disabled
               id="edit-email"
+              readOnly
               type="email"
               value={editingMember?.email ?? ""}
-              readOnly
-              disabled
             />
           </div>
           <div>
-            <label htmlFor="edit-phone" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="edit-phone"
+            >
               Phone
             </label>
             <Input
               id="edit-phone"
-              value={editPhone}
               onChange={(event) => onEditPhoneChange(event.target.value)}
               placeholder="+1234567890"
+              value={editPhone}
             />
           </div>
           <div>
-            <label htmlFor="edit-role" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="edit-role"
+            >
               Role
             </label>
-            <OrgMemberRoleSelect value={editRole} onChange={onEditRoleChange} />
+            <OrgMemberRoleSelect onChange={onEditRoleChange} value={editRole} />
           </div>
-          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          {formError ? (
+            <p className="text-destructive text-sm">{formError}</p>
+          ) : null}
           <DialogFooter>
-            <Button type="submit" disabled={pending}>
+            <Button disabled={pending} type="submit">
               {pending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
@@ -421,40 +487,46 @@ export function OrgMemberRemoveDialog({
 
   return (
     <Dialog
-      open={member !== null}
       onOpenChange={(open) => {
-        if (!open && !pending) {
+        if (!(open || pending)) {
           onOpenChange(false);
         }
       }}
+      open={member !== null}
     >
       <DialogContent className="gap-6 p-6 sm:max-w-md">
         <DialogHeader className="gap-3">
           <DialogTitle>Remove member?</DialogTitle>
           <DialogDescription>
-            Remove {displayName} from {orgName}? They will lose access to this organization.
+            Remove {displayName} from {orgName}? They will lose access to this
+            organization.
           </DialogDescription>
           {member?.name ? (
-            <p className="text-sm text-muted-foreground">{member.email}</p>
+            <p className="text-muted-foreground text-sm">{member.email}</p>
           ) : null}
         </DialogHeader>
 
         {formError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {formError}
           </p>
         ) : null}
 
         <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
           <Button
-            type="button"
-            variant="outline"
             disabled={pending}
             onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
           >
             Cancel
           </Button>
-          <Button type="button" variant="destructive" disabled={pending} onClick={onConfirm}>
+          <Button
+            disabled={pending}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
             {pending ? <Spinner className="size-4" /> : "Remove"}
           </Button>
         </DialogFooter>

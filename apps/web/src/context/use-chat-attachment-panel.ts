@@ -8,7 +8,9 @@ export function useChatAttachmentPanel(): ChatAttachmentPanelContextValue {
   const context = useContext(ChatAttachmentPanelContext);
 
   if (!context) {
-    throw new Error("useChatAttachmentPanel must be used within ChatAttachmentPanelProvider");
+    throw new Error(
+      "useChatAttachmentPanel must be used within ChatAttachmentPanelProvider"
+    );
   }
 
   return context;

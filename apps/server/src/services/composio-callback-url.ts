@@ -9,7 +9,7 @@ import {
 
 export function resolveRequestClientOrigin(
   request?: Request,
-  explicitOrigin?: string,
+  explicitOrigin?: string
 ): string | undefined {
   const explicit = explicitOrigin?.trim();
   if (explicit) {
@@ -17,7 +17,7 @@ export function resolveRequestClientOrigin(
   }
 
   if (!request) {
-    return undefined;
+    return;
   }
 
   const origin = request.headers.get("origin")?.trim();
@@ -33,35 +33,36 @@ export function resolveRequestClientOrigin(
       // ignore invalid referer
     }
   }
-
-  return undefined;
 }
 
 export async function persistWebPublicUrl(input: string): Promise<string> {
   const trimmed = input.trim();
-  if (!trimmed || !isValidBaseUrl(trimmed)) {
+  if (!(trimmed && isValidBaseUrl(trimmed))) {
     throw new Error("webPublicUrl must be a valid http or https URL.");
   }
 
-  return saveUserWebPublicUrl(new URL(trimmed).origin);
+  return saveUserWebPublicUrl(normalizeBaseUrl(trimmed));
 }
 
 export async function getWebPublicUrlSettings(): Promise<WebPublicUrlSettingsResponse> {
   const envOverride =
-    process.env.NAKAMA_WEB_PUBLIC_URL?.trim() || process.env.NAKAMA_PUBLIC_URL?.trim();
+    process.env.NAKAMA_WEB_PUBLIC_URL?.trim() ||
+    process.env.NAKAMA_PUBLIC_URL?.trim();
 
   return {
-    webPublicUrl: await loadUserWebPublicUrl(),
     envOverride: envOverride ? normalizeBaseUrl(envOverride) : null,
+    webPublicUrl: await loadUserWebPublicUrl(),
   };
 }
 
 /** OAuth callback base URL — prefers the browser origin from the active request. */
-export function resolveComposioCallbackBaseUrl(options: {
-  clientOrigin?: string;
-  request?: Request;
-} = {}): string {
-  const fromBrowser = resolveRequestClientOrigin(options.request, options.clientOrigin);
+export function resolveComposioCallbackBaseUrl(
+  options: { clientOrigin?: string; request?: Request } = {}
+): string {
+  const fromBrowser = resolveRequestClientOrigin(
+    options.request,
+    options.clientOrigin
+  );
   if (fromBrowser) {
     return fromBrowser;
   }
@@ -69,7 +70,8 @@ export function resolveComposioCallbackBaseUrl(options: {
   if (options.request) {
     const forwardedHost = options.request.headers.get("x-forwarded-host");
     if (forwardedHost) {
-      const forwardedProto = options.request.headers.get("x-forwarded-proto") ?? "http";
+      const forwardedProto =
+        options.request.headers.get("x-forwarded-proto") ?? "http";
       return `${forwardedProto}://${forwardedHost}`;
     }
 

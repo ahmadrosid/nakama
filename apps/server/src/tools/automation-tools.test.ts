@@ -16,22 +16,22 @@ async function createTestDb() {
   const now = new Date().toISOString();
 
   await db.upsertOrganization({
+    createdAt: now,
     id: ORG_ID,
     name: "Test Org",
     slug: "test-org",
-    createdAt: now,
     updatedAt: now,
   });
 
   await db.upsertProfile({
-    id: PROFILE_ID,
-    name: "Default Bot",
-    systemPrompt: "",
-    model: null,
-    isSuper: false,
-    orgId: ORG_ID,
-    isDefault: true,
     createdAt: now,
+    id: PROFILE_ID,
+    isDefault: true,
+    isSuper: false,
+    model: null,
+    name: "Default Bot",
+    orgId: ORG_ID,
+    systemPrompt: "",
     updatedAt: now,
   });
 
@@ -40,10 +40,10 @@ async function createTestDb() {
 
 function getRunAutomationTool(
   service: AutomationService,
-  runner: AutomationRunner,
+  runner: AutomationRunner
 ) {
   const tool = createAutomationTools(service, runner).find(
-    (entry) => entry.name === "run_automation",
+    (entry) => entry.name === "run_automation"
   );
 
   if (!tool) {
@@ -55,7 +55,7 @@ function getRunAutomationTool(
 
 function getPreviousAutomationRunsTool(service: AutomationService) {
   const tool = createAutomationRunHistoryTools(service).find(
-    (entry) => entry.name === "list_previous_automation_runs",
+    (entry) => entry.name === "list_previous_automation_runs"
   );
 
   if (!tool) {
@@ -75,12 +75,12 @@ describe("run_automation tool", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Manual task",
         description: "Run once",
+        name: "Manual task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const runner = new AutomationRunner(service, {
@@ -88,14 +88,17 @@ describe("run_automation tool", () => {
     } as never);
     const tool = getRunAutomationTool(service, runner);
 
-    const result = await tool.run({ automationId: automation.id }, TOOL_CONTEXT as never);
+    const result = await tool.run(
+      { automationId: automation.id },
+      TOOL_CONTEXT as never
+    );
 
     expect(result).toEqual({
       automationId: automation.id,
-      name: "Manual task",
-      status: "completed",
-      output: "Hello from automation",
       error: null,
+      name: "Manual task",
+      output: "Hello from automation",
+      status: "completed",
     });
   });
 
@@ -110,7 +113,7 @@ describe("run_automation tool", () => {
     const tool = getRunAutomationTool(service, runner);
 
     await expect(
-      tool.run({ automationId: "automation_missing" }, TOOL_CONTEXT as never),
+      tool.run({ automationId: "automation_missing" }, TOOL_CONTEXT as never)
     ).rejects.toThrow("Automation not found.");
   });
 
@@ -123,13 +126,13 @@ describe("run_automation tool", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Disabled task",
         description: "Should not run",
+        enabled: false,
+        name: "Disabled task",
         prompt: "Say hello",
         trigger: { type: "manual" },
-        enabled: false,
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const runner = new AutomationRunner(service, {
@@ -138,7 +141,7 @@ describe("run_automation tool", () => {
     const tool = getRunAutomationTool(service, runner);
 
     await expect(
-      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never),
+      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never)
     ).rejects.toThrow("Automation is disabled.");
   });
 
@@ -151,12 +154,12 @@ describe("run_automation tool", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Concurrent task",
         description: "Already running",
+        name: "Concurrent task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     let releaseFirstRun: (() => void) | undefined;
@@ -176,11 +179,14 @@ describe("run_automation tool", () => {
     } as never);
     const tool = getRunAutomationTool(service, runner);
 
-    const firstRun = tool.run({ automationId: automation.id }, TOOL_CONTEXT as never);
+    const firstRun = tool.run(
+      { automationId: automation.id },
+      TOOL_CONTEXT as never
+    );
     await firstRunHasStarted;
 
     await expect(
-      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never),
+      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never)
     ).rejects.toThrow("Automation is already running.");
 
     releaseFirstRun?.();
@@ -196,12 +202,12 @@ describe("run_automation tool", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Failing task",
         description: "Provider offline",
+        name: "Failing task",
         prompt: "Say hello",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     const runner = new AutomationRunner(service, {
@@ -211,14 +217,17 @@ describe("run_automation tool", () => {
     } as never);
     const tool = getRunAutomationTool(service, runner);
 
-    const result = await tool.run({ automationId: automation.id }, TOOL_CONTEXT as never);
+    const result = await tool.run(
+      { automationId: automation.id },
+      TOOL_CONTEXT as never
+    );
 
     expect(result).toEqual({
       automationId: automation.id,
-      name: "Failing task",
-      status: "failed",
-      output: null,
       error: "Provider offline",
+      name: "Failing task",
+      output: null,
+      status: "failed",
     });
 
     const runs = await service.listRuns(automation.id);
@@ -237,70 +246,67 @@ describe("list_previous_automation_runs tool", () => {
     const automation = await service.create(
       ORG_ID,
       {
-        name: "Digest",
         description: "Daily digest",
+        name: "Digest",
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
     const otherAutomation = await service.create(
       ORG_ID,
       {
-        name: "Other",
         description: "Other task",
+        name: "Other",
         prompt: "Run",
         trigger: { type: "manual" },
       },
-      PROFILE_ID,
+      PROFILE_ID
     );
 
     await db.insertAutomationRun({
-      id: "run_previous",
       automationId: automation.id,
-      status: "completed",
-      startedAt: "2026-06-29T10:00:00.000Z",
       completedAt: "2026-06-29T10:01:00.000Z",
+      error: null,
+      id: "run_previous",
       output: "Yesterday summary",
-      error: null,
-    });
-    await db.insertAutomationRun({
-      id: "run_current",
-      automationId: automation.id,
-      status: "running",
-      startedAt: "2026-06-30T10:00:00.000Z",
-      completedAt: null,
-      output: null,
-      error: null,
-    });
-    await db.insertAutomationRun({
-      id: "run_other",
-      automationId: otherAutomation.id,
+      startedAt: "2026-06-29T10:00:00.000Z",
       status: "completed",
-      startedAt: "2026-06-30T09:00:00.000Z",
-      completedAt: "2026-06-30T09:01:00.000Z",
-      output: "Hidden",
+    });
+    await db.insertAutomationRun({
+      automationId: automation.id,
+      completedAt: null,
       error: null,
+      id: "run_current",
+      output: null,
+      startedAt: "2026-06-30T10:00:00.000Z",
+      status: "running",
+    });
+    await db.insertAutomationRun({
+      automationId: otherAutomation.id,
+      completedAt: "2026-06-30T09:01:00.000Z",
+      error: null,
+      id: "run_other",
+      output: "Hidden",
+      startedAt: "2026-06-30T09:00:00.000Z",
+      status: "completed",
     });
 
     const tool = getPreviousAutomationRunsTool(service);
-    const result = await tool.run(
-      { limit: 5 },
-      {
-        ...TOOL_CONTEXT,
-        automationId: automation.id,
-        automationRunId: "run_current",
-      } as never,
-    );
+    const result = await tool.run({ limit: 5 }, {
+      ...TOOL_CONTEXT,
+      automationId: automation.id,
+      automationRunId: "run_current",
+    } as never);
 
     expect(result).toEqual([
       {
-        id: "run_previous",
-        status: "completed",
-        startedAt: "2026-06-29T10:00:00.000Z",
         completedAt: "2026-06-29T10:01:00.000Z",
-        output: "Yesterday summary",
         error: null,
+        id: "run_previous",
+        output: "Yesterday summary",
+        startedAt: "2026-06-29T10:00:00.000Z",
+        status: "completed",
       },
     ]);
   });
@@ -313,7 +319,7 @@ describe("list_previous_automation_runs tool", () => {
     const tool = getPreviousAutomationRunsTool(service);
 
     await expect(tool.run({}, TOOL_CONTEXT as never)).rejects.toThrow(
-      "automationId is required.",
+      "automationId is required."
     );
   });
 });

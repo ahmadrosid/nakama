@@ -14,7 +14,7 @@ describe("createTelegramOutboundAdapter", () => {
     homedirSpy = null;
 
     if (tempHome) {
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { force: true, recursive: true });
       tempHome = "";
     }
   });
@@ -32,14 +32,16 @@ describe("createTelegramOutboundAdapter", () => {
       const adapter = createTelegramOutboundAdapter({
         fetchImpl: async (input, init) => {
           calls.push({
-            url: String(input),
             body: JSON.parse(String(init?.body)),
+            url: String(input),
           });
           return new Response("ok", { status: 200 });
         },
       });
 
-      await expect(adapter.send({ text: "hello", chatIds: [1001] })).resolves.toEqual({
+      await expect(
+        adapter.send({ chatIds: [1001], text: "hello" })
+      ).resolves.toEqual({
         ok: true,
       });
       expect(calls[0]?.body).toEqual({ chat_id: 1001, text: "hello" });
@@ -57,12 +59,12 @@ describe("createTelegramOutboundAdapter", () => {
       });
 
       await expect(
-        adapter.send({ text: "hello", chatIds: [1001], topicId: 22 }),
+        adapter.send({ chatIds: [1001], text: "hello", topicId: 22 })
       ).resolves.toEqual({ ok: true });
       expect(calls[0]).toEqual({
         chat_id: 1001,
-        text: "hello",
         message_thread_id: 22,
+        text: "hello",
       });
     });
   });
@@ -79,16 +81,16 @@ describe("createTelegramOutboundAdapter", () => {
 
       await expect(
         adapter.send({
-          text: "✅ **New payment**\n\nCustomer: [Ahmad](https://example.com)",
           chatIds: [1001],
           parseMode: "HTML",
-        }),
+          text: "✅ **New payment**\n\nCustomer: [Ahmad](https://example.com)",
+        })
       ).resolves.toEqual({ ok: true });
 
       expect(calls[0]).toEqual({
         chat_id: 1001,
-        text: '✅ <b>New payment</b>\n\nCustomer: <a href="https://example.com">Ahmad</a>',
         parse_mode: "HTML",
+        text: '✅ <b>New payment</b>\n\nCustomer: <a href="https://example.com">Ahmad</a>',
       });
     });
   });

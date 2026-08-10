@@ -7,20 +7,22 @@ import type { CodingAgentProviderRouting } from "./coding-agent-provider-routing
 import { formatModelForHarness } from "./coding-agent-spawn-env";
 
 export interface HarnessConfigDir {
-  dir: string;
   cleanup: () => Promise<void>;
+  dir: string;
 }
 
-export async function createHarnessConfigDir(prefix: string): Promise<HarnessConfigDir> {
+export async function createHarnessConfigDir(
+  prefix: string
+): Promise<HarnessConfigDir> {
   const dir = await mkdtemp(path.join(tmpdir(), prefix));
   await chmod(dir, 0o700);
 
   return {
-    dir,
     cleanup: async () => {
       const { rm } = await import("node:fs/promises");
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, { force: true, recursive: true });
     },
+    dir,
   };
 }
 
@@ -28,13 +30,13 @@ export async function writeCodexConfigToml(
   configDir: string,
   routing: CodingAgentProviderRouting,
   harnessKind: StoredCodingAgentHarnessKind,
-  providerType: ProviderName,
+  providerType: ProviderName
 ): Promise<string> {
   const configPath = path.join(configDir, "config.toml");
   const model = formatModelForHarness(
     harnessKind,
     providerType,
-    routing.model ?? "gpt-4.1",
+    routing.model ?? "gpt-4.1"
   );
   const baseUrl = routing.baseUrl ?? "";
   const apiKey = routing.apiKey ?? "";
@@ -64,10 +66,10 @@ export async function writeOpenCodeConfig(
   configRoot: string,
   routing: CodingAgentProviderRouting,
   harnessKind: StoredCodingAgentHarnessKind,
-  providerType: ProviderName,
+  providerType: ProviderName
 ): Promise<string> {
   const configDir = path.join(configRoot, "opencode");
-  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  await mkdir(configDir, { mode: 0o700, recursive: true });
 
   const configPath = path.join(configDir, "opencode.json");
   const model = routing.model
@@ -80,8 +82,8 @@ export async function writeOpenCodeConfig(
     provider: {
       [providerKey]: {
         options: {
-          baseURL: routing.baseUrl,
           apiKey: routing.apiKey,
+          baseURL: routing.baseUrl,
         },
         ...(model ? { models: { [model]: { name: model } } } : {}),
       },
@@ -89,7 +91,9 @@ export async function writeOpenCodeConfig(
     ...(model ? { model: `${providerKey}/${model}` } : {}),
   };
 
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
+    mode: 0o600,
+  });
   await chmod(configPath, 0o600);
   return configPath;
 }
@@ -116,13 +120,27 @@ function resolveOpenCodeProviderKey(providerType: ProviderName): string {
  * hardcoded base URLs. We override their baseUrl + apiKey via models.json.
  */
 function resolvePiProviderId(providerType: ProviderName): string {
-  if (providerType === "anthropic") return "anthropic";
-  if (providerType === "openai") return "openai";
-  if (providerType === "openrouter") return "openrouter";
-  if (providerType === "deepseek") return "deepseek";
-  if (providerType === "cerebras") return "cerebras";
-  if (providerType === "fireworks") return "fireworks";
-  if (providerType === "opencode_go") return "opencode";
+  if (providerType === "anthropic") {
+    return "anthropic";
+  }
+  if (providerType === "openai") {
+    return "openai";
+  }
+  if (providerType === "openrouter") {
+    return "openrouter";
+  }
+  if (providerType === "deepseek") {
+    return "deepseek";
+  }
+  if (providerType === "cerebras") {
+    return "cerebras";
+  }
+  if (providerType === "fireworks") {
+    return "fireworks";
+  }
+  if (providerType === "opencode_go") {
+    return "opencode";
+  }
   return "nakama";
 }
 
@@ -135,17 +153,24 @@ function resolvePiProviderId(providerType: ProviderName): string {
  */
 const PI_DEFAULT_BASE_URLS: Partial<Record<ProviderName, string>> = {
   anthropic: "https://api.anthropic.com",
+  cerebras: "https://api.cerebras.ai/v1",
+  deepseek: "https://api.deepseek.com",
+  fireworks: "https://api.fireworks.ai/inference",
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
-  deepseek: "https://api.deepseek.com",
-  cerebras: "https://api.cerebras.ai/v1",
-  fireworks: "https://api.fireworks.ai/inference",
 };
 
-function isDefaultBaseUrl(providerType: ProviderName, baseUrl: string | null | undefined): boolean {
-  if (!baseUrl) return false;
+function isDefaultBaseUrl(
+  providerType: ProviderName,
+  baseUrl: string | null | undefined
+): boolean {
+  if (!baseUrl) {
+    return false;
+  }
   const defaultUrl = PI_DEFAULT_BASE_URLS[providerType];
-  if (!defaultUrl) return false;
+  if (!defaultUrl) {
+    return false;
+  }
   return baseUrl.replace(/\/+$/, "") === defaultUrl.replace(/\/+$/, "");
 }
 
@@ -167,7 +192,7 @@ function isDefaultBaseUrl(providerType: ProviderName, baseUrl: string | null | u
 export async function writePiModelsJson(
   configDir: string,
   routing: CodingAgentProviderRouting,
-  providerType: ProviderName,
+  providerType: ProviderName
 ): Promise<string> {
   const configPath = path.join(configDir, "models.json");
   const baseUrl = routing.baseUrl ?? "";
@@ -181,33 +206,39 @@ export async function writePiModelsJson(
     // openai-responses, openai-completions, etc).
     const providerId = resolvePiProviderId(providerType);
     providers[providerId] = {
-      baseUrl,
       apiKey,
+      baseUrl,
     };
   } else {
     // Custom base URL (proxy/gateway): create a standalone "nakama" provider
     // with the OpenAI Chat Completions API, which is universally supported.
-    const model = formatModelForHarness("pi", providerType, routing.model ?? "gpt-4o");
+    const model = formatModelForHarness(
+      "pi",
+      providerType,
+      routing.model ?? "gpt-4o"
+    );
     providers["nakama"] = {
-      name: "Nakama",
-      baseUrl,
-      apiKey,
       api: "openai-completions",
+      apiKey,
+      baseUrl,
       models: [
         {
+          contextWindow: 128_000,
           id: model,
+          input: ["text"],
+          maxTokens: 16_384,
           name: model,
           reasoning: false,
-          input: ["text"],
-          contextWindow: 128000,
-          maxTokens: 16384,
         },
       ],
+      name: "Nakama",
     };
   }
 
   const config = { providers };
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
+    mode: 0o600,
+  });
   await chmod(configPath, 0o600);
   return configPath;
 }

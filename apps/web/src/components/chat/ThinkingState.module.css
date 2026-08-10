@@ -2,8 +2,8 @@
 .shimmer {
   --c-muted: var(--muted-foreground);
   font-size: 13px;
-  line-height: 18px;
   font-weight: 500;
+  line-height: 18px;
   color: transparent;
   -webkit-text-fill-color: transparent;
   background: linear-gradient(
@@ -15,9 +15,9 @@
     color-mix(in srgb, var(--c-muted) 100%, transparent) 70%,
     color-mix(in srgb, var(--c-muted) 100%, transparent) 100%
   );
-  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
+  background-size: 300% 100%;
   animation: ts-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
 }
 
@@ -35,9 +35,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .shimmer {
-    animation: none;
-    background: none;
-    -webkit-text-fill-color: var(--c-muted);
     color: var(--c-muted);
+    -webkit-text-fill-color: var(--c-muted);
+    background: none;
+    animation: none;
   }
 }

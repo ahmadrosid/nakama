@@ -1,9 +1,9 @@
 import {
-  CheckIcon,
-  ChevronDownIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-} from "lucide-react";
+  ArrowDown01Icon,
+  CheckmarkCircle01Icon,
+  Maximize01Icon,
+  Minimize01Icon,
+} from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -41,16 +41,16 @@ export function ArtifactAttachmentPanelActions({
     <>
       <div className="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-border bg-muted">
         <button
-          type="button"
-          className="px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
+          className="px-2.5 font-medium text-foreground text-xs transition-colors hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-50"
           disabled={copyDisabled || (loading && !content)}
           onClick={onCopy}
+          type="button"
         >
           {copied ? (
             <span className="inline-flex items-center gap-1.5">
-              <CheckIcon
-                className="size-3.5 text-emerald-600 dark:text-emerald-400"
+              <CheckmarkCircle01Icon
                 aria-hidden
+                className="size-3.5 text-emerald-600 dark:text-emerald-400"
               />
               Copied
             </span>
@@ -58,18 +58,18 @@ export function ArtifactAttachmentPanelActions({
             "Copy"
           )}
         </button>
-        <div className="w-px self-stretch bg-border" aria-hidden />
+        <div aria-hidden className="w-px self-stretch bg-border" />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
-                type="button"
                 aria-label="More artifact actions"
                 className="inline-flex items-center justify-center px-1.5 text-foreground transition-colors hover:bg-muted/80"
+                type="button"
               />
             }
           >
-            <ChevronDownIcon className="size-3.5" aria-hidden />
+            <ArrowDown01Icon aria-hidden className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-44">
             <DropdownMenuItem
@@ -92,17 +92,17 @@ export function ArtifactAttachmentPanelActions({
       </div>
 
       <Button
+        aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        onClick={onToggleFullscreen}
+        size="icon-sm"
+        title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
         type="button"
         variant="ghost"
-        size="icon-sm"
-        aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-        onClick={onToggleFullscreen}
       >
         {fullscreen ? (
-          <Minimize2Icon className="size-4" aria-hidden />
+          <Minimize01Icon aria-hidden className="size-4" />
         ) : (
-          <Maximize2Icon className="size-4" aria-hidden />
+          <Maximize01Icon aria-hidden className="size-4" />
         )}
       </Button>
     </>

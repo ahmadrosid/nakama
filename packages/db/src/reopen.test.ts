@@ -9,7 +9,7 @@ describe("database reopen after restore", () => {
 
   afterEach(async () => {
     if (rootDir) {
-      await rm(rootDir, { recursive: true, force: true });
+      await rm(rootDir, { force: true, recursive: true });
       rootDir = "";
     }
   });
@@ -21,13 +21,13 @@ describe("database reopen after restore", () => {
 
     const database = await createDatabase(databaseUrl);
     await database.adapter.createUser({
-      id: "user-1",
-      email: "admin@example.com",
-      name: "Admin",
-      phone: null,
-      passwordHash: "hash",
-      isPlatformAdmin: true,
       createdAt: now,
+      email: "admin@example.com",
+      id: "user-1",
+      isPlatformAdmin: true,
+      name: "Admin",
+      passwordHash: "hash",
+      phone: null,
       updatedAt: now,
     });
     expect(await database.adapter.countHumanUsers()).toBe(1);
@@ -37,15 +37,17 @@ describe("database reopen after restore", () => {
     const stagedSqliteDir = join(rootDir, "sqlite-staged");
     await mkdir(stagedSqliteDir, { recursive: true });
 
-    const staged = await createDatabase(`file:${join(stagedSqliteDir, "nakama.sqlite")}`);
+    const staged = await createDatabase(
+      `file:${join(stagedSqliteDir, "nakama.sqlite")}`
+    );
     await staged.adapter.createUser({
-      id: "user-2",
-      email: "restored@example.com",
-      name: "Restored",
-      phone: null,
-      passwordHash: "hash",
-      isPlatformAdmin: true,
       createdAt: now,
+      email: "restored@example.com",
+      id: "user-2",
+      isPlatformAdmin: true,
+      name: "Restored",
+      passwordHash: "hash",
+      phone: null,
       updatedAt: now,
     });
     await writeFile(join(stagedSqliteDir, "marker.txt"), "restored");
@@ -59,8 +61,12 @@ describe("database reopen after restore", () => {
     await database.reopen();
 
     expect(await database.adapter.countHumanUsers()).toBe(1);
-    expect(await database.adapter.getUserByEmail("restored@example.com")).not.toBeNull();
-    expect(await database.adapter.getUserByEmail("admin@example.com")).toBeNull();
+    expect(
+      await database.adapter.getUserByEmail("restored@example.com")
+    ).not.toBeNull();
+    expect(
+      await database.adapter.getUserByEmail("admin@example.com")
+    ).toBeNull();
 
     database.close();
   });

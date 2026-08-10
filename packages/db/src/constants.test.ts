@@ -7,14 +7,18 @@ describe("SUPER_BOT_SYSTEM_PROMPT", () => {
     expect(SUPER_BOT_SYSTEM_PROMPT.toLowerCase()).toMatch(/draft/);
     expect(SUPER_BOT_SYSTEM_PROMPT.toLowerCase()).toMatch(/confirm/);
     expect(SUPER_BOT_SYSTEM_PROMPT).not.toContain(
-      "without confirming intent when the user did not ask for it",
+      "without confirming intent when the user did not ask for it"
     );
   });
 
   test("clarifies profile vs skill and blocks list_skills hallucination", () => {
-    expect(SUPER_BOT_SYSTEM_PROMPT).toMatch(/new agent.*profile|new bot.*profile/i);
+    expect(SUPER_BOT_SYSTEM_PROMPT).toMatch(
+      /new agent.*profile|new bot.*profile/i
+    );
     expect(SUPER_BOT_SYSTEM_PROMPT).toContain("skill_manage");
-    expect(SUPER_BOT_SYSTEM_PROMPT).toMatch(/only list_profiles, list_tools, and list_automations exist/i);
+    expect(SUPER_BOT_SYSTEM_PROMPT).toMatch(
+      /only list_profiles, list_tools, and list_automations exist/i
+    );
     expect(SUPER_BOT_SYSTEM_PROMPT).not.toContain("list_skills");
     expect(SUPER_BOT_SYSTEM_PROMPT).toMatch(/server generates the profile id/i);
   });

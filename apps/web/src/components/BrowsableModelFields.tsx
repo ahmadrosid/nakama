@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ModelListEditor,
   type ModelListRow,
@@ -7,17 +7,17 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 
 interface BrowsableModelFieldsProps<T> {
-  fieldId: string;
-  customModels: ModelListRow[];
-  disabled?: boolean;
-  density?: "default" | "compact";
-  modelsError?: string | null;
-  footerHint: ReactNode;
   browseLabel: string;
-  showPricing?: boolean;
+  customModels: ModelListRow[];
+  density?: "default" | "compact";
+  disabled?: boolean;
+  fieldId: string;
+  footerHint: ReactNode;
+  modelsError?: string | null;
   onCustomModelsChange: (models: ModelListRow[]) => void;
-  toModelRow: (row: T) => ModelListRow;
   renderBrowse: (onSelect: (row: T) => void) => ReactNode;
+  showPricing?: boolean;
+  toModelRow: (row: T) => ModelListRow;
 }
 
 export function BrowsableModelFields<T>({
@@ -49,29 +49,29 @@ export function BrowsableModelFields<T>({
 
   return (
     <FormField
-      id={fieldId}
-      label="Models"
       density={density}
       footer={
         modelsError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">{footerHint}</p>
+          <p className="text-muted-foreground text-xs">{footerHint}</p>
         )
       }
+      id={fieldId}
+      label="Models"
     >
       {isBrowsing ? (
         <div className="space-y-2">
           {renderBrowse(handleBrowseSelect)}
           <div className="flex justify-end">
             <Button
-              type="button"
-              size="sm"
-              variant="outline"
               disabled={disabled}
               onClick={() => setIsBrowsing(false)}
+              size="sm"
+              type="button"
+              variant="outline"
             >
               Back
             </Button>
@@ -79,12 +79,12 @@ export function BrowsableModelFields<T>({
         </div>
       ) : (
         <ModelListEditor
-          models={customModels}
-          disabled={disabled}
-          showPricing={showPricing}
           browseLabel={browseLabel}
+          disabled={disabled}
+          models={customModels}
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
+          showPricing={showPricing}
         />
       )}
     </FormField>

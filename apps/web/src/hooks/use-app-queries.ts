@@ -1,76 +1,76 @@
 import {
+  type QueryClient,
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { useAuth } from "@/context/use-auth";
+import { telegramSettingsQueryOptions } from "@/hooks/use-telegram-settings";
+import { thinkingSettingsQueryOptions } from "@/hooks/use-thinking-settings";
+import { prefetchTimezoneData } from "@/hooks/use-timezones";
+import { whatsappSettingsQueryOptions } from "@/hooks/use-whatsapp-settings";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
-import { prefetchTimezoneData } from "@/hooks/use-timezones";
-import { thinkingSettingsQueryOptions } from "@/hooks/use-thinking-settings";
-import { telegramSettingsQueryOptions } from "@/hooks/use-telegram-settings";
-import { whatsappSettingsQueryOptions } from "@/hooks/use-whatsapp-settings";
 
 const defaultStaleTime = 1000 * 30;
 
 export const healthQueryOptions = queryOptions({
-  queryKey: queryKeys.health,
   queryFn: () => client.health(),
+  queryKey: queryKeys.health,
   staleTime: defaultStaleTime,
 });
 
 export const modelsQueryOptions = queryOptions({
-  queryKey: queryKeys.models,
   queryFn: () => client.getModels(),
+  queryKey: queryKeys.models,
   staleTime: defaultStaleTime,
 });
 
 export const profilesQueryOptions = queryOptions({
-  queryKey: queryKeys.profiles.all,
   queryFn: async () => (await client.listProfiles()).profiles,
+  queryKey: queryKeys.profiles.all,
   staleTime: defaultStaleTime,
 });
 
 export const toolsQueryOptions = queryOptions({
-  queryKey: queryKeys.tools.all,
   queryFn: async () => (await client.listTools()).tools,
+  queryKey: queryKeys.tools.all,
   staleTime: defaultStaleTime,
 });
 
 export const mcpServersQueryOptions = queryOptions({
-  queryKey: queryKeys.mcp.all,
   queryFn: async () => (await client.listMcpServers()).servers,
+  queryKey: queryKeys.mcp.all,
   staleTime: defaultStaleTime,
 });
 
 export const skillsQueryOptions = queryOptions({
-  queryKey: queryKeys.skills.all,
   queryFn: async () => (await client.listSkills()).skills,
+  queryKey: queryKeys.skills.all,
   staleTime: defaultStaleTime,
 });
 
 export const automationsQueryOptions = queryOptions({
-  queryKey: queryKeys.automations.all,
   queryFn: () => client.listAutomations(),
-  staleTime: defaultStaleTime,
+  queryKey: queryKeys.automations.all,
   refetchInterval: 30_000,
+  staleTime: defaultStaleTime,
 });
 
 export function profileQueryOptions(profileId: string) {
   return queryOptions({
-    queryKey: queryKeys.profiles.detail(profileId),
-    queryFn: async () => (await client.getProfile(profileId)).profile,
-    staleTime: defaultStaleTime,
     enabled: Boolean(profileId),
+    queryFn: async () => (await client.getProfile(profileId)).profile,
+    queryKey: queryKeys.profiles.detail(profileId),
+    staleTime: defaultStaleTime,
   });
 }
 
 export function prefetchAppData(
   queryClient: QueryClient,
-  options?: { isPlatformAdmin?: boolean },
+  options?: { isPlatformAdmin?: boolean }
 ): void {
   prefetchTimezoneData(queryClient);
   void queryClient.prefetchQuery(thinkingSettingsQueryOptions);
@@ -137,10 +137,10 @@ export function useSkillsQuery() {
 
 export function skillQueryOptions(skillId: string) {
   return queryOptions({
-    queryKey: queryKeys.skills.detail(skillId),
-    queryFn: async () => (await client.getSkill(skillId)).skill,
-    staleTime: defaultStaleTime,
     enabled: Boolean(skillId),
+    queryFn: async () => (await client.getSkill(skillId)).skill,
+    queryKey: queryKeys.skills.detail(skillId),
+    staleTime: defaultStaleTime,
   });
 }
 
@@ -153,10 +153,10 @@ export function useSkillQuery(skillId: string | null) {
 
 export function mcpServerDetailQueryOptions(serverId: string) {
   return queryOptions({
-    queryKey: queryKeys.mcp.detail(serverId),
-    queryFn: async () => (await client.getMcpServer(serverId)).server,
-    staleTime: defaultStaleTime,
     enabled: Boolean(serverId),
+    queryFn: async () => (await client.getMcpServer(serverId)).server,
+    queryKey: queryKeys.mcp.detail(serverId),
+    staleTime: defaultStaleTime,
   });
 }
 
@@ -169,10 +169,10 @@ export function useMcpServerDetailQuery(serverId: string | null) {
 
 export function toolQueryOptions(toolId: string) {
   return queryOptions({
-    queryKey: queryKeys.tools.detail(toolId),
-    queryFn: async () => (await client.getTool(toolId)).tool,
-    staleTime: defaultStaleTime,
     enabled: Boolean(toolId),
+    queryFn: async () => (await client.getTool(toolId)).tool,
+    queryKey: queryKeys.tools.detail(toolId),
+    staleTime: defaultStaleTime,
   });
 }
 
@@ -184,8 +184,8 @@ export function useToolQuery(toolId: string | null) {
 }
 
 export const providersQueryOptions = queryOptions({
-  queryKey: queryKeys.providers,
   queryFn: () => client.listProviders(),
+  queryKey: queryKeys.providers,
   staleTime: defaultStaleTime,
 });
 

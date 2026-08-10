@@ -11,7 +11,7 @@ describe("resolveSkillWriteApprovalRequired", () => {
       resolveSkillWriteApprovalRequired({
         orgSkillsWriteApproval: true,
         profileSkillsWriteApproval: null,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -20,7 +20,7 @@ describe("resolveSkillWriteApprovalRequired", () => {
       resolveSkillWriteApprovalRequired({
         orgSkillsWriteApproval: true,
         profileSkillsWriteApproval: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -29,7 +29,7 @@ describe("resolveSkillWriteApprovalRequired", () => {
       resolveSkillWriteApprovalRequired({
         orgSkillsWriteApproval: false,
         profileSkillsWriteApproval: true,
-      }),
+      })
     ).toBe(true);
   });
 });

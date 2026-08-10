@@ -6,7 +6,9 @@ import {
   classifyArtifactType,
 } from "./artifacts-tab-filters";
 
-function artifact(partial: Partial<ArtifactFile> & Pick<ArtifactFile, "filename" | "mimeType">): ArtifactFile {
+function artifact(
+  partial: Partial<ArtifactFile> & Pick<ArtifactFile, "filename" | "mimeType">
+): ArtifactFile {
   return {
     path: `/tmp/${partial.filename}`,
     sizeBytes: 0,
@@ -17,32 +19,45 @@ function artifact(partial: Partial<ArtifactFile> & Pick<ArtifactFile, "filename"
 
 describe("classifyArtifactType", () => {
   test("classifies common artifact families", () => {
-    expect(classifyArtifactType(artifact({ filename: "notes.md", mimeType: "text/markdown" }))).toBe(
-      "markdown",
-    );
-    expect(classifyArtifactType(artifact({ filename: "page.html", mimeType: "text/html" }))).toBe(
-      "html",
-    );
-    expect(classifyArtifactType(artifact({ filename: "shot.png", mimeType: "image/png" }))).toBe(
-      "image",
-    );
     expect(
-      classifyArtifactType(artifact({ filename: "reel.mp4", mimeType: "application/octet-stream" })),
+      classifyArtifactType(
+        artifact({ filename: "notes.md", mimeType: "text/markdown" })
+      )
+    ).toBe("markdown");
+    expect(
+      classifyArtifactType(
+        artifact({ filename: "page.html", mimeType: "text/html" })
+      )
+    ).toBe("html");
+    expect(
+      classifyArtifactType(
+        artifact({ filename: "shot.png", mimeType: "image/png" })
+      )
+    ).toBe("image");
+    expect(
+      classifyArtifactType(
+        artifact({ filename: "reel.mp4", mimeType: "application/octet-stream" })
+      )
     ).toBe("video");
     expect(
       classifyArtifactType(
         artifact({
           filename: "brief.docx",
-          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        }),
-      ),
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        })
+      )
     ).toBe("document");
-    expect(classifyArtifactType(artifact({ filename: "log.txt", mimeType: "text/plain" }))).toBe(
-      "text",
-    );
-    expect(classifyArtifactType(artifact({ filename: "blob.bin", mimeType: "application/octet-stream" }))).toBe(
-      "other",
-    );
+    expect(
+      classifyArtifactType(
+        artifact({ filename: "log.txt", mimeType: "text/plain" })
+      )
+    ).toBe("text");
+    expect(
+      classifyArtifactType(
+        artifact({ filename: "blob.bin", mimeType: "application/octet-stream" })
+      )
+    ).toBe("other");
   });
 });
 
@@ -62,7 +77,7 @@ describe("availableArtifactTypeFilters", () => {
         artifact({ filename: "a.md", mimeType: "text/markdown" }),
         artifact({ filename: "b.mp4", mimeType: "video/mp4" }),
         artifact({ filename: "c.md", mimeType: "text/markdown" }),
-      ]),
+      ])
     ).toEqual(["all", "markdown", "video"]);
   });
 });

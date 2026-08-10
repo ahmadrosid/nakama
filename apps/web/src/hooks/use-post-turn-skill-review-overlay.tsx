@@ -1,24 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
 import type { AgentChannel, ProfileSummary } from "@nakama/core/contract";
 import { resolveSkillPostTurnReviewEnabled } from "@nakama/core/skills/post-turn-review";
+import { useEffect, useMemo, useState } from "react";
 import {
   SkillPostTurnReviewBanner,
   type SuggestionApplyState,
 } from "@/components/chat/SkillPostTurnReviewBanner";
 import { useAuth } from "@/context/use-auth";
-import { useApplySkillSuggestion, useSkillSuggestions } from "@/hooks/use-skill-suggestions";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
+import {
+  useApplySkillSuggestion,
+  useSkillSuggestions,
+} from "@/hooks/use-skill-suggestions";
 import { formatError } from "@/lib/client";
 
 const POST_TURN_POLL_WINDOW_MS = 45_000;
-const POST_TURN_POLL_INTERVAL_MS = 3_000;
+const POST_TURN_POLL_INTERVAL_MS = 3000;
 
 interface UsePostTurnSkillReviewOverlayArgs {
-  sessionId: string | null;
-  profile: ProfileSummary | undefined;
-  sessionChannel: AgentChannel;
   lastSuccessfulTurnAt: number | null;
+  profile: ProfileSummary | undefined;
   readOnlySession: boolean;
+  sessionChannel: AgentChannel;
+  sessionId: string | null;
 }
 
 export function usePostTurnSkillReviewOverlay({
@@ -30,8 +33,12 @@ export function usePostTurnSkillReviewOverlay({
 }: UsePostTurnSkillReviewOverlayArgs) {
   const { activeOrg } = useAuth();
   const [now, setNow] = useState(() => Date.now());
-  const [applyStateById, setApplyStateById] = useState<Record<string, SuggestionApplyState>>({});
-  const [applyErrorById, setApplyErrorById] = useState<Record<string, string | undefined>>({});
+  const [applyStateById, setApplyStateById] = useState<
+    Record<string, SuggestionApplyState>
+  >({});
+  const [applyErrorById, setApplyErrorById] = useState<
+    Record<string, string | undefined>
+  >({});
 
   const reviewEnabled = resolveSkillPostTurnReviewEnabled({
     orgSkillsPostTurnReview: activeOrg?.skillsPostTurnReview ?? false,
@@ -59,23 +66,29 @@ export function usePostTurnSkillReviewOverlay({
     }
     const timer = window.setInterval(() => {
       setNow(Date.now());
-    }, 1_000);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [polling]);
 
-  const suggestionsQuery = useSkillSuggestions(canPoll ? (activeOrg?.id ?? null) : null, {
-    sessionId: sessionId ?? undefined,
-    status: "pending",
-    enabled: canPoll,
-    refetchInterval: polling ? POST_TURN_POLL_INTERVAL_MS : false,
-  });
+  const suggestionsQuery = useSkillSuggestions(
+    canPoll ? (activeOrg?.id ?? null) : null,
+    {
+      enabled: canPoll,
+      refetchInterval: polling ? POST_TURN_POLL_INTERVAL_MS : false,
+      sessionId: sessionId ?? undefined,
+      status: "pending",
+    }
+  );
 
-  const proposalsQuery = useSkillProposals(canPoll ? (activeOrg?.id ?? null) : null, {
-    status: "pending",
-    sessionId: sessionId ?? undefined,
-    enabled: canPoll,
-    refetchInterval: polling ? POST_TURN_POLL_INTERVAL_MS : false,
-  });
+  const proposalsQuery = useSkillProposals(
+    canPoll ? (activeOrg?.id ?? null) : null,
+    {
+      enabled: canPoll,
+      refetchInterval: polling ? POST_TURN_POLL_INTERVAL_MS : false,
+      sessionId: sessionId ?? undefined,
+      status: "pending",
+    }
+  );
 
   const applyMutation = useApplySkillSuggestion(activeOrg?.id ?? "");
 
@@ -83,9 +96,10 @@ export function usePostTurnSkillReviewOverlay({
   const pendingProposals = useMemo(
     () =>
       (proposalsQuery.data?.proposals ?? []).filter(
-        (proposal) => proposal.sessionId === sessionId && proposal.status === "pending",
+        (proposal) =>
+          proposal.sessionId === sessionId && proposal.status === "pending"
       ),
-    [proposalsQuery.data?.proposals, sessionId],
+    [proposalsQuery.data?.proposals, sessionId]
   );
 
   async function handleApply(suggestionId: string) {
@@ -98,7 +112,8 @@ export function usePostTurnSkillReviewOverlay({
       const result = await applyMutation.mutateAsync(suggestionId);
       setApplyStateById((current) => ({
         ...current,
-        [suggestionId]: result.outcome === "staged_as_proposal" ? "staged" : "applied",
+        [suggestionId]:
+          result.outcome === "staged_as_proposal" ? "staged" : "applied",
       }));
       void suggestionsQuery.refetch();
       void proposalsQuery.refetch();
@@ -114,13 +129,13 @@ export function usePostTurnSkillReviewOverlay({
   const banner =
     canPoll && (suggestions.length > 0 || pendingProposals.length > 0) ? (
       <SkillPostTurnReviewBanner
-        suggestions={suggestions}
-        pendingProposals={pendingProposals}
-        applyStateById={applyStateById}
         applyErrorById={applyErrorById}
+        applyStateById={applyStateById}
         canApply={activeOrg?.role !== "viewer"}
         isOrgAdmin={activeOrg?.role === "admin"}
         onApply={(id) => void handleApply(id)}
+        pendingProposals={pendingProposals}
+        suggestions={suggestions}
       />
     ) : null;
 

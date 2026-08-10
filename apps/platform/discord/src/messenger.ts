@@ -2,13 +2,19 @@ import type { Message, TextBasedChannel } from "discord.js";
 import { splitDiscordMessage } from "./format";
 
 export interface DiscordMessenger {
-  send(text: string): Promise<{ id: string } | null>;
   edit(messageId: string, text: string): Promise<void>;
+  send(text: string): Promise<{ id: string } | null>;
   sendTyping(): Promise<void>;
 }
 
-export function createDiscordMessenger(channel: TextBasedChannel): DiscordMessenger {
+export function createDiscordMessenger(
+  channel: TextBasedChannel
+): DiscordMessenger {
   return {
+    async edit(messageId: string, text: string) {
+      const message = await channel.messages.fetch(messageId);
+      await message.edit(text.slice(0, 2000));
+    },
     async send(text: string) {
       const chunks = splitDiscordMessage(text);
       let last: { id: string } | null = null;
@@ -20,10 +26,6 @@ export function createDiscordMessenger(channel: TextBasedChannel): DiscordMessen
 
       return last;
     },
-    async edit(messageId: string, text: string) {
-      const message = await channel.messages.fetch(messageId);
-      await message.edit(text.slice(0, 2000));
-    },
     async sendTyping() {
       if ("sendTyping" in channel && typeof channel.sendTyping === "function") {
         await channel.sendTyping();
@@ -32,7 +34,10 @@ export function createDiscordMessenger(channel: TextBasedChannel): DiscordMessen
   };
 }
 
-export async function replyAsChat(messenger: DiscordMessenger, text: string): Promise<void> {
+export async function replyAsChat(
+  messenger: DiscordMessenger,
+  text: string
+): Promise<void> {
   await messenger.send(text);
 }
 
@@ -40,11 +45,14 @@ export function createInteractionMessenger(
   reply: (content: string) => Promise<unknown>,
   followUp: (content: string) => Promise<unknown>,
   editReply: (content: string) => Promise<unknown>,
-  deferred: boolean,
+  deferred: boolean
 ): DiscordMessenger {
   let answered = false;
 
   return {
+    async edit(_messageId: string, text: string) {
+      await editReply(text.slice(0, 2000));
+    },
     async send(text: string) {
       const chunks = splitDiscordMessage(text);
 
@@ -63,9 +71,6 @@ export function createInteractionMessenger(
       }
 
       return { id: "interaction" };
-    },
-    async edit(_messageId: string, text: string) {
-      await editReply(text.slice(0, 2000));
     },
     async sendTyping() {},
   };

@@ -1,17 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { isAutomationRunUnread, summarizeAutomationUnreadCounts } from "./automation-run-read";
+import {
+  isAutomationRunUnread,
+  summarizeAutomationUnreadCounts,
+} from "./automation-run-read";
 
 describe("isAutomationRunUnread", () => {
   test("running runs are never unread", () => {
     expect(
       isAutomationRunUnread(
         {
-          status: "running",
-          startedAt: "2026-06-29T10:00:00.000Z",
           completedAt: null,
+          startedAt: "2026-06-29T10:00:00.000Z",
+          status: "running",
         },
-        null,
-      ),
+        null
+      )
     ).toBe(false);
   });
 
@@ -19,12 +22,12 @@ describe("isAutomationRunUnread", () => {
     expect(
       isAutomationRunUnread(
         {
-          status: "completed",
-          startedAt: "2026-06-29T10:00:00.000Z",
           completedAt: "2026-06-29T10:01:00.000Z",
+          startedAt: "2026-06-29T10:00:00.000Z",
+          status: "completed",
         },
-        "2026-06-29T09:00:00.000Z",
-      ),
+        "2026-06-29T09:00:00.000Z"
+      )
     ).toBe(true);
   });
 
@@ -32,12 +35,12 @@ describe("isAutomationRunUnread", () => {
     expect(
       isAutomationRunUnread(
         {
-          status: "completed",
-          startedAt: "2026-06-29T08:00:00.000Z",
           completedAt: "2026-06-29T08:01:00.000Z",
+          startedAt: "2026-06-29T08:00:00.000Z",
+          status: "completed",
         },
-        "2026-06-29T09:00:00.000Z",
-      ),
+        "2026-06-29T09:00:00.000Z"
+      )
     ).toBe(false);
   });
 
@@ -45,12 +48,12 @@ describe("isAutomationRunUnread", () => {
     expect(
       isAutomationRunUnread(
         {
-          status: "failed",
-          startedAt: "2026-06-29T08:00:00.000Z",
           completedAt: "2026-06-29T08:01:00.000Z",
+          startedAt: "2026-06-29T08:00:00.000Z",
+          status: "failed",
         },
-        null,
-      ),
+        null
+      )
     ).toBe(true);
   });
 });
@@ -62,13 +65,13 @@ describe("summarizeAutomationUnreadCounts", () => {
         { automationId: "automation_1", unreadCount: 2 },
         { automationId: "automation_2", unreadCount: 0 },
         { automationId: "automation_3", unreadCount: 1 },
-      ]),
+      ])
     ).toEqual({
-      totalUnread: 3,
       byAutomationId: {
         automation_1: 2,
         automation_3: 1,
       },
+      totalUnread: 3,
     });
   });
 });

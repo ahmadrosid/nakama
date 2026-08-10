@@ -1,17 +1,17 @@
-import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared'
+import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 
 export function baseOptions(): BaseLayoutProps {
   return {
-    nav: {
-      title: 'Nakama',
-    },
+    githubUrl: "https://github.com/ahmadrosid/nakama",
     links: [
       {
-        text: 'Managed hosting',
-        url: 'https://getnakama.cloud/',
         external: true,
+        text: "Managed hosting",
+        url: "https://getnakama.cloud/",
       },
     ],
-    githubUrl: 'https://github.com/ahmadrosid/nakama',
-  }
+    nav: {
+      title: "Nakama",
+    },
+  };
 }

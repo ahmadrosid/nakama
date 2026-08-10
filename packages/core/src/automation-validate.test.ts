@@ -14,7 +14,7 @@ describe("validateAutomationInput", () => {
         name: "Daily digest",
         prompt: "Summarize news",
         trigger: { type: "manual" },
-      }),
+      })
     ).not.toThrow();
   });
 
@@ -23,8 +23,8 @@ describe("validateAutomationInput", () => {
       validateAutomationInput({
         name: "Daily digest",
         prompt: "Summarize news",
-        trigger: { type: "schedule", cron: "every morning" },
-      }),
+        trigger: { cron: "every morning", type: "schedule" },
+      })
     ).toThrow(/Invalid cron/);
   });
 
@@ -33,8 +33,8 @@ describe("validateAutomationInput", () => {
       validateAutomationInput({
         name: "Reminder",
         prompt: "Send reminder email",
-        trigger: { type: "runAt", at: "2026-06-27T13:00:00.000Z" },
-      }),
+        trigger: { at: "2026-06-27T13:00:00.000Z", type: "runAt" },
+      })
     ).not.toThrow();
   });
 
@@ -43,8 +43,8 @@ describe("validateAutomationInput", () => {
       validateAutomationInput({
         name: "Reminder",
         prompt: "Send reminder email",
-        trigger: { type: "runAt", at: "not-a-date" },
-      }),
+        trigger: { at: "not-a-date", type: "runAt" },
+      })
     ).toThrow(/Invalid runAt/);
   });
 
@@ -54,7 +54,7 @@ describe("validateAutomationInput", () => {
         name: "Daily digest",
         prompt: "   ",
         trigger: { type: "manual" },
-      }),
+      })
     ).toThrow(/prompt is required/);
   });
 });
@@ -79,7 +79,9 @@ describe("validateTimezone", () => {
   });
 
   test("rejects invalid timezone", () => {
-    expect(() => validateTimezone("Not/A_Timezone")).toThrow(/Invalid timezone/);
+    expect(() => validateTimezone("Not/A_Timezone")).toThrow(
+      /Invalid timezone/
+    );
   });
 });
 
@@ -87,26 +89,26 @@ describe("resolveScheduleTimezone", () => {
   test("fills missing timezone from user preference", () => {
     expect(
       resolveScheduleTimezone(
-        { type: "schedule", cron: "0 8 * * *" },
-        "Asia/Jakarta",
-      ),
+        { cron: "0 8 * * *", type: "schedule" },
+        "Asia/Jakarta"
+      )
     ).toEqual({
-      type: "schedule",
       cron: "0 8 * * *",
       timezone: "Asia/Jakarta",
+      type: "schedule",
     });
   });
 
   test("fills runAt timezone from user preference", () => {
     expect(
       resolveScheduleTimezone(
-        { type: "runAt", at: "2026-06-27T13:00:00.000Z" },
-        "Asia/Jakarta",
-      ),
+        { at: "2026-06-27T13:00:00.000Z", type: "runAt" },
+        "Asia/Jakarta"
+      )
     ).toEqual({
-      type: "runAt",
       at: "2026-06-27T13:00:00.000Z",
       timezone: "Asia/Jakarta",
+      type: "runAt",
     });
   });
 });
@@ -117,8 +119,8 @@ describe("isWorkerSchedulable", () => {
     expect(
       isWorkerSchedulable({
         enabled: true,
-        trigger: { type: "runAt", at },
-      }),
+        trigger: { at, type: "runAt" },
+      })
     ).toBe(true);
   });
 
@@ -126,8 +128,8 @@ describe("isWorkerSchedulable", () => {
     expect(
       isWorkerSchedulable({
         enabled: true,
-        trigger: { type: "runAt", at: "2020-01-01T00:00:00.000Z" },
-      }),
+        trigger: { at: "2020-01-01T00:00:00.000Z", type: "runAt" },
+      })
     ).toBe(false);
   });
 });

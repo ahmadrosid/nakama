@@ -10,7 +10,7 @@ const MAX_ASSISTANT_CHARS = 12_000;
 const MAX_TOOL_LINES = 40;
 
 export function looksLikeCursorAgentStreamJson(stdout: string): boolean {
-  const sample = stdout.slice(0, 4_000);
+  const sample = stdout.slice(0, 4000);
   if (!sample.includes('"type"')) {
     return false;
   }
@@ -29,7 +29,7 @@ export function looksLikeCursorAgentStreamJson(stdout: string): boolean {
 
 export function formatCodingAgentBashStdout(
   stdout: string,
-  options: { logPath?: string | null; exitCode?: number | null } = {},
+  options: { logPath?: string | null; exitCode?: number | null } = {}
 ): string {
   const trimmed = stdout.trim();
   if (!trimmed) {
@@ -37,15 +37,21 @@ export function formatCodingAgentBashStdout(
   }
 
   if (looksLikeCursorAgentStreamJson(trimmed)) {
-    return appendLogFooter(summarizeCursorAgentStreamJson(trimmed, options.exitCode), options.logPath);
+    return appendLogFooter(
+      summarizeCursorAgentStreamJson(trimmed, options.exitCode),
+      options.logPath
+    );
   }
 
-  return appendLogFooter(capText(trimmed, MAX_SUMMARY_CHARS, "tail"), options.logPath);
+  return appendLogFooter(
+    capText(trimmed, MAX_SUMMARY_CHARS, "tail"),
+    options.logPath
+  );
 }
 
 export function summarizeCursorAgentStreamJson(
   stdout: string,
-  exitCode?: number | null,
+  exitCode?: number | null
 ): string {
   const assistantChunks: string[] = [];
   const toolLines: string[] = [];
@@ -77,7 +83,9 @@ export function summarizeCursorAgentStreamJson(
       const bits = [
         model ? `model=${model}` : null,
         cwd ? `cwd=${cwd}` : null,
-        typeof event.apiKeySource === "string" ? `auth=${event.apiKeySource}` : null,
+        typeof event.apiKeySource === "string"
+          ? `auth=${event.apiKeySource}`
+          : null,
       ].filter(Boolean);
       initLine = bits.length > 0 ? bits.join(", ") : "Cursor Agent started";
       continue;
@@ -135,7 +143,7 @@ export function summarizeCursorAgentStreamJson(
     sections.push(
       "",
       "## Result",
-      "No final result event in captured stream. Check git status in the repo cwd or the full log.",
+      "No final result event in captured stream. Check git status in the repo cwd or the full log."
     );
   }
 
@@ -198,7 +206,7 @@ function formatToolCallLine(event: Record<string, unknown>): string | null {
 
   const call = toolCall as Record<string, unknown>;
   for (const [key, value] of Object.entries(call)) {
-    if (!key.endsWith("ToolCall") || !value || typeof value !== "object") {
+    if (!(key.endsWith("ToolCall") && value) || typeof value !== "object") {
       continue;
     }
     const name = key.replace(/ToolCall$/, "");
@@ -210,7 +218,10 @@ function formatToolCallLine(event: Record<string, unknown>): string | null {
   return `tool_call ${subtype || "unknown"}`.trim();
 }
 
-function summarizeToolArgs(name: string, args: Record<string, unknown> | undefined): string {
+function summarizeToolArgs(
+  name: string,
+  args: Record<string, unknown> | undefined
+): string {
   if (!args) {
     return "";
   }
@@ -232,7 +243,10 @@ function summarizeToolArgs(name: string, args: Record<string, unknown> | undefin
     return capText(args.pattern, 80, "head");
   }
 
-  if (name.toLowerCase().includes("write") || name.toLowerCase().includes("edit")) {
+  if (
+    name.toLowerCase().includes("write") ||
+    name.toLowerCase().includes("edit")
+  ) {
     return "(edit)";
   }
 
@@ -246,9 +260,9 @@ function formatResultLine(event: Record<string, unknown>): string {
     bits.push(subtype);
   }
   if (typeof event.result === "string" && event.result.trim()) {
-    bits.push(capText(event.result.trim(), 4_000, "tail"));
+    bits.push(capText(event.result.trim(), 4000, "tail"));
   } else if (typeof event.message === "string" && event.message.trim()) {
-    bits.push(capText(event.message.trim(), 4_000, "tail"));
+    bits.push(capText(event.message.trim(), 4000, "tail"));
   }
   if (typeof event.duration_ms === "number") {
     bits.push(`durationMs=${event.duration_ms}`);
@@ -269,7 +283,11 @@ function appendLogFooter(body: string, logPath?: string | null): string {
   return `${body}${footer}`;
 }
 
-function capText(value: string, maxChars: number, mode: "head" | "tail"): string {
+function capText(
+  value: string,
+  maxChars: number,
+  mode: "head" | "tail"
+): string {
   if (value.length <= maxChars) {
     return value;
   }

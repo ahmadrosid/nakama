@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "name": "image-generation-usage-no-usage-field",
+  "recordedAt": "2026-08-08T00:00:00.000Z",
+  "exchanges": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "body": {
+          "model": "gpt-image-2",
+          "prompt": "abcd",
+          "size": "1024x1024",
+          "n": 1,
+          "output_format": "png"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "created": 1754601600,
+          "data": [
+            {
+              "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAADAAEABf4C/tzMWecAAAAASUVORK5CYII="
+            }
+          ],
+          "output_format": "png",
+          "size": "1024x1024"
+        }
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, SessionMessageMeta } from "@nakama/core/contract";
-import { chatMessagesToListItems } from "./chat-history";
 import { extractTurnArtifacts } from "./chat-artifacts";
+import { chatMessagesToListItems } from "./chat-history";
 
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -9,68 +9,75 @@ const tinyPngBase64 =
 describe("chatMessagesToListItems", () => {
   test("preserves history index and metadata for rendered items", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "Hello" },
+      { content: "Hello", role: "user" },
       {
-        role: "assistant",
         content: "",
-        toolCalls: [{ id: "tool_1", name: "search_files", arguments: { path: "src" } }],
+        role: "assistant",
+        toolCalls: [
+          { arguments: { path: "src" }, id: "tool_1", name: "search_files" },
+        ],
       },
-      { role: "tool", toolCallId: "tool_1", name: "search_files", content: "{\"ok\":true}" },
-      { role: "assistant", content: "Done" },
+      {
+        content: '{"ok":true}',
+        name: "search_files",
+        role: "tool",
+        toolCallId: "tool_1",
+      },
+      { content: "Done", role: "assistant" },
     ];
     const messageMeta: SessionMessageMeta[] = [
-      { id: "msg_1", seq: 0, createdAt: "2026-06-14T10:00:00.000Z" },
-      { id: "msg_2", seq: 1, createdAt: "2026-06-14T10:00:01.000Z" },
-      { id: "msg_3", seq: 2, createdAt: "2026-06-14T10:00:02.000Z" },
-      { id: "msg_4", seq: 3, createdAt: "2026-06-14T10:00:03.000Z" },
+      { createdAt: "2026-06-14T10:00:00.000Z", id: "msg_1", seq: 0 },
+      { createdAt: "2026-06-14T10:00:01.000Z", id: "msg_2", seq: 1 },
+      { createdAt: "2026-06-14T10:00:02.000Z", id: "msg_3", seq: 2 },
+      { createdAt: "2026-06-14T10:00:03.000Z", id: "msg_4", seq: 3 },
     ];
 
     const items = chatMessagesToListItems(messages, messageMeta);
 
     expect(items).toHaveLength(3);
     expect(items[0]).toMatchObject({
-      role: "user",
-      historyIndex: 0,
       createdAt: "2026-06-14T10:00:00.000Z",
+      historyIndex: 0,
+      role: "user",
     });
     expect(items[1]).toMatchObject({
-      role: "tool",
-      historyIndex: 2,
       createdAt: "2026-06-14T10:00:02.000Z",
+      historyIndex: 2,
+      role: "tool",
       toolInput: { path: "src" },
     });
     expect(items[2]).toMatchObject({
-      role: "assistant",
-      historyIndex: 3,
-      createdAt: "2026-06-14T10:00:03.000Z",
       content: "Done",
+      createdAt: "2026-06-14T10:00:03.000Z",
+      historyIndex: 3,
+      role: "assistant",
     });
   });
 
   test("renders described images as attachments and keeps vision-native images inline", () => {
     const messages: ChatMessage[] = [
       {
-        role: "user",
         content: [
-          { type: "text", text: "What is this?" },
+          { text: "What is this?", type: "text" },
           {
-            type: "image",
-            mediaType: "image/png",
             data: tinyPngBase64,
             description: "A red square.",
+            mediaType: "image/png",
+            type: "image",
           },
         ],
+        role: "user",
       },
       {
-        role: "user",
         content: [
-          { type: "text", text: "Another one" },
-          { type: "image", mediaType: "image/png", data: tinyPngBase64 },
+          { text: "Another one", type: "text" },
+          { data: tinyPngBase64, mediaType: "image/png", type: "image" },
         ],
+        role: "user",
       },
       {
-        role: "user",
         content: "[Image]\nLegacy description only.",
+        role: "user",
       },
     ];
 
@@ -80,9 +87,9 @@ describe("chatMessagesToListItems", () => {
       content: "What is this?",
       imageAttachments: [
         {
+          description: "A red square.",
           mediaType: "image/png",
           url: `data:image/png;base64,${tinyPngBase64}`,
-          description: "A red square.",
         },
       ],
     });
@@ -99,12 +106,15 @@ describe("chatMessagesToListItems", () => {
     expect(items[1]?.imageAttachments).toBeUndefined();
     expect(items[2]).toMatchObject({
       content: "",
-      imageAttachments: [{ mediaType: "image/unknown", description: "Legacy description only." }],
+      imageAttachments: [
+        { description: "Legacy description only.", mediaType: "image/unknown" },
+      ],
     });
   });
 
   test("derives artifact refs from persisted write_file tool messages after hydration", () => {
-    const artifactsRoot = "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
+    const artifactsRoot =
+      "/Users/test/.nakama/orgs/org_1/profiles/profile_1/artifacts";
     const metaJson = JSON.stringify({
       mimeType: "text/markdown",
       savedAt: "2026-07-13T10:00:00.000Z",
@@ -112,36 +122,43 @@ describe("chatMessagesToListItems", () => {
     });
     const messages: ChatMessage[] = [
       {
-        role: "assistant",
         content: "",
+        role: "assistant",
         toolCalls: [
-          { id: "tool_content", name: "write_file", arguments: { path: "artifacts/report.md", content: "# Report" } },
           {
+            arguments: { content: "# Report", path: "artifacts/report.md" },
+            id: "tool_content",
+            name: "write_file",
+          },
+          {
+            arguments: {
+              content: metaJson,
+              path: "artifacts/report.md.nakama-meta.json",
+            },
             id: "tool_meta",
             name: "write_file",
-            arguments: { path: "artifacts/report.md.nakama-meta.json", content: metaJson },
           },
         ],
       },
       {
+        content: JSON.stringify({
+          bytesWritten: 8,
+          path: `${artifactsRoot}/report.md`,
+        }),
+        name: "write_file",
         role: "tool",
         toolCallId: "tool_content",
-        name: "write_file",
-        content: JSON.stringify({
-          path: `${artifactsRoot}/report.md`,
-          bytesWritten: 8,
-        }),
       },
       {
+        content: JSON.stringify({
+          bytesWritten: metaJson.length,
+          path: `${artifactsRoot}/report.md.nakama-meta.json`,
+        }),
+        name: "write_file",
         role: "tool",
         toolCallId: "tool_meta",
-        name: "write_file",
-        content: JSON.stringify({
-          path: `${artifactsRoot}/report.md.nakama-meta.json`,
-          bytesWritten: metaJson.length,
-        }),
       },
-      { role: "assistant", content: "Saved the report for you." },
+      { content: "Saved the report for you.", role: "assistant" },
     ];
 
     const items = chatMessagesToListItems(messages);
@@ -151,39 +168,39 @@ describe("chatMessagesToListItems", () => {
     expect(artifacts).toEqual([
       {
         filename: "report.md",
-        path: "report.md",
         mimeType: "text/markdown",
-        sizeBytes: 12,
+        path: "report.md",
         savedAt: "2026-07-13T10:00:00.000Z",
+        sizeBytes: 12,
       },
     ]);
   });
 
   test("hydrates web_search tool rows from assistant providerContent", () => {
     const messages: ChatMessage[] = [
-      { role: "user", content: "Search the web for JWT security" },
+      { content: "Search the web for JWT security", role: "user" },
       {
-        role: "assistant",
         content: "Here is what I found about JWT security.",
         providerContent: [
           {
-            type: "server_tool_use",
             id: "srvtool_abc",
-            name: "web_search",
             input: { query: "JWT security best practices" },
+            name: "web_search",
+            type: "server_tool_use",
           },
           {
-            type: "web_search_tool_result",
-            tool_use_id: "srvtool_abc",
             content: [
               {
-                type: "web_search_result",
                 title: "JWT Security Best Practices",
+                type: "web_search_result",
                 url: "https://auth0.com/blog/jwt-security-best-practices",
               },
             ],
+            tool_use_id: "srvtool_abc",
+            type: "web_search_tool_result",
           },
         ],
+        role: "assistant",
       },
     ];
 
@@ -193,54 +210,54 @@ describe("chatMessagesToListItems", () => {
     expect(items[1]).toMatchObject({
       role: "tool",
       tool: "web_search",
-      toolStatus: "done",
       toolCallId: "srvtool_abc",
       toolInput: { query: "JWT security best practices" },
+      toolStatus: "done",
     });
     expect(items[2]).toMatchObject({
-      role: "assistant",
       content: "Here is what I found about JWT security.",
+      role: "assistant",
     });
   });
 
   test("does not duplicate web_search when a persisted tool row exists", () => {
     const messages: ChatMessage[] = [
       {
-        role: "assistant",
         content: "Searching…",
         providerContent: [
           {
-            type: "server_tool_use",
             id: "srvtool_abc",
-            name: "web_search",
             input: { query: "JWT" },
+            name: "web_search",
+            type: "server_tool_use",
           },
           {
-            type: "web_search_tool_result",
-            tool_use_id: "srvtool_abc",
             content: [
               {
-                type: "web_search_result",
                 title: "JWT",
+                type: "web_search_result",
                 url: "https://example.com/jwt",
               },
             ],
+            tool_use_id: "srvtool_abc",
+            type: "web_search_tool_result",
           },
         ],
+        role: "assistant",
       },
       {
-        role: "tool",
-        toolCallId: "srvtool_abc",
-        name: "web_search",
         content: JSON.stringify([
           {
-            type: "web_search_result",
             title: "JWT",
+            type: "web_search_result",
             url: "https://example.com/jwt",
           },
         ]),
+        name: "web_search",
+        role: "tool",
+        toolCallId: "srvtool_abc",
       },
-      { role: "assistant", content: "Done." },
+      { content: "Done.", role: "assistant" },
     ];
 
     const items = chatMessagesToListItems(messages);
@@ -254,42 +271,48 @@ describe("chatMessagesToListItems", () => {
   test("does not duplicate web_search when assistant had only toolCalls", () => {
     const messages: ChatMessage[] = [
       {
-        role: "assistant",
         content: "",
-        toolCalls: [{ id: "srvtool_abc", name: "web_search", arguments: { query: "JWT" } }],
         providerContent: [
           {
-            type: "server_tool_use",
             id: "srvtool_abc",
-            name: "web_search",
             input: { query: "JWT" },
+            name: "web_search",
+            type: "server_tool_use",
           },
           {
-            type: "web_search_tool_result",
-            tool_use_id: "srvtool_abc",
             content: [
               {
-                type: "web_search_result",
                 title: "JWT",
+                type: "web_search_result",
                 url: "https://example.com/jwt",
               },
             ],
+            tool_use_id: "srvtool_abc",
+            type: "web_search_tool_result",
+          },
+        ],
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { query: "JWT" },
+            id: "srvtool_abc",
+            name: "web_search",
           },
         ],
       },
       {
-        role: "tool",
-        toolCallId: "srvtool_abc",
-        name: "web_search",
         content: JSON.stringify([
           {
-            type: "web_search_result",
             title: "JWT",
+            type: "web_search_result",
             url: "https://example.com/jwt",
           },
         ]),
+        name: "web_search",
+        role: "tool",
+        toolCallId: "srvtool_abc",
       },
-      { role: "assistant", content: "Done." },
+      { content: "Done.", role: "assistant" },
     ];
 
     const items = chatMessagesToListItems(messages);
@@ -301,42 +324,42 @@ describe("chatMessagesToListItems", () => {
 
   test("preserves web_fetch tool rows from persisted tool messages", () => {
     const fetchResult = {
-      url: "https://example.com/start",
-      finalUrl: "https://example.com/docs",
-      status: 200,
-      contentType: "text/markdown",
       bytes: 42,
       content: "# Docs",
+      contentType: "text/markdown",
+      finalUrl: "https://example.com/docs",
+      status: 200,
+      url: "https://example.com/start",
     };
     const messages: ChatMessage[] = [
-      { role: "user", content: "Fetch the docs page" },
+      { content: "Fetch the docs page", role: "user" },
       {
-        role: "assistant",
         content: "",
+        role: "assistant",
         toolCalls: [
           {
+            arguments: { url: "https://example.com/docs" },
             id: "tool_fetch_1",
             name: "web_fetch",
-            arguments: { url: "https://example.com/docs" },
           },
         ],
       },
       {
+        content: JSON.stringify(fetchResult),
+        name: "web_fetch",
         role: "tool",
         toolCallId: "tool_fetch_1",
-        name: "web_fetch",
-        content: JSON.stringify(fetchResult),
       },
-      { role: "assistant", content: "Here is the page." },
+      { content: "Here is the page.", role: "assistant" },
     ];
 
     const items = chatMessagesToListItems(messages);
 
     expect(items.find((item) => item.tool === "web_fetch")).toMatchObject({
       role: "tool",
-      toolStatus: "done",
       toolInput: { url: "https://example.com/docs" },
       toolResult: fetchResult,
+      toolStatus: "done",
     });
   });
 
@@ -345,43 +368,45 @@ describe("chatMessagesToListItems", () => {
       text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
     };
     const messages: ChatMessage[] = [
-      { role: "user", content: "Search for JWT security" },
+      { content: "Search for JWT security", role: "user" },
       {
-        role: "assistant",
         content: "",
+        role: "assistant",
         toolCalls: [
           {
+            arguments: { query: "JWT security best practices" },
             id: "tool_exa_1",
             name: "exa__web_search_exa",
-            arguments: { query: "JWT security best practices" },
           },
         ],
       },
       {
+        content: JSON.stringify(exaResult),
+        name: "exa__web_search_exa",
         role: "tool",
         toolCallId: "tool_exa_1",
-        name: "exa__web_search_exa",
-        content: JSON.stringify(exaResult),
       },
-      { role: "assistant", content: "Here is what I found." },
+      { content: "Here is what I found.", role: "assistant" },
     ];
 
     const items = chatMessagesToListItems(messages);
 
-    expect(items.find((item) => item.tool === "exa__web_search_exa")).toMatchObject({
+    expect(
+      items.find((item) => item.tool === "exa__web_search_exa")
+    ).toMatchObject({
       role: "tool",
-      toolStatus: "done",
       toolInput: { query: "JWT security best practices" },
       toolResult: exaResult,
+      toolStatus: "done",
     });
   });
 
   test("does not hydrate web_search when providerContent lacks hosted search", () => {
     const messages: ChatMessage[] = [
       {
-        role: "assistant",
         content: "Plain answer.",
-        providerContent: [{ type: "text", text: "Plain answer." }],
+        providerContent: [{ text: "Plain answer.", type: "text" }],
+        role: "assistant",
       },
     ];
 

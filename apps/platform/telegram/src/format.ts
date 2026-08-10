@@ -13,7 +13,9 @@ export function stripMarkdownForTelegram(text: string): string {
   const protectedUrls = protectBareUrls(text.trim());
   let result = protectedUrls.text;
 
-  result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => code.trim());
+  result = result.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) =>
+    code.trim()
+  );
   result = result.replace(/`([^`]+)`/g, "$1");
   result = result.replace(/\*\*([^*]+)\*\*/g, "$1");
   result = result.replace(/\*([^*]+)\*/g, "$1");
@@ -64,15 +66,23 @@ function restoreBareUrls(text: string, urls: string[]): string {
   return result;
 }
 
-function protectFencedCodeBlocks(text: string): { text: string; blocks: string[] } {
+function protectFencedCodeBlocks(text: string): {
+  text: string;
+  blocks: string[];
+} {
   const blocks: string[] = [];
-  const protectedText = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code: string) => {
-    const token = `@@TCTOKEN${blocks.length}@@`;
-    blocks.push(`<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`);
-    return token;
-  });
+  const protectedText = text.replace(
+    /```[\w]*\n?([\s\S]*?)```/g,
+    (_, code: string) => {
+      const token = `@@TCTOKEN${blocks.length}@@`;
+      blocks.push(
+        `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
+      );
+      return token;
+    }
+  );
 
-  return { text: protectedText, blocks };
+  return { blocks, text: protectedText };
 }
 
 function renderInlineTelegramFormatting(text: string): string {
@@ -128,7 +138,10 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
     return splitTelegramMessage(trimmed);
   }
 
-  const paragraphs = trimmed.split(/\n\n+/).map((part) => part.trim()).filter(Boolean);
+  const paragraphs = trimmed
+    .split(/\n\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
   const merged: string[] = [];
   let current = "";
 
@@ -217,7 +230,7 @@ export function splitTelegramMessage(text: string): string[] {
 
 export function renderTelegramTodoStatus(
   todos: AgentTodo[],
-  state: TelegramTodoRunState,
+  state: TelegramTodoRunState
 ): string {
   const header =
     state === "completed"

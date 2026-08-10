@@ -9,9 +9,9 @@ import { useFireworksDiscoverModels } from "@/hooks/use-fireworks-discover-model
 export type FireworksBrowseSelectHandler = (row: CapabilityBrowseRow) => void;
 
 interface FireworksModelsBrowseListProps {
-  onSelect: FireworksBrowseSelectHandler;
-  className?: string;
   apiKey?: string;
+  className?: string;
+  onSelect: FireworksBrowseSelectHandler;
   providerId?: string;
 }
 
@@ -22,23 +22,26 @@ export function FireworksModelsBrowseList({
   providerId,
 }: FireworksModelsBrowseListProps) {
   const canFetch = Boolean(providerId?.trim() || apiKey?.trim());
-  const { data, isLoading, error } = useFireworksDiscoverModels({ apiKey, providerId });
+  const { data, isLoading, error } = useFireworksDiscoverModels({
+    apiKey,
+    providerId,
+  });
 
   return (
     <CatalogModelsBrowseList<CapabilityBrowseRow>
-      rows={data?.rows ?? []}
-      onSelect={onSelect}
       className={className}
-      query={{ isLoading, error, canFetch }}
+      filterRows={(rows, search, hideDeprecated) =>
+        filterCapabilityBrowseRows(rows, { hideDeprecated, search })
+      }
       idleMessage="Enter an API key to browse Fireworks models."
       isDeprecated={(row) => row.deprecated === true}
-      toDisplayRow={capabilityBrowseRowToDisplayRow}
-      filterRows={(rows, search, hideDeprecated) =>
-        filterCapabilityBrowseRows(rows, { search, hideDeprecated })
-      }
+      onSelect={onSelect}
+      query={{ canFetch, error, isLoading }}
+      rows={data?.rows ?? []}
       status={({ filteredCount }) =>
         `${filteredCount} models${data?.usedFallback ? " · using curated fallback catalog" : ""}`
       }
+      toDisplayRow={capabilityBrowseRowToDisplayRow}
     />
   );
 }

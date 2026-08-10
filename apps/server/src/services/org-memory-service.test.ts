@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import { ORG_MEMORY_PREAMBLE, parseOrgMemoryContent } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { OrgMemoryService } from "./org-memory-service";
@@ -11,7 +11,7 @@ describe("OrgMemoryService", () => {
 
   afterEach(async () => {
     if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
   });
@@ -20,7 +20,7 @@ describe("OrgMemoryService", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-org-memory-"));
     return new OrgMemoryService(
       withDb ? createInMemoryDatabaseAdapter() : null,
-      { configDir: tempDir },
+      { configDir: tempDir }
     );
   }
 
@@ -64,7 +64,9 @@ describe("OrgMemoryService", () => {
     await service.unpinFact("org_a", "fact one");
     const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
     expect(parsed.pinned).toEqual([]);
-    await expect(service.unpinFact("org_a", "missing")).rejects.toThrow("Pinned fact not found.");
+    await expect(service.unpinFact("org_a", "missing")).rejects.toThrow(
+      "Pinned fact not found."
+    );
   });
 
   test("setMemory replaces live content and rejects oversized bodies", async () => {
@@ -72,7 +74,9 @@ describe("OrgMemoryService", () => {
     await service.setMemory("org_a", `${ORG_MEMORY_PREAMBLE}\n\n- custom\n`);
     expect(await service.getMemory("org_a")).toContain("- custom");
     const huge = "x".repeat(10_000);
-    await expect(service.setMemory("org_a", huge)).rejects.toThrow("size limit");
+    await expect(service.setMemory("org_a", huge)).rejects.toThrow(
+      "size limit"
+    );
   });
 
   test("search finds bullets in the live file and archive files", async () => {
@@ -81,7 +85,9 @@ describe("OrgMemoryService", () => {
     await service.addFact("org_a", "deploys on Tuesday", { pin: true });
     const result = await service.search("org_a", "Bun");
     expect(result.matches.some((m) => m.bullet.includes("Bun"))).toBe(true);
-    expect(result.matches.some((m) => m.bullet.includes("Tuesday"))).toBe(false);
+    expect(result.matches.some((m) => m.bullet.includes("Tuesday"))).toBe(
+      false
+    );
   });
 
   test("archiveEntries moves bullets to memory-archive", async () => {
@@ -105,7 +111,9 @@ describe("OrgMemoryService", () => {
 
   test("propose creates pending row without writing MEMORY.md", async () => {
     const service = await setup(true);
-    const result = await service.propose("org_a", { bullet: "team standup is 10am UTC" });
+    const result = await service.propose("org_a", {
+      bullet: "team standup is 10am UTC",
+    });
     expect(result.outcome).toBe("created");
     expect(result.proposalId).toBeTruthy();
     const memory = parseOrgMemoryContent(await service.getMemory("org_a"));
@@ -117,8 +125,12 @@ describe("OrgMemoryService", () => {
 
   test("propose returns already_pending for duplicate bullet", async () => {
     const service = await setup(true);
-    const first = await service.propose("org_a", { bullet: "shared deploy window" });
-    const second = await service.propose("org_a", { bullet: "shared deploy window" });
+    const first = await service.propose("org_a", {
+      bullet: "shared deploy window",
+    });
+    const second = await service.propose("org_a", {
+      bullet: "shared deploy window",
+    });
     expect(first.outcome).toBe("created");
     expect(second.outcome).toBe("already_pending");
     expect(await service.countPendingProposals("org_a")).toBe(1);
@@ -126,22 +138,34 @@ describe("OrgMemoryService", () => {
 
   test("approve writes to recent-log section by default", async () => {
     const service = await setup(true);
-    const proposed = await service.propose("org_a", { bullet: "review PRs before lunch" });
+    const proposed = await service.propose("org_a", {
+      bullet: "review PRs before lunch",
+    });
     await service.approveProposal("org_a", proposed.proposalId!, "admin_user");
     const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
     expect(parsed.pinned).toEqual([]);
-    expect(parsed.sections.some((section) => section.bullets.includes("review PRs before lunch"))).toBe(
-      true,
-    );
+    expect(
+      parsed.sections.some((section) =>
+        section.bullets.includes("review PRs before lunch")
+      )
+    ).toBe(true);
   });
 
   test("approve with pin writes to pinned section and is idempotent", async () => {
     const service = await setup(true);
-    const proposed = await service.propose("org_a", { bullet: "always pin this" });
-    await service.approveProposal("org_a", proposed.proposalId!, "admin_user", { pin: true });
-    await service.approveProposal("org_a", proposed.proposalId!, "admin_user", { pin: true });
+    const proposed = await service.propose("org_a", {
+      bullet: "always pin this",
+    });
+    await service.approveProposal("org_a", proposed.proposalId!, "admin_user", {
+      pin: true,
+    });
+    await service.approveProposal("org_a", proposed.proposalId!, "admin_user", {
+      pin: true,
+    });
     const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
-    expect(parsed.pinned.filter((bullet) => bullet === "always pin this")).toEqual(["always pin this"]);
+    expect(
+      parsed.pinned.filter((bullet) => bullet === "always pin this")
+    ).toEqual(["always pin this"]);
   });
 
   test("search tags pinned and recent-log tiers", async () => {
@@ -150,23 +174,33 @@ describe("OrgMemoryService", () => {
     await service.addRecentLogFact("org_a", "dated fact", "2026-07-31");
     const result = await service.search("org_a", "fact");
     expect(result.matches.some((match) => match.tier === "pinned")).toBe(true);
-    expect(result.matches.some((match) => match.tier === "recent-log" && match.date === "2026-07-31")).toBe(
-      true,
-    );
+    expect(
+      result.matches.some(
+        (match) => match.tier === "recent-log" && match.date === "2026-07-31"
+      )
+    ).toBe(true);
   });
 
   test("logs changes and supports undo", async () => {
     const service = await setup();
-    await service.setMemory("org_a", `${ORG_MEMORY_PREAMBLE}\n\n- first fact\n`, {
-      actorUserId: "admin_user",
-      action: "edit",
-      label: "Initial edit",
-    });
-    await service.setMemory("org_a", `${ORG_MEMORY_PREAMBLE}\n\n- second fact\n`, {
-      actorUserId: "admin_user",
-      action: "edit",
-      label: "Second edit",
-    });
+    await service.setMemory(
+      "org_a",
+      `${ORG_MEMORY_PREAMBLE}\n\n- first fact\n`,
+      {
+        action: "edit",
+        actorUserId: "admin_user",
+        label: "Initial edit",
+      }
+    );
+    await service.setMemory(
+      "org_a",
+      `${ORG_MEMORY_PREAMBLE}\n\n- second fact\n`,
+      {
+        action: "edit",
+        actorUserId: "admin_user",
+        label: "Second edit",
+      }
+    );
 
     const history = await service.listHistory("org_a");
     expect(history).toHaveLength(2);
@@ -175,7 +209,7 @@ describe("OrgMemoryService", () => {
     const restored = await service.undoLastChange("org_a", "admin_user");
     expect(restored).toContain("- first fact");
     expect(await service.getMemory("org_a")).toContain("- first fact");
-    expect((await service.listHistory("org_a"))).toHaveLength(3);
+    expect(await service.listHistory("org_a")).toHaveLength(3);
 
     const latest = (await service.listHistory("org_a"))[0]!;
     const revision = await service.getHistoryRevision("org_a", latest.id);

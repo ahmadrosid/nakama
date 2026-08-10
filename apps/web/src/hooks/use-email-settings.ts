@@ -1,25 +1,26 @@
+import type {
+  SendEmailTestRequest,
+  UpdateEmailSettingsRequest,
+} from "@nakama/core/contract";
 import {
   queryOptions,
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  SendEmailTestRequest,
-  UpdateEmailSettingsRequest,
-} from "@nakama/core/contract";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const emailSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.email.settings,
   queryFn: () => client.getEmailSettings(),
+  queryKey: queryKeys.email.settings,
 });
 
 export function useSaveEmailSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: UpdateEmailSettingsRequest) => client.setEmailSettings(request),
+    mutationFn: (request: UpdateEmailSettingsRequest) =>
+      client.setEmailSettings(request),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.email.settings, saved);
     },
@@ -28,6 +29,7 @@ export function useSaveEmailSettings() {
 
 export function useSendEmailTest() {
   return useMutation({
-    mutationFn: (request: SendEmailTestRequest = {}) => client.sendEmailTest(request),
+    mutationFn: (request: SendEmailTestRequest = {}) =>
+      client.sendEmailTest(request),
   });
 }

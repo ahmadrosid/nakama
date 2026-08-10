@@ -8,8 +8,8 @@ import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const visionSettingsQueryOptions = queryOptions({
-  queryKey: queryKeys.visionSettings,
   queryFn: () => client.getVisionSettings(),
+  queryKey: queryKeys.visionSettings,
 });
 
 export function useVisionSettings() {

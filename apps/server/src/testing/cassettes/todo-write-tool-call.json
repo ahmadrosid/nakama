@@ -55,18 +55,12 @@
                         "description": "Current todo status."
                       }
                     },
-                    "required": [
-                      "id",
-                      "status"
-                    ],
+                    "required": ["id", "status"],
                     "additionalProperties": false
                   }
                 }
               },
-              "required": [
-                "merge",
-                "todos"
-              ],
+              "required": ["merge", "todos"],
               "additionalProperties": false
             }
           }

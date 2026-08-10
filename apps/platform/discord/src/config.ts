@@ -11,7 +11,7 @@ export interface DiscordBridgeConfig {
 }
 
 export async function loadConfig(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): Promise<DiscordBridgeConfig> {
   const file = await loadDiscordConfigFile();
   const resolved = resolveDiscordConfigFromSources({ env, file });
@@ -19,7 +19,7 @@ export async function loadConfig(
   if (!resolved) {
     const hasEnvToken = Boolean(env.DISCORD_BOT_TOKEN?.trim());
 
-    if (!hasEnvToken && !file) {
+    if (!(hasEnvToken || file)) {
       throw new Error(formatNotConfiguredMessage());
     }
 

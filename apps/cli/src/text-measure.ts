@@ -12,16 +12,16 @@ export type TextToken =
   | { type: "char"; value: string; width: number };
 
 export interface SgrState {
+  background?: string;
+  blink?: boolean;
   bold?: boolean;
   faint?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  blink?: boolean;
-  inverse?: boolean;
-  hidden?: boolean;
-  strikethrough?: boolean;
   foreground?: string;
-  background?: string;
+  hidden?: boolean;
+  inverse?: boolean;
+  italic?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
 }
 
 /**
@@ -35,37 +35,37 @@ export function getCharWidth(char: string): number {
 
   // Zero-width / combining marks
   if (
-    (code >= 0x0300 && code <= 0x036f) ||
-    (code >= 0x1ab0 && code <= 0x1aff) ||
-    (code >= 0x1dc0 && code <= 0x1dff) ||
-    (code >= 0x20d0 && code <= 0x20ff) ||
-    (code >= 0xfe20 && code <= 0xfe2f) ||
-    code === 0x200b ||
-    code === 0x200c ||
-    code === 0x200d ||
-    code === 0xfeff
+    (code >= 0x03_00 && code <= 0x03_6f) ||
+    (code >= 0x1a_b0 && code <= 0x1a_ff) ||
+    (code >= 0x1d_c0 && code <= 0x1d_ff) ||
+    (code >= 0x20_d0 && code <= 0x20_ff) ||
+    (code >= 0xfe_20 && code <= 0xfe_2f) ||
+    code === 0x20_0b ||
+    code === 0x20_0c ||
+    code === 0x20_0d ||
+    code === 0xfe_ff
   ) {
     return 0;
   }
 
   // Wide ranges: Hangul, CJK, fullwidth forms, emoji blocks, misc symbols.
   if (
-    (code >= 0x1100 && code <= 0x115f) ||
-    (code >= 0x2e80 && code <= 0xa4cf) ||
-    (code >= 0xa960 && code <= 0xa97f) ||
-    (code >= 0xac00 && code <= 0xd7af) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe10 && code <= 0xfe19) ||
-    (code >= 0xfe30 && code <= 0xfe6f) ||
-    (code >= 0xff01 && code <= 0xff60) ||
-    (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x1f300 && code <= 0x1f5ff) ||
-    (code >= 0x1f600 && code <= 0x1f64f) ||
-    (code >= 0x1f680 && code <= 0x1f6ff) ||
-    (code >= 0x1f900 && code <= 0x1f9ff) ||
-    (code >= 0x1fa70 && code <= 0x1faff) ||
-    (code >= 0x2600 && code <= 0x26ff) ||
-    (code >= 0x2700 && code <= 0x27bf)
+    (code >= 0x11_00 && code <= 0x11_5f) ||
+    (code >= 0x2e_80 && code <= 0xa4_cf) ||
+    (code >= 0xa9_60 && code <= 0xa9_7f) ||
+    (code >= 0xac_00 && code <= 0xd7_af) ||
+    (code >= 0xf9_00 && code <= 0xfa_ff) ||
+    (code >= 0xfe_10 && code <= 0xfe_19) ||
+    (code >= 0xfe_30 && code <= 0xfe_6f) ||
+    (code >= 0xff_01 && code <= 0xff_60) ||
+    (code >= 0xff_e0 && code <= 0xff_e6) ||
+    (code >= 0x1_f3_00 && code <= 0x1_f5_ff) ||
+    (code >= 0x1_f6_00 && code <= 0x1_f6_4f) ||
+    (code >= 0x1_f6_80 && code <= 0x1_f6_ff) ||
+    (code >= 0x1_f9_00 && code <= 0x1_f9_ff) ||
+    (code >= 0x1_fa_70 && code <= 0x1_fa_ff) ||
+    (code >= 0x26_00 && code <= 0x26_ff) ||
+    (code >= 0x27_00 && code <= 0x27_bf)
   ) {
     return 2;
   }
@@ -115,7 +115,7 @@ function readAnsiSequence(text: string, start: number): string {
   }
 
   // Single-letter escape sequences (cursor movement, etc.).
-  if (ch && /[A-Za-z=><\^#NOc]/.test(ch)) {
+  if (ch && /[A-Za-z=><^#NOc]/.test(ch)) {
     return text.slice(start, i + 1);
   }
 
@@ -175,7 +175,9 @@ export function isSgrSequence(seq: string): boolean {
 
 export function parseSgrParams(seq: string): number[] {
   const body = seq.slice(2, -1);
-  if (body === "") return [0];
+  if (body === "") {
+    return [0];
+  }
   return body.split(";").map((part) => {
     const n = Number(part);
     return Number.isNaN(n) ? 0 : n;
@@ -313,16 +315,36 @@ export function applySgr(state: SgrState, params: number[]): SgrState {
 
 export function encodeSgr(state: SgrState): string {
   const codes: string[] = [];
-  if (state.bold) codes.push("1");
-  if (state.faint) codes.push("2");
-  if (state.italic) codes.push("3");
-  if (state.underline) codes.push("4");
-  if (state.blink) codes.push("5");
-  if (state.inverse) codes.push("7");
-  if (state.hidden) codes.push("8");
-  if (state.strikethrough) codes.push("9");
-  if (state.foreground) codes.push(state.foreground);
-  if (state.background) codes.push(state.background);
+  if (state.bold) {
+    codes.push("1");
+  }
+  if (state.faint) {
+    codes.push("2");
+  }
+  if (state.italic) {
+    codes.push("3");
+  }
+  if (state.underline) {
+    codes.push("4");
+  }
+  if (state.blink) {
+    codes.push("5");
+  }
+  if (state.inverse) {
+    codes.push("7");
+  }
+  if (state.hidden) {
+    codes.push("8");
+  }
+  if (state.strikethrough) {
+    codes.push("9");
+  }
+  if (state.foreground) {
+    codes.push(state.foreground);
+  }
+  if (state.background) {
+    codes.push(state.background);
+  }
 
   if (codes.length === 0) {
     return "";
@@ -410,7 +432,11 @@ export function wrapText(text: string, width: number): string[] {
  * requested range. The slice includes any ANSI codes that are active within the
  * range so that color/style remain correct.
  */
-export function sliceByColumns(text: string, start: number, end: number): string {
+export function sliceByColumns(
+  text: string,
+  start: number,
+  end: number
+): string {
   if (start >= end) {
     return "";
   }
@@ -449,7 +475,7 @@ export function sliceByColumns(text: string, start: number, end: number): string
 export function truncateText(
   text: string,
   maxWidth: number,
-  ellipsis = "…",
+  ellipsis = "…"
 ): string {
   if (maxWidth <= 0) {
     return "";

@@ -11,30 +11,42 @@ describe("attachment content helpers", () => {
 
     const result = await persistInlineAttachmentsInContent(
       [
-        { type: "text", text: "see this" },
-        { type: "image", mediaType: "image/png", data: Buffer.from("png").toString("base64") },
+        { text: "see this", type: "text" },
         {
-          type: "document",
+          data: Buffer.from("png").toString("base64"),
+          mediaType: "image/png",
+          type: "image",
+        },
+        {
+          data: Buffer.from("pdf").toString("base64"),
           filename: "report.pdf",
           mediaType: "application/pdf",
-          data: Buffer.from("pdf").toString("base64"),
+          type: "document",
         },
       ],
       async (input) => {
-        saved.push({ kind: input.kind, bytes: input.bytes });
-        return { attachmentId: `att_${saved.length}`, size: input.bytes.byteLength };
-      },
+        saved.push({ bytes: input.bytes, kind: input.kind });
+        return {
+          attachmentId: `att_${saved.length}`,
+          size: input.bytes.byteLength,
+        };
+      }
     );
 
     expect(result).toEqual([
-      { type: "text", text: "see this" },
-      { type: "image_ref", attachmentId: "att_1", mediaType: "image/png", size: 3 },
+      { text: "see this", type: "text" },
       {
-        type: "document_ref",
+        attachmentId: "att_1",
+        mediaType: "image/png",
+        size: 3,
+        type: "image_ref",
+      },
+      {
         attachmentId: "att_2",
         filename: "report.pdf",
         mediaType: "application/pdf",
         size: 3,
+        type: "document_ref",
       },
     ]);
     expect(saved).toHaveLength(2);
@@ -46,13 +58,18 @@ describe("attachment content helpers", () => {
 
     const result = await rehydrateAttachmentRefsInContent(
       [
-        { type: "image_ref", attachmentId: "att_img", mediaType: "image/png", size: 3 },
         {
-          type: "document_ref",
+          attachmentId: "att_img",
+          mediaType: "image/png",
+          size: 3,
+          type: "image_ref",
+        },
+        {
           attachmentId: "att_doc",
           filename: "report.pdf",
           mediaType: "application/pdf",
           size: 3,
+          type: "document_ref",
         },
       ],
       async (attachmentId) => {
@@ -61,30 +78,33 @@ describe("attachment content helpers", () => {
         }
 
         return { bytes: Buffer.from("pdf"), mediaType: "application/pdf" };
-      },
+      }
     );
 
     expect(result).toEqual([
-      { type: "image", mediaType: "image/png", data: pngBase64 },
+      { data: pngBase64, mediaType: "image/png", type: "image" },
       {
-        type: "document",
+        data: pdfBase64,
         filename: "report.pdf",
         mediaType: "application/pdf",
-        data: pdfBase64,
+        type: "document",
       },
     ]);
   });
 
   test("rehydrateMessagesForProvider leaves inline attachments unchanged", async () => {
     const inline = {
-      role: "user" as const,
       content: [
-        { type: "text" as const, text: "old" },
-        { type: "image" as const, mediaType: "image/jpeg", data: "abc" },
+        { text: "old", type: "text" as const },
+        { data: "abc", mediaType: "image/jpeg", type: "image" as const },
       ],
+      role: "user" as const,
     };
 
-    const result = await rehydrateMessagesForProvider([inline], async () => null);
+    const result = await rehydrateMessagesForProvider(
+      [inline],
+      async () => null
+    );
 
     expect(result).toEqual([inline]);
   });

@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ANYDOC_MAX_OUTPUT_BYTES,
   ANYDOC_TIMEOUT_MS,
   convertDocumentBytes,
   resolveAnydocFormat,
 } from "./anydoc-text";
-import { ANYDOC_MAX_OUTPUT_BYTES } from "./anydoc-text";
 
 const FIXTURES = join(import.meta.dir, "__fixtures__");
 const SAMPLE_PDF = readFileSync(join(FIXTURES, "sample.pdf"));
@@ -18,11 +18,11 @@ describe("resolveAnydocFormat", () => {
     expect(
       resolveAnydocFormat(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "budget.bin",
-      ),
+        "budget.bin"
+      )
     ).toBe("xlsx");
     expect(resolveAnydocFormat("application/octet-stream", "sheet.xlsm")).toBe(
-      "xlsx",
+      "xlsx"
     );
     expect(resolveAnydocFormat(undefined, "legacy.xls")).toBe("xlsx");
   });
@@ -36,8 +36,8 @@ describe("resolveAnydocFormat", () => {
 describe("convertDocumentBytes", () => {
   test("converts PDF fixture to markdown containing known text", async () => {
     const result = await convertDocumentBytes(SAMPLE_PDF, {
-      format: "pdf",
       filename: "sample.pdf",
+      format: "pdf",
     });
     expect(result.truncated).toBe(false);
     expect(result.text.toLowerCase()).toContain("dummy");
@@ -45,8 +45,9 @@ describe("convertDocumentBytes", () => {
 
   test("converts XLSX fixture with known cell values", async () => {
     const result = await convertDocumentBytes(SAMPLE_XLSX, {
-      mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       filename: "sample.xlsx",
+      mediaType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     expect(result.text).toContain("Widget");
     expect(result.text).toContain("42");
@@ -54,8 +55,8 @@ describe("convertDocumentBytes", () => {
 
   test("converts DOCX fixture with known heading", async () => {
     const result = await convertDocumentBytes(SAMPLE_DOCX, {
-      format: "docx",
       filename: "sample.docx",
+      format: "docx",
     });
     expect(result.text).toContain("Laporan");
   });
@@ -76,12 +77,12 @@ describe("convertDocumentBytes", () => {
     await expect(
       convertDocumentBytes(Buffer.from("not-a-real-office-file"), {
         format: "xlsx",
-      }),
+      })
     ).rejects.toThrow();
   });
 
   test("truncates output above the shared UTF-8 byte limit", async () => {
-    const hugeRow = "x".repeat(ANYDOC_MAX_OUTPUT_BYTES + 8_192);
+    const hugeRow = "x".repeat(ANYDOC_MAX_OUTPUT_BYTES + 8192);
     const csv = Buffer.from(`col\n${hugeRow}\n`, "utf8");
     const result = await convertDocumentBytes(csv, {
       format: "csv",
@@ -90,23 +91,23 @@ describe("convertDocumentBytes", () => {
     expect(result.truncated).toBe(true);
     // Truncation may append an ellipsis after the byte cut.
     expect(Buffer.byteLength(result.text, "utf8")).toBeLessThan(
-      Buffer.byteLength(hugeRow, "utf8"),
+      Buffer.byteLength(hugeRow, "utf8")
     );
     expect(Buffer.byteLength(result.text, "utf8")).toBeLessThanOrEqual(
-      ANYDOC_MAX_OUTPUT_BYTES + 3,
+      ANYDOC_MAX_OUTPUT_BYTES + 3
     );
   });
 
   test("surfaces a timeout when conversion stalls", async () => {
     await expect(
       convertDocumentBytes(SAMPLE_XLSX, {
-        format: "xlsx",
-        timeoutMs: 25,
         convertFn: () =>
           new Promise<string>(() => {
             /* never resolves */
           }),
-      }),
+        format: "xlsx",
+        timeoutMs: 25,
+      })
     ).rejects.toThrow(/timed out/i);
 
     expect(ANYDOC_TIMEOUT_MS).toBeGreaterThan(0);

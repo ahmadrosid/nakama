@@ -7,9 +7,12 @@ import {
   getKnowledgeBaseExtractedPath,
   KNOWLEDGE_BASE_EXTRACTED_SUFFIX,
 } from "../knowledge-base/paths";
-import { ensureKnowledgeBaseDirs, listKnowledgeBaseDocuments } from "../knowledge-base/store";
+import {
+  ensureKnowledgeBaseDirs,
+  listKnowledgeBaseDocuments,
+} from "../knowledge-base/store";
 import { getProfileSoulDir } from "../soul/resolve";
-import { buildRipgrepArgs, runRipgrep, type RipgrepMatch } from "./ripgrep";
+import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
   maxResultsSchema,
@@ -21,22 +24,24 @@ import {
 
 export const knowledgeBaseSearchInputSchema = z
   .object({
-    query: requiredTrimmedString("query"),
     filename: trimmedOptionalString,
-    regex: optionalRegexFlag,
     maxResults: maxResultsSchema,
+    query: requiredTrimmedString("query"),
+    regex: optionalRegexFlag,
   })
   .strict();
 
-export type KnowledgeBaseSearchInput = z.infer<typeof knowledgeBaseSearchInputSchema>;
+export type KnowledgeBaseSearchInput = z.infer<
+  typeof knowledgeBaseSearchInputSchema
+>;
 
 export interface KnowledgeBaseSearchMatch extends RipgrepMatch {}
 
 export interface KnowledgeBaseSearchOutput {
+  matchCount: number;
+  matches: KnowledgeBaseSearchMatch[];
   query: string;
   root: string;
-  matches: KnowledgeBaseSearchMatch[];
-  matchCount: number;
   truncated: boolean;
 }
 
@@ -48,11 +53,11 @@ export const knowledgeBaseSearchTool: ToolDefinition<
   KnowledgeBaseSearchInput,
   KnowledgeBaseSearchOutput
 > = {
-  name: "knowledge_base_search",
   description:
     "Search uploaded knowledge base documents for relevant facts. Does not search inherited URL sources such as Nakama documentation — use web_fetch on llms.txt and specific .md pages for product docs.",
-  parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
+  name: "knowledge_base_search",
   parallelSafe: true,
+  parameters: jsonSchemaFromZod(knowledgeBaseSearchInputSchema),
   run(input, context) {
     return runKnowledgeBaseSearch(input, context);
   },
@@ -61,11 +66,11 @@ export const knowledgeBaseSearchTool: ToolDefinition<
 export async function runKnowledgeBaseSearch(
   input: unknown,
   context: ToolContext,
-  options: KnowledgeBaseSearchOptions = {},
+  options: KnowledgeBaseSearchOptions = {}
 ): Promise<KnowledgeBaseSearchOutput> {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
-  if (!orgId || !profileId) {
+  if (!(orgId && profileId)) {
     throw new Error("orgId and profileId are required.");
   }
 
@@ -74,39 +79,43 @@ export async function runKnowledgeBaseSearch(
   await ensureKnowledgeBaseDirs(orgId, profileId);
 
   const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId),
+    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
   );
-  const searchTarget = await resolveSearchTarget(orgId, profileId, parsed.filename ?? null);
+  const searchTarget = await resolveSearchTarget(
+    orgId,
+    profileId,
+    parsed.filename ?? null
+  );
 
   if (searchTarget.kind === "missing") {
     return {
+      matchCount: 0,
+      matches: [],
       query: parsed.query,
       root: searchTarget.root,
-      matches: [],
-      matchCount: 0,
       truncated: false,
     };
   }
 
   const args = buildRipgrepArgs({
-    query: parsed.query,
-    searchRoot: searchTarget.root,
     glob: searchTarget.glob,
-    regex: parsed.regex,
     maxResults: parsed.maxResults,
+    query: parsed.query,
+    regex: parsed.regex,
+    searchRoot: searchTarget.root,
   });
 
   const searchResult = await runRipgrep(args, {
-    workspaceRoot,
-    searchRoot: searchTarget.root,
     maxResults: parsed.maxResults,
+    searchRoot: searchTarget.root,
+    workspaceRoot,
   });
 
   return {
+    matchCount: searchResult.matches.length,
+    matches: searchResult.matches,
     query: parsed.query,
     root: searchTarget.root,
-    matches: searchResult.matches,
-    matchCount: searchResult.matches.length,
     truncated: searchResult.truncated,
   };
 }
@@ -119,18 +128,24 @@ type SearchTarget =
 async function resolveSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null,
+  filename: string | null
 ): Promise<SearchTarget> {
   const knowledgeBaseDir = getKnowledgeBaseDir(orgId, profileId);
 
   if (!filename) {
-    return { kind: "dir", root: knowledgeBaseDir, glob: `*${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}` };
+    return {
+      glob: `*${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`,
+      kind: "dir",
+      root: knowledgeBaseDir,
+    };
   }
 
   const documents = await listKnowledgeBaseDocuments(orgId, profileId);
   const normalized = filename.trim().toLowerCase();
   const document = documents.find(
-    (entry) => entry.filename.trim().toLowerCase() === normalized && entry.status === "ready",
+    (entry) =>
+      entry.filename.trim().toLowerCase() === normalized &&
+      entry.status === "ready"
   );
 
   if (!document) {
@@ -138,9 +153,9 @@ async function resolveSearchTarget(
   }
 
   return {
+    glob: null,
     kind: "file",
     root: getKnowledgeBaseExtractedPath(orgId, profileId, document.id),
-    glob: null,
   };
 }
 

@@ -3,12 +3,12 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
+import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
-import type { StoredProfileRecord } from "@nakama/db";
 import { AgentService } from "./agent-service";
 import { SkillsService } from "./skills-service";
 
@@ -17,14 +17,14 @@ const ORG_ID = "org_test";
 function createDefaultProfile(): StoredProfileRecord {
   const now = new Date().toISOString();
   return {
-    id: "profile_default",
-    name: "Default",
-    systemPrompt: "You are helpful.",
-    model: null,
-    isSuper: false,
-    orgId: ORG_ID,
-    isDefault: true,
     createdAt: now,
+    id: "profile_default",
+    isDefault: true,
+    isSuper: false,
+    model: null,
+    name: "Default",
+    orgId: ORG_ID,
+    systemPrompt: "You are helpful.",
     updatedAt: now,
   };
 }
@@ -35,45 +35,53 @@ describe("AgentService branching", () => {
     await db.upsertProfile(createDefaultProfile());
     const service = new AgentService(null, null, db);
 
-    const sourceSessionId = await service.createSession(ORG_ID, "web", "profile_default");
+    const sourceSessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
     await db.replaceMessagesForSession(sourceSessionId, [
       {
-        id: "msg_1",
-        sessionId: sourceSessionId,
-        seq: 0,
-        payload: { role: "user", content: "Hello" },
         createdAt: "2026-06-14T10:00:00.000Z",
+        id: "msg_1",
+        payload: { content: "Hello", role: "user" },
+        seq: 0,
+        sessionId: sourceSessionId,
       },
       {
-        id: "msg_2",
-        sessionId: sourceSessionId,
-        seq: 1,
-        payload: { role: "assistant", content: "Hi there" },
         createdAt: "2026-06-14T10:00:01.000Z",
+        id: "msg_2",
+        payload: { content: "Hi there", role: "assistant" },
+        seq: 1,
+        sessionId: sourceSessionId,
       },
       {
-        id: "msg_3",
-        sessionId: sourceSessionId,
-        seq: 2,
-        payload: { role: "user", content: "Second turn" },
         createdAt: "2026-06-14T10:00:02.000Z",
+        id: "msg_3",
+        payload: { content: "Second turn", role: "user" },
+        seq: 2,
+        sessionId: sourceSessionId,
       },
     ]);
     await db.updateSessionTitle(sourceSessionId, "Original chat");
     await db.updateSessionTodos(sourceSessionId, [
-      { id: "todo_1", content: "Keep this out of the branch", status: "pending" },
+      {
+        content: "Keep this out of the branch",
+        id: "todo_1",
+        status: "pending",
+      },
     ]);
     await db.updateSessionQuestionnaire(sourceSessionId, {
       id: "q_1",
-      title: "Need input",
       questions: [
         {
-          id: "timeline",
-          prompt: "When?",
           allowCustomAnswer: true,
           choices: [],
+          id: "timeline",
+          prompt: "When?",
         },
       ],
+      title: "Need input",
     });
 
     const result = await service.branchSession(sourceSessionId, 1);
@@ -83,8 +91,8 @@ describe("AgentService branching", () => {
 
     const branchMessages = await service.getSessionMessages(branchSessionId);
     expect(branchMessages?.messages).toEqual([
-      { role: "user", content: "Hello" },
-      { role: "assistant", content: "Hi there" },
+      { content: "Hello", role: "user" },
+      { content: "Hi there", role: "assistant" },
     ]);
     expect(branchMessages?.messageMeta).toHaveLength(2);
 
@@ -106,19 +114,23 @@ describe("AgentService branching", () => {
     await db.upsertProfile(createDefaultProfile());
     const service = new AgentService(null, null, db);
 
-    const sourceSessionId = await service.createSession(ORG_ID, "web", "profile_default");
+    const sourceSessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
     await db.replaceMessagesForSession(sourceSessionId, [
       {
-        id: "msg_1",
-        sessionId: sourceSessionId,
-        seq: 0,
-        payload: { role: "user", content: "Hello" },
         createdAt: "2026-06-14T10:00:00.000Z",
+        id: "msg_1",
+        payload: { content: "Hello", role: "user" },
+        seq: 0,
+        sessionId: sourceSessionId,
       },
     ]);
 
     await expect(service.branchSession(sourceSessionId, 3)).rejects.toThrow(
-      "messageIndex is out of bounds.",
+      "messageIndex is out of bounds."
     );
   });
 
@@ -129,27 +141,31 @@ describe("AgentService branching", () => {
 
     try {
       await db.upsertOrganization({
+        createdAt: now,
         id: ORG_ID,
         name: "Test Org",
         slug: "test-org",
-        createdAt: now,
         updatedAt: now,
       });
 
       await db.upsertProfile({
-        id: "profile_custom",
-        name: "Custom",
-        systemPrompt: "You are helpful.",
-        model: null,
-        isSuper: false,
-        orgId: ORG_ID,
-        isDefault: true,
         createdAt: now,
+        id: "profile_custom",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Custom",
+        orgId: ORG_ID,
+        systemPrompt: "You are helpful.",
         updatedAt: now,
       });
 
       const service = new AgentService(null, null, db);
-      const sessionId = await service.createSession(ORG_ID, "web", "missing_profile");
+      const sessionId = await service.createSession(
+        ORG_ID,
+        "web",
+        "missing_profile"
+      );
       const session = await db.getSession(sessionId);
 
       expect(session?.profileId).toBe("profile_custom");
@@ -167,47 +183,54 @@ describe("AgentService thinking provider options", () => {
         defaultProviderId: "compat-1",
         providers: [
           {
-            id: "compat-1",
-            type: "openai_compatible",
-            label: "NetraRuntime",
             apiKey: "",
             baseUrl: "https://api.example.com/v1",
-            customModels: [{ id: "qwen3.6-35b", default: true, supportsThinking: true }],
             createdAt: new Date().toISOString(),
+            customModels: [
+              { default: true, id: "qwen3.6-35b", supportsThinking: true },
+            ],
+            id: "compat-1",
+            label: "NetraRuntime",
+            type: "openai_compatible",
           },
         ],
-        thinkingEnabled: true,
         thinkingEffort: "high",
+        thinkingEnabled: true,
       },
       null,
-      db,
+      db
     );
 
-    const options = (service as unknown as {
-      resolveChatProviderOptions: (
-        providerInstance: {
-          type: "openai_compatible";
-          id: string;
-          label: string;
-          apiKey: string;
-          baseUrl: string;
-          createdAt: string;
-        },
-        thinkingSettings: { enabled: boolean; effort: "low" | "medium" | "high" },
-      ) => { thinking?: { enabled: boolean; effort: string } } | undefined;
-    }).resolveChatProviderOptions(
+    const options = (
+      service as unknown as {
+        resolveChatProviderOptions: (
+          providerInstance: {
+            type: "openai_compatible";
+            id: string;
+            label: string;
+            apiKey: string;
+            baseUrl: string;
+            createdAt: string;
+          },
+          thinkingSettings: {
+            enabled: boolean;
+            effort: "low" | "medium" | "high";
+          }
+        ) => { thinking?: { enabled: boolean; effort: string } } | undefined;
+      }
+    ).resolveChatProviderOptions(
       {
-        id: "compat-1",
-        type: "openai_compatible",
-        label: "NetraRuntime",
         apiKey: "",
         baseUrl: "https://api.example.com/v1",
         createdAt: new Date().toISOString(),
+        id: "compat-1",
+        label: "NetraRuntime",
+        type: "openai_compatible",
       },
-      { enabled: true, effort: "high" },
+      { effort: "high", enabled: true }
     );
 
-    expect(options?.thinking).toEqual({ enabled: true, effort: "high" });
+    expect(options?.thinking).toEqual({ effort: "high", enabled: true });
   });
 });
 
@@ -219,24 +242,26 @@ describe("AgentService vision settings", () => {
         defaultProviderId: "p-openai-1",
         providers: [
           {
-            id: "p-openai-1",
-            type: "openai",
-            label: "OpenAI",
             apiKey: "test-key",
             createdAt: new Date().toISOString(),
+            id: "p-openai-1",
+            label: "OpenAI",
+            type: "openai",
           },
         ],
       },
       null,
-      db,
+      db
     );
 
-    const saved = await service.setVisionSettings({ model: "p-openai-1::gpt-4o-mini" });
+    const saved = await service.setVisionSettings({
+      model: "p-openai-1::gpt-4o-mini",
+    });
 
     expect(saved).toEqual({ vision: { model: "p-openai-1::gpt-4o-mini" } });
     expect(await db.getWorkspaceSettings()).toMatchObject({
-      visionModel: "p-openai-1::gpt-4o-mini",
       transcriptionModel: null,
+      visionModel: "p-openai-1::gpt-4o-mini",
     });
     expect(await service.getVisionSettings()).toEqual({
       vision: { model: "p-openai-1::gpt-4o-mini" },
@@ -252,21 +277,25 @@ describe("AgentService transcription settings", () => {
         defaultProviderId: "p-openai-1",
         providers: [
           {
-            id: "p-openai-1",
-            type: "openai",
-            label: "OpenAI",
             apiKey: "test-key",
             createdAt: new Date().toISOString(),
+            id: "p-openai-1",
+            label: "OpenAI",
+            type: "openai",
           },
         ],
       },
       null,
-      db,
+      db
     );
 
-    const saved = await service.setTranscriptionSettings({ model: "p-openai-1::whisper-1" });
+    const saved = await service.setTranscriptionSettings({
+      model: "p-openai-1::whisper-1",
+    });
 
-    expect(saved).toEqual({ transcription: { model: "p-openai-1::whisper-1" } });
+    expect(saved).toEqual({
+      transcription: { model: "p-openai-1::whisper-1" },
+    });
     expect(await db.getWorkspaceSettings()).toMatchObject({
       transcriptionModel: "p-openai-1::whisper-1",
     });
@@ -282,7 +311,9 @@ describe("AgentService coding delegation context", () => {
   let tempBinDir = "";
 
   beforeEach(async () => {
-    tempBinDir = await mkdtemp(path.join(tmpdir(), "nakama-agent-delegation-bin-"));
+    tempBinDir = await mkdtemp(
+      path.join(tmpdir(), "nakama-agent-delegation-bin-")
+    );
     process.env.PATH = tempBinDir;
     process.env.NAKAMA_DISABLE_FIX_PATH = "1";
   });
@@ -295,7 +326,7 @@ describe("AgentService coding delegation context", () => {
       process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
     }
     if (tempBinDir) {
-      await rm(tempBinDir, { recursive: true, force: true });
+      await rm(tempBinDir, { force: true, recursive: true });
       tempBinDir = "";
     }
   });
@@ -304,27 +335,33 @@ describe("AgentService coding delegation context", () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
     await db.upsertWorkspaceSettings({
-      id: WORKSPACE_SETTINGS_ID,
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "opencode",
+          enabled: true,
           id: "coding-harness-opencode",
           kind: "opencode",
           name: "OpenCode",
-          command: "opencode",
-          args: [],
-          enabled: true,
         },
       ],
+      id: WORKSPACE_SETTINGS_ID,
+      imageModel: null,
       selectedCodingAgentHarness: null,
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
 
     const service = new AgentService(null, null, db);
-    const context = await (service as unknown as {
-      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
-    }).formatCodingDelegationContext("org_test", "profile_test");
+    const context = await (
+      service as unknown as {
+        formatCodingDelegationContext(
+          orgId: string,
+          profileId: string
+        ): Promise<string>;
+      }
+    ).formatCodingDelegationContext("org_test", "profile_test");
 
     expect(context).toContain("bash");
     expect(context).toContain("opencode run");
@@ -335,18 +372,24 @@ describe("AgentService coding delegation context", () => {
   test("lists install commands when no coding agent CLI is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({
-      id: WORKSPACE_SETTINGS_ID,
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [],
+      id: WORKSPACE_SETTINGS_ID,
+      imageModel: null,
       selectedCodingAgentHarness: null,
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
 
     const service = new AgentService(null, null, db);
-    const context = await (service as unknown as {
-      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
-    }).formatCodingDelegationContext("org_test", "profile_test");
+    const context = await (
+      service as unknown as {
+        formatCodingDelegationContext(
+          orgId: string,
+          profileId: string
+        ): Promise<string>;
+      }
+    ).formatCodingDelegationContext("org_test", "profile_test");
 
     expect(context).toContain("No coding agent CLI is installed");
     expect(context).toContain("npm install -g");
@@ -359,39 +402,48 @@ describe("AgentService coding delegation context", () => {
   test("asks the user when multiple coding agent CLIs are installed", async () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
-    await Bun.write(path.join(tempBinDir, "claude"), "#!/bin/sh\necho claude\n");
+    await Bun.write(
+      path.join(tempBinDir, "claude"),
+      "#!/bin/sh\necho claude\n"
+    );
     await chmod(path.join(tempBinDir, "claude"), 0o755);
 
     await db.upsertWorkspaceSettings({
-      id: WORKSPACE_SETTINGS_ID,
-      visionModel: null,
-      transcriptionModel: null,
       codingAgentHarnesses: [
         {
+          args: [],
+          command: "opencode",
+          enabled: true,
           id: "coding-harness-opencode",
           kind: "opencode",
           name: "OpenCode",
-          command: "opencode",
-          args: [],
-          enabled: true,
         },
         {
+          args: [],
+          command: "claude",
+          enabled: true,
           id: "coding-harness-claude-code",
           kind: "claude_code",
           name: "Claude Code",
-          command: "claude",
-          args: [],
-          enabled: true,
         },
       ],
+      id: WORKSPACE_SETTINGS_ID,
+      imageModel: null,
       selectedCodingAgentHarness: "coding-harness-opencode",
+      transcriptionModel: null,
       updatedAt: new Date().toISOString(),
+      visionModel: null,
     });
 
     const service = new AgentService(null, null, db);
-    const context = await (service as unknown as {
-      formatCodingDelegationContext(orgId: string, profileId: string): Promise<string>;
-    }).formatCodingDelegationContext("org_test", "profile_test");
+    const context = await (
+      service as unknown as {
+        formatCodingDelegationContext(
+          orgId: string,
+          profileId: string
+        ): Promise<string>;
+      }
+    ).formatCodingDelegationContext("org_test", "profile_test");
 
     expect(context).toContain("Multiple coding agent CLIs are installed");
     expect(context).toContain("Ask the user which one to use");
@@ -405,14 +457,16 @@ describe("AgentService skill_manage injection", () => {
   let configDir = "";
 
   beforeEach(async () => {
-    configDir = await mkdtemp(path.join(tmpdir(), "nakama-skill-manage-inject-"));
+    configDir = await mkdtemp(
+      path.join(tmpdir(), "nakama-skill-manage-inject-")
+    );
     process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
   afterEach(async () => {
     delete process.env.NAKAMA_CONFIG_DIR;
     if (configDir) {
-      await rm(configDir, { recursive: true, force: true });
+      await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
   });
@@ -423,7 +477,9 @@ describe("AgentService skill_manage injection", () => {
     const skills = new SkillsService(db);
     await ensureBundledSkillFiles();
     await skills.syncDiscoveredSkills();
-    const manage = (await skills.listSkills()).skills.find((skill) => skill.name === "manage-skills");
+    const manage = (await skills.listSkills()).skills.find(
+      (skill) => skill.name === "manage-skills"
+    );
     expect(manage).toBeDefined();
     await db.assignSkillToProfile("profile_default", manage!.id);
 
@@ -436,23 +492,31 @@ describe("AgentService skill_manage injection", () => {
         options?: {
           includeAutomationTools?: boolean;
           includeSkillManageTools?: boolean;
-        },
+        }
       ): Promise<Array<{ name: string }>>;
     };
 
-    const resolve = (service as unknown as ResolveTools).resolveProfileTools.bind(service);
+    const resolve = (
+      service as unknown as ResolveTools
+    ).resolveProfileTools.bind(service);
     const profile = createDefaultProfile();
 
     const webTools = await resolve(profile, { includeSkillManageTools: true });
     expect(webTools.some((tool) => tool.name === "skill_manage")).toBe(true);
 
-    const telegramTools = await resolve(profile, { includeSkillManageTools: false });
-    expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(false);
+    const telegramTools = await resolve(profile, {
+      includeSkillManageTools: false,
+    });
+    expect(telegramTools.some((tool) => tool.name === "skill_manage")).toBe(
+      false
+    );
 
     const automationTools = await resolve(profile, {
       includeAutomationTools: false,
     });
-    expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(false);
+    expect(automationTools.some((tool) => tool.name === "skill_manage")).toBe(
+      false
+    );
   });
 });
 
@@ -462,12 +526,12 @@ async function installFakeOpenCode(binDir: string): Promise<void> {
     scriptPath,
     [
       "#!/bin/sh",
-      "if [ \"$1\" = \"--version\" ]; then",
-      "  echo \"fake opencode\"",
+      'if [ "$1" = "--version" ]; then',
+      '  echo "fake opencode"',
       "  exit 0",
       "fi",
       "printf '%s' \"$*\"",
-    ].join("\n"),
+    ].join("\n")
   );
   await chmod(scriptPath, 0o755);
 }

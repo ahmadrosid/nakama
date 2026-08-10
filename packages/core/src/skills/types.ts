@@ -1,27 +1,27 @@
 export interface SkillFrontmatter {
-  name: string;
   description: string;
   /** When true, the skill only activates on explicit invocation (e.g. /skill name). */
   disableModelInvocation?: boolean;
   /** When true, auto-matched skills include full body text in the prompt. */
   includeBodyOnMatch?: boolean;
+  name: string;
 }
 
 export interface ParsedSkillFile {
-  frontmatter: SkillFrontmatter;
   body: string;
+  frontmatter: SkillFrontmatter;
   sourcePath: string;
 }
 
 export interface DiscoveredSkill {
-  name: string;
-  description: string;
-  disableModelInvocation: boolean;
-  includeBodyOnMatch: boolean;
-  directory: string;
-  skillFilePath: string;
   body: string;
+  description: string;
+  directory: string;
+  disableModelInvocation: boolean;
   hasTool: boolean;
+  includeBodyOnMatch: boolean;
+  name: string;
+  skillFilePath: string;
   toolPath: string | null;
 }
 

@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/use-auth";
-import { useAppContext } from "@/context/use-app-context";
-import { useTheme } from "@/context/use-theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ditherLogoSrc } from "@/lib/theme";
+import { useAppContext } from "@/context/use-app-context";
+import { useAuth } from "@/context/use-auth";
+import { useTheme } from "@/context/use-theme";
 import { SETUP_PATH } from "@/lib/navigation";
+import { ditherLogoSrc } from "@/lib/theme";
 
 function resolvePostAuthPath(
   health: { providerConfigured?: boolean } | null,
-  from?: string,
+  from?: string
 ): string {
   if (health?.providerConfigured !== true) {
     return SETUP_PATH;
@@ -32,11 +32,11 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (isAuthenticated) {
-    return <Navigate to={resolvePostAuthPath(health, from)} replace />;
+    return <Navigate replace to={resolvePostAuthPath(health, from)} />;
   }
 
   if (health?.userConfigured === false) {
-    return <Navigate to={SETUP_PATH} replace />;
+    return <Navigate replace to={SETUP_PATH} />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,46 +59,53 @@ export function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center text-center">
           <img
-            src={ditherLogoSrc(resolvedTheme)}
             alt="Nakama"
             className="mb-4 size-14 rounded-xl"
+            src={ditherLogoSrc(resolvedTheme)}
           />
-          <h1 className="text-xl font-semibold tracking-tight">Sign in to Nakama</h1>
-          <p className="text-sm text-muted-foreground">Enter your credentials to access your account.</p>
+          <h1 className="font-semibold text-xl tracking-tight">
+            Sign in to Nakama
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Enter your credentials to access your account.
+          </p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium">
+            <label className="mb-1 block font-medium text-sm" htmlFor="email">
               Email
             </label>
             <Input
               id="email"
-              type="email"
-              value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@example.com"
               required
+              type="email"
+              value={email}
             />
           </div>
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium">
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="password"
+            >
               Password
             </label>
             <Input
               id="password"
-              type="password"
-              value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              type="password"
+              value={password}
             />
           </div>
           {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+            <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
               {error}
             </div>
           )}
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button className="w-full" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Signing in..." : "Sign in"}
           </Button>
         </form>

@@ -15,31 +15,35 @@ export function materializedToolCallIds(messages: ChatListItem[]): Set<string> {
   return ids;
 }
 
-export function seedStreamingStateForActiveTurn(messages: ChatListItem[]): ChatListItem[] {
+export function seedStreamingStateForActiveTurn(
+  messages: ChatListItem[]
+): ChatListItem[] {
   const last = messages[messages.length - 1];
 
   if (!last) {
     return messages;
   }
 
-  const needsAssistantShell =
-    last.role === "user" ||
-    last.role === "tool";
+  const needsAssistantShell = last.role === "user" || last.role === "tool";
 
   if (!needsAssistantShell) {
     return messages;
   }
 
-  if (messages.some((message) => message.role === "assistant" && message.streaming)) {
+  if (
+    messages.some(
+      (message) => message.role === "assistant" && message.streaming
+    )
+  ) {
     return messages;
   }
 
   return [
     ...messages,
     {
+      content: "",
       id: nanoid(),
       role: "assistant",
-      content: "",
       streaming: true,
     },
   ];
@@ -47,17 +51,10 @@ export function seedStreamingStateForActiveTurn(messages: ChatListItem[]): ChatL
 
 export function createReplayAwareHandlers(
   handlers: StreamHandlers,
-  materializedTools: Set<string>,
+  materializedTools: Set<string>
 ): StreamHandlers {
   return {
     ...handlers,
-    onToolStart: (event) => {
-      if (materializedTools.has(event.toolCallId)) {
-        return;
-      }
-
-      handlers.onToolStart?.(event);
-    },
     onToolEnd: (event) => {
       if (materializedTools.has(event.toolCallId)) {
         return;
@@ -71,6 +68,13 @@ export function createReplayAwareHandlers(
       }
 
       handlers.onToolInputDelta?.(event);
+    },
+    onToolStart: (event) => {
+      if (materializedTools.has(event.toolCallId)) {
+        return;
+      }
+
+      handlers.onToolStart?.(event);
     },
   };
 }
@@ -89,12 +93,16 @@ export async function reconnectActiveSessionStream(input: {
 
   const replayHandlers = createReplayAwareHandlers(
     input.handlers,
-    materializedToolCallIds(input.messages),
+    materializedToolCallIds(input.messages)
   );
 
-  const result = await client.subscribeSessionStream(input.sessionId, replayHandlers, {
-    signal: input.signal,
-  });
+  const result = await client.subscribeSessionStream(
+    input.sessionId,
+    replayHandlers,
+    {
+      signal: input.signal,
+    }
+  );
 
   return { reconnected: result.reconnected };
 }

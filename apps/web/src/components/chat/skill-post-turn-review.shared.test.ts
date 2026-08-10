@@ -1,26 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import type { SkillSuggestion } from "@nakama/core/contract";
 import {
   extractSkillDescription,
   skillSuggestionPreview,
 } from "./skill-post-turn-review.shared";
-import type { SkillSuggestion } from "@nakama/core/contract";
 
 function suggestion(partial: Partial<SkillSuggestion>): SkillSuggestion {
   return {
+    action: "create",
+    appliedAt: null,
+    content: null,
+    createdAt: "2026-08-04T00:00:00.000Z",
     id: "sug_1",
     orgId: "org_1",
-    profileId: "profile_1",
-    sessionId: "sess_1",
-    proposedByUserId: "user_1",
-    action: "create",
-    skillName: "deploy-notes",
-    content: null,
-    patchOldString: null,
     patchNewString: null,
-    status: "pending",
+    patchOldString: null,
+    profileId: "profile_1",
+    proposedByUserId: "user_1",
+    sessionId: "sess_1",
+    skillName: "deploy-notes",
     source: "post_turn_review",
-    createdAt: "2026-08-04T00:00:00.000Z",
-    appliedAt: null,
+    status: "pending",
     ...partial,
   };
 }
@@ -37,7 +37,7 @@ description: Run the deploy checklist.
 # Steps
 1. Build
 `,
-      }),
+      })
     );
     expect(preview.title).toContain("deploy-notes");
     expect(preview.description).toBe("Run the deploy checklist.");
@@ -48,9 +48,9 @@ description: Run the deploy checklist.
     const preview = skillSuggestionPreview(
       suggestion({
         action: "patch",
-        patchOldString: "old step",
         patchNewString: "new step",
-      }),
+        patchOldString: "old step",
+      })
     );
     expect(preview.title).toContain("Update");
     expect(preview.excerpt).toContain("old step");

@@ -1,13 +1,16 @@
+export {
+  formatClientError as formatError,
+  NakamaApiError,
+} from "@nakama/core/api-error";
 export { NakamaClient } from "./client";
 export type {
+  NakamaClientOptions,
   RemoteChatSession,
   SendMessageArg,
   SendStreamOptions,
   StreamHandler,
   StreamHandlers,
-  NakamaClientOptions,
 } from "./types";
-export { formatClientError as formatError, NakamaApiError } from "@nakama/core/api-error";
 
 import type { ProfileSummary } from "@nakama/core/contract";
 import { NakamaClient } from "./client";
@@ -18,7 +21,7 @@ export function createClient(options?: NakamaClientOptions): NakamaClient {
 }
 
 export function getProfileAvatarUrl(
-  profile: Pick<ProfileSummary, "id" | "hasAvatar" | "updatedAt">,
+  profile: Pick<ProfileSummary, "id" | "hasAvatar" | "updatedAt">
 ): string | null {
   if (!profile.hasAvatar) {
     return null;

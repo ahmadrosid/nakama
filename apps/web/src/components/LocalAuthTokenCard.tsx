@@ -1,5 +1,5 @@
+import { Copy01Icon, RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
-import { CopyIcon, RefreshCwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -27,12 +27,14 @@ export function LocalAuthTokenCard() {
     setRotatedToken(null);
 
     rotateMutation.mutate(undefined, {
-      onSuccess: (response) => {
-        setRotatedToken(response.token);
-        setHint("New token generated. Copy it now — it will not be shown again.");
-      },
       onError: (error) => {
         setFormError(formatError(error));
+      },
+      onSuccess: (response) => {
+        setRotatedToken(response.token);
+        setHint(
+          "New token generated. Copy it now — it will not be shown again."
+        );
       },
     });
   }
@@ -44,15 +46,19 @@ export function LocalAuthTokenCard() {
       <CardContent className="divide-y divide-border p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-medium text-foreground">Local API token</p>
-            <p className="text-xs text-muted-foreground">
-              Used by the CLI, Telegram, and WhatsApp bridges on this machine. Rotate if the token
-              may have leaked.
+            <p className="font-medium text-foreground text-sm">
+              Local API token
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Used by the CLI, Telegram, and WhatsApp bridges on this machine.
+              Rotate if the token may have leaked.
             </p>
             {statusLine ? (
               <p
                 className={
-                  formError ? "text-xs text-destructive" : "text-xs text-emerald-200"
+                  formError
+                    ? "text-destructive text-xs"
+                    : "text-emerald-200 text-xs"
                 }
                 role="status"
               >
@@ -61,17 +67,17 @@ export function LocalAuthTokenCard() {
             ) : null}
           </div>
           <Button
-            type="button"
-            size="sm"
-            variant="outline"
             disabled={rotateMutation.isPending}
             onClick={handleRotate}
+            size="sm"
+            type="button"
+            variant="outline"
           >
             {rotateMutation.isPending ? (
               <Spinner />
             ) : (
               <>
-                <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+                <RefreshIcon aria-hidden="true" className="size-3.5" />
                 Rotate token
               </>
             )}
@@ -80,16 +86,21 @@ export function LocalAuthTokenCard() {
 
         {rotatedToken ? (
           <div className="space-y-3 px-4 py-3">
-            <p className="text-xs text-muted-foreground">
-              Running workers reload the token from disk after the next failed request. Restart them
-              if anything stays disconnected.
+            <p className="text-muted-foreground text-xs">
+              Running workers reload the token from disk after the next failed
+              request. Restart them if anything stays disconnected.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <code className="max-w-full break-all rounded-md border border-border bg-background px-2.5 py-1 text-xs">
                 {rotatedToken}
               </code>
-              <Button type="button" size="sm" variant="outline" onClick={() => void copyToken()}>
-                <CopyIcon className="size-4" />
+              <Button
+                onClick={() => void copyToken()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <Copy01Icon className="size-4" />
                 Copy
               </Button>
             </div>

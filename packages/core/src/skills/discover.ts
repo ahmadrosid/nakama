@@ -2,12 +2,12 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
 import { pickPreferredSkillSourcePath } from "./dedupe";
+import { parseSkillMarkdown } from "./parse";
 import {
   resolveSkillDiscoveryDirs,
   SKILL_FILE_NAME,
   SKILL_TOOL_FILES,
 } from "./paths";
-import { parseSkillMarkdown } from "./parse";
 import type { DiscoveredSkill } from "./types";
 
 export interface DiscoverSkillsOptions {
@@ -16,7 +16,7 @@ export interface DiscoverSkillsOptions {
 }
 
 export async function discoverSkills(
-  options: DiscoverSkillsOptions = {},
+  options: DiscoverSkillsOptions = {}
 ): Promise<DiscoveredSkill[]> {
   const dirs = await resolveSkillDiscoveryDirs(options);
   const discovered = new Map<string, DiscoveredSkill>();
@@ -49,7 +49,7 @@ export async function discoverSkills(
 
       const preferredDirectory = pickPreferredSkillSourcePath(
         existing.directory,
-        skill.directory,
+        skill.directory
       );
 
       if (preferredDirectory === skill.directory) {
@@ -59,12 +59,12 @@ export async function discoverSkills(
   }
 
   return Array.from(discovered.values()).sort((left, right) =>
-    left.name.localeCompare(right.name),
+    left.name.localeCompare(right.name)
   );
 }
 
 export async function discoverSkillDirectory(
-  directory: string,
+  directory: string
 ): Promise<DiscoveredSkill | null> {
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
 
@@ -78,20 +78,21 @@ export async function discoverSkillDirectory(
     const toolPath = await findSkillToolPath(directory);
 
     return {
-      name: parsed.frontmatter.name,
-      description: parsed.frontmatter.description,
-      disableModelInvocation: parsed.frontmatter.disableModelInvocation ?? false,
-      includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
-      directory,
-      skillFilePath,
       body: parsed.body,
+      description: parsed.frontmatter.description,
+      directory,
+      disableModelInvocation:
+        parsed.frontmatter.disableModelInvocation ?? false,
       hasTool: toolPath !== null,
+      includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
+      name: parsed.frontmatter.name,
+      skillFilePath,
       toolPath,
     };
   } catch (error) {
     console.warn(
       `[nakama:skills] Skipping ${skillFilePath}:`,
-      error instanceof Error ? error.message : error,
+      error instanceof Error ? error.message : error
     );
     return null;
   }

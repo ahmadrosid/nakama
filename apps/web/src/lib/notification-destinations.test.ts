@@ -6,9 +6,9 @@ import {
 
 describe("buildNotificationWebhookUrl", () => {
   test("joins origin and webhook path", () => {
-    expect(buildNotificationWebhookUrl("http://localhost:4310/", "/v1/notify/dest_1")).toBe(
-      "http://localhost:4310/v1/notify/dest_1",
-    );
+    expect(
+      buildNotificationWebhookUrl("http://localhost:4310/", "/v1/notify/dest_1")
+    ).toBe("http://localhost:4310/v1/notify/dest_1");
   });
 });
 
@@ -19,7 +19,7 @@ describe("formatTelegramDestinationLabel", () => {
 
   test("formats topic destinations", () => {
     expect(formatTelegramDestinationLabel({ chatId: 1001, topicId: 22 })).toBe(
-      "Chat 1001 / Topic 22",
+      "Chat 1001 / Topic 22"
     );
   });
 });

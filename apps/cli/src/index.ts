@@ -1,16 +1,22 @@
 import { createClient } from "@nakama/client";
+import {
+  ensureServerRunning,
+  stopSpawnedServer,
+} from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { runChat } from "./chat";
-import { parseCliProfileArgs } from "./profile";
 import { parseCliOrgArgs, resolveCliOrgId } from "./org";
-import { ensureUserConfiguredViaCli, ensureProviderConfiguredViaCli } from "./setup";
-import { ensureServerRunning, stopSpawnedServer } from "@nakama/core/ensure-server";
-import { setTheme, type Theme, detectTheme } from "./styled-text";
+import { parseCliProfileArgs } from "./profile";
 import {
   formatRotateTokenError,
   isRotateTokenCommand,
   runRotateToken,
 } from "./rotate-token";
+import {
+  ensureProviderConfiguredViaCli,
+  ensureUserConfiguredViaCli,
+} from "./setup";
+import { detectTheme, setTheme, type Theme } from "./styled-text";
 
 if (isRotateTokenCommand()) {
   try {
@@ -28,13 +34,19 @@ function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
 
     if (arg === "--theme") {
       const value = argv[index + 1]?.trim();
-      if (value === "light" || value === "dark") return value;
+      if (value === "light" || value === "dark") {
+        return value;
+      }
       index += 1;
       continue;
     }
 
-    if (arg === "--theme=light") return "light";
-    if (arg === "--theme=dark") return "dark";
+    if (arg === "--theme=light") {
+      return "light";
+    }
+    if (arg === "--theme=dark") {
+      return "dark";
+    }
   }
 
   return null;
@@ -42,9 +54,15 @@ function parseThemeArg(argv = process.argv.slice(2)): Theme | null {
 
 async function resolveTheme(): Promise<Theme> {
   const explicit = parseThemeArg();
-  if (explicit) return explicit;
-  if (process.env.NAKAMA_THEME === "light") return "light";
-  if (process.env.NAKAMA_THEME === "dark") return "dark";
+  if (explicit) {
+    return explicit;
+  }
+  if (process.env.NAKAMA_THEME === "light") {
+    return "light";
+  }
+  if (process.env.NAKAMA_THEME === "dark") {
+    return "dark";
+  }
   const detected = await detectTheme();
   return detected ?? "dark";
 }
@@ -65,8 +83,8 @@ try {
   spawnedChild = child;
 
   const client = createClient({
-    baseUrl: serverUrl,
     authToken: await loadLocalAuthToken("cli@nakama.internal"),
+    baseUrl: serverUrl,
   });
 
   const cliOrg = parseCliOrgArgs();
@@ -93,8 +111,8 @@ try {
   const cliProfile = parseCliProfileArgs();
 
   await runChat({
-    client,
     channel: "cli",
+    client,
     offline: !health.providerConfigured,
     profileId: cliProfile.profileId,
     signal: abortController.signal,
@@ -105,7 +123,7 @@ try {
 
   if (message === "Not found") {
     console.error(
-      "\nThe server looks outdated. Restart it to pick up the latest API:\n  bun run dev:server\n",
+      "\nThe server looks outdated. Restart it to pick up the latest API:\n  bun run dev:server\n"
     );
   }
 

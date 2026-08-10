@@ -1,14 +1,14 @@
+import { dirname, join } from "node:path";
 import type { DeliverableChannelArtifact } from "@nakama/core/channel-artifact-delivery";
 import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
-import { dirname, join } from "node:path";
 
 export interface ChatSessionRecord {
-  sessionId: string;
-  profileId: string;
-  updatedAt: string;
   artifactShareUrls?: Record<string, string>;
   deliverableArtifacts?: DeliverableChannelArtifact[];
+  profileId: string;
+  sessionId: string;
+  updatedAt: string;
 }
 
 type ChatSessionMap = Record<string, ChatSessionRecord>;
@@ -31,7 +31,11 @@ export class SessionStore {
 
     const parsed = JSON.parse(raw) as unknown;
 
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       this.map = {};
       return;
     }
@@ -64,7 +68,7 @@ export class SessionStore {
     update: {
       artifactShareUrls?: Record<string, string>;
       deliverableArtifacts?: DeliverableChannelArtifact[];
-    },
+    }
   ): void {
     const existing = this.get(chatId);
     if (!existing) {
@@ -74,14 +78,19 @@ export class SessionStore {
     this.set(chatId, {
       ...existing,
       artifactShareUrls: update.artifactShareUrls ?? existing.artifactShareUrls,
-      deliverableArtifacts: update.deliverableArtifacts ?? existing.deliverableArtifacts,
+      deliverableArtifacts:
+        update.deliverableArtifacts ?? existing.deliverableArtifacts,
     });
   }
 
   async save(): Promise<void> {
-    await writePrivateTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
-    });
+    await writePrivateTextFile(
+      this.path,
+      `${JSON.stringify(this.map, null, 2)}\n`,
+      {
+        ensureDir: dirname(this.path),
+      }
+    );
   }
 }
 

@@ -6,7 +6,7 @@ export interface ComposeSoulPromptOptions {
 
 export function composeSoulSystemPrompt(
   stack: LoadedSoulStack,
-  options: ComposeSoulPromptOptions = {},
+  options: ComposeSoulPromptOptions = {}
 ): string {
   const profilePrompt = options.profilePrompt?.trim();
   const sections: string[] = [
@@ -25,18 +25,18 @@ export function composeSoulSystemPrompt(
   }
 
   if (stack.files.instructions) {
-    sections.push("", "# Operating Instructions (INSTRUCTIONS.md)", stack.files.instructions);
+    sections.push(
+      "",
+      "# Operating Instructions (INSTRUCTIONS.md)",
+      stack.files.instructions
+    );
   }
 
   if (stack.files.memory) {
     sections.push("", "# Continuity (MEMORY.md)", stack.files.memory);
   }
 
-  if (
-    stack.files.soul &&
-    profilePrompt &&
-    profilePrompt !== stack.files.soul
-  ) {
+  if (stack.files.soul && profilePrompt && profilePrompt !== stack.files.soul) {
     sections.push("", "# Profile Instructions", profilePrompt);
   }
 

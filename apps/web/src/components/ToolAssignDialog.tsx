@@ -1,5 +1,5 @@
 import type { ToolSummary } from "@nakama/core/contract";
-import { PlusIcon } from "lucide-react";
+import { Add01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,9 +19,9 @@ import {
 } from "@/components/ui/dialog";
 
 interface ToolAssignDialogProps {
-  tools: ToolSummary[];
   disabled?: boolean;
   onAssign: (toolId: string) => void | Promise<void>;
+  tools: ToolSummary[];
 }
 
 export function ToolAssignDialog({
@@ -38,24 +38,24 @@ export function ToolAssignDialog({
   return (
     <>
       <Button
-        type="button"
-        variant="outline"
-        size="sm"
         disabled={disabled}
         onClick={() => setOpen(true)}
+        size="sm"
+        type="button"
+        variant="outline"
       >
-        <PlusIcon className="size-4" data-icon="inline-start" aria-hidden />
+        <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
         Add tool
       </Button>
 
       <Dialog
-        open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
         }}
+        open={open}
       >
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="gap-1 border-b border-border px-6 py-4 text-left">
+          <DialogHeader className="gap-1 border-border border-b px-6 py-4 text-left">
             <DialogTitle>Add tool</DialogTitle>
             <DialogDescription>
               Choose a tool to allow for this profile.
@@ -63,7 +63,7 @@ export function ToolAssignDialog({
           </DialogHeader>
 
           <Command className="rounded-none bg-transparent">
-            <div className="border-b border-border/60 px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
+            <div className="border-border/60 border-b px-2 py-2 [&_[data-slot=command-input-wrapper]]:p-0">
               <CommandInput placeholder="Search tools…" />
             </div>
             <CommandList className="max-h-72 p-1">
@@ -71,18 +71,20 @@ export function ToolAssignDialog({
               <CommandGroup>
                 {tools.map((tool) => (
                   <CommandItem
-                    key={tool.id}
-                    value={`${tool.name} ${tool.description}`}
                     disabled={disabled}
+                    key={tool.id}
                     onSelect={() => {
                       void onAssign(tool.id);
                       setOpen(false);
                     }}
+                    value={`${tool.name} ${tool.description}`}
                   >
                     <div className="min-w-0">
                       <p>{tool.name}</p>
                       {tool.description ? (
-                        <p className="truncate text-xs text-muted-foreground">{tool.description}</p>
+                        <p className="truncate text-muted-foreground text-xs">
+                          {tool.description}
+                        </p>
                       ) : null}
                     </div>
                   </CommandItem>

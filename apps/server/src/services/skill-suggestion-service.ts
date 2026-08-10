@@ -1,21 +1,30 @@
 import {
-  NakamaApiError,
   detectOrgMemoryInjectionWarnings,
   isGlobalSkillSourcePath,
   isPathWithinProfileSkillsDir,
+  NakamaApiError,
   parseRawProfileSkillContent,
   resolveSkillWriteApprovalRequired,
 } from "@nakama/core";
+import type {
+  ApplySkillSuggestionOutcome,
+  SkillSuggestion,
+} from "@nakama/core/contract";
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
 } from "@nakama/core/skills/write";
-import type { DatabaseAdapter, SkillSuggestionAction, StoredSkillSuggestion } from "@nakama/db";
-import type { ApplySkillSuggestionOutcome, SkillSuggestion } from "@nakama/core/contract";
-import type { SkillsService } from "./skills-service";
+import type {
+  DatabaseAdapter,
+  SkillSuggestionAction,
+  StoredSkillSuggestion,
+} from "@nakama/db";
 import type { SkillProposalService } from "./skill-proposal-service";
+import type { SkillsService } from "./skills-service";
 
-export function toSkillSuggestion(record: StoredSkillSuggestion): SkillSuggestion {
+export function toSkillSuggestion(
+  record: StoredSkillSuggestion
+): SkillSuggestion {
   const { warnings, ...suggestion } = record;
   return warnings?.length ? { ...suggestion, warnings } : suggestion;
 }
@@ -26,26 +35,29 @@ export type SkillSuggestionOutcome =
 
 export interface CreateSkillSuggestionInput {
   orgId: string;
-  profileId: string;
-  sessionId?: string | null;
-  proposedByUserId?: string | null;
   outcome: SkillSuggestionOutcome;
+  profileId: string;
+  proposedByUserId?: string | null;
+  sessionId?: string | null;
 }
 
 export interface ApplySkillSuggestionResult {
   outcome: ApplySkillSuggestionOutcome;
-  suggestion: StoredSkillSuggestion;
   proposalId?: string;
+  suggestion: StoredSkillSuggestion;
 }
 
 export class SkillSuggestionService {
   constructor(
     private readonly database: DatabaseAdapter | null = null,
     private readonly skillsService: SkillsService | null = null,
-    private readonly skillProposalService: SkillProposalService | null = null,
+    private readonly skillProposalService: SkillProposalService | null = null
   ) {}
 
-  async isWriteApprovalRequired(orgId: string, profileId: string): Promise<boolean> {
+  async isWriteApprovalRequired(
+    orgId: string,
+    profileId: string
+  ): Promise<boolean> {
     const db = this.requireDatabase();
     const org = await db.getOrganizationById(orgId);
     if (!org) {
@@ -61,7 +73,9 @@ export class SkillSuggestionService {
     });
   }
 
-  async createSuggestion(input: CreateSkillSuggestionInput): Promise<StoredSkillSuggestion> {
+  async createSuggestion(
+    input: CreateSkillSuggestionInput
+  ): Promise<StoredSkillSuggestion> {
     const db = this.requireDatabase();
     const { outcome } = input;
     const name = assertValidSkillName(outcome.name);
@@ -69,21 +83,21 @@ export class SkillSuggestionService {
 
     const now = new Date().toISOString();
     const record: StoredSkillSuggestion = {
+      action: outcome.action,
+      appliedAt: null,
+      content: outcome.action === "create" ? outcome.content : null,
+      createdAt: now,
       id: `sksug_${crypto.randomUUID().replace(/-/g, "")}`,
       orgId: input.orgId,
-      profileId: input.profileId,
-      sessionId: input.sessionId ?? null,
-      proposedByUserId: input.proposedByUserId ?? null,
-      action: outcome.action,
-      skillName: name,
-      content: outcome.action === "create" ? outcome.content : null,
-      patchOldString: outcome.action === "patch" ? outcome.oldString : null,
       patchNewString: outcome.action === "patch" ? outcome.newString : null,
-      status: "pending",
+      patchOldString: outcome.action === "patch" ? outcome.oldString : null,
+      profileId: input.profileId,
+      proposedByUserId: input.proposedByUserId ?? null,
+      sessionId: input.sessionId ?? null,
+      skillName: name,
       source: "post_turn_review",
+      status: "pending",
       warnings: this.computeWarnings(outcome) ?? null,
-      createdAt: now,
-      appliedAt: null,
     };
 
     await db.createSkillSuggestion(record);
@@ -96,13 +110,19 @@ export class SkillSuggestionService {
       sessionId?: string;
       status?: StoredSkillSuggestion["status"];
       profileId?: string;
-    } = {},
+    } = {}
   ): Promise<StoredSkillSuggestion[]> {
     return this.requireDatabase().listSkillSuggestions(orgId, options);
   }
 
-  async getSuggestion(orgId: string, id: string): Promise<StoredSkillSuggestion> {
-    const suggestion = await this.requireDatabase().getSkillSuggestion(orgId, id);
+  async getSuggestion(
+    orgId: string,
+    id: string
+  ): Promise<StoredSkillSuggestion> {
+    const suggestion = await this.requireDatabase().getSkillSuggestion(
+      orgId,
+      id
+    );
     if (!suggestion) {
       throw new NakamaApiError("Skill suggestion not found.", 404);
     }
@@ -118,7 +138,7 @@ export class SkillSuggestionService {
   async applySuggestion(
     orgId: string,
     id: string,
-    actorUserId: string,
+    actorUserId: string
   ): Promise<ApplySkillSuggestionResult> {
     const db = this.requireDatabase();
     const suggestion = await this.getSuggestion(orgId, id);
@@ -131,21 +151,21 @@ export class SkillSuggestionService {
 
     const writeApprovalRequired = await this.isWriteApprovalRequired(
       orgId,
-      suggestion.profileId,
+      suggestion.profileId
     );
 
     if (writeApprovalRequired) {
       const proposals = this.requireProposalService();
       const staged = await proposals.stageProposal({
+        action: suggestion.action,
+        content: suggestion.content ?? undefined,
+        newString: suggestion.patchNewString ?? undefined,
+        oldString: suggestion.patchOldString ?? undefined,
         orgId,
         profileId: suggestion.profileId,
-        action: suggestion.action,
-        skillName: suggestion.skillName,
-        content: suggestion.content ?? undefined,
-        oldString: suggestion.patchOldString ?? undefined,
-        newString: suggestion.patchNewString ?? undefined,
-        sessionId: suggestion.sessionId,
         proposedByUserId: actorUserId,
+        sessionId: suggestion.sessionId,
+        skillName: suggestion.skillName,
       });
 
       const appliedAt = new Date().toISOString();
@@ -153,8 +173,8 @@ export class SkillSuggestionService {
 
       return {
         outcome: "staged_as_proposal",
-        suggestion: { ...suggestion, status: "applied", appliedAt },
         proposalId: staged.proposalId,
+        suggestion: { ...suggestion, appliedAt, status: "applied" },
       };
     }
 
@@ -165,20 +185,28 @@ export class SkillSuggestionService {
         throw new NakamaApiError("Suggestion is missing content.", 400);
       }
       parseRawProfileSkillContent(content, orgId, suggestion.profileId);
-      await skills.createAndAssignRawSkillToProfile(orgId, suggestion.profileId, content);
+      await skills.createAndAssignRawSkillToProfile(
+        orgId,
+        suggestion.profileId,
+        content
+      );
     } else {
       const oldString = suggestion.patchOldString;
       const newString = suggestion.patchNewString;
       if (oldString === null || oldString === "" || newString === null) {
         throw new NakamaApiError("Suggestion is missing patch fields.", 400);
       }
-      await this.assertProfileOwnedSkill(orgId, suggestion.profileId, suggestion.skillName);
+      await this.assertProfileOwnedSkill(
+        orgId,
+        suggestion.profileId,
+        suggestion.skillName
+      );
       await skills.patchAssignedProfileSkill(
         orgId,
         suggestion.profileId,
         suggestion.skillName,
         oldString,
-        newString,
+        newString
       );
     }
 
@@ -187,14 +215,14 @@ export class SkillSuggestionService {
 
     return {
       outcome: "applied",
-      suggestion: { ...suggestion, status: "applied", appliedAt },
+      suggestion: { ...suggestion, appliedAt, status: "applied" },
     };
   }
 
   private async assertProfileOwnedSkill(
     orgId: string,
     profileId: string,
-    name: string,
+    name: string
   ): Promise<void> {
     const db = this.requireDatabase();
     const skillName = assertValidSkillName(name);
@@ -203,14 +231,22 @@ export class SkillSuggestionService {
       throw new NakamaApiError(`Skill "${skillName}" not found.`, 404);
     }
     if (isGlobalSkillSourcePath(record.sourcePath)) {
-      throw new NakamaApiError("Global skills cannot be modified by agents.", 403);
+      throw new NakamaApiError(
+        "Global skills cannot be modified by agents.",
+        403
+      );
     }
     if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
-      throw new NakamaApiError(`Skill "${skillName}" is not owned by this profile.`, 403);
+      throw new NakamaApiError(
+        `Skill "${skillName}" is not owned by this profile.`,
+        403
+      );
     }
   }
 
-  private computeWarnings(outcome: SkillSuggestionOutcome): string[] | undefined {
+  private computeWarnings(
+    outcome: SkillSuggestionOutcome
+  ): string[] | undefined {
     const warnings =
       outcome.action === "create"
         ? detectOrgMemoryInjectionWarnings(outcome.content)

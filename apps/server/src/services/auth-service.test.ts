@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { AuthService } from "./auth-service";
 
 describe("AuthService", () => {
@@ -46,7 +46,9 @@ describe("AuthService", () => {
       expect(session.csrfToken.length).toBeGreaterThan(50);
       expect(new Date(session.expiresAt).toString()).not.toBe("Invalid Date");
       expect(authService.hashToken(session.sessionToken)).toHaveLength(43);
-      expect(authService.hashToken(session.sessionToken)).not.toBe(session.sessionToken);
+      expect(authService.hashToken(session.sessionToken)).not.toBe(
+        session.sessionToken
+      );
     });
   });
 });

@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import { useCallback } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { McpTab } from "@/components/soul-tools/McpTab";
@@ -7,9 +6,14 @@ import { OrganizationPanel } from "@/components/system/OrganizationPanel";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/context/use-auth";
 import { canAccessSystemPage } from "@/lib/navigation";
-import { StatusPage } from "@/pages/StatusPage";
-import { resolveSystemTab, visibleSystemTabs, type SystemTabId } from "@/pages/system-page.shared";
 import { cn } from "@/lib/utils";
+import { StatusPage } from "@/pages/StatusPage";
+import {
+  resolveSystemTab,
+  type SYSTEM_TABS,
+  type SystemTabId,
+  visibleSystemTabs,
+} from "@/pages/system-page.shared";
 
 export function SystemPage() {
   const { user, activeOrg, isLoading } = useAuth();
@@ -31,48 +35,48 @@ export function SystemPage() {
           }
           return next;
         },
-        { replace: true },
+        { replace: true }
       );
     },
-    [setSearchParams],
+    [setSearchParams]
   );
 
   if (isLoading) {
     return (
-      <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-64 items-center justify-center text-muted-foreground text-sm">
         <Spinner className="size-5" />
       </div>
     );
   }
 
   if (!canAccess) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate replace to="/chat" />;
   }
 
   return (
     <section className="overflow-hidden rounded-md border border-border bg-card">
       <div
-        role="tablist"
         aria-label="System"
-        className="flex shrink-0 border-b border-border px-4 sm:px-5"
+        className="flex shrink-0 border-border border-b px-4 sm:px-5"
+        role="tablist"
       >
         {visibleTabs.map((item) => (
           <SystemTabButton
-            key={item.id}
-            id={`system-tab-${item.id}`}
-            label={item.label}
-            icon={item.icon}
             active={tab === item.id}
             controls={`system-panel-${item.id}`}
+            icon={item.icon}
+            id={`system-tab-${item.id}`}
+            key={item.id}
+            label={item.label}
             onSelect={() => setTab(item.id)}
           />
         ))}
       </div>
 
       <div
+        aria-labelledby={`system-tab-${tab}`}
         id={`system-panel-${tab}`}
         role="tabpanel"
-        aria-labelledby={`system-tab-${tab}`}
       >
         {tab === "status" ? (
           <StatusPage embedded />
@@ -98,28 +102,28 @@ function SystemTabButton({
 }: {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: (typeof SYSTEM_TABS)[number]["icon"];
   active: boolean;
   controls: string;
   onSelect: () => void;
 }) {
   return (
     <button
-      type="button"
-      id={id}
-      role="tab"
-      aria-selected={active}
       aria-controls={controls}
-      data-active={active || undefined}
+      aria-selected={active}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+        "relative -mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 font-medium text-sm transition-colors sm:px-4",
         active
           ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          : "border-transparent text-muted-foreground hover:text-foreground"
       )}
+      data-active={active || undefined}
+      id={id}
       onClick={onSelect}
+      role="tab"
+      type="button"
     >
-      <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+      <Icon aria-hidden className="size-4 shrink-0" />
       {label}
     </button>
   );

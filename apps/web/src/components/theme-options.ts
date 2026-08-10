@@ -1,12 +1,12 @@
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { ComputerIcon, MoonIcon, Sun01Icon } from "hugeicons-react";
 import type { Theme } from "@/lib/theme";
 
 export const THEME_OPTIONS: {
   id: Theme;
   label: string;
-  icon: typeof SunIcon;
+  icon: typeof Sun01Icon;
 }[] = [
-  { id: "light", label: "Light", icon: SunIcon },
-  { id: "dark", label: "Dark", icon: MoonIcon },
-  { id: "system", label: "System", icon: MonitorIcon },
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: MoonIcon, id: "dark", label: "Dark" },
+  { icon: ComputerIcon, id: "system", label: "System" },
 ];
