@@ -199,6 +199,10 @@ describe("runFirstBootSeed", () => {
     });
     expect(result.seeded).toBe(true);
 
+    const org =
+      await services.databaseAdapter.getOrganizationBySlug("personal");
+    expect(org?.name).toBe("Personal");
+
     const userConfig = await loadUserConfig();
     const provider = createProviderFromSources(process.env, userConfig);
     const { app } = createMinimalHonoApp({
