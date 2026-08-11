@@ -6,6 +6,7 @@ import type {
   RevokeArtifactShareResponse,
 } from "@nakama/core/contract";
 import { ArtifactShareService } from "../../services/artifact-share-service";
+import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -37,6 +38,11 @@ export function registerArtifactShareRoutes(
       return json({ error: "path is required" }, 400);
     }
 
+    const clientOrigin = resolveRequestClientOrigin(
+      c.req.raw,
+      body.clientOrigin
+    );
+
     return json<PublishArtifactShareResponse>(
       await service.publishArtifactShare({
         orgId,
@@ -44,6 +50,7 @@ export function registerArtifactShareRoutes(
         request: c.req.raw,
         sourcePath: body.path.trim(),
         userId: auth.user.id,
+        ...(clientOrigin ? { clientOrigin } : {}),
       }),
       201
     );

@@ -212,22 +212,17 @@ export async function deliverDiscordTurnArtifactShares(input: {
   });
   await input.sessionStore.save();
 
-  const fallbackArtifacts: DeliverableChannelArtifact[] = [];
-
   for (const artifact of delivered) {
-    const uploaded = await tryUploadDiscordArtifact({
+    await tryUploadDiscordArtifact({
       artifact,
       channel: input.channel,
       client: input.client,
       profileId: input.profileId,
     });
-
-    if (!uploaded) {
-      fallbackArtifacts.push(artifact);
-    }
   }
 
-  const footer = formatArtifactShareFooter(fallbackArtifacts, {
+  // Always post share links (like Telegram); attachment upload is additive.
+  const footer = formatArtifactShareFooter(delivered, {
     webPublicUrlConfigured,
   });
 

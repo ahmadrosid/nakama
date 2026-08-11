@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="/Users/ahmadrosid/github.com/ahmadrosid/nakama"
-OUTPUT="$ROOT/nakama_demo.png"
+OUTPUT="$ROOT/assets/nakama_demo.png"
 TEMP_CONFIG="/tmp/nakama-demo-screenshot-$$"
 COOKIE_JAR="/tmp/nakama-demo-cookies-$$.txt"
 PORT=4319

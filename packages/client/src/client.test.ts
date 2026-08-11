@@ -313,3 +313,68 @@ test("notification destination client methods hit the expected routes", async ()
     "http://localhost:4310/v1/notification-destinations/dest_1"
   );
 });
+
+function createPublishShareClient(options: {
+  clientOrigin?: string;
+  response: Record<string, unknown>;
+}) {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = createClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://127.0.0.1:4310",
+    ...(options.clientOrigin === undefined
+      ? {}
+      : { clientOrigin: options.clientOrigin }),
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return Response.json(options.response);
+    },
+    orgId: "org_test",
+  });
+  return { client, fetchCalls };
+}
+
+test("publishProfileArtifactShare includes clientOrigin when configured", async () => {
+  const { client, fetchCalls } = createPublishShareClient({
+    clientOrigin: "https://nakama.example.com/",
+    response: {
+      id: "share_1",
+      refreshed: false,
+      sharePath: "/s/tok",
+      shareUrl: "https://nakama.example.com/s/tok",
+      token: "tok",
+      webPublicUrlConfigured: true,
+    },
+  });
+
+  await client.publishProfileArtifactShare("profile_1", "report.md");
+
+  expect(fetchCalls).toHaveLength(1);
+  expect(fetchCalls[0]!.input.toString()).toBe(
+    "http://127.0.0.1:4310/v1/profiles/profile_1/artifacts/shares"
+  );
+  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+    clientOrigin: "https://nakama.example.com",
+    path: "report.md",
+  });
+});
+
+test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
+  const { client, fetchCalls } = createPublishShareClient({
+    response: {
+      id: "share_1",
+      refreshed: false,
+      sharePath: "/s/tok",
+      shareUrl: null,
+      token: "tok",
+      webPublicUrlConfigured: false,
+    },
+  });
+
+  await client.publishProfileArtifactShare("profile_1", "report.md");
+
+  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+    path: "report.md",
+  });
+});

@@ -3,10 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { saveTelegramConfig } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 
 describe("notification webhook routes", () => {
   let tempHome = "";
@@ -27,22 +24,10 @@ describe("notification webhook routes", () => {
     homedirSpy = spyOn(os, "homedir").mockReturnValue(tempHome);
     await saveTelegramConfig({ botToken: "1234567890:TEST" });
 
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
-      agent: {} as any,
-      authService,
-      automationService: {} as any,
-      databaseAdapter,
-      mcpService: {} as any,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: {} as any,
-      taskService: {} as any,
-      webDistDir: null,
-      workerManager: {} as any,
+    return createMinimalHonoApp({
+      agent: {},
+      systemStatus: {},
     });
-
-    return { app, authService, databaseAdapter };
   }
 
   test("accepts authenticated webhook requests and delivers to telegram topics", async () => {

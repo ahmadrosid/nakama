@@ -897,10 +897,15 @@ export class NakamaClient {
     profileId: string,
     path: string
   ): Promise<PublishArtifactShareResponse> {
+    const body: PublishArtifactShareRequest = { path };
+    if (this.clientOrigin) {
+      body.clientOrigin = this.clientOrigin;
+    }
+
     return this.request<PublishArtifactShareResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares`,
       {
-        body: JSON.stringify({ path } satisfies PublishArtifactShareRequest),
+        body: JSON.stringify(body),
         method: "POST",
       }
     );

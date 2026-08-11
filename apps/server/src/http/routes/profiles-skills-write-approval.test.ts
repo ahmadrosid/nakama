@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { OrgService } from "../../services/org-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createHonoApp } from "../app";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
@@ -14,10 +12,9 @@ setupTestConfigDir("nakama-profiles-skills-write-approval-test-");
 
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
   const profileService = new ProfileService(databaseAdapter);
   return {
-    app: createHonoApp({
+    ...createMinimalHonoApp({
       agent: {
         updateProfile: (orgId: string, profileId: string, body: unknown) =>
           profileService.updateProfile(
@@ -25,19 +22,9 @@ function createApp() {
             profileId,
             body as Parameters<ProfileService["updateProfile"]>[2]
           ),
-      } as never,
-      authService,
-      automationService: {} as never,
+      },
       databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
     }),
-    authService,
-    databaseAdapter,
     profileService,
   };
 }

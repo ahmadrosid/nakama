@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="nakama-logo-dither-dark.png" />
-    <img alt="Nakama logo" src="nakama-logo-dither-light.png" width="188" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/nakama-logo-dither-dark.png" />
+    <img alt="Nakama logo" src="assets/nakama-logo-dither-light.png" width="188" />
   </picture>
 </p>
 
@@ -18,8 +18,8 @@
 Nakama is a small, self-hosted Bun + TypeScript monorepo for running AI agents. Inspired by [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes Agent](https://github.com/nousresearch/hermes-agent) — same self-hosted agent idea (tools, channels, soul, automations) — but **multi-tenant by design**. Those projects target one operator on one machine; Nakama is one server, many orgs, with isolated profiles, sessions, member invites, and roles built in.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="nakama_demo_dark.png" />
-  <img alt="Nakama dashboard demo" src="nakama_demo_light.png" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/nakama_demo_dark.png" />
+  <img alt="Nakama dashboard demo" src="assets/nakama_demo_light.png" />
 </picture>
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for system design, or the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
