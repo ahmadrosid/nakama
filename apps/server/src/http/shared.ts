@@ -550,7 +550,10 @@ export function streamMessage(
   session: AgentChatSession,
   input: SendMessageInput,
   onComplete?: (terminal: StreamEvent) => void,
-  requestSignal?: AbortSignal
+  requestSignal?: AbortSignal,
+  // Only tests pass this. The resolved value clamps to 60s minimum, which is far
+  // too long to wait for in a suite.
+  timeoutMs: number = STREAM_TIMEOUT_MS
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
@@ -581,19 +584,30 @@ export function streamMessage(
         }
       }, keepaliveIntervalMs);
 
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      // The timeout aborts the turn, so turnSignal.aborted alone can no longer
+      // tell a cancel from a deadline. Without this the user sees "Turn
+      // cancelled." for a provider that simply went quiet.
+      let timedOut = false;
+
       try {
         const reply = await Promise.race([
           session.sendStream(input, buildAgentStreamHandlers(send), {
             signal: turnSignal,
           }),
           new Promise<never>((_, reject) => {
-            setTimeout(() => {
+            deadline = setTimeout(() => {
+              timedOut = true;
               reject(
                 new Error(
-                  `Chat timed out after ${Math.round(STREAM_TIMEOUT_MS / 1000)}s waiting for the provider. Try another model or check provider settings.`
+                  `Chat timed out after ${Math.round(timeoutMs / 1000)}s waiting for the provider. Try another model or check provider settings.`
                 )
               );
-            }, STREAM_TIMEOUT_MS);
+              // After rejecting, so the race reports the timeout and not the
+              // abort. The provider request is still open at this point and
+              // nothing else ever stops it.
+              turnAbort.abort();
+            }, timeoutMs);
           }),
         ]);
 
@@ -605,12 +619,16 @@ export function streamMessage(
         });
       } catch (error) {
         send({
-          error: turnSignal.aborted
-            ? "Turn cancelled."
-            : formatServerError(error),
+          error:
+            turnSignal.aborted && !timedOut
+              ? "Turn cancelled."
+              : formatServerError(error),
           type: "error",
         });
       } finally {
+        // Every turn scheduled one of these. Left pending, a long-running server
+        // accumulates a live timer per turn for the whole timeout window.
+        clearTimeout(deadline);
         clearInterval(keepalive);
 
         const terminal =

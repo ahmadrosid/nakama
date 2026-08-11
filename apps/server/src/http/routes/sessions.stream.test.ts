@@ -123,3 +123,93 @@ describe("streamMessage cancellation", () => {
     expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
   });
 });
+
+describe("streamMessage timeout", () => {
+  test("a provider that goes quiet is timed out, aborted, and reported as a timeout", async () => {
+    const sessionId = `session_timeout_test_${Date.now()}`;
+    const { session, sawSignal } = createCancellableSession();
+
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    const response = streamMessage(
+      sessionId,
+      session,
+      { message: "hi" },
+      undefined,
+      undefined,
+      10
+    );
+
+    const body = await new Response(response.body).text();
+    await waitForTurnToEnd(sessionId);
+
+    expect(body).toContain("timed out after");
+    // The deadline aborts the turn, so this is the message the user would get
+    // if the abort were mistaken for a cancel.
+    expect(body).not.toContain("Turn cancelled.");
+    // Nothing else stops the provider request once the race is lost.
+    expect(sawSignal()?.aborted).toBe(true);
+    expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
+    // The session is usable again rather than 409ing for the rest of the window.
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    sessionTurnRegistry.endTurn(sessionId, { reply: "ok", type: "done" });
+  });
+
+  test("a completed turn clears its deadline instead of leaving a timer behind", async () => {
+    const sessionId = `session_deadline_test_${Date.now()}`;
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const pending = new Set<ReturnType<typeof setTimeout>>();
+    // Distinctive enough that only the stream deadline matches.
+    const deadlineMs = 300_000;
+
+    globalThis.setTimeout = ((
+      handler: TimerHandler,
+      delay?: number,
+      ...rest: unknown[]
+    ) => {
+      const handle = realSetTimeout(
+        handler as () => void,
+        delay,
+        ...(rest as [])
+      );
+      if (delay === deadlineMs) {
+        pending.add(handle);
+      }
+      return handle;
+    }) as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
+      if (handle !== undefined) {
+        pending.delete(handle);
+      }
+      realClearTimeout(handle);
+    }) as typeof globalThis.clearTimeout;
+
+    try {
+      const session = {
+        getContextUsage: () => null,
+        sendStream: () => Promise.resolve("done"),
+      } as unknown as AgentChatSession;
+
+      expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+      const response = streamMessage(
+        sessionId,
+        session,
+        { message: "hi" },
+        undefined,
+        undefined,
+        deadlineMs
+      );
+
+      await new Response(response.body).text();
+      await waitForTurnToEnd(sessionId);
+
+      expect(pending.size).toBe(0);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      for (const handle of pending) {
+        realClearTimeout(handle);
+      }
+    }
+  });
+});
