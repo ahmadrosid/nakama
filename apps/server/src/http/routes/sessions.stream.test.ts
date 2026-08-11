@@ -33,6 +33,26 @@ function createCancellableSession(): {
   return { sawSignal: () => signal, session };
 }
 
+/** Emits once and then stalls: a healthy turn sitting in a long tool run. */
+function createChattyThenStalledSession(): AgentChatSession {
+  return {
+    getContextUsage: () => null,
+    sendStream: (
+      _input: unknown,
+      handlers: { onChunk: (delta: string) => void },
+      options?: { signal?: AbortSignal }
+    ) =>
+      new Promise<string>((_resolve, reject) => {
+        handlers.onChunk("working");
+        options?.signal?.addEventListener(
+          "abort",
+          () => reject(options.signal?.reason),
+          { once: true }
+        );
+      }),
+  } as unknown as AgentChatSession;
+}
+
 async function waitForTurnToEnd(sessionId: string): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (!sessionTurnRegistry.isActive(sessionId)) {
@@ -152,6 +172,59 @@ describe("streamMessage timeout", () => {
     // The session is usable again rather than 409ing for the rest of the window.
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
     sessionTurnRegistry.endTurn(sessionId, { reply: "ok", type: "done" });
+  });
+
+  test("a silent provider is released on the first-token deadline, not the stream deadline", async () => {
+    const sessionId = `session_first_token_test_${Date.now()}`;
+    const { session, sawSignal } = createCancellableSession();
+
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    const startedAt = Bun.nanoseconds();
+    const response = streamMessage(
+      sessionId,
+      session,
+      { message: "hi" },
+      undefined,
+      undefined,
+      5000,
+      50
+    );
+
+    const body = await new Response(response.body).text();
+    const heldMs = (Bun.nanoseconds() - startedAt) / 1e6;
+    await waitForTurnToEnd(sessionId);
+
+    expect(body).toContain("sent nothing for");
+    expect(sawSignal()?.aborted).toBe(true);
+    expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
+    // The point of the whole change: the session comes back on the short
+    // deadline instead of being held for the long one.
+    expect(heldMs).toBeLessThan(2500);
+  });
+
+  test("a provider that has produced output keeps the full stream deadline", async () => {
+    const sessionId = `session_slow_tool_test_${Date.now()}`;
+    const session = createChattyThenStalledSession();
+
+    expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+    const response = streamMessage(
+      sessionId,
+      session,
+      { message: "hi" },
+      undefined,
+      undefined,
+      400,
+      50
+    );
+
+    const body = await new Response(response.body).text();
+    await waitForTurnToEnd(sessionId);
+
+    expect(body).toContain('"delta":"working"');
+    // It outlived the 50ms first-token deadline and died on the stream one, so
+    // a long tool run is not collateral damage.
+    expect(body).not.toContain("sent nothing for");
+    expect(body).toContain("timed out after");
   });
 
   test("a completed turn clears its deadline instead of leaving a timer behind", async () => {
