@@ -11,6 +11,9 @@ export interface TypingLoop {
 export function createTypingLoop(messenger: DiscordMessenger): TypingLoop {
   let interval: ReturnType<typeof setInterval> | null = null;
   let active = false;
+  // Serialize typing POSTs and re-check `active` before each send so a ping
+  // flood (e.g. onThinking) cannot keep refreshing Discord after stop().
+  let sendChain: Promise<void> = Promise.resolve();
 
   function clear() {
     if (interval) {
@@ -19,26 +22,34 @@ export function createTypingLoop(messenger: DiscordMessenger): TypingLoop {
     }
   }
 
+  function queueTyping() {
+    if (!active) {
+      return;
+    }
+
+    sendChain = sendChain
+      .then(async () => {
+        if (!active) {
+          return;
+        }
+
+        await messenger.sendTyping();
+      })
+      .catch(() => {
+        // Best-effort; keep the chain healthy.
+      });
+  }
+
   return {
     ping() {
-      // Ignore late stream callbacks after stop() so we do not refresh Discord typing.
-      if (!active) {
-        return;
-      }
-
-      void messenger.sendTyping();
+      queueTyping();
     },
     start() {
       clear();
       active = true;
-      void messenger.sendTyping();
+      queueTyping();
       interval = setInterval(() => {
-        if (!active) {
-          clear();
-          return;
-        }
-
-        void messenger.sendTyping();
+        queueTyping();
       }, TYPING_REFRESH_MS);
     },
     stop() {
