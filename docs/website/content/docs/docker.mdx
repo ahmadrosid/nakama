@@ -32,6 +32,27 @@ The data root follows `NAKAMA_CONFIG_DIR` when set. By default it is `/nakama/da
 
 On first run, complete the setup wizard in the browser and add your LLM provider. See [Providers](/providers) and [First-time setup](/first-time-setup).
 
+### First-boot seed (optional)
+
+To skip the setup wizard on a fresh data volume, set all three admin seed variables before the first boot. Nakama creates the admin account, a `Personal` org (override with `NAKAMA_SEED_ORG_NAME`), and an OpenCode Zen provider. Self-hosted installs without these variables behave as today.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `NAKAMA_SEED_ADMIN_EMAIL` | Yes (with the other two) | Platform admin email |
+| `NAKAMA_SEED_ADMIN_NAME` | Yes (with the other two) | Platform admin display name |
+| `NAKAMA_SEED_ADMIN_PASSWORD` | Yes (with the other two) | Platform admin password (min 8 characters) |
+| `NAKAMA_SEED_ORG_NAME` | No | Organization name (default `Personal`) |
+
+Partial seed config fails boot with a clear error. Restarting a seeded instance is a no-op (idempotent).
+
+```bash
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+  -e NAKAMA_SEED_ADMIN_EMAIL=admin@example.com \
+  -e NAKAMA_SEED_ADMIN_NAME=Admin \
+  -e NAKAMA_SEED_ADMIN_PASSWORD=seedpass123 \
+  --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
 ## Reset a local Docker install
 
 To remove the container, volume, and image and start fresh:
