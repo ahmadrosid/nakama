@@ -295,3 +295,71 @@ describe("convertHtmlToMarkdown", () => {
     expect(md).toContain("Self-hosted AI agents");
   });
 });
+
+describe("web_fetch content cap", () => {
+  // Same shape as truncateComposioToolResult: the marker is inside the budget,
+  // so a capped result is exactly CAP characters and never one more.
+  const CAP = 16_000;
+  const MARKER = "\n...[truncated]";
+
+  test("leaves a small body whole", async () => {
+    stubFetch(async () => htmlResponse("<h1>Short</h1><p>Body.</p>"));
+
+    const out = await webFetchTool.run({ url: "https://example.com" }, CTX);
+
+    expect(out.truncated).toBe(false);
+    expect(out.content).toContain("# Short");
+    expect(out.content).not.toContain(MARKER);
+  });
+
+  test("caps a long body and reports the original size", async () => {
+    // Long enough that the markdown is still over the cap after conversion.
+    const paragraphs = "<p>lorem ipsum dolor sit amet</p>".repeat(4000);
+    stubFetch(async () => htmlResponse(`<h1>Long</h1>${paragraphs}`));
+
+    const out = await webFetchTool.run({ url: "https://example.com" }, CTX);
+
+    expect(out.truncated).toBe(true);
+    expect(out.content.length).toBe(CAP);
+    expect(out.content.endsWith(MARKER)).toBe(true);
+    expect(out.content).toContain("# Long");
+    expect(out.bytes).toBeGreaterThan(CAP);
+  });
+
+  test("caps a raw body too, since raw skips conversion entirely", async () => {
+    const html = `<div>${"x".repeat(50_000)}</div>`;
+    stubFetch(async () => htmlResponse(html));
+
+    const out = await webFetchTool.run(
+      { raw: true, url: "https://example.com" },
+      CTX
+    );
+
+    expect(out.truncated).toBe(true);
+    expect(out.content.length).toBe(CAP);
+    expect(out.content.endsWith(MARKER)).toBe(true);
+  });
+
+  test("caps a large JSON body, the case that motivated the limit", async () => {
+    // An OpenAPI spec fetched in one call is what put 913 KB into a real session.
+    const spec = JSON.stringify({
+      paths: Object.fromEntries(
+        Array.from({ length: 2000 }, (_, i) => [
+          `/v1/resource/${i}`,
+          { get: { summary: `read resource ${i}` } },
+        ])
+      ),
+    });
+    stubFetch(async () => jsonResponse(spec));
+
+    const out = await webFetchTool.run(
+      { url: "https://api.example.com/o.json" },
+      CTX
+    );
+
+    expect(out.bytes).toBeGreaterThan(CAP);
+    expect(out.truncated).toBe(true);
+    expect(out.content.length).toBe(CAP);
+    expect(out.content.endsWith(MARKER)).toBe(true);
+  });
+});

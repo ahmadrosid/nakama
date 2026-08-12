@@ -1,21 +1,22 @@
 ---
 title: "Agent Browser"
-description: "Drive interactive, login-walled websites from Nakama chat or automations with the agent-browser skill and bash."
+description: "Drive interactive websites that need a login from Nakama chat or automations with the agent-browser skill and bash."
 ---
 
-Some work needs a **real browser**: logging into a vendor portal, filling forms, clicking through client-rendered UI, or reading pages that [`web_fetch`](/builtin-tools#web_fetch) and [`web_search`](/builtin-tools#web_search) cannot reach.
+Some work needs a **real browser**. Examples are a login to a vendor portal, form entry, clicks in client-rendered UI, and pages that [`web_fetch`](/builtin-tools#web_fetch) and [`web_search`](/builtin-tools#web_search) cannot reach.
 
-Nakama’s agent-browser feature keeps you in the same chat (or automation) while the agent drives an interactive browser on the server through the [`bash`](/builtin-tools#bash) tool.
+Nakama agent-browser keeps you in the same chat or automation. The agent drives an interactive browser on the server through the [`bash`](/builtin-tools#bash) tool.
 
-The mental model:
+How the system works:
 
-- The user still talks to Nakama
-- Nakama matches the opt-in `agent-browser` skill when the task needs interaction or login
-- The agent runs [agent-browser](https://github.com/vercel-labs/agent-browser) CLI commands via `bash`
-- Snapshots return a compact accessibility tree with short refs like `@e2` (token-efficient vs raw HTML)
-- The agent clicks/fills by those refs, then closes the browser when done
+- The user talks to Nakama
+- Nakama matches the opt-in `agent-browser` skill when the task needs interaction or a login
+- The agent runs [agent-browser](https://github.com/vercel-labs/agent-browser) CLI commands through `bash`
+- Snapshots return a compact accessibility tree with short refs like `@e2`
+- This tree uses fewer tokens than raw HTML
+- The agent clicks and fills fields by those refs. Then the agent closes the browser when the task ends
 
-There is no dedicated `browser` builtin. The workflow is **`bash` + the `agent-browser` skill + the host CLI** (and Chrome).
+The product has no dedicated `browser` builtin. The workflow is **`bash` + the `agent-browser` skill + the host CLI** and Chrome.
 
 ## Why use agent-browser
 
@@ -25,19 +26,19 @@ There is no dedicated `browser` builtin. The workflow is **`bash` + the `agent-b
 | Discover sources on the open web | [`web_search`](/builtin-tools#web_search) |
 | Login walls, forms, clicks, client-rendered UI | **`agent-browser` skill + `bash`** |
 
-Use agent-browser when the site has no usable API and the agent must act like a person in a browser — for example checking an order on an e-commerce portal after signing in.
+Use agent-browser when the site has no usable API. The agent must act like a person in a browser. One example is an order status check on an e-commerce portal after a login.
 
 ## How the pieces fit together
 
 | Piece | Role |
 |-------|------|
-| **`agent-browser` skill** | Opt-in bundled skill that teaches when and how to drive the CLI |
+| **`agent-browser` skill** | Opt-in bundled skill. The skill teaches when and how to drive the CLI |
 | **`bash` tool** | Runs `agent-browser` commands in the profile workspace |
-| **Profile Config → Skills** | Assign the skill; **Install** CLI/Chrome on the server and **Add bash** when needed |
-| **Host CLI + Chrome** | Installed via the dashboard **Install** button or manually on the Nakama server |
+| **Profile Config → Skills** | Assign the skill. **Install** the CLI and Chrome on the server. **Add bash** when needed |
+| **Host CLI + Chrome** | Install through the dashboard **Install** button or manually on the Nakama server |
 
 ```text
-User message (interactive / login-walled task)
+User message (interactive task or login wall)
   → skill matcher activates agent-browser
   → Nakama agent calls bash with agent-browser commands
   → Same daemon session for open → snapshot → click/fill in that run
@@ -51,18 +52,18 @@ User message (interactive / login-walled task)
 
 Platform admins:
 
-1. Open **Agent → Profiles**, select the profile, and go to the **Config** tab
-2. In **Skills**, open the skill picker and find **`agent-browser`**
-3. If the skill is blocked, use the buttons in that row / banner:
+1. Open **Agent → Profiles**. Select the profile. Open the **Config** tab.
+2. In **Skills**, open the skill picker. Find **`agent-browser`**.
+3. If the skill is blocked, use the buttons in that row or banner:
    - **Install** — installs the `agent-browser` CLI and Chrome on this Nakama server
-   - **Add bash** — assigns the `bash` tool to the profile (required; Super Bot usually already has it)
-4. Assign the **`agent-browser`** skill once install and bash are ready
+   - **Add bash** — assigns the `bash` tool to the profile. Super Bot usually has bash already.
+4. Assign the **`agent-browser`** skill after install and bash are ready.
 
-The skill is opt-in — it is not auto-assigned to Super Bot or default profiles. Both **bash** and the skill are required; the skill alone cannot open a browser.
+The skill is opt-in. Nakama does not auto-assign it to Super Bot or default profiles. The profile needs **bash** and the skill. The skill alone cannot open a browser.
 
 ### 2. Manual CLI install (optional)
 
-If the dashboard **Install** button is unavailable or fails, install on the host where Nakama’s `bash` tool runs:
+If the dashboard **Install** button is not available or fails, install on the host where the Nakama `bash` tool runs:
 
 ```bash
 npm install -g agent-browser
@@ -75,11 +76,11 @@ On Linux, if Chrome libraries are missing:
 agent-browser install --with-deps
 ```
 
-Then return to the profile **Config** tab and assign the skill (and **Add bash** if needed).
+Then open the profile **Config** tab. Assign the skill. Use **Add bash** if needed.
 
 ### 3. Try it in chat
 
-Ask the profile something that needs a real browser, for example:
+Ask the profile for a task that needs a real browser. Example:
 
 > Open our vendor portal, log in with the credentials I provide, and tell me the status of the latest order.
 
@@ -89,40 +90,40 @@ Or force the skill:
 /skill agent-browser Check https://example.com and summarize the main heading
 ```
 
-The same path works in **automations** once the automation’s profile has bash + the skill and the host CLI is installed.
+The same path works in **automations**. The automation profile needs bash and the skill. The host CLI must be installed.
 
 ## How a typical run works
 
-Within **one** chat turn or automation run:
+In **one** chat turn or automation run:
 
-1. **Open** a URL (or launch the browser, then navigate)
-2. **Snapshot** the page (`snapshot -i`) to get element refs (`@e1`, `@e2`, …)
-3. **Act** — `click`, `fill`, `press`, waits — using those refs; re-snapshot after big UI changes
-4. **Screenshot** (optional) under the profile workspace `artifacts/` directory
-5. **Close** the browser when the task finishes
+1. **Open** a URL. Or launch the browser, then go to the URL.
+2. **Snapshot** the page (`snapshot -i`) to get element refs (`@e1`, `@e2`, …).
+3. **Act** — do `click`, `fill`, and `press`. Wait when needed. Use those refs. Take a new snapshot after large UI changes.
+4. **Screenshot** (optional) under the profile workspace `artifacts/` directory.
+5. **Close** the browser when the task ends.
 
-Across runs, sessions are **fresh** by default: no sticky cookies or restored login state unless you change product policy later. The agent re-authenticates within the run when the task needs it.
+Across runs, sessions are **fresh** by default. The product does not keep sticky cookies or a restored login state. The agent logs in again in the run when the task needs it.
 
 ## Credentials and safety
 
-- Prefer credentials the user supplies in the prompt (or already known for that task)
-- Do not expect Nakama to store site passwords for agent-browser in v1
-- Agents should not echo passwords in summaries or screenshot password fields
-- Viewers cannot invoke agents, so they cannot trigger browser runs
+- Use credentials that the user supplies in the prompt. You can also use credentials that are already known for that task.
+- Do not expect Nakama to store site passwords for agent-browser in v1.
+- Agents must not echo passwords in summaries. Agents must not take screenshots of password fields.
+- Viewers cannot invoke agents. Viewers cannot start browser runs.
 
 ## Troubleshooting
 
-| Symptom | What to check |
-|---------|----------------|
-| Agent never opens a browser | Is `agent-browser` assigned? Does the message look like interactive/login-walled work? Try `/skill agent-browser …` |
+| Symptom | What to examine |
+|---------|-----------------|
+| Agent never opens a browser | Is `agent-browser` assigned? Does the message look like interactive work or a login wall? Try `/skill agent-browser …` |
 | `command not found` / `ENOENT` | Use **Install** on the profile Config → Skills picker, or install manually (`npm install -g agent-browser && agent-browser install`) |
-| Skill assigned but nothing runs | Profile also needs **`bash`** — use **Add bash** in the skill picker if prompted |
-| Clicks miss or fail after navigation | Agent should take a **fresh snapshot** before using refs again |
-| Daemon seems stuck | Ask the agent to run `agent-browser close` or `agent-browser close --all` (or `agent-browser doctor`) |
+| Skill assigned but nothing runs | The profile also needs **`bash`**. Use **Add bash** in the skill picker if the UI shows the prompt |
+| Clicks miss or fail after navigation | The agent must take a **fresh snapshot** before it uses refs again |
+| Daemon seems stuck | Ask the agent to run `agent-browser close` or `agent-browser close --all`. Or run `agent-browser doctor` |
 
 ## Next steps
 
 - [Skills](/skills) — bundled skills catalog and assignment
 - [Builtin tools](/builtin-tools#bash) — `bash` parameters and availability
-- [Coding agent](/coding-agent) — similar bash + skill pattern for repo coding work
+- [Coding agent](/coding-agent) — similar bash and skill pattern for repo coding work
 - [agent-browser](https://github.com/vercel-labs/agent-browser) — upstream CLI reference

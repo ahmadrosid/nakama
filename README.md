@@ -11,18 +11,26 @@
 
 # Nakama
 
-> Deploy your own AI Agent platform as easily as spinning up WordPress.
-
 [Documentation](https://ahmadrosid.github.io/nakama/) · [Demo](https://demo.getnakama.cloud) · [Managed hosting](https://getnakama.cloud/)
 
-Nakama is a small, self-hosted Bun + TypeScript monorepo for running AI agents. Inspired by [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes Agent](https://github.com/nousresearch/hermes-agent) — same self-hosted agent idea (tools, channels, soul, automations) — but **multi-tenant by design**. Those projects target one operator on one machine; Nakama is one server, many orgs, with isolated profiles, sessions, member invites, and roles built in.
+Your next hire will still be human.
+With Nakama, that person works on important tasks.
+The AI agents do the trivial tasks.
+
+Nakama is a small, self-hosted service for AI agents. You can imagine that nakama is like [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes Agent](https://github.com/nousresearch/hermes-agent) but it design to work with your teams.
+
+- Nakama is multi-tenant by design.
+- Those projects serve one operator on one machine.
+- Nakama is one server for many orgs.
+- Each org has isolated profiles, sessions, member invites, and roles.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/nakama_demo_dark.png" />
   <img alt="Nakama dashboard demo" src="assets/nakama_demo_light.png" />
 </picture>
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for system design, or the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
+Open [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design.
+Open the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
 
 ## Quick start
 
@@ -35,11 +43,17 @@ Open the live demo at [https://demo.getnakama.cloud](https://demo.getnakama.clou
 
 ### Managed hosting
 
-The fastest way to try Nakama is [Nakama Cloud](https://getnakama.cloud/). Create an account, provision an instance, complete the first-time setup wizard in the browser, and you are live — no Bun, Docker, or VPS required.
+Use [Nakama Cloud](https://getnakama.cloud/) to try Nakama with the least work.
+
+1. Create an account.
+2. Provision an instance.
+3. Complete the first-time setup wizard in the browser.
+
+You do not need Bun, Docker, or a VPS.
 
 ### Run locally
 
-Requires [Bun](https://bun.sh).
+You need [Bun](https://bun.sh).
 
 ```bash
 # Install dependencies
@@ -49,9 +63,9 @@ bun install
 bun run dev:web
 ```
 
-Visit web dashboard: http://localhost:3000
+Open the web dashboard: http://localhost:3000
 
-Or run the server on its own:
+Or start the server alone:
 
 ```bash
 bun run dev:server
@@ -61,7 +75,7 @@ bun run dev:server
 
 You can also run Nakama with Docker.
 
-**Prebuilt image (quickest):**
+**Prebuilt image (fastest):**
 
 ```bash
 # Pull and run the latest image
@@ -82,17 +96,19 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ./scripts/docker-build-run.sh
 ```
 
-The dashboard will be available at http://localhost:4310.
+Open the dashboard at http://localhost:4310.
 
 ### Integrations
 
-Nakama integrates with **Telegram**, **WhatsApp**, and **Composio** (SaaS app connections). Enable them in the web app under **Integrations**.
+Nakama connects to **Telegram**, **WhatsApp**, and **Composio**.
+With Composio, you can connect to more than 1,000 external apps.
+Enable them in the web app under **Integrations**.
 
-For Composio, save your API key under **Integrations → Composio** (stored in `~/.nakama/composio/config.ini`). Org admins connect OAuth apps on Integrations; assign toolkits per profile on **Profiles**.
+On the first run, the server asks for a provider and an API key if none is configured.
+The server saves settings to `~/.nakama/config.ini`.
 
-On first run, the server prompts for a provider and API key if none is configured. Settings are saved to `~/.nakama/config.ini`.
-
-The server listens on `http://127.0.0.1:4310` by default. Interactive API docs are available at `http://127.0.0.1:4310/docs`.
+The server listens on `http://127.0.0.1:4310` by default.
+Interactive API docs are at `http://127.0.0.1:4310/docs`.
 
 ## License
 
