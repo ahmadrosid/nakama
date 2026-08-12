@@ -69,9 +69,7 @@ function DailyChart({ days }: { days: Day[] }) {
           role="img"
           viewBox={`0 0 100 ${height}`}
         >
-          <title>
-            Bytes produced per day, and the part kept out of context
-          </title>
+          <title>Bytes produced per day, and the part saved of context</title>
           <line
             stroke="var(--grid)"
             strokeWidth={1}
@@ -147,7 +145,7 @@ function DailyChart({ days }: { days: Day[] }) {
           <div className="pointer-events-none absolute top-0 right-0 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm">
             <p className="font-medium">{days[hover].day}</p>
             <p className="text-muted-foreground">
-              {formatBytes(days[hover].bytesRemoved)} kept out of{" "}
+              {formatBytes(days[hover].bytesRemoved)} saved of{" "}
               {formatBytes(days[hover].bytesIn)}
             </p>
           </div>
@@ -238,9 +236,16 @@ export function TokenOptimizationCard() {
               </a>
             ) : null}
           </div>
-          <p className="truncate text-muted-foreground text-xs">
-            {omni?.tools.join(", ")}
-          </p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {omni?.tools.map((tool) => (
+              <span
+                className="rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground leading-none"
+                key={tool}
+              >
+                {tool}
+              </span>
+            ))}
+          </div>
         </div>
         <Switch
           checked={Boolean(omni?.enabled)}
@@ -258,12 +263,18 @@ export function TokenOptimizationCard() {
       ) : (
         <>
           <div>
-            <p className="font-semibold text-3xl tabular-nums">
-              Token optimize saved - {percent.toFixed(0)}%
+            {/* A stat tile is read by its number, so the number leads. The
+                colour is the "saved" series colour, not a decorative one,
+                so colour still carries identity here. */}
+            <p className="font-semibold text-4xl tabular-nums leading-none">
+              <span style={{ color: "var(--out)" }}>{percent.toFixed(0)}%</span>
+              <span className="ml-2 font-normal text-lg text-muted-foreground">
+                saved
+              </span>
             </p>
-            <p className="text-muted-foreground text-sm">
-              {formatBytes(totals.bytesRemoved)} kept out of{" "}
-              {formatBytes(totals.bytesIn)} in {windowDays} days
+            <p className="mt-1.5 text-muted-foreground text-sm">
+              {formatBytes(totals.bytesRemoved)} of{" "}
+              {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
             </p>
           </div>
 
@@ -275,7 +286,7 @@ export function TokenOptimizationCard() {
                   className="size-2.5 rounded-[2px]"
                   style={{ background: "var(--out)" }}
                 />
-                <span className="text-muted-foreground">kept out</span>
+                <span className="text-muted-foreground">saved</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <span
@@ -304,7 +315,7 @@ export function TokenOptimizationCard() {
                   </tr>
                 ))}
                 <tr className="border-border/60 border-t text-muted-foreground">
-                  <td className="py-1.5">not optimised</td>
+                  <td className="py-1.5">passthrough</td>
                   <td className="py-1.5 text-right tabular-nums">
                     {arms.control.calls} calls
                   </td>
@@ -330,7 +341,7 @@ export function TokenOptimizationCard() {
           }
         />
         <TooltipContent className="max-w-xs text-xs" side="top">
-          Share of tool output kept out of the conversation at insertion, over{" "}
+          Share of tool output saved of the conversation at insertion, over{" "}
           {windowDays} days. Bytes, not tokens and not cost: shortened results
           are re-sent later as cache reads billed at a fraction, so this
           percentage is not a percentage off a bill.

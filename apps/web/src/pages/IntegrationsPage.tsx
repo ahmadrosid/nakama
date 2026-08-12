@@ -60,7 +60,7 @@ const INTEGRATION_SECTIONS = [
     label: "Local token",
   },
   {
-    description: "Tool output optimisers",
+    description: "Shrink tool output before the model reads it",
     icon: RocketIcon,
     id: "optimization",
     label: "Token optimisation",
