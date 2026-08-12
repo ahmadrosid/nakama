@@ -124,6 +124,15 @@ describe("omni fails open", () => {
   });
 });
 
+describe("omni install probe", () => {
+  test("reports missing when the binary cannot be run", async () => {
+    // Fresh module so the cached probe does not leak between tests.
+    process.env.PATH = "/nonexistent";
+    const fresh = await import(`./omni?probe=${Date.now()}`);
+    expect(await fresh.isOmniInstalled()).toBe(false);
+  });
+});
+
 describe("omni_retrieve input", () => {
   test("rejects a handle that is not hex", async () => {
     for (const handle of ["", "not-hex", "../../etc/passwd", "; rm -rf /"]) {

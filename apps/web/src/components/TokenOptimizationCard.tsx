@@ -256,6 +256,14 @@ export function TokenOptimizationCard() {
 
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
+      {omni?.enabled && omni.installed === false ? (
+        <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-amber-700 text-xs dark:text-amber-400">
+          The <code className="font-mono">{omni.id}</code> binary is not on this
+          host, so nothing is being shortened. Tool output passes through
+          untouched until it is installed.
+        </p>
+      ) : null}
+
       {totals.calls === 0 ? (
         <p className="text-muted-foreground text-sm">
           Nothing measured in the last {windowDays} days.

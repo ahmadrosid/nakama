@@ -67,6 +67,23 @@ export function isOmniEnabled(): boolean {
   return process.env.NAKAMA_OMNI === "1";
 }
 
+let installedProbe: Promise<boolean> | null = null;
+
+/**
+ * Whether the binary can actually be run here. Probed once and cached, because
+ * the answer only changes when the image does.
+ *
+ * Worth its own signal rather than inferring it from a zero: the optimiser fails
+ * open, so a missing binary and an idle day look identical on the panel, and an
+ * operator who switched it on deserves to be told it is not there.
+ */
+export function isOmniInstalled(): Promise<boolean> {
+  installedProbe ??= runOmni(["--version"], "", {}).then(
+    (out) => out !== null && out.trim().length > 0
+  );
+  return installedProbe;
+}
+
 /**
  * Whether the optimiser runs for this call. An explicit org setting wins in both
  * directions, so an operator who turned it off in the UI is not overridden by

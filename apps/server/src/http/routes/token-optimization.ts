@@ -1,4 +1,9 @@
-import { CONTROL_ID, isOmniEnabled, OPTIMIZER_ID } from "@nakama/core";
+import {
+  CONTROL_ID,
+  isOmniEnabled,
+  isOmniInstalled,
+  OPTIMIZER_ID,
+} from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -28,9 +33,10 @@ export function registerTokenOptimizationRoutes(
 ): void {
   app.get("/v1/token-optimization", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const [rows, settings] = await Promise.all([
+    const [rows, settings, installed] = await Promise.all([
       options.databaseAdapter.listToolOutputSavings(orgId),
       options.databaseAdapter.getWorkspaceSettings(),
+      isOmniInstalled(),
     ]);
     const enabled = settings?.tokenOptimizerEnabled ?? isOmniEnabled();
 

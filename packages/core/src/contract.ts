@@ -219,6 +219,10 @@ export interface TokenOptimizationResponse {
   optimizers: Array<{
     enabled: boolean;
     id: string;
+    /** Whether the binary is reachable on this host. Enabled without installed
+     * is the case an operator has to be told about, because the optimiser fails
+     * open and would otherwise look merely idle. */
+    installed: boolean;
     tools: string[];
   }>;
   totals: {
