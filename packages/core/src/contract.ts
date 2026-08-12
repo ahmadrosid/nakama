@@ -735,6 +735,9 @@ export interface ChatContextUsage {
    * announcing a feature. Bytes, not tokens: the label must carry a byte unit.
    */
   bytesKeptOut?: number;
+  /** Everything the handled tools produced this session, the denominator for
+   * the percentage. Present whenever bytesKeptOut is. */
+  bytesProduced?: number;
   contextWindow: number;
   source: ChatContextUsageSource;
   /** Denominator matching compaction usable context (window minus reserved output). */

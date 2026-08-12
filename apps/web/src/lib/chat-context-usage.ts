@@ -41,8 +41,12 @@ export function formatContextUsageLabel(usage: ChatContextUsage): string {
   const sourceNote = usage.source === "estimate" ? " · estimated" : "";
   // "less context" rather than "saved", and always with a byte unit: this sits
   // beside two token counts, and a bare number there reads as tokens.
-  const optimizedNote = usage.bytesKeptOut
-    ? ` · ${formatBytes(usage.bytesKeptOut)} less context`
-    : "";
+  // The percentage is what was asked for; the byte figure rides along because
+  // this sits beside two token counts and a lone percentage there gets read as
+  // a bill, not as output that never had to be sent.
+  const optimizedNote =
+    usage.bytesKeptOut && usage.bytesProduced
+      ? ` · saved ${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}% (${formatBytes(usage.bytesKeptOut)})`
+      : "";
   return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizedNote}`;
 }

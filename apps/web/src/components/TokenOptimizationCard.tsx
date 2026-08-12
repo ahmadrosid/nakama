@@ -1,4 +1,5 @@
 import type { TokenOptimizationResponse } from "@nakama/core/contract";
+import { GithubIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -14,6 +15,11 @@ import { client, formatError } from "@/lib/client";
  * worst adjacent pair ΔE 24.7 protan / 33.6 normal in light, 26.8 / 31.8 in
  * dark). Do not substitute a hue without re-running that check.
  */
+/** Where each optimiser lives, so the card can point at what it is running. */
+const OPTIMIZER_HOMEPAGE: Record<string, string> = {
+  omni: "https://github.com/fajarhide/omni",
+};
+
 const CHART_STYLE = `
 .tokenopt { --out: #2a78d6; --in: #eb6834; --grid: rgb(0 0 0 / 0.08); }
 @media (prefers-color-scheme: dark) {
@@ -36,6 +42,10 @@ function formatBytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDay(day: string): string {
+  return `${Number(day.slice(8, 10))}/${Number(day.slice(5, 7))}`;
+}
+
 type Day = TokenOptimizationResponse["days"][number];
 
 /**
@@ -50,7 +60,7 @@ function DailyChart({ days }: { days: Day[] }) {
   const width = slot * 0.62;
 
   return (
-    <figure className="m-0">
+    <figure className="m-0 mb-4">
       <div className="relative">
         <svg
           className="w-full"
@@ -115,6 +125,24 @@ function DailyChart({ days }: { days: Day[] }) {
             );
           })}
         </svg>
+        {/* Selective labels, not one per bar: 30 of them collide, and the
+            reader needs anchors rather than a full axis. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -bottom-4 h-4"
+        >
+          {days.map((day, index) =>
+            index % 7 === 0 || index === days.length - 1 ? (
+              <span
+                className="absolute -translate-x-1/2 text-[10px] text-muted-foreground tabular-nums"
+                key={day.day}
+                style={{ left: `${(index + 0.5) * slot}%` }}
+              >
+                {formatDay(day.day)}
+              </span>
+            ) : null
+          )}
+        </div>
         {hover !== null && days[hover] ? (
           <div className="pointer-events-none absolute top-0 right-0 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm">
             <p className="font-medium">{days[hover].day}</p>
@@ -183,10 +211,11 @@ export function TokenOptimizationCard() {
 
   const { arms, byTool, days, optimizers, totals, windowDays } = data;
   const omni = optimizers?.[0];
+  // Denominator is everything the handled tools produced, both arms. Dividing
+  // by the optimised calls alone would be a percentage of a set chosen after
+  // the fact, and it would not match the per-session figure on the chat chip.
   const percent =
-    arms.optimized.bytesIn > 0
-      ? (100 * totals.bytesRemoved) / arms.optimized.bytesIn
-      : 0;
+    totals.bytesIn > 0 ? (100 * totals.bytesRemoved) / totals.bytesIn : 0;
 
   return (
     <div className="tokenopt space-y-5 p-4">
@@ -194,9 +223,22 @@ export function TokenOptimizationCard() {
       <style dangerouslySetInnerHTML={{ __html: CHART_STYLE }} />
 
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
-          <p className="text-muted-foreground text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
+            {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
+              <a
+                aria-label={`${omni.id} on GitHub`}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+                href={OPTIMIZER_HOMEPAGE[omni.id]}
+                rel="noreferrer noopener"
+                target="_blank"
+              >
+                <GithubIcon aria-hidden size={14} />
+              </a>
+            ) : null}
+          </div>
+          <p className="truncate text-muted-foreground text-xs">
             {omni?.tools.join(", ")}
           </p>
         </div>
@@ -217,11 +259,11 @@ export function TokenOptimizationCard() {
         <>
           <div>
             <p className="font-semibold text-3xl tabular-nums">
-              {formatBytes(totals.bytesRemoved)}
+              Token optimize saved - {percent.toFixed(0)}%
             </p>
             <p className="text-muted-foreground text-sm">
-              less context in {windowDays} days, {percent.toFixed(0)}% of what
-              those calls produced
+              {formatBytes(totals.bytesRemoved)} kept out of{" "}
+              {formatBytes(totals.bytesIn)} in {windowDays} days
             </p>
           </div>
 
@@ -288,10 +330,10 @@ export function TokenOptimizationCard() {
           }
         />
         <TooltipContent className="max-w-xs text-xs" side="top">
-          Bytes kept out of the conversation at insertion, over {windowDays}{" "}
-          days. Not tokens and not cost: shortened results are re-sent later as
-          cache reads billed at a fraction, so bytes cannot be multiplied by a
-          price.
+          Share of tool output kept out of the conversation at insertion, over{" "}
+          {windowDays} days. Bytes, not tokens and not cost: shortened results
+          are re-sent later as cache reads billed at a fraction, so this
+          percentage is not a percentage off a bill.
         </TooltipContent>
       </Tooltip>
     </div>

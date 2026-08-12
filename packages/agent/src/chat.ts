@@ -153,11 +153,16 @@ export function createAgentChatSession(
   // purpose: the chip beside it reports this conversation, not the org, and
   // showing an org total there would be read as this chat's saving.
   let bytesKeptOut = 0;
+  // The denominator is every byte the handled tools produced this session,
+  // including calls where nothing was removed. Dividing only by the optimised
+  // calls would report a percentage of a set chosen after the fact.
+  let bytesProduced = 0;
   const callerRecord = options.toolContext?.recordToolOutputSavings;
   const toolContext: ToolContext = {
     ...options.toolContext,
     recordToolOutputSavings: (saving) => {
       bytesKeptOut += Math.max(0, saving.bytesIn - saving.bytesOut);
+      bytesProduced += saving.bytesIn;
       callerRecord?.(saving);
     },
   };
@@ -190,6 +195,7 @@ export function createAgentChatSession(
       // Reported only once an optimiser has actually removed something in this
       // session, so the chip stays silent rather than announcing a feature.
       bytesKeptOut: bytesKeptOut > 0 ? bytesKeptOut : undefined,
+      bytesProduced: bytesKeptOut > 0 ? bytesProduced : undefined,
       contextWindow: options.compaction.contextWindow,
       source,
       usableContextTokens: usableContextTokens(options.compaction),
