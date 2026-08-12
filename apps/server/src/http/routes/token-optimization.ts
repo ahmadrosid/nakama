@@ -102,7 +102,9 @@ export function registerTokenOptimizationRoutes(
       days: [...days.values()],
       // One entry today. The shape is a list because a second optimiser attaches
       // in a different place and would appear beside this one, not replace it.
-      optimizers: [{ enabled, id: OPTIMIZER_ID, tools: ["bash", "read_file"] }],
+      optimizers: [
+        { enabled, id: OPTIMIZER_ID, installed, tools: ["bash", "read_file"] },
+      ],
       totals: {
         bytesIn: optimized.bytesIn + control.bytesIn,
         bytesRemoved: optimized.bytesIn - optimized.bytesOut,
