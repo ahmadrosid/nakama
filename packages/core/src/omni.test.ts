@@ -81,12 +81,28 @@ describe("omni result passthrough", () => {
     expect(await distillToolResult("bash", result, {})).toBe(result);
     // An automation run has a run id and no session id. It is still one
     // conversation, so it is a valid scope and must not be skipped.
-    expect(
-      await distillToolResult("bash", result, {
-        automationRunId: "run_1",
-        orgId: "o",
-      })
-    ).not.toBe(result);
+    //
+    // Observed through the recorder rather than through the returned object:
+    // without the binary the optimiser fails open and returns the very same
+    // object, so identity would only prove that OMNI happens to be installed on
+    // the machine running the test. The recorder fires either way, and only
+    // once the scope gate has passed.
+    process.env.PATH = "/nonexistent";
+    const seen: string[] = [];
+    await distillToolResult("bash", result, {
+      automationRunId: "run_1",
+      orgId: "o",
+      recordToolOutputSavings: (saving) => seen.push(saving.tool),
+    });
+    expect(seen).toEqual(["bash"]);
+
+    // And the other way: no scope at all means it never reaches the recorder.
+    const unscoped: string[] = [];
+    await distillToolResult("bash", result, {
+      orgId: "o",
+      recordToolOutputSavings: (saving) => unscoped.push(saving.tool),
+    });
+    expect(unscoped).toEqual([]);
   });
 
   test("leaves non-object and fieldless results alone", async () => {
