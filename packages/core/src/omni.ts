@@ -17,10 +17,13 @@ import type { JsonSchema, ToolContext, ToolDefinition } from "./contract";
 import { getOrgMemoryDir } from "./soul/resolve";
 
 /**
- * OMNI matches these exactly and never normalizes them on this payload shape, so
- * `bash` reaches a generic arm that head-truncates and never folds, while `Bash`
- * reaches the real pipeline. Sending the wrong case scores *better* on bytes
- * while losing content, so it fails silently. See fajarhide/omni#488.
+ * A compatibility shim, kept deliberately.
+ *
+ * OMNI 0.7.3 normalizes these names itself, so the mapping is redundant there.
+ * Before it, the ClaudeCode payload shape passed `tool_name` through unchanged,
+ * and a snake_case name reached a generic arm that head-truncated instead of
+ * folding. That failure was silent and scored *better* on bytes while losing
+ * content, so mapping explicitly costs nothing and removes the possibility.
  */
 const OMNI_TOOL_NAMES: Record<string, string> = {
   bash: "Bash",

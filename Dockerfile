@@ -20,10 +20,10 @@ WORKDIR /app
 
 # Optional tool-output optimiser. Empty by default, so the published image is
 # unchanged and carries no binary most deployments would never run. Build with
-# --build-arg OMNI_VERSION=0.7.2 to include it, then set NAKAMA_OMNI=1.
+# --build-arg OMNI_VERSION=0.7.3 to include it, then set NAKAMA_OMNI=1.
 # The release is a static musl build, which runs on this glibc base, and the
 # published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION="0.7.3"
+ARG OMNI_VERSION=""
 RUN if [ -n "$OMNI_VERSION" ]; then \
       set -eu; \
       apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
