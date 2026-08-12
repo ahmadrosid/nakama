@@ -5,6 +5,11 @@ import { Input } from "@/components/ui/input";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
+import {
+  DEMO_LOGIN_EMAIL,
+  DEMO_LOGIN_PASSWORD,
+  isDemoLoginHost,
+} from "@/lib/demo-login";
 import { SETUP_PATH } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
 
@@ -20,8 +25,11 @@ function resolvePostAuthPath(
 }
 
 export function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const demoLogin = isDemoLoginHost();
+  const [email, setEmail] = useState(demoLogin ? DEMO_LOGIN_EMAIL : "");
+  const [password, setPassword] = useState(
+    demoLogin ? DEMO_LOGIN_PASSWORD : ""
+  );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, isAuthenticated } = useAuth();
@@ -66,10 +74,26 @@ export function LoginPage() {
           <h1 className="font-semibold text-xl tracking-tight">
             Sign in to Nakama
           </h1>
-          <p className="text-muted-foreground text-sm">
-            Enter your credentials to access your account.
-          </p>
+          {demoLogin ? null : (
+            <p className="text-muted-foreground text-sm">
+              Enter your credentials to access your account.
+            </p>
+          )}
         </div>
+        {demoLogin ? (
+          <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-muted-foreground">Email</span>
+              <span className="text-right font-mono">{DEMO_LOGIN_EMAIL}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-muted-foreground">Password</span>
+              <span className="text-right font-mono">
+                {DEMO_LOGIN_PASSWORD}
+              </span>
+            </div>
+          </div>
+        ) : null}
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label className="mb-1 block font-medium text-sm" htmlFor="email">

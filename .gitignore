@@ -20,8 +20,6 @@ docs/plans/*
 docs/brainstorms/*
 .worktrees/
 outputs/
-pitch-deck.pdf
-pitch-deck.md
 .commandcode
 .claude/
 .local-poc/

@@ -8,6 +8,7 @@ import {
   formatServerError,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
   type StreamEvent,
@@ -400,6 +401,7 @@ export function parseChannel(value: string | undefined): AgentChannel {
 }
 
 const STREAM_TIMEOUT_MS = resolveChatStreamTimeoutMs();
+const FIRST_TOKEN_TIMEOUT_MS = resolveChatFirstTokenTimeoutMs();
 
 function createStreamSenders(
   sessionId: string,
@@ -550,7 +552,11 @@ export function streamMessage(
   session: AgentChatSession,
   input: SendMessageInput,
   onComplete?: (terminal: StreamEvent) => void,
-  requestSignal?: AbortSignal
+  requestSignal?: AbortSignal,
+  // Only tests pass these. The resolved values clamp to 60s and 5s minimums,
+  // which are far too long to wait for in a suite.
+  timeoutMs: number = STREAM_TIMEOUT_MS,
+  firstTokenTimeoutMs: number = FIRST_TOKEN_TIMEOUT_MS
 ): Response {
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
@@ -569,9 +575,21 @@ export function streamMessage(
       turnAbort.abort();
     },
     async start(controller) {
-      const { send, getTerminal } = createStreamSenders(sessionId, (chunk) => {
-        controller.enqueue(chunk);
-      });
+      const { send: publish, getTerminal } = createStreamSenders(
+        sessionId,
+        (chunk) => {
+          controller.enqueue(chunk);
+        }
+      );
+
+      // Anything the provider produces clears the first-token deadline. The
+      // keepalive below deliberately does not go through here: it is the
+      // server's own ping and says nothing about whether the provider is alive.
+      let sawProviderOutput = false;
+      const send = (event: StreamEvent) => {
+        sawProviderOutput = true;
+        publish(event);
+      };
 
       const keepalive = setInterval(() => {
         try {
@@ -581,21 +599,52 @@ export function streamMessage(
         }
       }, keepaliveIntervalMs);
 
+      const deadlines: ReturnType<typeof setTimeout>[] = [];
+      // A deadline aborts the turn, so turnSignal.aborted alone can no longer
+      // tell a cancel from a timeout. Without this the user sees "Turn
+      // cancelled." for a provider that simply went quiet.
+      let timedOut = false;
+
+      const failAfter = (ms: number, message: string, when?: () => boolean) =>
+        new Promise<never>((_, reject) => {
+          deadlines.push(
+            setTimeout(() => {
+              if (when && !when()) {
+                return;
+              }
+
+              timedOut = true;
+              reject(new Error(message));
+              // After rejecting, so the race reports the timeout and not the
+              // abort. The provider request is still open at this point and
+              // nothing else ever stops it.
+              turnAbort.abort();
+            }, ms)
+          );
+        });
+
       try {
-        const reply = await Promise.race([
+        const raced: Promise<string>[] = [
           session.sendStream(input, buildAgentStreamHandlers(send), {
             signal: turnSignal,
           }),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => {
-              reject(
-                new Error(
-                  `Chat timed out after ${Math.round(STREAM_TIMEOUT_MS / 1000)}s waiting for the provider. Try another model or check provider settings.`
-                )
-              );
-            }, STREAM_TIMEOUT_MS);
-          }),
-        ]);
+          failAfter(
+            timeoutMs,
+            `Chat timed out after ${Math.round(timeoutMs / 1000)}s waiting for the provider. Try another model or check provider settings.`
+          ),
+        ];
+
+        if (firstTokenTimeoutMs > 0) {
+          raced.push(
+            failAfter(
+              firstTokenTimeoutMs,
+              `The provider accepted the request but sent nothing for ${Math.round(firstTokenTimeoutMs / 1000)}s. Try another model or check provider settings.`,
+              () => !sawProviderOutput
+            )
+          );
+        }
+
+        const reply = await Promise.race(raced);
 
         const contextUsage = session.getContextUsage() ?? undefined;
         send({
@@ -605,12 +654,18 @@ export function streamMessage(
         });
       } catch (error) {
         send({
-          error: turnSignal.aborted
-            ? "Turn cancelled."
-            : formatServerError(error),
+          error:
+            turnSignal.aborted && !timedOut
+              ? "Turn cancelled."
+              : formatServerError(error),
           type: "error",
         });
       } finally {
+        // Every turn scheduled these. Left pending, a long-running server
+        // accumulates live timers per turn for the whole timeout window.
+        for (const handle of deadlines) {
+          clearTimeout(handle);
+        }
         clearInterval(keepalive);
 
         const terminal =

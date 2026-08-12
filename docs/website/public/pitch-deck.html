@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>Nakama — Customer Pitch Deck</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    :root {
+      --bg: #f7f4ee;
+      --bg-deep: #efe8dc;
+      --ink: #1c1917;
+      --ink-muted: #57534e;
+      --brand: #a16207;
+      --brand-strong: #ca8a04;
+      --line: color-mix(in oklab, #1c1917 12%, transparent);
+      --surface: color-mix(in oklab, #ffffff 72%, #f7f4ee);
+      --ok: #166534;
+      --ease: cubic-bezier(0.2, 0, 0, 1);
+      --slide-pad: clamp(2rem, 6vw, 5rem);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: Sora, ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    body {
+      background:
+        radial-gradient(1200px 700px at 12% -10%, #fde68a55, transparent 55%),
+        radial-gradient(900px 600px at 100% 0%, #fdba7440, transparent 50%),
+        linear-gradient(160deg, #faf7f1 0%, #f3eee4 48%, #ebe4d6 100%);
+    }
+
+    .deck {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      visibility: hidden;
+      gap: 1.25rem;
+      align-content: center;
+      padding: var(--slide-pad);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(18px);
+      transition:
+        opacity 420ms var(--ease),
+        transform 420ms var(--ease),
+        visibility 0ms 420ms;
+    }
+
+    .slide.active {
+      visibility: visible;
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateY(0);
+      transition:
+        opacity 420ms var(--ease),
+        transform 420ms var(--ease),
+        visibility 0ms 0ms;
+    }
+
+    .slide.active .reveal {
+      animation: rise 520ms var(--ease) both;
+    }
+
+    .slide.active .reveal:nth-child(1) {
+      animation-delay: 40ms;
+    }
+    .slide.active .reveal:nth-child(2) {
+      animation-delay: 120ms;
+    }
+    .slide.active .reveal:nth-child(3) {
+      animation-delay: 200ms;
+    }
+    .slide.active .reveal:nth-child(4) {
+      animation-delay: 280ms;
+    }
+    .slide.active .reveal:nth-child(5) {
+      animation-delay: 360ms;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+        filter: blur(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide,
+      .slide.active .reveal {
+        filter: none !important;
+        transform: none !important;
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    .brand-mark {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .brand-mark img {
+      width: 52px;
+      height: 52px;
+      outline: 1px solid oklch(0 0 0 / 0.1);
+      object-fit: contain;
+    }
+
+    .brand-mark .wordmark {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 2.35rem;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--brand);
+    }
+
+    .eyebrow {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--brand);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      line-height: 1.08;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 16ch;
+      font-size: clamp(2.4rem, 6vw, 4.4rem);
+    }
+
+    h2 {
+      max-width: 22ch;
+      font-size: clamp(1.9rem, 4.4vw, 3.2rem);
+    }
+
+    .lede {
+      max-width: 42ch;
+      margin: 0;
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+      line-height: 1.45;
+      color: var(--ink-muted);
+      text-wrap: pretty;
+    }
+
+    .sub {
+      max-width: 46ch;
+      margin: 0;
+      font-size: clamp(1rem, 1.6vw, 1.2rem);
+      line-height: 1.5;
+      color: var(--ink);
+    }
+
+    .meta {
+      font-size: 0.95rem;
+      color: var(--ink-muted);
+    }
+
+    .meta a {
+      color: var(--brand);
+      text-decoration: none;
+      border-bottom: 1px solid
+        color-mix(in oklab, var(--brand) 45%, transparent);
+    }
+
+    .meta a:hover {
+      border-bottom-color: var(--brand);
+    }
+
+    .stack {
+      display: grid;
+      gap: 0.85rem;
+      max-width: 54rem;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .stack li {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.9rem;
+      align-items: start;
+      padding: 0.95rem 1.1rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    .stack .n {
+      padding-top: 0.15rem;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.35rem;
+      line-height: 1;
+      color: var(--brand);
+    }
+
+    .stack strong {
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .stack span {
+      font-size: 0.98rem;
+      line-height: 1.4;
+      color: var(--ink-muted);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      max-width: 56rem;
+    }
+
+    @media (max-width: 800px) {
+      .split,
+      .compare,
+      .stats,
+      .usecase-grid,
+      .cta-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      padding: 1.25rem 1.35rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .card h3 {
+      margin: 0 0 0.45rem;
+      font-size: 1.15rem;
+    }
+
+    .card p {
+      margin: 0;
+      line-height: 1.45;
+      color: var(--ink-muted);
+      text-wrap: pretty;
+    }
+
+    .usecase-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      max-width: 56rem;
+    }
+
+    .usecase-grid .card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: start;
+    }
+
+    .usecase-grid .n {
+      padding-top: 0.1rem;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.25rem;
+      line-height: 1;
+      color: var(--brand);
+    }
+
+    .usecase-grid .wide {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 800px) {
+      .usecase-grid .wide {
+        grid-column: auto;
+      }
+    }
+
+    .bullets {
+      display: grid;
+      gap: 0.7rem;
+      max-width: 42rem;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .bullets li {
+      position: relative;
+      padding-left: 1.2rem;
+      line-height: 1.4;
+      color: var(--ink-muted);
+    }
+
+    .bullets li::before {
+      position: absolute;
+      top: 0.55em;
+      left: 0;
+      width: 0.45rem;
+      height: 0.45rem;
+      content: "";
+      background: var(--brand-strong);
+      border-radius: 50%;
+    }
+
+    .bullets strong {
+      color: var(--ink);
+    }
+
+    .soul-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      max-width: 56rem;
+    }
+
+    @media (max-width: 900px) {
+      .soul-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .soul-grid .card code {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85rem;
+      color: var(--brand);
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(3, 1fr);
+      gap: 0.5rem;
+      max-width: 58rem;
+      font-size: 0.92rem;
+    }
+
+    .compare .h,
+    .compare .c {
+      padding: 0.75rem 0.8rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .compare .h {
+      font-weight: 600;
+      background: color-mix(in oklab, var(--brand) 10%, white);
+      border-color: color-mix(in oklab, var(--brand) 25%, transparent);
+    }
+
+    .compare .nakama {
+      font-weight: 600;
+      color: var(--ok);
+      background: color-mix(in oklab, #bbf7d0 35%, white);
+      border-color: color-mix(in oklab, #166534 18%, transparent);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.85rem;
+      max-width: 42rem;
+    }
+
+    .stat {
+      padding: 1.2rem 1.3rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .stat .v {
+      font-family: Fraunces, Georgia, serif;
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: var(--brand);
+    }
+
+    .stat .l {
+      margin-top: 0.35rem;
+      font-size: 0.95rem;
+      color: var(--ink-muted);
+    }
+
+    .cta-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1.4fr;
+      gap: 1rem;
+      align-items: start;
+      max-width: 58rem;
+    }
+
+    .cta-grid h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.05rem;
+    }
+
+    pre {
+      padding: 0.9rem 1rem;
+      margin: 0.6rem 0 0;
+      overflow-x: auto;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #f5f5f4;
+      white-space: pre-wrap;
+      background: #1c1917;
+      border-radius: 12px;
+    }
+
+    .creds {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9rem;
+      color: var(--ink-muted);
+    }
+
+    .footer-bar {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 20;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+      background: color-mix(in oklab, #f7f4ee 78%, transparent);
+      border-top: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    .progress {
+      flex: 1;
+      max-width: 220px;
+      height: 4px;
+      overflow: hidden;
+      background: color-mix(in oklab, #1c1917 10%, transparent);
+      border-radius: 99px;
+    }
+
+    .progress > span {
+      display: block;
+      width: 10%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand), var(--brand-strong));
+      transition: width 320ms var(--ease);
+    }
+
+    .nav-hint kbd {
+      padding: 0.15rem 0.4rem;
+      font-family: Sora, sans-serif;
+      font-size: 0.75rem;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .punch {
+      margin-top: 0.75rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    </style>
+  </head>
+  <body>
+    <main aria-live="polite" class="deck" id="deck">
+      <!-- 1 -->
+      <section class="slide active" data-slide="1">
+        <div class="brand-mark reveal">
+          <img alt="" src="favicon-light.png">
+          <p class="wordmark">Nakama</p>
+        </div>
+        <h1 class="reveal">
+          Stop shared work in private ChatGPT chats. Run one agent workspace for
+          your team.
+        </h1>
+        <p class="sub reveal">
+          Nakama gives each team or each client agents, memory, and channels on
+          one platform.
+        </p>
+        <p class="meta reveal">
+          <a href="https://getnakama.cloud/" rel="noopener" target="_blank"
+            >getnakama.cloud</a
+          >
+          ·
+          <a href="https://demo.getnakama.cloud" rel="noopener" target="_blank"
+            >demo.getnakama.cloud</a
+          >
+          · Open source
+        </p>
+      </section>
+
+      <!-- 2 -->
+      <section class="slide" data-slide="2">
+        <p class="eyebrow reveal">Problem</p>
+        <h2 class="reveal">
+          Teams need more than ChatGPT. Agent tools for one operator do not
+          scale.
+        </h2>
+        <ol class="stack reveal">
+          <li>
+            <span class="n">1</span>
+            <div>
+              <strong>Many private chats</strong>
+              <span
+                >Each person uses a private ChatGPT chat. The team does not
+                share agents, memory, or control.</span
+              >
+            </div>
+          </li>
+          <li>
+            <span class="n">2</span>
+            <div>
+              <strong>Tools for one operator</strong>
+              <span
+                >Tools such as OpenClaw and Hermes work on one machine for one
+                person.</span
+              >
+            </div>
+          </li>
+          <li>
+            <span class="n">3</span>
+            <div>
+              <strong>Teams and agencies need more</strong>
+              <span
+                >They need many users, many clients, channels, and roles.</span
+              >
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 3 -->
+      <section class="slide" data-slide="3">
+        <p class="eyebrow reveal">Who can use Nakama</p>
+        <h2 class="reveal">Nakama serves two types of buyers.</h2>
+        <div class="split reveal">
+          <article class="card">
+            <h3>Team lead</h3>
+            <p>
+              Operations, support, and founders need shared agents on the web,
+              Telegram, and WhatsApp. They do not need only personal ChatGPT.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Agency or freelancer</h3>
+            <p>
+              One platform can hold many client organizations. Each client has
+              isolated agents, memory, and channels.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="slide" data-slide="4">
+        <p class="eyebrow reveal">Solution</p>
+        <h2 class="reveal">Nakama is a multi-tenant platform for AI agents.</h2>
+        <p class="lede reveal">
+          You can install Nakama on your servers, as with WordPress. You can
+          also use managed hosting.
+        </p>
+        <ul class="bullets reveal">
+          <li>One server can serve many organizations.</li>
+          <li>Agents have identity (soul), memory, skills, and tools.</li>
+          <li>Channels connect to the tools that teams already use.</li>
+          <li>Roles include admin, member, and viewer.</li>
+        </ul>
+      </section>
+
+      <!-- 5 -->
+      <section class="slide" data-slide="5">
+        <p class="eyebrow reveal">Feature 1</p>
+        <h2 class="reveal">Organizations and roles</h2>
+        <p class="lede reveal">Nakama is multi-tenant by design.</p>
+        <ul class="bullets reveal">
+          <li>Organizations are tenants.</li>
+          <li>You can send invites and assign roles: admin, member, viewer.</li>
+          <li>
+            Profiles, sessions, automations, tools, and usage stay isolated by
+            organization.
+          </li>
+          <li>Agencies: One installation can serve many client workspaces.</li>
+        </ul>
+      </section>
+
+      <!-- 6 -->
+      <section class="slide" data-slide="6">
+        <p class="eyebrow reveal">Feature 2</p>
+        <h2 class="reveal">Souls and memory</h2>
+        <p class="lede reveal">
+          Agents keep context across sessions. Agents do not use only temporary
+          chats.
+        </p>
+        <div class="soul-grid reveal">
+          <article class="card">
+            <code>SOUL.md</code>
+            <p>Identity</p>
+          </article>
+          <article class="card">
+            <code>STYLE.md</code>
+            <p>Voice</p>
+          </article>
+          <article class="card">
+            <code>INSTRUCTIONS.md</code>
+            <p>Operating rules</p>
+          </article>
+          <article class="card">
+            <code>MEMORY.md</code>
+            <p>Facts across sessions</p>
+          </article>
+        </div>
+        <p class="sub reveal">
+          Team knowledge increases over time. Client organizations stay
+          separate.
+        </p>
+      </section>
+
+      <!-- 7 -->
+      <section class="slide" data-slide="7">
+        <p class="eyebrow reveal">Feature 3</p>
+        <h2 class="reveal">Channels</h2>
+        <p class="lede reveal">Use the channels that your team already uses.</p>
+        <ul class="bullets reveal">
+          <li>Web dashboard and CLI</li>
+          <li>Telegram, WhatsApp, and Discord</li>
+          <li>The same agent and the same soul operate across channels.</li>
+          <li>Automations and tasks do recurring work.</li>
+        </ul>
+      </section>
+
+      <!-- 8 -->
+      <section class="slide" data-slide="8">
+        <p class="eyebrow reveal">Work examples</p>
+        <h2 class="reveal">Nakama agents can do these tasks:</h2>
+        <p class="lede reveal">
+          Connect external apps with Composio. Assign skills and tools to each
+          profile.
+        </p>
+        <div class="usecase-grid reveal">
+          <article class="card">
+            <span class="n">1</span>
+            <div>
+              <h3>Documents</h3>
+              <p>
+                Connect Google Drive, Docs, and Sheets. Read and change
+                documents.
+              </p>
+            </div>
+          </article>
+          <article class="card">
+            <span class="n">2</span>
+            <div>
+              <h3>Calendar</h3>
+              <p>Create, change, and review calendar events.</p>
+            </div>
+          </article>
+          <article class="card">
+            <span class="n">3</span>
+            <div>
+              <h3>Email</h3>
+              <p>Read email. Write and send replies.</p>
+            </div>
+          </article>
+          <article class="card">
+            <span class="n">4</span>
+            <div>
+              <h3>Short video</h3>
+              <p>Configure an agent to edit short videos.</p>
+            </div>
+          </article>
+          <article class="card">
+            <span class="n">5</span>
+            <div>
+              <h3>Coding agent</h3>
+              <p>
+                Start Codex, Claude Code, OpenCode, or Cursor Agent. Write and
+                change code, including Nakama itself.
+              </p>
+            </div>
+          </article>
+          <article class="card">
+            <span class="n">6</span>
+            <div>
+              <h3>Automations</h3>
+              <p>Schedule agent work on a timer for recurring tasks.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="slide" data-slide="9">
+        <p class="eyebrow reveal">Comparison</p>
+        <h2 class="reveal">
+          Nakama is not only a chatbot. Nakama is not a tool for one operator.
+        </h2>
+        <div aria-label="Comparison" class="compare reveal" role="table">
+          <div class="h">Function</div>
+          <div class="h">ChatGPT / Claude Team</div>
+          <div class="h">OpenClaw-style</div>
+          <div class="h">Nakama</div>
+
+          <div class="c">Shared team agents</div>
+          <div class="c">Limited</div>
+          <div class="c">One operator</div>
+          <div class="c nakama">Yes</div>
+
+          <div class="c">Multi-tenant orgs</div>
+          <div class="c">No</div>
+          <div class="c">No</div>
+          <div class="c nakama">Yes</div>
+
+          <div class="c">Channels</div>
+          <div class="c">Limited</div>
+          <div class="c">Often available</div>
+          <div class="c nakama">Yes</div>
+
+          <div class="c">Durable memory</div>
+          <div class="c">Chat history</div>
+          <div class="c">One machine</div>
+          <div class="c nakama">Org and profile</div>
+
+          <div class="c">Deployment</div>
+          <div class="c">SaaS only</div>
+          <div class="c">One local system</div>
+          <div class="c nakama">Docker or Cloud</div>
+        </div>
+        <p class="punch reveal">Nakama is a platform for team agents.</p>
+      </section>
+
+      <!-- 10 -->
+      <section class="slide" data-slide="10">
+        <p class="eyebrow reveal">Evidence</p>
+        <h2 class="reveal">
+          Nakama is open source. A public demo is available.
+        </h2>
+        <div class="stats reveal">
+          <div class="stat">
+            <div class="v">200</div>
+            <div class="l">GitHub stars</div>
+          </div>
+          <div class="stat">
+            <div class="v">22</div>
+            <div class="l">Forks</div>
+          </div>
+          <div class="stat">
+            <div class="v">7</div>
+            <div class="l">Contributors</div>
+          </div>
+        </div>
+        <p class="meta reveal">
+          <a href="https://demo.getnakama.cloud" rel="noopener" target="_blank"
+            >Public demo</a
+          >
+          ·
+          <a
+            href="https://ahmadrosid.github.io/nakama/"
+            rel="noopener"
+            target="_blank"
+            >Documentation</a
+          >
+          ·
+          <a href="https://getnakama.cloud/" rel="noopener" target="_blank"
+            >Nakama Cloud</a
+          >
+          ·
+          <a
+            href="https://github.com/ahmadrosid/nakama"
+            rel="noopener"
+            target="_blank"
+            >GitHub</a
+          >
+        </p>
+      </section>
+
+      <!-- 11 -->
+      <section class="slide" data-slide="11">
+        <p class="eyebrow reveal">Start a test</p>
+        <h2 class="reveal">
+          Open the public demo. Install Nakama with Docker when you are ready.
+        </h2>
+        <div class="cta-grid reveal">
+          <article class="card">
+            <h3>1. Public demo</h3>
+            <p>
+              <a
+                href="https://demo.getnakama.cloud"
+                rel="noopener"
+                target="_blank"
+                >demo.getnakama.cloud</a
+              >
+            </p>
+            <p class="creds">demo@getnakama.cloud / demo1234</p>
+            <h3 style="margin-top: 1.1rem">3. Managed hosting</h3>
+            <p>
+              If you do not want to install Nakama, use
+              <a href="https://getnakama.cloud/" rel="noopener" target="_blank"
+                >getnakama.cloud</a
+              >.
+            </p>
+          </article>
+          <article class="card">
+            <h3>2. Install with Docker</h3>
+            <pre>docker pull ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 4310:4310 \
+  -v nakama-data:/nakama/data \
+  --name nakama \
+  ghcr.io/ahmadrosid/nakama:latest
+
+# Open the dashboard: http://localhost:4310</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer-bar">
+      <div class="nav-hint">
+        <kbd>←</kbd> <kbd>→</kbd> or <kbd>Space</kbd> · <kbd>F</kbd> full screen
+      </div>
+      <div aria-hidden="true" class="progress"><span id="progress"></span></div>
+      <div id="counter">1 / 11</div>
+    </footer>
+
+    <script>
+    "use strict";
+    const slides = [...document.querySelectorAll(".slide")];
+    const progress = document.getElementById("progress");
+    const counter = document.getElementById("counter");
+    let index = 0;
+
+    function show(next) {
+      index = Math.max(0, Math.min(slides.length - 1, next));
+      for (const [i, slide] of slides.entries()) {
+        slide.classList.toggle("active", i === index);
+      }
+      const pct = ((index + 1) / slides.length) * 100;
+      progress.style.width = `${pct}%`;
+      counter.textContent = `${index + 1} / ${slides.length}`;
+      history.replaceState(null, "", `#${index + 1}`);
+    }
+
+    function onKey(e) {
+      if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
+        e.preventDefault();
+        show(index + 1);
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        show(index - 1);
+      } else if (e.key === "Home") {
+        show(0);
+      } else if (e.key === "End") {
+        show(slides.length - 1);
+      } else if (e.key === "f" || e.key === "F") {
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.();
+        } else {
+          document.documentElement.requestFullscreen?.();
+        }
+      }
+    }
+
+    let touchX = null;
+    window.addEventListener("keydown", onKey);
+    window.addEventListener(
+      "touchstart",
+      (e) => {
+        touchX = e.changedTouches[0].screenX;
+      },
+      { passive: true }
+    );
+    window.addEventListener(
+      "touchend",
+      (e) => {
+        if (touchX == null) {
+          return;
+        }
+        const dx = e.changedTouches[0].screenX - touchX;
+        if (Math.abs(dx) > 50) {
+          show(index + (dx < 0 ? 1 : -1));
+        }
+        touchX = null;
+      },
+      { passive: true }
+    );
+
+    const fromHash = Number(location.hash.replace("#", ""));
+    show(Number.isFinite(fromHash) && fromHash >= 1 ? fromHash - 1 : 0);
+    </script>
+  </body>
+</html>
