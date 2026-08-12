@@ -207,7 +207,8 @@ export function TokenOptimizationCard() {
     );
   }
 
-  const { arms, byTool, days, optimizers, totals, windowDays } = data;
+  const { arms, byTool, days, inputTokens, optimizers, totals, windowDays } =
+    data;
   const omni = optimizers?.[0];
   // Denominator is everything the handled tools produced, both arms. Dividing
   // by the optimised calls alone would be a percentage of a set chosen after
@@ -307,6 +308,41 @@ export function TokenOptimizationCard() {
             </div>
             <DailyChart days={days} />
           </div>
+
+          {/* The only tokens on this card. Shown per turn because the arms
+              never have the same turn count, and only once both arms have
+              enough turns to be worth printing. */}
+          {inputTokens.optimized.turns >= 5 &&
+          inputTokens.control.turns >= 5 ? (
+            <div className="rounded border border-border p-3">
+              <p className="mb-2 font-medium text-sm">
+                Provider input tokens per turn
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="tabular-nums">
+                    {inputTokens.optimized.inputTokensPerTurn.toLocaleString()}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    optimised, {inputTokens.optimized.turns} turns
+                  </p>
+                </div>
+                <div>
+                  <p className="tabular-nums">
+                    {inputTokens.control.inputTokensPerTurn.toLocaleString()}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    passthrough, {inputTokens.control.turns} turns
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-muted-foreground text-xs">
+                Counted by the provider, not estimated here. Turns fall into an
+                arm by what happened rather than by assignment, so a difference
+                in the work itself can explain part of any gap.
+              </p>
+            </div>
+          ) : null}
 
           {byTool?.length ? (
             <table className="w-full text-sm">

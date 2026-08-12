@@ -23,7 +23,7 @@ WORKDIR /app
 # --build-arg OMNI_VERSION=0.7.2 to include it, then set NAKAMA_OMNI=1.
 # The release is a static musl build, which runs on this glibc base, and the
 # published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION=""
+ARG OMNI_VERSION="0.7.3"
 RUN if [ -n "$OMNI_VERSION" ]; then \
       set -eu; \
       apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
@@ -31,7 +31,7 @@ RUN if [ -n "$OMNI_VERSION" ]; then \
         amd64) target=x86_64-unknown-linux-musl ;; \
         arm64) target=aarch64-unknown-linux-musl ;; \
         *) echo "no omni build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
-      esac; \
+      esac; \ 
       base="https://github.com/fajarhide/omni/releases/download/v${OMNI_VERSION}"; \
       archive="omni-v${OMNI_VERSION}-${target}.tar.gz"; \
       curl -fsSL -o "/tmp/${archive}" "${base}/${archive}"; \

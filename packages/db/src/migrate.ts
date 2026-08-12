@@ -29,6 +29,7 @@ export function migrateDatabase(db: Database): void {
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
   migrateToolOutputSavingsTable(db);
+  migrateLlmTurnUsageTable(db);
   migrateAttachmentsTable(db);
   migrateAutomationRunsTable(db);
   migrateAutomationRunReadStateTable(db);
@@ -297,6 +298,32 @@ function migrateLlmUsageModelStatsTable(db: Database): void {
  * client, so neither produces a row here. That is a boundary worth naming, not
  * hiding.
  */
+/**
+ * Provider input tokens per turn, per org, per day, split by whether the
+ * optimiser removed anything on that turn.
+ *
+ * This is the only table here that holds tokens rather than bytes, and it holds
+ * what the provider charged rather than an estimate. The comparison it supports
+ * is observational, not randomised: turns land in an arm because of what
+ * happened, not because anything was assigned, so a workload difference between
+ * the arms is a confound the reader has to be told about.
+ */
+function migrateLlmTurnUsageTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_turn_usage (
+      org_id TEXT NOT NULL,
+      bucket TEXT NOT NULL,
+      arm TEXT NOT NULL,
+      turns INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_turns INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, bucket, arm)
+    );
+  `);
+}
+
 function migrateToolOutputSavingsTable(db: Database): void {
   // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
   // will not add one. It is a counter with no history worth keeping and it has

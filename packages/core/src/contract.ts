@@ -216,6 +216,15 @@ export interface TokenOptimizationResponse {
     bytesRemoved: number;
     day: string;
   }>;
+  /**
+   * Provider input tokens per turn, split by arm. The only tokens here; every
+   * other figure is bytes. Observational rather than randomised, so a workload
+   * difference between the arms is a confound, not a result.
+   */
+  inputTokens: {
+    control: TokenOptimizationTurnArm;
+    optimized: TokenOptimizationTurnArm;
+  };
   optimizers: Array<{
     enabled: boolean;
     id: string;
@@ -232,6 +241,15 @@ export interface TokenOptimizationResponse {
   };
   trackedSince: string | null;
   windowDays: number;
+}
+
+export interface TokenOptimizationTurnArm {
+  arm: string;
+  /** Turns whose token count came from an estimate, not the provider. */
+  estimatedTurns: number;
+  inputTokens: number;
+  inputTokensPerTurn: number;
+  turns: number;
 }
 
 export interface TokenOptimizationArm {
@@ -1968,6 +1986,17 @@ export interface ToolContext {
     bytesOut: number;
     optimizer: string;
     tool: string;
+  }) => void;
+  /**
+   * Records what the provider actually charged for one request, tagged with
+   * whether the optimiser was active. This is the only honest route from bytes
+   * to tokens: the provider counts, split by arm.
+   */
+  recordTurnUsage?: (turn: {
+    estimated: boolean;
+    inputTokens: number;
+    optimized: boolean;
+    outputTokens: number;
   }) => void;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */

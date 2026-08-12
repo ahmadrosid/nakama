@@ -33,8 +33,9 @@ export function registerTokenOptimizationRoutes(
 ): void {
   app.get("/v1/token-optimization", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const [rows, settings, installed] = await Promise.all([
+    const [rows, turnRows, settings, installed] = await Promise.all([
       options.databaseAdapter.listToolOutputSavings(orgId),
+      options.databaseAdapter.listLlmTurnUsage(orgId),
       options.databaseAdapter.getWorkspaceSettings(),
       isOmniInstalled(),
     ]);
@@ -93,6 +94,30 @@ export function registerTokenOptimizationRoutes(
     const optimized = byArm(OPTIMIZER_ID);
     const control = byArm(CONTROL_ID);
 
+    // Provider tokens, the only figure here that is a token rather than a byte.
+    // Reported per turn so the two arms are comparable when they have different
+    // turn counts, which they always do.
+    const turnsByArm = (arm: string) => {
+      const armRows = turnRows.filter(
+        (row) => row.arm === arm && row.bucket >= from
+      );
+      const turns = armRows.reduce((sum, row) => sum + row.turns, 0);
+      const inputTokens = armRows.reduce(
+        (sum, row) => sum + row.inputTokens,
+        0
+      );
+      return {
+        arm,
+        estimatedTurns: armRows.reduce(
+          (sum, row) => sum + row.estimatedTurns,
+          0
+        ),
+        inputTokens,
+        inputTokensPerTurn: turns > 0 ? Math.round(inputTokens / turns) : 0,
+        turns,
+      };
+    };
+
     return json({
       arms: { control, optimized },
       byTool: [...byToolMap.values()].sort(
@@ -100,6 +125,12 @@ export function registerTokenOptimizationRoutes(
           right.bytesIn - right.bytesOut - (left.bytesIn - left.bytesOut)
       ),
       days: [...days.values()],
+      // Observational, not randomised: turns land in an arm because of what
+      // happened, so the panel must say so rather than imply a trial.
+      inputTokens: {
+        control: turnsByArm(CONTROL_ID),
+        optimized: turnsByArm(OPTIMIZER_ID),
+      },
       // One entry today. The shape is a list because a second optimiser attaches
       // in a different place and would appear beside this one, not replace it.
       optimizers: [

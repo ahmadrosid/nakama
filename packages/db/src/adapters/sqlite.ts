@@ -886,6 +886,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listToolOutputSavingsStmt = db.prepare(
     "SELECT * FROM tool_output_savings WHERE org_id = ? ORDER BY bucket ASC, (bytes_in - bytes_out) DESC"
   );
+  const incrementLlmTurnUsageStmt = db.prepare(`
+    INSERT INTO llm_turn_usage (
+      org_id, bucket, arm, turns, input_tokens, output_tokens, estimated_turns, updated_at
+    )
+    VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+    ON CONFLICT(org_id, bucket, arm) DO UPDATE SET
+      turns = llm_turn_usage.turns + 1,
+      input_tokens = llm_turn_usage.input_tokens + excluded.input_tokens,
+      output_tokens = llm_turn_usage.output_tokens + excluded.output_tokens,
+      estimated_turns = llm_turn_usage.estimated_turns + excluded.estimated_turns,
+      updated_at = excluded.updated_at
+  `);
+  const listLlmTurnUsageStmt = db.prepare(
+    "SELECT * FROM llm_turn_usage WHERE org_id = ? ORDER BY bucket ASC"
+  );
   const getWorkspaceSettingsStmt = db.prepare(
     "SELECT * FROM workspace_settings WHERE id = ?"
   );
@@ -2061,6 +2076,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toWorkspaceSettingsRecord(row) : null;
     },
 
+    async incrementLlmTurnUsage(orgId, delta) {
+      const updatedAt = new Date().toISOString();
+      incrementLlmTurnUsageStmt.run(
+        orgId,
+        updatedAt.slice(0, 10),
+        delta.optimized ? "omni" : "none",
+        delta.inputTokens,
+        delta.outputTokens,
+        delta.estimated ? 1 : 0,
+        updatedAt
+      );
+    },
+
     async incrementLlmUsageStats(delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsStmt.run(
@@ -2190,6 +2218,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) =>
           toComposioUserConnectionRecord(row as ComposioUserConnectionRow)
         );
+    },
+
+    async listLlmTurnUsage(orgId) {
+      return (
+        listLlmTurnUsageStmt.all(orgId) as {
+          arm: string;
+          bucket: string;
+          estimated_turns: number;
+          input_tokens: number;
+          org_id: string;
+          output_tokens: number;
+          turns: number;
+        }[]
+      ).map((row) => ({
+        arm: row.arm,
+        bucket: row.bucket,
+        estimatedTurns: row.estimated_turns,
+        inputTokens: row.input_tokens,
+        orgId: row.org_id,
+        outputTokens: row.output_tokens,
+        turns: row.turns,
+      }));
     },
 
     async listLlmUsageStatsByModel() {

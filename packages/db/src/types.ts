@@ -282,6 +282,24 @@ export interface ToolOutputSavingsDelta {
   tool: string;
 }
 
+/** One request's provider tokens, tagged with the arm it belongs to. */
+export interface LlmTurnUsageDelta {
+  estimated: boolean;
+  inputTokens: number;
+  optimized: boolean;
+  outputTokens: number;
+}
+
+export interface StoredLlmTurnUsageRecord {
+  arm: string;
+  bucket: string;
+  estimatedTurns: number;
+  inputTokens: number;
+  orgId: string;
+  outputTokens: number;
+  turns: number;
+}
+
 export interface StoredToolOutputSavingsRecord {
   /** Day the bytes were removed, `YYYY-MM-DD`. Day resolution because the panel
    * plots days and an hour column would be 24x the rows for a chart nobody asked
@@ -668,6 +686,7 @@ export interface DatabaseAdapter {
   getUserContext(orgId: string, userId: string): Promise<string | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
+  incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageStats(
     delta: LlmUsageStatsDelta,
     trackedSince: string
@@ -714,6 +733,7 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
 

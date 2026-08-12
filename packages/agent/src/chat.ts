@@ -158,6 +158,7 @@ export function createAgentChatSession(
   // calls would report a percentage of a set chosen after the fact.
   let bytesProduced = 0;
   const callerRecord = options.toolContext?.recordToolOutputSavings;
+  const callerTurnUsage = options.toolContext?.recordTurnUsage;
   const toolContext: ToolContext = {
     ...options.toolContext,
     recordToolOutputSavings: (saving) => {
@@ -165,6 +166,11 @@ export function createAgentChatSession(
       bytesProduced += saving.bytesIn;
       callerRecord?.(saving);
     },
+    // The arm is session state, and the conversation loop is a module-level
+    // function that cannot see it, so it is filled in here and the loop's own
+    // value is ignored.
+    recordTurnUsage: (turn) =>
+      callerTurnUsage?.({ ...turn, optimized: bytesKeptOut > 0 }),
   };
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
@@ -521,6 +527,22 @@ async function runConversation(
       usedTokens,
       result.usage && !result.usage.estimated ? "provider" : "estimate"
     );
+
+    // The arm is what the optimiser did in this session, not what a setting
+    // says: a session where nothing was ever shortened belongs in the control
+    // arm even with the feature switched on, or the comparison flatters itself.
+    try {
+      toolContext.recordTurnUsage?.({
+        estimated: Boolean(result.usage?.estimated ?? !result.usage),
+        inputTokens: result.usage?.inputTokens ?? 0,
+        // Overwritten by the session wrapper, which is the only scope that
+        // knows whether anything was shortened.
+        optimized: false,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      });
+    } catch {
+      // never let accounting break a turn
+    }
 
     // Backstop for providers that ignore the signal. The in-flight request is
     // aborted through GenerateChatInput.signal; this only catches the case where

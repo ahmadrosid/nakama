@@ -364,6 +364,26 @@ export class AgentService {
    * for a dashboard must never delay a tool result or fail a turn, so the write
    * is not awaited and a rejection is swallowed.
    */
+  /** Same fire-and-forget shape as the savings recorder, for provider tokens. */
+  private turnUsageRecorderFor(orgId: string | undefined) {
+    if (!orgId?.trim()) {
+      return;
+    }
+
+    const scopedOrgId = orgId.trim();
+
+    return (turn: {
+      estimated: boolean;
+      inputTokens: number;
+      optimized: boolean;
+      outputTokens: number;
+    }): void => {
+      void this.db
+        .incrementLlmTurnUsage(scopedOrgId, turn)
+        .catch(() => undefined);
+    };
+  }
+
   private savingsRecorderFor(orgId: string | undefined) {
     if (!orgId?.trim()) {
       return;
@@ -1200,6 +1220,7 @@ export class AgentService {
         orgRole: "member",
         profileId,
         recordToolOutputSavings: this.savingsRecorderFor(orgId),
+        recordTurnUsage: this.turnUsageRecorderFor(orgId),
       }),
       tools,
       userContext,
@@ -1264,6 +1285,7 @@ export class AgentService {
         orgRole: "member",
         profileId: input.profileId,
         recordToolOutputSavings: this.savingsRecorderFor(input.orgId),
+        recordTurnUsage: this.turnUsageRecorderFor(input.orgId),
         sessionId: input.sessionId,
         userId: input.userId,
       }),
@@ -3224,6 +3246,7 @@ export class AgentService {
         orgRole: orgRole ?? undefined,
         profileId,
         recordToolOutputSavings: this.savingsRecorderFor(orgId),
+        recordTurnUsage: this.turnUsageRecorderFor(orgId),
         sessionId,
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
         userId: userId ?? undefined,
