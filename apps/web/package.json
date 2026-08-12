@@ -6,7 +6,8 @@
     "build": "tsc --noEmit && vite build",
     "dev": "bun run scripts/dev.ts",
     "preview": "vite preview",
-    "start": "vite preview"
+    "start": "vite preview",
+    "test": "bun test"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
