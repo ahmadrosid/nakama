@@ -44,9 +44,12 @@ export function formatContextUsageLabel(usage: ChatContextUsage): string {
   // The percentage is what was asked for; the byte figure rides along because
   // this sits beside two token counts and a lone percentage there gets read as
   // a bill, not as output that never had to be sent.
+  // The denominator is named. Beside "Context 9%", whose denominator is the
+  // window, a bare second percentage is read as a share of context, and it is
+  // not: it is a share of what the tools produced.
   const optimizedNote =
     usage.bytesKeptOut && usage.bytesProduced
-      ? ` · saved ${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}% (${formatBytes(usage.bytesKeptOut)})`
+      ? ` · ${formatBytes(usage.bytesKeptOut)} of tool output saved (${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}%)`
       : "";
   return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizedNote}`;
 }

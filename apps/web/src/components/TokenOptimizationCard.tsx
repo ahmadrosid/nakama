@@ -277,7 +277,7 @@ export function TokenOptimizationCard() {
             <p className="font-semibold text-4xl tabular-nums leading-none">
               <span style={{ color: "var(--out)" }}>{percent.toFixed(0)}%</span>
               <span className="ml-2 font-normal text-lg text-muted-foreground">
-                saved
+                of tool output saved
               </span>
             </p>
             <p className="mt-1.5 text-muted-foreground text-sm">
