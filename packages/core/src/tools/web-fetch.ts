@@ -45,10 +45,21 @@ export interface WebFetchOutput {
   contentType: string;
   finalUrl: string;
   status: number;
+  truncated: boolean;
   url: string;
 }
 
 const MAX_BODY_BYTES = 1024 * 1024;
+/**
+ * MAX_BODY_BYTES bounds the transfer; this bounds what reaches the model. Without
+ * it a single fetch can spend a megabyte of context: one call in a local session
+ * pulled a 913 KB OpenAPI spec, which then rides along in history on every later
+ * turn. Number, marker and the subtraction below all follow
+ * `truncateComposioToolResult` in apps/server/src/services/composio-tool-bridge.ts,
+ * which answered the same question for Composio results.
+ */
+const MAX_CONTENT_CHARS = 16_000;
+const TRUNCATION_MARKER = "\n...[truncated]";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 
@@ -402,6 +413,8 @@ export async function convertHtmlToMarkdown(html: string): Promise<string> {
 export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
   description:
     "Fetch a single public HTTP(S) URL and return its content. HTML pages are converted to Markdown. " +
+    `Content is capped at ${MAX_CONTENT_CHARS} characters; when truncated is true the tail was dropped, ` +
+    "so fetch a more specific URL rather than assuming you have the whole document. " +
     "Use for retrieving a known URL; use web_search when you need to discover sources.",
   name: WEB_FETCH_TOOL_NAME,
   parallelSafe: true,
@@ -455,12 +468,21 @@ export const webFetchTool: ToolDefinition<WebFetchInput, WebFetchOutput> = {
         content = await convertHtmlToMarkdown(body);
       }
 
+      // After conversion, so the cap applies to what the model actually reads
+      // rather than to the markup it never sees.
+      const truncated = content.length > MAX_CONTENT_CHARS;
+      if (truncated) {
+        const keep = Math.max(0, MAX_CONTENT_CHARS - TRUNCATION_MARKER.length);
+        content = `${content.slice(0, keep)}${TRUNCATION_MARKER}`;
+      }
+
       return {
         bytes,
         content,
         contentType,
         finalUrl,
         status: response.status,
+        truncated,
         url: url.toString(),
       };
     } catch (err) {
