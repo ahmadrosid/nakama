@@ -23,6 +23,7 @@ import {
   seedDatabase,
 } from "@nakama/db";
 import { createHonoApp } from "./http/app";
+import { runFirstBootSeed } from "./seed";
 import { AgentService } from "./services/agent-service";
 import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
@@ -175,6 +176,15 @@ const skillSuggestionService = new SkillSuggestionService(
   skillProposalService
 );
 agent.setSkillSuggestionService(skillSuggestionService);
+
+const seedResult = await runFirstBootSeed({
+  authService,
+  databaseAdapter: database.adapter,
+  orgService,
+});
+if (seedResult.providerWritten) {
+  await agent.reloadAfterDataRestore();
+}
 
 const systemStatus = new SystemStatusService(
   agent,

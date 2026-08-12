@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 
 type ProfileAvatarProfile = Pick<
   ProfileSummary,
-  "id" | "name" | "hasAvatar" | "updatedAt"
+  "id" | "name" | "hasAvatar" | "updatedAt" | "isSuper"
 >;
+
+const SUPER_AGENT_DEFAULT_AVATAR = "/super-agent.png";
 
 const sizeClasses = {
   lg: "size-16",
@@ -43,6 +45,19 @@ function tonesFromHash(hash: string): [string, string] {
   ];
 }
 
+function resolveAvatarSrc(profile: ProfileAvatarProfile): string | null {
+  const uploaded = getProfileAvatarUrl(profile);
+  if (uploaded) {
+    return uploaded;
+  }
+
+  if (profile.isSuper) {
+    return SUPER_AGENT_DEFAULT_AVATAR;
+  }
+
+  return null;
+}
+
 export function ProfileAvatar({
   profile,
   size = "md",
@@ -55,7 +70,7 @@ export function ProfileAvatar({
   active?: boolean;
   className?: string;
 }) {
-  const avatarUrl = getProfileAvatarUrl(profile);
+  const avatarUrl = resolveAvatarSrc(profile);
 
   const surfaceClass = cn(
     "shrink-0 rounded-full outline outline-1 outline-black/10 -outline-offset-1 dark:outline-white/10",
