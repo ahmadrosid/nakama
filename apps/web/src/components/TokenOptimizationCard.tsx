@@ -46,6 +46,9 @@ function formatDay(day: string): string {
   return `${Number(day.slice(8, 10))}/${Number(day.slice(5, 7))}`;
 }
 
+/** Turns needed in each arm before the token comparison means anything. */
+const MIN_TURNS = 5;
+
 type Day = TokenOptimizationResponse["days"][number];
 
 /**
@@ -312,8 +315,22 @@ export function TokenOptimizationCard() {
           {/* The only tokens on this card. Shown per turn because the arms
               never have the same turn count, and only once both arms have
               enough turns to be worth printing. */}
-          {inputTokens.optimized.turns >= 5 &&
-          inputTokens.control.turns >= 5 ? (
+          {inputTokens.optimized.turns < MIN_TURNS ||
+          inputTokens.control.turns < MIN_TURNS ? (
+            // Say the threshold rather than hide the block. An absent panel
+            // reads as unbuilt; a stated one reads as not enough data yet,
+            // which is what it is.
+            <div className="rounded border border-border border-dashed p-3">
+              <p className="font-medium text-sm">
+                Provider input tokens per turn
+              </p>
+              <p className="mt-1 text-muted-foreground text-xs">
+                Needs {MIN_TURNS} turns in each arm before the two are worth
+                comparing. So far {inputTokens.optimized.turns} optimised and{" "}
+                {inputTokens.control.turns} passthrough.
+              </p>
+            </div>
+          ) : (
             <div className="rounded border border-border p-3">
               <p className="mb-2 font-medium text-sm">
                 Provider input tokens per turn
@@ -342,7 +359,7 @@ export function TokenOptimizationCard() {
                 in the work itself can explain part of any gap.
               </p>
             </div>
-          ) : null}
+          )}
 
           {byTool?.length ? (
             <table className="w-full text-sm">
