@@ -69,7 +69,7 @@ function DailyChart({ days }: { days: Day[] }) {
           role="img"
           viewBox={`0 0 100 ${height}`}
         >
-          <title>Bytes produced per day, and the part saved of context</title>
+          <title>Bytes produced per day, and the part saved</title>
           <line
             stroke="var(--grid)"
             strokeWidth={1}
@@ -145,7 +145,7 @@ function DailyChart({ days }: { days: Day[] }) {
           <div className="pointer-events-none absolute top-0 right-0 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm">
             <p className="font-medium">{days[hover].day}</p>
             <p className="text-muted-foreground">
-              {formatBytes(days[hover].bytesRemoved)} saved of{" "}
+              {formatBytes(days[hover].bytesRemoved)} saved from{" "}
               {formatBytes(days[hover].bytesIn)}
             </p>
           </div>
@@ -273,7 +273,7 @@ export function TokenOptimizationCard() {
               </span>
             </p>
             <p className="mt-1.5 text-muted-foreground text-sm">
-              {formatBytes(totals.bytesRemoved)} of{" "}
+              {formatBytes(totals.bytesRemoved)} saved from{" "}
               {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
             </p>
           </div>
@@ -310,7 +310,7 @@ export function TokenOptimizationCard() {
                       {row.calls} calls
                     </td>
                     <td className="py-1.5 text-right tabular-nums">
-                      {formatBytes(row.bytesIn - row.bytesOut)} out
+                      {formatBytes(row.bytesIn - row.bytesOut)} saved
                     </td>
                   </tr>
                 ))}
@@ -341,7 +341,7 @@ export function TokenOptimizationCard() {
           }
         />
         <TooltipContent className="max-w-xs text-xs" side="top">
-          Share of tool output saved of the conversation at insertion, over{" "}
+          Share of tool output saved before it reached the conversation, over{" "}
           {windowDays} days. Bytes, not tokens and not cost: shortened results
           are re-sent later as cache reads billed at a fraction, so this
           percentage is not a percentage off a bill.
