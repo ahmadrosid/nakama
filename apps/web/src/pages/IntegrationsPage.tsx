@@ -3,6 +3,7 @@ import {
   Key01Icon,
   Notification01Icon,
   Plug01Icon,
+  RocketIcon,
   TelegramIcon,
   WhatsappIcon,
 } from "hugeicons-react";
@@ -13,6 +14,7 @@ import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { LocalAuthTokenCard } from "@/components/LocalAuthTokenCard";
 import { NotificationDestinationsCard } from "@/components/NotificationDestinationsCard";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
+import { TokenOptimizationCard } from "@/components/TokenOptimizationCard";
 import { Spinner } from "@/components/ui/spinner";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
@@ -57,6 +59,12 @@ const INTEGRATION_SECTIONS = [
     id: "token",
     label: "Local token",
   },
+  {
+    description: "Tool output optimisers",
+    icon: RocketIcon,
+    id: "optimization",
+    label: "Token optimisation",
+  },
 ] as const;
 
 type IntegrationSectionId = (typeof INTEGRATION_SECTIONS)[number]["id"];
@@ -67,7 +75,8 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "notifications" ||
     value === "whatsapp" ||
     value === "discord" ||
-    value === "composio"
+    value === "composio" ||
+    value === "optimization"
   ) {
     return value;
   }
@@ -142,6 +151,8 @@ export function IntegrationsPage() {
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
           {section === "token" ? <LocalAuthTokenCard /> : null}
+
+          {section === "optimization" ? <TokenOptimizationCard /> : null}
 
           {section === "composio" ? (
             <div className={cn(isOrgAdmin && "space-y-4")}>

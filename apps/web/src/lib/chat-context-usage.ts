@@ -29,5 +29,8 @@ export function formatTokenCount(tokens: number): string {
 export function formatContextUsageLabel(usage: ChatContextUsage): string {
   const percent = Math.round(contextUsageRatio(usage) * 100);
   const sourceNote = usage.source === "estimate" ? " · estimated" : "";
-  return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}`;
+  // Only named when one actually ran. Printing "no optimiser" on every turn
+  // would be noise on the one chip that has to stay glanceable.
+  const optimizerNote = usage.optimizer ? ` · ${usage.optimizer}` : "";
+  return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizerNote}`;
 }

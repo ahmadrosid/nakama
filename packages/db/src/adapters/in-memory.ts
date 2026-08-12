@@ -30,6 +30,7 @@ import type {
   StoredSkillUsageRecord,
   StoredTaskRecord,
   StoredTaskRunRecord,
+  StoredToolOutputSavingsRecord,
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
@@ -83,6 +84,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   >();
   let llmUsageStats: StoredLlmUsageStatsRecord | null = null;
   const llmUsageByModel = new Map<string, StoredLlmUsageModelStatsRecord>();
+  const toolOutputSavings = new Map<string, StoredToolOutputSavingsRecord>();
   let workspaceSettings: StoredWorkspaceSettingsRecord | null = null;
   const notificationDestinations = new Map<
     string,
@@ -744,6 +746,25 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       });
     },
 
+    async incrementToolOutputSavings(orgId, delta, trackedSince) {
+      const updatedAt = new Date().toISOString();
+      const bucket = updatedAt.slice(0, 10);
+      const key = `${orgId}\u0000${bucket}\u0000${delta.optimizer}\u0000${delta.tool}`;
+      const existing = toolOutputSavings.get(key);
+
+      toolOutputSavings.set(key, {
+        bucket,
+        bytesIn: (existing?.bytesIn ?? 0) + delta.bytesIn,
+        bytesOut: (existing?.bytesOut ?? 0) + delta.bytesOut,
+        calls: (existing?.calls ?? 0) + 1,
+        optimizer: delta.optimizer,
+        orgId,
+        tool: delta.tool,
+        trackedSince: existing?.trackedSince ?? trackedSince,
+        updatedAt,
+      });
+    },
+
     async insertAttachment(record) {
       attachments.set(record.id, { ...record });
     },
@@ -1012,6 +1033,16 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
             ? left.position - right.position
             : statusCompare;
         });
+    },
+
+    async listToolOutputSavings(orgId) {
+      return [...toolOutputSavings.values()]
+        .filter((row) => row.orgId === orgId)
+        .sort((left, right) =>
+          left.bucket === right.bucket
+            ? right.bytesIn - right.bytesOut - (left.bytesIn - left.bytesOut)
+            : left.bucket.localeCompare(right.bucket)
+        );
     },
 
     async listTools() {

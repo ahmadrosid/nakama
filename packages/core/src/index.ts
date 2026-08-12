@@ -73,6 +73,7 @@ export * from "./message-content";
 export * from "./normalize-task-prompt";
 export * from "./notification-destinations";
 export * from "./ollama-provider-config";
+export * from "./omni";
 export * from "./profile-avatar";
 export * from "./profiles";
 export * from "./provider-label";

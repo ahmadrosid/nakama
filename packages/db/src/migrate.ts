@@ -28,6 +28,7 @@ export function migrateDatabase(db: Database): void {
   migrateCodingDelegationSkillName(db);
   migrateWorkspaceSettingsTable(db);
   migrateLlmUsageModelStatsTable(db);
+  migrateToolOutputSavingsTable(db);
   migrateAttachmentsTable(db);
   migrateAutomationRunsTable(db);
   migrateAutomationRunReadStateTable(db);
@@ -278,6 +279,54 @@ function migrateLlmUsageModelStatsTable(db: Database): void {
       tracked_since TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+  `);
+}
+
+/**
+ * Bytes removed from a tool result before it entered the conversation, per org,
+ * per optimiser, per tool.
+ *
+ * Deliberately not tokens and not cost: a shortened result is re-sent on later
+ * turns as a cache read billed at a fraction of fresh input, so multiplying
+ * these by a price would invent a number nobody can support.
+ *
+ * `optimizer` is a column rather than a hard-coded name because OMNI will not be
+ * the only one. It is also why this is not called `omni_savings`. What it cannot
+ * hold is anything that never sees tool output: a command rewriter like rtk acts
+ * before the command runs, and a proxy like headroom replaces the provider
+ * client, so neither produces a row here. That is a boundary worth naming, not
+ * hiding.
+ */
+function migrateToolOutputSavingsTable(db: Database): void {
+  // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
+  // will not add one. It is a counter with no history worth keeping and it has
+  // never shipped, so recreating is cheaper and clearer than an ALTER dance.
+  const columns = db
+    .prepare("PRAGMA table_info(tool_output_savings)")
+    .all() as Array<{ name: string }>;
+
+  if (
+    columns.length > 0 &&
+    !columns.some((column) => column.name === "bucket")
+  ) {
+    db.exec("DROP TABLE tool_output_savings;");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tool_output_savings (
+      org_id TEXT NOT NULL,
+      bucket TEXT NOT NULL,
+      optimizer TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      calls INTEGER NOT NULL DEFAULT 0,
+      bytes_in INTEGER NOT NULL DEFAULT 0,
+      bytes_out INTEGER NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, bucket, optimizer, tool)
+    );
+    CREATE INDEX IF NOT EXISTS tool_output_savings_org_bucket
+      ON tool_output_savings (org_id, bucket);
   `);
 }
 
@@ -959,6 +1008,15 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   if (!columnNames.has("selected_coding_agent_harness")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN selected_coding_agent_harness TEXT;
+    `);
+  }
+
+  // Null means "not chosen here", which falls back to the NAKAMA_OMNI env var.
+  // A tri-state rather than a boolean so an operator who set the env var does
+  // not have it silently overridden by a default row.
+  if (!columnNames.has("token_optimizer_enabled")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER;
     `);
   }
 }

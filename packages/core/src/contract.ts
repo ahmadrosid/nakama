@@ -189,6 +189,54 @@ export interface McpStatus {
   serverCount: number;
 }
 
+/**
+ * Bytes an optimiser removed from tool results before they entered the
+ * conversation. Not tokens and not cost: see the route that serves it for why
+ * converting these to either would be a fabrication.
+ */
+export interface TokenOptimizationResponse {
+  /**
+   * Two arms. `optimized` is what an optimiser shortened; `control` is what went
+   * in untouched. One arm alone is not a comparison, it is a restatement that
+   * the feature was on.
+   */
+  arms: {
+    control: TokenOptimizationArm;
+    optimized: TokenOptimizationArm;
+  };
+  byTool: Array<{
+    bytesIn: number;
+    bytesOut: number;
+    calls: number;
+    tool: string;
+  }>;
+  /** One entry per day in the window, oldest first, zero-filled. */
+  days: Array<{
+    bytesIn: number;
+    bytesRemoved: number;
+    day: string;
+  }>;
+  optimizers: Array<{
+    enabled: boolean;
+    id: string;
+    tools: string[];
+  }>;
+  totals: {
+    bytesIn: number;
+    bytesRemoved: number;
+    calls: number;
+  };
+  trackedSince: string | null;
+  windowDays: number;
+}
+
+export interface TokenOptimizationArm {
+  arm: string;
+  bytesIn: number;
+  bytesOut: number;
+  calls: number;
+}
+
 export interface SystemStatusResponse {
   automationWorker: AutomationWorkerStatus;
   checkedAt: string;
@@ -682,6 +730,9 @@ export type ChatContextUsageSource = "provider" | "estimate";
 
 export interface ChatContextUsage {
   contextWindow: number;
+  /** Set when a tool-output optimiser ran for this turn. Absent means none did,
+   * and the UI shows nothing rather than saying "off". */
+  optimizer?: string;
   source: ChatContextUsageSource;
   /** Denominator matching compaction usable context (window minus reserved output). */
   usableContextTokens: number;
@@ -1896,9 +1947,26 @@ export interface ToolContext {
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
   profileId?: string;
+  /**
+   * Records bytes an optimiser removed from a tool result before insertion.
+   * Passed in rather than imported because the database lives in the server and
+   * this runs in core. Optional and fire-and-forget: a platform that does not
+   * record anything simply leaves it undefined.
+   */
+  recordToolOutputSavings?: (saving: {
+    bytesIn: number;
+    bytesOut: number;
+    optimizer: string;
+    tool: string;
+  }) => void;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
+  /**
+   * Per-org override for the tool-output optimiser. Undefined means the setting
+   * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
+   */
+  tokenOptimizerEnabled?: boolean | null;
   userId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;

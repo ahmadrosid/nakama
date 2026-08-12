@@ -26,11 +26,13 @@ export interface AgentDependencies {
 
 import {
   getUserMessageText,
+  isOmniEnabledFor,
   messageContentHasDocuments,
   messageContentHasImages,
   messagesIncludeUserDocuments,
   messagesIncludeUserImages,
   normalizeUserContent,
+  OPTIMIZER_ID,
   partitionTools,
   toLlmToolDefinitions,
 } from "@nakama/core";
@@ -177,6 +179,9 @@ export function createAgentChatSession(
 
     return {
       contextWindow: options.compaction.contextWindow,
+      // Named only when one is actually active for this session, so the chip
+      // stays silent rather than announcing an absence every turn.
+      optimizer: isOmniEnabledFor(toolContext) ? OPTIMIZER_ID : undefined,
       source,
       usableContextTokens: usableContextTokens(options.compaction),
       usedTokens,
