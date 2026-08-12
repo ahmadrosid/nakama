@@ -26,13 +26,11 @@ export interface AgentDependencies {
 
 import {
   getUserMessageText,
-  isOmniEnabledFor,
   messageContentHasDocuments,
   messageContentHasImages,
   messagesIncludeUserDocuments,
   messagesIncludeUserImages,
   normalizeUserContent,
-  OPTIMIZER_ID,
   partitionTools,
   toLlmToolDefinitions,
 } from "@nakama/core";
@@ -151,7 +149,18 @@ export function createAgentChatSession(
     userContext: options.userContext,
     userTimezone: options.userTimezone,
   });
-  const toolContext = options.toolContext ?? {};
+  // Bytes this session's optimiser kept out of the context. Session scope on
+  // purpose: the chip beside it reports this conversation, not the org, and
+  // showing an org total there would be read as this chat's saving.
+  let bytesKeptOut = 0;
+  const callerRecord = options.toolContext?.recordToolOutputSavings;
+  const toolContext: ToolContext = {
+    ...options.toolContext,
+    recordToolOutputSavings: (saving) => {
+      bytesKeptOut += Math.max(0, saving.bytesIn - saving.bytesOut);
+      callerRecord?.(saving);
+    },
+  };
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
@@ -178,10 +187,10 @@ export function createAgentChatSession(
     }
 
     return {
+      // Reported only once an optimiser has actually removed something in this
+      // session, so the chip stays silent rather than announcing a feature.
+      bytesKeptOut: bytesKeptOut > 0 ? bytesKeptOut : undefined,
       contextWindow: options.compaction.contextWindow,
-      // Named only when one is actually active for this session, so the chip
-      // stays silent rather than announcing an absence every turn.
-      optimizer: isOmniEnabledFor(toolContext) ? OPTIMIZER_ID : undefined,
       source,
       usableContextTokens: usableContextTokens(options.compaction),
       usedTokens,

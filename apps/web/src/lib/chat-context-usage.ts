@@ -26,11 +26,23 @@ export function formatTokenCount(tokens: number): string {
   return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function formatContextUsageLabel(usage: ChatContextUsage): string {
   const percent = Math.round(contextUsageRatio(usage) * 100);
   const sourceNote = usage.source === "estimate" ? " · estimated" : "";
-  // Only named when one actually ran. Printing "no optimiser" on every turn
-  // would be noise on the one chip that has to stay glanceable.
-  const optimizerNote = usage.optimizer ? ` · ${usage.optimizer}` : "";
-  return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizerNote}`;
+  // "less context" rather than "saved", and always with a byte unit: this sits
+  // beside two token counts, and a bare number there reads as tokens.
+  const optimizedNote = usage.bytesKeptOut
+    ? ` · ${formatBytes(usage.bytesKeptOut)} less context`
+    : "";
+  return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizedNote}`;
 }

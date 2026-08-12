@@ -729,10 +729,13 @@ export interface SessionMessageMeta {
 export type ChatContextUsageSource = "provider" | "estimate";
 
 export interface ChatContextUsage {
+  /**
+   * Bytes an optimiser kept out of this session's context so far. Absent until
+   * something is actually removed, so the UI reports a measurement rather than
+   * announcing a feature. Bytes, not tokens: the label must carry a byte unit.
+   */
+  bytesKeptOut?: number;
   contextWindow: number;
-  /** Set when a tool-output optimiser ran for this turn. Absent means none did,
-   * and the UI shows nothing rather than saying "off". */
-  optimizer?: string;
   source: ChatContextUsageSource;
   /** Denominator matching compaction usable context (window minus reserved output). */
   usableContextTokens: number;
