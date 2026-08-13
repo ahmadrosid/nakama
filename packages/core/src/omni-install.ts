@@ -31,7 +31,7 @@ import { getUserConfigDir } from "./user-config";
  * restart is not reproducible, and the Dockerfile pins the same way, so the two
  * routes to the same binary agree.
  */
-const DEFAULT_VERSION = "0.7.3";
+const DEFAULT_VERSION = "0.7.4";
 const RELEASES = "https://github.com/fajarhide/omni/releases/download";
 const DOWNLOAD_TIMEOUT_MS = 60_000;
 
