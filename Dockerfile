@@ -19,7 +19,7 @@ FROM oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
 # Tool-output optimiser, on by default so the dashboard toggle works on a fresh
-# image without a rebuild. Roughly 12 MB unpacked. Build with
+# image without a rebuild. Just under 10 MB unpacked. Build with
 # --build-arg OMNI_VERSION= to leave it out; the server then fetches it on demand
 # when the toggle is switched on, unless NAKAMA_OMNI_AUTO_INSTALL=0.
 # The release is a static musl build, which runs on this glibc base, and the
