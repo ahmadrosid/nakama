@@ -1,4 +1,8 @@
-import { builtinTools } from "@nakama/core";
+import {
+  builtinTools,
+  type McpHttpConfig,
+  type McpStdioConfig,
+} from "@nakama/core";
 import { preinstalledMcpServers } from "@nakama/core/mcp/preinstalled";
 import {
   BUILTIN_TOOL_IDS,
@@ -173,6 +177,9 @@ export async function ensureSubAgentToolDefinition(
   });
 }
 
+const FIRECRAWL_LEGACY_KEY_URL =
+  /^https:\/\/mcp\.firecrawl\.dev\/([^/]+)\/v2\/mcp\/?$/i;
+
 export async function ensurePreinstalledMcpServers(
   db: DatabaseAdapter
 ): Promise<void> {
@@ -181,11 +188,24 @@ export async function ensurePreinstalledMcpServers(
   for (const server of preinstalledMcpServers) {
     const existing = await db.getMcpServer(server.id);
 
+    if (!existing) {
+      const nameOwner = await db.getMcpServerByName(server.name);
+
+      if (nameOwner && nameOwner.id !== server.id) {
+        console.warn(
+          `Preinstalled MCP server "${server.name}" was not inserted: name already used by ${nameOwner.id}.`
+        );
+        continue;
+      }
+    }
+
     await db.upsertMcpServer({
       cachedTools: existing?.cachedTools ?? [],
-      config: server.config,
+      config: existing
+        ? mergePreinstalledHttpConfig(server.config, existing.config)
+        : server.config,
       createdAt: existing?.createdAt ?? now,
-      enabled: true,
+      enabled: existing?.enabled ?? true,
       id: server.id,
       lastError: existing?.lastError ?? null,
       name: server.name,
@@ -194,4 +214,68 @@ export async function ensurePreinstalledMcpServers(
       updatedAt: now,
     });
   }
+}
+
+function mergePreinstalledHttpConfig(
+  catalogConfig: McpHttpConfig | McpStdioConfig,
+  existingConfig: unknown
+): McpHttpConfig | McpStdioConfig {
+  if (!("url" in catalogConfig)) {
+    return catalogConfig;
+  }
+
+  const headers = { ...readHttpHeaders(existingConfig) };
+  const legacyBearer = firecrawlLegacyBearer(readHttpUrl(existingConfig));
+
+  if (legacyBearer && !headers.Authorization) {
+    headers.Authorization = legacyBearer;
+  }
+
+  if (Object.keys(headers).length === 0) {
+    return { url: catalogConfig.url };
+  }
+
+  return { headers, url: catalogConfig.url };
+}
+
+function readHttpUrl(config: unknown): string | undefined {
+  if (typeof config !== "object" || config === null) {
+    return;
+  }
+
+  const url = (config as Record<string, unknown>).url;
+
+  return typeof url === "string" && url.trim() ? url.trim() : undefined;
+}
+
+function readHttpHeaders(config: unknown): Record<string, string> {
+  if (typeof config !== "object" || config === null) {
+    return {};
+  }
+
+  const headers = (config as Record<string, unknown>).headers;
+
+  if (typeof headers !== "object" || headers === null) {
+    return {};
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === "string" && value.trim()) {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+function firecrawlLegacyBearer(url: string | undefined): string | undefined {
+  if (!url) {
+    return;
+  }
+
+  const token = FIRECRAWL_LEGACY_KEY_URL.exec(url)?.[1]?.trim();
+
+  return token ? `Bearer ${token}` : undefined;
 }

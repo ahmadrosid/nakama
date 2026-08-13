@@ -91,6 +91,34 @@ Nakama ships a preinstalled **exa** server (`https://mcp.exa.ai/mcp`) with `web_
 
 Tools appear as `exa__web_search_exa` and `exa__web_fetch_exa`.
 
+### Example: Firecrawl
+
+Nakama ships a preinstalled **firecrawl** server (`https://mcp.firecrawl.dev/v2/mcp`) with no API key. Assign it on **Agent → Profiles** when a profile needs JS-rendered public pages.
+
+Keyless tools appear as `firecrawl__firecrawl_search`, `firecrawl__firecrawl_scrape`, and `firecrawl__firecrawl_parse`. Use scrape for JS-heavy public pages. Search is extra surface next to Exa and builtin [`web_search`](/builtin-tools#web_search). Hosted parse is not for files in the profile workspace — use [`extract_document_text`](/builtin-tools#extract_document_text).
+
+Firecrawl Cloud fetches the URL. Unlike [`web_fetch`](/builtin-tools#web_fetch), the page is processed off the Nakama host. Keyless usage shares a daily cap on the host's public IP across every assigned profile, including automations and Telegram / WhatsApp / Discord.
+
+Keyless MCP does not include interact, crawl, or map. For login walls, forms, and clicks, use the [agent-browser](/agent-browser) skill.
+
+To raise limits or unlock crawl / interact / map, add a [Firecrawl API key](https://www.firecrawl.dev/app/api-keys) under **Headers**, then **Reconnect** or **Sync tools**:
+
+- **Key:** `Authorization`
+- **Value:** `Bearer YOUR_FIRECRAWL_API_KEY`
+
+That header is shared by every profile assigned to this server. After sync, keyed tools are available on all of them until you unassign or rotate the header.
+
+```json
+{
+  "mcpServers": {
+    "firecrawl": {
+      "url": "https://mcp.firecrawl.dev/v2/mcp",
+      "headers": { "Authorization": "Bearer YOUR_FIRECRAWL_API_KEY" }
+    }
+  }
+}
+```
+
 ### Import from an existing config
 
 Use **Import JSON** or paste a Cursor-style `mcpServers` block onto the form. A bare server object (top-level `command` or `url`) also works — the first entry fills the form for review.
@@ -136,10 +164,12 @@ MCP management is platform-admin only (same as profiles, builtins, and skills).
 - **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
 - **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
 - **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect
+- **Firecrawl rate limit** — add an `Authorization` header with `Bearer` plus your [Firecrawl API key](https://www.firecrawl.dev/app/api-keys), then reconnect. This also unlocks crawl / interact / map for every assigned profile
 - **Unexpected tool name** — names are sanitized to `a-zA-Z0-9_-`; `tools.list` on server `user.tolaria` becomes `user_tolaria__tools_list`
 
 ## Related
 
 - [Builtin tools](/builtin-tools) — tools that ship with Nakama
+- [Agent browser](/agent-browser) — login walls and interactive pages
 - [Profiles](/profiles) — designing bots and tool access
 - [Multi-tenancy](/multi-tenancy) — org roles and admin boundaries

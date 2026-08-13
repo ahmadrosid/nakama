@@ -3,6 +3,7 @@ import type { McpHttpConfig, McpStdioConfig, McpTransport } from "../contract";
 export const PREINSTALLED_MCP_SERVER_IDS = {
   currency_conversion: "mcp_currency_conversion",
   exa: "mcp_exa",
+  firecrawl: "mcp_firecrawl",
 } as const;
 
 export type PreinstalledMcpServerDefinition = {
@@ -27,6 +28,14 @@ export const preinstalledMcpServers: PreinstalledMcpServerDefinition[] = [
     },
     id: PREINSTALLED_MCP_SERVER_IDS.currency_conversion,
     name: "currency-conversion",
+    transport: "http",
+  },
+  {
+    config: {
+      url: "https://mcp.firecrawl.dev/v2/mcp",
+    },
+    id: PREINSTALLED_MCP_SERVER_IDS.firecrawl,
+    name: "firecrawl",
     transport: "http",
   },
 ];
