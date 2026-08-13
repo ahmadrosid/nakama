@@ -1,5 +1,6 @@
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MessageResponse } from "@/components/ai-elements/message";
+import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ARTIFACT_HTML_IFRAME_SANDBOX,
@@ -8,14 +9,12 @@ import {
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
 import { cn } from "@/lib/utils";
 
-/** Highlighting a very large file blocks the main thread, so show it as plain text. */
-const MAX_HIGHLIGHTED_CHARS = 200_000;
-
 type ArtifactPanelSharedProps = {
   loading: boolean;
   error: string | null;
   canPreview: boolean;
   artifact: ChatArtifactRef;
+  previewMode?: ArtifactPreviewMode;
 };
 
 export type ArtifactAttachmentPanelBodyProps =
@@ -40,26 +39,6 @@ export type ArtifactAttachmentPanelBodyProps =
       streaming?: boolean;
     });
 
-function toCodeFence(content: string, language: string): string {
-  const longestRun = Math.max(
-    0,
-    ...[...content.matchAll(/`+/g)].map((match) => match[0].length)
-  );
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}${language}\n${content}\n${fence}`;
-}
-
-function usesPlainCodeBlock(
-  content: string,
-  format: "markdown" | "plain",
-  language: string | null
-): boolean {
-  return (
-    format !== "markdown" &&
-    !(language !== null && content.length <= MAX_HIGHLIGHTED_CHARS)
-  );
-}
-
 function renderTextContent({
   content,
   format,
@@ -81,15 +60,14 @@ function renderTextContent({
     );
   }
 
-  if (language && content.length <= MAX_HIGHLIGHTED_CHARS) {
-    return (
-      <MessageResponse className="text-sm" isAnimating={streaming}>
-        {toCodeFence(content, language)}
-      </MessageResponse>
-    );
-  }
-
-  return <CodeBlock code={content} fillHeight={fillHeight} lang={language} />;
+  return (
+    <CodeBlock
+      className="rounded-lg border border-border"
+      code={content}
+      fillHeight={fillHeight}
+      lang={language}
+    />
+  );
 }
 
 function LoadingState({ compact = false }: { compact?: boolean }) {
@@ -186,12 +164,23 @@ function ArtifactAttachmentHtmlBody({
   canPreview,
   artifact,
   htmlSandbox = ARTIFACT_HTML_IFRAME_SANDBOX,
+  previewMode = "preview",
 }: Extract<ArtifactAttachmentPanelBodyProps, { kind: "html" }>) {
+  const showSource = previewMode === "source" && Boolean(content);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {loading ? <LoadingState /> : null}
       {error ? <p className="p-4 text-destructive text-sm">{error}</p> : null}
-      {!(loading || error) && content ? (
+      {!(loading || error) && showSource && content
+        ? renderTextContent({
+            content,
+            fillHeight: true,
+            format: "plain",
+            language: "html",
+          })
+        : null}
+      {!(loading || error || showSource) && content ? (
         <iframe
           className="min-h-0 w-full flex-1 border-0 bg-background"
           sandbox={htmlSandbox}
@@ -214,10 +203,14 @@ function ArtifactAttachmentTextBody({
   language,
   streaming = false,
   canPreview,
+  previewMode = "preview",
 }: Extract<ArtifactAttachmentPanelBodyProps, { kind: "text" }>) {
-  const showCodeBlock = Boolean(
-    content && usesPlainCodeBlock(content, format, language)
-  );
+  const sourceFormat = previewMode === "source" ? "plain" : format;
+  const sourceLanguage =
+    previewMode === "source"
+      ? (language ?? (format === "markdown" ? "markdown" : null))
+      : language;
+  const showCodeBlock = Boolean(content && sourceFormat !== "markdown");
 
   return (
     <div
@@ -231,8 +224,8 @@ function ArtifactAttachmentTextBody({
         ? renderTextContent({
             content,
             fillHeight: showCodeBlock,
-            format,
-            language,
+            format: sourceFormat,
+            language: sourceLanguage,
             streaming,
           })
         : null}

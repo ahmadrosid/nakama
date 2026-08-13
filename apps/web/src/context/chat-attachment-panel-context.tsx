@@ -145,11 +145,13 @@ export function ChatAttachmentPanelProvider({
               )}
               fullscreen={fullscreen}
               headerActions={config.headerActions}
+              leading={config.leading}
               onClose={handlePanelClose}
               onWidthChange={setWidth}
               resizable={config.resizable ?? !fullscreen}
               subtitle={config.subtitle}
               title={config.title}
+              typeLabel={config.typeLabel}
               width={width}
             >
               {config.content}

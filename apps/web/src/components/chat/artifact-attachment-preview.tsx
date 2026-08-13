@@ -8,11 +8,16 @@ import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
 import {
+  artifactCanTogglePreviewSource,
   artifactPanelBodyClassName,
   artifactPanelDefaultWidth,
-  artifactPanelSubtitle,
+  artifactPanelHeaderMeta,
   downloadActionLabel,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
+import {
+  type ArtifactPreviewMode,
+  ArtifactPreviewModeToggle,
+} from "@/components/chat/artifact-preview-mode-toggle";
 import {
   ArtifactShareMenuItem,
   ArtifactSharePublishDialogFromState,
@@ -64,6 +69,7 @@ function ArtifactAttachmentPreviewPanelBody({
   videoPreviewUrl,
   canPreview,
   artifact,
+  previewMode,
 }: {
   kind: "image" | "video" | "html" | "text";
   textFormat: "markdown" | "plain";
@@ -75,6 +81,7 @@ function ArtifactAttachmentPreviewPanelBody({
   videoPreviewUrl: string | null;
   canPreview: boolean;
   artifact: ChatArtifactRef;
+  previewMode: ArtifactPreviewMode;
 }) {
   if (kind === "image") {
     return (
@@ -111,6 +118,7 @@ function ArtifactAttachmentPreviewPanelBody({
         error={error}
         kind="html"
         loading={loading}
+        previewMode={previewMode}
       />
     );
   }
@@ -125,6 +133,7 @@ function ArtifactAttachmentPreviewPanelBody({
       kind="text"
       language={language}
       loading={loading}
+      previewMode={previewMode}
     />
   );
 }
@@ -144,6 +153,8 @@ export function ArtifactAttachmentPreview({
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewMode, setPreviewMode] =
+    useState<ArtifactPreviewMode>("preview");
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
   const mimeType = resolveArtifactMimeType(
     artifact.mimeType,
@@ -156,6 +167,16 @@ export function ArtifactAttachmentPreview({
     isDocxFile(artifact.filename, mimeType) ||
     isLegacyDocFile(artifact.filename, mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+  const showPreviewToggle = artifactCanTogglePreviewSource({
+    isHtml,
+    isMarkdown,
+  });
+  const header = artifactPanelHeaderMeta({
+    filename: artifact.filename,
+    mimeType,
+    showPreviewToggle,
+    sizeBytes: artifact.sizeBytes,
+  });
   const language = artifactCodeLanguage(artifact.filename);
   const canPreview =
     isHtml ||
@@ -192,7 +213,10 @@ export function ArtifactAttachmentPreview({
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
-  function buildPanelBody(loadingOverride?: boolean) {
+  function buildPanelBody(
+    loadingOverride?: boolean,
+    mode: ArtifactPreviewMode = previewMode
+  ) {
     const panelKind = isImage
       ? "image"
       : isVideo
@@ -210,21 +234,23 @@ export function ArtifactAttachmentPreview({
         kind={panelKind}
         language={language}
         loading={loadingOverride ?? loading}
+        previewMode={mode}
         textFormat={isMarkdown ? "markdown" : "plain"}
         videoPreviewUrl={videoPreviewUrl}
       />
     );
   }
 
-  function buildPanelConfig() {
+  function buildPanelConfig(mode: ArtifactPreviewMode = previewMode) {
     return {
       bodyClassName: artifactPanelBodyClassName({
         isHtml,
         isImage,
         isMarkdown,
         isVideo,
+        previewMode: mode,
       }),
-      content: buildPanelBody(),
+      content: buildPanelBody(undefined, mode),
       fullscreen,
       headerActions: (
         <>
@@ -247,12 +273,13 @@ export function ArtifactAttachmentPreview({
           />
         </>
       ),
+      leading: showPreviewToggle ? (
+        <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
+      ) : null,
       resizable: !fullscreen,
-      subtitle: artifactPanelSubtitle({
-        mimeType,
-        sizeBytes: artifact.sizeBytes,
-      }),
-      title: artifact.filename,
+      subtitle: header.subtitle,
+      title: header.title,
+      typeLabel: header.typeLabel,
     };
   }
 
@@ -286,6 +313,11 @@ export function ArtifactAttachmentPreview({
     downloadUrl,
     share.busy,
     share.publishDialogOpen,
+    previewMode,
+    showPreviewToggle,
+    header.subtitle,
+    header.title,
+    header.typeLabel,
   ]);
 
   async function copyArtifact() {
@@ -318,14 +350,16 @@ export function ArtifactAttachmentPreview({
   function openPanel() {
     setFullscreen(false);
     setCopied(false);
+    setPreviewMode("preview");
     show({
-      ...buildPanelConfig(),
+      ...buildPanelConfig("preview"),
       content: buildPanelBody(
         canPreview &&
           (isImage || isVideo
             ? (isImage ? imagePreviewUrl : videoPreviewUrl) === null
             : content === null) &&
-          error === null
+          error === null,
+        "preview"
       ),
       defaultWidth: artifactPanelDefaultWidth(artifact.filename, mimeType),
       fullscreen: false,
@@ -333,11 +367,42 @@ export function ArtifactAttachmentPreview({
       onClose: () => {
         setFullscreen(false);
         setCopied(false);
+        setPreviewMode("preview");
       },
       resizable: true,
     });
   }
 
+  return (
+    <ArtifactAttachmentPreviewTrigger
+      artifact={artifact}
+      className={className}
+      imagePreviewUrl={imagePreviewUrl}
+      isImage={isImage}
+      isVideo={isVideo}
+      onOpen={openPanel}
+      variant={variant}
+    />
+  );
+}
+
+function ArtifactAttachmentPreviewTrigger({
+  artifact,
+  className,
+  imagePreviewUrl,
+  isImage,
+  isVideo,
+  onOpen,
+  variant,
+}: {
+  artifact: ChatArtifactRef;
+  className?: string;
+  imagePreviewUrl: string | null;
+  isImage: boolean;
+  isVideo: boolean;
+  onOpen: () => void;
+  variant: "chip" | "icon";
+}) {
   if (variant === "icon") {
     return (
       <Tooltip>
@@ -346,7 +411,7 @@ export function ArtifactAttachmentPreview({
             <Button
               aria-label="View"
               className={className}
-              onClick={openPanel}
+              onClick={onOpen}
               size="icon-sm"
               title="View"
               type="button"
@@ -370,7 +435,7 @@ export function ArtifactAttachmentPreview({
           "relative flex w-1/2 max-w-full shrink-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-muted p-2 text-left transition-colors hover:bg-muted/70",
           className
         )}
-        onClick={openPanel}
+        onClick={onOpen}
         type="button"
       >
         {imagePreviewUrl ? (
@@ -405,7 +470,7 @@ export function ArtifactAttachmentPreview({
         "relative inline-flex max-w-full shrink-0 items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2 text-left transition-colors hover:bg-muted/70",
         className
       )}
-      onClick={openPanel}
+      onClick={onOpen}
       type="button"
     >
       <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">

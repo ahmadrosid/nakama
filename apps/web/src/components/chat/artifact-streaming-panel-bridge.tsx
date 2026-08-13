@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
 import {
+  artifactCanTogglePreviewSource,
   artifactPanelBodyClassName,
   artifactPanelDefaultWidth,
-  artifactPanelSubtitle,
+  artifactPanelHeaderMeta,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
+import {
+  type ArtifactPreviewMode,
+  ArtifactPreviewModeToggle,
+} from "@/components/chat/artifact-preview-mode-toggle";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import {
   artifactCodeLanguage,
@@ -45,19 +50,47 @@ function buildStreamingArtifactRef(
   };
 }
 
-function buildStreamingPanelBody({
-  artifact,
-  content,
-}: {
-  artifact: ChatArtifactRef;
-  content: string;
-}) {
+function streamingPreviewFlags(artifact: ChatArtifactRef) {
   const mimeType = artifact.mimeType;
   const isWordDocument =
     isDocxFile(artifact.filename, mimeType) ||
     isLegacyDocFile(artifact.filename, mimeType);
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+  return { isHtml, isMarkdown, isWordDocument, mimeType };
+}
+
+function buildStreamingArtifactHeader(
+  artifact: ChatArtifactRef,
+  options: { sizeBytes?: number; streaming?: boolean } = {}
+) {
+  const { isHtml, isMarkdown, mimeType } = streamingPreviewFlags(artifact);
+  const showPreviewToggle = artifactCanTogglePreviewSource({
+    isHtml,
+    isMarkdown,
+  });
+  return {
+    ...artifactPanelHeaderMeta({
+      filename: artifact.filename,
+      mimeType,
+      showPreviewToggle,
+      sizeBytes: options.sizeBytes,
+      streaming: options.streaming,
+    }),
+    showPreviewToggle,
+  };
+}
+
+function buildStreamingPanelBody({
+  artifact,
+  content,
+  previewMode,
+}: {
+  artifact: ChatArtifactRef;
+  content: string;
+  previewMode: ArtifactPreviewMode;
+}) {
+  const { isHtml, isMarkdown } = streamingPreviewFlags(artifact);
   const language = artifactCodeLanguage(artifact.filename);
 
   return (
@@ -70,6 +103,7 @@ function buildStreamingPanelBody({
       kind="text"
       language={language}
       loading={false}
+      previewMode={previewMode}
       streaming
     />
   );
@@ -78,17 +112,15 @@ function buildStreamingPanelBody({
 function buildStablePanelBody({
   artifact,
   content,
+  previewMode,
 }: {
   artifact: ChatArtifactRef;
   content: string;
+  previewMode: ArtifactPreviewMode;
 }) {
-  const mimeType = artifact.mimeType;
-  const isWordDocument =
-    isDocxFile(artifact.filename, mimeType) ||
-    isLegacyDocFile(artifact.filename, mimeType);
-  const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
+  const { isHtml, isMarkdown } = streamingPreviewFlags(artifact);
 
-  if (isHtmlArtifactMimeType(mimeType)) {
+  if (isHtml) {
     return (
       <ArtifactAttachmentPanelBody
         artifact={artifact}
@@ -97,6 +129,7 @@ function buildStablePanelBody({
         error={null}
         kind="html"
         loading={false}
+        previewMode={previewMode}
       />
     );
   }
@@ -111,8 +144,32 @@ function buildStablePanelBody({
       kind="text"
       language={artifactCodeLanguage(artifact.filename)}
       loading={false}
+      previewMode={previewMode}
     />
   );
+}
+
+function withPanelPreviewMode(
+  current: Partial<Record<string, ArtifactPreviewMode>>,
+  panelId: string,
+  mode: ArtifactPreviewMode
+): Partial<Record<string, ArtifactPreviewMode>> {
+  if (current[panelId] === mode) {
+    return current;
+  }
+  return { ...current, [panelId]: mode };
+}
+
+function withoutPanelPreviewMode(
+  current: Partial<Record<string, ArtifactPreviewMode>>,
+  panelId: string
+): Partial<Record<string, ArtifactPreviewMode>> {
+  if (!(panelId in current)) {
+    return current;
+  }
+  const next = { ...current };
+  delete next[panelId];
+  return next;
 }
 
 export function ArtifactStreamingPanelBridge({
@@ -128,6 +185,14 @@ export function ArtifactStreamingPanelBridge({
   const lastEligibleRef = useRef<EligibleStreamTarget | null>(null);
   const handedOffRef = useRef(new Set<string>());
   const autoWidthAppliedRef = useRef(new Set<string>());
+  const [previewModeByPanel, setPreviewModeByPanel] = useState<
+    Partial<Record<string, ArtifactPreviewMode>>
+  >({});
+  const [stableContent, setStableContent] = useState<{
+    artifact: ChatArtifactRef;
+    content: string;
+    toolCallId: string;
+  } | null>(null);
   const streaming = useMemo(
     () => findLatestStreamingArtifact(messages),
     [messages]
@@ -155,6 +220,7 @@ export function ArtifactStreamingPanelBridge({
     }
 
     const panelId = streaming.toolCallId;
+    const previewMode = previewModeByPanel[panelId] ?? "preview";
 
     if (dismissedRef.current.has(panelId)) {
       return;
@@ -169,26 +235,30 @@ export function ArtifactStreamingPanelBridge({
     const body = buildStreamingPanelBody({
       artifact,
       content: streaming.parsed.content ?? "",
+      previewMode,
     });
     const defaultWidth = artifactPanelDefaultWidth(
       artifact.filename,
       artifact.mimeType
     );
-    const subtitle = artifactPanelSubtitle({
-      mimeType: artifact.mimeType,
-      streaming: true,
-    });
-    const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
-    const isWordDocument =
-      isDocxFile(artifact.filename, artifact.mimeType) ||
-      isLegacyDocFile(artifact.filename, artifact.mimeType);
-    const isMarkdown =
-      isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
+    const header = buildStreamingArtifactHeader(artifact, { streaming: true });
+    const { isHtml, isMarkdown } = streamingPreviewFlags(artifact);
     const bodyClassName = artifactPanelBodyClassName({
       isHtml,
       isImage: false,
       isMarkdown,
+      previewMode,
     });
+    const leading = header.showPreviewToggle ? (
+      <ArtifactPreviewModeToggle
+        mode={previewMode}
+        onChange={(mode) =>
+          setPreviewModeByPanel((current) =>
+            withPanelPreviewMode(current, panelId, mode)
+          )
+        }
+      />
+    ) : null;
     const widthPatch =
       defaultWidth === 768 && !autoWidthAppliedRef.current.has(panelId)
         ? { defaultWidth }
@@ -202,8 +272,10 @@ export function ArtifactStreamingPanelBridge({
       update(panelId, {
         bodyClassName,
         content: body,
-        subtitle,
-        title: filename,
+        leading,
+        subtitle: header.subtitle,
+        title: header.title,
+        typeLabel: header.typeLabel,
         ...widthPatch,
       });
       return;
@@ -218,20 +290,43 @@ export function ArtifactStreamingPanelBridge({
       autoWidthAppliedRef.current.add(panelId);
     }
     show({
-      bodyClassName,
-      content: body,
+      bodyClassName: artifactPanelBodyClassName({
+        isHtml,
+        isImage: false,
+        isMarkdown,
+        previewMode: "preview",
+      }),
+      content: buildStreamingPanelBody({
+        artifact,
+        content: streaming.parsed.content ?? "",
+        previewMode: "preview",
+      }),
       defaultWidth,
       fullscreen: false,
       id: panelId,
+      leading: header.showPreviewToggle ? (
+        <ArtifactPreviewModeToggle
+          mode="preview"
+          onChange={(mode) =>
+            setPreviewModeByPanel((current) =>
+              withPanelPreviewMode(current, panelId, mode)
+            )
+          }
+        />
+      ) : null,
       onClose: () => {
         dismissedRef.current.add(panelId);
         openedRef.current = null;
+        setPreviewModeByPanel((current) =>
+          withoutPanelPreviewMode(current, panelId)
+        );
       },
       resizable: true,
-      subtitle,
-      title: filename,
+      subtitle: header.subtitle,
+      title: header.title,
+      typeLabel: header.typeLabel,
     });
-  }, [activeId, profileId, show, streaming, update]);
+  }, [activeId, previewModeByPanel, profileId, show, streaming, update]);
 
   const handoffTarget = useMemo(() => {
     const candidate = lastEligibleRef.current;
@@ -282,32 +377,10 @@ export function ArtifactStreamingPanelBridge({
           handoffTarget.relativePath,
           handoffTarget.tool
         );
-        const isHtml = isHtmlArtifactMimeType(artifact.mimeType);
-        const isWordDocument =
-          isDocxFile(artifact.filename, artifact.mimeType) ||
-          isLegacyDocFile(artifact.filename, artifact.mimeType);
-        const isMarkdown =
-          isMarkdownArtifactMimeType(artifact.mimeType) || isWordDocument;
-
-        update(handoffTarget.toolCallId, {
-          bodyClassName: artifactPanelBodyClassName({
-            isHtml,
-            isImage: false,
-            isMarkdown,
-          }),
-          content: buildStablePanelBody({
-            artifact,
-            content: text,
-          }),
-          defaultWidth: artifactPanelDefaultWidth(
-            artifact.filename,
-            artifact.mimeType
-          ),
-          subtitle: artifactPanelSubtitle({
-            mimeType: artifact.mimeType,
-            sizeBytes: new TextEncoder().encode(text).byteLength,
-          }),
-          title: filename,
+        setStableContent({
+          artifact,
+          content: text,
+          toolCallId: handoffTarget.toolCallId,
         });
       })
       .catch((error) => {
@@ -326,6 +399,52 @@ export function ArtifactStreamingPanelBridge({
       cancelled = true;
     };
   }, [activeId, handoffTarget, profileId, update]);
+
+  useEffect(() => {
+    if (!stableContent || activeId !== stableContent.toolCallId) {
+      return;
+    }
+
+    const previewMode =
+      previewModeByPanel[stableContent.toolCallId] ?? "preview";
+    const header = buildStreamingArtifactHeader(stableContent.artifact, {
+      sizeBytes: new TextEncoder().encode(stableContent.content).byteLength,
+    });
+    const { isHtml, isMarkdown } = streamingPreviewFlags(
+      stableContent.artifact
+    );
+
+    update(stableContent.toolCallId, {
+      bodyClassName: artifactPanelBodyClassName({
+        isHtml,
+        isImage: false,
+        isMarkdown,
+        previewMode,
+      }),
+      content: buildStablePanelBody({
+        artifact: stableContent.artifact,
+        content: stableContent.content,
+        previewMode,
+      }),
+      defaultWidth: artifactPanelDefaultWidth(
+        stableContent.artifact.filename,
+        stableContent.artifact.mimeType
+      ),
+      leading: header.showPreviewToggle ? (
+        <ArtifactPreviewModeToggle
+          mode={previewMode}
+          onChange={(mode) =>
+            setPreviewModeByPanel((current) =>
+              withPanelPreviewMode(current, stableContent.toolCallId, mode)
+            )
+          }
+        />
+      ) : null,
+      subtitle: header.subtitle,
+      title: header.title,
+      typeLabel: header.typeLabel,
+    });
+  }, [activeId, previewModeByPanel, stableContent, update]);
 
   return null;
 }

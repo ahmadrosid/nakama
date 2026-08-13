@@ -16,17 +16,21 @@ interface AttachmentDetailPanelProps {
   className?: string;
   fullscreen?: boolean;
   headerActions?: ReactNode;
+  leading?: ReactNode;
   onClose: () => void;
   onWidthChange: (width: number) => void;
   resizable?: boolean;
   subtitle?: string | null;
   title: string;
+  typeLabel?: string | null;
   width: number;
 }
 
 export function AttachmentDetailPanel({
   title,
+  typeLabel,
   subtitle,
+  leading,
   children,
   headerActions,
   bodyClassName,
@@ -128,13 +132,24 @@ export function AttachmentDetailPanel({
       ) : null}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-3 border-border border-b px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate font-medium text-sm">{title}</h2>
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-muted-foreground text-xs">
-                {subtitle}
-              </p>
-            ) : null}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            {leading}
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate font-medium text-sm">
+                {title}
+                {typeLabel ? (
+                  <span className="font-normal text-muted-foreground">
+                    {" · "}
+                    {typeLabel}
+                  </span>
+                ) : null}
+              </h2>
+              {leading ? null : subtitle ? (
+                <p className="mt-0.5 truncate text-muted-foreground text-xs">
+                  {subtitle}
+                </p>
+              ) : null}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {headerActions}

@@ -1,3 +1,4 @@
+import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
 import {
   artifactCodeLanguage,
@@ -36,22 +37,108 @@ export function artifactPanelDefaultWidth(
   return clampAttachmentPanelWidth(baseWidth);
 }
 
+export function artifactCanTogglePreviewSource({
+  isHtml,
+  isMarkdown,
+}: {
+  isHtml: boolean;
+  isMarkdown: boolean;
+}): boolean {
+  return isHtml || isMarkdown;
+}
+
+export function artifactPanelHeadingName(filename: string): string {
+  const slash = filename.lastIndexOf("/");
+  const base = slash >= 0 ? filename.slice(slash + 1) : filename;
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) {
+    return base;
+  }
+  return base.slice(0, dot);
+}
+
+export function artifactPanelTypeLabel({
+  filename,
+  mimeType,
+}: {
+  filename: string;
+  mimeType: string;
+}): string {
+  if (isHtmlArtifactMimeType(mimeType)) {
+    return "HTML";
+  }
+
+  if (
+    isMarkdownArtifactMimeType(mimeType) ||
+    isDocxFile(filename, mimeType) ||
+    isLegacyDocFile(filename, mimeType)
+  ) {
+    return "Markdown";
+  }
+
+  const language = artifactCodeLanguage(filename);
+  if (language) {
+    return language.toUpperCase();
+  }
+
+  const subtype = mimeType.split("/")[1]?.trim();
+  return subtype ? subtype.toUpperCase() : "FILE";
+}
+
+export function artifactPanelHeaderMeta({
+  filename,
+  mimeType,
+  sizeBytes = 0,
+  streaming = false,
+  showPreviewToggle,
+}: {
+  filename: string;
+  mimeType: string;
+  sizeBytes?: number;
+  streaming?: boolean;
+  showPreviewToggle: boolean;
+}): {
+  subtitle: string | null;
+  title: string;
+  typeLabel: string | null;
+} {
+  if (showPreviewToggle) {
+    return {
+      subtitle: null,
+      title: artifactPanelHeadingName(filename),
+      typeLabel: artifactPanelTypeLabel({ filename, mimeType }),
+    };
+  }
+
+  return {
+    subtitle: artifactPanelSubtitle({ mimeType, sizeBytes, streaming }),
+    title: filename,
+    typeLabel: null,
+  };
+}
+
 export function artifactPanelBodyClassName({
   isHtml,
   isImage,
   isVideo = false,
   isMarkdown,
+  previewMode = "preview",
 }: {
   isHtml: boolean;
   isImage: boolean;
   isVideo?: boolean;
   isMarkdown: boolean;
+  previewMode?: ArtifactPreviewMode;
 }): string | undefined {
+  if (isHtml && previewMode === "source") {
+    return "flex flex-col overflow-hidden";
+  }
+
   if (isHtml || isImage || isVideo) {
     return "flex flex-col overflow-hidden p-0";
   }
 
-  if (!isMarkdown) {
+  if (!isMarkdown || previewMode === "source") {
     return "flex flex-col overflow-hidden";
   }
 }
