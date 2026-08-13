@@ -10,6 +10,62 @@ import {
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 
+export function useAuthenticatedImagePreview(
+  profileId: string | null | undefined,
+  artifactPath: string | null | undefined
+): { error: string | null; url: string | null } {
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const url = useBlobObjectUrl(blob);
+
+  useEffect(() => {
+    if (!(profileId?.trim() && artifactPath?.trim())) {
+      setBlob(null);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setBlob(null);
+    setError(null);
+
+    void client
+      .readProfileArtifactContent(profileId, artifactPath, { inline: true })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        const filename = artifactPath.split("/").pop() ?? artifactPath;
+        const contentType = resolveArtifactMimeType(
+          result.contentType,
+          filename
+        );
+        if (!isImageArtifactMimeType(contentType)) {
+          setBlob(null);
+          setError(
+            "Preview is not available for this file type. Download instead."
+          );
+          return;
+        }
+
+        setBlob(new Blob([result.data], { type: contentType }));
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          setBlob(null);
+          setError(formatError(fetchError));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [artifactPath, profileId]);
+
+  return { error, url };
+}
+
 function useBlobObjectUrl(blob: Blob | null) {
   const [url, setUrl] = useState<string | null>(null);
 
