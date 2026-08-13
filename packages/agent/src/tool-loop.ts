@@ -1,4 +1,9 @@
-import type { ToolCall, ToolContext, ToolDefinition } from "@nakama/core";
+import {
+  distillToolResult,
+  type ToolCall,
+  type ToolContext,
+  type ToolDefinition,
+} from "@nakama/core";
 
 export function findTool(
   tools: ToolDefinition[],
@@ -32,7 +37,11 @@ export async function executeToolCall(
   }
 
   try {
-    return await tool.run(call.arguments, context);
+    const result = await tool.run(call.arguments, context);
+    // The single place every tool result passes through, so the optimiser is
+    // wired once rather than per tool. It returns `result` untouched unless it
+    // is enabled, recognises the tool, and produces something strictly shorter.
+    return await distillToolResult(call.name, result, context);
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),

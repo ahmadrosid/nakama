@@ -170,6 +170,8 @@ export interface StoredWorkspaceSettingsRecord {
   imageModel: string | null;
   orgId?: string | null;
   selectedCodingAgentHarness: string | null;
+  /** null = inherit the NAKAMA_OMNI env var; true/false = set explicitly here. */
+  tokenOptimizerEnabled?: boolean | null;
   transcriptionModel: string | null;
   updatedAt: string;
   visionModel: string | null;
@@ -270,6 +272,47 @@ export interface LlmUsageStatsDelta {
   inputTokens: number;
   outputTokens: number;
   requestCount: number;
+}
+
+/** Bytes one optimiser removed from one tool result before it was inserted. */
+export interface ToolOutputSavingsDelta {
+  bytesIn: number;
+  bytesOut: number;
+  optimizer: string;
+  tool: string;
+}
+
+/** One request's provider tokens, tagged with the arm it belongs to. */
+export interface LlmTurnUsageDelta {
+  estimated: boolean;
+  inputTokens: number;
+  optimized: boolean;
+  outputTokens: number;
+}
+
+export interface StoredLlmTurnUsageRecord {
+  arm: string;
+  bucket: string;
+  estimatedTurns: number;
+  inputTokens: number;
+  orgId: string;
+  outputTokens: number;
+  turns: number;
+}
+
+export interface StoredToolOutputSavingsRecord {
+  /** Day the bytes were removed, `YYYY-MM-DD`. Day resolution because the panel
+   * plots days and an hour column would be 24x the rows for a chart nobody asked
+   * for at that grain. */
+  bucket: string;
+  bytesIn: number;
+  bytesOut: number;
+  calls: number;
+  optimizer: string;
+  orgId: string;
+  tool: string;
+  trackedSince: string;
+  updatedAt: string;
 }
 
 export type McpServerStatus = "connected" | "disconnected" | "error";
@@ -643,6 +686,7 @@ export interface DatabaseAdapter {
   getUserContext(orgId: string, userId: string): Promise<string | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
+  incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageStats(
     delta: LlmUsageStatsDelta,
     trackedSince: string
@@ -663,6 +707,11 @@ export interface DatabaseAdapter {
     usedAt?: string;
     patchedAt?: string;
   }): Promise<void>;
+  incrementToolOutputSavings(
+    orgId: string,
+    delta: ToolOutputSavingsDelta,
+    trackedSince: string
+  ): Promise<void>;
 
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
@@ -684,6 +733,7 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
 
@@ -747,6 +797,9 @@ export interface DatabaseAdapter {
 
   listTasks(): Promise<StoredTaskRecord[]>;
   listTasksForOrg(orgId: string): Promise<StoredTaskRecord[]>;
+  listToolOutputSavings(
+    orgId: string
+  ): Promise<StoredToolOutputSavingsRecord[]>;
 
   listTools(): Promise<StoredToolRecord[]>;
 

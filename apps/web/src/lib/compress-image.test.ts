@@ -1,5 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import { scaleImageDimensions } from "./compress-image";
+import {
+  COMPRESS_IMAGE_OVER_BYTES,
+  compressImageFileForUpload,
+  scaleImageDimensions,
+} from "./compress-image";
+
+describe("compressImageFileForUpload", () => {
+  test("leaves images at or under 1 MB unchanged", async () => {
+    const file = new File(
+      [new Uint8Array(COMPRESS_IMAGE_OVER_BYTES)],
+      "shot.png",
+      { type: "image/png" }
+    );
+
+    expect(await compressImageFileForUpload(file)).toBe(file);
+  });
+
+  test("leaves non-images unchanged when larger than 1 MB", async () => {
+    const file = new File(
+      [new Uint8Array(COMPRESS_IMAGE_OVER_BYTES + 1)],
+      "notes.pdf",
+      { type: "application/pdf" }
+    );
+
+    expect(await compressImageFileForUpload(file)).toBe(file);
+  });
+});
 
 describe("scaleImageDimensions", () => {
   test("keeps dimensions when already within bounds", () => {

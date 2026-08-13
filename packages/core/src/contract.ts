@@ -189,6 +189,76 @@ export interface McpStatus {
   serverCount: number;
 }
 
+/**
+ * Bytes an optimiser removed from tool results before they entered the
+ * conversation. Not tokens and not cost: see the route that serves it for why
+ * converting these to either would be a fabrication.
+ */
+export interface TokenOptimizationResponse {
+  /**
+   * Two arms. `optimized` is what an optimiser shortened; `control` is what went
+   * in untouched. One arm alone is not a comparison, it is a restatement that
+   * the feature was on.
+   */
+  arms: {
+    control: TokenOptimizationArm;
+    optimized: TokenOptimizationArm;
+  };
+  byTool: Array<{
+    bytesIn: number;
+    bytesOut: number;
+    calls: number;
+    tool: string;
+  }>;
+  /** One entry per day in the window, oldest first, zero-filled. */
+  days: Array<{
+    bytesIn: number;
+    bytesRemoved: number;
+    day: string;
+  }>;
+  /**
+   * Provider input tokens per turn, split by arm. The only tokens here; every
+   * other figure is bytes. Observational rather than randomised, so a workload
+   * difference between the arms is a confound, not a result.
+   */
+  inputTokens: {
+    control: TokenOptimizationTurnArm;
+    optimized: TokenOptimizationTurnArm;
+  };
+  optimizers: Array<{
+    enabled: boolean;
+    id: string;
+    /** Whether the binary is reachable on this host. Enabled without installed
+     * is the case an operator has to be told about, because the optimiser fails
+     * open and would otherwise look merely idle. */
+    installed: boolean;
+    tools: string[];
+  }>;
+  totals: {
+    bytesIn: number;
+    bytesRemoved: number;
+    calls: number;
+  };
+  trackedSince: string | null;
+  windowDays: number;
+}
+
+export interface TokenOptimizationTurnArm {
+  arm: string;
+  /** Turns whose token count came from an estimate, not the provider. */
+  estimatedTurns: number;
+  inputTokens: number;
+  inputTokensPerTurn: number;
+  turns: number;
+}
+
+export interface TokenOptimizationArm {
+  arm: string;
+  bytesIn: number;
+  bytesOut: number;
+  calls: number;
+}
+
 export interface SystemStatusResponse {
   automationWorker: AutomationWorkerStatus;
   checkedAt: string;
@@ -681,6 +751,15 @@ export interface SessionMessageMeta {
 export type ChatContextUsageSource = "provider" | "estimate";
 
 export interface ChatContextUsage {
+  /**
+   * Bytes an optimiser kept out of this session's context so far. Absent until
+   * something is actually removed, so the UI reports a measurement rather than
+   * announcing a feature. Bytes, not tokens: the label must carry a byte unit.
+   */
+  bytesKeptOut?: number;
+  /** Everything the handled tools produced this session, the denominator for
+   * the percentage. Present whenever bytesKeptOut is. */
+  bytesProduced?: number;
   contextWindow: number;
   source: ChatContextUsageSource;
   /** Denominator matching compaction usable context (window minus reserved output). */
@@ -1896,9 +1975,37 @@ export interface ToolContext {
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
   profileId?: string;
+  /**
+   * Records bytes an optimiser removed from a tool result before insertion.
+   * Passed in rather than imported because the database lives in the server and
+   * this runs in core. Optional and fire-and-forget: a platform that does not
+   * record anything simply leaves it undefined.
+   */
+  recordToolOutputSavings?: (saving: {
+    bytesIn: number;
+    bytesOut: number;
+    optimizer: string;
+    tool: string;
+  }) => void;
+  /**
+   * Records what the provider actually charged for one request, tagged with
+   * whether the optimiser was active. This is the only honest route from bytes
+   * to tokens: the provider counts, split by arm.
+   */
+  recordTurnUsage?: (turn: {
+    estimated: boolean;
+    inputTokens: number;
+    optimized: boolean;
+    outputTokens: number;
+  }) => void;
   sessionId?: string;
   /** Aborts when the caller cancels the turn. Long-running tools should stop their work on it. */
   signal?: AbortSignal;
+  /**
+   * Per-org override for the tool-output optimiser. Undefined means the setting
+   * was never chosen, which falls back to the server's NAKAMA_OMNI env var.
+   */
+  tokenOptimizerEnabled?: boolean | null;
   userId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
   workspaceRoot?: string;

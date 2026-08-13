@@ -1,6 +1,7 @@
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
+export const COMPRESS_IMAGE_OVER_BYTES = 1024 * 1024;
 const MAX_DIMENSION = 2048;
 const QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4] as const;
 const SCALE_STEPS = [1, 0.75, 0.5, 0.35] as const;
@@ -134,7 +135,7 @@ async function renderCompressedFile(
 
 export async function compressImageFileForUpload(
   file: File,
-  maxBytes = MAX_IMAGE_BYTES
+  maxBytes = COMPRESS_IMAGE_OVER_BYTES
 ): Promise<File> {
   if (!file.type.startsWith("image/") || file.size <= maxBytes) {
     return file;

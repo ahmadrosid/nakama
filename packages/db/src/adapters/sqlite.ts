@@ -189,6 +189,7 @@ interface WorkspaceSettingsRow {
   id: string;
   image_model: string | null;
   selected_coding_agent_harness: string | null;
+  token_optimizer_enabled: number | null;
   transcription_model: string | null;
   updated_at: string;
   vision_model: string | null;
@@ -871,6 +872,35 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       estimated_cost_usd = llm_usage_model_stats.estimated_cost_usd + excluded.estimated_cost_usd,
       updated_at = excluded.updated_at
   `);
+  const incrementToolOutputSavingsStmt = db.prepare(`
+    INSERT INTO tool_output_savings (
+      org_id, bucket, optimizer, tool, calls, bytes_in, bytes_out, tracked_since, updated_at
+    )
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+    ON CONFLICT(org_id, bucket, optimizer, tool) DO UPDATE SET
+      calls = tool_output_savings.calls + 1,
+      bytes_in = tool_output_savings.bytes_in + excluded.bytes_in,
+      bytes_out = tool_output_savings.bytes_out + excluded.bytes_out,
+      updated_at = excluded.updated_at
+  `);
+  const listToolOutputSavingsStmt = db.prepare(
+    "SELECT * FROM tool_output_savings WHERE org_id = ? ORDER BY bucket ASC, (bytes_in - bytes_out) DESC"
+  );
+  const incrementLlmTurnUsageStmt = db.prepare(`
+    INSERT INTO llm_turn_usage (
+      org_id, bucket, arm, turns, input_tokens, output_tokens, estimated_turns, updated_at
+    )
+    VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+    ON CONFLICT(org_id, bucket, arm) DO UPDATE SET
+      turns = llm_turn_usage.turns + 1,
+      input_tokens = llm_turn_usage.input_tokens + excluded.input_tokens,
+      output_tokens = llm_turn_usage.output_tokens + excluded.output_tokens,
+      estimated_turns = llm_turn_usage.estimated_turns + excluded.estimated_turns,
+      updated_at = excluded.updated_at
+  `);
+  const listLlmTurnUsageStmt = db.prepare(
+    "SELECT * FROM llm_turn_usage WHERE org_id = ? ORDER BY bucket ASC"
+  );
   const getWorkspaceSettingsStmt = db.prepare(
     "SELECT * FROM workspace_settings WHERE id = ?"
   );
@@ -882,15 +912,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       image_model,
       coding_agent_harnesses,
       selected_coding_agent_harness,
+      token_optimizer_enabled,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
       image_model = excluded.image_model,
       coding_agent_harnesses = excluded.coding_agent_harnesses,
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
+      token_optimizer_enabled = excluded.token_optimizer_enabled,
       updated_at = excluded.updated_at
   `);
   const listNotificationDestinationsForOrgStmt = db.prepare(`
@@ -2044,6 +2076,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toWorkspaceSettingsRecord(row) : null;
     },
 
+    async incrementLlmTurnUsage(orgId, delta) {
+      const updatedAt = new Date().toISOString();
+      incrementLlmTurnUsageStmt.run(
+        orgId,
+        updatedAt.slice(0, 10),
+        delta.optimized ? "omni" : "none",
+        delta.inputTokens,
+        delta.outputTokens,
+        delta.estimated ? 1 : 0,
+        updatedAt
+      );
+    },
+
     async incrementLlmUsageStats(delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsStmt.run(
@@ -2084,6 +2129,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         input.patchedAt ?? null,
         now,
         now
+      );
+    },
+
+    async incrementToolOutputSavings(orgId, delta, trackedSince) {
+      const updatedAt = new Date().toISOString();
+      incrementToolOutputSavingsStmt.run(
+        orgId,
+        updatedAt.slice(0, 10),
+        delta.optimizer,
+        delta.tool,
+        delta.bytesIn,
+        delta.bytesOut,
+        trackedSince,
+        updatedAt
       );
     },
 
@@ -2159,6 +2218,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) =>
           toComposioUserConnectionRecord(row as ComposioUserConnectionRow)
         );
+    },
+
+    async listLlmTurnUsage(orgId) {
+      return (
+        listLlmTurnUsageStmt.all(orgId) as {
+          arm: string;
+          bucket: string;
+          estimated_turns: number;
+          input_tokens: number;
+          org_id: string;
+          output_tokens: number;
+          turns: number;
+        }[]
+      ).map((row) => ({
+        arm: row.arm,
+        bucket: row.bucket,
+        estimatedTurns: row.estimated_turns,
+        inputTokens: row.input_tokens,
+        orgId: row.org_id,
+        outputTokens: row.output_tokens,
+        turns: row.turns,
+      }));
     },
 
     async listLlmUsageStatsByModel() {
@@ -2369,6 +2450,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listTasksForOrgStmt
         .all(orgId)
         .map((row) => toTaskRecord(row as TaskRow));
+    },
+
+    async listToolOutputSavings(orgId) {
+      return (
+        listToolOutputSavingsStmt.all(orgId) as {
+          bucket: string;
+          bytes_in: number;
+          bytes_out: number;
+          calls: number;
+          optimizer: string;
+          org_id: string;
+          tool: string;
+          tracked_since: string;
+          updated_at: string;
+        }[]
+      ).map((row) => ({
+        bucket: row.bucket,
+        bytesIn: row.bytes_in,
+        bytesOut: row.bytes_out,
+        calls: row.calls,
+        optimizer: row.optimizer,
+        orgId: row.org_id,
+        tool: row.tool,
+        trackedSince: row.tracked_since,
+        updatedAt: row.updated_at,
+      }));
     },
 
     async listTools() {
@@ -2779,6 +2886,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.imageModel,
         JSON.stringify(record.codingAgentHarnesses),
         record.selectedCodingAgentHarness,
+        record.tokenOptimizerEnabled === null ||
+          record.tokenOptimizerEnabled === undefined
+          ? null
+          : Number(record.tokenOptimizerEnabled),
         record.updatedAt
       );
     },
@@ -3139,6 +3250,11 @@ function toWorkspaceSettingsRecord(
     imageModel: row.image_model?.trim() || null,
     selectedCodingAgentHarness:
       row.selected_coding_agent_harness?.trim() || null,
+    tokenOptimizerEnabled:
+      row.token_optimizer_enabled === null ||
+      row.token_optimizer_enabled === undefined
+        ? null
+        : row.token_optimizer_enabled === 1,
     transcriptionModel: row.transcription_model?.trim() || null,
     updatedAt: row.updated_at,
     visionModel: row.vision_model?.trim() || null,

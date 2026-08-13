@@ -293,6 +293,14 @@ describe("McpService", () => {
     expect(
       await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.exa)
     ).not.toBeNull();
+
+    await expect(
+      service.deleteServer(PREINSTALLED_MCP_SERVER_IDS.firecrawl)
+    ).rejects.toThrow('Preinstalled MCP server "firecrawl" cannot be deleted.');
+
+    expect(
+      await db.getMcpServer(PREINSTALLED_MCP_SERVER_IDS.firecrawl)
+    ).not.toBeNull();
   });
 
   test("lists assigned profile counts on MCP servers", async () => {

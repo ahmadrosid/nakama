@@ -266,6 +266,141 @@ describe("seed preinstalled MCP servers", () => {
     await ensurePreinstalledMcpServers(db);
     await ensurePreinstalledMcpServers(db);
 
-    expect((await db.listMcpServers()).length).toBe(2);
+    expect((await db.listMcpServers()).length).toBe(3);
+  });
+
+  test("seeds firecrawl keyless HTTP MCP unassigned", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    await ensurePreinstalledMcpServers(db);
+
+    const firecrawl = await db.getMcpServer("mcp_firecrawl");
+
+    expect(firecrawl).toMatchObject({
+      enabled: true,
+      id: "mcp_firecrawl",
+      name: "firecrawl",
+      transport: "http",
+    });
+    expect(firecrawl?.config).toEqual({
+      url: "https://mcp.firecrawl.dev/v2/mcp",
+    });
+    expect(await db.listProfilesForMcpServer("mcp_firecrawl")).toEqual([]);
+  });
+
+  test("preserves HTTP headers and enabled on re-seed", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await ensurePreinstalledMcpServers(db);
+
+    const firecrawl = await db.getMcpServer("mcp_firecrawl");
+    const exa = await db.getMcpServer("mcp_exa");
+
+    expect(firecrawl).not.toBeNull();
+    expect(exa).not.toBeNull();
+
+    await db.upsertMcpServer({
+      ...firecrawl!,
+      cachedTools: [{ description: "search", name: "firecrawl_search" }],
+      config: {
+        headers: { Authorization: "Bearer fc-test" },
+        url: "https://mcp.firecrawl.dev/v2/mcp",
+      },
+      enabled: false,
+      lastError: "previous error",
+      status: "error",
+      updatedAt: now,
+    });
+    await db.upsertMcpServer({
+      ...exa!,
+      config: {
+        headers: { "x-api-key": "exa-secret" },
+        url: "https://mcp.exa.ai/mcp",
+      },
+      updatedAt: now,
+    });
+
+    await ensurePreinstalledMcpServers(db);
+
+    const reseededFirecrawl = await db.getMcpServer("mcp_firecrawl");
+    const reseededExa = await db.getMcpServer("mcp_exa");
+
+    expect(reseededFirecrawl?.config).toEqual({
+      headers: { Authorization: "Bearer fc-test" },
+      url: "https://mcp.firecrawl.dev/v2/mcp",
+    });
+    expect(reseededFirecrawl?.enabled).toBe(false);
+    expect(reseededFirecrawl?.cachedTools).toEqual([
+      { description: "search", name: "firecrawl_search" },
+    ]);
+    expect(reseededFirecrawl?.lastError).toBe("previous error");
+    expect(reseededFirecrawl?.status).toBe("error");
+    expect(reseededExa?.config).toEqual({
+      headers: { "x-api-key": "exa-secret" },
+      url: "https://mcp.exa.ai/mcp",
+    });
+  });
+
+  test("skips insert when another server already owns the catalog name", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    const warns: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warns.push(args.map(String).join(" "));
+    };
+
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: {
+        headers: { Authorization: "Bearer fc-custom" },
+        url: "https://mcp.firecrawl.dev/v2/mcp",
+      },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_custom_firecrawl",
+      lastError: null,
+      name: "firecrawl",
+      status: "disconnected",
+      transport: "http",
+      updatedAt: now,
+    });
+
+    try {
+      await ensurePreinstalledMcpServers(db);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(await db.getMcpServer("mcp_firecrawl")).toBeNull();
+    expect(await db.getMcpServerByName("firecrawl")).toMatchObject({
+      id: "mcp_custom_firecrawl",
+    });
+    expect(warns.join("\n")).toContain("mcp_custom_firecrawl");
+    expect(warns.join("\n")).not.toContain("fc-custom");
+    expect(warns.join("\n")).not.toContain("Authorization");
+  });
+
+  test("migrates a Firecrawl key-in-URL into an Authorization header", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await ensurePreinstalledMcpServers(db);
+    const firecrawl = await db.getMcpServer("mcp_firecrawl");
+    expect(firecrawl).not.toBeNull();
+
+    await db.upsertMcpServer({
+      ...firecrawl!,
+      config: { url: "https://mcp.firecrawl.dev/fc-legacy/v2/mcp" },
+      updatedAt: now,
+    });
+
+    await ensurePreinstalledMcpServers(db);
+
+    expect((await db.getMcpServer("mcp_firecrawl"))?.config).toEqual({
+      headers: { Authorization: "Bearer fc-legacy" },
+      url: "https://mcp.firecrawl.dev/v2/mcp",
+    });
   });
 });

@@ -137,6 +137,7 @@ import type {
   ThinkingSettings,
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
+  TokenOptimizationResponse,
   ToolResponse,
   ToolSourceResponse,
   TranscribeAudioRequest,
@@ -236,6 +237,17 @@ export class NakamaClient {
 
   async getSystemStatus(): Promise<SystemStatusResponse> {
     return this.request<SystemStatusResponse>("/v1/system/status");
+  }
+
+  async getTokenOptimization(): Promise<TokenOptimizationResponse> {
+    return this.request<TokenOptimizationResponse>("/v1/token-optimization");
+  }
+
+  async setTokenOptimization(enabled: boolean): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/token-optimization", {
+      body: JSON.stringify({ enabled }),
+      method: "PUT",
+    });
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {

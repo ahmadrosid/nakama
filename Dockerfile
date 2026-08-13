@@ -18,6 +18,30 @@ RUN bun install --frozen-lockfile --ignore-scripts \
 FROM oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
+# Optional tool-output optimiser. Empty by default, so the published image is
+# unchanged and carries no binary most deployments would never run. Build with
+# --build-arg OMNI_VERSION=0.7.3 to include it, then set NAKAMA_OMNI=1.
+# The release is a static musl build, which runs on this glibc base, and the
+# published checksum is verified rather than the download trusted.
+ARG OMNI_VERSION=""
+RUN if [ -n "$OMNI_VERSION" ]; then \
+      set -eu; \
+      apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
+      case "$(dpkg --print-architecture)" in \
+        amd64) target=x86_64-unknown-linux-musl ;; \
+        arm64) target=aarch64-unknown-linux-musl ;; \
+        *) echo "no omni build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+      esac; \ 
+      base="https://github.com/fajarhide/omni/releases/download/v${OMNI_VERSION}"; \
+      archive="omni-v${OMNI_VERSION}-${target}.tar.gz"; \
+      curl -fsSL -o "/tmp/${archive}" "${base}/${archive}"; \
+      curl -fsSL -o /tmp/SHA256SUMS "${base}/SHA256SUMS"; \
+      (cd /tmp && grep " ${archive}\$" SHA256SUMS | sha256sum -c -); \
+      tar -xzf "/tmp/${archive}" -C /usr/local/bin omni; \
+      rm -rf "/tmp/${archive}" /tmp/SHA256SUMS /var/lib/apt/lists/*; \
+      omni --version; \
+    fi
+
 COPY package.json bun.lock ./
 COPY apps/server apps/server
 COPY apps/platform/automation apps/platform/automation

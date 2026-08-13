@@ -11,6 +11,7 @@ import type {
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
+  StoredLlmTurnUsageRecord,
   StoredLlmUsageModelStatsRecord,
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
@@ -30,6 +31,7 @@ import type {
   StoredSkillUsageRecord,
   StoredTaskRecord,
   StoredTaskRunRecord,
+  StoredToolOutputSavingsRecord,
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
@@ -83,6 +85,8 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   >();
   let llmUsageStats: StoredLlmUsageStatsRecord | null = null;
   const llmUsageByModel = new Map<string, StoredLlmUsageModelStatsRecord>();
+  const toolOutputSavings = new Map<string, StoredToolOutputSavingsRecord>();
+  const llmTurnUsage = new Map<string, StoredLlmTurnUsageRecord>();
   let workspaceSettings: StoredWorkspaceSettingsRecord | null = null;
   const notificationDestinations = new Map<
     string,
@@ -649,6 +653,25 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         : null;
     },
 
+    async incrementLlmTurnUsage(orgId, delta) {
+      const updatedAt = new Date().toISOString();
+      const bucket = updatedAt.slice(0, 10);
+      const arm = delta.optimized ? "omni" : "none";
+      const key = `${orgId}\u0000${bucket}\u0000${arm}`;
+      const existing = llmTurnUsage.get(key);
+
+      llmTurnUsage.set(key, {
+        arm,
+        bucket,
+        estimatedTurns:
+          (existing?.estimatedTurns ?? 0) + (delta.estimated ? 1 : 0),
+        inputTokens: (existing?.inputTokens ?? 0) + delta.inputTokens,
+        orgId,
+        outputTokens: (existing?.outputTokens ?? 0) + delta.outputTokens,
+        turns: (existing?.turns ?? 0) + 1,
+      });
+    },
+
     async incrementLlmUsageStats(
       delta: LlmUsageStatsDelta,
       trackedSince: string
@@ -744,6 +767,25 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       });
     },
 
+    async incrementToolOutputSavings(orgId, delta, trackedSince) {
+      const updatedAt = new Date().toISOString();
+      const bucket = updatedAt.slice(0, 10);
+      const key = `${orgId}\u0000${bucket}\u0000${delta.optimizer}\u0000${delta.tool}`;
+      const existing = toolOutputSavings.get(key);
+
+      toolOutputSavings.set(key, {
+        bucket,
+        bytesIn: (existing?.bytesIn ?? 0) + delta.bytesIn,
+        bytesOut: (existing?.bytesOut ?? 0) + delta.bytesOut,
+        calls: (existing?.calls ?? 0) + 1,
+        optimizer: delta.optimizer,
+        orgId,
+        tool: delta.tool,
+        trackedSince: existing?.trackedSince ?? trackedSince,
+        updatedAt,
+      });
+    },
+
     async insertAttachment(record) {
       attachments.set(record.id, { ...record });
     },
@@ -784,6 +826,12 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       return Array.from(composioUserConnections.values()).filter(
         (record) => record.orgId === orgId && record.userId === userId
       );
+    },
+
+    async listLlmTurnUsage(orgId) {
+      return [...llmTurnUsage.values()]
+        .filter((row) => row.orgId === orgId)
+        .sort((left, right) => left.bucket.localeCompare(right.bucket));
     },
 
     async listLlmUsageStatsByModel() {
@@ -1012,6 +1060,16 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
             ? left.position - right.position
             : statusCompare;
         });
+    },
+
+    async listToolOutputSavings(orgId) {
+      return [...toolOutputSavings.values()]
+        .filter((row) => row.orgId === orgId)
+        .sort((left, right) =>
+          left.bucket === right.bucket
+            ? right.bytesIn - right.bytesOut - (left.bytesIn - left.bytesOut)
+            : left.bucket.localeCompare(right.bucket)
+        );
     },
 
     async listTools() {

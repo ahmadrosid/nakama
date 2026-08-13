@@ -6,6 +6,7 @@ import type { ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
 import { pathExists } from "../fs";
+import { isOmniEnabled, omniRetrieveTool } from "../omni";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
@@ -864,6 +865,11 @@ export const builtinTools: ToolDefinition[] = [
   webFetchTool,
   emailTool,
   extractDocumentTextTool,
+  // Gated on the server-wide env var, not the per-org toggle: the env var says
+  // the binary exists here, the toggle says whether an org uses it. Publishing
+  // the expander per-org would let an org flip folding on and have no way to
+  // read back what was folded until a restart.
+  ...(isOmniEnabled() ? [omniRetrieveTool] : []),
 ];
 
 export { PathGuardError };
