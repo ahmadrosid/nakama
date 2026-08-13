@@ -1,5 +1,5 @@
 import type { TokenOptimizationResponse } from "@nakama/core/contract";
-import { GithubIcon } from "hugeicons-react";
+import { GithubIcon, LinkSquare02Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -231,12 +231,18 @@ export function TokenOptimizationCard() {
             {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
               <a
                 aria-label={`${omni.id} on GitHub`}
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="flex items-center gap-1 rounded border border-border bg-muted/50 px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground leading-none transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground"
                 href={OPTIMIZER_HOMEPAGE[omni.id]}
                 rel="noreferrer noopener"
                 target="_blank"
               >
-                <GithubIcon aria-hidden size={14} />
+                <GithubIcon aria-hidden size={12} />
+                GitHub
+                <LinkSquare02Icon
+                  aria-hidden
+                  className="opacity-60"
+                  size={10}
+                />
               </a>
             ) : null}
           </div>
