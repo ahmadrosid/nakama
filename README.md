@@ -98,6 +98,12 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 
 Open the dashboard at http://localhost:4310.
 
+The image carries [omni](https://github.com/fajarhide/omni), which shortens `bash`
+and `read_file` output before it reaches the model. Turn it on under Integrations,
+or with `NAKAMA_OMNI=1`. Build with `--build-arg OMNI_VERSION=` to leave the binary
+out; the server then downloads it, checksum verified, the first time the toggle is
+switched on. Set `NAKAMA_OMNI_AUTO_INSTALL=0` to forbid that download.
+
 ### Integrations
 
 Nakama connects to **Telegram**, **WhatsApp**, and **Composio**.

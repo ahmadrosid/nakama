@@ -138,6 +138,7 @@ import type {
   ThinkingSettingsResponse,
   TimezoneSettingsResponse,
   TokenOptimizationResponse,
+  TokenOptimizationUpdateResponse,
   ToolResponse,
   ToolSourceResponse,
   TranscribeAudioRequest,
@@ -243,11 +244,16 @@ export class NakamaClient {
     return this.request<TokenOptimizationResponse>("/v1/token-optimization");
   }
 
-  async setTokenOptimization(enabled: boolean): Promise<{ enabled: boolean }> {
-    return this.request<{ enabled: boolean }>("/v1/token-optimization", {
-      body: JSON.stringify({ enabled }),
-      method: "PUT",
-    });
+  async setTokenOptimization(
+    enabled: boolean
+  ): Promise<TokenOptimizationUpdateResponse> {
+    return this.request<TokenOptimizationUpdateResponse>(
+      "/v1/token-optimization",
+      {
+        body: JSON.stringify({ enabled }),
+        method: "PUT",
+      }
+    );
   }
 
   async getWebPublicUrl(): Promise<WebPublicUrlSettingsResponse> {

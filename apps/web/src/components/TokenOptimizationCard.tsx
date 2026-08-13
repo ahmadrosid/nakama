@@ -177,9 +177,12 @@ export function TokenOptimizationCard() {
   async function toggle(next: boolean) {
     setSaving(true);
     try {
-      await client.setTokenOptimization(next);
+      const result = await client.setTokenOptimization(next);
       setData(await client.getTokenOptimization());
-      setError(null);
+      // Switching on fetches the binary when it is missing, and a failed fetch
+      // is the operator's to act on: without it the panel would only repeat that
+      // the binary is absent.
+      setError(result.installError);
     } catch (cause) {
       setError(formatError(cause));
     } finally {

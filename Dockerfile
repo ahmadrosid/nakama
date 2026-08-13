@@ -18,12 +18,13 @@ RUN bun install --frozen-lockfile --ignore-scripts \
 FROM oven/bun:1.3-slim AS runtime
 WORKDIR /app
 
-# Optional tool-output optimiser. Empty by default, so the published image is
-# unchanged and carries no binary most deployments would never run. Build with
-# --build-arg OMNI_VERSION=0.7.3 to include it, then set NAKAMA_OMNI=1.
+# Tool-output optimiser, on by default so the dashboard toggle works on a fresh
+# image without a rebuild. Roughly 12 MB unpacked. Build with
+# --build-arg OMNI_VERSION= to leave it out; the server then fetches it on demand
+# when the toggle is switched on, unless NAKAMA_OMNI_AUTO_INSTALL=0.
 # The release is a static musl build, which runs on this glibc base, and the
 # published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION=""
+ARG OMNI_VERSION="0.7.3"
 RUN if [ -n "$OMNI_VERSION" ]; then \
       set -eu; \
       apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \

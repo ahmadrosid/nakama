@@ -243,6 +243,17 @@ export interface TokenOptimizationResponse {
   windowDays: number;
 }
 
+export interface TokenOptimizationUpdateResponse {
+  enabled: boolean;
+  /**
+   * Why the binary is still missing after switching the optimiser on, or null.
+   * Switching on triggers an install, and an operator who is told only that the
+   * binary is absent cannot tell a blocked download from one never attempted.
+   */
+  installError: string | null;
+  installed: boolean;
+}
+
 export interface TokenOptimizationTurnArm {
   arm: string;
   /** Turns whose token count came from an estimate, not the provider. */

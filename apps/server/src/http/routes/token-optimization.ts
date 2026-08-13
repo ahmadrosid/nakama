@@ -1,7 +1,9 @@
 import {
   CONTROL_ID,
+  ensureOmniInstalled,
   isOmniEnabled,
   isOmniInstalled,
+  type OmniInstallResult,
   OPTIMIZER_ID,
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
@@ -150,6 +152,7 @@ export function registerTokenOptimizationRoutes(
     // Admin only: this changes what every session in the org does.
     requireOrgAdminFromContext(c);
     const body = await readJson<{ enabled: boolean }>(c.req.raw);
+    const enabled = Boolean(body.enabled);
     const existing = await options.databaseAdapter.getWorkspaceSettings();
 
     await options.databaseAdapter.upsertWorkspaceSettings({
@@ -157,12 +160,23 @@ export function registerTokenOptimizationRoutes(
       id: existing?.id ?? "default",
       imageModel: existing?.imageModel ?? null,
       selectedCodingAgentHarness: existing?.selectedCodingAgentHarness ?? null,
-      tokenOptimizerEnabled: Boolean(body.enabled),
+      tokenOptimizerEnabled: enabled,
       transcriptionModel: existing?.transcriptionModel ?? null,
       updatedAt: new Date().toISOString(),
       visionModel: existing?.visionModel ?? null,
     });
 
-    return json({ enabled: Boolean(body.enabled) });
+    // Switching it on when the binary is absent used to save a setting that did
+    // nothing. Fetch it instead, and report the failure to the operator who
+    // asked rather than leaving the panel to say only that it is missing.
+    const result: OmniInstallResult = enabled
+      ? await ensureOmniInstalled()
+      : { installed: await isOmniInstalled() };
+
+    return json({
+      enabled,
+      installError: result.error ?? null,
+      installed: result.installed,
+    });
   });
 }
