@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Server } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();
@@ -322,9 +323,10 @@ function startServer(options: {
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
       return Bun.serve({
-        fetch(request, bunServer) {
-          disableBunIdleTimeoutForSse(request, bunServer);
-          return options.fetch(request);
+        async fetch(request, server: Server) {
+          const response = await options.fetch(request);
+          disableBunIdleTimeoutForSse(request, response, server);
+          return response;
         },
         hostname: options.host,
         idleTimeout: 255,

@@ -16,6 +16,7 @@ import {
   writeWhatsAppQrCode,
   writeWhatsAppWorkerHeartbeat,
 } from "@nakama/core/whatsapp-worker";
+import { hasActiveStreams } from "./active-stream";
 import { WhatsAppAuthStore } from "./auth-store";
 import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
@@ -51,7 +52,13 @@ registerCleanupHandlers(() => {
   }
   void clearWhatsAppWorkerHeartbeat();
   void clearWhatsAppQrCode();
-  stopSpawnedServer(spawnedChild);
+  if (hasActiveStreams()) {
+    console.warn(
+      "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
+    );
+  } else {
+    stopSpawnedServer(spawnedChild);
+  }
 });
 
 try {

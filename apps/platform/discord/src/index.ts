@@ -15,6 +15,7 @@ import {
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
+import { hasActiveStreams } from "./active-stream";
 import { DiscordAuthStore } from "./auth-store";
 import { createBot } from "./bot";
 import { loadConfig } from "./config";
@@ -31,7 +32,13 @@ registerCleanupHandlers(() => {
     clearInterval(heartbeatTimer);
   }
   void clearDiscordWorkerHeartbeat();
-  stopSpawnedServer(spawnedChild);
+  if (hasActiveStreams()) {
+    console.warn(
+      "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
+    );
+  } else {
+    stopSpawnedServer(spawnedChild);
+  }
 });
 
 try {
