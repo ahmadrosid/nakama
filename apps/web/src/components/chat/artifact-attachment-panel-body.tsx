@@ -62,7 +62,7 @@ function renderTextContent({
 
   return (
     <CodeBlock
-      className="rounded-lg border border-border"
+      className="rounded-none border-0"
       code={content}
       fillHeight={fillHeight}
       lang={language}
@@ -215,7 +215,7 @@ function ArtifactAttachmentTextBody({
   return (
     <div
       className={cn(
-        showCodeBlock ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4"
+        showCodeBlock ? "flex min-h-0 flex-1 flex-col" : "space-y-4"
       )}
     >
       {loading ? <LoadingState compact /> : null}

@@ -130,16 +130,12 @@ export function artifactPanelBodyClassName({
   isMarkdown: boolean;
   previewMode?: ArtifactPreviewMode;
 }): string | undefined {
-  if (isHtml && previewMode === "source") {
-    return "flex flex-col overflow-hidden";
-  }
-
   if (isHtml || isImage || isVideo) {
     return "flex flex-col overflow-hidden p-0";
   }
 
   if (!isMarkdown || previewMode === "source") {
-    return "flex flex-col overflow-hidden";
+    return "flex flex-col overflow-hidden p-0";
   }
 }
 

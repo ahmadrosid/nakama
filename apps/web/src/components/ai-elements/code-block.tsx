@@ -128,29 +128,31 @@ export function CodeBlock({
       </div>
       <div
         className={cn(
-          "relative overflow-auto bg-muted/20",
+          "overflow-auto bg-muted/20",
           fillHeight ? "min-h-0 flex-1" : maxScrollHeightClass
         )}
         style={gridStyle}
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-(--code-block-gutter) border-border/70 border-r bg-muted/50"
-        />
-        <div className="relative grid min-w-full pb-2" style={gridStyle}>
-          {lines.map((line, index) => (
-            <Fragment key={index}>
-              <span
-                aria-hidden="true"
-                className="select-none py-0 pr-3 pl-2 text-right font-mono text-muted-foreground/80 text-xs tabular-nums leading-6"
-              >
-                {index + 1}
-              </span>
-              <code className="block min-w-0 whitespace-pre-wrap break-words px-2 pl-3 font-mono text-foreground text-xs leading-6">
-                {line || "\u00A0"}
-              </code>
-            </Fragment>
-          ))}
+        <div className="relative min-h-full" style={gridStyle}>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-(--code-block-gutter) border-border/70 border-r bg-muted/50"
+          />
+          <div className="relative grid min-w-full pb-2" style={gridStyle}>
+            {lines.map((line, index) => (
+              <Fragment key={index}>
+                <span
+                  aria-hidden="true"
+                  className="select-none py-0 pr-3 pl-2 text-right font-mono text-muted-foreground/80 text-xs tabular-nums leading-6"
+                >
+                  {index + 1}
+                </span>
+                <code className="block min-w-0 whitespace-pre-wrap break-words px-2 pl-3 font-mono text-foreground text-xs leading-6">
+                  {line || "\u00A0"}
+                </code>
+              </Fragment>
+            ))}
+          </div>
         </div>
       </div>
     </div>

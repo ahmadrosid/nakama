@@ -60,7 +60,7 @@ describe("artifact panel header", () => {
 });
 
 describe("artifact panel body class", () => {
-  test("keeps padding for html source view", () => {
+  test("source view fills the panel with no padding", () => {
     expect(
       artifactPanelBodyClassName({
         isHtml: true,
@@ -68,6 +68,14 @@ describe("artifact panel body class", () => {
         isMarkdown: false,
         previewMode: "source",
       })
-    ).toBe("flex flex-col overflow-hidden");
+    ).toBe("flex flex-col overflow-hidden p-0");
+    expect(
+      artifactPanelBodyClassName({
+        isHtml: false,
+        isImage: false,
+        isMarkdown: true,
+        previewMode: "source",
+      })
+    ).toBe("flex flex-col overflow-hidden p-0");
   });
 });
