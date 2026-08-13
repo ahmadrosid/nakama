@@ -1,4 +1,4 @@
-import { CodeIcon, ViewIcon } from "hugeicons-react";
+import { CodeSquareIcon, ViewIcon } from "hugeicons-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +47,7 @@ export function ArtifactPreviewModeToggle({
         type="button"
         variant="ghost"
       >
-        <CodeIcon aria-hidden className="size-3.5" />
+        <CodeSquareIcon aria-hidden className="size-3.5" />
       </Button>
     </div>
   );
