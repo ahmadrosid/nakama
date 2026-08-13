@@ -75,7 +75,7 @@ export function FilesArtifactViews({
   onShowMore: () => void;
 }) {
   return (
-    <div className="rounded-md border border-border">
+    <div className="overflow-hidden rounded-md border border-border bg-card">
       {isLoading ? (
         viewMode === "grid" ? (
           <ArtifactGridSkeleton />
