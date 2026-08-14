@@ -276,7 +276,6 @@ export class SkillProposalService {
       input.orgId,
       input.profileId
     );
-    assertNotBundledSkillName(name);
 
     const db = this.requireDatabase();
     const existingByName = await db.getSkillByName(name);

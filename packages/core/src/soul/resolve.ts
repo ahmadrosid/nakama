@@ -22,6 +22,17 @@ export function assertConfigPathSegment(value: string, label: string): string {
   return trimmed;
 }
 
+/** Archive filenames are `YYYY-MM.md` — reject anything that could escape the archive dir. */
+export function assertYearMonth(value: string): string {
+  const trimmed = value.trim();
+
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(trimmed)) {
+    throw new Error(`Invalid yearMonth (expected YYYY-MM): ${value}`);
+  }
+
+  return trimmed;
+}
+
 /** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
 export function getProfileSoulDir(orgId: string, profileId: string): string {
   return join(
@@ -87,7 +98,10 @@ export function getOrgMemoryArchiveFilePath(
   yearMonth: string,
   configDir?: string
 ): string {
-  return join(getOrgMemoryArchiveDir(orgId, configDir), `${yearMonth}.md`);
+  return join(
+    getOrgMemoryArchiveDir(orgId, configDir),
+    `${assertYearMonth(yearMonth)}.md`
+  );
 }
 
 export async function resolveSoulStackForProfile(
