@@ -13,34 +13,51 @@ export function createTypingLoop(
   jid: string
 ): TypingLoop {
   let interval: ReturnType<typeof setInterval> | null = null;
+  let active = false;
+  // Serialize presence updates and re-check `active` before each one so a ping
+  // flood (e.g. onThinking) cannot keep refreshing WhatsApp after stop().
+  let sendChain: Promise<void> = Promise.resolve();
 
-  async function sendTyping(): Promise<void> {
-    if (!socket) {
+  function clear() {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    }
+  }
+
+  function queueTyping() {
+    if (!(active && socket)) {
       return;
     }
 
-    try {
-      await socket.sendPresenceUpdate("composing", jid);
-    } catch {
-      // Connection may be lost — ignore.
-    }
+    sendChain = sendChain
+      .then(async () => {
+        if (!(active && socket)) {
+          return;
+        }
+
+        await socket.sendPresenceUpdate("composing", jid);
+      })
+      .catch(() => {
+        // Connection may be lost. Keep the chain healthy.
+      });
   }
 
   return {
     ping() {
-      void sendTyping();
+      queueTyping();
     },
     start() {
-      void sendTyping();
+      clear();
+      active = true;
+      queueTyping();
       interval = setInterval(() => {
-        void sendTyping();
+        queueTyping();
       }, TYPING_REFRESH_MS);
     },
     stop() {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
-      }
+      active = false;
+      clear();
     },
   };
 }
