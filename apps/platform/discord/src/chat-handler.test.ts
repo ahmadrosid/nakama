@@ -28,18 +28,29 @@ afterEach(() => {
 });
 
 /**
- * Wait for a condition instead of sleeping a fixed slice. A busy CI runner can
- * miss a fixed window and fail a test that is not actually broken; a real
- * regression still fails, it just reaches the assertion through the timeout.
+ * Same shape as the telegram suite's helper (chat-handler.test.ts). Prefer real
+ * intervals over a tight spin: under CI's concurrent workspace load, session
+ * I/O can take tens of ms before sendStream runs, and a 1ms poll competes with
+ * the very work it is waiting for.
  */
-async function waitUntil(
-  predicate: () => boolean,
-  timeoutMs = 2000
+async function waitForCondition(
+  condition: () => boolean,
+  message: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {}
 ): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 2000;
+  const intervalMs = options.intervalMs ?? 10;
   const deadline = Date.now() + timeoutMs;
-  while (!predicate() && Date.now() < deadline) {
-    await Bun.sleep(1);
+
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+
+  throw new Error(message);
 }
 
 async function createPairedHandler(
@@ -990,9 +1001,15 @@ describe("createChatHandler guild thread routing", () => {
       });
 
       const firstTurn = handleMessage(first.message);
-      await waitUntil(() => entered >= 1);
+      await waitForCondition(
+        () => entered >= 1,
+        "first turn never reached onSendStream"
+      );
       const secondTurn = handleMessage(second.message);
-      await waitUntil(() => entered >= 2);
+      await waitForCondition(
+        () => entered >= 2,
+        "second turn never reached onSendStream; turns are not concurrent"
+      );
 
       expect(entered).toBe(2);
       expect(maxInFlight).toBeGreaterThanOrEqual(2);
