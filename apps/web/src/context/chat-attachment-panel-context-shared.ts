@@ -7,10 +7,12 @@ export interface ChatAttachmentPanelConfig {
   fullscreen?: boolean;
   headerActions?: ReactNode;
   id: string;
+  leading?: ReactNode;
   onClose?: () => void;
   resizable?: boolean;
   subtitle?: string | null;
   title: string;
+  typeLabel?: string | null;
 }
 
 export interface ChatAttachmentPanelContextValue {

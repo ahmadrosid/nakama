@@ -18,13 +18,3 @@ describe("capabilityBrowseRowToModelListRow", () => {
     });
   });
 });
-
-describe("FIREWORKS_FALLBACK_ROWS", () => {
-  test("includes representative serverless ids with full paths", () => {
-    expect(
-      FIREWORKS_FALLBACK_ROWS.some((row) =>
-        row.id.startsWith("accounts/fireworks/models/")
-      )
-    ).toBe(true);
-  });
-});

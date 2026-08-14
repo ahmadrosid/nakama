@@ -159,6 +159,7 @@ test(
     const profileService = new ProfileService(db);
     const sessionState = new SuperBotSessionState();
     sessionState.beginTurn(SESSION_ID);
+    sessionState.beginTurn(SESSION_ID);
     const tools = createSuperBotTools(profileService, sessionState);
     const toolDefs = tools.map(toLlmToolDefinition);
     const toolContext = { orgId: ORG_ID, sessionId: SESSION_ID };

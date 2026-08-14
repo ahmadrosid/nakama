@@ -17,7 +17,10 @@ interface BrowsableModelFieldsProps<T> {
   onCustomModelsChange: (models: ModelListRow[]) => void;
   renderBrowse: (onSelect: (row: T) => void) => ReactNode;
   showPricing?: boolean;
+  showThinking?: boolean;
+  showVision?: boolean;
   toModelRow: (row: T) => ModelListRow;
+  visionDefaultOn?: boolean;
 }
 
 export function BrowsableModelFields<T>({
@@ -29,6 +32,9 @@ export function BrowsableModelFields<T>({
   footerHint,
   browseLabel,
   showPricing = true,
+  showThinking = false,
+  showVision = false,
+  visionDefaultOn = false,
   onCustomModelsChange,
   toModelRow,
   renderBrowse,
@@ -85,6 +91,9 @@ export function BrowsableModelFields<T>({
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
           showPricing={showPricing}
+          showThinking={showThinking}
+          showVision={showVision}
+          visionDefaultOn={visionDefaultOn}
         />
       )}
     </FormField>

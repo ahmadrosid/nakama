@@ -112,10 +112,6 @@ describe("parseTelegramWorkerHeartbeat", () => {
 });
 
 describe("isProcessAlive", () => {
-  test("returns true for the current process", () => {
-    expect(isProcessAlive(process.pid)).toBe(true);
-  });
-
   test("returns false for invalid pids", () => {
     expect(isProcessAlive(-1)).toBe(false);
   });

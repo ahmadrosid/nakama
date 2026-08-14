@@ -7,6 +7,7 @@ import {
 import { validateJavascriptToolModule } from "../services/javascript-tool-loader";
 import type { ProfileService } from "../services/profile-service";
 import {
+  PROFILE_CREATE_CONFIRMATION_MESSAGE,
   type SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
@@ -107,6 +108,10 @@ export function createSuperBotTools(
 
         if (!name) {
           throw new Error("name is required.");
+        }
+
+        if (!sessionState.canCreateProfile(context.sessionId)) {
+          throw new Error(PROFILE_CREATE_CONFIRMATION_MESSAGE);
         }
 
         return profileService.createProfile(requireOrgId(context), {

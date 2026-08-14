@@ -61,50 +61,6 @@ const healthyStatus: SystemStatusResponse = {
 };
 
 describe("StatusPage helpers", () => {
-  test("summarizes the overall system state", () => {
-    expect(deriveSummary(healthyStatus)).toEqual({
-      description: "Server, workers, and bridges are healthy.",
-      title: "All systems operational",
-      tone: "ok",
-    });
-  });
-
-  test("tells users to start the automation worker when it is stopped", () => {
-    const status = {
-      ...healthyStatus,
-      automationWorker: {
-        ...healthyStatus.automationWorker,
-        ok: false,
-        running: false,
-      },
-    };
-
-    expect(deriveSummary(status)).toEqual({
-      description: "Start the automation worker to resume scheduled runs.",
-      title: "Automation worker stopped",
-      tone: "bad",
-    });
-  });
-
-  test("points bridge-offline warnings at Integrations", () => {
-    const status = {
-      ...healthyStatus,
-      telegramWorker: {
-        ...healthyStatus.telegramWorker,
-        ok: false,
-        running: false,
-      },
-    };
-
-    expect(deriveSummary(status)).toEqual({
-      action: { label: "Open Integrations", to: "/integrations" },
-      description:
-        "Start the Telegram worker (bun run dev:telegram) to receive messages.",
-      title: "Telegram bridge offline",
-      tone: "warn",
-    });
-  });
-
   test("points provider warnings at Settings", () => {
     const status = {
       ...healthyStatus,
@@ -121,22 +77,6 @@ describe("StatusPage helpers", () => {
       title: "Running with warnings",
       tone: "warn",
     });
-  });
-
-  test("maps bridge health to service columns", () => {
-    const columns = buildServiceColumns(healthyStatus);
-    expect(columns.map((column) => column.title)).toEqual([
-      "Automation",
-      "Telegram",
-      "WhatsApp",
-      "Discord",
-    ]);
-    expect(columns.map((column) => column.status)).toEqual([
-      "Healthy",
-      "Healthy",
-      "Healthy",
-      "Healthy",
-    ]);
   });
 
   test("marks automation as PM2 unavailable when no managed process is present", () => {

@@ -67,7 +67,7 @@ export function createHonoApp(options: ServerOptions) {
       }
       headers.set(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';"
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self';"
       );
       // Only enable HSTS if the request is secure (HTTPS)
       if (new URL(c.req.url).protocol === "https:") {

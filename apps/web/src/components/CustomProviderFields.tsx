@@ -67,7 +67,11 @@ export function CustomProviderFields({
     modelId: string,
     row: ModelsDevRow
   ) => {
-    const nextModel = { id: modelId, name: row.modelName };
+    const nextModel = {
+      id: modelId,
+      name: row.modelName,
+      supportsVision: row.vision,
+    };
     if (customModels.some((model) => model.id === nextModel.id)) {
       setIsBrowsing(false);
       return;
@@ -77,13 +81,26 @@ export function CustomProviderFields({
     setIsBrowsing(false);
   };
 
-  const handleRemoteSelect = (row: { id: string; name: string }) => {
+  const handleRemoteSelect = (row: {
+    id: string;
+    name: string;
+    supportsVision?: boolean;
+  }) => {
     if (customModels.some((model) => model.id === row.id)) {
       setIsBrowsing(false);
       return;
     }
 
-    onCustomModelsChange([...customModels, { id: row.id, name: row.name }]);
+    onCustomModelsChange([
+      ...customModels,
+      {
+        id: row.id,
+        name: row.name,
+        ...(row.supportsVision === undefined
+          ? {}
+          : { supportsVision: row.supportsVision }),
+      },
+    ]);
     setIsBrowsing(false);
   };
 
@@ -195,6 +212,7 @@ export function CustomProviderFields({
               onChange={onCustomModelsChange}
               showPricing={false}
               showThinking
+              showVision
             />
           )}
         </FormField>

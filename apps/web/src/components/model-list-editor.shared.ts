@@ -1,6 +1,17 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
 import type { ModelListRow } from "@/components/ModelListEditor";
 
+export function modelListRowVisionEnabled(
+  row: Pick<ModelListRow, "supportsVision">,
+  visionDefaultOn: boolean
+): boolean {
+  if (visionDefaultOn) {
+    return row.supportsVision !== false;
+  }
+
+  return row.supportsVision === true;
+}
+
 export function normalizeModelListRows(
   models: ModelListRow[]
 ): CustomModelEntry[] {

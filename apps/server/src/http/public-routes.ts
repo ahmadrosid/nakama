@@ -18,7 +18,7 @@ export function isPublicRouteRequest(
   method: string,
   pathname: string
 ): boolean {
-  if (pathname === "/v1/auth/me") {
+  if (pathname === "/v1/auth/me" || pathname === "/v1/tools") {
     return method === "GET";
   }
 

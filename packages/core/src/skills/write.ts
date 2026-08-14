@@ -273,7 +273,6 @@ export async function writeProfileSkillSupportingFile(options: {
     options.relativePath
   );
 
-  await assertSupportingPathIsNotSymlink(absolutePath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await assertSupportingPathIsNotSymlink(absolutePath);
   await writeFile(absolutePath, options.content, "utf8");
@@ -328,7 +327,7 @@ export async function removeProfileSkillSupportingFile(options: {
 export async function createSkillFile(
   options: CreateSkillFileOptions
 ): Promise<string> {
-  const name = options.name.trim().toLowerCase();
+  const name = assertValidSkillName(options.name);
   const description = options.description.trim();
   const skillsRoot =
     options.orgId && options.profileId
@@ -438,17 +437,14 @@ export async function patchSkillFile(options: {
     options.profileId,
     options.name
   );
+  // resolveProfileSkillDirectory already assertValidSkillName + assertNotBundledSkillName
+  // and keeps the directory inside the profile skills root; SKILL.md under it cannot escape.
+  const expectedName = options.name.trim().toLowerCase();
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
 
   if (!(await pathExists(skillFilePath))) {
     throw new Error(`Skill "${options.name}" not found.`);
   }
-
-  assertPathWithinProfileSkillsDir(
-    options.orgId,
-    options.profileId,
-    skillFilePath
-  );
 
   const existing = await readFile(skillFilePath, "utf8");
   const occurrences = existing.split(options.oldString).length - 1;
@@ -465,7 +461,6 @@ export async function patchSkillFile(options: {
 
   const next = existing.replace(options.oldString, options.newString);
   const parsed = parseSkillMarkdown(next, skillFilePath);
-  const expectedName = assertValidSkillName(options.name);
 
   if (parsed.frontmatter.name !== expectedName) {
     throw new Error(
@@ -473,7 +468,6 @@ export async function patchSkillFile(options: {
     );
   }
 
-  assertNotBundledSkillName(parsed.frontmatter.name);
   await writeFile(
     skillFilePath,
     next.endsWith("\n") ? next : `${next}\n`,

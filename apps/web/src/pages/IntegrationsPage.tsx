@@ -1,9 +1,9 @@
 import {
+  CpuChargeIcon,
   HashtagIcon,
   Key01Icon,
   Notification01Icon,
   Plug01Icon,
-  RocketIcon,
   TelegramIcon,
   WhatsappIcon,
 } from "hugeicons-react";
@@ -24,46 +24,39 @@ const sectionClass = "rounded-md border border-border bg-card";
 
 const INTEGRATION_SECTIONS = [
   {
-    description: "Bot and pairing",
     icon: TelegramIcon,
     id: "telegram",
     label: "Telegram",
   },
   {
-    description: "Bridge and device link",
     icon: WhatsappIcon,
     id: "whatsapp",
     label: "WhatsApp",
   },
   {
-    description: "Bot and pairing",
     icon: HashtagIcon,
     id: "discord",
     label: "Discord",
   },
   {
-    description: "Telegram webhooks",
     icon: Notification01Icon,
     id: "notifications",
     label: "Notifications",
   },
   {
-    description: "SaaS app connections",
     icon: Plug01Icon,
     id: "composio",
     label: "Composio",
   },
   {
-    description: "CLI and bridge access",
     icon: Key01Icon,
     id: "token",
     label: "Local token",
   },
   {
-    description: "Shrink tool output before the model reads it",
-    icon: RocketIcon,
+    icon: CpuChargeIcon,
     id: "optimization",
-    label: "Token optimisation",
+    label: "Context savings",
   },
 ] as const;
 
@@ -139,7 +132,6 @@ export function IntegrationsPage() {
             {visibleSections.map((item) => (
               <SidebarButton
                 active={section === item.id}
-                description={item.description}
                 icon={item.icon}
                 key={item.id}
                 label={item.label}
@@ -178,13 +170,11 @@ export function IntegrationsPage() {
 
 function SidebarButton({
   label,
-  description,
   icon: Icon,
   active,
   onClick,
 }: {
   label: string;
-  description: string;
   icon: typeof TelegramIcon;
   active: boolean;
   onClick: () => void;
@@ -208,13 +198,8 @@ function SidebarButton({
         )}
         strokeWidth={1.75}
       />
-      <span className="min-w-0 md:space-y-0.5">
-        <span className="block whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
-          {label}
-        </span>
-        <span className="hidden text-muted-foreground text-xs leading-snug [text-wrap:pretty] md:block">
-          {description}
-        </span>
+      <span className="min-w-0 whitespace-nowrap font-medium text-sm leading-tight [text-wrap:balance] md:whitespace-normal">
+        {label}
       </span>
     </button>
   );

@@ -1,5 +1,5 @@
 import type { TokenOptimizationResponse } from "@nakama/core/contract";
-import { GithubIcon, LinkSquare02Icon } from "hugeicons-react";
+import { GithubIcon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { client, formatError } from "@/lib/client";
+import { cn } from "@/lib/utils";
 
 /**
  * Palette: categorical slots 1 and 2, validated for both surfaces (six checks;
@@ -46,6 +47,25 @@ function formatDay(day: string): string {
   return `${Number(day.slice(8, 10))}/${Number(day.slice(5, 7))}`;
 }
 
+/** Weekly anchors plus the last day. Drop a weekly tick that would sit on the end. */
+function chartLabelIndexes(length: number): number[] {
+  if (length <= 0) {
+    return [];
+  }
+  const last = length - 1;
+  const indexes: number[] = [];
+  for (let index = 0; index < length; index += 7) {
+    if (index !== 0 && last - index < 3) {
+      break;
+    }
+    indexes.push(index);
+  }
+  if (indexes.at(-1) !== last) {
+    indexes.push(last);
+  }
+  return indexes;
+}
+
 /** Turns needed in each arm before the token comparison means anything. */
 const MIN_TURNS = 5;
 
@@ -61,9 +81,11 @@ function DailyChart({ days }: { days: Day[] }) {
   const height = 120;
   const slot = 100 / days.length;
   const width = slot * 0.62;
+  const labeled = new Set(chartLabelIndexes(days.length));
+  const lastIndex = days.length - 1;
 
   return (
-    <figure className="m-0 mb-4">
+    <figure className="m-0">
       <div className="relative">
         <svg
           className="w-full"
@@ -128,21 +150,32 @@ function DailyChart({ days }: { days: Day[] }) {
         </svg>
         {/* Selective labels, not one per bar: 30 of them collide, and the
             reader needs anchors rather than a full axis. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -bottom-4 h-4"
-        >
-          {days.map((day, index) =>
-            index % 7 === 0 || index === days.length - 1 ? (
+        <div aria-hidden className="relative mt-2 h-4">
+          {days.map((day, index) => {
+            if (!labeled.has(index)) {
+              return null;
+            }
+            const isFirst = index === 0;
+            const isLast = index === lastIndex;
+            return (
               <span
-                className="absolute -translate-x-1/2 text-[10px] text-muted-foreground tabular-nums"
+                className={cn(
+                  "absolute whitespace-nowrap text-[10px] text-muted-foreground tabular-nums",
+                  isFirst && "left-0",
+                  isLast && !isFirst && "right-0",
+                  !(isFirst || isLast) && "-translate-x-1/2"
+                )}
                 key={day.day}
-                style={{ left: `${(index + 0.5) * slot}%` }}
+                style={
+                  isFirst || isLast
+                    ? undefined
+                    : { left: `${(index + 0.5) * slot}%` }
+                }
               >
                 {formatDay(day.day)}
               </span>
-            ) : null
-          )}
+            );
+          })}
         </div>
         {hover !== null && days[hover] ? (
           <div className="pointer-events-none absolute top-0 right-0 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm">
@@ -177,9 +210,12 @@ export function TokenOptimizationCard() {
   async function toggle(next: boolean) {
     setSaving(true);
     try {
-      await client.setTokenOptimization(next);
+      const result = await client.setTokenOptimization(next);
       setData(await client.getTokenOptimization());
-      setError(null);
+      // Switching on fetches the binary when it is missing, and a failed fetch
+      // is the operator's to act on: without it the panel would only repeat that
+      // the binary is absent.
+      setError(result.installError);
     } catch (cause) {
       setError(formatError(cause));
     } finally {
@@ -188,12 +224,12 @@ export function TokenOptimizationCard() {
   }
 
   if (error && !data) {
-    return <p className="p-4 text-destructive text-sm">{error}</p>;
+    return <p className="text-destructive text-sm">{error}</p>;
   }
 
   if (!data) {
     return (
-      <div className="flex items-center gap-2 p-4 text-muted-foreground text-sm">
+      <div className="flex items-center gap-2 text-muted-foreground text-sm">
         <Spinner /> Loading
       </div>
     );
@@ -203,7 +239,7 @@ export function TokenOptimizationCard() {
   // beats white-screening on a version skew.
   if (!(data.arms?.optimized && data.days?.length)) {
     return (
-      <p className="p-4 text-muted-foreground text-sm">
+      <p className="text-muted-foreground text-sm">
         The server is running an older build than this page. Restart it to see
         this panel.
       </p>
@@ -220,35 +256,34 @@ export function TokenOptimizationCard() {
     totals.bytesIn > 0 ? (100 * totals.bytesRemoved) / totals.bytesIn : 0;
 
   return (
-    <div className="tokenopt space-y-5 p-4">
+    <div className="tokenopt space-y-5">
       <style dangerouslySetInnerHTML={{ __html: CHART_STYLE }} />
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
             {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
               <a
                 aria-label={`${omni.id} on GitHub`}
-                className="flex items-center gap-1 rounded border border-border bg-muted/50 px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground leading-none transition-colors hover:border-foreground/30 hover:bg-muted hover:text-foreground"
+                className="relative inline-flex items-center gap-1 text-muted-foreground text-xs transition-[color,transform,scale] duration-150 ease-out after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:text-foreground active:scale-[0.96]"
                 href={OPTIMIZER_HOMEPAGE[omni.id]}
                 rel="noreferrer noopener"
                 target="_blank"
               >
-                <GithubIcon aria-hidden size={12} />
-                GitHub
-                <LinkSquare02Icon
+                <GithubIcon
                   aria-hidden
-                  className="opacity-60"
-                  size={10}
+                  className="size-3.5"
+                  strokeWidth={1.5}
                 />
+                GitHub
               </a>
             ) : null}
           </div>
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {omni?.tools.map((tool) => (
               <span
-                className="rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground leading-none"
+                className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground leading-none"
                 key={tool}
               >
                 {tool}
@@ -257,7 +292,9 @@ export function TokenOptimizationCard() {
           </div>
         </div>
         <Switch
+          aria-label={`Enable ${omni?.id ?? "omni"}`}
           checked={Boolean(omni?.enabled)}
+          className="mt-0.5"
           disabled={saving}
           onCheckedChange={toggle}
         />
@@ -283,19 +320,24 @@ export function TokenOptimizationCard() {
             {/* A stat tile is read by its number, so the number leads. The
                 colour is the "saved" series colour, not a decorative one,
                 so colour still carries identity here. */}
-            <p className="font-semibold text-4xl tabular-nums leading-none">
-              <span style={{ color: "var(--out)" }}>{percent.toFixed(0)}%</span>
-              <span className="ml-2 font-normal text-lg text-muted-foreground">
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span
+                className="font-semibold text-4xl tabular-nums leading-none"
+                style={{ color: "var(--out)" }}
+              >
+                {percent.toFixed(0)}%
+              </span>
+              <span className="text-pretty text-muted-foreground text-sm">
                 of tool output saved
               </span>
             </p>
-            <p className="mt-1.5 text-muted-foreground text-sm">
+            <p className="mt-1.5 text-pretty text-muted-foreground text-sm tabular-nums">
               {formatBytes(totals.bytesRemoved)} saved from{" "}
               {formatBytes(totals.bytesIn)} tool output, last {windowDays} days
             </p>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <div className="flex items-center gap-4 text-xs">
               <span className="flex items-center gap-1.5">
                 <span
@@ -325,19 +367,19 @@ export function TokenOptimizationCard() {
             // Say the threshold rather than hide the block. An absent panel
             // reads as unbuilt; a stated one reads as not enough data yet,
             // which is what it is.
-            <div className="rounded border border-border border-dashed p-3">
+            <div className="rounded-md border border-border border-dashed px-4 py-3.5">
               <p className="font-medium text-sm">
                 Provider input tokens per turn
               </p>
-              <p className="mt-1 text-muted-foreground text-xs">
+              <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
                 Needs {MIN_TURNS} turns in each arm before the two are worth
                 comparing. So far {inputTokens.optimized.turns} optimised and{" "}
                 {inputTokens.control.turns} passthrough.
               </p>
             </div>
           ) : (
-            <div className="rounded border border-border p-3">
-              <p className="mb-2 font-medium text-sm">
+            <div className="rounded-md border border-border px-4 py-3.5">
+              <p className="mb-3 font-medium text-sm">
                 Provider input tokens per turn
               </p>
               <div className="grid grid-cols-2 gap-3 text-sm">
@@ -358,7 +400,7 @@ export function TokenOptimizationCard() {
                   </p>
                 </div>
               </div>
-              <p className="mt-2 text-muted-foreground text-xs">
+              <p className="mt-3 text-muted-foreground text-xs leading-relaxed">
                 Counted by the provider, not estimated here. Turns fall into an
                 arm by what happened rather than by assignment, so a difference
                 in the work itself can explain part of any gap.

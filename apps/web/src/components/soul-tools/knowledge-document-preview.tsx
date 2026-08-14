@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
 import {
+  artifactCanTogglePreviewSource,
   artifactPanelBodyClassName,
   artifactPanelDefaultWidth,
-  artifactPanelSubtitle,
+  artifactPanelHeaderMeta,
   downloadActionLabel,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
+import {
+  type ArtifactPreviewMode,
+  ArtifactPreviewModeToggle,
+} from "@/components/chat/artifact-preview-mode-toggle";
 import { useKnowledgeDocumentPreviewContent } from "@/components/soul-tools/use-knowledge-document-preview-content";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,10 +69,22 @@ export function KnowledgeDocumentPreview({
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewMode, setPreviewMode] =
+    useState<ArtifactPreviewMode>("preview");
 
   const canPreview = document.status === "ready";
   const downloadUrl = `${client.baseUrl}${buildKnowledgeDocumentContentUrl(profileId, document.id)}`;
   const isMarkdown = isMarkdownArtifactMimeType(document.mediaType);
+  const showPreviewToggle = artifactCanTogglePreviewSource({
+    isHtml: false,
+    isMarkdown,
+  });
+  const header = artifactPanelHeaderMeta({
+    filename: document.filename,
+    mimeType: document.mediaType,
+    showPreviewToggle,
+    sizeBytes: document.sizeBytes,
+  });
   const language = artifactCodeLanguage(document.filename);
   const downloadLabel = downloadActionLabel(document.mediaType);
   const artifactRef = toArtifactRef(document);
@@ -88,7 +105,10 @@ export function KnowledgeDocumentPreview({
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
-  function buildPanelBody(loadingOverride?: boolean) {
+  function buildPanelBody(
+    loadingOverride?: boolean,
+    mode: ArtifactPreviewMode = previewMode
+  ) {
     return (
       <ArtifactAttachmentPanelBody
         artifact={artifactRef}
@@ -99,18 +119,20 @@ export function KnowledgeDocumentPreview({
         kind="text"
         language={language}
         loading={loadingOverride ?? loading}
+        previewMode={mode}
       />
     );
   }
 
-  function buildPanelConfig() {
+  function buildPanelConfig(mode: ArtifactPreviewMode = previewMode) {
     return {
       bodyClassName: artifactPanelBodyClassName({
         isHtml: false,
         isImage: false,
         isMarkdown,
+        previewMode: mode,
       }),
-      content: buildPanelBody(),
+      content: buildPanelBody(undefined, mode),
       fullscreen,
       headerActions: (
         <ArtifactAttachmentPanelActions
@@ -126,12 +148,13 @@ export function KnowledgeDocumentPreview({
           onToggleFullscreen={() => setFullscreen((current) => !current)}
         />
       ),
+      leading: showPreviewToggle ? (
+        <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
+      ) : null,
       resizable: !fullscreen,
-      subtitle: artifactPanelSubtitle({
-        mimeType: document.mediaType,
-        sizeBytes: document.sizeBytes,
-      }),
-      title: document.filename,
+      subtitle: header.subtitle,
+      title: header.title,
+      typeLabel: header.typeLabel,
     };
   }
 
@@ -157,6 +180,11 @@ export function KnowledgeDocumentPreview({
     copied,
     downloadLabel,
     downloadUrl,
+    previewMode,
+    showPreviewToggle,
+    header.subtitle,
+    header.title,
+    header.typeLabel,
   ]);
 
   async function copyDocument() {
@@ -182,9 +210,13 @@ export function KnowledgeDocumentPreview({
   function openPanel() {
     setFullscreen(false);
     setCopied(false);
+    setPreviewMode("preview");
     show({
-      ...buildPanelConfig(),
-      content: buildPanelBody(canPreview && content === null && error === null),
+      ...buildPanelConfig("preview"),
+      content: buildPanelBody(
+        canPreview && content === null && error === null,
+        "preview"
+      ),
       defaultWidth: artifactPanelDefaultWidth(
         document.filename,
         document.mediaType
@@ -194,6 +226,7 @@ export function KnowledgeDocumentPreview({
       onClose: () => {
         setFullscreen(false);
         setCopied(false);
+        setPreviewMode("preview");
       },
       resizable: true,
     });

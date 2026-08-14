@@ -1,4 +1,5 @@
 import type { OrgRole } from "@nakama/core";
+import { ORG_ROLES } from "@nakama/db";
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import { isPublicRouteRequest } from "./public-routes";
@@ -13,6 +14,12 @@ function isPlatformRoute(pathname: string): boolean {
 
 function isAuthRoute(pathname: string): boolean {
   return pathname === "/v1/auth" || pathname.startsWith("/v1/auth/");
+}
+
+function assertOrgRole(role: string): asserts role is OrgRole {
+  if (!(ORG_ROLES as readonly string[]).includes(role)) {
+    throw new Error(`Invalid organization role: ${role}`);
+  }
 }
 
 function resolveOrgId(
@@ -73,10 +80,12 @@ export function createOrgContextMiddleware(
       return;
     }
 
+    assertOrgRole(member.role);
+
     c.set("auth", {
       ...auth,
       activeOrgId: orgId,
-      orgRole: member.role as OrgRole,
+      orgRole: member.role,
     });
 
     await next();

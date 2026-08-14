@@ -21,6 +21,12 @@ describe("isPublicRouteRequest", () => {
     ).toBe(true);
   });
 
+  test("allows GET /v1/tools without auth but not POST", () => {
+    expect(isPublicRouteRequest("GET", "/v1/tools")).toBe(true);
+    expect(isPublicRouteRequest("POST", "/v1/tools")).toBe(false);
+    expect(isPublicRouteRequest("POST", "/v1/tools/tool_x/run")).toBe(false);
+  });
+
   test("allows GET /v1/auth/me without middleware auth but not PATCH", () => {
     expect(isPublicRouteRequest("GET", "/v1/auth/me")).toBe(true);
     expect(isPublicRouteRequest("PATCH", "/v1/auth/me")).toBe(false);

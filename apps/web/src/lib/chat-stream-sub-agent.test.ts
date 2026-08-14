@@ -5,16 +5,10 @@ import {
   formatSubAgentToolResult,
   formatToolActionLabel,
   formatToolResult,
-  isSubAgentTool,
   parseSubAgentResult,
 } from "./chat-stream";
 
 describe("sub_agent chat formatting", () => {
-  test("isSubAgentTool matches name", () => {
-    expect(isSubAgentTool("sub_agent")).toBe(true);
-    expect(isSubAgentTool("bash")).toBe(false);
-  });
-
   test("formatSubAgentTitle uses first line of task", () => {
     expect(
       formatSubAgentTitle({

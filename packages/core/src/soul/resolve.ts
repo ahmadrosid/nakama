@@ -3,9 +3,45 @@ import { getUserConfigDir } from "../user-config";
 import { getSoulStatus, loadSoulStack } from "./load";
 import type { LoadedSoulStack, SoulStatus } from "./types";
 
+/** Reject path segments that would escape `~/.nakama/orgs/{id}/...`. */
+export function assertConfigPathSegment(value: string, label: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed || trimmed === "." || trimmed === "..") {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  if (
+    trimmed.includes("/") ||
+    trimmed.includes("\\") ||
+    trimmed.includes("\0")
+  ) {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return trimmed;
+}
+
+/** Archive filenames are `YYYY-MM.md` — reject anything that could escape the archive dir. */
+export function assertYearMonth(value: string): string {
+  const trimmed = value.trim();
+
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(trimmed)) {
+    throw new Error(`Invalid yearMonth (expected YYYY-MM): ${value}`);
+  }
+
+  return trimmed;
+}
+
 /** Per-profile soul stack: ~/.nakama/orgs/{orgId}/profiles/{profileId}/ */
 export function getProfileSoulDir(orgId: string, profileId: string): string {
-  return join(getUserConfigDir(), "orgs", orgId, "profiles", profileId);
+  return join(
+    getUserConfigDir(),
+    "orgs",
+    assertConfigPathSegment(orgId, "orgId"),
+    "profiles",
+    assertConfigPathSegment(profileId, "profileId")
+  );
 }
 
 export function getProfileArtifactsDir(
@@ -16,7 +52,12 @@ export function getProfileArtifactsDir(
 }
 
 export function getArtifactSharesDir(orgId: string): string {
-  return join(getUserConfigDir(), "orgs", orgId, "artifact-shares");
+  return join(
+    getUserConfigDir(),
+    "orgs",
+    assertConfigPathSegment(orgId, "orgId"),
+    "artifact-shares"
+  );
 }
 
 /** Org-level memory dir: ~/.nakama/orgs/{orgId}/ (sibling of the profile dirs). */
@@ -24,7 +65,7 @@ export function getOrgMemoryDir(
   orgId: string,
   configDir = getUserConfigDir()
 ): string {
-  return join(configDir, "orgs", orgId);
+  return join(configDir, "orgs", assertConfigPathSegment(orgId, "orgId"));
 }
 
 /** Live org memory file: ~/.nakama/orgs/{orgId}/MEMORY.md */
@@ -57,7 +98,10 @@ export function getOrgMemoryArchiveFilePath(
   yearMonth: string,
   configDir?: string
 ): string {
-  return join(getOrgMemoryArchiveDir(orgId, configDir), `${yearMonth}.md`);
+  return join(
+    getOrgMemoryArchiveDir(orgId, configDir),
+    `${assertYearMonth(yearMonth)}.md`
+  );
 }
 
 export async function resolveSoulStackForProfile(

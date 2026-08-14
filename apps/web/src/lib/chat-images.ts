@@ -22,7 +22,7 @@ import {
 export const IMAGE_ACCEPT = "image/jpeg,image/png,image/gif,image/webp";
 
 export const DOCUMENT_ACCEPT =
-  ".pdf,.docx,.xls,.xlsx,.xlsm,.xlsb,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12,text/plain,text/csv";
+  ".pdf,.docx,.xls,.xlsx,.xlsm,.xlsb,.csv,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12,text/plain,text/csv,text/markdown";
 
 export const ALL_ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
@@ -35,6 +35,7 @@ const DOCUMENT_MEDIA_TYPES = new Set([
   "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
   "text/plain",
   "text/csv",
+  "text/markdown",
 ]);
 
 export function isImageFilePart(file: FileUIPart): boolean {

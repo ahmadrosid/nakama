@@ -13,16 +13,14 @@
 
 [Documentation](https://ahmadrosid.github.io/nakama/) · [Demo](https://demo.getnakama.cloud) · [Managed hosting](https://getnakama.cloud/)
 
-Your next hire will still be human.
-With Nakama, that person works on important tasks.
-The AI agents do the trivial tasks.
+> Your next hire will still be human.
+> Nakama runs the agents. Your team keeps the important work.
 
-Nakama is a small, self-hosted service for AI agents. You can imagine that nakama is like [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes Agent](https://github.com/nousresearch/hermes-agent) but it design to work with your teams.
+Nakama is an AI agent platform for your team. You chat in a dashboard that feels like ChatGPT. Behind that, each agent can use tools, skills, memory, and channels (Telegram, WhatsApp, Discord) — with its own identity and permissions.
 
-- Nakama is multi-tenant by design.
-- Those projects serve one operator on one machine.
-- Nakama is one server for many orgs.
-- Each org has isolated profiles, sessions, member invites, and roles.
+It was built for teams from day one: one server, many orgs, invites and roles, agents isolated from each other. Set it up in the browser — demo, managed cloud, or one Docker container.
+
+Coming from [OpenClaw](https://github.com/openclaw/openclaw) or [Hermes Agent](https://github.com/nousresearch/hermes-agent)? Same class of capability, without the setup maze, and not limited to one operator on one machine.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/nakama_demo_dark.png" />
@@ -97,6 +95,12 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ```
 
 Open the dashboard at http://localhost:4310.
+
+The image carries [omni](https://github.com/fajarhide/omni), which shortens `bash`
+and `read_file` output before it reaches the model. Turn it on under Integrations,
+or with `NAKAMA_OMNI=1`. Build with `--build-arg OMNI_VERSION=` to leave the binary
+out; the server then downloads it, checksum verified, the first time the toggle is
+switched on. Set `NAKAMA_OMNI_AUTO_INSTALL=0` to forbid that download.
 
 ### Integrations
 

@@ -31,6 +31,9 @@ export function openRouterCustomModelsToCatalog(
     provider: "openrouter" as const,
     supportsThinking: resolveOpenRouterCatalogThinking(entry),
     ...(entry.default ? { default: true } : {}),
+    ...(entry.supportsVision === undefined
+      ? {}
+      : { supportsVision: entry.supportsVision }),
     ...(entry.inputPerMillionUsd === undefined
       ? {}
       : { inputPerMillionUsd: entry.inputPerMillionUsd }),
@@ -168,6 +171,9 @@ export function mergeOpenRouterCatalog(
       name: entry.name?.trim() || existing?.name || entry.id,
       provider: "openrouter",
       supportsThinking: resolveOpenRouterCatalogThinking(entry),
+      ...(entry.supportsVision === undefined
+        ? {}
+        : { supportsVision: entry.supportsVision }),
       ...(entry.default
         ? { default: true }
         : existing?.default
@@ -430,6 +436,89 @@ export function resolveOllamaDefaultModel(
   return fallback;
 }
 
+function catalogVisionForModelId(modelId: string): boolean | undefined {
+  return AVAILABLE_MODELS.find((model) => model.id === modelId)?.supportsVision;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function stringListIncludes(value: unknown, needle: string): boolean {
+  return Array.isArray(value) && value.includes(needle);
+}
+
+export function inferRemoteModelVision(
+  record: Record<string, unknown>
+): boolean | undefined {
+  if (record.supports_vision === true || record.supportsVision === true) {
+    return true;
+  }
+
+  if (record.supports_vision === false || record.supportsVision === false) {
+    return false;
+  }
+
+  const capabilities = asRecord(record.capabilities);
+  if (capabilities?.vision === true) {
+    return true;
+  }
+  if (capabilities?.vision === false) {
+    return false;
+  }
+
+  const architecture = asRecord(record.architecture);
+  if (architecture) {
+    if (
+      typeof architecture.modality === "string" &&
+      architecture.modality.includes("image")
+    ) {
+      return true;
+    }
+    if (stringListIncludes(architecture.input_modalities, "image")) {
+      return true;
+    }
+  }
+
+  const modalities = asRecord(record.modalities);
+  if (stringListIncludes(modalities?.input, "image")) {
+    return true;
+  }
+}
+
+export function customModelEntryFromRemoteRecord(
+  value: unknown
+): CustomModelEntry | null {
+  const record = asRecord(value);
+  const id =
+    typeof record?.id === "string"
+      ? record.id.trim()
+      : typeof record?.name === "string"
+        ? record.name.trim()
+        : "";
+
+  if (!id) {
+    return null;
+  }
+
+  const name =
+    typeof record.name === "string" && record.name.trim()
+      ? record.name.trim()
+      : id;
+  const supportsVision =
+    inferRemoteModelVision(record) ?? catalogVisionForModelId(id);
+
+  return {
+    id,
+    name,
+    ...(supportsVision === undefined ? {} : { supportsVision }),
+  };
+}
+
 export async function fetchRemoteOpenAIModels(
   baseUrl: string,
   apiKey: string
@@ -442,20 +531,19 @@ export async function fetchRemoteOpenAIModels(
 
   try {
     const page = await client.models.list();
+    const entries: CustomModelEntry[] = [];
     const ids = new Set<string>();
 
     for await (const model of page) {
-      const id = model.id?.trim();
-
-      if (id) {
-        ids.add(id);
+      const entry = customModelEntryFromRemoteRecord(model);
+      if (entry && !ids.has(entry.id)) {
+        ids.add(entry.id);
+        entries.push(entry);
       }
     }
 
-    if (ids.size > 0) {
-      return [...ids]
-        .sort((left, right) => left.localeCompare(right))
-        .map((id) => ({ id, name: id }));
+    if (entries.length > 0) {
+      return entries.sort((left, right) => left.id.localeCompare(right.id));
     }
   } catch {
     // Fall through to raw fetch for hosts without SDK-compatible models.list.
@@ -492,20 +580,27 @@ async function fetchRemoteOpenAIModelsRaw(
   }
 
   const payload = (await response.json()) as {
-    data?: Array<{ id?: string }>;
+    data?: unknown[];
   };
 
-  const ids = (payload.data ?? [])
-    .map((entry) => entry.id?.trim())
-    .filter((id): id is string => Boolean(id));
+  const entries = (payload.data ?? [])
+    .map((entry) => customModelEntryFromRemoteRecord(entry))
+    .filter((entry): entry is CustomModelEntry => entry !== null);
 
-  if (ids.length === 0) {
+  const unique = new Map<string, CustomModelEntry>();
+  for (const entry of entries) {
+    if (!unique.has(entry.id)) {
+      unique.set(entry.id, entry);
+    }
+  }
+
+  if (unique.size === 0) {
     throw new Error("Remote models response did not include any model ids.");
   }
 
-  return [...new Set(ids)]
-    .sort((left, right) => left.localeCompare(right))
-    .map((id) => ({ id, name: id }));
+  return [...unique.values()].sort((left, right) =>
+    left.id.localeCompare(right.id)
+  );
 }
 
 export function resolveCompatibleDefaultModel(

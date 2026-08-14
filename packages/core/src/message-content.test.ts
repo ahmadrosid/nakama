@@ -108,6 +108,18 @@ describe("validateDocumentAttachments", () => {
     ).toThrow(NakamaApiError);
   });
 
+  test("accepts markdown attachments", () => {
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          data: "Iw==",
+          filename: "notes.md",
+          mediaType: "text/markdown",
+        },
+      ])
+    ).not.toThrow();
+  });
+
   test("accepts excel attachments under the size limit", () => {
     expect(() =>
       validateDocumentAttachments([

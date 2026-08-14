@@ -39,6 +39,10 @@ test("chat stream request includes cookie CSRF protection", async () => {
     expect(headers.get("X-CSRF-Token")).toBe("csrf-token-123");
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(fetchCalls[0]!.init?.credentials).toBe("include");
+    expect(
+      (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number })
+        .idleTimeout
+    ).toBe(0);
   } finally {
     (
       globalThis as typeof globalThis & { document?: { cookie: string } }

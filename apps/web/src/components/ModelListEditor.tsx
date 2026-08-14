@@ -1,6 +1,7 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { useRef } from "react";
+import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +17,8 @@ interface ModelListEditorProps {
   onChange: (models: ModelListRow[]) => void;
   showPricing?: boolean;
   showThinking?: boolean;
+  showVision?: boolean;
+  visionDefaultOn?: boolean;
 }
 
 function emptyRow(): ModelListRow {
@@ -27,6 +30,8 @@ export function ModelListEditor({
   disabled,
   showPricing = true,
   showThinking = false,
+  showVision = false,
+  visionDefaultOn = false,
   onBrowse,
   browseLabel = "Browse models.dev",
   onChange,
@@ -52,7 +57,7 @@ export function ModelListEditor({
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-lg border border-border">
         <table
-          className={`w-full text-left text-xs ${showThinking ? "min-w-[40rem]" : "min-w-[32rem]"}`}
+          className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[44rem]" : "min-w-[32rem]"}`}
         >
           <thead className="border-border border-b bg-muted/30 text-muted-foreground">
             <tr>
@@ -60,6 +65,9 @@ export function ModelListEditor({
               <th className="px-2 py-2 font-medium">Display name</th>
               {showThinking ? (
                 <th className="px-2 py-2 font-medium">Reasoning</th>
+              ) : null}
+              {showVision ? (
+                <th className="px-2 py-2 font-medium">Vision</th>
               ) : null}
               {showPricing ? (
                 <>
@@ -108,6 +116,19 @@ export function ModelListEditor({
                       disabled={disabled}
                       onCheckedChange={(checked) =>
                         updateRow(index, { supportsThinking: checked })
+                      }
+                      size="sm"
+                    />
+                  </td>
+                ) : null}
+                {showVision ? (
+                  <td className="px-2 py-1.5">
+                    <Switch
+                      aria-label={`Vision for ${row.id.trim() || "model"}`}
+                      checked={modelListRowVisionEnabled(row, visionDefaultOn)}
+                      disabled={disabled}
+                      onCheckedChange={(checked) =>
+                        updateRow(index, { supportsVision: checked })
                       }
                       size="sm"
                     />

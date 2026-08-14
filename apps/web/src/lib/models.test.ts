@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   encodeModelSelection,
+  filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
   hasOpenCodeZenProvider,
-  IMAGE_GENERATION_MODEL_OPTIONS,
-  IMAGE_GENERATION_SELECTION,
   isOpenCodeZenBaseUrl,
   isProviderTypeAlreadyConfigured,
   resolveModelThinkingSupport,
@@ -220,6 +219,40 @@ describe("resolveModelVisionSupport", () => {
       )
     ).toBe(true);
   });
+
+  test("treats openrouter models as opt-in only for vision", () => {
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("or-1", "model-1"),
+        group("or-1", "openrouter")
+      )
+    ).toBe(false);
+
+    expect(
+      resolveModelVisionSupport(
+        encodeModelSelection("or-1", "model-1"),
+        group("or-1", "openrouter", { supportsVision: true })
+      )
+    ).toBe(true);
+  });
+});
+
+describe("filterVisionCapableProviderGroups", () => {
+  test("keeps only models with vision capability", () => {
+    const groups = [
+      ...group("openai-1", "openai"),
+      ...group("compat-1", "openai_compatible"),
+      ...group("compat-2", "openai_compatible", { supportsVision: true }),
+    ];
+
+    const filtered = filterVisionCapableProviderGroups(groups);
+
+    expect(filtered.map((entry) => entry.providerId)).toEqual([
+      "openai-1",
+      "compat-2",
+    ]);
+    expect(filtered[1]?.models.map((model) => model.id)).toEqual(["model-1"]);
+  });
 });
 
 describe("isProviderTypeAlreadyConfigured", () => {
@@ -316,16 +349,5 @@ describe("hasOpenCodeZenProvider", () => {
         { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
       ])
     ).toBe(false);
-  });
-});
-
-describe("IMAGE_GENERATION_MODEL_OPTIONS", () => {
-  test("exposes exactly openai::gpt-image-2", () => {
-    expect(IMAGE_GENERATION_MODEL_OPTIONS).toHaveLength(1);
-    expect(IMAGE_GENERATION_MODEL_OPTIONS[0]?.id).toBe("gpt-image-2");
-    expect(IMAGE_GENERATION_SELECTION).toBe("openai::gpt-image-2");
-    expect(
-      encodeModelSelection("openai", IMAGE_GENERATION_MODEL_OPTIONS[0]!.id)
-    ).toBe(IMAGE_GENERATION_SELECTION);
   });
 });

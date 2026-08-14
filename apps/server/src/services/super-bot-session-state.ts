@@ -1,15 +1,18 @@
 interface TurnState {
   assignedToolIds: Set<string>;
   createdToolIds: Set<string>;
+  turnIndex: number;
 }
 
 export class SuperBotSessionState {
   private readonly turns = new Map<string, TurnState>();
 
   beginTurn(sessionId: string): void {
+    const previous = this.turns.get(sessionId);
     this.turns.set(sessionId, {
       assignedToolIds: new Set(),
       createdToolIds: new Set(),
+      turnIndex: (previous?.turnIndex ?? 0) + 1,
     });
   }
 
@@ -19,6 +22,14 @@ export class SuperBotSessionState {
     }
 
     this.turnFor(sessionId).createdToolIds.add(toolId);
+  }
+
+  canCreateProfile(sessionId: string | undefined): boolean {
+    if (!sessionId) {
+      return true;
+    }
+
+    return (this.turns.get(sessionId)?.turnIndex ?? 0) >= 2;
   }
 
   canAssignTool(sessionId: string | undefined, toolId: string): boolean {
@@ -54,6 +65,7 @@ export class SuperBotSessionState {
       turn = {
         assignedToolIds: new Set(),
         createdToolIds: new Set(),
+        turnIndex: 1,
       };
       this.turns.set(sessionId, turn);
     }
@@ -64,3 +76,6 @@ export class SuperBotSessionState {
 
 export const TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE =
   "This tool was already assigned to a profile in this turn. Assign it to another profile on a later message or from the dashboard.";
+
+export const PROFILE_CREATE_CONFIRMATION_MESSAGE =
+  "Wait for the user to confirm the draft in a later message before calling create_profile.";

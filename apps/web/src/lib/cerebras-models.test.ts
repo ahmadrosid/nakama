@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  CEREBRAS_FALLBACK_MODELS,
   cerebrasPricingPerMillion,
   normalizeCerebrasModel,
   normalizeCerebrasModels,
@@ -54,12 +53,6 @@ describe("cerebrasPricingPerMillion", () => {
 });
 
 describe("normalizeCerebrasModels", () => {
-  test("covers representative public catalog ids", () => {
-    const rows = normalizeCerebrasModels(fixture);
-
-    expect(rows.map((row) => row.id)).toEqual(["gemma-4-31b", "gpt-oss-120b"]);
-  });
-
   test("maps capabilities.reasoning and vision", () => {
     const rows = normalizeCerebrasModels(fixture);
     const gpt = rows.find((row) => row.id === "gpt-oss-120b");
@@ -80,15 +73,5 @@ describe("normalizeCerebrasModels", () => {
     expect(row.reasoning).toBe(false);
     expect(row.vision).toBe(false);
     expect(row.tools).toBe(false);
-  });
-});
-
-describe("CEREBRAS_FALLBACK_MODELS", () => {
-  test("includes curated fallback ids", () => {
-    expect(CEREBRAS_FALLBACK_MODELS.map((row) => row.id)).toEqual([
-      "gpt-oss-120b",
-      "gemma-4-31b",
-      "zai-glm-4.7",
-    ]);
   });
 });

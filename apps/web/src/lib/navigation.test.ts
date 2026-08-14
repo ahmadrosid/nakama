@@ -3,7 +3,6 @@ import {
   agentWorkTabFromSearchParams,
   agentWorkTabPath,
   pageIdFromPath,
-  pathForPage,
 } from "./navigation";
 
 describe("agent work navigation", () => {
@@ -32,10 +31,5 @@ describe("agent work navigation", () => {
   test("maps the legacy tasks path to the unified page", () => {
     expect(pageIdFromPath("/tasks")).toBe("automations");
     expect(pageIdFromPath("/automations")).toBe("automations");
-  });
-
-  test("registers the Files page", () => {
-    expect(pageIdFromPath("/files")).toBe("files");
-    expect(pathForPage("files")).toBe("/files");
   });
 });

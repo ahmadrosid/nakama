@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   isHeartbeatAlive,
-  isProcessAlive,
   parseDiscordWorkerHeartbeat,
   resolveDiscordWorkerStatus,
 } from "./discord-worker";
@@ -104,11 +103,5 @@ describe("isHeartbeatAlive", () => {
         updatedAt: new Date().toISOString(),
       })
     ).toBe(true);
-  });
-});
-
-describe("isProcessAlive", () => {
-  test("returns true for the current process", () => {
-    expect(isProcessAlive(process.pid)).toBe(true);
   });
 });

@@ -30,6 +30,10 @@ export function stopActiveStream(chatId: string): boolean {
   return true;
 }
 
+export function hasActiveStreams(): boolean {
+  return activeByChat.size > 0;
+}
+
 export function resetActiveStreamsForTests(): void {
   for (const controller of activeByChat.values()) {
     controller.abort();

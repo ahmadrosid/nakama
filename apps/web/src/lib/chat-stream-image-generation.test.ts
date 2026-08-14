@@ -61,21 +61,20 @@ describe("chat-stream-image-generation", () => {
           size: "1024x1536",
         },
         toolStatus: "running",
-      }),
-      "profile_1"
+      })
     );
 
     expect(state).toEqual({
+      artifactPath: null,
       aspect: "portrait",
       error: null,
-      imageUrl: null,
       prompt: "a calm mountain lake at dawn",
       resolution: "1024 × 1536",
       status: "running",
     });
   });
 
-  test("buildGenerateImageToolState done builds artifact image URL", () => {
+  test("buildGenerateImageToolState done exposes artifacts-relative path", () => {
     const state = buildGenerateImageToolState(
       toolMessage({
         toolInput: { prompt: "logo", size: "1024x1024" },
@@ -87,15 +86,11 @@ describe("chat-stream-image-generation", () => {
           sizeBytes: 1200,
         },
         toolStatus: "done",
-      }),
-      "profile_1"
+      })
     );
 
     expect(state.status).toBe("done");
-    expect(state.imageUrl).toContain(
-      "/v1/profiles/profile_1/artifacts/content?path=logo.png"
-    );
-    expect(state.imageUrl).toContain("inline=1");
+    expect(state.artifactPath).toBe("logo.png");
     expect(state.error).toBeNull();
   });
 
@@ -104,13 +99,12 @@ describe("chat-stream-image-generation", () => {
       toolMessage({
         toolResult: { error: "Configure an image generation model" },
         toolStatus: "done",
-      }),
-      "profile_1"
+      })
     );
 
     expect(state).toMatchObject({
+      artifactPath: null,
       error: "Configure an image generation model",
-      imageUrl: null,
       status: "error",
     });
   });

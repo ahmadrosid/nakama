@@ -3,9 +3,7 @@ import {
   buildAutoEnableThinkingPayload,
   shouldAutoEnableThinking,
   shouldBlockThinkingEffortChange,
-  shouldShowThinkingBlocks,
   shouldShowThinkingEffort,
-  thinkingEffortLabel,
 } from "./thinking-settings";
 
 describe("thinking-settings helpers", () => {
@@ -13,12 +11,6 @@ describe("thinking-settings helpers", () => {
     expect(shouldShowThinkingEffort(true)).toBe(true);
     expect(shouldShowThinkingEffort(false)).toBe(false);
     expect(shouldShowThinkingEffort(undefined)).toBe(false);
-  });
-
-  test("shouldShowThinkingBlocks matches effort visibility gate", () => {
-    expect(shouldShowThinkingBlocks).toBe(shouldShowThinkingEffort);
-    expect(shouldShowThinkingBlocks(true)).toBe(true);
-    expect(shouldShowThinkingBlocks(undefined)).toBe(false);
   });
 
   test("buildAutoEnableThinkingPayload always enables thinking", () => {
@@ -67,9 +59,5 @@ describe("thinking-settings helpers", () => {
   test("shouldBlockThinkingEffortChange blocks while busy", () => {
     expect(shouldBlockThinkingEffortChange(true)).toBe(true);
     expect(shouldBlockThinkingEffortChange(false)).toBe(false);
-  });
-
-  test("thinkingEffortLabel maps effort values", () => {
-    expect(thinkingEffortLabel("medium")).toBe("Medium");
   });
 });

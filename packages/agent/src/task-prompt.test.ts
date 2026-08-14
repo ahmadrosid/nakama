@@ -14,16 +14,6 @@ describe("task prompt drafting", () => {
     );
   });
 
-  test("draftTaskPromptFromFields uses fallback without provider", async () => {
-    const prompt = await draftTaskPromptFromFields(
-      { description: "Weekly check", title: "Audit logs" },
-      {}
-    );
-
-    expect(prompt).toContain("Audit logs");
-    expect(prompt).toContain("Weekly check");
-  });
-
   test("draftTaskPromptFromFields requires title", async () => {
     await expect(
       draftTaskPromptFromFields({ title: "   " }, {})

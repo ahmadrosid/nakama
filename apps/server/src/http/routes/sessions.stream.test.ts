@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentChatSession } from "@nakama/agent";
+import type { StreamEvent } from "@nakama/core";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { streamMessage, streamTurnSubscribe } from "../shared";
 
@@ -141,6 +142,55 @@ describe("streamMessage cancellation", () => {
     await waitForTurnToEnd(sessionId);
 
     expect(sessionTurnRegistry.isActive(sessionId)).toBe(false);
+  });
+
+  test("a mid-flight drop without a terminal event records the fallback and warns", async () => {
+    const sessionId = `session_drop_test_${Date.now()}`;
+    const { session } = createCancellableSession();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const publish = sessionTurnRegistry.publish.bind(sessionTurnRegistry);
+    const publishSpy = spyOn(sessionTurnRegistry, "publish").mockImplementation(
+      (id, event) => {
+        if (event.type === "done" || event.type === "error") {
+          throw new Error("simulated transport drop before terminal publish");
+        }
+        publish(id, event);
+      }
+    );
+
+    let completed: StreamEvent | undefined;
+
+    try {
+      expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+      const response = streamMessage(
+        sessionId,
+        session,
+        { message: "hi" },
+        (terminal) => {
+          completed = terminal;
+        }
+      );
+
+      await Bun.sleep(10);
+      await response.body?.cancel();
+      await waitForTurnToEnd(sessionId);
+
+      expect(completed).toEqual({
+        error: "Stream closed before the agent finished.",
+        type: "error",
+      });
+      expect(
+        warn.mock.calls.some(
+          (args) =>
+            typeof args[0] === "string" &&
+            args[0].includes(sessionId) &&
+            args[0].includes("Stream closed before the agent finished.")
+        )
+      ).toBe(true);
+    } finally {
+      publishSpy.mockRestore();
+      warn.mockRestore();
+    }
   });
 });
 

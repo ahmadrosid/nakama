@@ -41,12 +41,14 @@ const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
   XLSB_MEDIA_TYPE,
   "text/plain",
   "text/csv",
+  "text/markdown",
 ]);
 
 const DOCUMENT_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   ".csv": "text/csv",
   ".docx":
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".md": "text/markdown",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".xls": XLS_MEDIA_TYPE,
@@ -171,7 +173,7 @@ export function validateDocumentAttachments(
 
     if (!ALLOWED_DOCUMENT_MEDIA_TYPES.has(mediaType)) {
       throw new NakamaApiError(
-        `Unsupported document type: ${document.mediaType}. Allowed: pdf, docx, xls, xlsx, xlsm, xlsb, csv, txt.`,
+        `Unsupported document type: ${document.mediaType}. Allowed: pdf, docx, xls, xlsx, xlsm, xlsb, csv, txt, md.`,
         400
       );
     }

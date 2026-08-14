@@ -2,8 +2,10 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
+  customModelEntryFromRemoteRecord,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
+  inferRemoteModelVision,
   mergeOpenRouterCatalog,
 } from "./compatible-models";
 
@@ -290,6 +292,28 @@ describe("getModelsForProviderInstance openai_compatible", () => {
     expect(models[0]?.supportsThinking).toBe(true);
     expect(models[0]?.providerId).toBe("compat-1");
   });
+
+  test("maps supportsVision from custom models into the catalog", () => {
+    const models = getModelsForProviderInstance({
+      apiKey: "",
+      baseUrl: "https://api.example.com/v1",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [
+        { id: "qwen-vl", name: "Qwen VL", supportsVision: true },
+        { id: "qwen-text", name: "Qwen Text" },
+      ],
+      id: "compat-1",
+      label: "Custom",
+      type: "openai_compatible",
+    });
+
+    expect(models.find((model) => model.id === "qwen-vl")?.supportsVision).toBe(
+      true
+    );
+    expect(
+      models.find((model) => model.id === "qwen-text")?.supportsVision
+    ).toBeUndefined();
+  });
 });
 
 describe("compatibleModelSupportsThinking", () => {
@@ -307,6 +331,37 @@ describe("compatibleModelSupportsThinking", () => {
         { id: "qwen3.6-7b" },
       ])
     ).toBe(false);
+  });
+});
+
+describe("inferRemoteModelVision", () => {
+  test("reads OpenRouter-style architecture modalities", () => {
+    expect(
+      inferRemoteModelVision({
+        architecture: { input_modalities: ["text", "image"] },
+      })
+    ).toBe(true);
+  });
+
+  test("reads explicit supports_vision flags", () => {
+    expect(inferRemoteModelVision({ supports_vision: true })).toBe(true);
+    expect(inferRemoteModelVision({ supportsVision: false })).toBe(false);
+  });
+});
+
+describe("customModelEntryFromRemoteRecord", () => {
+  test("copies inferred vision onto the custom model entry", () => {
+    expect(
+      customModelEntryFromRemoteRecord({
+        architecture: { input_modalities: ["image"] },
+        id: "qwen-vl",
+        name: "Qwen VL",
+      })
+    ).toEqual({
+      id: "qwen-vl",
+      name: "Qwen VL",
+      supportsVision: true,
+    });
   });
 });
 

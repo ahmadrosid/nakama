@@ -458,6 +458,20 @@ describe("createHonoApp", () => {
     });
   });
 
+  test("allows blob: media so authenticated artifact previews can render", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: { Authorization: "Bearer invalid_token" },
+      })
+    );
+
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("img-src 'self' data: blob:");
+    expect(csp).toContain("media-src 'self' blob:");
+  });
+
   test("rotates the local auth token from a browser session", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-rotate-auth-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

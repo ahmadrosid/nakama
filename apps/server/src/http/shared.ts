@@ -668,8 +668,15 @@ export function streamMessage(
         }
         clearInterval(keepalive);
 
+        const observedTerminal = getTerminal();
+        if (!observedTerminal) {
+          console.warn(
+            `Session ${sessionId}: Stream closed before the agent finished.`
+          );
+        }
+
         const terminal =
-          getTerminal() ??
+          observedTerminal ??
           ({
             error: "Stream closed before the agent finished.",
             type: "error",

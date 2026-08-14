@@ -15,6 +15,7 @@ import {
 import { formatError } from "@/lib/client";
 import {
   encodeModelSelection,
+  filterVisionCapableProviderGroups,
   groupModelsByProvider,
   profileModelLabel,
   profileModelSelectionValue,
@@ -36,25 +37,10 @@ export function VisionSettingsCard() {
     [modelsResponse?.models]
   );
 
-  const visionModelGroups = useMemo(() => {
-    const groups: typeof providerModelGroups = [];
-
-    for (const group of providerModelGroups) {
-      const models = group.models.filter(
-        (model) =>
-          resolveModelVisionSupport(
-            encodeModelSelection(group.providerId, model.id),
-            providerModelGroups
-          ) === true
-      );
-
-      if (models.length > 0) {
-        groups.push({ ...group, models });
-      }
-    }
-
-    return groups;
-  }, [providerModelGroups]);
+  const visionModelGroups = useMemo(
+    () => filterVisionCapableProviderGroups(providerModelGroups),
+    [providerModelGroups]
+  );
 
   const visionUnavailable = visionModelGroups.length === 0;
 

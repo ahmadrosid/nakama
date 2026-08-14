@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Server } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();
@@ -23,6 +24,7 @@ import {
   seedDatabase,
 } from "@nakama/db";
 import { createHonoApp } from "./http/app";
+import { disableBunIdleTimeoutForSse } from "./http/sse-idle-timeout";
 import { runFirstBootSeed } from "./seed";
 import { AgentService } from "./services/agent-service";
 import { AuthService } from "./services/auth-service";
@@ -321,7 +323,11 @@ function startServer(options: {
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
       return Bun.serve({
-        fetch: options.fetch,
+        async fetch(request, server: Server) {
+          const response = await options.fetch(request);
+          disableBunIdleTimeoutForSse(request, response, server);
+          return response;
+        },
         hostname: options.host,
         idleTimeout: 255,
         port,

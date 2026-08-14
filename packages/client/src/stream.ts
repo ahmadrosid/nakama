@@ -10,6 +10,18 @@ import type { SendMessageArg, StreamHandler, StreamHandlers } from "./types";
 
 const DEFAULT_STREAM_IDLE_MS = DEFAULT_CHAT_STREAM_TIMEOUT_MS;
 
+/**
+ * Bun fetch idleTimeout is in seconds (max 255). SSE tool runs can sit quiet
+ * longer than that, so stream requests disable it.
+ */
+export const STREAM_FETCH_IDLE_TIMEOUT_S = 0;
+
+export type StreamFetchInit = RequestInit & { idleTimeout?: number };
+
+export function withStreamFetchIdle(init: RequestInit): StreamFetchInit {
+  return { ...init, idleTimeout: STREAM_FETCH_IDLE_TIMEOUT_S };
+}
+
 /** How long a 409 is treated as a turn that is still stopping rather than a real conflict. */
 const TURN_CONFLICT_RETRY_MS = 3000;
 const TURN_CONFLICT_POLL_MS = 150;

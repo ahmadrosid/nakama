@@ -1,8 +1,5 @@
 import type { ImageGenerationAspect } from "@/components/chat/ImageGeneration";
-import {
-  buildArtifactContentUrl,
-  toArtifactsRelativePath,
-} from "@/lib/chat-artifacts";
+import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
 
 export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
@@ -10,9 +7,9 @@ export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 export type ImageGenerationToolStatus = "running" | "done" | "error";
 
 export interface ImageGenerationToolState {
+  artifactPath: string | null;
   aspect: ImageGenerationAspect;
   error: string | null;
-  imageUrl: string | null;
   prompt: string;
   resolution: string;
   status: ImageGenerationToolStatus;
@@ -116,8 +113,7 @@ function parseGenerateImagePath(result: unknown): string | null {
 }
 
 export function buildGenerateImageToolState(
-  item: ChatListItem,
-  profileId?: string | null
+  item: ChatListItem
 ): ImageGenerationToolState {
   const prompt = parseGenerateImagePrompt(item.toolInput) ?? DEFAULT_PROMPT;
   const size = parseGenerateImageSize(item.toolInput);
@@ -126,9 +122,9 @@ export function buildGenerateImageToolState(
 
   if (item.toolStatus === "running") {
     return {
+      artifactPath: null,
       aspect,
       error: null,
-      imageUrl: null,
       prompt,
       resolution,
       status: "running",
@@ -138,9 +134,9 @@ export function buildGenerateImageToolState(
   const error = parseGenerateImageError(item.toolResult);
   if (error) {
     return {
+      artifactPath: null,
       aspect,
       error,
-      imageUrl: null,
       prompt,
       resolution,
       status: "error",
@@ -148,18 +144,11 @@ export function buildGenerateImageToolState(
   }
 
   const relativePath = parseGenerateImagePath(item.toolResult);
-  const imageUrl =
-    relativePath && profileId
-      ? buildArtifactContentUrl(profileId, relativePath, true)
-      : null;
-
-  if (!imageUrl) {
+  if (!relativePath) {
     return {
+      artifactPath: null,
       aspect,
-      error: relativePath
-        ? "Image ready, but preview is unavailable."
-        : "Image generation returned no path.",
-      imageUrl: null,
+      error: "Image generation returned no path.",
       prompt,
       resolution,
       status: "error",
@@ -167,9 +156,9 @@ export function buildGenerateImageToolState(
   }
 
   return {
+    artifactPath: relativePath,
     aspect,
     error: null,
-    imageUrl,
     prompt,
     resolution,
     status: "done",

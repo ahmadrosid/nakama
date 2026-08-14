@@ -10,6 +10,7 @@ import type {
 } from "@nakama/core";
 import type { ProfileService } from "../services/profile-service";
 import {
+  PROFILE_CREATE_CONFIRMATION_MESSAGE,
   SuperBotSessionState,
   TOOL_ASSIGNMENT_CONFIRMATION_MESSAGE,
 } from "../services/super-bot-session-state";
@@ -271,6 +272,76 @@ describe("super bot assign_tool_to_profile", () => {
 });
 
 describe("super bot create_profile", () => {
+  test("refuses create_profile on the first turn", async () => {
+    let createProfileCalled = false;
+    const sessionState = new SuperBotSessionState();
+    sessionState.beginTurn(SESSION_ID);
+    const createProfile = getCreateProfileTool(
+      {
+        async createProfile(): Promise<ProfileResponse> {
+          createProfileCalled = true;
+          throw new Error("should not be called");
+        },
+      },
+      sessionState
+    );
+
+    const error = await captureError(
+      createProfile.run(
+        { name: "Gary" },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    );
+
+    expect(error?.message).toBe(PROFILE_CREATE_CONFIRMATION_MESSAGE);
+    expect(createProfileCalled).toBe(false);
+  });
+
+  test("creates after a later user turn confirms the draft", async () => {
+    const capturedRequests: CreateProfileRequest[] = [];
+    const sessionState = new SuperBotSessionState();
+    sessionState.beginTurn(SESSION_ID);
+    sessionState.beginTurn(SESSION_ID);
+    const createProfile = getCreateProfileTool(
+      {
+        async createProfile(
+          _orgId: string,
+          request: CreateProfileRequest
+        ): Promise<ProfileResponse> {
+          capturedRequests.push(request);
+          return {
+            profile: {
+              createdAt: "2026-01-01T00:00:00.000Z",
+              hasAvatar: false,
+              id: "gary",
+              isSuper: false,
+              mcpServerCount: 0,
+              mcpServers: [],
+              model: null,
+              name: request.name,
+              skills: [],
+              soulActive: true,
+              systemPrompt: "",
+              toolCount: 0,
+              tools: [],
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          };
+        },
+      },
+      sessionState
+    );
+
+    await expect(
+      createProfile.run(
+        { name: "Gary" },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    ).resolves.toMatchObject({ profile: { name: "Gary" } });
+    expect(capturedRequests[0]?.name).toBe("Gary");
+    expect(capturedRequests[0]?.id).toBeUndefined();
+  });
+
   test("passes generated soul files to profile creation", async () => {
     const capturedRequests: CreateProfileRequest[] = [];
 
@@ -425,11 +496,19 @@ function getCreateToolTool(profileService: Pick<ProfileService, "createTool">) {
 }
 
 function getCreateProfileTool(
-  profileService: Pick<ProfileService, "createProfile">
+  profileService: Pick<ProfileService, "createProfile">,
+  sessionState?: SuperBotSessionState
 ) {
-  const tool = createTestTools(profileService).find(
-    (candidate) => candidate.name === "create_profile"
-  );
+  const state = sessionState ?? new SuperBotSessionState();
+  if (!sessionState) {
+    state.beginTurn(SESSION_ID);
+    state.beginTurn(SESSION_ID);
+  }
+
+  const tool = createSuperBotTools(
+    profileService as ProfileService,
+    state
+  ).find((candidate) => candidate.name === "create_profile");
 
   if (!tool) {
     throw new Error("create_profile was not registered");

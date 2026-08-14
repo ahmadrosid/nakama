@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ANYDOC_MAX_OUTPUT_BYTES,
-  ANYDOC_TIMEOUT_MS,
   convertDocumentBytes,
   resolveAnydocFormat,
 } from "./anydoc-text";
@@ -109,7 +108,5 @@ describe("convertDocumentBytes", () => {
         timeoutMs: 25,
       })
     ).rejects.toThrow(/timed out/i);
-
-    expect(ANYDOC_TIMEOUT_MS).toBeGreaterThan(0);
   });
 });

@@ -15,6 +15,7 @@ import {
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
+  Image01Icon,
   WifiOff01Icon,
 } from "hugeicons-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -835,12 +836,14 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           onClick={() => openPicker(IMAGE_ACCEPT)}
         >
+          <Image01Icon aria-hidden className="size-4 text-muted-foreground" />
           Image
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={disabled}
           onClick={() => openPicker(DOCUMENT_ACCEPT)}
         >
+          <File01Icon aria-hidden className="size-4 text-muted-foreground" />
           Document
         </DropdownMenuItem>
       </DropdownMenuContent>

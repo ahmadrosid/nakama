@@ -47,6 +47,7 @@ async function parseWithAnydoc(document: DocumentAttachment): Promise<string> {
 const BUILTIN_DOCUMENT_TEXT_PARSERS: Record<string, DocumentTextParser> = {
   "application/pdf": parseWithAnydoc,
   "text/csv": (document) => decodeDocumentText(document.data),
+  "text/markdown": (document) => decodeDocumentText(document.data),
   "text/plain": (document) => decodeDocumentText(document.data),
   [DOCX_MEDIA_TYPE]: parseWithAnydoc,
   [XLSX_MEDIA_TYPE]: parseWithAnydoc,

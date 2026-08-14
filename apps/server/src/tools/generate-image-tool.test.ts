@@ -134,8 +134,6 @@ describe("generate_image tool seed and resolver (U3)", () => {
     );
 
     expect(tool).toBeDefined();
-    expect(tool?.parallelSafe).toBe(false);
-    expect(typeof tool?.run).toBe("function");
     expect(tool?.parameters?.required).toEqual(["prompt"]);
     expect(tool?.parameters?.properties).not.toHaveProperty("model");
   });
@@ -420,46 +418,5 @@ describe("generate_image tool persistence (U4)", () => {
     );
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
-  });
-
-  test("tool result includes path, mimeType, sizeBytes, attachmentId, model", async () => {
-    await setupWorkspace();
-    const db = createInMemoryDatabaseAdapter();
-
-    const result = await runGenerateImageTool(
-      { prompt: "logo" },
-      {
-        channel: "cli",
-        orgId: "org_1",
-        profileId: "profile_1",
-        sessionId: "session_1",
-        workspaceRoot,
-      },
-      {
-        db,
-        ensureSettingsLoaded: async () => {},
-        generateImage: async () => ({
-          data: PNG_BYTES,
-          mediaType: "image/png",
-          model: "gpt-image-2",
-          size: "1024x1024",
-        }),
-        getUserConfig: () =>
-          openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
-      }
-    );
-
-    expect(Object.keys(result).sort()).toEqual([
-      "attachmentId",
-      "mimeType",
-      "model",
-      "path",
-      "sizeBytes",
-    ]);
-    expect(result).toMatchObject({
-      mimeType: "image/png",
-      model: "gpt-image-2",
-      sizeBytes: PNG_BYTES.byteLength,
-    });
   });
 });

@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# Export docs/website/public/pitch-deck.html to docs/deck/pitch-deck.pdf (one page per slide, 16:9).
+# Export a public HTML deck to docs/deck/<basename>.pdf (one page per slide, 16:9).
+# Usage: scripts/export-pitch-deck-pdf.sh [basename]
+#   basename defaults to investor-pitch.
+#   Example: scripts/export-pitch-deck-pdf.sh investor-pitch
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="${ROOT}/docs/website/public/pitch-deck.html"
-OUT="${ROOT}/docs/deck/pitch-deck.pdf"
-PRINT_HTML="${ROOT}/docs/website/public/.pitch-deck-print.html"
+DECK="${1:-investor-pitch}"
+
+if [[ ! "${DECK}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "Invalid deck basename: ${DECK}" >&2
+  exit 1
+fi
+
+SRC="${ROOT}/docs/website/public/${DECK}.html"
+OUT="${ROOT}/docs/deck/${DECK}.pdf"
+PRINT_HTML="${ROOT}/docs/website/public/.${DECK}-print.html"
 
 find_chrome() {
   if [[ -n "${CHROME_PATH:-}" && -x "${CHROME_PATH}" ]]; then
@@ -60,7 +70,7 @@ src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
 html = src.read_text(encoding="utf-8")
 if "</head>" not in html:
-    raise SystemExit("pitch-deck.html has no </head>")
+    raise SystemExit(f"{src.name} has no </head>")
 
 print_css = r"""
 <style id="print-export">

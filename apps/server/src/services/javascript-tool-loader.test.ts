@@ -71,6 +71,7 @@ export async function run(input) {
 
     expect(tool).not.toBeNull();
     expect(tool?.name).toBe("echo");
+    expect(tool?.parallelSafe).not.toBe(true);
     expect(tool?.parameters?.required).toEqual(["message"]);
 
     const result = await tool!.run({ message: "hello" }, {});

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseYoutubeVideoId, youtubeEmbedSrc } from "./youtube-url";
+import { parseYoutubeVideoId } from "./youtube-url";
 
 describe("parseYoutubeVideoId", () => {
   test("parses watch URLs", () => {
@@ -41,13 +41,5 @@ describe("parseYoutubeVideoId", () => {
     ).toBeNull();
     expect(parseYoutubeVideoId("not a url")).toBeNull();
     expect(parseYoutubeVideoId(undefined)).toBeNull();
-  });
-});
-
-describe("youtubeEmbedSrc", () => {
-  test("builds a nocookie embed URL", () => {
-    expect(youtubeEmbedSrc("dQw4w9WgXcQ")).toBe(
-      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"
-    );
   });
 });

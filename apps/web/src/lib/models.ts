@@ -886,12 +886,35 @@ export function resolveModelVisionSupport(
     model.provider === "deepseek" ||
     model.provider === "cerebras" ||
     model.provider === "fireworks" ||
-    model.provider === "ollama"
+    model.provider === "ollama" ||
+    model.provider === "openrouter"
   ) {
     return model.supportsVision === true;
   }
 
   return model.supportsVision !== false;
+}
+
+export function filterVisionCapableProviderGroups(
+  groups: ReturnType<typeof groupModelsByProvider>
+): ReturnType<typeof groupModelsByProvider> {
+  const visionGroups: typeof groups = [];
+
+  for (const group of groups) {
+    const models = group.models.filter(
+      (model) =>
+        resolveModelVisionSupport(
+          encodeModelSelection(group.providerId, model.id),
+          groups
+        ) === true
+    );
+
+    if (models.length > 0) {
+      visionGroups.push({ ...group, models });
+    }
+  }
+
+  return visionGroups;
 }
 
 export const TRANSCRIPTION_MODEL_OPTIONS = [

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { getProfileSoulDir } from "../soul/resolve";
 import { getUserConfigDir } from "../user-config";
 
 export const SKILL_FILE_NAME = "SKILL.md";
@@ -9,14 +10,7 @@ export function getGlobalSkillsDir(): string {
 }
 
 export function getProfileSkillsDir(orgId: string, profileId: string): string {
-  return path.join(
-    getUserConfigDir(),
-    "orgs",
-    orgId,
-    "profiles",
-    profileId,
-    "skills"
-  );
+  return path.join(getProfileSoulDir(orgId, profileId), "skills");
 }
 
 export async function resolveSkillDiscoveryDirs(

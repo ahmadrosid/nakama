@@ -731,6 +731,12 @@ function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
     const previous = plans[index - 1]!;
     const current = plans[index]!;
 
+    if (current.start < previous.start) {
+      throw new Error(
+        "Edit plans must be sorted by start offset before applying."
+      );
+    }
+
     if (current.start < previous.end) {
       throw new Error(
         `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`

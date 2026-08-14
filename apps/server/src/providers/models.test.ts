@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { getDefaultModel, isOpenRouterModelSlug, resolveModel } from "./models";
+import {
+  getDefaultModel,
+  isOpenRouterModelSlug,
+  modelSupportsVision,
+  resolveModel,
+} from "./models";
 
 describe("isOpenRouterModelSlug", () => {
   test("accepts vendor/model slugs", () => {
@@ -123,5 +128,25 @@ describe("resolveModel", () => {
     expect(resolveModel("fireworks", "unknown-model", customModels)).toBe(
       "accounts/fireworks/models/glm-5p2"
     );
+  });
+});
+
+describe("modelSupportsVision", () => {
+  test("treats openai-compatible models as opt-in only", () => {
+    expect(
+      modelSupportsVision("qwen-vl", "openai_compatible", [{ id: "qwen-vl" }])
+    ).toBe(false);
+
+    expect(
+      modelSupportsVision("qwen-vl", "openai_compatible", [
+        { id: "qwen-vl", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
+  test("keeps OpenCode Go models opt-in only", () => {
+    expect(
+      modelSupportsVision("opencode-go/kimi-k2.7-code", "opencode_go")
+    ).toBe(false);
   });
 });

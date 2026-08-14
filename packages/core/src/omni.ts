@@ -14,6 +14,11 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { JsonSchema, ToolContext, ToolDefinition } from "./contract";
+import {
+  installOmni,
+  type OmniInstallResult,
+  omniCommand,
+} from "./omni-install";
 import { getOrgMemoryDir } from "./soul/resolve";
 
 /**
@@ -88,6 +93,23 @@ export function isOmniInstalled(): Promise<boolean> {
 }
 
 /**
+ * Install the binary if it is missing, and make the probe tell the truth again.
+ *
+ * The probe is cached for the life of the process, so an install that did not
+ * clear it would leave the panel reporting a binary that is sitting right there.
+ */
+export async function ensureOmniInstalled(): Promise<OmniInstallResult> {
+  if (await isOmniInstalled()) {
+    return { installed: true };
+  }
+  const result = await installOmni();
+  if (result.installed) {
+    installedProbe = null;
+  }
+  return result;
+}
+
+/**
  * Whether the optimiser runs for this call. An explicit org setting wins in both
  * directions, so an operator who turned it off in the UI is not overridden by
  * the env var, and vice versa.
@@ -111,7 +133,7 @@ function runOmni(
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn("omni", args, {
+      child = spawn(omniCommand(), args, {
         env: { ...process.env, ...env },
         stdio: ["pipe", "pipe", "ignore"],
       });

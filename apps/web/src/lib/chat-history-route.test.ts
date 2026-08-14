@@ -3,10 +3,7 @@ import {
   buildChatPath,
   buildNewChatPath,
   chatProfileIdFromPath,
-  formatSessionChannelLabel,
-  HISTORY_SESSION_CHANNELS,
   isChatSessionPath,
-  isReadOnlySessionChannel,
   parseChatRouteParams,
   pickKnownProfileId,
   readInitialDraftChatProfileId,
@@ -16,7 +13,6 @@ import {
   resolveActiveProfileIdFromLocation,
   resolveDefaultProfileId,
   resolveHistoryProfileId,
-  sessionStorageKey,
   writeStoredActiveChatProfileId,
 } from "./chat-history";
 
@@ -63,10 +59,6 @@ describe("chat history route helpers", () => {
       "abc"
     );
     expect(readRequestedDraftFromNewChatSearch("?draft=fix")).toBeNull();
-  });
-
-  test("uses a profile-scoped session storage key", () => {
-    expect(sessionStorageKey("default")).toBe("nakama:session:default");
   });
 
   test("resolveActiveProfileIdFromLocation prefers URL, live chat state, and defaults", () => {
@@ -227,11 +219,5 @@ describe("chat history route helpers", () => {
     const profiles = [{ id: "default" }, { id: "super" }];
     expect(pickKnownProfileId(profiles, "missing", "super")).toBe("super");
     expect(pickKnownProfileId(profiles, "missing")).toBeNull();
-  });
-
-  test("history lists discord sessions as read-only channel chats", () => {
-    expect(HISTORY_SESSION_CHANNELS).toContain("discord");
-    expect(isReadOnlySessionChannel("discord")).toBe(true);
-    expect(formatSessionChannelLabel("discord")).toBe("Discord");
   });
 });

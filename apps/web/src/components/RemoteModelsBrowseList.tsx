@@ -6,6 +6,7 @@ import { queryKeys } from "@/lib/query-keys";
 export interface RemoteModelRow {
   id: string;
   name: string;
+  supportsVision?: boolean;
 }
 
 export type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
@@ -61,6 +62,9 @@ export function RemoteModelsBrowseList({
       return (response.customModels ?? response.models ?? []).map((entry) => ({
         id: entry.id,
         name: entry.name?.trim() || entry.id,
+        ...(entry.supportsVision === undefined
+          ? {}
+          : { supportsVision: entry.supportsVision }),
       }));
     },
     queryKey: queryKeys.remoteModelDiscovery({

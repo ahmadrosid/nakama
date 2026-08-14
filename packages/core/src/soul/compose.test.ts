@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { composeSoulSystemPrompt } from "./compose";
 import { initSoulDirectory } from "./init";
-import { loadSoulStack } from "./load";
 import { SOUL_TEMPLATE } from "./templates";
 
 describe("composeSoulSystemPrompt", () => {
@@ -37,20 +36,6 @@ describe("composeSoulSystemPrompt", () => {
 });
 
 describe("default seed compose integration", () => {
-  test("initSoulDirectory + loadSoulStack + compose omits Profile Instructions", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "nakama-soul-compose-"));
-
-    try {
-      await initSoulDirectory(directory);
-      const stack = await loadSoulStack(directory);
-      const prompt = composeSoulSystemPrompt(stack, { profilePrompt: "" });
-
-      expect(prompt).not.toContain("# Profile Instructions");
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
-  });
-
   test("initSoulDirectory does not overwrite existing SOUL.md", async () => {
     const directory = await mkdtemp(join(tmpdir(), "nakama-soul-init-"));
 

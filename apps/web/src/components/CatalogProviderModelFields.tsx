@@ -15,6 +15,26 @@ import { client } from "@/lib/client";
 import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
+function modelListFieldsFromCatalog(model: ProviderModelOption): ModelListRow {
+  return {
+    id: model.id,
+    name: model.name,
+    ...(model.default ? { default: true } : {}),
+    ...(model.inputPerMillionUsd === undefined
+      ? {}
+      : { inputPerMillionUsd: model.inputPerMillionUsd }),
+    ...(model.outputPerMillionUsd === undefined
+      ? {}
+      : { outputPerMillionUsd: model.outputPerMillionUsd }),
+    ...(model.supportsThinking === undefined
+      ? {}
+      : { supportsThinking: model.supportsThinking }),
+    ...(model.supportsVision === undefined
+      ? {}
+      : { supportsVision: model.supportsVision }),
+  };
+}
+
 function mergeBrowseModels(
   staticCatalog: ProviderModelOption[],
   remoteModels: ProviderModelOption[],
@@ -126,23 +146,7 @@ export function CatalogProviderModelFields({
       return;
     }
 
-    onCustomModelsChange([
-      ...customModels,
-      {
-        id: model.id,
-        name: model.name,
-        ...(model.default ? { default: true } : {}),
-        ...(model.inputPerMillionUsd === undefined
-          ? {}
-          : { inputPerMillionUsd: model.inputPerMillionUsd }),
-        ...(model.outputPerMillionUsd === undefined
-          ? {}
-          : { outputPerMillionUsd: model.outputPerMillionUsd }),
-        ...(model.supportsThinking === undefined
-          ? {}
-          : { supportsThinking: model.supportsThinking }),
-      },
-    ]);
+    onCustomModelsChange([...customModels, modelListFieldsFromCatalog(model)]);
     setIsBrowsing(false);
   };
 
@@ -185,20 +189,7 @@ export function CatalogProviderModelFields({
               disabled={disabled || remoteLoading || browseModels.length === 0}
               onClick={() =>
                 onCustomModelsChange(
-                  browseModels.map((model) => ({
-                    default: model.default,
-                    id: model.id,
-                    name: model.name,
-                    ...(model.inputPerMillionUsd === undefined
-                      ? {}
-                      : { inputPerMillionUsd: model.inputPerMillionUsd }),
-                    ...(model.outputPerMillionUsd === undefined
-                      ? {}
-                      : { outputPerMillionUsd: model.outputPerMillionUsd }),
-                    ...(model.supportsThinking === undefined
-                      ? {}
-                      : { supportsThinking: model.supportsThinking }),
-                  }))
+                  browseModels.map(modelListFieldsFromCatalog)
                 )
               }
               size="sm"
@@ -226,6 +217,12 @@ export function CatalogProviderModelFields({
           onBrowse={() => setIsBrowsing(true)}
           onChange={onCustomModelsChange}
           showPricing
+          showVision
+          visionDefaultOn={
+            provider === "openai" ||
+            provider === "anthropic" ||
+            provider === "gemini"
+          }
         />
       )}
     </FormField>

@@ -56,6 +56,8 @@ export function ShortlistBrowseProviderModelFields({
           />
         )
       }
+      showThinking
+      showVision
       toModelRow={capabilityBrowseRowToModelListRow}
     />
   );

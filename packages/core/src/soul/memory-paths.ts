@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getProfileSoulDir } from "./resolve";
+import { assertYearMonth, getProfileSoulDir } from "./resolve";
 
 export const MEMORY_ARCHIVE_RELATIVE_DIR = "memory-archive";
 
@@ -12,7 +12,10 @@ export function getMemoryArchiveFilePath(
   profileId: string,
   yearMonth: string
 ): string {
-  return join(getMemoryArchiveDir(orgId, profileId), `${yearMonth}.md`);
+  return join(
+    getMemoryArchiveDir(orgId, profileId),
+    `${assertYearMonth(yearMonth)}.md`
+  );
 }
 
 export function formatMemoryArchiveYearMonth(date: Date): string {
