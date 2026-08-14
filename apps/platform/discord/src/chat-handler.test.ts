@@ -27,6 +27,21 @@ afterEach(() => {
   chatLockOptions.waitMs = 15 * 60 * 1000;
 });
 
+/**
+ * Wait for a condition instead of sleeping a fixed slice. A busy CI runner can
+ * miss a fixed window and fail a test that is not actually broken; a real
+ * regression still fails, it just reaches the assertion through the timeout.
+ */
+async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs = 2000
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) {
+    await Bun.sleep(1);
+  }
+}
+
 async function createPairedHandler(
   homeDir: string,
   options: {
@@ -975,9 +990,9 @@ describe("createChatHandler guild thread routing", () => {
       });
 
       const firstTurn = handleMessage(first.message);
-      await Bun.sleep(20);
+      await waitUntil(() => entered >= 1);
       const secondTurn = handleMessage(second.message);
-      await Bun.sleep(20);
+      await waitUntil(() => entered >= 2);
 
       expect(entered).toBe(2);
       expect(maxInFlight).toBeGreaterThanOrEqual(2);
