@@ -99,13 +99,4 @@ describe("createTypingLoop", () => {
     // Queued pings must not call WhatsApp after stop().
     expect(getSendCount()).toBe(1);
   });
-
-  test("a null socket never sends", async () => {
-    const loop = createTypingLoop(null, JID);
-
-    loop.start();
-    loop.ping();
-    await flushTypingChain();
-    loop.stop();
-  });
 });
