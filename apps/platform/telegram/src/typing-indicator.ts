@@ -10,30 +10,51 @@ export interface TypingLoop {
 
 export function createTypingLoop(ctx: Context): TypingLoop {
   let interval: ReturnType<typeof setInterval> | null = null;
+  let active = false;
+  // Serialize typing sends and re-check `active` before each one so a ping
+  // flood (e.g. onThinking) cannot keep refreshing Telegram after stop().
+  let sendChain: Promise<void> = Promise.resolve();
 
-  async function sendTyping(): Promise<void> {
-    try {
-      await ctx.replyWithChatAction("typing");
-    } catch {
-      // Chat may have been deleted or bot blocked — ignore.
+  function clear() {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
     }
+  }
+
+  function queueTyping() {
+    if (!active) {
+      return;
+    }
+
+    sendChain = sendChain
+      .then(async () => {
+        if (!active) {
+          return;
+        }
+
+        await ctx.replyWithChatAction("typing");
+      })
+      .catch(() => {
+        // Chat may have been deleted or bot blocked. Keep the chain healthy.
+      });
   }
 
   return {
     ping() {
-      void sendTyping();
+      queueTyping();
     },
     start() {
-      void sendTyping();
+      clear();
+      active = true;
+      queueTyping();
       interval = setInterval(() => {
-        void sendTyping();
+        queueTyping();
       }, TYPING_REFRESH_MS);
     },
     stop() {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
-      }
+      active = false;
+      clear();
     },
   };
 }
