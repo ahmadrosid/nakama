@@ -124,4 +124,23 @@ describe("version", () => {
     process.env.OMNI_VERSION = "9.9.9";
     expect(omniVersion()).toBe("9.9.9");
   });
+
+  // The image bakes the binary in at build time and the server fetches it at
+  // runtime when it is missing. Two pins, one binary, and nothing stopped them
+  // drifting: an image built with the default arg would carry one version while
+  // a fetch on the same image pulled another, silently and only on the hosts
+  // that took the fetch path.
+  test("the Dockerfile pin matches the runtime default", async () => {
+    delete process.env.OMNI_VERSION;
+    const dockerfile = await Bun.file(
+      join(import.meta.dir, "..", "..", "..", "Dockerfile")
+    ).text();
+    const pinned = dockerfile.match(/^ARG OMNI_VERSION="([^"]+)"/m)?.[1];
+
+    expect(
+      pinned,
+      "Dockerfile no longer declares ARG OMNI_VERSION"
+    ).toBeTruthy();
+    expect(pinned).toBe(omniVersion());
+  });
 });
