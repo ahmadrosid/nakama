@@ -789,41 +789,70 @@ function DeliverySettingsFields({
   const channel = delivery?.channel ?? "none";
 
   return (
-    <div className="grid gap-4 rounded-md border border-border bg-muted/20 p-4">
-      <Field label="Send results to">
-        <Select
-          disabled={busy}
-          onValueChange={(value) => {
-            const next = String(value);
+    <fieldset className="grid min-w-0 gap-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+      <legend className="sr-only">Delivery</legend>
+      <div className={delivery ? "grid gap-4 sm:grid-cols-2" : undefined}>
+        <Field label="Send results to">
+          <Select
+            disabled={busy}
+            onValueChange={(value) => {
+              const next = String(value);
 
-            if (next === "none") {
-              onChange(undefined);
-              return;
-            }
+              if (next === "none") {
+                onChange(undefined);
+                return;
+              }
 
-            onChange({
-              channel: next as AutomationDeliveryChannel,
-              ...(next === "email" && delivery?.to ? { to: delivery.to } : {}),
-              ...(next === "discord" && delivery?.channelId
-                ? { channelId: delivery.channelId }
-                : {}),
-              ...(delivery?.notifyOn ? { notifyOn: delivery.notifyOn } : {}),
-            });
-          }}
-          value={channel}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">None (run history only)</SelectItem>
-            <SelectItem value="telegram">Telegram</SelectItem>
-            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-            <SelectItem value="email">Email</SelectItem>
-            <SelectItem value="discord">Discord</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
+              onChange({
+                channel: next as AutomationDeliveryChannel,
+                ...(next === "email" && delivery?.to
+                  ? { to: delivery.to }
+                  : {}),
+                ...(next === "discord" && delivery?.channelId
+                  ? { channelId: delivery.channelId }
+                  : {}),
+                ...(delivery?.notifyOn ? { notifyOn: delivery.notifyOn } : {}),
+              });
+            }}
+            value={channel}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None (run history only)</SelectItem>
+              <SelectItem value="telegram">Telegram</SelectItem>
+              <SelectItem value="whatsapp">WhatsApp</SelectItem>
+              <SelectItem value="email">Email</SelectItem>
+              <SelectItem value="discord">Discord</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        {delivery ? (
+          <Field label="Notify on">
+            <Select
+              disabled={busy}
+              onValueChange={(value) =>
+                onChange({
+                  ...delivery,
+                  notifyOn: String(value) as AutomationDelivery["notifyOn"],
+                })
+              }
+              value={delivery.notifyOn ?? "success"}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="success">Successful runs</SelectItem>
+                <SelectItem value="failure">Failed runs</SelectItem>
+                <SelectItem value="both">Success and failure</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        ) : null}
+      </div>
 
       {delivery?.channel === "discord" ? (
         <Field
@@ -831,6 +860,7 @@ function DeliverySettingsFields({
           label="Discord channel ID"
         >
           <Input
+            className="tabular-nums"
             disabled={busy}
             onChange={(event) => {
               const channelId = event.target.value.trim();
@@ -866,31 +896,7 @@ function DeliverySettingsFields({
           />
         </Field>
       ) : null}
-
-      {delivery ? (
-        <Field label="Notify on">
-          <Select
-            disabled={busy}
-            onValueChange={(value) =>
-              onChange({
-                ...delivery,
-                notifyOn: String(value) as AutomationDelivery["notifyOn"],
-              })
-            }
-            value={delivery.notifyOn ?? "success"}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="success">Successful runs</SelectItem>
-              <SelectItem value="failure">Failed runs</SelectItem>
-              <SelectItem value="both">Success and failure</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-      ) : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -966,13 +972,13 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="mb-2 block font-medium text-muted-foreground text-xs">
         {label}
       </p>
       {children}
       {hint ? (
-        <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
+        <p className="mt-1.5 text-pretty text-muted-foreground text-xs leading-relaxed">
           {hint}
         </p>
       ) : null}
