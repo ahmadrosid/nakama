@@ -643,6 +643,54 @@ describe("profile service cloneProfile", () => {
     expect(await db.listProfilesForOrg(ORG_ID)).toHaveLength(countBefore);
   });
 
+  test("carries MCP server assignments across", async () => {
+    const { db, service, sourceId } = await setup();
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { command: "echo" },
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "Echo",
+      orgId: ORG_ID,
+      status: "disconnected",
+      transport: "stdio",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignMcpServerToProfile(sourceId, "mcp_1");
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.mcpServers.map((server) => server.id)).toEqual(["mcp_1"]);
+  });
+
+  test("copies the avatar", async () => {
+    const { service, sourceId } = await setup();
+    await service.uploadProfileAvatar(ORG_ID, sourceId, {
+      data: tinyPngBase64,
+      mediaType: "image/png",
+    });
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.hasAvatar).toBe(true);
+    await expect(
+      service.getProfileAvatar(ORG_ID, profile.id)
+    ).resolves.toBeTruthy();
+  });
+
+  test("clones the org default without the clone becoming default", async () => {
+    const { db, service, sourceId } = await setup();
+    const source = await db.getProfile(sourceId);
+    await db.upsertProfile({ ...source!, isDefault: true });
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.isDefault).toBe(false);
+    expect((await db.getProfile(sourceId))?.isDefault).toBe(true);
+  });
+
   test("404s on a missing source", async () => {
     const { service } = await setup();
 
