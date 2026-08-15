@@ -2,6 +2,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
 import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { CommandPalette } from "@/components/CommandPalette";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { ProfileRail } from "@/components/ProfileRail";
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,12 @@ import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
-  canAccessIntegrationsPage,
-  canAccessSystemPage,
   findNavItem,
-  NAV_GROUPS,
   type NavItem,
   navHrefForPage,
   PAGE_PATHS,
-  PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
+  visibleNavGroups,
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
@@ -43,35 +41,14 @@ export function Layout() {
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
-  const navGroups = useMemo(() => {
-    const groups: typeof NAV_GROUPS = [];
-
-    for (const group of NAV_GROUPS) {
-      const items = group.items.filter((item) => {
-        if (item.id === "soul") {
-          return canAccessSystemPage(
-            user?.isPlatformAdmin === true,
-            activeOrg?.role
-          );
-        }
-
-        if (item.id === "integrations") {
-          return canAccessIntegrationsPage(activeOrg?.role);
-        }
-
-        return (
-          !PLATFORM_ADMIN_PAGE_IDS.has(item.id) ||
-          user?.isPlatformAdmin === true
-        );
-      });
-
-      if (items.length > 0) {
-        groups.push({ ...group, items });
-      }
-    }
-
-    return groups;
-  }, [activeOrg?.role, user?.isPlatformAdmin]);
+  const navGroups = useMemo(
+    () =>
+      visibleNavGroups({
+        isPlatformAdmin: user?.isPlatformAdmin === true,
+        orgRole: activeOrg?.role,
+      }),
+    [activeOrg?.role, user?.isPlatformAdmin]
+  );
 
   return (
     <TooltipProvider delay={0}>
@@ -194,6 +171,7 @@ export function Layout() {
         </div>
 
         <NarrowViewportNotice />
+        <CommandPalette />
       </ActiveChatProfileProvider>
     </TooltipProvider>
   );

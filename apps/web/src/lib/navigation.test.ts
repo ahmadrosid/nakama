@@ -3,7 +3,57 @@ import {
   agentWorkTabFromSearchParams,
   agentWorkTabPath,
   pageIdFromPath,
+  visibleNavGroups,
 } from "./navigation";
+
+const pageIdsFor = (isPlatformAdmin: boolean, orgRole: string | undefined) =>
+  visibleNavGroups({ isPlatformAdmin, orgRole })
+    .flatMap((group) => group.items)
+    .map((item) => item.id)
+    .sort();
+
+describe("visibleNavGroups", () => {
+  test("a platform admin sees every destination", () => {
+    expect(pageIdsFor(true, "admin")).toEqual([
+      "automations",
+      "chat",
+      "files",
+      "history",
+      "integrations",
+      "profiles",
+      "settings",
+      "soul",
+    ]);
+  });
+
+  test("an org admin gets System but not the platform-admin pages", () => {
+    // `soul` is in PLATFORM_ADMIN_PAGE_IDS yet reachable by an org admin: the
+    // canAccessSystemPage branch runs before the platform-admin check.
+    const ids = pageIdsFor(false, "admin");
+    expect(ids).toContain("soul");
+    expect(ids).toContain("integrations");
+    expect(ids).not.toContain("files");
+    expect(ids).not.toContain("profiles");
+  });
+
+  test("a member loses System, a viewer also loses Integrations", () => {
+    const member = pageIdsFor(false, "member");
+    expect(member).toContain("integrations");
+    expect(member).not.toContain("soul");
+
+    const viewer = pageIdsFor(false, "viewer");
+    expect(viewer).not.toContain("integrations");
+    expect(viewer).not.toContain("soul");
+  });
+
+  test("groups left with no reachable item are dropped", () => {
+    const groups = visibleNavGroups({
+      isPlatformAdmin: false,
+      orgRole: "viewer",
+    });
+    expect(groups.every((group) => group.items.length > 0)).toBe(true);
+  });
+});
 
 describe("agent work navigation", () => {
   test("defaults the unified page to automations", () => {
