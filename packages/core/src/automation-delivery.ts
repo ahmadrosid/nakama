@@ -3,6 +3,7 @@ import type {
   AutomationDeliveryNotifyOn,
   AutomationRunStatus,
 } from "./contract";
+import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
@@ -23,15 +24,26 @@ export function normalizeAutomationDelivery(
   const record = value as Record<string, unknown>;
   const channel = record.channel;
 
-  if (channel !== "telegram" && channel !== "whatsapp" && channel !== "email") {
+  if (
+    channel !== "telegram" &&
+    channel !== "whatsapp" &&
+    channel !== "email" &&
+    channel !== "discord"
+  ) {
     throw new Error(
-      'delivery.channel must be "telegram", "whatsapp", or "email".'
+      'delivery.channel must be "telegram", "whatsapp", "email", or "discord".'
     );
   }
 
   const delivery: AutomationDelivery = { channel };
 
   if (record.to !== undefined) {
+    if (channel !== "email") {
+      throw new Error(
+        "delivery.to is only valid when delivery.channel is email."
+      );
+    }
+
     if (typeof record.to !== "string" || !record.to.trim()) {
       throw new Error("delivery.to must be a non-empty string.");
     }
@@ -40,6 +52,12 @@ export function normalizeAutomationDelivery(
   }
 
   if (record.chatId !== undefined) {
+    if (channel !== "telegram") {
+      throw new Error(
+        "delivery.chatId is only valid when delivery.channel is telegram."
+      );
+    }
+
     if (
       typeof record.chatId !== "number" ||
       !Number.isInteger(record.chatId) ||
@@ -49,6 +67,26 @@ export function normalizeAutomationDelivery(
     }
 
     delivery.chatId = record.chatId;
+  }
+
+  if (record.channelId !== undefined) {
+    if (channel !== "discord") {
+      throw new Error(
+        "delivery.channelId is only valid when delivery.channel is discord."
+      );
+    }
+
+    if (typeof record.channelId !== "string" || !record.channelId.trim()) {
+      throw new Error("delivery.channelId must be a non-empty string.");
+    }
+
+    const channelId = record.channelId.trim();
+
+    if (!isDiscordSnowflake(channelId)) {
+      throw new Error("delivery.channelId must be a Discord snowflake.");
+    }
+
+    delivery.channelId = channelId;
   }
 
   if (record.notifyOn !== undefined) {
@@ -137,6 +175,24 @@ export async function validateAutomationDelivery(
     if (!config.pairedJid) {
       throw new Error(
         "WhatsApp is not paired. Link your account in Integrations → WhatsApp first."
+      );
+    }
+
+    return;
+  }
+
+  if (delivery.channel === "discord") {
+    const config = await loadDiscordConfigFile();
+
+    if (!config?.botToken.trim()) {
+      throw new Error(
+        "Discord is not configured. Set up Integrations → Discord first."
+      );
+    }
+
+    if (delivery.channelId === undefined && config.pairedUserIds.length === 0) {
+      throw new Error(
+        "Discord is not paired. Link your account in Integrations → Discord first."
       );
     }
 

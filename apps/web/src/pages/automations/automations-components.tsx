@@ -804,6 +804,9 @@ function DeliverySettingsFields({
             onChange({
               channel: next as AutomationDeliveryChannel,
               ...(next === "email" && delivery?.to ? { to: delivery.to } : {}),
+              ...(next === "discord" && delivery?.channelId
+                ? { channelId: delivery.channelId }
+                : {}),
               ...(delivery?.notifyOn ? { notifyOn: delivery.notifyOn } : {}),
             });
           }}
@@ -817,9 +820,35 @@ function DeliverySettingsFields({
             <SelectItem value="telegram">Telegram</SelectItem>
             <SelectItem value="whatsapp">WhatsApp</SelectItem>
             <SelectItem value="email">Email</SelectItem>
+            <SelectItem value="discord">Discord</SelectItem>
           </SelectContent>
         </Select>
       </Field>
+
+      {delivery?.channel === "discord" ? (
+        <Field
+          hint="Leave blank to DM every paired Discord user."
+          label="Discord channel ID"
+        >
+          <Input
+            disabled={busy}
+            onChange={(event) => {
+              const channelId = event.target.value.trim();
+              const next = { ...delivery };
+
+              if (channelId) {
+                next.channelId = channelId;
+              } else {
+                delete next.channelId;
+              }
+
+              onChange(next);
+            }}
+            placeholder="123456789012345678"
+            value={delivery.channelId ?? ""}
+          />
+        </Field>
+      ) : null}
 
       {delivery?.channel === "email" ? (
         <Field label="Email recipient">

@@ -11,12 +11,18 @@ export interface AutomationStep {
   tool: string;
 }
 
-export type AutomationDeliveryChannel = "telegram" | "whatsapp" | "email";
+export type AutomationDeliveryChannel =
+  | "telegram"
+  | "whatsapp"
+  | "email"
+  | "discord";
 
 export type AutomationDeliveryNotifyOn = "success" | "failure" | "both";
 
 export interface AutomationDelivery {
   channel: AutomationDeliveryChannel;
+  /** Optional Discord channel snowflake; defaults to DMs for all paired users. */
+  channelId?: string;
   /** Optional Telegram chat override; defaults to all paired users. */
   chatId?: number;
   notifyOn?: AutomationDeliveryNotifyOn;

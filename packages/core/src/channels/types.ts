@@ -25,3 +25,7 @@ export interface TelegramOutboundAdapter {
 export interface WhatsAppOutboundAdapter {
   send(input: { text: string }): Promise<ChannelSendResult>;
 }
+
+export interface DiscordOutboundAdapter {
+  send(input: { text: string; channelId?: string }): Promise<ChannelSendResult>;
+}

@@ -34,10 +34,12 @@ export {
 export {
   buildDiscordInviteUrl,
   DEFAULT_DISCORD_PROFILE_ID,
+  DISCORD_API_BASE_URL,
   type DiscordConfigFile,
   type DiscordSettingsPublic,
   getDiscordConfigDir,
   getDiscordConfigPath,
+  isDiscordSnowflake,
   isDiscordUserAuthorized,
   loadDiscordConfigFile,
   loadDiscordSettingsPublic,

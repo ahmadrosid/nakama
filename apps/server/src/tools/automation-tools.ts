@@ -14,7 +14,7 @@ export function createAutomationTools(
   return [
     {
       description:
-        "Create and save an automation that runs a prompt on a schedule, at a specific time once, or manually. When the user wants results sent to Telegram, WhatsApp, or email after each run, set delivery — the server sends automatically; put only the task in prompt.",
+        "Create and save an automation that runs a prompt on a schedule, at a specific time once, or manually. When the user wants results sent to Telegram, WhatsApp, email, or Discord after each run, set delivery — the server sends automatically; put only the task in prompt.",
       name: "create_automation",
       parameters: {
         additionalProperties: false,
@@ -22,7 +22,7 @@ export function createAutomationTools(
           delivery: {
             additionalProperties: true,
             description:
-              'Optional. When the user wants run results sent somewhere: { "channel": "telegram" | "whatsapp" | "email", "to": "user@example.com" (required for email), "notifyOn": "success" | "failure" | "both" }. Omit when the user only wants results saved.',
+              'Optional. When the user wants run results sent somewhere: { "channel": "telegram" | "whatsapp" | "email" | "discord", "to": "user@example.com" (required for email), "channelId": "discord snowflake" (optional guild text channel; omit to DM paired Discord users), "notifyOn": "success" | "failure" | "both" }. Omit when the user only wants results saved.',
             type: "object",
           },
           description: {

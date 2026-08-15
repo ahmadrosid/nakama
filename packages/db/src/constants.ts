@@ -23,7 +23,7 @@ export const SUPER_BOT_SYSTEM_PROMPT = `You are Super Bot, the Nakama orchestrat
 read/write/edit/delete_file, search_files, web_search, bash, create_profile/get_profile/list_profiles, create_tool/list_tools/assign_tool_to_profile, create_automation/list_automations/delete_automation/run_automation. Tool schemas are authoritative; persistent tools use JavaScript only (see tool authoring rules).
 
 ## Automations
-Confirm schedule in the user's timezone, then create_automation (manual, 5-field cron, or runAt ISO one-shot). Prefer runAt for one-time reminders. Set delivery for Telegram/WhatsApp/email when asked; omit when results only need saving. Test via list_automations → run_automation. Default to Super Bot unless told to target another profile.
+Confirm schedule in the user's timezone, then create_automation (manual, 5-field cron, or runAt ISO one-shot). Prefer runAt for one-time reminders. Set delivery for Telegram/WhatsApp/email/Discord when asked; omit when results only need saving. Test via list_automations → run_automation. Default to Super Bot unless told to target another profile.
 
 ## Profiles
 Prefer the create-profile skill when active. Never call create_profile before the user confirms the draft. Pass name and soulFiles only — the server generates the profile id.

@@ -555,6 +555,151 @@ describe("AutomationRunner", () => {
     expect(runs[0]?.deliveryStatus).toBe("sent");
   });
 
+  test("records discord delivery status after successful runs", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const now = new Date().toISOString();
+    const sent: Array<{ channelId?: string; text: string }> = [];
+
+    await db.upsertAutomation({
+      createdAt: now,
+      definition: {
+        delivery: { channel: "discord" },
+        description: "Daily digest",
+        prompt: "Summarize news",
+        steps: [],
+        trigger: { type: "manual" },
+        version: 1,
+      },
+      enabled: true,
+      id: "automation_discord_delivery_test",
+      name: "Digest",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      updatedAt: now,
+      version: 1,
+    });
+
+    const deliveryService = new AutomationDeliveryService(service, {
+      discord: {
+        send: async (input) => {
+          sent.push(input);
+          return { ok: true };
+        },
+      },
+    });
+
+    const runner = new AutomationRunner(
+      service,
+      { runAutomationPrompt: async () => "News summary" } as never,
+      deliveryService
+    );
+    await runner.run("automation_discord_delivery_test");
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.text).toContain("News summary");
+
+    const runs = await service.listRuns("automation_discord_delivery_test");
+    expect(runs[0]?.deliveryStatus).toBe("sent");
+  });
+
+  test("skips discord delivery when notifyOn is failure and the run succeeds", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const now = new Date().toISOString();
+    let called = false;
+
+    await db.upsertAutomation({
+      createdAt: now,
+      definition: {
+        delivery: { channel: "discord", notifyOn: "failure" },
+        description: "Daily digest",
+        prompt: "Summarize news",
+        steps: [],
+        trigger: { type: "manual" },
+        version: 1,
+      },
+      enabled: true,
+      id: "automation_discord_skip_test",
+      name: "Digest",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      updatedAt: now,
+      version: 1,
+    });
+
+    const deliveryService = new AutomationDeliveryService(service, {
+      discord: {
+        send: async () => {
+          called = true;
+          return { ok: true };
+        },
+      },
+    });
+
+    const runner = new AutomationRunner(
+      service,
+      { runAutomationPrompt: async () => "News summary" } as never,
+      deliveryService
+    );
+    await runner.run("automation_discord_skip_test");
+
+    expect(called).toBe(false);
+    const runs = await service.listRuns("automation_discord_skip_test");
+    expect(runs[0]?.deliveryStatus).toBe("skipped");
+  });
+
+  test("records discord delivery failure from the adapter", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const now = new Date().toISOString();
+
+    await db.upsertAutomation({
+      createdAt: now,
+      definition: {
+        delivery: { channel: "discord", channelId: "123456789012345678" },
+        description: "Daily digest",
+        prompt: "Summarize news",
+        steps: [],
+        trigger: { type: "manual" },
+        version: 1,
+      },
+      enabled: true,
+      id: "automation_discord_fail_test",
+      name: "Digest",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      updatedAt: now,
+      version: 1,
+    });
+
+    const deliveryService = new AutomationDeliveryService(service, {
+      discord: {
+        send: async () => ({
+          error: "Discord API error (403): missing access",
+          ok: false,
+        }),
+      },
+    });
+
+    const runner = new AutomationRunner(
+      service,
+      { runAutomationPrompt: async () => "News summary" } as never,
+      deliveryService
+    );
+    await runner.run("automation_discord_fail_test");
+
+    const runs = await service.listRuns("automation_discord_fail_test");
+    expect(runs[0]?.deliveryStatus).toBe("failed");
+    expect(runs[0]?.deliveryError).toContain("403");
+  });
+
   test("delivers automation email through composeio MCP when SMTP is unavailable", async () => {
     const db = await createTestDb();
     await assignComposeioGmailSender(db, PROFILE_ID);
