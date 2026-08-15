@@ -160,6 +160,11 @@ async function resolveSearchTarget(
 }
 
 async function resolveWorkspaceRoot(rawWorkspaceRoot: string): Promise<string> {
+  if (!path.isAbsolute(rawWorkspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
   try {
     return await realpath(rawWorkspaceRoot);
   } catch {

@@ -226,7 +226,7 @@ export function resolveProfileSkillSupportingFilePath(
   profileId: string,
   name: string,
   relativePath: string
-): string {
+): { absolutePath: string; relativePath: string } {
   const directory = resolveProfileSkillDirectory(orgId, profileId, name);
   const trimmed = relativePath.trim();
   if (!trimmed) {
@@ -247,16 +247,17 @@ export function resolveProfileSkillSupportingFilePath(
   }
 
   const target = path.join(directory, ...segments);
-  const resolved = assertPathWithinProfileSkillsDir(orgId, profileId, target);
+  // resolveProfileSkillDirectory already locked `directory` inside the profile
+  // skills root; realpath containment under that skill dir is the remaining check.
   const skillRoot = resolveWithRealpath(directory);
-  const resolvedTarget = resolveWithRealpath(resolved);
+  const absolutePath = resolveWithRealpath(target);
 
-  if (!isResolvedWithinRoot(skillRoot, resolvedTarget)) {
+  if (!isResolvedWithinRoot(skillRoot, absolutePath)) {
     throw new Error("Path escapes the skill directory.");
   }
 
-  assertSupportingFileAllowed(resolved);
-  return resolved;
+  assertSupportingFileAllowed(absolutePath);
+  return { absolutePath, relativePath: segments.join("/") };
 }
 
 export async function writeProfileSkillSupportingFile(options: {
@@ -266,7 +267,7 @@ export async function writeProfileSkillSupportingFile(options: {
   relativePath: string;
   content: string;
 }): Promise<{ absolutePath: string; relativePath: string }> {
-  const absolutePath = resolveProfileSkillSupportingFilePath(
+  const { absolutePath, relativePath } = resolveProfileSkillSupportingFilePath(
     options.orgId,
     options.profileId,
     options.name,
@@ -277,16 +278,6 @@ export async function writeProfileSkillSupportingFile(options: {
   await assertSupportingPathIsNotSymlink(absolutePath);
   await writeFile(absolutePath, options.content, "utf8");
 
-  const skillRoot = resolveProfileSkillDirectory(
-    options.orgId,
-    options.profileId,
-    options.name
-  );
-  const relativePath = path
-    .relative(skillRoot, absolutePath)
-    .split(path.sep)
-    .join("/");
-
   return { absolutePath, relativePath };
 }
 
@@ -296,7 +287,7 @@ export async function removeProfileSkillSupportingFile(options: {
   name: string;
   relativePath: string;
 }): Promise<{ absolutePath: string; relativePath: string }> {
-  const absolutePath = resolveProfileSkillSupportingFilePath(
+  const { absolutePath, relativePath } = resolveProfileSkillSupportingFilePath(
     options.orgId,
     options.profileId,
     options.name,
@@ -311,16 +302,6 @@ export async function removeProfileSkillSupportingFile(options: {
 
   await unlink(absolutePath);
 
-  const skillRoot = resolveProfileSkillDirectory(
-    options.orgId,
-    options.profileId,
-    options.name
-  );
-  const relativePath = path
-    .relative(skillRoot, absolutePath)
-    .split(path.sep)
-    .join("/");
-
   return { absolutePath, relativePath };
 }
 
@@ -329,9 +310,16 @@ export async function createSkillFile(
 ): Promise<string> {
   const name = assertValidSkillName(options.name);
   const description = options.description.trim();
+  const orgId = options.orgId?.trim();
+  const profileId = options.profileId?.trim();
+  if (Boolean(orgId) !== Boolean(profileId)) {
+    throw new Error(
+      "createSkillFile requires both orgId and profileId for profile skills, or neither for global skills."
+    );
+  }
   const skillsRoot =
-    options.orgId && options.profileId
-      ? getProfileSkillsDir(options.orgId, options.profileId)
+    orgId && profileId
+      ? getProfileSkillsDir(orgId, profileId)
       : getGlobalSkillsDir();
   const directory = path.join(skillsRoot, name);
   const skillFilePath = path.join(directory, SKILL_FILE_NAME);
