@@ -22,3 +22,26 @@ export function disableBunIdleTimeoutForSse(
     server.timeout(request, 0);
   }
 }
+
+/**
+ * Automation run POSTs hold the socket until the agent finishes and write no
+ * bytes until then. Disable idle timeout at request start, not after the
+ * handler returns.
+ */
+export function isLongHeldAutomationRunRequest(request: Request): boolean {
+  if (request.method !== "POST") {
+    return false;
+  }
+
+  const pathname = new URL(request.url).pathname;
+  return /\/v1\/(?:internal\/)?automations\/[^/]+\/run\/?$/.test(pathname);
+}
+
+export function disableBunIdleTimeoutForLongHeldRequest(
+  request: Request,
+  server: { timeout(request: Request, seconds: number): void }
+): void {
+  if (isLongHeldAutomationRunRequest(request)) {
+    server.timeout(request, 0);
+  }
+}

@@ -437,6 +437,43 @@ describe("AutomationRunner", () => {
     expect(runs[0]?.error).toBe("Provider offline");
   });
 
+  test("maps Bun fetch disconnects to a readable run error", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Run once",
+        name: "Manual task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const agentService = {
+      runAutomationPrompt: async () => {
+        throw new Error(
+          "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+        );
+      },
+    };
+
+    const runner = new AutomationRunner(service, agentService as never);
+    const result = await runner.run(automation.id);
+
+    expect(result.error).toBe(
+      "The connection closed before the agent finished. Restart the Nakama server, then try again. Long automations can take a minute or more."
+    );
+
+    const runs = await service.listRuns(automation.id);
+    expect(runs[0]?.status).toBe("failed");
+    expect(runs[0]?.error).toBe(result.error);
+  });
+
   test("disables runAt automations before executing", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

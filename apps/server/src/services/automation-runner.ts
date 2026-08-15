@@ -1,4 +1,8 @@
-import { isWorkerSchedulable, type StoredAutomation } from "@nakama/core";
+import {
+  formatClientError,
+  isWorkerSchedulable,
+  type StoredAutomation,
+} from "@nakama/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationDeliveryService } from "./automation-delivery-service";
 import type { AutomationService } from "./automation-service";
@@ -60,7 +64,7 @@ export class AutomationRunner {
       await this.tryDeliver(automation, completedRun);
       return { output };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatClientError(error);
       const completedRun = await this.automationService.completeRun(
         run.id,
         automationId,

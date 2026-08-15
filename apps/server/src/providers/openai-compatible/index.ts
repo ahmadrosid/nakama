@@ -10,7 +10,7 @@ import type {
   StreamChatHandlers,
   ToolCall,
 } from "@nakama/core";
-import { normalizeBaseUrl } from "@nakama/core";
+import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
 import OpenAI from "openai";
 import {
   parseOpenAIToolCalls,
@@ -53,6 +53,7 @@ export function createOpenAICompatibleProvider(
   const client = new OpenAI({
     apiKey,
     baseURL: baseUrl,
+    fetch: fetchWithoutIdleTimeout,
     maxRetries: 0,
     timeout: 300_000,
   });
@@ -258,30 +259,33 @@ async function streamChatCompletion(options: {
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
-  const response = await fetch(`${options.baseUrl}/chat/completions`, {
-    body: JSON.stringify({
-      messages: await buildMessages(options.system, options.messages),
-      model: options.model,
-      stream: true,
-      stream_options: { include_usage: true },
-      ...buildThinkingBody(options.thinking, {
-        hasTools: Boolean(options.tools?.length),
+  const response = await fetchWithoutIdleTimeout(
+    `${options.baseUrl}/chat/completions`,
+    {
+      body: JSON.stringify({
+        messages: await buildMessages(options.system, options.messages),
         model: options.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...buildThinkingBody(options.thinking, {
+          hasTools: Boolean(options.tools?.length),
+          model: options.model,
+        }),
+        ...(options.tools?.length
+          ? {
+              tool_choice: "auto",
+              tools: toOpenAITools(options.tools),
+            }
+          : {}),
       }),
-      ...(options.tools?.length
-        ? {
-            tool_choice: "auto",
-            tools: toOpenAITools(options.tools),
-          }
-        : {}),
-    }),
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    signal: options.signal,
-  });
+      headers: {
+        Authorization: `Bearer ${options.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: options.signal,
+    }
+  );
 
   const bodyText = response.ok ? null : await response.text();
 

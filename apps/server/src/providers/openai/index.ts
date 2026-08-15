@@ -13,6 +13,7 @@ import type {
   ToolCall,
 } from "@nakama/core";
 import {
+  fetchWithoutIdleTimeout,
   messagesIncludeUserDocuments,
   messagesIncludeUserImages,
   toOpenAIChatUserContent,
@@ -423,7 +424,7 @@ async function requestChatCompletion(
     thinking?: ProviderChatOptions["thinking"];
   }
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(chatCompletionsUrl(client), {
+  const response = await fetchWithoutIdleTimeout(chatCompletionsUrl(client), {
     body: JSON.stringify(
       await buildChatCompletionRequestBody({
         ...options,
@@ -486,7 +487,7 @@ async function streamChatCompletion(
     handlers: StreamChatHandlers;
   }
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(chatCompletionsUrl(client), {
+  const response = await fetchWithoutIdleTimeout(chatCompletionsUrl(client), {
     body: JSON.stringify(
       await buildChatCompletionRequestBody({
         messages: options.messages,
@@ -525,7 +526,7 @@ async function requestCompletion(
     responseFormat?: { type: "json_object" };
   }
 ): Promise<GenerateTextResult> {
-  const response = await fetch(chatCompletionsUrl(client), {
+  const response = await fetchWithoutIdleTimeout(chatCompletionsUrl(client), {
     body: JSON.stringify({
       messages: options.messages,
       model: options.model,

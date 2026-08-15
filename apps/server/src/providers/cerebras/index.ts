@@ -1,15 +1,16 @@
-import type {
-  ChatCompletionResult,
-  ChatMessage,
-  CustomModelEntry,
-  GenerateChatInput,
-  GenerateTextInput,
-  GenerateTextResult,
-  LlmToolDefinition,
-  ProviderChatOptions,
-  ProviderClient,
-  StreamChatHandlers,
-  ToolCall,
+import {
+  type ChatCompletionResult,
+  type ChatMessage,
+  type CustomModelEntry,
+  fetchWithoutIdleTimeout,
+  type GenerateChatInput,
+  type GenerateTextInput,
+  type GenerateTextResult,
+  type LlmToolDefinition,
+  type ProviderChatOptions,
+  type ProviderClient,
+  type StreamChatHandlers,
+  type ToolCall,
 } from "@nakama/core";
 import OpenAI from "openai";
 import {
@@ -52,6 +53,7 @@ export function createCerebrasProvider(
   const client = new OpenAI({
     apiKey,
     baseURL: CEREBRAS_CHAT_BASE_URL,
+    fetch: fetchWithoutIdleTimeout,
     maxRetries: 0,
     timeout: 300_000,
   });
@@ -239,27 +241,30 @@ async function streamChatCompletion(options: {
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
-  const response = await fetch(`${CEREBRAS_CHAT_BASE_URL}/chat/completions`, {
-    body: JSON.stringify({
-      messages: await buildMessages(options.system, options.messages),
-      model: options.model,
-      stream: true,
-      stream_options: { include_usage: true },
-      ...buildThinkingBody(options.thinking),
-      ...(options.tools?.length
-        ? {
-            tool_choice: "auto",
-            tools: toOpenAITools(options.tools),
-          }
-        : {}),
-    }),
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    signal: options.signal,
-  });
+  const response = await fetchWithoutIdleTimeout(
+    `${CEREBRAS_CHAT_BASE_URL}/chat/completions`,
+    {
+      body: JSON.stringify({
+        messages: await buildMessages(options.system, options.messages),
+        model: options.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...buildThinkingBody(options.thinking),
+        ...(options.tools?.length
+          ? {
+              tool_choice: "auto",
+              tools: toOpenAITools(options.tools),
+            }
+          : {}),
+      }),
+      headers: {
+        Authorization: `Bearer ${options.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: options.signal,
+    }
+  );
 
   const bodyText = response.ok ? null : await response.text();
 

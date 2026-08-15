@@ -1212,7 +1212,7 @@ export class NakamaClient {
   async runAutomation(automationId: string): Promise<AutomationRunRecord> {
     const response = await this.request<RunAutomationResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}/run`,
-      { method: "POST" }
+      withStreamFetchIdle({ method: "POST" })
     );
     return response.run;
   }
@@ -1226,9 +1226,9 @@ export class NakamaClient {
   async runAutomationInternal(automationId: string): Promise<void> {
     await this.request(
       `/v1/internal/automations/${encodeURIComponent(automationId)}/run`,
-      {
+      withStreamFetchIdle({
         method: "POST",
-      }
+      })
     );
   }
 
