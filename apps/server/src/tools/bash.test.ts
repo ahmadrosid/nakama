@@ -200,18 +200,18 @@ describe("bash tool", () => {
     expect(result.stdout).toContain("Full coding-agent log:");
   });
 
-  test("prunes coding-agent logs to the newest 20 and leaves other artifacts", async () => {
+  test("prunes coding-agent logs to the newest 10 and leaves other artifacts", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const logDir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
     await mkdir(logDir, { recursive: true });
     await writeFile(path.join(logDir, "keep-me.txt"), "user file", "utf8");
 
     const now = Date.now();
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 15; i++) {
       const name = `old-${String(i).padStart(2, "0")}.log`;
       const filePath = path.join(logDir, name);
       await writeFile(filePath, `old ${i}`, "utf8");
-      const stamp = new Date(now - (25 - i) * 60_000);
+      const stamp = new Date(now - (15 - i) * 60_000);
       await utimes(filePath, stamp, stamp);
     }
 
@@ -231,7 +231,7 @@ describe("bash tool", () => {
     expect(result.exitCode).toBe(0);
     const remaining = await readdir(logDir);
     const logs = remaining.filter((name) => name.endsWith(".log"));
-    expect(logs).toHaveLength(20);
+    expect(logs).toHaveLength(10);
     expect(remaining).toContain("keep-me.txt");
     expect(remaining).not.toContain("old-00.log");
     expect(logs.some((name) => !name.startsWith("old-"))).toBe(true);

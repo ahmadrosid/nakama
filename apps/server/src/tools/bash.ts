@@ -26,7 +26,7 @@ const MAX_OUTPUT_CHARS = 32_000;
 /** In-memory capture for coding-agent runs before summarize / keep-tail. */
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
 /** Keep the newest N coding-agent logs; prune the rest after each write. */
-const CODING_AGENT_LOG_RETENTION = 20;
+const CODING_AGENT_LOG_RETENTION = 10;
 
 export interface BashInput {
   codingAgent?: boolean;
