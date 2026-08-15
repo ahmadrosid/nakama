@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   CreateSkillRequest,
+  InstallSkillRequest,
   ListSkillsResponse,
   PatchSkillRequest,
   SkillDetail,
@@ -27,10 +28,12 @@ import {
   discoverSkillDirectory,
   discoverSkills,
   extractExplicitSkillName,
+  fetchGitHubSkillMarkdown,
   isGlobalSkillSourcePath,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
   matchSkillsForMessage,
+  NakamaApiError,
   parseRawProfileSkillContent,
   parseSkillMarkdown,
   patchSkillFile,
@@ -229,6 +232,48 @@ export class SkillsService {
     await this.db.assignSkillToProfile(profileId, created.skill.id);
 
     return created;
+  }
+
+  async installSkillFromGitHub(
+    orgId: string,
+    request: InstallSkillRequest
+  ): Promise<SkillResponse> {
+    const profileId = request.profileId.trim();
+    const url = request.url.trim();
+
+    if (!profileId) {
+      throw new NakamaApiError("profileId is required.", 400);
+    }
+
+    if (!url) {
+      throw new NakamaApiError("url is required.", 400);
+    }
+
+    const profile = await this.db.getProfileForOrg(profileId, orgId);
+    if (!profile) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    const content = await fetchGitHubSkillMarkdown(url);
+
+    try {
+      parseSkillMarkdown(content, url);
+    } catch (error) {
+      throw new NakamaApiError(
+        error instanceof Error
+          ? error.message
+          : "Skill file is missing or has invalid frontmatter.",
+        400
+      );
+    }
+
+    const installed = await this.createAndAssignRawSkillToProfile(
+      orgId,
+      profileId,
+      content
+    );
+
+    return { skill: installed.skill };
   }
 
   /**

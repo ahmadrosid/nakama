@@ -151,6 +151,7 @@ export function ProfileSkillsSection({
   allSkills,
   assignedSkillIds,
   onCreateOpen,
+  onInstallOpen,
   onAssign,
   onDelete,
   onViewDetail,
@@ -162,6 +163,7 @@ export function ProfileSkillsSection({
   allSkills: SkillSummary[];
   assignedSkillIds: ReadonlySet<string>;
   onCreateOpen: () => void;
+  onInstallOpen: () => void;
   onAssign: (skillId: string) => void;
   onDelete: (skillId: string) => void;
   onViewDetail: (skillId: string) => void;
@@ -202,6 +204,15 @@ export function ProfileSkillsSection({
             variant="outline"
           >
             Create skill
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onInstallOpen}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Install from GitHub
           </Button>
           <SkillAssignPicker
             assignedSkillIds={assignedSkillIds}

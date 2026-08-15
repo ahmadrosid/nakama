@@ -1,6 +1,7 @@
 import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
+  InstallSkillRequest,
 } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -26,6 +27,7 @@ import {
   useDeleteProfileAvatarMutation,
   useDeleteProfileMutation,
   useDeleteSkillMutation,
+  useInstallSkillMutation,
   useUnassignMcpServerMutation,
   useUnassignSkillMutation,
   useUnassignToolMutation,
@@ -86,6 +88,7 @@ export function useProfilesPage() {
   const unassignMcpMutation = useUnassignMcpServerMutation();
   const createMcpMutation = useCreateMcpServerMutation();
   const createSkillMutation = useCreateSkillMutation();
+  const installSkillMutation = useInstallSkillMutation();
   const assignSkillMutation = useAssignSkillMutation();
   const unassignSkillMutation = useUnassignSkillMutation();
   const deleteSkillMutation = useDeleteSkillMutation();
@@ -99,6 +102,7 @@ export function useProfilesPage() {
     useState<RemoveAssignmentTarget | null>(null);
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
+  const [skillInstallOpen, setSkillInstallOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -154,6 +158,7 @@ export function useProfilesPage() {
     unassignMcpMutation.isPending ||
     createMcpMutation.isPending ||
     createSkillMutation.isPending ||
+    installSkillMutation.isPending ||
     assignSkillMutation.isPending ||
     unassignSkillMutation.isPending ||
     deleteSkillMutation.isPending ||
@@ -735,6 +740,23 @@ export function useProfilesPage() {
     }
   }
 
+  async function handleInstallSkill(request: InstallSkillRequest) {
+    if (!selectedId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await installSkillMutation.mutateAsync(request);
+      setSkillInstallOpen(false);
+    } catch (err) {
+      const message = formatError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }
+
   async function handleAssignComposioToolkit(toolkitId: string) {
     if (!(selectedId && profileComposioData)) {
       return;
@@ -909,8 +931,10 @@ export function useProfilesPage() {
     handleEditModelChange,
     handleEditNameChange,
     handleEditPromptChange,
+    handleInstallSkill,
     handleRemoveAssignmentConfirm,
     handleSelectProfile,
+    installSkillMutation,
     isDirty,
     mcpCreateOpen,
     modelInCatalog,
@@ -934,7 +958,9 @@ export function useProfilesPage() {
     setRemoveConfirm,
     setSelectedId,
     setSkillCreateOpen,
+    setSkillInstallOpen,
     skillCreateOpen,
+    skillInstallOpen,
     unassignMcpMutation,
     unassignMutation,
     unassignSkillMutation,

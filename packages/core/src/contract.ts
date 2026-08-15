@@ -1505,6 +1505,11 @@ export interface CreateSkillRequest {
   profileId?: string;
 }
 
+export interface InstallSkillRequest {
+  profileId: string;
+  url: string;
+}
+
 export interface PatchSkillRequest {
   body?: string;
   description?: string;

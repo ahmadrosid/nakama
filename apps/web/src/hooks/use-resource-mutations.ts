@@ -320,6 +320,24 @@ export function useCreateSkillMutation() {
   });
 }
 
+export function useInstallSkillMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.installSkill>[0]) =>
+      client.installSkill(input),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profiles.detail(variables.profileId),
+        }),
+      ]);
+    },
+  });
+}
+
 export function usePatchSkillMutation() {
   const queryClient = useQueryClient();
 
