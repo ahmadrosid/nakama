@@ -76,7 +76,7 @@ export function Layout() {
   return (
     <TooltipProvider delay={0}>
       <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background max-md:hidden">
+        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
           <ProfileRail />
 
           <aside
@@ -202,16 +202,17 @@ export function Layout() {
 /**
  * The rail and sidebar cost a fixed 296px. Measured on the settings page, that
  * leaves 344px of content at 640px wide and 79px at 375px, with labels clipped
- * and the page scrolling sideways; at 768px everything fits. So below `md` we
- * say so instead of rendering a shell nobody can use.
+ * and the page scrolling sideways. Tablets at `sm` (640px) can use the shell;
+ * below that we say so instead of rendering a layout nobody can use.
  */
 function NarrowViewportNotice() {
   return (
-    <div className="hidden h-svh flex-col items-center justify-center gap-3 bg-background px-6 text-center max-md:flex">
+    <div className="hidden h-svh flex-col items-center justify-center gap-3 bg-background px-6 text-center max-sm:flex">
       <h1 className="type-page-title">This console needs a wider window</h1>
       <p className="max-w-sm text-muted-foreground text-sm">
         Profiles, tools and integrations are laid out for a screen at least
-        768px wide. Open Nakama on a desktop browser, or widen this window.
+        640px wide. Open Nakama on a tablet or desktop browser, or widen this
+        window.
       </p>
       <p className="max-w-sm text-muted-foreground text-sm">
         To chat with your agent from a phone, use the Telegram, WhatsApp or
