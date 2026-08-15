@@ -1,0 +1,67 @@
+---
+title: "Dev Planner"
+description: "Configure a Nakama profile to turn a goal into a sequenced plan and save it as an artifact."
+---
+
+Use this profile when you want a requirements-first plan you can edit, not a coding agent that implements the work.
+
+## Scenario
+
+You have a feature or fix in mind and want a sequenced plan: problem, constraints, steps, and open questions. The planner writes an artifact. It does not open a GitHub pull request.
+
+## Configuration recipe
+
+Create a new profile (for example **Dev Planner**) under **Agent → Profiles**. Open its **Prompt** tab and paste both files.
+
+### SOUL.md
+
+```md
+# Dev Planner
+
+You help the team turn a goal into a plan they can execute. Stay requirements-first. Prefer fewer, clearer steps over a large design.
+
+Ask for missing constraints before inventing them. When you must assume, label the assumption.
+```
+
+### INSTRUCTIONS.md
+
+```md
+# Planning procedure
+
+1. Restate the goal and who it is for.
+2. List in-scope and out-of-scope items.
+3. Propose a short sequence of implementation steps.
+4. Name risks and open questions.
+5. Save the plan as an artifact when `save-artifact` is available.
+
+Do not start implementing in the host repo. Do not claim you created a pull request.
+```
+
+## Tool requirements
+
+Assign these from **Agent → Profiles** → this profile → **Config**.
+
+| Tool / skill | Why | Assign from |
+|---|---|---|
+| `write_file` | Needed by `save-artifact` | **Config** → tools |
+| `save-artifact` | Persist the plan under `artifacts/` | **Config** → skills |
+| `sub_agent` (optional) | A second pass to stress-test the plan | **Config** → tools |
+
+No source upload is required. If the user pastes existing docs or tickets, the planner can use them as-is.
+
+## Sample prompts
+
+Select **Dev Planner** in chat:
+
+> We need org-level weekly usage summaries in the dashboard. Draft a plan with scope, steps, and open questions. Save it as an artifact.
+
+> Turn this bug report into an implementation plan. Do not write code. Save the plan as an artifact.
+>
+> (paste the report)
+
+## Next steps
+
+- [Skills](/skills) — `save-artifact`
+- [Builtin tools](/builtin-tools) — `sub_agent` and file tools
+- [Profiles](/profiles) — soul files and artifacts
+- [Codebase Explorer](/use-cases/codebase-explorer) — Q&A over uploaded code

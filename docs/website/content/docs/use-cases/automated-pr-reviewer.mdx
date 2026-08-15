@@ -1,0 +1,74 @@
+---
+title: "Automated PR Reviewer"
+description: "Configure a Nakama profile to review a pasted diff and save a written review artifact."
+---
+
+Use this profile when you want a structured review of a change you can paste into chat. The first-hour path does not need `gh` or a coding CLI on the host.
+
+## Scenario
+
+You have a diff, a patch, or a PR description plus changed files, and you want findings, risk, and a saved review you can share. Deep review of a live git working copy is an optional later step — see [Coding agent](/coding-agent).
+
+## Configuration recipe
+
+Create a new profile (for example **PR Reviewer**) under **Agent → Profiles**. Open its **Prompt** tab and paste both files.
+
+### SOUL.md
+
+```md
+# PR Reviewer
+
+You review code changes the user pastes or attaches. You are a careful reviewer, not a co-author rewriting the change unless asked.
+
+Lead with blocking issues, then suggestions. Every finding cites a file and hunk when the diff includes them. If the user did not paste a diff, ask for one before reviewing.
+```
+
+### INSTRUCTIONS.md
+
+```md
+# Review procedure
+
+1. Restate the change in two sentences.
+2. List blocking defects (correctness, security, data loss).
+3. List non-blocking suggestions (clarity, tests, edge cases).
+4. Note residual risk and what you could not see (missing tests, unseen callers).
+5. Save the written review as an artifact when `save-artifact` is available.
+
+Do not approve a change you have not seen. Do not claim you opened GitHub unless the user provided the diff or you were asked to use a coding agent on the host.
+```
+
+## Tool requirements
+
+Assign these from **Agent → Profiles** → this profile → **Config**.
+
+| Tool / skill | Why | Assign from |
+|---|---|---|
+| `read_file` / `search_files` | Read context the user uploaded or that lives in the workspace | **Config** → tools |
+| `write_file` | Needed by `save-artifact` | **Config** → tools |
+| `save-artifact` | Persist the review under `artifacts/` | **Config** → skills |
+| `sub_agent` (optional) | Second-pass review of the same diff | **Config** → tools |
+
+See [Skills](/skills) for `save-artifact` and [Builtin tools](/builtin-tools) for `sub_agent`.
+
+## Sample prompts
+
+Select **PR Reviewer** in chat. Paste a real diff after the first line:
+
+> Review this diff. List blocking issues first, then suggestions. Save the review as an artifact.
+>
+> ```diff
+> (paste your diff here)
+> ```
+
+> Here is a pull request title, description, and the changed files. Write a review I can paste back to the author. Save it as an artifact.
+
+## Optional: review a host checkout
+
+If the change lives in a git working copy on the Nakama host and you have `bash` plus the `coding-agent` skill, the agent can inspect that tree. That path needs a host-installed coding CLI (`gh` only if you want it to fetch a GitHub PR). It is not required for the prompts above.
+
+## Next steps
+
+- [Coding agent](/coding-agent) — host checkout and CLI backends
+- [Skills](/skills) — `save-artifact`
+- [Builtin tools](/builtin-tools) — file tools and `sub_agent`
+- [Dev Planner](/use-cases/dev-planner) — turn a goal into a plan

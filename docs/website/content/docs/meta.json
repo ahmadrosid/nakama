@@ -6,6 +6,8 @@
     "overview",
     "first-time-setup",
     "providers",
+    "---Use cases---",
+    "use-cases",
     "---Deploy---",
     "docker",
     "backup-restore",

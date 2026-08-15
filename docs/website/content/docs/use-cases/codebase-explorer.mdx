@@ -1,0 +1,67 @@
+---
+title: "Codebase Explorer"
+description: "Configure a Nakama profile to answer questions about code you upload to its workspace or knowledge base."
+---
+
+Give one profile a clear explorer identity so it can search and explain code you put in front of it — without treating the host disk as a repo.
+
+## Scenario
+
+You want to ask "where is auth handled?" or "what does this module do?" and get answers grounded in files the profile can see. This is Q&A over an uploaded tree or knowledge-base documents, not a checkout of your laptop or Docker host.
+
+## Configuration recipe
+
+Create a new profile (for example **Codebase Explorer**) under **Agent → Profiles**. Open its **Prompt** tab and paste the soul files below.
+
+### SOUL.md
+
+```md
+# Codebase Explorer
+
+You help the team understand code they have placed in this profile's workspace or knowledge base.
+
+Be concrete. Cite file paths and quote the lines that support your answer. If the files you can see do not contain the answer, say so and ask for a more specific path or another upload.
+
+Do not invent APIs, folder layouts, or behavior that is not in the files. Do not assume you can see the host filesystem or a git remote unless those files were uploaded here.
+```
+
+## Tool requirements
+
+Assign these from **Agent → Profiles** → this profile → **Config**. New custom profiles often already have the file and knowledge tools.
+
+| Tool / skill | Why | Assign from |
+|---|---|---|
+| `read_file` | Open a specific file | **Config** → tools |
+| `search_files` | Find symbols and phrases in the profile workspace | **Config** → tools |
+| `knowledge_base_search` | Search documents you uploaded on the Knowledge tab | **Config** → tools |
+
+`search_files` only walks the profile workspace. It does not walk an arbitrary host path. See [Builtin tools](/builtin-tools).
+
+## Put code where the profile can see it
+
+Do this **before** the first sample prompt. An empty workspace and empty knowledge base will produce empty answers.
+
+1. Open the profile's **Knowledge** tab
+2. Upload the files or archive you want searched
+3. Wait until uploaded documents show as ready
+
+On a local Bun install you can also copy a tree into the profile workspace at `~/.nakama/orgs/{orgId}/profiles/{profileId}/`. That path is not something you browse on managed hosting or inside Docker without a volume. Prefer the Knowledge tab unless you already know the data-root layout.
+
+For a full git working copy and host CLIs, use [Coding agent](/coding-agent) instead of this recipe.
+
+## Sample prompts
+
+Select **Codebase Explorer** in chat, then paste:
+
+> Search the uploaded code for where user sessions are created. List the files and quote the relevant functions.
+
+> Explain how errors from the HTTP layer reach the client. Cite paths.
+
+> What public types does the client package export? If you cannot see that package in the knowledge base or workspace, say what is missing.
+
+## Next steps
+
+- [Profiles](/profiles) — soul files and the Knowledge tab
+- [Builtin tools](/builtin-tools) — `read_file`, `search_files`, `knowledge_base_search`
+- [Automated PR Reviewer](/use-cases/automated-pr-reviewer) — review a pasted diff
+- [Coding agent](/coding-agent) — work in a real host checkout

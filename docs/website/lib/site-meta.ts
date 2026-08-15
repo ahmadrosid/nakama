@@ -57,6 +57,16 @@ export const pageDescriptions: Record<string, string> = {
     "Learn how reusable skills extend Nakama profiles, including bundled memory, artifact, automation, and skill-authoring workflows.",
   "telegram.md":
     "Set up Nakama as a Telegram bot with pairing, commands, and group behavior.",
+  "use-cases.md":
+    "Plug-and-play Nakama profile recipes: Codebase Explorer, Automated PR Reviewer, and Dev Planner.",
+  "use-cases/index.md":
+    "Plug-and-play Nakama profile recipes: Codebase Explorer, Automated PR Reviewer, and Dev Planner.",
+  "use-cases/automated-pr-reviewer.md":
+    "Configure a Nakama profile to review a pasted diff and save a written review artifact.",
+  "use-cases/codebase-explorer.md":
+    "Configure a Nakama profile to answer questions about code you upload to its workspace or knowledge base.",
+  "use-cases/dev-planner.md":
+    "Configure a Nakama profile to turn a goal into a sequenced plan and save it as an artifact.",
   "whatsapp.md":
     "Set up Nakama on WhatsApp with linking, commands, and troubleshooting.",
 };
@@ -86,6 +96,11 @@ export const pageTitles: Record<string, string> = {
   "self-improving-skills.md": "Self-improving Skills",
   "skills.md": "Skills",
   "telegram.md": "Telegram",
+  "use-cases.md": "Use Cases",
+  "use-cases/index.md": "Use Cases",
+  "use-cases/automated-pr-reviewer.md": "Automated PR Reviewer",
+  "use-cases/codebase-explorer.md": "Codebase Explorer",
+  "use-cases/dev-planner.md": "Dev Planner",
   "whatsapp.md": "WhatsApp",
 };
 
@@ -249,6 +264,25 @@ export function buildLlmsTxt(pages: string[]) {
         "what is Nakama, mental model, organizations, profiles, tools, channels, managed hosting, deployment options",
     },
     {
+      page: "use-cases/index.md",
+      topics:
+        "use cases, examples, recipes, demo profiles, Codebase Explorer, PR Reviewer, Dev Planner",
+    },
+    {
+      page: "use-cases/codebase-explorer.md",
+      topics:
+        "codebase explorer, search uploaded code, knowledge base Q&A, profile workspace",
+    },
+    {
+      page: "use-cases/automated-pr-reviewer.md",
+      topics:
+        "PR reviewer, review a diff, save-artifact review, pull request review recipe",
+    },
+    {
+      page: "use-cases/dev-planner.md",
+      topics: "dev planner, implementation plan, save plan artifact, requirements-first",
+    },
+    {
       page: "multi-tenancy.md",
       topics:
         "organizations, tenants, roles, members, invites, org admin, multi-tenant",
@@ -315,6 +349,15 @@ export function buildLlmsTxt(pages: string[]) {
         "overview.md",
         "first-time-setup.md",
         "providers.md",
+      ] as const,
+    },
+    {
+      heading: "Use cases",
+      pages: [
+        "use-cases/index.md",
+        "use-cases/codebase-explorer.md",
+        "use-cases/automated-pr-reviewer.md",
+        "use-cases/dev-planner.md",
       ] as const,
     },
     {
