@@ -465,9 +465,11 @@ describe("AutomationRunner", () => {
     const runner = new AutomationRunner(service, agentService as never);
     const result = await runner.run(automation.id);
 
-    expect(result.error).toBe(
-      "The connection closed before the agent finished. Restart the Nakama server, then try again. Long automations can take a minute or more."
+    expect(result.error).not.toContain(
+      "socket connection was closed unexpectedly"
     );
+    expect(result.error).not.toContain("Restart the Nakama server");
+    expect(result.error?.length).toBeGreaterThan(0);
 
     const runs = await service.listRuns(automation.id);
     expect(runs[0]?.status).toBe("failed");

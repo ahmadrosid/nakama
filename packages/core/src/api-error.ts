@@ -112,6 +112,25 @@ export function formatClientError(error: unknown): string {
   return "Something went wrong.";
 }
 
+export function formatAutomationRunError(error: unknown): string {
+  if (error instanceof Error && isStreamDisconnectError(error)) {
+    return "The model connection closed before the agent finished. Try again. Long automations can take a minute or more.";
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message) {
+      return message;
+    }
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  return formatServerError(error);
+}
+
 export function formatServerError(error: unknown): string {
   if (error instanceof SyntaxError) {
     return "Invalid JSON in request body.";

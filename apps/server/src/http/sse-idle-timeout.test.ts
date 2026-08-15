@@ -128,4 +128,17 @@ describe("disableBunIdleTimeoutForLongHeldRequest", () => {
 
     expect(calls).toEqual([{ request, seconds: 0 }]);
   });
+
+  test("leaves non-run requests on the default idle timeout", () => {
+    const request = new Request("http://127.0.0.1:4310/health");
+    let called = false;
+
+    disableBunIdleTimeoutForLongHeldRequest(request, {
+      timeout() {
+        called = true;
+      },
+    });
+
+    expect(called).toBe(false);
+  });
 });

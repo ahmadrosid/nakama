@@ -1,10 +1,12 @@
 /**
  * Bun.serve closes idle connections after `idleTimeout` seconds (max 255).
- * Chat SSE can sit quiet for minutes during a tool run; `: ping` comments do
- * not reliably reset that timer. Disable it per-request for SSE responses.
  *
- * Detect via the response Content-Type after the handler returns — do not
- * duplicate route knowledge on the request.
+ * Chat SSE can sit quiet for minutes during a tool run; `: ping` comments do
+ * not reliably reset that timer. Disable idle timeout after the handler
+ * returns when Content-Type is text/event-stream.
+ *
+ * Automation run POSTs write no bytes until the agent finishes, so disable
+ * idle timeout at request start by matching those paths.
  *
  * @see https://bun.com/docs/guides/http/sse
  */

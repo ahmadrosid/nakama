@@ -1,5 +1,5 @@
 import {
-  formatClientError,
+  formatAutomationRunError,
   isWorkerSchedulable,
   type StoredAutomation,
 } from "@nakama/core";
@@ -64,7 +64,7 @@ export class AutomationRunner {
       await this.tryDeliver(automation, completedRun);
       return { output };
     } catch (error) {
-      const message = formatClientError(error);
+      const message = formatAutomationRunError(error);
       const completedRun = await this.automationService.completeRun(
         run.id,
         automationId,
