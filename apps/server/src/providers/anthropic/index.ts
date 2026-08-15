@@ -1,11 +1,12 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
-import type {
-  GenerateChatInput,
-  GenerateTextInput,
-  GenerateTextResult,
-  ProviderClient,
-  ProviderName,
-  StreamChatHandlers,
+import {
+  fetchWithoutIdleTimeout,
+  type GenerateChatInput,
+  type GenerateTextInput,
+  type GenerateTextResult,
+  type ProviderClient,
+  type ProviderName,
+  type StreamChatHandlers,
 } from "@nakama/core";
 import { buildTokenUsage } from "../shared";
 import { continueAnthropicUntilDone } from "./web-search";
@@ -29,8 +30,8 @@ function createAnthropicClient(
 ): Anthropic {
   return new Anthropic({
     apiKey,
+    fetch: fetchImpl ?? fetchWithoutIdleTimeout,
     ...(baseUrl?.trim() ? { baseURL: baseUrl.trim() } : {}),
-    ...(fetchImpl ? { fetch: fetchImpl } : {}),
   });
 }
 

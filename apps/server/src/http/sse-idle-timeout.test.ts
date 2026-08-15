@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { disableBunIdleTimeoutForSse, isSseResponse } from "./sse-idle-timeout";
+import {
+  disableBunIdleTimeoutForLongHeldRequest,
+  disableBunIdleTimeoutForSse,
+  isLongHeldAutomationRunRequest,
+  isSseResponse,
+} from "./sse-idle-timeout";
 
 describe("isSseResponse", () => {
   test("matches text/event-stream Content-Type", () => {
@@ -65,6 +70,70 @@ describe("disableBunIdleTimeoutForSse", () => {
     let called = false;
 
     disableBunIdleTimeoutForSse(request, response, {
+      timeout() {
+        called = true;
+      },
+    });
+
+    expect(called).toBe(false);
+  });
+});
+
+describe("isLongHeldAutomationRunRequest", () => {
+  test("matches public and internal run POSTs", () => {
+    expect(
+      isLongHeldAutomationRunRequest(
+        new Request("http://127.0.0.1:4310/v1/automations/auto_1/run", {
+          method: "POST",
+        })
+      )
+    ).toBe(true);
+    expect(
+      isLongHeldAutomationRunRequest(
+        new Request(
+          "http://127.0.0.1:4310/v1/internal/automations/auto_1/run",
+          { method: "POST" }
+        )
+      )
+    ).toBe(true);
+  });
+
+  test("does not match run listing or other methods", () => {
+    expect(
+      isLongHeldAutomationRunRequest(
+        new Request("http://127.0.0.1:4310/v1/automations/auto_1/runs")
+      )
+    ).toBe(false);
+    expect(
+      isLongHeldAutomationRunRequest(
+        new Request("http://127.0.0.1:4310/v1/automations/auto_1/run")
+      )
+    ).toBe(false);
+  });
+});
+
+describe("disableBunIdleTimeoutForLongHeldRequest", () => {
+  test("calls server.timeout(request, 0) for automation runs", () => {
+    const request = new Request(
+      "http://127.0.0.1:4310/v1/automations/auto_1/run",
+      { method: "POST" }
+    );
+    const calls: Array<{ request: Request; seconds: number }> = [];
+
+    disableBunIdleTimeoutForLongHeldRequest(request, {
+      timeout(req, seconds) {
+        calls.push({ request: req, seconds });
+      },
+    });
+
+    expect(calls).toEqual([{ request, seconds: 0 }]);
+  });
+
+  test("leaves non-run requests on the default idle timeout", () => {
+    const request = new Request("http://127.0.0.1:4310/health");
+    let called = false;
+
+    disableBunIdleTimeoutForLongHeldRequest(request, {
       timeout() {
         called = true;
       },

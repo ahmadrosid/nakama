@@ -24,7 +24,7 @@ WORKDIR /app
 # when the toggle is switched on, unless NAKAMA_OMNI_AUTO_INSTALL=0.
 # The release is a static musl build, which runs on this glibc base, and the
 # published checksum is verified rather than the download trusted.
-ARG OMNI_VERSION="0.7.4"
+ARG OMNI_VERSION="0.7.5"
 RUN if [ -n "$OMNI_VERSION" ]; then \
       set -eu; \
       apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \

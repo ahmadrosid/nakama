@@ -62,6 +62,7 @@ export {
 } from "./discord-worker";
 export * from "./document-content";
 export * from "./email-config";
+export * from "./fetch-idle";
 export * from "./fs";
 export * from "./ids";
 export * from "./image-content";
