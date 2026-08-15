@@ -13,8 +13,8 @@ import {
   CheckmarkCircle01Icon,
   Copy01Icon,
   Delete02Icon,
+  Edit03Icon,
   Loading03Icon,
-  PencilIcon,
   PlayIcon,
   Search01Icon,
 } from "hugeicons-react";
@@ -75,7 +75,7 @@ export function AutomationDetailActions({
         {runningId === automation.id ? (
           <Spinner className="size-3.5" />
         ) : (
-          <PlayIcon aria-hidden className="size-3.5" />
+          <PlayIcon aria-hidden className="ml-px size-3.5" />
         )}
       </Button>
       <Button
@@ -86,7 +86,7 @@ export function AutomationDetailActions({
         type="button"
         variant="ghost"
       >
-        <PencilIcon aria-hidden className="size-3.5" />
+        <Edit03Icon aria-hidden className="size-3.5" />
       </Button>
       <Button
         aria-label="Delete"
@@ -422,7 +422,7 @@ export function AutomationDetailSkeleton() {
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="mb-5 flex shrink-0 flex-col gap-4 sm:flex-row sm:justify-between">
-        <div className="min-h-[4.75rem] flex-1 space-y-2">
+        <div className="flex-1 space-y-2">
           <div className="h-5 w-48 animate-pulse rounded bg-muted/50" />
           <div className="h-10 animate-pulse rounded bg-muted/40" />
           <div className="h-3 w-64 animate-pulse rounded bg-muted/35" />
@@ -468,11 +468,15 @@ export function AutomationsEmptyState() {
 export function RunHistoryList({
   runs,
   busy,
+  running,
   onDeleteRun,
+  onRerun,
 }: {
   runs: AutomationRunRecord[];
   busy: boolean;
+  running: boolean;
   onDeleteRun: (run: AutomationRunRecord) => void;
+  onRerun: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(
     () => runs.find((run) => run.status === "running")?.id ?? null
@@ -502,12 +506,14 @@ export function RunHistoryList({
                 expanded={expandedId === run.id}
                 key={run.id}
                 onDelete={() => onDeleteRun(run)}
+                onRerun={onRerun}
                 onToggle={() => {
                   setExpandedId((current) =>
                     current === run.id ? null : run.id
                   );
                 }}
                 run={run}
+                running={running}
               />
             ))}
           </ul>
@@ -521,21 +527,26 @@ function RunHistoryItem({
   run,
   expanded,
   busy,
+  running,
   onToggle,
   onDelete,
+  onRerun,
 }: {
   run: AutomationRunRecord;
   expanded: boolean;
   busy: boolean;
+  running: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onRerun: () => void;
 }) {
   const isRunning = run.status === "running";
+  const isFailed = run.status === "failed";
   const isUnread = run.read === false;
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
   const hasDeliveryError = Boolean(run.deliveryError?.trim());
-  const hasBody = hasOutput || hasError || isRunning;
+  const hasBody = hasOutput || hasError || isRunning || isFailed;
   const previewText = runPreviewText(run);
   const duration = formatRunDuration(run.startedAt, run.completedAt);
   const statusLabel =
@@ -658,21 +669,43 @@ function RunHistoryItem({
                   ? " · running"
                   : ""}
             </p>
-            {copyText ? (
-              <Button
-                className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleCopy();
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <Copy01Icon aria-hidden className="size-3.5" />
-                Copy
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-1">
+              {isFailed ? (
+                <Button
+                  className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
+                  disabled={busy || running}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRerun();
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  {running ? (
+                    <Spinner className="size-3.5" />
+                  ) : (
+                    <PlayIcon aria-hidden className="ml-px size-3.5" />
+                  )}
+                  Run again
+                </Button>
+              ) : null}
+              {copyText ? (
+                <Button
+                  className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleCopy();
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Copy01Icon aria-hidden className="size-3.5" />
+                  Copy
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           {hasDeliveryError ? (
@@ -832,14 +865,21 @@ function DeliverySettingsFields({
   );
 }
 
-export function AutomationStateBadge({ enabled }: { enabled: boolean }) {
+export function AutomationStateBadge({
+  enabled,
+  className,
+}: {
+  enabled: boolean;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-[11px]",
         enabled
           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "bg-muted text-muted-foreground"
+          : "bg-muted text-muted-foreground",
+        className
       )}
     >
       <span

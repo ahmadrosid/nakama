@@ -46,13 +46,16 @@ export function AutomationsListSidebar(state: ListState) {
   return (
     <aside className="hidden min-h-0 min-w-0 flex-col border-border border-b lg:flex lg:border-r lg:border-b-0">
       <div className="shrink-0 space-y-3 border-border border-b px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs">
-            {filteredAutomations.length} shown
-            {filteredAutomations.length === automations.length
-              ? ""
-              : ` of ${automations.length}`}
-          </p>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <AutomationSearch
+              disabled={initialLoading || automations.length === 0 || busy}
+              isSearching={isSearching}
+              onChange={setSearchQuery}
+              onClear={() => setSearchQuery("")}
+              value={searchQuery}
+            />
+          </div>
           <Button
             aria-label="Refresh automations"
             disabled={busy || automationsRefreshing}
@@ -68,14 +71,6 @@ export function AutomationsListSidebar(state: ListState) {
             )}
           </Button>
         </div>
-
-        <AutomationSearch
-          disabled={initialLoading || automations.length === 0 || busy}
-          isSearching={isSearching}
-          onChange={setSearchQuery}
-          onClear={() => setSearchQuery("")}
-          value={searchQuery}
-        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

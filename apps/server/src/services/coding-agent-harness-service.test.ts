@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   buildCodingHarnessInstallPlan,
@@ -120,4 +123,43 @@ describe("coding-agent harness resolution", () => {
       cached.find((harness) => harness.id === "coding-harness-codex")?.ready
     ).toBe(true);
   });
+
+  test("a harness that hangs on --version resolves as not installed", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "nakama-hanging-harness-"));
+    // exec, so SIGTERM reaches sleep itself rather than orphaning it under sh.
+    const command = path.join(dir, "hangs");
+    await writeFile(command, "#!/bin/sh\nexec sleep 600\n", { mode: 0o755 });
+
+    try {
+      const db = createInMemoryDatabaseAdapter();
+      await db.upsertWorkspaceSettings({
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command,
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: "coding-harness-claude-code",
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      });
+
+      const probed = await refreshCodingAgentHarnessProbe(
+        db,
+        "coding-harness-claude-code"
+      );
+
+      expect(probed.installed).toBe(false);
+      expect(probed.ready).toBe(false);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  }, 20_000);
 });

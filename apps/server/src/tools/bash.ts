@@ -1,5 +1,12 @@
 import { spawn } from "node:child_process";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  realpath,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import {
   getProfileSoulDir,
@@ -18,6 +25,8 @@ const MAX_TIMEOUT_MS = 30 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
 /** In-memory capture for coding-agent runs before summarize / keep-tail. */
 const CODING_AGENT_MAX_CAPTURE_CHARS = 5_000_000;
+/** Keep the newest N coding-agent logs; prune the rest after each write. */
+const CODING_AGENT_LOG_RETENTION = 10;
 
 export interface BashInput {
   codingAgent?: boolean;
@@ -265,9 +274,34 @@ async function writeCodingAgentLog(
       "",
     ].join("\n");
     await writeFile(absolutePath, body, "utf8");
+    await pruneCodingAgentLogs(dir);
     return path.join("artifacts", "coding-agent-runs", fileName);
   } catch {
     return null;
+  }
+}
+
+async function pruneCodingAgentLogs(dir: string): Promise<void> {
+  const names = await readdir(dir);
+  const logs = names.filter((name) => name.endsWith(".log"));
+  if (logs.length <= CODING_AGENT_LOG_RETENTION) {
+    return;
+  }
+
+  const ranked = await Promise.all(
+    logs.map(async (name) => {
+      try {
+        const info = await stat(path.join(dir, name));
+        return { mtimeMs: info.mtimeMs, name };
+      } catch {
+        return { mtimeMs: 0, name };
+      }
+    })
+  );
+  ranked.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.name < b.name ? 1 : -1));
+
+  for (const stale of ranked.slice(CODING_AGENT_LOG_RETENTION)) {
+    await unlink(path.join(dir, stale.name)).catch(() => undefined);
   }
 }
 

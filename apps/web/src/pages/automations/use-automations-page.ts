@@ -262,11 +262,7 @@ export function useAutomationsPage() {
     : "";
 
   const selectedSubtitle = selected
-    ? [
-        formatTrigger(selected.trigger),
-        selected.enabled ? "enabled" : "disabled",
-        runScheduleHint,
-      ]
+    ? [formatTrigger(selected.trigger), runScheduleHint]
         .filter(Boolean)
         .join(" · ")
     : "";
@@ -289,7 +285,6 @@ export function useAutomationsPage() {
     isSearching,
     loading,
     openEdit,
-    refetchRuns,
     refresh,
     refreshing,
     runningId,

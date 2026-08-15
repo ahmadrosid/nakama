@@ -1,7 +1,3 @@
-import { RefreshIcon } from "hugeicons-react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import {
   AutomationDetailActions,
   AutomationStateBadge,
@@ -24,7 +20,6 @@ type DetailState = Pick<
   | "runs"
   | "runsLoading"
   | "setDeleteRunTarget"
-  | "refetchRuns"
 >;
 
 export function AutomationDetailPanel(state: DetailState) {
@@ -40,7 +35,6 @@ export function AutomationDetailPanel(state: DetailState) {
     runs,
     runsLoading,
     setDeleteRunTarget,
-    refetchRuns,
   } = state;
 
   if (!selected) {
@@ -50,20 +44,24 @@ export function AutomationDetailPanel(state: DetailState) {
   return (
     <div className="flex flex-col">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-h-[4.75rem] min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="type-section-title">{selected.name}</h2>
-            <AutomationStateBadge enabled={selected.enabled} />
+        <div className="min-w-0">
+          <div className="flex items-start gap-2">
+            <h2 className="type-section-title min-w-0 text-balance">
+              {selected.name}
+            </h2>
+            <AutomationStateBadge
+              className="mt-px shrink-0"
+              enabled={selected.enabled}
+            />
           </div>
-          <p
-            className={cn(
-              "type-body mt-1 line-clamp-2 min-h-[2.5rem] text-sm",
-              selected.description ? "text-foreground" : "text-transparent"
-            )}
-          >
-            {selected.description || "No description"}
+          {selected.description ? (
+            <p className="type-body mt-1 line-clamp-2 text-pretty text-sm">
+              {selected.description}
+            </p>
+          ) : null}
+          <p className="type-body mt-1 text-pretty text-xs tabular-nums">
+            {selectedSubtitle}
           </p>
-          <p className="type-body mt-1 text-xs">{selectedSubtitle}</p>
         </div>
 
         <AutomationDetailActions
@@ -87,7 +85,7 @@ export function AutomationDetailPanel(state: DetailState) {
         runningId={runningId}
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-xs tabular-nums">
         <SoftPill label={`${runs.length} total`} />
         <SoftPill
           label={`${selectedRunSummary.completed} success`}
@@ -106,32 +104,15 @@ export function AutomationDetailPanel(state: DetailState) {
       </div>
 
       <div className="flex flex-col border-border border-t pt-5">
-        <div className="mb-4 flex h-10 items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="type-section-title">Run history</h3>
-            <p className="type-body mt-1 min-h-[1rem] text-xs">
-              {runsLoading
-                ? "Loading runs…"
-                : runs.length === 0
-                  ? "No runs yet"
-                  : `${runs.length} run${runs.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
-          <Button
-            aria-label="Refresh run history"
-            className="shrink-0"
-            disabled={runsLoading || busy}
-            onClick={() => void refetchRuns()}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            {runsLoading ? (
-              <Spinner className="size-4" />
-            ) : (
-              <RefreshIcon aria-hidden className="size-4" />
-            )}
-          </Button>
+        <div className="mb-4">
+          <h3 className="type-section-title">Run history</h3>
+          <p className="type-body mt-1 min-h-[1rem] text-xs">
+            {runsLoading
+              ? "Loading runs…"
+              : runs.length === 0
+                ? "No runs yet"
+                : `${runs.length} run${runs.length === 1 ? "" : "s"}`}
+          </p>
         </div>
 
         {runsLoading ? (
@@ -146,6 +127,8 @@ export function AutomationDetailPanel(state: DetailState) {
           <RunHistoryList
             busy={busy}
             onDeleteRun={setDeleteRunTarget}
+            onRerun={() => void handleRun(selected.id)}
+            running={runningId === selected.id}
             runs={runs}
           />
         )}

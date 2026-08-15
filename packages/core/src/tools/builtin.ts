@@ -244,12 +244,21 @@ function buildFileGuardOptions(
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+  assertAbsoluteWorkspaceRoot(workspaceRoot);
 
   return {
     ...defaultGuardOptions,
     allowedDirs: [workspaceRoot, getCustomToolsDir()],
     cwd: workspaceRoot,
   };
+}
+
+function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
+  if (!path.isAbsolute(workspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
 }
 
 export const writeFileTool: ToolDefinition<WriteFileInput, WriteFileOutput> = {

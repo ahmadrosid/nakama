@@ -642,10 +642,10 @@ export class SkillProposalService {
     name: string
   ): Promise<void> {
     const db = this.requireDatabase();
-    const skillName = assertValidSkillName(name);
-    const record = await db.getSkillByName(skillName);
+    // Callers pass names from readSkillName (already assertValidSkillName).
+    const record = await db.getSkillByName(name);
     if (!record) {
-      throw new NakamaApiError(`Skill "${skillName}" not found.`, 404);
+      throw new NakamaApiError(`Skill "${name}" not found.`, 404);
     }
     if (isGlobalSkillSourcePath(record.sourcePath)) {
       throw new NakamaApiError(
@@ -655,7 +655,7 @@ export class SkillProposalService {
     }
     if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
       throw new NakamaApiError(
-        `Skill "${skillName}" is not owned by this profile.`,
+        `Skill "${name}" is not owned by this profile.`,
         403
       );
     }

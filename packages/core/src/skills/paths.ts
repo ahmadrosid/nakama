@@ -16,10 +16,18 @@ export function getProfileSkillsDir(orgId: string, profileId: string): string {
 export async function resolveSkillDiscoveryDirs(
   options: { orgId?: string; profileId?: string } = {}
 ): Promise<string[]> {
+  const orgId = options.orgId?.trim();
+  const profileId = options.profileId?.trim();
+  if (Boolean(orgId) !== Boolean(profileId)) {
+    throw new Error(
+      "resolveSkillDiscoveryDirs requires both orgId and profileId, or neither."
+    );
+  }
+
   const dirs = [getGlobalSkillsDir()];
 
-  if (options.orgId && options.profileId) {
-    dirs.push(getProfileSkillsDir(options.orgId, options.profileId));
+  if (orgId && profileId) {
+    dirs.push(getProfileSkillsDir(orgId, profileId));
   }
 
   return [...new Set(dirs)];

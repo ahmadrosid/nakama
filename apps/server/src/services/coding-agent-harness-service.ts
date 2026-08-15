@@ -693,6 +693,7 @@ async function probeHarnessVersion(command: string): Promise<{
   missing: boolean;
 }> {
   const { spawn } = await import("node:child_process");
+  const timeoutMs = 5000;
 
   return new Promise((resolve) => {
     const child = spawn(command, ["--version"], {
@@ -702,26 +703,38 @@ async function probeHarnessVersion(command: string): Promise<{
     let stdout = "";
     let stderr = "";
 
+    // The bash tool awaits this probe, so a CLI that never answers --version
+    // would otherwise hold the turn open forever. Resolve on the timer instead
+    // of waiting for close, because a child that ignores SIGTERM never emits
+    // one. `missing: false` keeps getHarnessRuntimeStatus from paying the
+    // timeout a second time on its PATH retry.
+    const timeoutId = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ installed: false, missing: false, version: null });
+    }, timeoutMs);
+
     child.stdout?.on("data", (chunk) => {
       stdout += chunk.toString();
     });
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    child.once("error", (error) =>
+    child.once("error", (error) => {
+      clearTimeout(timeoutId);
       resolve({
         installed: false,
         missing: (error as NodeJS.ErrnoException).code === "ENOENT",
         version: null,
-      })
-    );
-    child.once("close", (code) =>
+      });
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeoutId);
       resolve({
         installed: code === 0,
         missing: false,
         version: code === 0 ? extractVersion(stdout, stderr) : null,
-      })
-    );
+      });
+    });
   });
 }
 
