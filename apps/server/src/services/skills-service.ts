@@ -238,8 +238,8 @@ export class SkillsService {
     orgId: string,
     request: InstallSkillRequest
   ): Promise<SkillResponse> {
-    const profileId = request.profileId.trim();
-    const url = request.url.trim();
+    const profileId = request.profileId?.trim() ?? "";
+    const url = request.url?.trim() ?? "";
 
     if (!profileId) {
       throw new NakamaApiError("profileId is required.", 400);
@@ -267,13 +267,31 @@ export class SkillsService {
       );
     }
 
-    const installed = await this.createAndAssignRawSkillToProfile(
-      orgId,
-      profileId,
-      content
-    );
+    try {
+      const installed = await this.createAndAssignRawSkillToProfile(
+        orgId,
+        profileId,
+        content
+      );
+      return { skill: installed.skill };
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        throw error;
+      }
 
-    return { skill: installed.skill };
+      const message =
+        error instanceof Error ? error.message : "Failed to install skill.";
+
+      if (
+        /already exists|already assigned|cannot be attached|bundled/i.test(
+          message
+        )
+      ) {
+        throw new NakamaApiError(message, 409);
+      }
+
+      throw new NakamaApiError(message, 400);
+    }
   }
 
   /**

@@ -229,4 +229,103 @@ describe("POST /v1/skills/install", () => {
 
     expect(response.status).toBe(403);
   });
+
+  test("incomplete body returns 400, not 500", async () => {
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin-malformed@org.com"
+    );
+    const orgId = adminSession.orgId!;
+
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/skills/install`, {
+        body: JSON.stringify({ profileId: "p" }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/url is required/i);
+  });
+
+  test("installing the same skill onto a second profile returns 409", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(VALID_SKILL, { status: 200 })
+    ) as typeof fetch;
+
+    const { app, databaseAdapter } = createApp();
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin-dup@org.com"
+    );
+    const orgId = adminSession.orgId!;
+    const profiles = await databaseAdapter.listProfilesForOrg(orgId);
+    const firstProfileId = profiles[0]!.id;
+
+    const first = await app.fetch(
+      new Request(`${BASE}/v1/skills/install`, {
+        body: JSON.stringify({
+          profileId: firstProfileId,
+          url: "https://github.com/acme/skills/blob/main/weather/SKILL.md",
+        }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(first.status).toBe(201);
+
+    const now = new Date().toISOString();
+    const secondProfileId = "profile_second";
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: secondProfileId,
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Second",
+      orgId,
+      skillsPostTurnReview: false,
+      skillsWriteApproval: false,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const second = await app.fetch(
+      new Request(`${BASE}/v1/skills/install`, {
+        body: JSON.stringify({
+          profileId: secondProfileId,
+          url: "https://github.com/acme/skills/blob/main/weather/SKILL.md",
+        }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    expect(second.status).toBe(409);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toMatch(/already exists|cannot be attached/i);
+  });
 });

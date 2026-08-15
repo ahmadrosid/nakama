@@ -1,6 +1,8 @@
 const RAW_HOST = "raw.githubusercontent.com";
 const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
 const SKILL_FILE_NAME = "SKILL.md";
+/** Encoded path/query/fragment separators that must not become real separators after decode. */
+const ENCODED_SEPARATOR_PATTERN = /%(?:2[fF]|5[cC]|23|3[fF])/;
 
 export function resolveGitHubSkillRawUrl(input: string): string {
   const trimmed = input.trim();
@@ -42,13 +44,12 @@ function normalizeRawUrl(parsed: URL): string {
     );
   }
 
-  const filePath = segments.slice(3).join("/");
-  const withSkillFile = ensureSkillFilePath(filePath, "file");
   const owner = segments[0]!;
   const repo = segments[1]!;
   const ref = segments[2]!;
+  const filePath = ensureSkillFilePath(segments.slice(3).join("/"), "file");
 
-  return `https://${RAW_HOST}/${owner}/${repo}/${ref}/${withSkillFile}`;
+  return buildRawUrl(owner, repo, ref, filePath);
 }
 
 function githubHtmlUrlToRaw(parsed: URL): string {
@@ -80,7 +81,27 @@ function githubHtmlUrlToRaw(parsed: URL): string {
   const mode = kind === "tree" ? "tree" : "file";
   const filePath = ensureSkillFilePath(rest, mode);
 
-  return `https://${RAW_HOST}/${owner}/${repo}/${ref}/${filePath}`;
+  return buildRawUrl(owner, repo, ref, filePath);
+}
+
+function buildRawUrl(
+  owner: string,
+  repo: string,
+  ref: string,
+  filePath: string
+): string {
+  const pathSegments = [
+    owner,
+    repo,
+    ref,
+    ...filePath.split("/").filter((segment) => segment.length > 0),
+  ];
+
+  for (const segment of pathSegments) {
+    assertSafePathSegment(segment);
+  }
+
+  return `https://${RAW_HOST}/${pathSegments.map(encodeURIComponent).join("/")}`;
 }
 
 function ensureSkillFilePath(pathPart: string, mode: "file" | "tree"): string {
@@ -96,27 +117,61 @@ function ensureSkillFilePath(pathPart: string, mode: "file" | "tree"): string {
     );
   }
 
-  const base = normalized.split("/").at(-1) ?? "";
+  const parts = normalized.split("/").filter((segment) => segment.length > 0);
+  for (const part of parts) {
+    assertSafePathSegment(part);
+  }
+
+  const base = parts.at(-1) ?? "";
   if (base === SKILL_FILE_NAME) {
-    return normalized;
+    return parts.join("/");
   }
 
   if (mode === "tree") {
-    return `${normalized}/${SKILL_FILE_NAME}`;
+    return [...parts, SKILL_FILE_NAME].join("/");
   }
 
   throw new Error("GitHub URL must point to a SKILL.md file.");
 }
 
 function splitPath(pathname: string): string[] {
-  return pathname
-    .split("/")
-    .map((segment) => {
-      try {
-        return decodeURIComponent(segment);
-      } catch {
-        return segment;
-      }
-    })
-    .filter((segment) => segment.length > 0);
+  const decoded: string[] = [];
+
+  for (const segment of pathname.split("/")) {
+    if (segment.length === 0) {
+      continue;
+    }
+
+    if (ENCODED_SEPARATOR_PATTERN.test(segment)) {
+      throw new Error(
+        "GitHub skill URL path cannot contain encoded path separators."
+      );
+    }
+
+    let value: string;
+    try {
+      value = decodeURIComponent(segment);
+    } catch {
+      throw new Error("GitHub skill URL path is invalid.");
+    }
+
+    assertSafePathSegment(value);
+    decoded.push(value);
+  }
+
+  return decoded;
+}
+
+function assertSafePathSegment(segment: string): void {
+  if (
+    !segment ||
+    segment === "." ||
+    segment === ".." ||
+    segment.includes("/") ||
+    segment.includes("\\") ||
+    segment.includes("#") ||
+    segment.includes("?")
+  ) {
+    throw new Error("GitHub skill URL path is invalid.");
+  }
 }
