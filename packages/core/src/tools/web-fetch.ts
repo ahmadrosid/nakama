@@ -7,6 +7,7 @@ import remarkStringify from "remark-stringify";
 import { unified } from "unified";
 import { z } from "zod";
 import type { JsonSchema, ToolDefinition } from "../contract";
+import { withDisabledFetchIdle } from "../fetch-idle";
 
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
@@ -300,15 +301,18 @@ async function fetchWithRedirects(
 ): Promise<{ response: Response; finalUrl: string }> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const response = await fetch(current, {
-      headers: {
-        accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-        "user-agent":
-          "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
-      },
-      redirect: "manual",
-      signal,
-    });
+    const response = await fetch(
+      current,
+      withDisabledFetchIdle({
+        headers: {
+          accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+          "user-agent":
+            "nakama-web_fetch/1.0 (+https://github.com/ahmadrosid/nakama)",
+        },
+        redirect: "manual",
+        signal,
+      })
+    );
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");

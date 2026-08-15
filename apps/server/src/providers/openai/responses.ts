@@ -8,6 +8,7 @@ import type {
   ToolCall,
 } from "@nakama/core";
 import {
+  fetchWithoutIdleTimeout,
   isMessageContentPartArray,
   toOpenAIResponsesUserContent,
   WEB_SEARCH_TOOL_NAME,
@@ -37,15 +38,18 @@ export async function generateOpenAIResponsesChat(options: {
     options.stream,
     options.customModels
   );
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    body: JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-    signal: options.input.signal,
-  });
+  const response = await fetchWithoutIdleTimeout(
+    "https://api.openai.com/v1/responses",
+    {
+      body: JSON.stringify(body),
+      headers: {
+        Authorization: `Bearer ${options.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: options.input.signal,
+    }
+  );
 
   if (!response.ok) {
     throw new Error(

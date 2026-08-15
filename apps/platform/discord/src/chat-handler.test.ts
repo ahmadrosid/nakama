@@ -27,6 +27,32 @@ afterEach(() => {
   chatLockOptions.waitMs = 15 * 60 * 1000;
 });
 
+/**
+ * Same shape as the telegram suite's helper (chat-handler.test.ts). Prefer real
+ * intervals over a tight spin: under CI's concurrent workspace load, session
+ * I/O can take tens of ms before sendStream runs, and a 1ms poll competes with
+ * the very work it is waiting for.
+ */
+async function waitForCondition(
+  condition: () => boolean,
+  message: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 2000;
+  const intervalMs = options.intervalMs ?? 10;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(message);
+}
+
 async function createPairedHandler(
   homeDir: string,
   options: {
@@ -975,9 +1001,15 @@ describe("createChatHandler guild thread routing", () => {
       });
 
       const firstTurn = handleMessage(first.message);
-      await Bun.sleep(20);
+      await waitForCondition(
+        () => entered >= 1,
+        "first turn never reached onSendStream"
+      );
       const secondTurn = handleMessage(second.message);
-      await Bun.sleep(20);
+      await waitForCondition(
+        () => entered >= 2,
+        "second turn never reached onSendStream; turns are not concurrent"
+      );
 
       expect(entered).toBe(2);
       expect(maxInFlight).toBeGreaterThanOrEqual(2);

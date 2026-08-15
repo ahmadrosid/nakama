@@ -1,4 +1,5 @@
 import type { ProfileRef } from "./contract";
+import { LLM_FETCH_TIMEOUT_MS } from "./fetch-idle";
 
 export class NakamaApiError extends Error {
   readonly status: number;
@@ -112,6 +113,29 @@ export function formatClientError(error: unknown): string {
   return "Something went wrong.";
 }
 
+export function formatAutomationRunError(error: unknown): string {
+  if (error instanceof Error && isFetchDeadlineError(error)) {
+    return `The model request timed out after ${Math.round(LLM_FETCH_TIMEOUT_MS / 60_000)} minutes.`;
+  }
+
+  if (error instanceof Error && isStreamDisconnectError(error)) {
+    return "The model connection closed before the agent finished. Try again. Long automations can take a minute or more.";
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message) {
+      return message;
+    }
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  return formatServerError(error);
+}
+
 export function formatServerError(error: unknown): string {
   if (error instanceof SyntaxError) {
     return "Invalid JSON in request body.";
@@ -155,6 +179,18 @@ function isNetworkError(error: Error): boolean {
     message === "Failed to fetch" ||
     message === "NetworkError when attempting to fetch resource." ||
     message === "Load failed"
+  );
+}
+
+function isFetchDeadlineError(error: Error): boolean {
+  const message = error.message.trim();
+
+  return (
+    error.name === "TimeoutError" ||
+    error.name === "AbortError" ||
+    message.includes("timed out") ||
+    message.includes("Timeout") ||
+    message.includes("aborted")
   );
 }
 

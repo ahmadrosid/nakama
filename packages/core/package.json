@@ -27,6 +27,7 @@
     "./provider-resolution": "./src/provider-resolution.ts",
     "./runtime": "./src/runtime.ts",
     "./ensure-server": "./src/ensure-server.ts",
+    "./fetch-idle": "./src/fetch-idle.ts",
     "./local-auth": "./src/local-auth.ts",
     "./automation-scheduler": "./src/automation-scheduler.ts",
     "./automation-worker": "./src/automation-worker.ts",

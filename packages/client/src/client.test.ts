@@ -50,6 +50,28 @@ test("chat stream request includes cookie CSRF protection", async () => {
   }
 });
 
+test("automation run requests disable Bun fetch idle timeout", async () => {
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = createClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  await client.runAutomationInternal("auto_1");
+
+  expect(String(fetchCalls[0]!.input)).toBe(
+    "http://localhost:4310/v1/internal/automations/auto_1/run"
+  );
+  expect(
+    (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number }).idleTimeout
+  ).toBe(0);
+});
+
 test("clients send org context on authenticated requests", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];

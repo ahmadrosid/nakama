@@ -24,7 +24,10 @@ import {
   seedDatabase,
 } from "@nakama/db";
 import { createHonoApp } from "./http/app";
-import { disableBunIdleTimeoutForSse } from "./http/sse-idle-timeout";
+import {
+  disableBunIdleTimeoutForLongHeldRequest,
+  disableBunIdleTimeoutForSse,
+} from "./http/sse-idle-timeout";
 import { runFirstBootSeed } from "./seed";
 import { AgentService } from "./services/agent-service";
 import { AuthService } from "./services/auth-service";
@@ -324,6 +327,7 @@ function startServer(options: {
     try {
       return Bun.serve({
         async fetch(request, server: Server) {
+          disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request);
           disableBunIdleTimeoutForSse(request, response, server);
           return response;

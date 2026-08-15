@@ -58,6 +58,10 @@ describe("OpenAI-compatible provider", () => {
 
     expect(result.assistantMessage.thinking).toBe("Plan");
     expect(result.usage).toBeUndefined();
+    const completionInit = fetchMock.mock.calls[0]?.[1] as
+      | (RequestInit & { idleTimeout?: number })
+      | undefined;
+    expect(completionInit?.idleTimeout).toBe(0);
   });
 
   test("omits reasoning config when the model does not support thinking", async () => {

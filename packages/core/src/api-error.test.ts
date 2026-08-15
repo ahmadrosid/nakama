@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   fallbackApiErrorMessage,
+  formatAutomationRunError,
   formatClientError,
   formatServerError,
   NakamaApiError,
@@ -65,6 +66,35 @@ describe("formatClientError", () => {
     ).toBe(
       "The connection closed before the agent finished. Restart the Nakama server, then try again. Long automations can take a minute or more."
     );
+  });
+});
+
+describe("formatAutomationRunError", () => {
+  test("maps stream disconnects without blaming the Nakama server", () => {
+    expect(
+      formatAutomationRunError(
+        new Error(
+          "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+        )
+      )
+    ).toBe(
+      "The model connection closed before the agent finished. Try again. Long automations can take a minute or more."
+    );
+  });
+
+  test("keeps ordinary provider errors", () => {
+    expect(formatAutomationRunError(new Error("Provider offline"))).toBe(
+      "Provider offline"
+    );
+  });
+
+  test("maps fetch deadline aborts without the raw abort text", () => {
+    const error = new Error("The operation was aborted.");
+    error.name = "TimeoutError";
+    const formatted = formatAutomationRunError(error);
+
+    expect(formatted).not.toBe(error.message);
+    expect(formatted).toContain("10");
   });
 });
 

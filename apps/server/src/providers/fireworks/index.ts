@@ -11,6 +11,7 @@ import type {
   StreamChatHandlers,
   ToolCall,
 } from "@nakama/core";
+import { fetchWithoutIdleTimeout } from "@nakama/core";
 import OpenAI from "openai";
 import {
   parseOpenAIToolCalls,
@@ -53,8 +54,9 @@ export function createFireworksProvider(
   const client = new OpenAI({
     apiKey,
     baseURL: FIREWORKS_INFERENCE_BASE_URL,
+    fetch: fetchWithoutIdleTimeout,
     maxRetries: 0,
-    timeout: 300_000,
+    timeout: 600_000,
   });
 
   const resolveThinking = (input: GenerateChatInput) => {
@@ -240,7 +242,7 @@ async function streamChatCompletion(options: {
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
-  const response = await fetch(
+  const response = await fetchWithoutIdleTimeout(
     `${FIREWORKS_INFERENCE_BASE_URL}/chat/completions`,
     {
       body: JSON.stringify({

@@ -162,7 +162,11 @@ describe("web_fetch SSRF guard", () => {
   });
 
   test("allows hostnames with at least one public address", async () => {
-    stubFetch(async () => htmlResponse("<p>ok</p>"));
+    let fetchInit: RequestInit | undefined;
+    stubFetch(async (_input, init) => {
+      fetchInit = init;
+      return htmlResponse("<p>ok</p>");
+    });
 
     const out = await webFetchTool.run(
       { url: "https://github-pages.test/" },
@@ -171,6 +175,9 @@ describe("web_fetch SSRF guard", () => {
 
     expect(out.status).toBe(200);
     expect(out.content).toContain("ok");
+    expect(
+      (fetchInit as RequestInit & { idleTimeout?: number }).idleTimeout
+    ).toBe(0);
   });
 
   test("rejects hostnames with only private addresses", async () => {

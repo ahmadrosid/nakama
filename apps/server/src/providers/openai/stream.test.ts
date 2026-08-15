@@ -56,6 +56,10 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hello");
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const streamInit = fetchMock.mock.calls[0]?.[1] as
+      | (RequestInit & { idleTimeout?: number })
+      | undefined;
+    expect(streamInit?.idleTimeout).toBe(0);
   });
 
   test("streams responses api text and thinking", async () => {
