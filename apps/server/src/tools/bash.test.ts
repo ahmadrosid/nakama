@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -197,5 +198,42 @@ describe("bash tool", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("TAIL_MARKER_OK");
     expect(result.stdout).toContain("Full coding-agent log:");
+  });
+
+  test("prunes coding-agent logs to the newest 20 and leaves other artifacts", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    const logDir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
+    await mkdir(logDir, { recursive: true });
+    await writeFile(path.join(logDir, "keep-me.txt"), "user file", "utf8");
+
+    const now = Date.now();
+    for (let i = 0; i < 25; i++) {
+      const name = `old-${String(i).padStart(2, "0")}.log`;
+      const filePath = path.join(logDir, name);
+      await writeFile(filePath, `old ${i}`, "utf8");
+      const stamp = new Date(now - (25 - i) * 60_000);
+      await utimes(filePath, stamp, stamp);
+    }
+
+    const agentPath = path.join(workspaceRoot, "agent");
+    await writeFile(agentPath, "#!/bin/bash\necho done\n", "utf8");
+    await chmod(agentPath, 0o755);
+
+    const result = await runBash(
+      {
+        codingAgent: true,
+        command: "./agent -p 'hello' --output-format text --yolo",
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot }
+    );
+
+    expect(result.exitCode).toBe(0);
+    const remaining = await readdir(logDir);
+    const logs = remaining.filter((name) => name.endsWith(".log"));
+    expect(logs).toHaveLength(20);
+    expect(remaining).toContain("keep-me.txt");
+    expect(remaining).not.toContain("old-00.log");
+    expect(logs.some((name) => !name.startsWith("old-"))).toBe(true);
   });
 });
