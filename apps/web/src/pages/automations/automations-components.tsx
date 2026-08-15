@@ -863,7 +863,11 @@ function DeliverySettingsFields({
             className="tabular-nums"
             disabled={busy}
             onChange={(event) => {
-              const channelId = event.target.value.trim();
+              const raw = event.target.value.trim();
+              const channelId =
+                /discord(?:app)?\.com\/channels\/[^/]+\/(\d{17,20})/i.exec(
+                  raw
+                )?.[1] ?? raw;
               const next = { ...delivery };
 
               if (channelId) {
@@ -874,7 +878,7 @@ function DeliverySettingsFields({
 
               onChange(next);
             }}
-            placeholder="123456789012345678"
+            placeholder="Channel ID or discord.com/channels/…"
             value={delivery.channelId ?? ""}
           />
         </Field>

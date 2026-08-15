@@ -80,10 +80,15 @@ export function normalizeAutomationDelivery(
       throw new Error("delivery.channelId must be a non-empty string.");
     }
 
-    const channelId = record.channelId.trim();
+    const channelId =
+      /discord(?:app)?\.com\/channels\/[^/]+\/(\d{17,20})/i.exec(
+        record.channelId.trim()
+      )?.[1] ?? record.channelId.trim();
 
     if (!isDiscordSnowflake(channelId)) {
-      throw new Error("delivery.channelId must be a Discord snowflake.");
+      throw new Error(
+        "delivery.channelId must be a Discord snowflake or channel URL."
+      );
     }
 
     delivery.channelId = channelId;

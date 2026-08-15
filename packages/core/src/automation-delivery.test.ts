@@ -39,6 +39,19 @@ describe("normalizeAutomationDelivery", () => {
     });
   });
 
+  test("parses discord delivery from a channel URL", () => {
+    expect(
+      normalizeAutomationDelivery({
+        channel: "discord",
+        channelId:
+          "https://discord.com/channels/1525955095433576620/1538233425062797352 ",
+      })
+    ).toEqual({
+      channel: "discord",
+      channelId: "1538233425062797352",
+    });
+  });
+
   test("rejects whitespace-only channelId", () => {
     expect(() =>
       normalizeAutomationDelivery({ channel: "discord", channelId: "   " })
@@ -51,13 +64,13 @@ describe("normalizeAutomationDelivery", () => {
         channel: "discord",
         channelId: "1234567890123456",
       })
-    ).toThrow("delivery.channelId must be a Discord snowflake.");
+    ).toThrow("delivery.channelId must be a Discord snowflake or channel URL.");
     expect(() =>
       normalizeAutomationDelivery({
         channel: "discord",
         channelId: "123456789012345678901",
       })
-    ).toThrow("delivery.channelId must be a Discord snowflake.");
+    ).toThrow("delivery.channelId must be a Discord snowflake or channel URL.");
   });
 
   test("rejects discord payload with chatId or to", () => {
