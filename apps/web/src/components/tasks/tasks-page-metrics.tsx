@@ -53,7 +53,7 @@ function SwarmMetricTile({
           className={cn(
             "text-muted-foreground",
             compact
-              ? "@sm/metrics:line-clamp-1 line-clamp-2 @sm/metrics:text-xs text-[11px]"
+              ? "@sm/metrics:line-clamp-1 line-clamp-2 @sm/metrics:text-xs text-2xs"
               : "@sm/metrics:line-clamp-1 line-clamp-2 text-xs"
           )}
         >

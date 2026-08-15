@@ -56,7 +56,7 @@ export function OrgMembersCardHeader({
         <span className="shrink-0 font-medium text-foreground text-sm leading-none">
           Organization
         </span>
-        <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-[11px] text-foreground leading-none sm:max-w-xs">
+        <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">
           {orgId}
         </code>
         <Button

@@ -23,7 +23,7 @@ export function ProfileAdminPlusButton({
         render={
           <Button
             aria-label={label}
-            className="text-muted-foreground/70 hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground"
             disabled={disabled}
             onClick={onClick}
             size="icon-sm"

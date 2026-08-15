@@ -269,7 +269,7 @@ function CollapsedOrgExpandControl({ onExpand }: { onExpand: () => void }) {
       </div>
       <Button
         aria-label="Expand sidebar"
-        className="absolute inset-0 size-9 rounded-md p-0 text-muted-foreground/70 opacity-0 transition-opacity duration-150 hover:bg-sidebar-accent/55 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        className="absolute inset-0 size-9 rounded-md p-0 text-muted-foreground opacity-0 transition-opacity duration-150 hover:bg-sidebar-accent/55 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
         onClick={onExpand}
         title="Expand sidebar"
         type="button"
@@ -286,7 +286,7 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
     <Button
       aria-expanded
       aria-label="Collapse sidebar"
-      className="shrink-0 self-center text-muted-foreground/70 hover:text-foreground"
+      className="shrink-0 self-center text-muted-foreground hover:text-foreground"
       onClick={onToggle}
       size="icon-sm"
       title="Collapse sidebar"
@@ -348,7 +348,7 @@ function SidebarNavButton({
         {showBadge && collapsed ? (
           <span
             aria-hidden
-            className="absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-[10px] text-primary-foreground tabular-nums leading-none shadow-sm"
+            className="absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-2xs text-primary-foreground tabular-nums leading-none shadow-sm"
           >
             {badgeLabel}
           </span>
@@ -358,7 +358,7 @@ function SidebarNavButton({
       {showBadge && !collapsed ? (
         <span
           aria-hidden
-          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground tabular-nums"
+          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
         >
           {badgeLabel}
         </span>

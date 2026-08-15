@@ -82,7 +82,7 @@ export function SkillPostTurnReviewBanner({
               {preview.description}
             </p>
             {preview.excerpt ? (
-              <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 p-2 font-mono text-[11px] text-foreground leading-relaxed">
+              <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 p-2 font-mono text-2xs text-foreground leading-relaxed">
                 {preview.excerpt}
               </pre>
             ) : null}

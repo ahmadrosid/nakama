@@ -76,7 +76,7 @@ export function ChatProfileSwitcher({
                 size="xs"
               />
             ) : (
-              <span className="inline-flex size-4 items-center justify-center rounded-full bg-background font-medium text-[9px]">
+              <span className="inline-flex size-4 items-center justify-center rounded-full bg-background font-medium text-2xs">
                 ?
               </span>
             )}

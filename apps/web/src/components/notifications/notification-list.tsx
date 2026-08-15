@@ -52,13 +52,13 @@ function NotificationListItem({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             {item.count > 1 ? (
-              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground tabular-nums">
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums">
                 {item.count > 99 ? "99+" : item.count}
               </span>
             ) : null}
             {item.createdAt ? (
               <time
-                className="text-[11px] text-muted-foreground tabular-nums"
+                className="text-2xs text-muted-foreground tabular-nums"
                 dateTime={item.createdAt}
               >
                 {formatSessionRelativeTime(item.createdAt)}

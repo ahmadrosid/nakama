@@ -67,7 +67,7 @@ export function McpToolLabels({
         ))}
         {hiddenCount > 0 ? (
           <button
-            className="rounded-full border border-border border-dashed px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+            className="rounded-full border border-border border-dashed px-2.5 py-0.5 font-mono text-2xs text-muted-foreground transition-colors hover:bg-muted/50"
             onClick={onShowAll}
             type="button"
           >
@@ -82,7 +82,7 @@ export function McpToolLabels({
 function McpToolLabel({ tool }: { tool: CachedMcpToolSummary }) {
   return (
     <span
-      className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+      className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-2xs text-muted-foreground"
       title={tool.description || tool.name}
     >
       {tool.name}
@@ -231,7 +231,7 @@ function McpToolItem({
         <span
           aria-hidden
           className={cn(
-            "mt-px hidden w-7 shrink-0 justify-self-end rounded-full bg-muted px-2 py-0.5 text-center font-mono text-[11px] text-muted-foreground leading-4 sm:inline",
+            "mt-px hidden w-7 shrink-0 justify-self-end rounded-full bg-muted px-2 py-0.5 text-center font-mono text-2xs text-muted-foreground leading-4 sm:inline",
             !parameters.length && "invisible"
           )}
         >
@@ -283,11 +283,11 @@ function McpToolParameters({
               <code className="font-mono text-foreground text-xs">
                 {parameter.name}
               </code>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
                 {parameter.type}
               </span>
               {parameter.required ? (
-                <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-800 dark:text-amber-200">
+                <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-2xs text-amber-800 dark:text-amber-200">
                   required
                 </span>
               ) : null}

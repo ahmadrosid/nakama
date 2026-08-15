@@ -137,7 +137,7 @@ export function IntegrationStatusHeader({
           </p>
           <span
             className={cn(
-              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-medium text-[11px]",
+              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 font-medium text-2xs",
               connected
                 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                 : configured

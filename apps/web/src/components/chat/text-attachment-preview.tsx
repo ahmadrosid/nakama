@@ -29,7 +29,7 @@ export function TextAttachmentPreview({
       <div className="min-w-0">
         <p className="font-medium text-foreground text-xs">Pasted text</p>
         {resolvedWordCount == null ? null : (
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {resolvedWordCount} words
           </p>
         )}

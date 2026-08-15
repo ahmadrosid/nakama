@@ -82,7 +82,7 @@ export function ChatSkillPicker({
                 ) : null}
               </span>
               {meta ? (
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase">
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium text-2xs text-muted-foreground uppercase">
                   {meta}
                 </span>
               ) : null}

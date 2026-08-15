@@ -80,7 +80,7 @@ export function TaskColumn({
             {tasks.length}
           </span>
         </div>
-        <p className="line-clamp-2 text-[11px] text-muted-foreground leading-snug">
+        <p className="line-clamp-2 text-2xs text-muted-foreground leading-snug">
           {meta.description}
         </p>
       </header>
@@ -97,7 +97,7 @@ export function TaskColumn({
             <div className="flex flex-1 flex-col items-center justify-center rounded-md border border-border/80 border-dashed bg-background/40 px-3 py-8 text-center">
               <ColumnIcon
                 aria-hidden
-                className="mb-2 size-5 text-muted-foreground/50"
+                className="mb-2 size-5 text-muted-foreground"
               />
               <p className="text-muted-foreground text-xs leading-relaxed">
                 {meta.emptyMessage}
