@@ -407,38 +407,10 @@
 }
 
 @layer components {
-  .panel {
-    @apply rounded-md border border-border bg-card;
-  }
-
   /* Chat composer must stay fully opaque — InputGroup defaults use dark:bg-input/30 and has-disabled:opacity-50. */
   .chat-composer-input {
     background-color: var(--card) !important;
     opacity: 1 !important;
-  }
-
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition;
-  }
-
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition border border-border bg-secondary text-secondary-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition border border-red-900/60 bg-red-950/40 text-red-200 hover:border-red-800 hover:bg-red-950/70 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .input {
-    @apply w-full rounded-md border border-input bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-3 focus:ring-ring/50;
-  }
-
-  .label {
-    @apply mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
   .type-brand {
@@ -463,10 +435,6 @@
 
   .type-code {
     @apply font-mono text-xs tabular-nums;
-  }
-
-  .type-badge {
-    @apply text-xs font-semibold uppercase tracking-wide;
   }
 
   .sidebar-shell {
