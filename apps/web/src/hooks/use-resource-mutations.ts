@@ -94,6 +94,22 @@ export function useUpdateProfileMutation() {
   });
 }
 
+export function useCloneProfileMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (profileId: string) => client.cloneProfile(profileId),
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.soul.profile(data.profile.id),
+        }),
+      ]);
+    },
+  });
+}
+
 export function useDeleteProfileMutation() {
   const queryClient = useQueryClient();
 

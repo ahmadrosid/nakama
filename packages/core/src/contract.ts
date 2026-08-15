@@ -1497,6 +1497,13 @@ export interface AssignSkillRequest {
   skillId: string;
 }
 
+export interface CloneProfileRequest {
+  /** Optional explicit id; otherwise a unique slug of the name. */
+  id?: string;
+  /** Defaults to `{source name} (copy)`. */
+  name?: string;
+}
+
 export interface CreateSkillRequest {
   body?: string;
   description: string;

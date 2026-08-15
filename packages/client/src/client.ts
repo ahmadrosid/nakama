@@ -21,6 +21,7 @@ import type {
   BranchSessionRequest,
   BranchSessionResponse,
   ChangePasswordRequest,
+  CloneProfileRequest,
   CompactionResponse,
   ComposioConnectRequest,
   ComposioConnectResponse,
@@ -776,6 +777,16 @@ export class NakamaClient {
 
   async listSkills(): Promise<ListSkillsResponse> {
     return this.request<ListSkillsResponse>("/v1/skills");
+  }
+
+  async cloneProfile(
+    profileId: string,
+    request: CloneProfileRequest = {}
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/clone`,
+      { body: JSON.stringify(request), method: "POST" }
+    );
   }
 
   async createSkill(request: CreateSkillRequest): Promise<SkillResponse> {

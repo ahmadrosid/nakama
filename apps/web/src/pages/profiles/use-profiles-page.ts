@@ -21,6 +21,7 @@ import {
   useAssignMcpServerMutation,
   useAssignSkillMutation,
   useAssignToolMutation,
+  useCloneProfileMutation,
   useCreateMcpServerMutation,
   useCreateSkillMutation,
   useDeleteProfileAvatarMutation,
@@ -77,6 +78,7 @@ export function useProfilesPage() {
     refetch: refetchDetail,
   } = useProfileQuery(selectedId);
   const updateMutation = useUpdateProfileMutation();
+  const cloneProfileMutation = useCloneProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const deleteAvatarMutation = useDeleteProfileAvatarMutation();
@@ -602,6 +604,17 @@ export function useProfilesPage() {
     }
   }
 
+  async function handleCloneProfile(profileId: string) {
+    setError(null);
+
+    try {
+      const response = await cloneProfileMutation.mutateAsync(profileId);
+      setSelectedId(response.profile.id);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDeleteConfirm() {
     const profileId = deleteTargetId;
     const profile = profileId
@@ -876,6 +889,7 @@ export function useProfilesPage() {
     availableTools,
     avatarInputRef,
     busy,
+    cloneProfileMutation,
     composioToolkitsData,
     createMcpMutation,
     createOpen,
@@ -900,6 +914,7 @@ export function useProfilesPage() {
     handleAssignTool,
     handleAvatarRemove,
     handleAvatarSelected,
+    handleCloneProfile,
     handleCreateMcpServer,
     handleCreateOpenChange,
     handleCreateSkill,

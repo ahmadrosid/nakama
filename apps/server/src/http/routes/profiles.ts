@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
+  CloneProfileRequest,
   CreateProfileRequest,
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
@@ -144,6 +145,10 @@ export function registerProfileRoutes(
       tags: ["Profiles"],
     })
   );
+  const cloneProfileSchema = z
+    .object({})
+    .passthrough()
+    .openapi("CloneProfileRequest");
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -835,6 +840,53 @@ export function registerProfileRoutes(
 
     return json<ProfileResponse>(
       await agent.updateProfile(orgId, profileId, body)
+    );
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "cloneProfile",
+      path: "/v1/profiles/{profileId}/clone",
+      request: {
+        body: {
+          content: { "application/json": { schema: cloneProfileSchema } },
+          required: false,
+        },
+        params: profileIdParam,
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: profileSchema } },
+          description: "Profile cloned",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Clone a bot profile",
+      tags: ["Profiles"],
+    })
+  );
+  app.post("/v1/profiles/:profileId/clone", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const body = await readJson<CloneProfileRequest>(c.req.raw).catch(
+      () => ({}) as CloneProfileRequest
+    );
+    return json<ProfileResponse>(
+      await agent.cloneProfile(orgId, profileId, body),
+      201
     );
   });
 
