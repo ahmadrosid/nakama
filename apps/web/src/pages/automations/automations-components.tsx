@@ -140,7 +140,7 @@ export function AutomationListItem({
             {unreadCount > 0 ? (
               <span
                 aria-label={`${unreadCount} unread run${unreadCount === 1 ? "" : "s"}`}
-                className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground tabular-nums"
+                className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
               >
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
@@ -151,7 +151,7 @@ export function AutomationListItem({
           </p>
           <div className="flex items-center gap-2">
             <AutomationStateDot enabled={automation.enabled} />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               {automation.nextRunAt
                 ? `Next ${formatFutureRelativeTime(automation.nextRunAt)}`
                 : automation.lastRunAt
@@ -635,7 +635,7 @@ function RunHistoryItem({
             <ArrowRight01Icon
               aria-hidden
               className={cn(
-                "mt-0.5 size-4 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+                "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
                 expanded && "rotate-90"
               )}
             />
@@ -904,7 +904,7 @@ export function AutomationStateBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-[11px]",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-2xs",
         enabled
           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
           : "bg-muted text-muted-foreground",
@@ -944,7 +944,7 @@ export function SoftPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-1 font-medium text-[11px]",
+        "inline-flex items-center rounded-full px-2 py-1 font-medium text-2xs",
         tone === "default" && "bg-muted text-muted-foreground",
         tone === "success" &&
           "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",

@@ -202,7 +202,7 @@ function HistorySessionRow({
 
       <Button
         aria-label={`Delete ${title}`}
-        className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+        className="shrink-0 text-muted-foreground hover:text-destructive"
         disabled={disabled}
         onClick={(event) => {
           event.stopPropagation();

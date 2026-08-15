@@ -172,7 +172,7 @@ export function BrowseModelRowButton({
         <div className="truncate font-medium text-foreground text-sm leading-tight">
           {row.name}
         </div>
-        <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
+        <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">
           {row.id}
         </div>
         {row.description ? (
@@ -186,7 +186,7 @@ export function BrowseModelRowButton({
         <div className="flex items-center gap-1">
           {(row.badges ?? []).map((badge) => (
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-bold text-[0.6rem] uppercase tracking-wide ${BADGE_TONES[badge.tone]}`}
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-bold text-2xs uppercase tracking-wide ${BADGE_TONES[badge.tone]}`}
               key={badge.label}
             >
               {badge.label}
@@ -204,7 +204,7 @@ export function BrowseModelRowButton({
           <div className="flex gap-1">
             {row.capabilities!.map((capability) => (
               <span
-                className="rounded bg-muted px-1 py-0.5 text-[0.6rem]"
+                className="rounded bg-muted px-1 py-0.5 text-2xs"
                 key={capability}
               >
                 {capability}

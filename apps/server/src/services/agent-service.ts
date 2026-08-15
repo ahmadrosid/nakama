@@ -17,6 +17,7 @@ import type {
   BranchSessionResponse,
   ChatContextUsage,
   ChatMessage,
+  CloneProfileRequest,
   CompactionResponse,
   ComposioSettingsResponse,
   ConfigureProviderRequest,
@@ -2564,6 +2565,14 @@ export class AgentService {
 
   async getSkill(skillId: string): Promise<SkillResponse> {
     return this.requireSkillsService().getSkill(skillId);
+  }
+
+  async cloneProfile(
+    orgId: string,
+    sourceId: string,
+    request: CloneProfileRequest
+  ): Promise<ProfileResponse> {
+    return this.profileService.cloneProfile(orgId, sourceId, request);
   }
 
   async createSkill(

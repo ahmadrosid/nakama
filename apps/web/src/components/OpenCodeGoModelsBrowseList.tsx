@@ -70,12 +70,12 @@ export function OpenCodeGoModelsBrowseList({
               <span className="font-medium text-foreground text-sm">
                 {model.name}
               </span>
-              <span className="font-mono text-[11px] text-muted-foreground">
+              <span className="font-mono text-2xs text-muted-foreground">
                 {model.id}
               </span>
               {model.inputPerMillionUsd !== undefined &&
               model.outputPerMillionUsd !== undefined ? (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   ${model.inputPerMillionUsd}/M in · $
                   {model.outputPerMillionUsd}/M out
                 </span>

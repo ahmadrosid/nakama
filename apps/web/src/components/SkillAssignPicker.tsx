@@ -147,7 +147,7 @@ function AgentBrowserPrerequisitesNotice({
       {installProgress ? (
         <div className="min-w-0 max-w-full overflow-hidden rounded-md bg-amber-500/5 px-2 py-1.5">
           <p
-            className="line-clamp-3 min-w-0 break-all font-mono text-[11px] text-amber-700/90 leading-snug dark:text-amber-200/90"
+            className="line-clamp-3 min-w-0 break-all font-mono text-2xs text-amber-700/90 leading-snug dark:text-amber-200/90"
             title={installProgress}
           >
             {installProgress}
@@ -276,7 +276,7 @@ function AvailableSkillActions({
               ? `Delete ${skill.name} from library`
               : `${skill.name} is a bundled skill and cannot be deleted`
           }
-          className="text-muted-foreground/60 hover:text-destructive [&_svg]:pointer-events-auto"
+          className="text-muted-foreground hover:text-destructive [&_svg]:pointer-events-auto"
           disabled={disabled || !canDelete}
           onClick={(event) => onRequestDelete(skill, event)}
           onPointerDown={stopCommandItemSelect}
@@ -413,7 +413,7 @@ function OnProfileSkillCommandItem({
           <p className="truncate font-medium text-muted-foreground text-sm leading-tight">
             {skill.name}
           </p>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium text-2xs text-muted-foreground uppercase tracking-wide">
             <CheckmarkCircle01Icon aria-hidden className="size-3" />
             On profile
           </span>
@@ -432,7 +432,7 @@ function OnProfileSkillCommandItem({
       {onDelete ? (
         <Button
           aria-label={`${skill.name} is on this profile and cannot be deleted from the library`}
-          className="shrink-0 self-center text-muted-foreground/60 [&_svg]:pointer-events-auto"
+          className="shrink-0 self-center text-muted-foreground [&_svg]:pointer-events-auto"
           disabled
           onPointerDown={stopCommandItemSelect}
           size="icon-sm"

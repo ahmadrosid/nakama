@@ -1,7 +1,9 @@
+import { cp } from "node:fs/promises";
 import type {
   AssignMcpServerRequest,
   AssignSkillRequest,
   AssignToolRequest,
+  CloneProfileRequest,
   CreateProfileRequest,
   CreateToolRequest,
   DeleteKnowledgeBaseResponse,
@@ -23,12 +25,14 @@ import type {
 import {
   createId,
   deleteProfileAvatar,
+  getKnowledgeBaseDir,
   getProfileSoulDir,
   hasProfileAvatar,
   initSoulDirectory,
   listKnowledgeBaseDocuments,
   listKnowledgeBaseSources,
   NakamaApiError,
+  pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
   readKnowledgeBaseDocumentContent,
   readProfileAvatar,
@@ -73,6 +77,48 @@ const SOUL_FILE_KEY_BY_NAME = {
   "SOUL.md": "soul",
   "STYLE.md": "style",
 } as const;
+
+/** Everything in the soul stack except MEMORY.md, which a clone starts fresh. */
+const CLONED_SOUL_FILE_KEYS = ["instructions", "soul", "style"] as const;
+
+/** How many `-2`, `-3` suffixes to try before giving up on a generated id. */
+const CLONE_ID_ATTEMPTS = 50;
+
+async function copyProfileAvatarTo(
+  orgId: string,
+  sourceId: string,
+  profileId: string
+): Promise<void> {
+  const avatar = await readProfileAvatar(orgId, sourceId);
+
+  if (!avatar) {
+    return;
+  }
+
+  await saveProfileAvatar(orgId, profileId, {
+    data: avatar.bytes.toString("base64"),
+    mediaType: avatar.mediaType,
+  });
+}
+
+async function copyKnowledgeBaseTo(
+  orgId: string,
+  sourceId: string,
+  profileId: string
+): Promise<void> {
+  const from = getKnowledgeBaseDir(orgId, sourceId);
+
+  if (!(await pathExists(from))) {
+    return;
+  }
+
+  // The manifest holds only document metadata and the stored file names carry
+  // the document id, not the profile id, so the tree copies as-is.
+  await cp(from, getKnowledgeBaseDir(orgId, profileId), {
+    force: true,
+    recursive: true,
+  });
+}
 
 function slugifyProfileName(name: string): string {
   return (
@@ -150,6 +196,123 @@ export class ProfileService {
     await ensureProfileDefaultBundledSkills(this.db, profile.id);
 
     return this.getProfile(orgId, profile.id);
+  }
+
+  /**
+   * Duplicate a profile inside its own org. Assignments are re-linked by id, as
+   * tools, MCP servers and Composio toolkits are shared records; only the soul
+   * files, avatar and knowledge base are per-profile bytes and get copied.
+   * MEMORY.md is deliberately left at the template `initSoulDirectory` writes,
+   * so a clone starts without the source's accumulated continuity.
+   */
+  async cloneProfile(
+    orgId: string,
+    sourceId: string,
+    request: CloneProfileRequest = {}
+  ): Promise<ProfileResponse> {
+    const source = await this.requireProfile(orgId, sourceId);
+
+    if (source.isSuper) {
+      throw new NakamaApiError("Super Bot cannot be cloned.", 400);
+    }
+
+    const name = request.name?.trim() || `${source.name} (copy)`;
+    const profileId = await this.resolveCloneProfileId(request.id, name);
+    const now = new Date().toISOString();
+
+    await this.db.upsertProfile({
+      createdAt: now,
+      id: profileId,
+      isDefault: false,
+      isSuper: false,
+      model: source.model,
+      name,
+      orgId,
+      skillsPostTurnReview: source.skillsPostTurnReview,
+      skillsWriteApproval: source.skillsWriteApproval,
+      systemPrompt: source.systemPrompt,
+      updatedAt: now,
+    });
+
+    await this.copyProfileSoul(orgId, sourceId, profileId);
+    await this.copyProfileAssignments(sourceId, profileId);
+    await copyProfileAvatarTo(orgId, sourceId, profileId);
+    await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+
+    return this.getProfile(orgId, profileId);
+  }
+
+  private async copyProfileSoul(
+    orgId: string,
+    sourceId: string,
+    profileId: string
+  ): Promise<void> {
+    const cloneSoulDir = getProfileSoulDir(orgId, profileId);
+    await initSoulDirectory(cloneSoulDir);
+
+    const sourceSoul = await resolveSoulStackForProfile(orgId, sourceId);
+
+    for (const key of CLONED_SOUL_FILE_KEYS) {
+      const content = sourceSoul?.files[key];
+
+      if (content) {
+        await writeSoulFile(cloneSoulDir, key, content);
+      }
+    }
+  }
+
+  private async copyProfileAssignments(
+    sourceId: string,
+    profileId: string
+  ): Promise<void> {
+    for (const tool of await this.db.listToolsForProfile(sourceId)) {
+      await this.db.assignToolToProfile(profileId, tool.id);
+    }
+
+    for (const skill of await this.db.listSkillsForProfile(sourceId)) {
+      await this.db.assignSkillToProfile(profileId, skill.id);
+    }
+
+    for (const server of await this.db.listMcpServersForProfile(sourceId)) {
+      await this.db.assignMcpServerToProfile(profileId, server.id);
+    }
+
+    const toolkits = await this.db.listProfileComposioToolkits(sourceId);
+
+    if (toolkits.length > 0) {
+      await this.db.replaceProfileComposioToolkits(
+        profileId,
+        toolkits.map((toolkit) => ({ ...toolkit, profileId }))
+      );
+    }
+  }
+
+  /**
+   * An explicit id must be free, same as create. A generated one is suffixed
+   * until it is, because cloning twice is a normal thing to do.
+   */
+  private async resolveCloneProfileId(
+    requestedId: string | undefined,
+    name: string
+  ): Promise<string> {
+    if (requestedId?.trim()) {
+      return this.resolveNewProfileId(requestedId, name);
+    }
+
+    const base = slugifyProfileName(name);
+
+    for (let suffix = 1; suffix <= CLONE_ID_ATTEMPTS; suffix++) {
+      const candidate = suffix === 1 ? base : `${base}-${suffix}`;
+
+      if (!(await this.db.getProfile(candidate))) {
+        return this.resolveNewProfileId(candidate, name);
+      }
+    }
+
+    throw new NakamaApiError(
+      `Could not find a free profile id for "${name}".`,
+      409
+    );
   }
 
   async updateProfile(

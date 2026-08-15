@@ -35,7 +35,7 @@ export function SidebarNotifications() {
         {showBadge ? (
           <span
             aria-hidden
-            className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-0.5 font-bold text-[9px] text-primary-foreground tabular-nums leading-none"
+            className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-0.5 font-bold text-2xs text-primary-foreground tabular-nums leading-none"
           >
             {badgeLabel}
           </span>
@@ -77,7 +77,7 @@ export function SidebarNotifications() {
               <p className="font-medium text-foreground text-sm leading-tight">
                 Notifications
               </p>
-              <p className="text-[11px] text-muted-foreground leading-tight">
+              <p className="text-2xs text-muted-foreground leading-tight">
                 Automation runs and org memory proposals
               </p>
             </div>

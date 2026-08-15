@@ -1,4 +1,4 @@
-import { Delete02Icon } from "hugeicons-react";
+import { Copy01Icon, Delete02Icon } from "hugeicons-react";
 import { createPortal } from "react-dom";
 import { ProfileAdminPlusButton } from "@/components/ProfileAdminPlusButton";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -46,6 +46,7 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
     setDetailTab,
     handleSelectProfile,
     setCreateOpen,
+    handleCloneProfile,
     openDeleteDialog,
   } = state;
   const { user, activeOrg } = useAuth();
@@ -120,18 +121,32 @@ export function ProfilesPageLayout(state: ProfilesPageState) {
         : null}
       {pageHeaderActions && selectedId && detail && !detail.isSuper
         ? createPortal(
-            <Button
-              aria-label="Delete profile"
-              className="self-center text-destructive hover:text-destructive"
-              disabled={busy}
-              onClick={() => openDeleteDialog(selectedId)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Delete02Icon aria-hidden className="size-3.5" />
-              <span>Delete</span>
-            </Button>,
+            <>
+              <Button
+                aria-label="Clone profile"
+                className="self-center"
+                disabled={busy}
+                onClick={() => handleCloneProfile(selectedId)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <Copy01Icon aria-hidden className="size-3.5" />
+                <span>Clone</span>
+              </Button>
+              <Button
+                aria-label="Delete profile"
+                className="self-center text-destructive hover:text-destructive"
+                disabled={busy}
+                onClick={() => openDeleteDialog(selectedId)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <Delete02Icon aria-hidden className="size-3.5" />
+                <span>Delete</span>
+              </Button>
+            </>,
             pageHeaderActions
           )
         : null}

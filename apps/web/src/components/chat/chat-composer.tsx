@@ -561,7 +561,7 @@ function ChatComposerFullFooter({
                 ) : null}
                 {props.providerModelGroups.map((group) => (
                   <div key={group.providerId}>
-                    <div className="px-2 py-1.5 font-medium text-[11px] text-muted-foreground">
+                    <div className="px-2 py-1.5 font-medium text-2xs text-muted-foreground">
                       {group.providerLabel}
                     </div>
                     {group.models.map((model) => {

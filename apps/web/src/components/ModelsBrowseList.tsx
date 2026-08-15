@@ -291,7 +291,7 @@ function ModelRowButton({
         <div className="truncate font-medium text-foreground text-sm leading-tight">
           {row.modelName}
         </div>
-        <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
+        <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">
           {row.modelId}
         </div>
       </div>
@@ -299,18 +299,18 @@ function ModelRowButton({
       <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-muted-foreground text-xs">
         <div className="flex items-center gap-1">
           {isPublicKey && (
-            <span className="inline-flex items-center rounded bg-sky-500/15 px-1.5 py-0.5 font-bold text-[0.6rem] text-sky-400 uppercase tracking-wide ring-1 ring-sky-500/30">
+            <span className="inline-flex items-center rounded bg-sky-500/15 px-1.5 py-0.5 font-bold text-2xs text-sky-400 uppercase tracking-wide ring-1 ring-sky-500/30">
               public
             </span>
           )}
           {row.isFree && (
-            <span className="inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-[0.6rem] text-emerald-400 uppercase tracking-wide ring-1 ring-emerald-500/30">
+            <span className="inline-flex items-center rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-2xs text-emerald-400 uppercase tracking-wide ring-1 ring-emerald-500/30">
               FREE
             </span>
           )}
           {row.experimental && (
             <span
-              className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-[0.6rem] text-amber-400 uppercase tracking-wide ring-1 ring-amber-500/30"
+              className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 font-bold text-2xs text-amber-400 uppercase tracking-wide ring-1 ring-amber-500/30"
               title="Untested with nakama — feature support (tools, JSON mode, streaming) may vary."
             >
               experimental
@@ -326,22 +326,20 @@ function ModelRowButton({
         </div>
         <div className="flex gap-1">
           {row.toolCall && (
-            <span className="rounded bg-muted px-1 py-0.5 text-[0.6rem]">
-              tools
-            </span>
+            <span className="rounded bg-muted px-1 py-0.5 text-2xs">tools</span>
           )}
           {row.vision && (
-            <span className="rounded bg-muted px-1 py-0.5 text-[0.6rem]">
+            <span className="rounded bg-muted px-1 py-0.5 text-2xs">
               vision
             </span>
           )}
           {row.reasoning && (
-            <span className="rounded bg-muted px-1 py-0.5 text-[0.6rem]">
+            <span className="rounded bg-muted px-1 py-0.5 text-2xs">
               reasoning
             </span>
           )}
           {!row.supported && (
-            <span className="rounded bg-muted px-1 py-0.5 text-[0.6rem] uppercase">
+            <span className="rounded bg-muted px-1 py-0.5 text-2xs uppercase">
               n/a
             </span>
           )}

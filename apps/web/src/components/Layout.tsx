@@ -2,6 +2,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useMemo } from "react";
 import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { CommandPalette } from "@/components/CommandPalette";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { ProfileRail } from "@/components/ProfileRail";
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,12 @@ import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
 import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
-  canAccessIntegrationsPage,
-  canAccessSystemPage,
   findNavItem,
-  NAV_GROUPS,
   type NavItem,
   navHrefForPage,
   PAGE_PATHS,
-  PLATFORM_ADMIN_PAGE_IDS,
   pageIdFromPath,
+  visibleNavGroups,
 } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { AgentWorkTabs } from "@/pages/automations/agent-work-tabs";
@@ -43,40 +41,19 @@ export function Layout() {
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed, toggle } = useSidebarCollapsed();
   const activeNav = findNavItem(page);
-  const navGroups = useMemo(() => {
-    const groups: typeof NAV_GROUPS = [];
-
-    for (const group of NAV_GROUPS) {
-      const items = group.items.filter((item) => {
-        if (item.id === "soul") {
-          return canAccessSystemPage(
-            user?.isPlatformAdmin === true,
-            activeOrg?.role
-          );
-        }
-
-        if (item.id === "integrations") {
-          return canAccessIntegrationsPage(activeOrg?.role);
-        }
-
-        return (
-          !PLATFORM_ADMIN_PAGE_IDS.has(item.id) ||
-          user?.isPlatformAdmin === true
-        );
-      });
-
-      if (items.length > 0) {
-        groups.push({ ...group, items });
-      }
-    }
-
-    return groups;
-  }, [activeOrg?.role, user?.isPlatformAdmin]);
+  const navGroups = useMemo(
+    () =>
+      visibleNavGroups({
+        isPlatformAdmin: user?.isPlatformAdmin === true,
+        orgRole: activeOrg?.role,
+      }),
+    [activeOrg?.role, user?.isPlatformAdmin]
+  );
 
   return (
     <TooltipProvider delay={0}>
       <ActiveChatProfileProvider>
-        <div className="flex h-svh overflow-hidden bg-background max-md:hidden">
+        <div className="flex h-svh overflow-hidden bg-background max-sm:hidden">
           <ProfileRail />
 
           <aside
@@ -194,6 +171,7 @@ export function Layout() {
         </div>
 
         <NarrowViewportNotice />
+        <CommandPalette />
       </ActiveChatProfileProvider>
     </TooltipProvider>
   );
@@ -202,16 +180,17 @@ export function Layout() {
 /**
  * The rail and sidebar cost a fixed 296px. Measured on the settings page, that
  * leaves 344px of content at 640px wide and 79px at 375px, with labels clipped
- * and the page scrolling sideways; at 768px everything fits. So below `md` we
- * say so instead of rendering a shell nobody can use.
+ * and the page scrolling sideways. Tablets at `sm` (640px) can use the shell;
+ * below that we say so instead of rendering a layout nobody can use.
  */
 function NarrowViewportNotice() {
   return (
-    <div className="hidden h-svh flex-col items-center justify-center gap-3 bg-background px-6 text-center max-md:flex">
+    <div className="hidden h-svh flex-col items-center justify-center gap-3 bg-background px-6 text-center max-sm:flex">
       <h1 className="type-page-title">This console needs a wider window</h1>
       <p className="max-w-sm text-muted-foreground text-sm">
         Profiles, tools and integrations are laid out for a screen at least
-        768px wide. Open Nakama on a desktop browser, or widen this window.
+        640px wide. Open Nakama on a tablet or desktop browser, or widen this
+        window.
       </p>
       <p className="max-w-sm text-muted-foreground text-sm">
         To chat with your agent from a phone, use the Telegram, WhatsApp or
@@ -269,7 +248,7 @@ function CollapsedOrgExpandControl({ onExpand }: { onExpand: () => void }) {
       </div>
       <Button
         aria-label="Expand sidebar"
-        className="absolute inset-0 size-9 rounded-md p-0 text-muted-foreground/70 opacity-0 transition-opacity duration-150 hover:bg-sidebar-accent/55 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        className="absolute inset-0 size-9 rounded-md p-0 text-muted-foreground opacity-0 transition-opacity duration-150 hover:bg-sidebar-accent/55 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
         onClick={onExpand}
         title="Expand sidebar"
         type="button"
@@ -286,7 +265,7 @@ function SidebarCollapseButton({ onToggle }: { onToggle: () => void }) {
     <Button
       aria-expanded
       aria-label="Collapse sidebar"
-      className="shrink-0 self-center text-muted-foreground/70 hover:text-foreground"
+      className="shrink-0 self-center text-muted-foreground hover:text-foreground"
       onClick={onToggle}
       size="icon-sm"
       title="Collapse sidebar"
@@ -348,7 +327,7 @@ function SidebarNavButton({
         {showBadge && collapsed ? (
           <span
             aria-hidden
-            className="absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-[10px] text-primary-foreground tabular-nums leading-none shadow-sm"
+            className="absolute top-0 right-0 inline-flex h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-sidebar bg-primary px-1.5 font-bold text-2xs text-primary-foreground tabular-nums leading-none shadow-sm"
           >
             {badgeLabel}
           </span>
@@ -358,7 +337,7 @@ function SidebarNavButton({
       {showBadge && !collapsed ? (
         <span
           aria-hidden
-          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground tabular-nums"
+          className="sidebar-nav-label ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 font-semibold text-2xs text-primary-foreground tabular-nums"
         >
           {badgeLabel}
         </span>

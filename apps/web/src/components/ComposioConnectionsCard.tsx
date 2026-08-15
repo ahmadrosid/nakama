@@ -105,7 +105,7 @@ function StatusPill({
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full border px-2 py-0.5 font-medium text-[11px]",
+        "shrink-0 rounded-full border px-2 py-0.5 font-medium text-2xs",
         tone === "success" &&
           "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200",
         tone === "warning" &&
@@ -155,7 +155,7 @@ function ComposioToolkitRow({
           >
             {catalog.name}
           </p>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+          <span className="shrink-0 font-mono text-2xs text-muted-foreground">
             {catalog.slug}
           </span>
         </div>

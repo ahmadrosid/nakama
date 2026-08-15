@@ -80,7 +80,7 @@ export function DataImportPreview({
             <ul className="flex flex-wrap gap-1.5">
               {preview.topLevelPaths.map((path) => (
                 <li
-                  className="rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                  className="rounded-md bg-muted px-2 py-0.5 font-mono text-2xs text-muted-foreground"
                   key={path}
                 >
                   {path}

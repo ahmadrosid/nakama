@@ -511,3 +511,191 @@ describe("profile service knowledge base", () => {
     ).rejects.toThrow(/not found/);
   });
 });
+
+describe("profile service cloneProfile", () => {
+  let tempConfigDir = "";
+
+  afterEach(async () => {
+    if (originalConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+    }
+
+    if (tempConfigDir) {
+      await rm(tempConfigDir, { force: true, recursive: true });
+      tempConfigDir = "";
+    }
+  });
+
+  async function setup() {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-clone-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const service = new ProfileService(db);
+    const source = await service.createProfile(ORG_ID, {
+      model: "anthropic:claude-sonnet-4-6",
+      name: "Research Bot",
+      systemPrompt: "You research things.",
+    });
+    return { db, service, sourceId: source.profile.id };
+  }
+
+  const soulDirOf = (profileId: string) =>
+    path.join(tempConfigDir, "orgs", ORG_ID, "profiles", profileId);
+
+  test("copies prompt, model and assignments onto a new independent id", async () => {
+    const { db, service, sourceId } = await setup();
+    const before = await service.getProfile(ORG_ID, sourceId);
+
+    const cloned = await service.cloneProfile(ORG_ID, sourceId, {});
+    const clone = cloned.profile;
+
+    expect(clone.id).not.toBe(sourceId);
+    expect(clone.name).toBe("Research Bot (copy)");
+    expect(clone.isDefault).toBe(false);
+    expect(clone.isSuper).toBe(false);
+    expect(clone.systemPrompt).toBe("You research things.");
+    expect(clone.model).toBe("anthropic:claude-sonnet-4-6");
+    expect(clone.tools.map((tool) => tool.id).sort()).toEqual(
+      before.profile.tools.map((tool) => tool.id).sort()
+    );
+    expect(await db.listSkillsForProfile(clone.id)).toHaveLength(
+      (await db.listSkillsForProfile(sourceId)).length
+    );
+  });
+
+  test("copies the soul files but leaves MEMORY.md at the template", async () => {
+    const { service, sourceId } = await setup();
+    const sourceDir = soulDirOf(sourceId);
+    await writeFile(path.join(sourceDir, "SOUL.md"), "# Source soul\n", "utf8");
+    await writeFile(
+      path.join(sourceDir, "MEMORY.md"),
+      "- remembered something private\n",
+      "utf8"
+    );
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+    const cloneDir = soulDirOf(profile.id);
+
+    expect(await readFile(path.join(cloneDir, "SOUL.md"), "utf8")).toContain(
+      "# Source soul"
+    );
+    expect(
+      await readFile(path.join(cloneDir, "MEMORY.md"), "utf8")
+    ).not.toContain("remembered something private");
+  });
+
+  test("does not share the source soul directory", async () => {
+    const { service, sourceId } = await setup();
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    await writeFile(
+      path.join(soulDirOf(profile.id), "SOUL.md"),
+      "# Edited on the clone\n",
+      "utf8"
+    );
+
+    expect(
+      await readFile(path.join(soulDirOf(sourceId), "SOUL.md"), "utf8")
+    ).not.toContain("Edited on the clone");
+  });
+
+  test("copies knowledge base documents", async () => {
+    const { service, sourceId } = await setup();
+    const kbDir = path.join(soulDirOf(sourceId), "knowledge-base");
+    await mkdir(kbDir, { recursive: true });
+    await writeFile(path.join(kbDir, "doc_1--notes.txt"), "kb body", "utf8");
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(
+      await readFile(
+        path.join(soulDirOf(profile.id), "knowledge-base", "doc_1--notes.txt"),
+        "utf8"
+      )
+    ).toBe("kb body");
+  });
+
+  test("gives each clone a unique id", async () => {
+    const { service, sourceId } = await setup();
+    const first = await service.cloneProfile(ORG_ID, sourceId, {});
+    const second = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(second.profile.id).not.toBe(first.profile.id);
+  });
+
+  test("refuses to clone Super Bot and writes nothing", async () => {
+    const { db, service } = await setup();
+    const superBot = await service.createProfile(ORG_ID, {
+      isSuper: true,
+      name: "Super Bot",
+    });
+    const countBefore = (await db.listProfilesForOrg(ORG_ID)).length;
+
+    await expect(
+      service.cloneProfile(ORG_ID, superBot.profile.id, {})
+    ).rejects.toThrow(/cannot be cloned/i);
+
+    expect(await db.listProfilesForOrg(ORG_ID)).toHaveLength(countBefore);
+  });
+
+  test("carries MCP server assignments across", async () => {
+    const { db, service, sourceId } = await setup();
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { command: "echo" },
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "Echo",
+      orgId: ORG_ID,
+      status: "disconnected",
+      transport: "stdio",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignMcpServerToProfile(sourceId, "mcp_1");
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.mcpServers.map((server) => server.id)).toEqual(["mcp_1"]);
+  });
+
+  test("copies the avatar", async () => {
+    const { service, sourceId } = await setup();
+    await service.uploadProfileAvatar(ORG_ID, sourceId, {
+      data: tinyPngBase64,
+      mediaType: "image/png",
+    });
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.hasAvatar).toBe(true);
+    await expect(
+      service.getProfileAvatar(ORG_ID, profile.id)
+    ).resolves.toBeTruthy();
+  });
+
+  test("clones the org default without the clone becoming default", async () => {
+    const { db, service, sourceId } = await setup();
+    const source = await db.getProfile(sourceId);
+    await db.upsertProfile({ ...source!, isDefault: true });
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(profile.isDefault).toBe(false);
+    expect((await db.getProfile(sourceId))?.isDefault).toBe(true);
+  });
+
+  test("404s on a missing source", async () => {
+    const { service } = await setup();
+
+    await expect(
+      service.cloneProfile(ORG_ID, "does-not-exist", {})
+    ).rejects.toThrow(/not found/i);
+  });
+});

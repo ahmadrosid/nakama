@@ -100,7 +100,7 @@ export function ImageAttachmentPreview({
       )}
       {chipPreview ? (
         <div className="min-w-0 max-w-[10rem]">
-          <p className="line-clamp-2 text-[10px] text-muted-foreground leading-snug">
+          <p className="line-clamp-2 text-2xs text-muted-foreground leading-snug">
             {chipPreview}
           </p>
         </div>
