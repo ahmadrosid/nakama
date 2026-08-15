@@ -55,7 +55,7 @@ export function createCerebrasProvider(
     baseURL: CEREBRAS_CHAT_BASE_URL,
     fetch: fetchWithoutIdleTimeout,
     maxRetries: 0,
-    timeout: 300_000,
+    timeout: 600_000,
   });
 
   const resolveThinking = (input: GenerateChatInput) => {

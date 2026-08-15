@@ -87,6 +87,15 @@ describe("formatAutomationRunError", () => {
       "Provider offline"
     );
   });
+
+  test("maps fetch deadline aborts without the raw abort text", () => {
+    const error = new Error("The operation was aborted.");
+    error.name = "TimeoutError";
+    const formatted = formatAutomationRunError(error);
+
+    expect(formatted).not.toBe(error.message);
+    expect(formatted).toContain("10");
+  });
 });
 
 describe("formatServerError", () => {

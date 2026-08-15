@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   BUN_FETCH_DISABLE_IDLE_TIMEOUT_S,
+  LLM_FETCH_TIMEOUT_MS,
   withDisabledFetchIdle,
+  withLlmFetchDeadline,
 } from "./fetch-idle";
 
 describe("withDisabledFetchIdle", () => {
@@ -11,5 +13,24 @@ describe("withDisabledFetchIdle", () => {
     expect(init.method).toBe("POST");
     expect(init.idleTimeout).toBe(BUN_FETCH_DISABLE_IDLE_TIMEOUT_S);
     expect(init.idleTimeout).toBe(0);
+  });
+});
+
+describe("withLlmFetchDeadline", () => {
+  test("attaches a deadline signal when the caller omitted one", () => {
+    const init = withLlmFetchDeadline({ method: "POST" });
+
+    expect(init.idleTimeout).toBe(0);
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal?.aborted).toBe(false);
+    expect(LLM_FETCH_TIMEOUT_MS).toBe(600_000);
+  });
+
+  test("aborts when the caller signal is already aborted", () => {
+    const caller = new AbortController();
+    caller.abort();
+    const init = withLlmFetchDeadline({ signal: caller.signal });
+
+    expect(init.signal?.aborted).toBe(true);
   });
 });
