@@ -59,8 +59,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  filterSkillsForSlashQuery,
+  type ComposerSlashSuggestion,
+  filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
+  replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
 } from "@/lib/chat-composer-skills";
@@ -363,13 +365,11 @@ function ChatComposerTextarea({
   const suggestions = useMemo(
     () =>
       slashRange
-        ? filterSkillsForSlashQuery(availableSkills, slashRange.query)
+        ? filterComposerSlashSuggestions(availableSkills, slashRange.query)
         : [],
     [availableSkills, slashRange]
   );
-  const pickerOpen = Boolean(
-    slashRange && availableSkills.length > 0 && !disabled
-  );
+  const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
   const safeActiveIndex =
     suggestions.length === 0
       ? 0
@@ -380,8 +380,8 @@ function ChatComposerTextarea({
     setActiveIndex(0);
   }, []);
 
-  const selectSkill = useCallback(
-    (skill: SkillSummary) => {
+  const selectSuggestion = useCallback(
+    (suggestion: ComposerSlashSuggestion) => {
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
@@ -392,11 +392,18 @@ function ChatComposerTextarea({
         return;
       }
 
-      const next = replaceSlashRangeWithSkillInvocation(
-        value,
-        activeRange,
-        skill
-      );
+      const next =
+        suggestion.kind === "command"
+          ? replaceSlashRangeWithReservedCommand(
+              value,
+              activeRange,
+              suggestion.command
+            )
+          : replaceSlashRangeWithSkillInvocation(
+              value,
+              activeRange,
+              suggestion.skill
+            );
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);
@@ -422,8 +429,8 @@ function ChatComposerTextarea({
       {pickerOpen ? (
         <ChatSkillPicker
           activeIndex={safeActiveIndex}
-          onSelect={selectSkill}
-          skills={suggestions}
+          onSelect={selectSuggestion}
+          suggestions={suggestions}
         />
       ) : null}
       <PromptInputTextarea
@@ -468,9 +475,9 @@ function ChatComposerTextarea({
 
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            const skill = suggestions[safeActiveIndex];
-            if (skill) {
-              selectSkill(skill);
+            const suggestion = suggestions[safeActiveIndex];
+            if (suggestion) {
+              selectSuggestion(suggestion);
             }
           }
         }}

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
+  filterComposerSlashSuggestions,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
   getSkillTokenRanges,
+  replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
 } from "./chat-composer-skills";
 
@@ -105,6 +107,32 @@ describe("filterSkillsForSlashQuery", () => {
   });
 });
 
+describe("filterComposerSlashSuggestions", () => {
+  test("lists reserved /learn ahead of skills", () => {
+    expect(
+      filterComposerSlashSuggestions([weatherSkill], "").map((item) =>
+        item.kind === "command" ? item.command.name : item.skill.name
+      )
+    ).toEqual(["learn", "weather"]);
+  });
+
+  test("matches /learn by name without treating it as a skill", () => {
+    const suggestions = filterComposerSlashSuggestions(
+      [weatherSkill, deploySkill],
+      "lea"
+    );
+    expect(suggestions).toEqual([
+      {
+        command: {
+          description: "Distill a reusable skill from sources",
+          name: "learn",
+        },
+        kind: "command",
+      },
+    ]);
+  });
+});
+
 describe("replaceSlashRangeWithSkillInvocation", () => {
   test("replaces only the active slash range", () => {
     const range = findActiveSkillSlashRange("please /we tomorrow", 10);
@@ -119,6 +147,22 @@ describe("replaceSlashRangeWithSkillInvocation", () => {
     ).toEqual({
       cursorIndex: 22,
       value: "please /skill weather  tomorrow",
+    });
+  });
+});
+
+describe("replaceSlashRangeWithReservedCommand", () => {
+  test("inserts /learn without the /skill prefix", () => {
+    const range = findActiveSkillSlashRange("/lea", 4);
+    expect(range).not.toBeNull();
+
+    expect(
+      replaceSlashRangeWithReservedCommand("/lea", range!, {
+        name: "learn",
+      })
+    ).toEqual({
+      cursorIndex: 7,
+      value: "/learn ",
     });
   });
 });

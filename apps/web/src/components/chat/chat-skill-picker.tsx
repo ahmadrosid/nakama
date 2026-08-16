@@ -1,11 +1,12 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import { CheckmarkCircle01Icon, SparklesIcon } from "hugeicons-react";
+import type { ComposerSlashSuggestion } from "@/lib/chat-composer-skills";
 import { cn } from "@/lib/utils";
 
 interface ChatSkillPickerProps {
   activeIndex: number;
-  onSelect: (skill: SkillSummary) => void;
-  skills: SkillSummary[];
+  onSelect: (suggestion: ComposerSlashSuggestion) => void;
+  suggestions: ComposerSlashSuggestion[];
 }
 
 function skillDescription(skill: SkillSummary): string | null {
@@ -31,26 +32,51 @@ function skillMeta(skill: SkillSummary): string | null {
   return parts.join(" · ") || null;
 }
 
+function suggestionKey(suggestion: ComposerSlashSuggestion): string {
+  return suggestion.kind === "command"
+    ? `command:${suggestion.command.name}`
+    : `skill:${suggestion.skill.id}`;
+}
+
+function suggestionTitle(suggestion: ComposerSlashSuggestion): string {
+  return suggestion.kind === "command"
+    ? `/${suggestion.command.name}`
+    : suggestion.skill.name;
+}
+
+function suggestionDescription(
+  suggestion: ComposerSlashSuggestion
+): string | null {
+  if (suggestion.kind === "command") {
+    return suggestion.command.description;
+  }
+
+  return skillDescription(suggestion.skill);
+}
+
 export function ChatSkillPicker({
-  skills,
+  suggestions,
   activeIndex,
   onSelect,
 }: ChatSkillPickerProps) {
   return (
     <div
-      aria-label="Available skills"
+      aria-label="Available slash commands and skills"
       className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
       role="listbox"
     >
-      {skills.length === 0 ? (
+      {suggestions.length === 0 ? (
         <div className="px-3 py-2 text-muted-foreground text-sm">
           No matching skills
         </div>
       ) : (
-        skills.map((skill, index) => {
+        suggestions.map((suggestion, index) => {
           const active = index === activeIndex;
-          const description = skillDescription(skill);
-          const meta = skillMeta(skill);
+          const description = suggestionDescription(suggestion);
+          const meta =
+            suggestion.kind === "skill"
+              ? skillMeta(suggestion.skill)
+              : "command";
 
           return (
             <button
@@ -59,10 +85,10 @@ export function ChatSkillPicker({
                 "flex w-full min-w-0 items-center gap-3 rounded-sm px-3 py-2 text-left text-sm outline-none",
                 active ? "bg-muted text-foreground" : "hover:bg-muted/70"
               )}
-              key={skill.id}
+              key={suggestionKey(suggestion)}
               onMouseDown={(event) => {
                 event.preventDefault();
-                onSelect(skill);
+                onSelect(suggestion);
               }}
               role="option"
               type="button"
@@ -73,7 +99,7 @@ export function ChatSkillPicker({
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium leading-tight">
-                  {skill.name}
+                  {suggestionTitle(suggestion)}
                 </span>
                 {description ? (
                   <span className="mt-0.5 line-clamp-1 text-muted-foreground text-xs leading-snug">

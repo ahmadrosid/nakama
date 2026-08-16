@@ -12,6 +12,15 @@ export interface SkillTokenRange {
   start: number;
 }
 
+export interface ReservedSlashCommand {
+  description: string;
+  name: string;
+}
+
+export type ComposerSlashSuggestion =
+  | { kind: "command"; command: ReservedSlashCommand }
+  | { kind: "skill"; skill: SkillSummary };
+
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
 const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
   "create-automation",
@@ -20,6 +29,14 @@ const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
   "archive-profile-memory",
   "save-artifact",
 ]);
+
+/** Composer slash tokens that are not skill names (must not become `/skill …`). */
+export const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
+  {
+    description: "Distill a reusable skill from sources",
+    name: "learn",
+  },
+];
 
 export function findActiveSkillSlashRange(
   value: string,
@@ -50,6 +67,22 @@ export function findActiveSkillSlashRange(
   };
 }
 
+export function filterReservedSlashCommands(
+  query: string
+): ReservedSlashCommand[] {
+  const normalized = query.trim().toLowerCase();
+
+  if (!normalized) {
+    return [...RESERVED_COMPOSER_SLASH_COMMANDS];
+  }
+
+  return RESERVED_COMPOSER_SLASH_COMMANDS.filter((command) => {
+    const name = command.name.toLowerCase();
+    const description = command.description.toLowerCase();
+    return name.includes(normalized) || description.includes(normalized);
+  });
+}
+
 export function filterSkillsForSlashQuery(
   skills: SkillSummary[],
   query: string
@@ -70,6 +103,24 @@ export function filterSkillsForSlashQuery(
   });
 }
 
+export function filterComposerSlashSuggestions(
+  skills: SkillSummary[],
+  query: string
+): ComposerSlashSuggestion[] {
+  const commands = filterReservedSlashCommands(query).map((command) => ({
+    command,
+    kind: "command" as const,
+  }));
+  const skillSuggestions = filterSkillsForSlashQuery(skills, query).map(
+    (skill) => ({
+      kind: "skill" as const,
+      skill,
+    })
+  );
+
+  return [...commands, ...skillSuggestions];
+}
+
 export function replaceSlashRangeWithSkillInvocation(
   value: string,
   range: SkillSlashRange,
@@ -80,6 +131,20 @@ export function replaceSlashRangeWithSkillInvocation(
 
   return {
     cursorIndex: range.start + invocation.length,
+    value: nextValue,
+  };
+}
+
+export function replaceSlashRangeWithReservedCommand(
+  value: string,
+  range: SkillSlashRange,
+  command: Pick<ReservedSlashCommand, "name">
+): { value: string; cursorIndex: number } {
+  const insertion = `/${command.name} `;
+  const nextValue = `${value.slice(0, range.start)}${insertion}${value.slice(range.end)}`;
+
+  return {
+    cursorIndex: range.start + insertion.length,
     value: nextValue,
   };
 }

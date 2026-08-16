@@ -5,6 +5,7 @@ import {
   createAgentHarness,
   draftTaskPromptFromFields,
   executeToolCall,
+  expandLearnUserContent,
   suggestToolParamsFromPrompt,
 } from "@nakama/agent";
 import type {
@@ -3143,6 +3144,11 @@ export class AgentService {
           content,
           saveAttachment
         );
+
+        // Interactive web/cli only — messaging channels do not get skill_manage.
+        if (includeSkillManageTools && hasSkillManage) {
+          content = expandLearnUserContent(content);
+        }
 
         if (!messageContentHasImages(content)) {
           return content;

@@ -140,6 +140,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { description: "compact conversation history", name: "/compact" },
   { description: "show server and model status", name: "/status" },
   { description: "draft an automation", name: "/create" },
+  { description: "distill a reusable skill from sources", name: "/learn" },
   { description: "show or initialize profile soul files", name: "/soul" },
   { description: "show or initialize USER.md", name: "/user" },
   { description: "choose a model", name: "/models" },
@@ -155,6 +156,7 @@ const COMMANDS_WITH_ARGS = new Set([
   "/thinking",
   "/profile",
   "/create",
+  "/learn",
   "/soul",
   "/user",
 ]);

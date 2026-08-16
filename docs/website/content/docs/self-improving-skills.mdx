@@ -29,9 +29,10 @@ Complex task succeeds  →  Agent saves a skill (or review suggests one)  →  S
 ```
 
 1. **During chat** — after a hard problem, recovery, or correction, the agent may offer to save the approach as a skill (for example, a deploy checklist or support triage flow).
-2. **After complex turns (optional)** — when **post-turn skill review** is on, Nakama may review the finished turn in the background and either show an **Apply** suggestion in chat or stage a proposal for an org admin.
-3. **On later turns** — when someone asks for something similar, Nakama can load that skill and follow the saved steps.
-4. **Optional gate** — if write approval is on, skill changes wait in a proposal queue until an org admin approves or rejects them.
+2. **On demand with `/learn`** — when you already know the material (notes, a docs URL, a local folder, or “what we just did”), type `/learn …` in web or CLI chat to turn it into a skill now. See [Learn from sources](#learn-from-sources).
+3. **After complex turns (optional)** — when **post-turn skill review** is on, Nakama may review the finished turn in the background and either show an **Apply** suggestion in chat or stage a proposal for an org admin.
+4. **On later turns** — when someone asks for something similar, Nakama can load that skill and follow the saved steps.
+5. **Optional gate** — if write approval is on, skill changes wait in a proposal queue until an org admin approves or rejects them.
 
 Skills hold **procedures** (how to do something). Profile memory holds **facts** about the user (preferences, context). Keep preferences in memory; keep repeatable workflows in skills.
 
@@ -47,6 +48,29 @@ Skills hold **procedures** (how to do something). Profile memory holds **facts**
 Org **viewers** can read chat but cannot run agents, so they cannot trigger skill updates or Apply suggestions.
 
 Default and Super Bot profiles include the skill-authoring capability after sync. Other profiles need the **manage-skills** skill assigned — see [Skills](/skills).
+
+## Learn from sources {#learn-from-sources}
+
+Crystallization captures a workflow **after** a hard turn. **`/learn`** is the explicit “turn *this* into a skill now” path when you already have the material.
+
+In **web** or **CLI** chat (not Telegram, WhatsApp, Discord, or automations), type:
+
+```text
+/learn filing an expense: open the portal, New > Expense, attach the receipt, submit
+/learn https://docs.example.com/api/quickstart
+/learn how I just deployed the staging server
+/learn the REST client in my project docs, focus on auth + pagination
+```
+
+What happens:
+
+1. Nakama expands `/learn` into a standards-guided turn (same house rules as hand-authored skills).
+2. The agent gathers sources with tools it already has (`read_file`, `search_files`, `web_fetch`, or the current conversation).
+3. It saves through `skill_manage` (create or patch). If **write approval** is on, that stages a proposal for an org admin — same gate as other agent skill writes.
+
+Large books or doc corpora become a lean `SKILL.md` plus `references/` files (and/or the knowledge base), not one giant skill body. Re-running `/learn` on the same topic should update the existing skill instead of creating a near-duplicate.
+
+In the web composer, `/` lists **`/learn`** as a reserved command so it is not treated as a skill name. In the CLI, `/learn` appears in slash autocomplete the same way.
 
 ## Write approval (optional)
 
