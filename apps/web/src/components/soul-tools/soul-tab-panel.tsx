@@ -340,7 +340,7 @@ function FileStatusListItem({
 
         <ArrowRight01Icon
           aria-hidden
-          className="size-4 shrink-0 text-muted-foreground/50 transition group-hover:text-muted-foreground"
+          className="size-4 shrink-0 text-muted-foreground transition group-hover:text-muted-foreground"
         />
       </button>
     </li>

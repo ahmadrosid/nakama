@@ -76,7 +76,7 @@ export function ProfileComposioSection({
                 </div>
                 <Button
                   aria-label={`Remove ${toolkit.displayName}`}
-                  className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
                   disabled={busy}
                   onClick={() =>
                     onRemove({

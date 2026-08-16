@@ -158,7 +158,7 @@ function QueuedRow({
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <QueuedStatusIcon />
-      <span className="min-w-0 truncate text-muted-foreground/50">{label}</span>
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
     </li>
   );
 }

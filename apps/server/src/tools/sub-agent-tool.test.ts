@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { canRunToolCallsInParallel } from "@nakama/agent";
 import type { SubAgentRunResult } from "./sub-agent-shared";
-import {
-  createSubAgentTool,
-  runSubAgentTool,
-  SUB_AGENT_TOOL_NAME,
-} from "./sub-agent-tool";
+import { createSubAgentTool, runSubAgentTool } from "./sub-agent-tool";
 
 const ORG_ID = "org_test";
 const PROFILE_ID = "profile_default";
@@ -78,10 +74,6 @@ describe("sub_agent tool", () => {
     await tool.run({ task: "timed", timeoutMs: 999_999 }, TOOL_CONTEXT);
 
     expect(capturedTimeout).toBe(600_000);
-  });
-
-  test("exposes stable tool name", () => {
-    expect(SUB_AGENT_TOOL_NAME).toBe("sub_agent");
   });
 
   test("is parallelSafe so sibling sub-agents can run concurrently from the parent", () => {

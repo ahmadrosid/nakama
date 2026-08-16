@@ -715,7 +715,7 @@ function DetailBlock({
     >
       <div
         className={cn(
-          "border-b px-3 py-1.5 font-medium text-[10px] uppercase tracking-[0.08em]",
+          "border-b px-3 py-1.5 font-medium text-2xs uppercase tracking-[0.08em]",
           tone === "error"
             ? "border-red-300/70 text-red-600 dark:border-red-900/70 dark:text-red-400"
             : "border-border/70 text-muted-foreground"

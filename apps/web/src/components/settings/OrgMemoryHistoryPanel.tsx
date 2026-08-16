@@ -185,11 +185,11 @@ function HistoryTimelineItem({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-[0.65rem] text-muted-foreground uppercase tracking-[0.08em]">
+                <span className="font-semibold text-2xs text-muted-foreground uppercase tracking-[0.08em]">
                   {formatActionLabel(change.action)}
                 </span>
                 {isCurrent ? (
-                  <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-[0.65rem] text-foreground">
+                  <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-2xs text-foreground">
                     Current
                   </span>
                 ) : null}

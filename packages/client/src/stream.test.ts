@@ -109,6 +109,41 @@ describe("readStreamEvents", () => {
     expect(usages).toEqual([{ source: "provider", usedTokens: 1200 }]);
   });
 
+  test("treats a caller abort as AbortError instead of an incomplete stream", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      readStreamEvents(
+        streamFromChunks(['data: {"type":"thinking","delta":"hmm"}\n\n']),
+        { onChunk: () => {} },
+        controller.signal
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  test("aborts an open stream without reporting a missing reply", async () => {
+    const controller = new AbortController();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(streamController) {
+        streamController.enqueue(
+          encoder.encode('data: {"type":"thinking","delta":"hmm"}\n\n')
+        );
+      },
+    });
+
+    const pending = readStreamEvents(
+      stream,
+      { onChunk: () => {} },
+      controller.signal
+    );
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   test("surfaces server error events", async () => {
     await expect(
       readStreamEvents(

@@ -74,7 +74,7 @@ export function ProfileMcpSection({
               </div>
               <Button
                 aria-label={`Delete ${server.name}`}
-                className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
                 disabled={busy}
                 onClick={() =>
                   onRemove({ id: server.id, kind: "mcp", name: server.name })

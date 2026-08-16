@@ -51,7 +51,7 @@ export function SidebarUserMenu() {
       className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/55 hover:text-foreground"
       type="button"
     >
-      <span className="flex size-7 items-center justify-center rounded-md bg-muted font-semibold text-[11px] text-foreground">
+      <span className="flex size-7 items-center justify-center rounded-md bg-muted font-semibold text-2xs text-foreground">
         {initial}
       </span>
     </button>

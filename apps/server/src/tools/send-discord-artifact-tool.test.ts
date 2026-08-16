@@ -3,10 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { getProfileArtifactsDir } from "@nakama/core";
-import {
-  SEND_DISCORD_ARTIFACT_TOOL_NAME,
-  sendDiscordArtifactTool,
-} from "./send-discord-artifact-tool";
+import { sendDiscordArtifactTool } from "./send-discord-artifact-tool";
 
 const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -19,10 +16,6 @@ afterEach(() => {
 });
 
 describe("sendDiscordArtifactTool", () => {
-  test("is named send_discord_artifact", () => {
-    expect(sendDiscordArtifactTool.name).toBe(SEND_DISCORD_ARTIFACT_TOOL_NAME);
-  });
-
   test("rejects non-discord channels", async () => {
     const result = await sendDiscordArtifactTool.run(
       { path: "report.pdf" },

@@ -17,6 +17,7 @@ import type {
   BranchSessionResponse,
   ChatContextUsage,
   ChatMessage,
+  CloneProfileRequest,
   CompactionResponse,
   ComposioSettingsResponse,
   ConfigureProviderRequest,
@@ -40,6 +41,7 @@ import type {
   ImageGenerationSettingsResponse,
   InitSoulResponse,
   InitUserContextResponse,
+  InstallSkillRequest,
   ListArtifactsOptions,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
@@ -2566,11 +2568,26 @@ export class AgentService {
     return this.requireSkillsService().getSkill(skillId);
   }
 
+  async cloneProfile(
+    orgId: string,
+    sourceId: string,
+    request: CloneProfileRequest
+  ): Promise<ProfileResponse> {
+    return this.profileService.cloneProfile(orgId, sourceId, request);
+  }
+
   async createSkill(
     orgId: string,
     request: CreateSkillRequest
   ): Promise<SkillResponse> {
     return this.requireSkillsService().createSkill(orgId, request);
+  }
+
+  async installSkillFromGitHub(
+    orgId: string,
+    request: InstallSkillRequest
+  ): Promise<SkillResponse> {
+    return this.requireSkillsService().installSkillFromGitHub(orgId, request);
   }
 
   async patchSkill(

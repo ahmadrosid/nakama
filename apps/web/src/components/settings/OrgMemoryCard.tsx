@@ -104,7 +104,7 @@ function OrgMemoryPinnedContent({ pinned }: { pinned: string[] }) {
       </div>
 
       <div className="min-w-0 flex-1 space-y-3 pb-1">
-        <p className="font-semibold text-[0.65rem] text-muted-foreground uppercase tracking-[0.08em]">
+        <p className="font-semibold text-2xs text-muted-foreground uppercase tracking-[0.08em]">
           PINNED
         </p>
 

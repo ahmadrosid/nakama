@@ -328,7 +328,7 @@ export function TaskRunHistoryPanel({
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span
               className={cn(
-                "rounded-full px-2 py-0.5 font-medium text-[11px]",
+                "rounded-full px-2 py-0.5 font-medium text-2xs",
                 statusBadge.className
               )}
             >

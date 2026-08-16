@@ -36,6 +36,16 @@ export function isActiveTurnConflict(error: unknown): boolean {
   );
 }
 
+function abortError(): DOMException {
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+
 /**
  * Cancelling a turn aborts the fetch, but the server only learns the client is
  * gone once the socket closes, measured at 30 to 45ms on loopback. A message
@@ -159,6 +169,8 @@ export async function readStreamEvents(
     return doneReply;
   }
 
+  throwIfAborted(signal);
+
   if (!reply) {
     throw new Error(
       sawDataEvent
@@ -209,6 +221,8 @@ export async function readAgentBrowserInstallStream(
     return doneStatus;
   }
 
+  throwIfAborted(signal);
+
   if (status) {
     return status;
   }
@@ -235,8 +249,13 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
   };
 
   signal?.addEventListener("abort", abortReader, { once: true });
+  if (signal?.aborted) {
+    abortReader();
+  }
 
   try {
+    throwIfAborted(signal);
+
     while (true) {
       if (Date.now() - lastDataAt >= idleMs) {
         throw new Error(
@@ -280,13 +299,9 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
       }
     }
 
-    if (signal?.aborted) {
-    }
+    throwIfAborted(signal);
   } catch (error) {
-    if (signal?.aborted) {
-      return;
-    }
-
+    throwIfAborted(signal);
     throw error;
   } finally {
     signal?.removeEventListener("abort", abortReader);

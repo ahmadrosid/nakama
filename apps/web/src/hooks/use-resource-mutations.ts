@@ -94,6 +94,22 @@ export function useUpdateProfileMutation() {
   });
 }
 
+export function useCloneProfileMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (profileId: string) => client.cloneProfile(profileId),
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.soul.profile(data.profile.id),
+        }),
+      ]);
+    },
+  });
+}
+
 export function useDeleteProfileMutation() {
   const queryClient = useQueryClient();
 
@@ -316,6 +332,24 @@ export function useCreateSkillMutation() {
       client.createSkill(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
+    },
+  });
+}
+
+export function useInstallSkillMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.installSkill>[0]) =>
+      client.installSkill(input),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profiles.detail(variables.profileId),
+        }),
+      ]);
     },
   });
 }

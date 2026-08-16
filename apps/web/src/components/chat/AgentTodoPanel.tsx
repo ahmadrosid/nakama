@@ -154,7 +154,7 @@ function TodoRow({ todo, index }: { todo: AgentTodo; index: number }) {
             ? "text-muted-foreground"
             : todo.status === "in_progress"
               ? "todo-shimmer-text text-foreground"
-              : "text-muted-foreground/50"
+              : "text-muted-foreground"
         )}
       >
         {todo.content}

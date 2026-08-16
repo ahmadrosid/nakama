@@ -102,7 +102,7 @@ export function ProfileToolsSection({
                   ) : null}
                   <Button
                     aria-label={`Delete ${tool.name}`}
-                    className="relative text-muted-foreground/60 transition-colors duration-150 ease-out after:absolute after:-inset-x-1.5 after:-inset-y-1 hover:text-destructive"
+                    className="relative text-muted-foreground transition-colors duration-150 ease-out after:absolute after:-inset-x-1.5 after:-inset-y-1 hover:text-destructive"
                     disabled={busy}
                     onClick={() =>
                       onRemove({ id: tool.id, kind: "tool", name: tool.name })

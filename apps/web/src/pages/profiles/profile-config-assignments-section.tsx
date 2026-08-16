@@ -28,6 +28,7 @@ export function ProfileConfigAssignmentsSection({
     allSkills,
     assignedSkillIds,
     setSkillCreateOpen,
+    setSkillInstallOpen,
     handleAssignSkill,
     handleDeleteSkill,
     selectedId,
@@ -73,6 +74,7 @@ export function ProfileConfigAssignmentsSection({
         onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
         onCreateOpen={() => setSkillCreateOpen(true)}
         onDelete={handleDeleteSkill}
+        onInstallOpen={() => setSkillInstallOpen(true)}
         onRemove={setRemoveConfirm}
         onViewDetail={(skillId) => {
           navigateToSkillDetail(skillId, {

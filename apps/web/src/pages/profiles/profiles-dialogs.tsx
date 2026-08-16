@@ -1,5 +1,6 @@
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import { SkillCreateDialog } from "@/components/SkillCreateDialog";
+import { SkillInstallDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,10 +24,14 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     setSelectedId,
     skillCreateOpen,
     setSkillCreateOpen,
+    skillInstallOpen,
+    setSkillInstallOpen,
     createSkillMutation,
+    installSkillMutation,
     assignSkillMutation,
     selectedId,
     handleCreateSkill,
+    handleInstallSkill,
     busy,
     setRemoveConfirm,
     mcpCreateOpen,
@@ -68,6 +73,14 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         onOpenChange={setSkillCreateOpen}
         onSubmit={handleCreateSkill}
         open={skillCreateOpen}
+        profileId={selectedId}
+      />
+
+      <SkillInstallDialog
+        busy={installSkillMutation.isPending}
+        onOpenChange={setSkillInstallOpen}
+        onSubmit={handleInstallSkill}
+        open={skillInstallOpen}
         profileId={selectedId}
       />
 

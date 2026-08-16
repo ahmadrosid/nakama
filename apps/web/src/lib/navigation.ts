@@ -158,6 +158,38 @@ export function canAccessIntegrationsPage(
 
 export const canUseToolPlayground = canAccessSystemPage;
 
+/**
+ * Nav groups this user can actually reach, empty groups dropped. The sidebar and
+ * the command palette both read this, so the palette cannot offer a destination
+ * the sidebar hides.
+ */
+export function visibleNavGroups(access: {
+  isPlatformAdmin: boolean;
+  orgRole: string | undefined;
+}): NavGroup[] {
+  const groups: NavGroup[] = [];
+
+  for (const group of NAV_GROUPS) {
+    const items = group.items.filter((item) => {
+      if (item.id === "soul") {
+        return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
+      }
+
+      if (item.id === "integrations") {
+        return canAccessIntegrationsPage(access.orgRole);
+      }
+
+      return !PLATFORM_ADMIN_PAGE_IDS.has(item.id) || access.isPlatformAdmin;
+    });
+
+    if (items.length > 0) {
+      groups.push({ ...group, items });
+    }
+  }
+
+  return groups;
+}
+
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 

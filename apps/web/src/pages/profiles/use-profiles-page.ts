@@ -1,6 +1,7 @@
 import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
+  InstallSkillRequest,
 } from "@nakama/core/contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -21,11 +22,13 @@ import {
   useAssignMcpServerMutation,
   useAssignSkillMutation,
   useAssignToolMutation,
+  useCloneProfileMutation,
   useCreateMcpServerMutation,
   useCreateSkillMutation,
   useDeleteProfileAvatarMutation,
   useDeleteProfileMutation,
   useDeleteSkillMutation,
+  useInstallSkillMutation,
   useUnassignMcpServerMutation,
   useUnassignSkillMutation,
   useUnassignToolMutation,
@@ -77,6 +80,7 @@ export function useProfilesPage() {
     refetch: refetchDetail,
   } = useProfileQuery(selectedId);
   const updateMutation = useUpdateProfileMutation();
+  const cloneProfileMutation = useCloneProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const deleteAvatarMutation = useDeleteProfileAvatarMutation();
@@ -86,6 +90,7 @@ export function useProfilesPage() {
   const unassignMcpMutation = useUnassignMcpServerMutation();
   const createMcpMutation = useCreateMcpServerMutation();
   const createSkillMutation = useCreateSkillMutation();
+  const installSkillMutation = useInstallSkillMutation();
   const assignSkillMutation = useAssignSkillMutation();
   const unassignSkillMutation = useUnassignSkillMutation();
   const deleteSkillMutation = useDeleteSkillMutation();
@@ -99,6 +104,7 @@ export function useProfilesPage() {
     useState<RemoveAssignmentTarget | null>(null);
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [skillCreateOpen, setSkillCreateOpen] = useState(false);
+  const [skillInstallOpen, setSkillInstallOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -154,6 +160,7 @@ export function useProfilesPage() {
     unassignMcpMutation.isPending ||
     createMcpMutation.isPending ||
     createSkillMutation.isPending ||
+    installSkillMutation.isPending ||
     assignSkillMutation.isPending ||
     unassignSkillMutation.isPending ||
     deleteSkillMutation.isPending ||
@@ -602,6 +609,17 @@ export function useProfilesPage() {
     }
   }
 
+  async function handleCloneProfile(profileId: string) {
+    setError(null);
+
+    try {
+      const response = await cloneProfileMutation.mutateAsync(profileId);
+      setSelectedId(response.profile.id);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDeleteConfirm() {
     const profileId = deleteTargetId;
     const profile = profileId
@@ -728,6 +746,23 @@ export function useProfilesPage() {
         skillId: response.skill.id,
       });
       setSkillCreateOpen(false);
+    } catch (err) {
+      const message = formatError(err);
+      setError(message);
+      throw new Error(message);
+    }
+  }
+
+  async function handleInstallSkill(request: InstallSkillRequest) {
+    if (!selectedId) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await installSkillMutation.mutateAsync(request);
+      setSkillInstallOpen(false);
     } catch (err) {
       const message = formatError(err);
       setError(message);
@@ -876,6 +911,7 @@ export function useProfilesPage() {
     availableTools,
     avatarInputRef,
     busy,
+    cloneProfileMutation,
     composioToolkitsData,
     createMcpMutation,
     createOpen,
@@ -900,6 +936,7 @@ export function useProfilesPage() {
     handleAssignTool,
     handleAvatarRemove,
     handleAvatarSelected,
+    handleCloneProfile,
     handleCreateMcpServer,
     handleCreateOpenChange,
     handleCreateSkill,
@@ -909,8 +946,10 @@ export function useProfilesPage() {
     handleEditModelChange,
     handleEditNameChange,
     handleEditPromptChange,
+    handleInstallSkill,
     handleRemoveAssignmentConfirm,
     handleSelectProfile,
+    installSkillMutation,
     isDirty,
     mcpCreateOpen,
     modelInCatalog,
@@ -934,7 +973,9 @@ export function useProfilesPage() {
     setRemoveConfirm,
     setSelectedId,
     setSkillCreateOpen,
+    setSkillInstallOpen,
     skillCreateOpen,
+    skillInstallOpen,
     unassignMcpMutation,
     unassignMutation,
     unassignSkillMutation,

@@ -1,4 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { getDiscordConfigDir, getDiscordConfigPath } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationRunner } from "../services/automation-runner";
 import { AutomationService } from "../services/automation-service";
@@ -321,5 +325,77 @@ describe("list_previous_automation_runs tool", () => {
     await expect(tool.run({}, TOOL_CONTEXT as never)).rejects.toThrow(
       "automationId is required."
     );
+  });
+});
+
+describe("create_automation tool", () => {
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
+  afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+  });
+
+  test("persists discord delivery and optional channelId", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-tool-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    await mkdir(getDiscordConfigDir(), { recursive: true });
+    await writeFile(
+      getDiscordConfigPath(),
+      "bot_token=test-token\npaired_user_ids=123456789012345678\n",
+      "utf8"
+    );
+
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "unused",
+    } as never);
+    const tool = createAutomationTools(service, runner).find(
+      (entry) => entry.name === "create_automation"
+    );
+
+    if (!tool) {
+      throw new Error("create_automation tool not found");
+    }
+
+    const created = (await tool.run(
+      {
+        delivery: { channel: "discord" },
+        description: "Digest",
+        name: "Discord digest",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      TOOL_CONTEXT as never
+    )) as { delivery: unknown; id: string };
+
+    expect(created.delivery).toEqual({ channel: "discord" });
+
+    const withChannel = (await tool.run(
+      {
+        delivery: {
+          channel: "discord",
+          channelId: "987654321098765432",
+        },
+        description: "Channel digest",
+        name: "Discord channel digest",
+        prompt: "Summarize news",
+        trigger: { type: "manual" },
+      },
+      TOOL_CONTEXT as never
+    )) as { delivery: unknown };
+
+    expect(withChannel.delivery).toEqual({
+      channel: "discord",
+      channelId: "987654321098765432",
+    });
+
+    await rm(configDir, { force: true, recursive: true });
   });
 });

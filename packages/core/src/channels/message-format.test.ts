@@ -27,6 +27,14 @@ describe("truncateForChannel", () => {
     expect(truncated.length).toBeLessThan(5000);
     expect(truncated).toContain("truncated");
   });
+
+  test("truncates long discord messages to 2000", () => {
+    const text = "x".repeat(2500);
+    const truncated = truncateForChannel(text, "discord");
+
+    expect(truncated.length).toBeLessThanOrEqual(2000);
+    expect(truncated).toContain("truncated");
+  });
 });
 
 describe("splitTelegramChunks", () => {

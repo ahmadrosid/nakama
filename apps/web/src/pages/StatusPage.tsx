@@ -225,7 +225,7 @@ function LlmUsageSection({
           <div className="flex items-center gap-2">
             <h2 className="type-section-title">LLM usage</h2>
             {usage.providerConfigured ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-[11px] text-emerald-700 dark:text-emerald-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-2xs text-emerald-700 dark:text-emerald-300">
                 <span
                   aria-hidden
                   className="size-1.5 rounded-full bg-emerald-500"
@@ -441,7 +441,7 @@ function CompactUsageStat({
     <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
       <div className="flex items-center gap-2">
         <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <p className="text-[11px] text-muted-foreground uppercase tracking-[0.12em]">
+        <p className="text-2xs text-muted-foreground uppercase tracking-[0.12em]">
           {label}
         </p>
       </div>
@@ -519,7 +519,7 @@ function UsageInlineMetric({
     <div
       className={cn("min-w-0", align === "right" ? "text-right" : undefined)}
     >
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-2xs text-muted-foreground">{label}</p>
       <p className="truncate font-semibold text-foreground text-sm tabular-nums">
         {value}
       </p>

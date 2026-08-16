@@ -113,7 +113,7 @@ export function ProviderInstanceCard({
         <td className="px-3 py-2.5 align-middle">
           {endpoint ? (
             <p
-              className="max-w-[18rem] truncate font-mono text-[11px] text-foreground/80"
+              className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
               title={endpoint}
             >
               {endpoint}

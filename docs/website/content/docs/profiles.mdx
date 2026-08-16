@@ -193,6 +193,17 @@ Create separate profiles when you need different:
 - Knowledge bases
 - Models
 
+## Clone a profile
+
+Tuning an agent and then wanting a close variant is common, so **System → Profiles** has a **Clone** button on the selected profile. It creates `{name} (copy)` in the same organization and selects it.
+
+The clone gets its own soul directory, avatar and knowledge base, and starts with the same system prompt, model, tools, skills, MCP servers and Composio toolkits as the source. It never becomes the organization default.
+
+Two things are deliberately not carried over:
+
+- `MEMORY.md` starts empty, so the clone does not inherit the source's continuity
+- Super Bot cannot be cloned, the same rule that stops it being deleted
+
 ## Next steps
 
 - [Builtin tools](/builtin-tools) — what each profile can do

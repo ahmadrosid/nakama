@@ -160,7 +160,7 @@ function DailyChart({ days }: { days: Day[] }) {
             return (
               <span
                 className={cn(
-                  "absolute whitespace-nowrap text-[10px] text-muted-foreground tabular-nums",
+                  "absolute whitespace-nowrap text-2xs text-muted-foreground tabular-nums",
                   isFirst && "left-0",
                   isLast && !isFirst && "right-0",
                   !(isFirst || isLast) && "-translate-x-1/2"
@@ -283,7 +283,7 @@ export function TokenOptimizationCard() {
           <div className="mt-1.5 flex flex-wrap gap-1">
             {omni?.tools.map((tool) => (
               <span
-                className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground leading-none"
+                className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground leading-none"
                 key={tool}
               >
                 {tool}

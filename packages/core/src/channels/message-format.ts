@@ -5,6 +5,7 @@ import type {
 
 const TELEGRAM_MAX_LENGTH = 4096;
 const WHATSAPP_MAX_LENGTH = 4096;
+const DISCORD_MAX_LENGTH = 2000;
 const EMAIL_BODY_MAX_LENGTH = 100_000;
 
 export function truncateForChannel(
@@ -14,9 +15,11 @@ export function truncateForChannel(
   const max =
     channel === "email"
       ? EMAIL_BODY_MAX_LENGTH
-      : channel === "telegram"
-        ? TELEGRAM_MAX_LENGTH
-        : WHATSAPP_MAX_LENGTH;
+      : channel === "discord"
+        ? DISCORD_MAX_LENGTH
+        : channel === "telegram"
+          ? TELEGRAM_MAX_LENGTH
+          : WHATSAPP_MAX_LENGTH;
 
   if (text.length <= max) {
     return text;

@@ -1,6 +1,6 @@
 ---
 name: create-automation
-description: Create, schedule, and manage automations. Use when the user wants reminders, recurring tasks, one-time runAt schedules, manual automations, delivery to Telegram, WhatsApp, or email, or to run and test saved automations.
+description: Create, schedule, and manage automations. Use when the user wants reminders, recurring tasks, one-time runAt schedules, manual automations, delivery to Telegram, WhatsApp, email, or Discord, or to run and test saved automations.
 include-body-on-match: true
 ---
 
@@ -10,7 +10,7 @@ Use `create_automation` to save recurring, one-time, or manual automations after
 
 When the user asks to run or test a saved automation, use `list_automations` to find it, then `run_automation`, and summarize the result.
 
-When the user wants run results sent to Telegram, WhatsApp, or email, set `create_automation` delivery (channel and email `to` when needed). Put only the task in `prompt` — the server sends results after each run.
+When the user wants run results sent to Telegram, WhatsApp, email, or Discord, set `create_automation` delivery (channel, email `to` when needed, and optional Discord `channelId`). Put only the task in `prompt` — the server sends results after each run. Omit Discord `channelId` to DM every paired Discord user.
 
 Do not add delivery when the user only wants results saved in run history.
 

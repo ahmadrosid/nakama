@@ -19,7 +19,7 @@ export function ToolDetailSections({
             <h2 className="font-semibold text-foreground text-sm">
               {tool.name}
             </h2>
-            <span className="inline-flex w-fit items-center rounded-full bg-muted px-1.5 py-px font-medium text-[11px] text-muted-foreground">
+            <span className="inline-flex w-fit items-center rounded-full bg-muted px-1.5 py-px font-medium text-2xs text-muted-foreground">
               {tool.handlerType}
             </span>
           </div>

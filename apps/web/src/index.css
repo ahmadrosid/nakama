@@ -15,6 +15,11 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  /* One named step below text-xs, so dense badges and metadata stop reaching for
+     one-off text-[9px] / text-[10px] / text-[0.6rem] values. 11px is the floor. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
   --color-surface-950: #0a0a0b;
   --color-surface-900: #111113;
   --color-surface-850: #18181b;
