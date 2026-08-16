@@ -93,9 +93,10 @@ describe("POST /v1/skills/install", () => {
 
     expect(response.status).toBe(201);
     const body = (await response.json()) as {
-      skill: { name: string; id: string };
+      skill: { name: string; id: string; createdBy: string };
     };
     expect(body.skill.name).toBe("github-weather");
+    expect(body.skill.createdBy).toBe("human");
 
     const assigned = await databaseAdapter.listSkillsForProfile(profileId);
     expect(assigned.some((skill) => skill.id === body.skill.id)).toBe(true);

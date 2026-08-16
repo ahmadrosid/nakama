@@ -271,7 +271,8 @@ export class SkillsService {
       const installed = await this.createAndAssignRawSkillToProfile(
         orgId,
         profileId,
-        content
+        content,
+        { createdBy: "human" }
       );
       return { skill: installed.skill };
     } catch (error) {
@@ -302,9 +303,11 @@ export class SkillsService {
   async createAndAssignRawSkillToProfile(
     orgId: string,
     profileId: string,
-    content: string
+    content: string,
+    options?: { createdBy?: SkillCreatedBy }
   ): Promise<SkillResponse & { created: boolean }> {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
+    const createdBy = options?.createdBy ?? "agent";
 
     const existingByName = await this.db.getSkillByName(name);
     if (
@@ -347,7 +350,7 @@ export class SkillsService {
       written.directory,
       written.name,
       "written",
-      "agent"
+      createdBy
     );
 
     if (!isPathWithinProfileSkillsDir(orgId, profileId, record.sourcePath)) {
