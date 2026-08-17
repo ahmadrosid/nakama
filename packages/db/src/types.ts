@@ -664,7 +664,14 @@ export interface DatabaseAdapter {
   ): Promise<AgentQuestionnaire | null>;
   getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
   getSkill(id: string): Promise<StoredSkillRecord | null>;
-  getSkillByName(name: string): Promise<StoredSkillRecord | null>;
+  /**
+   * Resolve a skill by name within `orgId`, falling back to a global (bundled)
+   * skill of that name. Omit `orgId` to look up global skills only.
+   */
+  getSkillByName(
+    name: string,
+    orgId?: string | null
+  ): Promise<StoredSkillRecord | null>;
   getSkillBySourcePath(sourcePath: string): Promise<StoredSkillRecord | null>;
   getSkillProposal(
     orgId: string,

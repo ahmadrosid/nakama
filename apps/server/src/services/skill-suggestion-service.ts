@@ -226,7 +226,7 @@ export class SkillSuggestionService {
   ): Promise<void> {
     const db = this.requireDatabase();
     const skillName = assertValidSkillName(name);
-    const record = await db.getSkillByName(skillName);
+    const record = await db.getSkillByName(skillName, orgId);
     if (!record) {
       throw new NakamaApiError(`Skill "${skillName}" not found.`, 404);
     }

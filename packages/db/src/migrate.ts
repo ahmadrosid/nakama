@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { orgIdFromSkillSourcePath } from "@nakama/core";
 export function migrateDatabase(db: Database): void {
   const schemaPath = resolveSchemaPath();
   const sql = readFileSync(schemaPath, "utf8");
@@ -22,6 +23,7 @@ export function migrateDatabase(db: Database): void {
   migrateSkillsPostTurnReviewColumns(db);
   migrateSkillUsageTables(db);
   migrateTenantOrgScope(db);
+  migrateSkillOrgIds(db);
   migrateProfileOrgColumns(db);
   migrateBrowserSessionsTable(db);
   migrateLegacyProfileIds(db);
@@ -672,6 +674,45 @@ function restoreGlobalNameUniqueness(db: Database): void {
       // A database that already collected duplicates must still boot. The
       // create paths guard the name, so it stays consistent from here on.
     }
+  }
+}
+
+/**
+ * `skills.org_id` shipped empty because no write path ever set it, which left
+ * skills_org_source_path_unique comparing NULL against NULL and skill names
+ * shared across every tenant. The owning org is recoverable from source_path.
+ */
+function migrateSkillOrgIds(db: Database): void {
+  const rows = db
+    .prepare("SELECT id, source_path FROM skills WHERE org_id IS NULL")
+    .all() as { id: string; source_path: string }[];
+  const update = db.prepare("UPDATE skills SET org_id = ? WHERE id = ?");
+
+  for (const row of rows) {
+    const orgId = orgIdFromSkillSourcePath(row.source_path);
+
+    if (!orgId) {
+      continue;
+    }
+
+    try {
+      update.run(orgId, row.id);
+    } catch {
+      // A pre-fix duplicate would now collide on (org_id, source_path). Leaving
+      // it NULL keeps today's behaviour instead of failing the whole boot.
+    }
+  }
+
+  try {
+    // skills_org_source_path_unique cannot see global skills, because SQLite
+    // treats every (NULL, path) pair as distinct. This restores what
+    // skills_source_path_unique used to guarantee for them.
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS skills_global_source_path_unique
+      ON skills (source_path) WHERE org_id IS NULL;
+    `);
+  } catch {
+    // Same reasoning: legacy duplicates must not stop the server from booting.
   }
 }
 

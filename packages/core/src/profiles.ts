@@ -212,12 +212,13 @@ export function resolveProfileInScopes(
     }
   }
 
-  if (matches.length === 0) {
+  const [onlyMatch] = matches;
+  if (!onlyMatch) {
     return null;
   }
 
   if (matches.length === 1) {
-    return { profile: matches[0]!.profile, scope: matches[0]!.scope };
+    return { profile: onlyMatch.profile, scope: onlyMatch.scope };
   }
 
   return {

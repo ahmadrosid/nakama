@@ -164,6 +164,11 @@ export async function runGenerateImageTool(
 
   const workspaceRoot =
     context.workspaceRoot?.trim() || getProfileSoulDir(orgId, profileId);
+  if (!path.isAbsolute(workspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
   const artifactsDir = path.join(workspaceRoot, "artifacts");
   const outputName = resolveOutputFilename(filenameHint, result.mediaType);
   const targetPath = await uniqueArtifactPath(

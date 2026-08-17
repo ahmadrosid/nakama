@@ -211,7 +211,7 @@ export function ProfileScopeButton({
         "flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:cursor-not-allowed",
         disabled && "opacity-50",
         active
-          ? "bg-primary/10 text-foreground"
+          ? "bg-primary/5 text-foreground dark:bg-primary/10"
           : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
       )}
       disabled={disabled}
