@@ -680,6 +680,18 @@ function migrateSkillOrgIds(db: Database): void {
       // it NULL keeps today's behaviour instead of failing the whole boot.
     }
   }
+
+  try {
+    // skills_org_source_path_unique cannot see global skills, because SQLite
+    // treats every (NULL, path) pair as distinct. This restores what
+    // skills_source_path_unique used to guarantee for them.
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS skills_global_source_path_unique
+      ON skills (source_path) WHERE org_id IS NULL;
+    `);
+  } catch {
+    // Same reasoning: legacy duplicates must not stop the server from booting.
+  }
 }
 
 function migrateProfileOrgColumns(db: Database): void {

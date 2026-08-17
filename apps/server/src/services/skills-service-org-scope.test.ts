@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSqliteDatabase, type DatabaseAdapter } from "@nakama/db";
+import { ensureBundledSkillFiles } from "@nakama/core";
+import {
+  createSqliteDatabase,
+  type DatabaseAdapter,
+  ensureProfileDefaultBundledSkills,
+} from "@nakama/db";
+import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
 
 function markdown(name: string, description: string, body: string): string {
@@ -164,6 +170,75 @@ describe("skills are scoped per org", () => {
 
     expect(await db.getSkillByName("deploy-notes", "org_b")).toBeNull();
     expect(await db.getSkillByName("deploy-notes", "org_a")).not.toBeNull();
+  });
+
+  test("org B patches its own copy of a shared name", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+    await service.createAndAssignRawSkillToProfile(
+      "org_b",
+      "profile_b",
+      ORG_B_SKILL
+    );
+
+    await service.patchAssignedProfileSkill(
+      "org_b",
+      "profile_b",
+      "deploy-notes",
+      "Org B steps.",
+      "Org B steps, revised."
+    );
+
+    const orgA = await service.getSkill(
+      (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
+    );
+    const orgB = await service.getSkill(
+      (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
+    );
+
+    expect(orgB.skill.body).toContain("Org B steps, revised.");
+    expect(orgA.skill.body).toContain("Org A steps.");
+  });
+
+  test("a proposal stages against the caller's own org", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+    const proposals = new SkillProposalService(db, service);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+
+    const staged = await proposals.stageProposal({
+      action: "create",
+      content: ORG_B_SKILL,
+      orgId: "org_b",
+      profileId: "profile_b",
+    });
+
+    expect(staged.outcome).toBe("created");
+  });
+
+  test("a new org still gets the bundled skills", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    await ensureBundledSkillFiles();
+    await service.syncDiscoveredSkills();
+    await ensureProfileDefaultBundledSkills(db, "profile_b");
+
+    const assigned = await db.listSkillsForProfile("profile_b");
+
+    expect(assigned.length).toBeGreaterThan(0);
+    expect(assigned.every((skill) => skill.orgId === null)).toBe(true);
   });
 
   test("global skills stay visible to every org", async () => {

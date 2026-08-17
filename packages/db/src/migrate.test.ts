@@ -376,6 +376,23 @@ describe("skill org id backfill", () => {
         { id: "skill_global", org_id: null },
         { id: "skill_org_a", org_id: "org_a" },
       ]);
+
+      // Two global skills may not share a source_path, which the org-scoped
+      // index alone cannot enforce.
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO skills (
+              id, name, description, source_path, has_tool,
+              disable_model_invocation, enabled, created_at, updated_at
+            ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+          )
+          .run(
+            "skill_global_copy",
+            "weather",
+            join(configDir, "agent", "skills", "weather")
+          )
+      ).toThrow();
     } finally {
       db.close();
       rmSync(configDir, { force: true, recursive: true });
