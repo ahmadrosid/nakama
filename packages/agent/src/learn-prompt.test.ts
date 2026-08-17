@@ -138,6 +138,64 @@ describe("expandLearnInLastUserMessage", () => {
     expect(expanded[0]?.content).not.toContain("workflow we just went through");
   });
 
+  test("bare /learn with an attached document still expands normally", () => {
+    const expanded = expandLearnInLastUserMessage([
+      {
+        content: [
+          { text: "/learn", type: "text" as const },
+          {
+            data: "AAAA",
+            filename: "expense-guide.pdf",
+            mediaType: "application/pdf",
+            type: "document" as const,
+          },
+        ],
+        role: "user" as const,
+      },
+    ]);
+
+    const textPart = Array.isArray(expanded[0]?.content)
+      ? expanded[0].content.find((part) => part.type === "text")
+      : null;
+
+    expect(textPart?.type).toBe("text");
+    if (textPart?.type === "text") {
+      expect(textPart.text).toContain("[/learn]");
+      expect(textPart.text).toContain(
+        "file(s) or image(s) attached to this message"
+      );
+      expect(textPart.text).not.toContain("Ask them what to learn from");
+    }
+  });
+
+  test("bare /learn with a document_ref still expands normally", () => {
+    const expanded = expandLearnInLastUserMessage([
+      {
+        content: [
+          { text: "/learn", type: "text" as const },
+          {
+            attachmentId: "att_1",
+            filename: "notes.md",
+            mediaType: "text/markdown",
+            size: 128,
+            type: "document_ref" as const,
+          },
+        ],
+        role: "user" as const,
+      },
+    ]);
+
+    const textPart = Array.isArray(expanded[0]?.content)
+      ? expanded[0].content.find((part) => part.type === "text")
+      : null;
+
+    expect(textPart?.type).toBe("text");
+    if (textPart?.type === "text") {
+      expect(textPart.text).toContain("[/learn]");
+      expect(textPart.text).not.toContain("Ask them what to learn from");
+    }
+  });
+
   test("bare /learn after prior turns uses the conversation workflow", () => {
     const expanded = expandLearnInLastUserMessage([
       { content: "how do I deploy staging?", role: "user" as const },
