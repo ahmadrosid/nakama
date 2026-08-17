@@ -518,6 +518,123 @@ describe("AgentService skill_manage injection", () => {
       false
     );
   });
+
+  test("expands /learn on web when manage-skills is assigned", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const skills = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await skills.syncDiscoveredSkills();
+    const manage = (await skills.listSkills()).skills.find(
+      (skill) => skill.name === "manage-skills"
+    );
+    expect(manage).toBeDefined();
+    await db.assignSkillToProfile("profile_default", manage!.id);
+
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      null,
+      { orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId);
+    expect(session).not.toBeNull();
+
+    await session!.send({
+      message: "/learn filing an expense: open portal, submit receipt",
+    });
+
+    const stored = await service.getSessionMessages(sessionId);
+    const userMessage = stored?.messages.find(
+      (message) => message.role === "user"
+    );
+    expect(userMessage).toBeDefined();
+    expect(typeof userMessage?.content).toBe("string");
+    expect(userMessage?.content).toContain("[/learn]");
+    expect(userMessage?.content).toContain(
+      "filing an expense: open portal, submit receipt"
+    );
+    expect(userMessage?.content).toContain("skill_manage");
+    expect(userMessage?.content).not.toBe(
+      "/learn filing an expense: open portal, submit receipt"
+    );
+  });
+
+  test("does not expand /learn on telegram even with manage-skills assigned", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const skills = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await skills.syncDiscoveredSkills();
+    const manage = (await skills.listSkills()).skills.find(
+      (skill) => skill.name === "manage-skills"
+    );
+    expect(manage).toBeDefined();
+    await db.assignSkillToProfile("profile_default", manage!.id);
+
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "telegram",
+      "profile_default",
+      null,
+      { orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId);
+    expect(session).not.toBeNull();
+
+    await session!.send({
+      message: "/learn filing an expense",
+    });
+
+    const stored = await service.getSessionMessages(sessionId);
+    const userMessage = stored?.messages.find(
+      (message) => message.role === "user"
+    );
+    expect(userMessage?.content).toBe("/learn filing an expense");
+  });
+
+  test("expands bare /learn to the conversation-workflow default on cli", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const skills = new SkillsService(db);
+    await ensureBundledSkillFiles();
+    await skills.syncDiscoveredSkills();
+    const manage = (await skills.listSkills()).skills.find(
+      (skill) => skill.name === "manage-skills"
+    );
+    expect(manage).toBeDefined();
+    await db.assignSkillToProfile("profile_default", manage!.id);
+
+    const service = new AgentService(null, null, db);
+    service.setSkillsService(skills);
+
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "cli",
+      "profile_default",
+      null,
+      { orgRole: "admin" }
+    );
+    const session = await service.resolveSession(sessionId);
+    expect(session).not.toBeNull();
+
+    await session!.send({ message: "/learn" });
+
+    const stored = await service.getSessionMessages(sessionId);
+    const userMessage = stored?.messages.find(
+      (message) => message.role === "user"
+    );
+    expect(typeof userMessage?.content).toBe("string");
+    expect(userMessage?.content).toContain("[/learn]");
+    expect(userMessage?.content).toContain("workflow we just went through");
+  });
 });
 
 async function installFakeOpenCode(binDir: string): Promise<void> {
