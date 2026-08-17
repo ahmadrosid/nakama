@@ -142,3 +142,40 @@ export function expandLearnUserContent<T extends string | TextContentPart[]>(
   next[textIndex] = { ...textPart, text: expanded };
   return next as T;
 }
+
+type ProviderChatMessage = {
+  content: string | TextContentPart[];
+  role: string;
+};
+
+/**
+ * Expand `/learn` on the last user message for the provider only.
+ * History stays raw so skill matching, UI, and later turns keep the short command.
+ */
+export function expandLearnInLastUserMessage<T extends ProviderChatMessage>(
+  messages: readonly T[]
+): T[] {
+  let lastUserIndex = -1;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      lastUserIndex = index;
+      break;
+    }
+  }
+
+  if (lastUserIndex < 0) {
+    return [...messages];
+  }
+
+  const lastUser = messages[lastUserIndex]!;
+  const expandedContent = expandLearnUserContent(lastUser.content);
+
+  if (expandedContent === lastUser.content) {
+    return [...messages];
+  }
+
+  const next = [...messages];
+  next[lastUserIndex] = { ...lastUser, content: expandedContent };
+  return next;
+}

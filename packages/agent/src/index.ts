@@ -61,6 +61,7 @@ export type { CompactionConfig } from "./history-compaction";
 export { usableContextTokens } from "./history-compaction";
 export {
   buildLearnPrompt,
+  expandLearnInLastUserMessage,
   expandLearnUserContent,
   expandLearnUserMessage,
   tryParseLearnCommand,

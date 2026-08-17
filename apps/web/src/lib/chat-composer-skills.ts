@@ -76,11 +76,14 @@ export function filterReservedSlashCommands(
     return [...RESERVED_COMPOSER_SLASH_COMMANDS];
   }
 
-  return RESERVED_COMPOSER_SLASH_COMMANDS.filter((command) => {
-    const name = command.name.toLowerCase();
-    const description = command.description.toLowerCase();
-    return name.includes(normalized) || description.includes(normalized);
-  });
+  // Name-prefix only — description matching made "/re" steal focus via "reusable".
+  return RESERVED_COMPOSER_SLASH_COMMANDS.filter((command) =>
+    command.name.toLowerCase().startsWith(normalized)
+  );
+}
+
+export function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {
+  return skills.some((skill) => skill.name === "manage-skills");
 }
 
 export function filterSkillsForSlashQuery(
@@ -107,10 +110,12 @@ export function filterComposerSlashSuggestions(
   skills: SkillSummary[],
   query: string
 ): ComposerSlashSuggestion[] {
-  const commands = filterReservedSlashCommands(query).map((command) => ({
-    command,
-    kind: "command" as const,
-  }));
+  const commands = profileCanUseLearnCommand(skills)
+    ? filterReservedSlashCommands(query).map((command) => ({
+        command,
+        kind: "command" as const,
+      }))
+    : [];
   const skillSuggestions = filterSkillsForSlashQuery(skills, query).map(
     (skill) => ({
       kind: "skill" as const,
@@ -183,8 +188,13 @@ const LEADING_RESERVED_COMMAND_PATTERN = new RegExp(
 
 /** Range of a leading reserved command (e.g. `/learn`) for composer highlighting. */
 export function getReservedCommandTokenRanges(
-  value: string
+  value: string,
+  options: { enableLearn?: boolean } = {}
 ): SkillTokenRange[] {
+  if (options.enableLearn === false) {
+    return [];
+  }
+
   const match = LEADING_RESERVED_COMMAND_PATTERN.exec(value);
   const token = match?.[2];
 

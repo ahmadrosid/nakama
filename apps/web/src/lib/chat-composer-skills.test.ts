@@ -109,17 +109,28 @@ describe("filterSkillsForSlashQuery", () => {
 });
 
 describe("filterComposerSlashSuggestions", () => {
-  test("lists reserved /learn ahead of skills", () => {
+  test("lists reserved /learn ahead of skills when manage-skills is assigned", () => {
     expect(
-      filterComposerSlashSuggestions([weatherSkill], "").map((item) =>
-        item.kind === "command" ? item.command.name : item.skill.name
+      filterComposerSlashSuggestions([manageSkillsSkill, weatherSkill], "").map(
+        (item) =>
+          item.kind === "command" ? item.command.name : item.skill.name
       )
     ).toEqual(["learn", "weather"]);
   });
 
-  test("matches /learn by name without treating it as a skill", () => {
+  test("hides /learn when manage-skills is not assigned", () => {
+    expect(
+      filterComposerSlashSuggestions([weatherSkill, deploySkill], "").map(
+        (item) =>
+          item.kind === "command" ? item.command.name : item.skill.name
+      )
+    ).toEqual(["weather", "deploy"]);
+    expect(filterComposerSlashSuggestions([weatherSkill], "lea")).toEqual([]);
+  });
+
+  test("matches /learn by name prefix only", () => {
     const suggestions = filterComposerSlashSuggestions(
-      [weatherSkill, deploySkill],
+      [manageSkillsSkill, weatherSkill, deploySkill],
       "lea"
     );
     expect(suggestions).toEqual([
@@ -131,6 +142,21 @@ describe("filterComposerSlashSuggestions", () => {
         kind: "command",
       },
     ]);
+  });
+
+  test("does not match /learn via description keywords", () => {
+    expect(
+      filterComposerSlashSuggestions(
+        [manageSkillsSkill, weatherSkill],
+        "re"
+      ).filter((item) => item.kind === "command")
+    ).toEqual([]);
+    expect(
+      filterComposerSlashSuggestions(
+        [manageSkillsSkill, weatherSkill],
+        "sk"
+      ).filter((item) => item.kind === "command")
+    ).toEqual([]);
   });
 });
 
@@ -194,6 +220,12 @@ describe("getReservedCommandTokenRanges", () => {
     expect(getReservedCommandTokenRanges("/learn")).toEqual([
       { end: 6, name: "learn", start: 0 },
     ]);
+  });
+
+  test("does not highlight when learn is disabled for the profile", () => {
+    expect(
+      getReservedCommandTokenRanges("/learn filing", { enableLearn: false })
+    ).toEqual([]);
   });
 
   test("does not highlight /learn embedded in other words or paths", () => {

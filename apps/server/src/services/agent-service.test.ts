@@ -519,7 +519,7 @@ describe("AgentService skill_manage injection", () => {
     );
   });
 
-  test("expands /learn on web when manage-skills is assigned", async () => {
+  test("keeps raw /learn in history on web when manage-skills is assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const skills = new SkillsService(db);
@@ -544,24 +544,14 @@ describe("AgentService skill_manage injection", () => {
     const session = await service.resolveSession(sessionId);
     expect(session).not.toBeNull();
 
-    await session!.send({
-      message: "/learn filing an expense: open portal, submit receipt",
-    });
+    const typed = "/learn filing an expense: open portal, submit receipt";
+    await session!.send({ message: typed });
 
     const stored = await service.getSessionMessages(sessionId);
     const userMessage = stored?.messages.find(
       (message) => message.role === "user"
     );
-    expect(userMessage).toBeDefined();
-    expect(typeof userMessage?.content).toBe("string");
-    expect(userMessage?.content).toContain("[/learn]");
-    expect(userMessage?.content).toContain(
-      "filing an expense: open portal, submit receipt"
-    );
-    expect(userMessage?.content).toContain("skill_manage");
-    expect(userMessage?.content).not.toBe(
-      "/learn filing an expense: open portal, submit receipt"
-    );
+    expect(userMessage?.content).toBe(typed);
   });
 
   test("does not expand /learn on telegram even with manage-skills assigned", async () => {
@@ -600,7 +590,7 @@ describe("AgentService skill_manage injection", () => {
     expect(userMessage?.content).toBe("/learn filing an expense");
   });
 
-  test("expands bare /learn to the conversation-workflow default on cli", async () => {
+  test("keeps bare /learn raw in history on cli", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
     const skills = new SkillsService(db);
@@ -631,9 +621,7 @@ describe("AgentService skill_manage injection", () => {
     const userMessage = stored?.messages.find(
       (message) => message.role === "user"
     );
-    expect(typeof userMessage?.content).toBe("string");
-    expect(userMessage?.content).toContain("[/learn]");
-    expect(userMessage?.content).toContain("workflow we just went through");
+    expect(userMessage?.content).toBe("/learn");
   });
 });
 
