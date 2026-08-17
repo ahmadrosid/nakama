@@ -116,4 +116,36 @@ describe("expandLearnInLastUserMessage", () => {
     const messages = [{ content: "hello", role: "user" as const }];
     expect(expandLearnInLastUserMessage(messages)).toEqual(messages);
   });
+
+  test("keeps the learn prompt through a tool-loop turn", () => {
+    const expanded = expandLearnInLastUserMessage([
+      { content: "/learn filing an expense", role: "user" as const },
+      { content: "", role: "assistant" as const },
+      { content: "file contents", role: "tool" as const },
+    ]);
+
+    expect(expanded[0]?.content).toContain("[/learn]");
+    expect(expanded[0]?.content).toContain("filing an expense");
+  });
+
+  test("bare /learn as the first message asks for a source", () => {
+    const expanded = expandLearnInLastUserMessage([
+      { content: "/learn", role: "user" as const },
+    ]);
+
+    expect(expanded[0]?.content).toContain("[/learn]");
+    expect(expanded[0]?.content).toContain("Ask them what to learn from");
+    expect(expanded[0]?.content).not.toContain("workflow we just went through");
+  });
+
+  test("bare /learn after prior turns uses the conversation workflow", () => {
+    const expanded = expandLearnInLastUserMessage([
+      { content: "how do I deploy staging?", role: "user" as const },
+      { content: "Here are the steps…", role: "assistant" as const },
+      { content: "/learn", role: "user" as const },
+    ]);
+
+    expect(expanded[2]?.content).toContain("[/learn]");
+    expect(expanded[2]?.content).toContain("workflow we just went through");
+  });
 });
