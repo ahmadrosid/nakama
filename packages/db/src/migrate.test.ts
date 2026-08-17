@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addOrgIdColumnIfMissing,
@@ -321,6 +322,69 @@ describe("coding-delegation skill rename migration", () => {
       expect(assignment.skill_id).toBe("skill_canonical");
     } finally {
       db.close();
+    }
+  });
+});
+
+describe("skill org id backfill", () => {
+  test("recovers the owning org from source_path and leaves global skills alone", () => {
+    const configDir = mkdtempSync(join(tmpdir(), "nakama-skill-org-backfill-"));
+    const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // Rows as every pre-fix install has them: org_id never written.
+      db.prepare(
+        `INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+      ).run(
+        "skill_org_a",
+        "deploy-notes",
+        join(
+          configDir,
+          "orgs",
+          "org_a",
+          "profiles",
+          "profile_a",
+          "skills",
+          "deploy-notes"
+        )
+      );
+      db.prepare(
+        `INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+      ).run(
+        "skill_global",
+        "weather",
+        join(configDir, "agent", "skills", "weather")
+      );
+
+      migrateDatabase(db);
+
+      const rows = db
+        .prepare("SELECT id, org_id FROM skills ORDER BY id")
+        .all() as { id: string; org_id: string | null }[];
+
+      expect(rows).toEqual([
+        { id: "skill_global", org_id: null },
+        { id: "skill_org_a", org_id: "org_a" },
+      ]);
+    } finally {
+      db.close();
+      rmSync(configDir, { force: true, recursive: true });
+
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
     }
   });
 });

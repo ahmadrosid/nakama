@@ -34,6 +34,7 @@ import {
   loadSkillTools,
   matchSkillsForMessage,
   NakamaApiError,
+  orgIdFromSkillSourcePath,
   parseRawProfileSkillContent,
   parseSkillMarkdown,
   patchSkillFile,
@@ -309,7 +310,7 @@ export class SkillsService {
     const { name } = parseRawProfileSkillContent(content, orgId, profileId);
     const createdBy = options?.createdBy ?? "agent";
 
-    const existingByName = await this.db.getSkillByName(name);
+    const existingByName = await this.db.getSkillByName(name, orgId);
     if (
       existingByName &&
       !isPathWithinProfileSkillsDir(orgId, profileId, existingByName.sourcePath)
@@ -483,7 +484,7 @@ export class SkillsService {
     const skillName = assertValidSkillName(name);
     assertNotBundledSkillName(skillName);
 
-    const record = await this.db.getSkillByName(skillName);
+    const record = await this.db.getSkillByName(skillName, orgId);
     if (!record) {
       throw new Error(`Skill "${skillName}" not found.`);
     }
@@ -669,7 +670,7 @@ export class SkillsService {
 
     const record =
       (await this.db.getSkillBySourcePath(directory)) ??
-      (await this.db.getSkillByName(name));
+      (await this.db.getSkillByName(name, orgIdFromSkillSourcePath(directory)));
 
     if (!record) {
       throw new Error(`Skill was ${verb} but could not be synced.`);
@@ -691,13 +692,21 @@ export class SkillsService {
   ): Promise<{ created: boolean }> {
     const existingByPath = await this.db.getSkillBySourcePath(skill.directory);
     const existing =
-      existingByPath ?? (await this.db.getSkillByName(skill.name)) ?? null;
+      existingByPath ??
+      (await this.db.getSkillByName(
+        skill.name,
+        orgIdFromSkillSourcePath(skill.directory)
+      )) ??
+      null;
     const now = new Date().toISOString();
     const defaultCreatedBy: SkillCreatedBy = isGlobalSkillSourcePath(
       skill.directory
     )
       ? "bundled"
       : "human";
+    const sourcePath = existing
+      ? pickPreferredSkillSourcePath(existing.sourcePath, skill.directory)
+      : skill.directory;
     const record: StoredSkillRecord = {
       createdAt: existing?.createdAt ?? now,
       createdBy: existing?.createdBy ?? createdByOverride ?? defaultCreatedBy,
@@ -707,9 +716,9 @@ export class SkillsService {
       hasTool: skill.hasTool,
       id: existing?.id ?? createId("skill"),
       name: skill.name,
-      sourcePath: existing
-        ? pickPreferredSkillSourcePath(existing.sourcePath, skill.directory)
-        : skill.directory,
+      // Ownership always follows the winning path, so org_id cannot drift from it.
+      orgId: orgIdFromSkillSourcePath(sourcePath),
+      sourcePath,
       updatedAt: now,
     };
 
@@ -735,7 +744,7 @@ export class SkillsService {
   ): Promise<StoredSkillRecord> {
     assertNotBundledSkillName(name);
 
-    const record = await this.db.getSkillByName(name);
+    const record = await this.db.getSkillByName(name, orgId);
     if (!record) {
       throw new Error(`Skill "${name}" not found.`);
     }
