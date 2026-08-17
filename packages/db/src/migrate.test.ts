@@ -325,6 +325,54 @@ describe("coding-delegation skill rename migration", () => {
   });
 });
 
+describe("install-wide name uniqueness", () => {
+  function insertTool(db: Database, id: string, name: string): void {
+    db.prepare(
+      `INSERT INTO tools (id, name, description, handler_type, handler_config, created_at, updated_at)
+       VALUES (?, ?, '', 'bash', '{}', '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+    ).run(id, name);
+  }
+
+  function insertServer(db: Database, id: string, name: string): void {
+    db.prepare(
+      `INSERT INTO mcp_servers (id, name, transport, config, enabled, status, last_error, cached_tools, created_at, updated_at)
+       VALUES (?, ?, 'stdio', '{}', 1, 'disconnected', NULL, '[]', '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+    ).run(id, name);
+  }
+
+  test("rejects a second tool or MCP server with the same name", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      insertTool(db, "tool_1", "bash");
+      insertServer(db, "mcp_1", "github");
+
+      expect(() => insertTool(db, "tool_2", "bash")).toThrow();
+      expect(() => insertServer(db, "mcp_2", "github")).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("still migrates a database that already holds duplicates", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec("DROP INDEX IF EXISTS tools_global_name_unique");
+      insertTool(db, "tool_1", "bash");
+      insertTool(db, "tool_2", "bash");
+
+      expect(() => migrateDatabase(db)).not.toThrow();
+      expect(db.query("SELECT count(*) c FROM tools").get()).toEqual({ c: 2 });
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("schema path resolution", () => {
   test("resolves schema.sql from the db package during source execution", () => {
     const schemaPath = resolveSchemaPath();

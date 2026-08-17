@@ -651,6 +651,28 @@ function migrateTenantOrgScope(db: Database): void {
     DROP INDEX IF EXISTS skills_source_path_unique;
     CREATE UNIQUE INDEX IF NOT EXISTS skills_org_source_path_unique ON skills (org_id, source_path);
   `);
+
+  restoreGlobalNameUniqueness(db);
+}
+
+/**
+ * Tools and MCP servers are install-wide: both create routes are platform admin
+ * and neither service takes an org. Nothing writes their org_id, so the indexes
+ * above compare NULL to NULL and never fire, which quietly retired the
+ * uniqueness schema.sql still declares. These cover the rows they left behind.
+ */
+function restoreGlobalNameUniqueness(db: Database): void {
+  for (const table of ["tools", "mcp_servers"] as const) {
+    try {
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ${table}_global_name_unique
+        ON ${table} (name) WHERE org_id IS NULL;
+      `);
+    } catch {
+      // A database that already collected duplicates must still boot. The
+      // create paths guard the name, so it stays consistent from here on.
+    }
+  }
 }
 
 function migrateProfileOrgColumns(db: Database): void {
