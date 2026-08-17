@@ -182,18 +182,20 @@ export class SkillsService {
     const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
     const existing = await readFile(skillFilePath, "utf8");
     const parsed = parseSkillMarkdown(existing, skillFilePath);
-    const description = hasDescription
-      ? request.description!.trim()
-      : parsed.frontmatter.description;
+    const description =
+      request.description === undefined
+        ? parsed.frontmatter.description
+        : request.description.trim();
 
     if (!description) {
       throw new Error("Skill description is required.");
     }
 
-    const body = hasBody ? request.body! : parsed.body;
-    const disableModelInvocation = hasDisableModelInvocation
-      ? request.disableModelInvocation!
-      : parsed.frontmatter.disableModelInvocation;
+    const body = request.body === undefined ? parsed.body : request.body;
+    const disableModelInvocation =
+      request.disableModelInvocation === undefined
+        ? parsed.frontmatter.disableModelInvocation
+        : request.disableModelInvocation;
 
     const content = composeSkillMarkdown({
       body,

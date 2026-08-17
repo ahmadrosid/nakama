@@ -62,7 +62,13 @@ export async function guardFilePath(
   const allowedDirs = await resolveAllowedDirs(rawAllowedDirs);
   const maxBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   // rawAllowedDirs is non-empty: either allowedOption or [cwdOption] from above.
-  const defaultCwd = await resolveDirectoryPath(cwdOption ?? rawAllowedDirs[0]);
+  const fallbackAllowedDir = rawAllowedDirs[0];
+  if (!fallbackAllowedDir) {
+    throw new PathGuardError(WORKSPACE_REQUIRED_MESSAGE, "TRAVERSAL");
+  }
+  const defaultCwd = await resolveDirectoryPath(
+    cwdOption ?? fallbackAllowedDir
+  );
 
   if (rawPath.includes("\0")) {
     throw new PathGuardError("Path contains null byte", "NULL_BYTE");

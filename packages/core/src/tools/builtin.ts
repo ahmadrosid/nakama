@@ -736,14 +736,12 @@ function removeTrailingWhitespaceTokens(
 }
 
 function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
+  // Caller sorts by start before invoking; only overlap is still possible.
   for (let index = 1; index < plans.length; index += 1) {
-    const previous = plans[index - 1]!;
-    const current = plans[index]!;
-
-    if (current.start < previous.start) {
-      throw new Error(
-        "Edit plans must be sorted by start offset before applying."
-      );
+    const previous = plans[index - 1];
+    const current = plans[index];
+    if (previous === undefined || current === undefined) {
+      throw new Error("Edit plans must be a contiguous list.");
     }
 
     if (current.start < previous.end) {

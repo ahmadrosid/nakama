@@ -75,12 +75,18 @@ export class AutomationDeliveryService {
     let result: { ok: boolean; error?: string };
 
     if (delivery.channel === "email") {
+      const to = delivery.to?.trim();
+      if (!to) {
+        throw new Error(
+          "delivery.to is required when delivery.channel is email."
+        );
+      }
       result = await this.email.send({
         orgId: automation.orgId,
         profileId: automation.profileId,
         subject: formatted.subject,
         text: formatted.text,
-        to: delivery.to!.trim(),
+        to,
       });
     } else if (delivery.channel === "telegram") {
       result = await this.telegram.send({
