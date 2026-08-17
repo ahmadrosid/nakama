@@ -1,5 +1,6 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import {
+  getReservedCommandTokenRanges,
   getSkillTokenRanges,
   type SkillTokenRange,
 } from "@/lib/chat-composer-skills";
@@ -16,8 +17,12 @@ export function ChatSkillTokenOverlay({
   skills,
   className,
 }: ChatSkillTokenOverlayProps) {
-  const tokenRanges = getSkillTokenRanges(value).filter((range) =>
+  const skillRanges = getSkillTokenRanges(value).filter((range) =>
     skills.some((skill) => skill.name === range.name)
+  );
+  const commandRanges = getReservedCommandTokenRanges(value);
+  const tokenRanges = [...skillRanges, ...commandRanges].sort(
+    (a, b) => a.start - b.start
   );
 
   if (tokenRanges.length === 0) {

@@ -4,6 +4,7 @@ import {
   filterComposerSlashSuggestions,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
+  getReservedCommandTokenRanges,
   getSkillTokenRanges,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
@@ -179,5 +180,27 @@ describe("getSkillTokenRanges", () => {
 
   test("does not create token ranges for partial invocations", () => {
     expect(getSkillTokenRanges("/skill ")).toEqual([]);
+  });
+});
+
+describe("getReservedCommandTokenRanges", () => {
+  test("highlights a leading /learn command", () => {
+    expect(getReservedCommandTokenRanges("/learn filing an expense")).toEqual([
+      { end: 6, name: "learn", start: 0 },
+    ]);
+  });
+
+  test("highlights a bare /learn command", () => {
+    expect(getReservedCommandTokenRanges("/learn")).toEqual([
+      { end: 6, name: "learn", start: 0 },
+    ]);
+  });
+
+  test("does not highlight /learn embedded in other words or paths", () => {
+    expect(getReservedCommandTokenRanges("/learning to code")).toEqual([]);
+    expect(getReservedCommandTokenRanges("https://x/learn")).toEqual([]);
+    expect(getReservedCommandTokenRanges("tell me about /learn later")).toEqual(
+      []
+    );
   });
 });

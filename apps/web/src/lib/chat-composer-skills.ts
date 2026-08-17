@@ -171,3 +171,33 @@ export function getSkillTokenRanges(value: string): SkillTokenRange[] {
 
   return ranges;
 }
+
+// Only a leading command is real: the server trims then treats `/learn …` as a
+// command, so mid-sentence `/learn` is plain text and must not be highlighted.
+const RESERVED_COMMAND_NAMES = RESERVED_COMPOSER_SLASH_COMMANDS.map(
+  (command) => command.name
+).join("|");
+const LEADING_RESERVED_COMMAND_PATTERN = new RegExp(
+  String.raw`^(\s*)(/(?:` + RESERVED_COMMAND_NAMES + String.raw`))(?=\s|$)`
+);
+
+/** Range of a leading reserved command (e.g. `/learn`) for composer highlighting. */
+export function getReservedCommandTokenRanges(
+  value: string
+): SkillTokenRange[] {
+  const match = LEADING_RESERVED_COMMAND_PATTERN.exec(value);
+  const token = match?.[2];
+
+  if (!(match && token)) {
+    return [];
+  }
+
+  const start = match[1]?.length ?? 0;
+  return [
+    {
+      end: start + token.length,
+      name: token.slice(1),
+      start,
+    },
+  ];
+}
