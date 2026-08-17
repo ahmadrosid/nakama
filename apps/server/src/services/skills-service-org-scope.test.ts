@@ -9,6 +9,7 @@ import {
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
 import { SkillProposalService } from "./skill-proposal-service";
+import { SkillSuggestionService } from "./skill-suggestion-service";
 import { SkillsService } from "./skills-service";
 
 function markdown(name: string, description: string, body: string): string {
@@ -225,6 +226,52 @@ describe("skills are scoped per org", () => {
     });
 
     expect(staged.outcome).toBe("created");
+  });
+
+  test("an applied suggestion patches the caller's own skill", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+    const suggestions = new SkillSuggestionService(db, service);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+    await service.createAndAssignRawSkillToProfile(
+      "org_b",
+      "profile_b",
+      ORG_B_SKILL
+    );
+
+    const suggestion = await suggestions.createSuggestion({
+      orgId: "org_b",
+      outcome: {
+        action: "patch",
+        name: "deploy-notes",
+        newString: "Org B steps, suggested.",
+        oldString: "Org B steps.",
+      },
+      profileId: "profile_b",
+    });
+
+    const applied = await suggestions.applySuggestion(
+      "org_b",
+      suggestion.id,
+      "user_b"
+    );
+
+    expect(applied.outcome).toBe("applied");
+
+    const orgB = await service.getSkill(
+      (await db.getSkillByName("deploy-notes", "org_b"))?.id ?? ""
+    );
+    const orgA = await service.getSkill(
+      (await db.getSkillByName("deploy-notes", "org_a"))?.id ?? ""
+    );
+
+    expect(orgB.skill.body).toContain("Org B steps, suggested.");
+    expect(orgA.skill.body).toContain("Org A steps.");
   });
 
   test("a new org still gets the bundled skills", async () => {
