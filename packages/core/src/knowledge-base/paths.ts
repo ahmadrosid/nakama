@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getProfileSoulDir } from "../soul/resolve";
+import { assertConfigPathSegment, getProfileSoulDir } from "../soul/resolve";
 
 export const KNOWLEDGE_BASE_RELATIVE_DIR = "knowledge-base";
 export const KNOWLEDGE_BASE_MANIFEST_FILE = "manifest.json";
@@ -29,7 +29,7 @@ export function getKnowledgeBaseStoredDocumentPath(
   const sanitized = base.replace(/[^\w.\-() ]+/g, "_") || "document";
   return join(
     getKnowledgeBaseDir(orgId, profileId),
-    `${documentId}--${sanitized}`
+    `${assertConfigPathSegment(documentId, "documentId")}--${sanitized}`
   );
 }
 
@@ -40,6 +40,6 @@ export function getKnowledgeBaseExtractedPath(
 ): string {
   return join(
     getKnowledgeBaseDir(orgId, profileId),
-    `${documentId}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
+    `${assertConfigPathSegment(documentId, "documentId")}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
   );
 }

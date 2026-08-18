@@ -274,9 +274,10 @@ export function pickProfileForOrg(
     return defaultProfile;
   }
 
-  if (profiles.length === 0) {
+  const [firstProfile] = profiles;
+  if (!firstProfile) {
     throw new Error("No profiles are available.");
   }
 
-  return profiles[0]!;
+  return firstProfile;
 }

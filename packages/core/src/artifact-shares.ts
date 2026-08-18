@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "./fs";
-import { getArtifactSharesDir } from "./soul/resolve";
+import { assertConfigPathSegment, getArtifactSharesDir } from "./soul/resolve";
 
 export function generateArtifactShareToken(): string {
   // No underscores: plain-text markdown strippers treat `_word_` as italic and can
@@ -21,7 +21,10 @@ export async function writeArtifactShareSnapshot(input: {
   bytes: Buffer;
 }): Promise<string> {
   const sharesDir = getArtifactSharesDir(input.orgId);
-  const shareDir = path.join(sharesDir, input.shareId);
+  const shareDir = path.join(
+    sharesDir,
+    assertConfigPathSegment(input.shareId, "shareId")
+  );
   await mkdir(shareDir, { recursive: true });
 
   const safeName =
