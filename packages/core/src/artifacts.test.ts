@@ -243,7 +243,7 @@ test("refuses to overwrite a non-markdown artifact", async () => {
       orgId: ORG_ID,
       profileId: PROFILE_ID,
     })
-  ).rejects.toThrow(/only supported for markdown/);
+  ).rejects.toThrow(/Only markdown artifacts can be edited: data\.json/);
 
   const artifact = await readArtifactFile({
     filename: "data.json",
@@ -264,4 +264,15 @@ test("refuses to write outside the artifacts directory", async () => {
       profileId: PROFILE_ID,
     })
   ).rejects.toThrow();
+});
+
+test("names the artifact, not the server path, when the file is gone", async () => {
+  await expect(
+    writeArtifactFile({
+      content: "# Recovered\n",
+      filename: "missing.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow("Artifact not found: missing.md");
 });

@@ -8,6 +8,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { NakamaApiError } from "./api-error";
 import {
   inferArtifactMimeType,
   isDocxFile,
@@ -205,10 +206,13 @@ export async function writeArtifactFile(input: {
     cwd: resolvedArtifactsDir,
   });
   const filePath = guarded.resolved;
-  const fileStat = await stat(filePath);
+  // The dashboard saves by absolute path, so error copy uses the relative name:
+  // it is what the user sees in the UI, and it keeps server paths out of the toast.
+  const displayName = path.relative(resolvedArtifactsDir, filePath);
+  const fileStat = await stat(filePath).catch(() => null);
 
-  if (!fileStat.isFile()) {
-    throw new Error(`Artifact not found: ${input.filename}`);
+  if (!fileStat?.isFile()) {
+    throw new NakamaApiError(`Artifact not found: ${displayName}`, 404);
   }
 
   const metadata = await readArtifactMeta(
@@ -218,8 +222,9 @@ export async function writeArtifactFile(input: {
   );
 
   if (!isMarkdownArtifactMimeType(metadata.mimeType)) {
-    throw new Error(
-      `Editing is only supported for markdown artifacts: ${input.filename}`
+    throw new NakamaApiError(
+      `Only markdown artifacts can be edited: ${displayName}`,
+      400
     );
   }
 
