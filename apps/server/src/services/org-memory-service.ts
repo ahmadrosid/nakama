@@ -191,14 +191,15 @@ export class OrgMemoryService {
       2,
       this.options.configDir
     );
-    if (history.length < 2) {
+    const previous = history[1];
+    if (!previous) {
       throw new NakamaApiError(
         "No previous org memory revision to restore.",
         404
       );
     }
 
-    return this.restoreHistoryRevision(orgId, history[1]!.id, actorUserId);
+    return this.restoreHistoryRevision(orgId, previous.id, actorUserId);
   }
 
   /**

@@ -278,7 +278,7 @@ export class SkillProposalService {
     );
 
     const db = this.requireDatabase();
-    const existingByName = await db.getSkillByName(name);
+    const existingByName = await db.getSkillByName(name, input.orgId);
     if (
       existingByName &&
       !isPathWithinProfileSkillsDir(
@@ -643,7 +643,7 @@ export class SkillProposalService {
   ): Promise<void> {
     const db = this.requireDatabase();
     // Callers pass names from readSkillName (already assertValidSkillName).
-    const record = await db.getSkillByName(name);
+    const record = await db.getSkillByName(name, orgId);
     if (!record) {
       throw new NakamaApiError(`Skill "${name}" not found.`, 404);
     }

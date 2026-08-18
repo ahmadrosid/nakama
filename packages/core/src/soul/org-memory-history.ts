@@ -6,7 +6,7 @@ import {
   readText,
   writePrivateTextFile,
 } from "../fs";
-import { getOrgMemoryHistoryDir } from "./resolve";
+import { assertConfigPathSegment, getOrgMemoryHistoryDir } from "./resolve";
 
 export const ORG_MEMORY_HISTORY_MAX_ENTRIES = 50;
 
@@ -19,7 +19,10 @@ function historyMetaPath(
   id: string,
   configDir?: string
 ): string {
-  return join(getOrgMemoryHistoryDir(orgId, configDir), `${id}.json`);
+  return join(
+    getOrgMemoryHistoryDir(orgId, configDir),
+    `${assertConfigPathSegment(id, "revisionId")}.json`
+  );
 }
 
 function historyContentPath(
@@ -27,7 +30,10 @@ function historyContentPath(
   id: string,
   configDir?: string
 ): string {
-  return join(getOrgMemoryHistoryDir(orgId, configDir), `${id}.md`);
+  return join(
+    getOrgMemoryHistoryDir(orgId, configDir),
+    `${assertConfigPathSegment(id, "revisionId")}.md`
+  );
 }
 
 let orgMemoryChangeSequence = 0;

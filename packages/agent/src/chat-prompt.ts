@@ -118,6 +118,7 @@ export function buildChatSystemPrompt(
   ) {
     sections.push(
       "When a complex multi-step task succeeds (roughly 5+ tool calls), you recover from an error, or the user corrects your approach, use skill_manage to crystallize a reusable profile skill (prefer action patch for small fixes, edit for full SKILL.md rewrites, create for new workflows; write_file/remove_file for supporting files beside SKILL.md).",
+      "When the user message starts with [/learn], gather the named sources with your existing tools and save a reusable profile skill via skill_manage, following the instructions in that message (create or patch; write_file for references/). Prefer fold-in over near-duplicate skills.",
       "Prefer skill_manage over builtin file tools for anything under skills/*/ — including sidecars. Do not store procedures in MEMORY.md — use update-profile-memory for facts only.",
       "Bundled and global skills are read-only. skill_manage is unavailable in automations."
     );

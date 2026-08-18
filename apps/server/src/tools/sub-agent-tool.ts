@@ -56,6 +56,10 @@ export async function runSubAgentTool(
 ): Promise<SubAgentToolOutput> {
   const depth = context.agentDepth ?? 0;
 
+  if (!Number.isInteger(depth) || depth < 0) {
+    return failSubAgentResult("agentDepth must be a non-negative integer.");
+  }
+
   if (depth >= 1) {
     return failSubAgentResult("Nested sub-agent execution is not allowed.");
   }

@@ -208,14 +208,10 @@ export function createSkillManageTools(
         const { orgId, profileId } = requireSkillManageAccess(context);
         const action = readAction(input);
 
-        const gateOn =
+        if (
           skillProposalService !== null &&
-          (await skillProposalService.isWriteApprovalRequired(
-            orgId,
-            profileId
-          ));
-
-        if (gateOn) {
+          (await skillProposalService.isWriteApprovalRequired(orgId, profileId))
+        ) {
           if (action === "create") {
             const content = readRawString(input, "content");
             if (!content?.trim()) {
@@ -224,7 +220,7 @@ export function createSkillManageTools(
               );
             }
 
-            const staged = await skillProposalService!.stageProposal({
+            const staged = await skillProposalService.stageProposal({
               action: "create",
               content,
               orgId,
@@ -263,7 +259,7 @@ export function createSkillManageTools(
               throw new Error("new_string is required for patch.");
             }
 
-            const staged = await skillProposalService!.stageProposal({
+            const staged = await skillProposalService.stageProposal({
               action: "patch",
               newString,
               oldString,
@@ -295,7 +291,7 @@ export function createSkillManageTools(
               );
             }
 
-            const staged = await skillProposalService!.stageProposal({
+            const staged = await skillProposalService.stageProposal({
               action: "edit",
               content,
               orgId,
@@ -328,7 +324,7 @@ export function createSkillManageTools(
               throw new Error("content is required for write_file.");
             }
 
-            const staged = await skillProposalService!.stageProposal({
+            const staged = await skillProposalService.stageProposal({
               action: "write_file",
               content,
               orgId,
@@ -361,7 +357,7 @@ export function createSkillManageTools(
               throw new Error("path is required for remove_file.");
             }
 
-            const staged = await skillProposalService!.stageProposal({
+            const staged = await skillProposalService.stageProposal({
               action: "remove_file",
               orgId,
               profileId,
@@ -388,7 +384,7 @@ export function createSkillManageTools(
             throw new Error("name is required for delete.");
           }
 
-          const staged = await skillProposalService!.stageProposal({
+          const staged = await skillProposalService.stageProposal({
             action: "delete",
             orgId,
             profileId,

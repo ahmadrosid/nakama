@@ -49,6 +49,22 @@ test("buildChatSystemPrompt omits skill crystallization nudge when skill_manage 
   expect(prompt).not.toContain("skill_manage");
 });
 
+test("buildChatSystemPrompt includes /learn recognition when skill_manage is available", () => {
+  const prompt = buildChatSystemPrompt(
+    [
+      {
+        description: "Manage skills",
+        name: "skill_manage",
+        parameters: { properties: {}, type: "object" },
+      },
+    ],
+    { enableToolLoop: true }
+  );
+
+  expect(prompt).toContain("skill_manage");
+  expect(prompt).toContain("[/learn]");
+});
+
 test("buildChatSystemPrompt includes memory skill pointers when file tools are available", () => {
   const prompt = buildChatSystemPrompt(
     [

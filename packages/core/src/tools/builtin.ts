@@ -538,22 +538,18 @@ function planEdit(
     );
   }
 
-  if (exactMatches.length === 1) {
-    const start = exactMatches[0]!;
+  const [exactStart] = exactMatches;
+  if (exactStart !== undefined) {
     return {
-      end: start + edit.oldText.length,
+      end: exactStart + edit.oldText.length,
       fuzzy: false,
       index,
       newText: normalizeReplacementLineEndings(edit.newText, lineEnding),
-      start,
+      start: exactStart,
     };
   }
 
   const fuzzyMatches = findNormalizedMatches(content, edit.oldText);
-
-  if (fuzzyMatches.length === 0) {
-    throw new Error(`Edit ${index + 1} oldText not found in file.`);
-  }
 
   if (fuzzyMatches.length > 1) {
     throw new Error(
@@ -561,7 +557,10 @@ function planEdit(
     );
   }
 
-  const match = fuzzyMatches[0]!;
+  const [match] = fuzzyMatches;
+  if (!match) {
+    throw new Error(`Edit ${index + 1} oldText not found in file.`);
+  }
 
   return {
     end: match.end,
@@ -736,21 +735,15 @@ function removeTrailingWhitespaceTokens(
 }
 
 function assertNoOverlappingEdits(plans: PlannedEdit[]): void {
-  for (let index = 1; index < plans.length; index += 1) {
-    const previous = plans[index - 1]!;
-    const current = plans[index]!;
-
-    if (current.start < previous.start) {
-      throw new Error(
-        "Edit plans must be sorted by start offset before applying."
-      );
-    }
-
-    if (current.start < previous.end) {
+  // Caller sorts by start before invoking; only overlap is still possible.
+  let previous: PlannedEdit | undefined;
+  for (const current of plans) {
+    if (previous !== undefined && current.start < previous.end) {
       throw new Error(
         `Edit ${current.index + 1} overlaps with edit ${previous.index + 1}.`
       );
     }
+    previous = current;
   }
 }
 

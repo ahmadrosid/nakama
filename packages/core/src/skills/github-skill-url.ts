@@ -44,9 +44,9 @@ function normalizeRawUrl(parsed: URL): string {
     );
   }
 
-  const owner = segments[0]!;
-  const repo = segments[1]!;
-  const ref = segments[2]!;
+  const owner = segments[0];
+  const repo = segments[1];
+  const ref = segments[2];
   const filePath = ensureSkillFilePath(segments.slice(3).join("/"), "file");
 
   return buildRawUrl(owner, repo, ref, filePath);
@@ -60,9 +60,9 @@ function githubHtmlUrlToRaw(parsed: URL): string {
     );
   }
 
-  const owner = segments[0]!;
-  const repo = segments[1]!;
-  const kind = segments[2]!;
+  const owner = segments[0];
+  const repo = segments[1];
+  const kind = segments[2];
 
   if (kind !== "blob" && kind !== "tree" && kind !== "raw") {
     throw new Error(
@@ -76,7 +76,7 @@ function githubHtmlUrlToRaw(parsed: URL): string {
     );
   }
 
-  const ref = segments[3]!;
+  const ref = segments[3];
   const rest = segments.slice(4).join("/");
   const mode = kind === "tree" ? "tree" : "file";
   const filePath = ensureSkillFilePath(rest, mode);
@@ -90,16 +90,13 @@ function buildRawUrl(
   ref: string,
   filePath: string
 ): string {
+  // Segments are validated in splitPath / ensureSkillFilePath before this runs.
   const pathSegments = [
     owner,
     repo,
     ref,
     ...filePath.split("/").filter((segment) => segment.length > 0),
   ];
-
-  for (const segment of pathSegments) {
-    assertSafePathSegment(segment);
-  }
 
   return `https://${RAW_HOST}/${pathSegments.map(encodeURIComponent).join("/")}`;
 }
@@ -117,10 +114,8 @@ function ensureSkillFilePath(pathPart: string, mode: "file" | "tree"): string {
     );
   }
 
+  // pathPart is built from splitPath segments (already assertSafePathSegment).
   const parts = normalized.split("/").filter((segment) => segment.length > 0);
-  for (const part of parts) {
-    assertSafePathSegment(part);
-  }
 
   const base = parts.at(-1) ?? "";
   if (base === SKILL_FILE_NAME) {

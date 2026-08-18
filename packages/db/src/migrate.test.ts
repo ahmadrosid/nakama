@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addOrgIdColumnIfMissing,
@@ -321,6 +322,134 @@ describe("coding-delegation skill rename migration", () => {
       expect(assignment.skill_id).toBe("skill_canonical");
     } finally {
       db.close();
+    }
+  });
+});
+
+describe("install-wide name uniqueness", () => {
+  function insertTool(db: Database, id: string, name: string): void {
+    db.prepare(
+      `INSERT INTO tools (id, name, description, handler_type, handler_config, created_at, updated_at)
+       VALUES (?, ?, '', 'bash', '{}', '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+    ).run(id, name);
+  }
+
+  function insertServer(db: Database, id: string, name: string): void {
+    db.prepare(
+      `INSERT INTO mcp_servers (id, name, transport, config, enabled, status, last_error, cached_tools, created_at, updated_at)
+       VALUES (?, ?, 'stdio', '{}', 1, 'disconnected', NULL, '[]', '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+    ).run(id, name);
+  }
+
+  test("rejects a second tool or MCP server with the same name", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      insertTool(db, "tool_1", "bash");
+      insertServer(db, "mcp_1", "github");
+
+      expect(() => insertTool(db, "tool_2", "bash")).toThrow();
+      expect(() => insertServer(db, "mcp_2", "github")).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("still migrates a database that already holds duplicates", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      db.exec("DROP INDEX IF EXISTS tools_global_name_unique");
+      insertTool(db, "tool_1", "bash");
+      insertTool(db, "tool_2", "bash");
+
+      expect(() => migrateDatabase(db)).not.toThrow();
+      expect(db.query("SELECT count(*) c FROM tools").get()).toEqual({ c: 2 });
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("skill org id backfill", () => {
+  test("recovers the owning org from source_path and leaves global skills alone", () => {
+    const configDir = mkdtempSync(join(tmpdir(), "nakama-skill-org-backfill-"));
+    const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+
+      // Rows as every pre-fix install has them: org_id never written.
+      db.prepare(
+        `INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+      ).run(
+        "skill_org_a",
+        "deploy-notes",
+        join(
+          configDir,
+          "orgs",
+          "org_a",
+          "profiles",
+          "profile_a",
+          "skills",
+          "deploy-notes"
+        )
+      );
+      db.prepare(
+        `INSERT INTO skills (
+          id, name, description, source_path, has_tool,
+          disable_model_invocation, enabled, created_at, updated_at
+        ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+      ).run(
+        "skill_global",
+        "weather",
+        join(configDir, "agent", "skills", "weather")
+      );
+
+      migrateDatabase(db);
+
+      const rows = db
+        .prepare("SELECT id, org_id FROM skills ORDER BY id")
+        .all() as { id: string; org_id: string | null }[];
+
+      expect(rows).toEqual([
+        { id: "skill_global", org_id: null },
+        { id: "skill_org_a", org_id: "org_a" },
+      ]);
+
+      // Two global skills may not share a source_path, which the org-scoped
+      // index alone cannot enforce.
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO skills (
+              id, name, description, source_path, has_tool,
+              disable_model_invocation, enabled, created_at, updated_at
+            ) VALUES (?, ?, '', ?, 0, 0, 1, '2026-08-17T00:00:00.000Z', '2026-08-17T00:00:00.000Z')`
+          )
+          .run(
+            "skill_global_copy",
+            "weather",
+            join(configDir, "agent", "skills", "weather")
+          )
+      ).toThrow();
+    } finally {
+      db.close();
+      rmSync(configDir, { force: true, recursive: true });
+
+      if (originalConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+      }
     }
   });
 });

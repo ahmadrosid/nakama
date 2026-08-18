@@ -145,6 +145,24 @@ export function isPathWithinProfileSkillsDir(
   return isResolvedWithinRoot(skillsRoot, resolved);
 }
 
+/**
+ * Owning org of a skill directory, read back from its path
+ * (`~/.nakama/orgs/{orgId}/profiles/{profileId}/skills/{name}`). Global skills
+ * live outside `orgs/` and belong to no org, so they return null.
+ */
+export function orgIdFromSkillSourcePath(sourcePath: string): string | null {
+  const orgsRoot = resolveWithRealpath(path.join(getUserConfigDir(), "orgs"));
+  const resolved = resolveWithRealpath(sourcePath);
+
+  if (!isResolvedWithinRoot(orgsRoot, resolved)) {
+    return null;
+  }
+
+  const [orgId] = path.relative(orgsRoot, resolved).split(path.sep);
+
+  return orgId || null;
+}
+
 export function resolveProfileSkillDirectory(
   orgId: string,
   profileId: string,

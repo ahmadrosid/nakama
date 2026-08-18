@@ -447,6 +447,12 @@ async function runStickyChat(
       return handleCreateCommand(line);
     }
 
+    // /learn is sent as a normal chat turn; the server expands it when
+    // skill_manage is available. Keep it unhandled so autocomplete still works.
+    if (line === "/learn" || line.startsWith("/learn ")) {
+      return "unhandled";
+    }
+
     if (line === "/soul" || line.startsWith("/soul ")) {
       return handleSoulCommand(line);
     }
