@@ -60,7 +60,6 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
   const mcpServersByName = new Map<string, StoredMcpServerRecord>();
   const profileMcpServers = new Map<string, Set<string>>();
   const skills = new Map<string, StoredSkillRecord>();
-  const skillsByName = new Map<string, StoredSkillRecord>();
   const skillsBySourcePath = new Map<string, StoredSkillRecord>();
   const profileSkills = new Map<string, Set<string>>();
   const skillUsage = new Map<string, StoredSkillUsageRecord>();
@@ -311,7 +310,6 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       }
 
       skills.delete(id);
-      skillsByName.delete(existing.name);
       skillsBySourcePath.delete(existing.sourcePath);
 
       for (const assigned of profileSkills.values()) {
@@ -588,8 +586,16 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       return skills.get(id) ?? null;
     },
 
-    async getSkillByName(name) {
-      return skillsByName.get(name) ?? null;
+    async getSkillByName(name, orgId) {
+      const matches = Array.from(skills.values()).filter(
+        (skill) => skill.name === name
+      );
+
+      return (
+        matches.find((skill) => Boolean(orgId) && skill.orgId === orgId) ??
+        matches.find((skill) => !skill.orgId) ??
+        null
+      );
     },
 
     async getSkillBySourcePath(sourcePath) {
@@ -1434,12 +1440,10 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       const existing = skills.get(record.id);
 
       if (existing) {
-        skillsByName.delete(existing.name);
         skillsBySourcePath.delete(existing.sourcePath);
       }
 
       skills.set(record.id, record);
-      skillsByName.set(record.name, record);
       skillsBySourcePath.set(record.sourcePath, record);
     },
 

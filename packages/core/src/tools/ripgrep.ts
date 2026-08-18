@@ -56,6 +56,17 @@ export async function runRipgrep(
   args: string[],
   options: { workspaceRoot: string; searchRoot: string; maxResults: number }
 ): Promise<RipgrepSearchResult> {
+  if (!path.isAbsolute(options.workspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
+  if (!path.isAbsolute(options.searchRoot)) {
+    throw new Error(
+      "searchRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
+
   const command = await resolveRipgrepCommand();
 
   return await new Promise((resolve, reject) => {

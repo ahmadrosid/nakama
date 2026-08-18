@@ -59,6 +59,13 @@ export type {
 } from "./chat";
 export type { CompactionConfig } from "./history-compaction";
 export { usableContextTokens } from "./history-compaction";
+export {
+  buildLearnPrompt,
+  expandLearnInLastUserMessage,
+  expandLearnUserContent,
+  expandLearnUserMessage,
+  tryParseLearnCommand,
+} from "./learn-prompt";
 export type { MergeOrgMemoryWithApprovedBulletOptions } from "./org-memory-merge";
 export {
   mergeOrgMemoryWithApprovedBullet,

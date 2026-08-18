@@ -5,6 +5,7 @@ import {
   createAgentHarness,
   draftTaskPromptFromFields,
   executeToolCall,
+  expandLearnInLastUserMessage,
   suggestToolParamsFromPrompt,
 } from "@nakama/agent";
 import type {
@@ -3193,8 +3194,20 @@ export class AgentService {
 
         return replaceImagePartsWithDescriptions(forVision, descriptions);
       },
-      rehydrateMessagesForProvider: (messages) =>
-        rehydrateAttachmentMessages(messages, loadAttachment),
+      rehydrateMessagesForProvider: async (messages) => {
+        const rehydrated = await rehydrateAttachmentMessages(
+          messages,
+          loadAttachment
+        );
+
+        // Expand /learn only for the provider. History stays raw so skill
+        // matching, the web UI, and later turns keep the short command.
+        if (includeSkillManageTools && hasSkillManage) {
+          return expandLearnInLastUserMessage(rehydrated);
+        }
+
+        return rehydrated;
+      },
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
         const todoContext =

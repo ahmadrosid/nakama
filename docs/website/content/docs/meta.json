@@ -8,6 +8,7 @@
     "providers",
     "---Deploy---",
     "docker",
+    "tailscale",
     "backup-restore",
     "---Channels---",
     "cli",

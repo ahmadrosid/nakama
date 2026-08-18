@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
   isValidBaseUrl,
   normalizeBaseUrl,
@@ -214,6 +214,11 @@ export function getUserConfigDir(): string {
   const override = process.env.NAKAMA_CONFIG_DIR?.trim();
 
   if (override) {
+    if (!isAbsolute(override)) {
+      throw new Error(
+        "NAKAMA_CONFIG_DIR must be an absolute path; relative paths resolve against process.cwd() and break profile isolation."
+      );
+    }
     return override;
   }
 

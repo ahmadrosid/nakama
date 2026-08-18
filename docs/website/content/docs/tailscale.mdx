@@ -1,0 +1,114 @@
+---
+title: "Tailscale"
+description: "Reach a self-hosted Nakama privately over your tailnet, without opening a public port."
+---
+
+Nakama has no built-in TLS and binds `127.0.0.1:4310` by default, or `0.0.0.0:4310` in Docker. Publishing that port to the internet exposes an agent console with tool access, so the safer route for a self-hosted install is a private network. Tailscale gives you one without a reverse proxy, a certificate, or a DNS record.
+
+Tailscale stays an operator concern. Nakama does not embed it and has no Tailscale settings of its own.
+
+## Host install
+
+Install Tailscale on the machine running Nakama, then join your tailnet:
+
+```bash
+tailscale up
+```
+
+Leave Nakama on its default port and let Tailscale carry the traffic. With MagicDNS on, the dashboard is reachable from any device in the tailnet:
+
+```
+http://<machine-name>:4310
+```
+
+If Nakama runs in Docker, keep the published port bound to the host only, not to every interface:
+
+```bash
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
+  --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
+`-p 4310:4310` binds `0.0.0.0` and is what accidentally exposes the console on a machine with a public IP.
+
+## HTTPS with Tailscale Serve
+
+MagicDNS over plain HTTP works, but Serve gives you an HTTPS origin with a real certificate, which the browser and any OAuth flow prefer:
+
+```bash
+tailscale serve --bg 4310
+```
+
+Nakama is then at `https://<machine-name>.<tailnet>.ts.net`. Tell Nakama that this is its public origin, otherwise callbacks and shared links keep pointing at `localhost`:
+
+```bash
+NAKAMA_WEB_PUBLIC_URL=https://<machine-name>.<tailnet>.ts.net
+```
+
+The same value can be set from **Settings** under **Public web URL** instead of the environment.
+
+Keep Funnel off. `tailscale funnel` publishes the same service to the whole internet, which is exactly what this setup avoids.
+
+## Docker Compose with a sidecar
+
+If you would rather not install Tailscale on the host, run it beside Nakama and put Nakama in the sidecar's network namespace:
+
+```yaml
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: nakama
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    restart: unless-stopped
+
+  nakama:
+    image: ghcr.io/ahmadrosid/nakama:latest
+    network_mode: service:tailscale
+    environment:
+      NAKAMA_WEB_PUBLIC_URL: https://nakama.<tailnet>.ts.net
+    volumes:
+      - nakama-data:/nakama/data
+    depends_on:
+      - tailscale
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
+  nakama-data:
+```
+
+`serve.json` describes the HTTPS front end:
+
+```json
+{
+  "TCP": { "443": { "HTTPS": true } },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": { "/": { "Proxy": "http://127.0.0.1:4310" } }
+    }
+  },
+  "AllowFunnel": {}
+}
+```
+
+An empty `AllowFunnel` keeps the service tailnet-only. Use a tagged auth key (`tag:nakama`) so the node is owned by the tag rather than by whoever generated the key, which keeps it from expiring with that user.
+
+`network_mode: service:tailscale` means Nakama publishes no ports of its own. Reaching it from outside the tailnet is then not a matter of configuration, it is simply not routed.
+
+## What Tailscale does not solve
+
+Serve is tailnet-only, so anything that has to call Nakama from the public internet still needs a public URL:
+
+- Composio OAuth callbacks, see [Composio](/composio)
+- Third-party webhooks pointed at your instance
+
+Outbound traffic is unaffected. Channel workers for [Telegram](/telegram), [WhatsApp](/whatsapp) and [Discord](/discord) connect out, so they keep working behind a tailnet with no inbound exposure at all.
+
+## Headscale
+
+Headscale is a self-hosted control plane that speaks the same protocol. Everything above applies once your nodes point at it. It is an operator choice about who runs the coordination server, and Nakama neither knows nor cares which one you use.

@@ -16,6 +16,12 @@ export function buildToolExecutionContext(context: ToolContext): ToolContext {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
 
+  if (Boolean(orgId) !== Boolean(profileId)) {
+    throw new Error(
+      "orgId and profileId must both be set to derive workspaceRoot, or neither."
+    );
+  }
+
   if (!(orgId && profileId)) {
     return context;
   }

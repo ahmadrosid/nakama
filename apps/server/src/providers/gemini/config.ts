@@ -37,6 +37,71 @@ export function buildGeminiGenerateConfig(options: {
   };
 }
 
+// Gemini function declarations accept a subset of JSON Schema: exclusive bounds
+// and the $schema marker are rejected with 400 INVALID_ARGUMENT, and Zod emits
+// exclusiveMinimum for .positive(). Translate to the closest supported bound.
+const DROPPED_SCHEMA_KEYS = new Set([
+  "$schema",
+  "exclusiveMaximum",
+  "exclusiveMinimum",
+]);
+
+function inclusiveBoundFor(
+  schema: Record<string, unknown>,
+  exclusiveValue: number,
+  step: number
+): number {
+  return schema.type === "integer" ? exclusiveValue + step : exclusiveValue;
+}
+
+function applyExclusiveBound(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  exclusiveKey: "exclusiveMaximum" | "exclusiveMinimum",
+  inclusiveKey: "maximum" | "minimum",
+  step: number
+): void {
+  const exclusiveValue = source[exclusiveKey];
+
+  if (typeof exclusiveValue !== "number" || inclusiveKey in target) {
+    return;
+  }
+
+  target[inclusiveKey] = inclusiveBoundFor(source, exclusiveValue, step);
+}
+
+function sanitizeSchemaValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeSchemaValue);
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const source = value as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, entry] of Object.entries(source)) {
+    if (DROPPED_SCHEMA_KEYS.has(key)) {
+      continue;
+    }
+
+    sanitized[key] = sanitizeSchemaValue(entry);
+  }
+
+  applyExclusiveBound(sanitized, source, "exclusiveMinimum", "minimum", 1);
+  applyExclusiveBound(sanitized, source, "exclusiveMaximum", "maximum", -1);
+
+  return sanitized;
+}
+
+export function sanitizeGeminiToolParameters(
+  parameters: LlmToolDefinition["parameters"]
+): LlmToolDefinition["parameters"] {
+  return sanitizeSchemaValue(parameters) as LlmToolDefinition["parameters"];
+}
+
 function buildGeminiTools(
   tools: LlmToolDefinition[] | undefined,
   webSearch: boolean
@@ -52,7 +117,7 @@ function buildGeminiTools(
       functionDeclarations: tools.map((tool) => ({
         description: tool.description,
         name: tool.name,
-        parameters: tool.parameters,
+        parameters: sanitizeGeminiToolParameters(tool.parameters),
       })),
     });
   }

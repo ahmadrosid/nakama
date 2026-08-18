@@ -155,7 +155,7 @@ export async function prepareChannelOrgContext(options: {
   }
 
   if (orgs.length === 1) {
-    const org = orgs[0]!;
+    const org = orgs[0];
     if (options.getSelectedOrgId() !== org.id) {
       await options.saveSelectedOrgId(org.id);
     }
