@@ -1750,6 +1750,17 @@ export interface ListArtifactsResponse {
   total: number;
 }
 
+export interface UpdateArtifactRequest {
+  content: string;
+}
+
+export interface UpdateArtifactResponse {
+  filename: string;
+  profileId: string;
+  sizeBytes: number;
+  updatedAt: string;
+}
+
 export interface DeleteArtifactResponse {
   deleted: boolean;
   filename: string;

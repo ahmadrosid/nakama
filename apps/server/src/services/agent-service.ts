@@ -73,6 +73,7 @@ import type {
   TranscribeAudioResponse,
   TranscriptionSettings,
   TranscriptionSettingsResponse,
+  UpdateArtifactResponse,
   UpdateComposioSettingsRequest,
   UpdateDiscordSettingsRequest,
   UpdateEmailSettingsRequest,
@@ -157,6 +158,7 @@ import {
   saveUserTimezone,
   saveWhatsAppConfig,
   USER_CONTEXT_TEMPLATE,
+  writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
@@ -2790,6 +2792,16 @@ export class AgentService {
       profileId,
       render: options.render,
     });
+  }
+
+  async writeProfileArtifact(
+    orgId: string,
+    profileId: string,
+    filename: string,
+    content: string
+  ): Promise<UpdateArtifactResponse> {
+    await this.requireProfile(orgId, profileId);
+    return writeArtifactFile({ content, filename, orgId, profileId });
   }
 
   async deleteProfileArtifact(

@@ -12,6 +12,7 @@ setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
 
 function createApp() {
   const readCalls: Array<{ render?: "markdown" }> = [];
+  const writeCalls: Array<{ content: string; filename: string }> = [];
   const agent = {
     deleteProfileArtifact: async () => ({
       deleted: true,
@@ -36,11 +37,26 @@ function createApp() {
         contentType: "text/markdown",
       };
     },
+    writeProfileArtifact: async (
+      _orgId: string,
+      profileId: string,
+      filename: string,
+      content: string
+    ) => {
+      writeCalls.push({ content, filename });
+      return {
+        filename,
+        profileId,
+        sizeBytes: content.length,
+        updatedAt: "2026-08-18T00:00:00.000Z",
+      };
+    },
   };
 
   return {
     ...createMinimalHonoApp({ agent }),
     readCalls,
+    writeCalls,
   };
 }
 
@@ -243,5 +259,100 @@ describe("profile artifact content auth", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+});
+
+describe("profile artifact write auth", () => {
+  test("org member can save artifact content", async () => {
+    const { app, databaseAdapter, writeCalls } = createApp();
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "writer@example.com",
+      "member"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
+        {
+          body: JSON.stringify({ content: "# Report\n\nEdited by hand.\n" }),
+          headers: memberSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": memberSession.csrfToken,
+            },
+            memberSession.orgId
+          ),
+          method: "PUT",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(writeCalls.at(-1)).toEqual({
+      content: "# Report\n\nEdited by hand.\n",
+      filename: "report.md",
+    });
+  });
+
+  test("org viewer cannot save artifact content", async () => {
+    const { app, databaseAdapter, writeCalls } = createApp();
+    const viewerSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "viewer-write@example.com",
+      "viewer"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md",
+        {
+          body: JSON.stringify({ content: "# Overwritten\n" }),
+          headers: viewerSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": viewerSession.csrfToken,
+            },
+            viewerSession.orgId
+          ),
+          method: "PUT",
+        }
+      )
+    );
+
+    expect(response.status).toBe(403);
+    expect(writeCalls).toHaveLength(0);
+  });
+
+  test("rejects a save with no path", async () => {
+    const { app, databaseAdapter, writeCalls } = createApp();
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "nopath@example.com",
+      "member"
+    );
+
+    const response = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/profiles/profile_1/artifacts/content",
+        {
+          body: JSON.stringify({ content: "# Report\n" }),
+          headers: memberSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": memberSession.csrfToken,
+            },
+            memberSession.orgId
+          ),
+          method: "PUT",
+        }
+      )
+    );
+
+    expect(response.status).toBe(400);
+    expect(writeCalls).toHaveLength(0);
   });
 });

@@ -1,6 +1,7 @@
 import {
   File01Icon,
   Image01Icon,
+  PencilEdit01Icon,
   Video01Icon,
   ViewIcon,
 } from "hugeicons-react";
@@ -14,6 +15,7 @@ import {
   artifactPanelHeaderMeta,
   downloadActionLabel,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
+import { ArtifactMarkdownEditor } from "@/components/chat/artifact-markdown-editor";
 import {
   type ArtifactPreviewMode,
   ArtifactPreviewModeToggle,
@@ -25,12 +27,15 @@ import {
 import { useArtifactPreviewContent } from "@/components/chat/use-artifact-preview-content";
 import { useArtifactShareControls } from "@/components/chat/use-artifact-share-controls";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useWriteArtifactMutation } from "@/hooks/use-resource-mutations";
 import {
   artifactCodeLanguage,
   buildArtifactContentUrl,
@@ -45,7 +50,7 @@ import {
   isVideoArtifactMimeType,
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
-import { client } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import { formatBytes } from "@/lib/knowledge-base-files";
 import { cn } from "@/lib/utils";
 
@@ -155,6 +160,10 @@ export function ArtifactAttachmentPreview({
   const [copied, setCopied] = useState(false);
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { activeOrg } = useAuth();
+  const writeArtifact = useWriteArtifactMutation();
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
   const mimeType = resolveArtifactMimeType(
     artifact.mimeType,
@@ -186,6 +195,9 @@ export function ArtifactAttachmentPreview({
     isTextArtifactMimeType(mimeType) ||
     isUnknownArtifactMimeType(mimeType);
   const downloadLabel = downloadActionLabel(mimeType);
+  // Word artifacts preview as converted markdown, so writing the buffer back
+  // would replace the .docx with its own preview text.
+  const canEdit = isMarkdown && !isWordDocument && activeOrg?.role !== "viewer";
   const {
     loading,
     error,
@@ -213,10 +225,46 @@ export function ArtifactAttachmentPreview({
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
+  async function saveDraft() {
+    if (draft === null) {
+      return;
+    }
+
+    setSaveError(null);
+
+    try {
+      await writeArtifact.mutateAsync({
+        artifactPath: artifact.path,
+        content: draft,
+        profileId,
+      });
+      setContent(draft);
+      setDraft(null);
+    } catch (mutationError) {
+      setSaveError(formatError(mutationError));
+    }
+  }
+
   function buildPanelBody(
     loadingOverride?: boolean,
     mode: ArtifactPreviewMode = previewMode
   ) {
+    if (draft !== null) {
+      return (
+        <ArtifactMarkdownEditor
+          busy={writeArtifact.isPending}
+          draft={draft}
+          error={saveError}
+          onCancel={() => {
+            setDraft(null);
+            setSaveError(null);
+          }}
+          onChange={setDraft}
+          onSave={() => void saveDraft()}
+        />
+      );
+    }
+
     const panelKind = isImage
       ? "image"
       : isVideo
@@ -243,19 +291,39 @@ export function ArtifactAttachmentPreview({
 
   function buildPanelConfig(mode: ArtifactPreviewMode = previewMode) {
     return {
-      bodyClassName: artifactPanelBodyClassName({
-        isHtml,
-        isImage,
-        isMarkdown,
-        isVideo,
-        previewMode: mode,
-      }),
+      bodyClassName:
+        draft === null
+          ? artifactPanelBodyClassName({
+              isHtml,
+              isImage,
+              isMarkdown,
+              isVideo,
+              previewMode: mode,
+            })
+          : "flex flex-col overflow-hidden p-0",
       content: buildPanelBody(undefined, mode),
       fullscreen,
       headerActions: (
         <>
           <ArtifactAttachmentPanelActions
-            additionalMenuItems={<ArtifactShareMenuItem share={share} />}
+            additionalMenuItems={
+              <>
+                {canEdit ? (
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    disabled={loading || content === null}
+                    onClick={() => {
+                      setSaveError(null);
+                      setDraft(content ?? "");
+                    }}
+                  >
+                    <PencilEdit01Icon aria-hidden />
+                    Edit artifact
+                  </DropdownMenuItem>
+                ) : null}
+                <ArtifactShareMenuItem share={share} />
+              </>
+            }
             content={content}
             copied={copied}
             copyDisabled={isImage || isVideo}
@@ -273,9 +341,10 @@ export function ArtifactAttachmentPreview({
           />
         </>
       ),
-      leading: showPreviewToggle ? (
-        <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
-      ) : null,
+      leading:
+        showPreviewToggle && draft === null ? (
+          <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
+        ) : null,
       resizable: !fullscreen,
       subtitle: header.subtitle,
       title: header.title,
@@ -314,6 +383,10 @@ export function ArtifactAttachmentPreview({
     share.busy,
     share.publishDialogOpen,
     previewMode,
+    canEdit,
+    draft,
+    saveError,
+    writeArtifact.isPending,
     showPreviewToggle,
     header.subtitle,
     header.title,
@@ -351,6 +424,8 @@ export function ArtifactAttachmentPreview({
     setFullscreen(false);
     setCopied(false);
     setPreviewMode("preview");
+    setDraft(null);
+    setSaveError(null);
     show({
       ...buildPanelConfig("preview"),
       content: buildPanelBody(
@@ -368,6 +443,8 @@ export function ArtifactAttachmentPreview({
         setFullscreen(false);
         setCopied(false);
         setPreviewMode("preview");
+        setDraft(null);
+        setSaveError(null);
       },
       resizable: true,
     });

@@ -12,6 +12,8 @@ import type {
   ProfileResponse,
   SoulStackResponse,
   SoulStatusResponse,
+  UpdateArtifactRequest,
+  UpdateArtifactResponse,
   UpdateProfileRequest,
   UpdateSoulFileRequest,
   UploadKnowledgeBaseRequest,
@@ -19,9 +21,11 @@ import type {
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
+  requireNotViewerFromContext,
   requireOrgAdmin,
   requirePlatformAdminFromContext,
 } from "../org-guards";
@@ -50,6 +54,10 @@ export function registerProfileRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+  const artifactShares =
+    options.databaseAdapter && options.authService
+      ? new ArtifactShareService(options.databaseAdapter, options.authService)
+      : null;
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -105,6 +113,14 @@ export function registerProfileRoutes(
     .object({})
     .passthrough()
     .openapi("ListArtifactsResponse");
+  const updateArtifactSchema = z
+    .object({})
+    .passthrough()
+    .openapi("UpdateArtifactRequest");
+  const updateArtifactResultSchema = z
+    .object({})
+    .passthrough()
+    .openapi("UpdateArtifactResponse");
   const deleteArtifactSchema = z
     .object({})
     .passthrough()
@@ -368,6 +384,35 @@ export function registerProfileRoutes(
       },
       summary:
         "Read artifact bytes for a profile (org members; list/delete remain platform-admin)",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "writeProfileArtifactContent",
+      path: "/v1/profiles/{profileId}/artifacts/content",
+      request: {
+        body: {
+          content: { "application/json": { schema: updateArtifactSchema } },
+          required: true,
+        },
+        params: profileIdParam,
+        query: artifactPathQuery,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: updateArtifactResultSchema },
+          },
+          description: "Saved artifact",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Save markdown artifact content (org members except viewers)",
       tags: ["Profiles"],
     })
   );
@@ -712,6 +757,38 @@ export function registerProfileRoutes(
         "Content-Type": artifact.contentType,
       },
     });
+  });
+
+  app.put("/v1/profiles/:profileId/artifacts/content", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const artifactPath = c.req.query("path");
+
+    if (!artifactPath) {
+      return json({ error: "path is required" }, 400);
+    }
+
+    const body = await readJson<UpdateArtifactRequest>(c.req.raw);
+
+    if (typeof body.content !== "string") {
+      return json({ error: "content is required" }, 400);
+    }
+
+    const saved = await agent.writeProfileArtifact(
+      orgId,
+      profileId,
+      artifactPath,
+      body.content
+    );
+
+    await artifactShares?.refreshArtifactShareSnapshot({
+      orgId,
+      profileId,
+      sourcePaths: [artifactPath, saved.filename],
+    });
+
+    return json<UpdateArtifactResponse>(saved);
   });
 
   app.delete("/v1/profiles/:profileId/artifacts", async (c) => {

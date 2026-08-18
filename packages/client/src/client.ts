@@ -148,6 +148,8 @@ import type {
   TranscriptionSettings,
   TranscriptionSettingsResponse,
   UnpinOrgMemoryRequest,
+  UpdateArtifactRequest,
+  UpdateArtifactResponse,
   UpdateAuthProfileRequest,
   UpdateAutomationRequest,
   UpdateComposioSettingsRequest,
@@ -991,6 +993,22 @@ export class NakamaClient {
         response.headers.get("Content-Type") ?? "application/octet-stream",
       data: await response.arrayBuffer(),
     };
+  }
+
+  async writeProfileArtifactContent(
+    profileId: string,
+    artifactPath: string,
+    content: string
+  ): Promise<UpdateArtifactResponse> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    return this.request<UpdateArtifactResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      {
+        body: JSON.stringify({ content } satisfies UpdateArtifactRequest),
+        method: "PUT",
+      }
+    );
   }
 
   async listKnowledgeBase(
