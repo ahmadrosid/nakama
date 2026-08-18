@@ -1,5 +1,7 @@
+import { useMemo, useRef } from "react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { ArtifactMarkdownToc } from "@/components/chat/artifact-markdown-toc";
 import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -7,6 +9,7 @@ import {
   htmlForArtifactPreview,
 } from "@/lib/artifact-html-preview";
 import type { ChatArtifactRef } from "@/lib/chat-artifacts";
+import { extractMarkdownHeadings } from "@/lib/markdown-toc";
 import { cn } from "@/lib/utils";
 
 type ArtifactPanelSharedProps = {
@@ -211,6 +214,24 @@ function ArtifactAttachmentTextBody({
       ? (language ?? (format === "markdown" ? "markdown" : null))
       : language;
   const showCodeBlock = Boolean(content && sourceFormat !== "markdown");
+  const renderedRef = useRef<HTMLDivElement>(null);
+  const headings = useMemo(
+    () =>
+      content && sourceFormat === "markdown"
+        ? extractMarkdownHeadings(content)
+        : [],
+    [content, sourceFormat]
+  );
+
+  const rendered = content
+    ? renderTextContent({
+        content,
+        fillHeight: showCodeBlock,
+        format: sourceFormat,
+        language: sourceLanguage,
+        streaming,
+      })
+    : null;
 
   return (
     <div
@@ -220,15 +241,16 @@ function ArtifactAttachmentTextBody({
     >
       {loading ? <LoadingState compact /> : null}
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
-      {!(loading || error) && content
-        ? renderTextContent({
-            content,
-            fillHeight: showCodeBlock,
-            format: sourceFormat,
-            language: sourceLanguage,
-            streaming,
-          })
-        : null}
+      {!(loading || error) && rendered ? (
+        sourceFormat === "markdown" ? (
+          <>
+            <ArtifactMarkdownToc contentRef={renderedRef} headings={headings} />
+            <div ref={renderedRef}>{rendered}</div>
+          </>
+        ) : (
+          rendered
+        )
+      ) : null}
       {loading || error || canPreview ? null : (
         <UnavailablePreview padded={false} />
       )}
