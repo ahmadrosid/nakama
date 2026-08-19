@@ -8,9 +8,29 @@ import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createHonoApp } from "./app";
 import {
+  loginPlatformAdminSession,
   loginUserSession,
   setupFreshInstallSession,
 } from "./test-session-helpers";
+
+function createHarnessApp() {
+  const databaseAdapter = createInMemoryDatabaseAdapter();
+  const authService = new AuthService();
+  const app = createHonoApp({
+    agent: new AgentService(null, null, databaseAdapter),
+    authService,
+    automationService: {} as never,
+    databaseAdapter,
+    mcpService: {} as never,
+    orgService: new OrgService(databaseAdapter, authService),
+    systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+    taskService: {} as never,
+    webDistDir: null,
+    workerManager: {} as never,
+  });
+
+  return { app, authService, databaseAdapter };
+}
 
 describe("coding harness settings routes", () => {
   let configDir = "";
@@ -28,20 +48,7 @@ describe("coding harness settings routes", () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-route-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
-      agent: new AgentService(null, null, databaseAdapter),
-      authService,
-      automationService: {} as never,
-      databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
-    });
+    const { app, databaseAdapter } = createHarnessApp();
 
     const session = await setupFreshInstallSession(app, databaseAdapter);
 
@@ -94,21 +101,7 @@ describe("coding harness settings routes", () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-member-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
-    const databaseAdapter = createInMemoryDatabaseAdapter();
-    const authService = new AuthService();
-    const app = createHonoApp({
-      agent: new AgentService(null, null, databaseAdapter),
-      authService,
-      automationService: {} as never,
-      databaseAdapter,
-      mcpService: {} as never,
-      orgService: new OrgService(databaseAdapter, authService),
-      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
-      taskService: {} as never,
-      webDistDir: null,
-      workerManager: {} as never,
-    });
-
+    const { app, databaseAdapter } = createHarnessApp();
     const adminSession = await setupFreshInstallSession(app, databaseAdapter);
     const orgId = adminSession.orgId!;
 
@@ -168,6 +161,55 @@ describe("coding harness settings routes", () => {
     );
     expect(adminPut.status).toBe(200);
     const saved = (await adminPut.json()) as {
+      providerPassthroughEnabled: boolean;
+    };
+    expect(saved.providerPassthroughEnabled).toBe(false);
+  });
+
+  test("a platform admin who is only an org member can write the setting", async () => {
+    configDir = await mkdtemp(
+      join(tmpdir(), "nakama-coding-harness-platform-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const { app, authService, databaseAdapter } = createHarnessApp();
+    const adminSession = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = adminSession.orgId!;
+
+    await loginPlatformAdminSession(app, authService, databaseAdapter);
+    const platformUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+    if (!platformUser) {
+      throw new Error("platform admin user missing");
+    }
+
+    await databaseAdapter.upsertOrgMember({
+      createdAt: new Date().toISOString(),
+      orgId,
+      role: "member",
+      userId: platformUser.id,
+    });
+
+    const platformSession = await loginUserSession(
+      app,
+      "platform@example.com",
+      "password123",
+      orgId
+    );
+
+    const putResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        body: JSON.stringify({ providerPassthroughEnabled: false }),
+        headers: platformSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": platformSession.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+    expect(putResponse.status).toBe(200);
+    const saved = (await putResponse.json()) as {
       providerPassthroughEnabled: boolean;
     };
     expect(saved.providerPassthroughEnabled).toBe(false);

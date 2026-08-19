@@ -1,30 +1,16 @@
 import { NakamaApiError } from "@nakama/core";
 import {
-  getCodingHarnessLoginCommand,
+  listCodingHarnessLoginCommands,
   loadCodingAgentWorkspaceSettings,
   saveCodingAgentWorkspaceSettings,
 } from "../../services/coding-agent-harness-service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
-
-const HARNESS_LOGIN_ORDER = [
-  { kind: "codex" as const, name: "Codex" },
-  { kind: "claude_code" as const, name: "Claude Code" },
-  { kind: "opencode" as const, name: "OpenCode" },
-  { kind: "pi" as const, name: "pi" },
-];
-
-function loginCommands() {
-  return HARNESS_LOGIN_ORDER.flatMap((harness) => {
-    const command = getCodingHarnessLoginCommand(harness.kind);
-    return command ? [{ command, name: harness.name }] : [];
-  });
-}
 
 export function registerCodingHarnessSettingsRoutes(
   app: HonoApp,
@@ -37,13 +23,15 @@ export function registerCodingHarnessSettingsRoutes(
     );
 
     return json({
-      loginCommands: loginCommands(),
+      loginCommands: listCodingHarnessLoginCommands(),
       providerPassthroughEnabled: settings.providerPassthroughEnabled,
     });
   });
 
   app.put("/v1/settings/coding-harnesses", async (c) => {
-    requireOrgAdminFromContext(c);
+    // Workspace-global, same bar as other install-wide settings (#305).
+    // Per-org isolation of this flag is #307.
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<{ providerPassthroughEnabled?: boolean }>(
       c.req.raw
     );
@@ -61,7 +49,7 @@ export function registerCodingHarnessSettingsRoutes(
     );
 
     return json({
-      loginCommands: loginCommands(),
+      loginCommands: listCodingHarnessLoginCommands(),
       providerPassthroughEnabled: settings.providerPassthroughEnabled,
     });
   });

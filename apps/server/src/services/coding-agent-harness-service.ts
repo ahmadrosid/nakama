@@ -799,6 +799,16 @@ export function getCodingHarnessLoginCommand(
   return null;
 }
 
+export function listCodingHarnessLoginCommands(): Array<{
+  command: string;
+  name: string;
+}> {
+  return DEFAULT_HARNESSES.flatMap((harness) => {
+    const command = getCodingHarnessLoginCommand(harness.kind);
+    return command ? [{ command, name: harness.name }] : [];
+  });
+}
+
 function withPassthroughProbeContext(
   probeContext: CodingAgentHarnessProbeContext | undefined,
   providerPassthroughEnabled: boolean

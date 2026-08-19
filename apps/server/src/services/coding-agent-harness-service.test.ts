@@ -8,10 +8,20 @@ import {
   inferCodingAgentHarnessKind,
   isCodingAgentCommand,
   listCodingAgentHarnessStatuses,
+  listCodingHarnessLoginCommands,
   refreshCodingAgentHarnessProbe,
 } from "./coding-agent-harness-service";
 
 describe("coding-agent harness resolution", () => {
+  test("login commands follow default harnesses that support vendor login", () => {
+    expect(listCodingHarnessLoginCommands()).toEqual([
+      { command: "codex login", name: "Codex" },
+      { command: "claude auth login", name: "Claude Code" },
+      { command: "opencode auth login", name: "OpenCode" },
+      { command: "pi login", name: "pi.dev" },
+    ]);
+  });
+
   test("detects harness-shaped bash commands", () => {
     const harnesses = [
       { command: "claude", enabled: true },
