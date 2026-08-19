@@ -49,6 +49,11 @@ import {
   executeToolCall,
   serializeToolResult,
 } from "./tool-loop";
+import {
+  createToolPollWaitState,
+  executeToolCallWithPollWait,
+  type ToolPollWaitState,
+} from "./tool-poll-wait";
 
 const MAX_TOOL_ITERATIONS = 100;
 
@@ -501,6 +506,8 @@ async function runConversation(
   ) => void,
   signal?: AbortSignal
 ): Promise<string> {
+  const pollWaitState = createToolPollWaitState();
+
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
 
@@ -561,7 +568,8 @@ async function runConversation(
       result.toolCalls,
       history,
       handlers,
-      toolContext
+      toolContext,
+      pollWaitState
     );
   }
 
@@ -580,7 +588,8 @@ async function executeToolCalls(
   toolCalls: ToolCall[],
   history: ChatMessage[],
   handlers?: StreamHandlers,
-  toolContext: ToolContext = {}
+  toolContext: ToolContext = {},
+  pollWaitState: ToolPollWaitState = createToolPollWaitState()
 ): Promise<void> {
   const contextForCall = (call: ToolCall): ToolContext => {
     if (!handlers?.onSubAgentActivity || call.name !== "sub_agent") {
@@ -641,7 +650,12 @@ async function executeToolCalls(
       toolCallId: call.id,
     });
 
-    const result = await executeToolCall(tools, call, contextForCall(call));
+    const result = await executeToolCallWithPollWait({
+      call,
+      context: contextForCall(call),
+      state: pollWaitState,
+      tools,
+    });
 
     handlers?.onToolEnd?.({
       result,

@@ -443,4 +443,87 @@ describe("agent chat tool loop", () => {
 
     expect(systems[0]).toContain("[pending] Ship");
   });
+
+  test("collapses repeated in-flight status polls after the third call", async () => {
+    let runs = 0;
+    const statusTool: ToolDefinition = {
+      description: "Poll a job",
+      name: "job_status",
+      parameters: {
+        properties: { job_id: { type: "number" } },
+        required: ["job_id"],
+        type: "object",
+      },
+      run() {
+        runs += 1;
+        if (runs < 4) {
+          return Promise.resolve({
+            progress: { percent: 5 },
+            status: "running",
+          });
+        }
+        return Promise.resolve({
+          progress: { percent: 20 },
+          status: "running",
+        });
+      },
+    };
+
+    const statusCall = (id: string) => ({
+      arguments: { job_id: 17 },
+      id,
+      name: "job_status",
+    });
+
+    const provider = createMockProvider([
+      {
+        assistantMessage: {
+          content: "",
+          role: "assistant",
+          toolCalls: [statusCall("call_1")],
+        },
+        content: "",
+        toolCalls: [statusCall("call_1")],
+      },
+      {
+        assistantMessage: {
+          content: "",
+          role: "assistant",
+          toolCalls: [statusCall("call_2")],
+        },
+        content: "",
+        toolCalls: [statusCall("call_2")],
+      },
+      {
+        assistantMessage: {
+          content: "",
+          role: "assistant",
+          toolCalls: [statusCall("call_3")],
+        },
+        content: "",
+        toolCalls: [statusCall("call_3")],
+      },
+      {
+        assistantMessage: { content: "Done", role: "assistant" },
+        content: "Done",
+        toolCalls: [],
+      },
+    ]);
+
+    const harness = createAgentHarness({ provider, tools: [statusTool] });
+    const session = harness.createChatSession({ tools: [statusTool] });
+    const reply = await session.send("check job");
+
+    expect(reply).toBe("Done");
+    expect(runs).toBe(4);
+
+    const history = session.getHistory() as ChatMessage[];
+    const toolMessages = history.filter((message) => message.role === "tool");
+    expect(toolMessages).toHaveLength(3);
+    expect(toolMessages[2]).toMatchObject({
+      content: '{"progress":{"percent":20},"status":"running"}',
+      name: "job_status",
+      role: "tool",
+    });
+  });
 });
