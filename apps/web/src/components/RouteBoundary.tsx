@@ -1,4 +1,8 @@
 import { Component, type ReactNode, Suspense } from "react";
+import {
+  type RouteErrorState,
+  routeErrorStateFromResetKey,
+} from "@/components/route-error-state";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -6,21 +10,25 @@ import { cn } from "@/lib/utils";
 interface RouteBoundaryProps {
   children: ReactNode;
   fullScreen?: boolean;
-}
-
-interface RouteErrorBoundaryState {
-  failed: boolean;
+  resetKey?: string;
 }
 
 // biome-ignore lint/style/useReactFunctionComponents: React error boundaries require a class component.
 class RouteErrorBoundary extends Component<
   RouteBoundaryProps,
-  RouteErrorBoundaryState
+  RouteErrorState
 > {
-  state: RouteErrorBoundaryState = { failed: false };
+  state: RouteErrorState = { failed: false };
 
-  static getDerivedStateFromError(): RouteErrorBoundaryState {
+  static getDerivedStateFromError(): Pick<RouteErrorState, "failed"> {
     return { failed: true };
+  }
+
+  static getDerivedStateFromProps(
+    props: RouteBoundaryProps,
+    state: RouteErrorState
+  ): Partial<RouteErrorState> | null {
+    return routeErrorStateFromResetKey(props.resetKey, state);
   }
 
   render() {
@@ -64,9 +72,13 @@ function RouteLoadError({ fullScreen }: { fullScreen?: boolean }) {
   );
 }
 
-export function RouteBoundary({ children, fullScreen }: RouteBoundaryProps) {
+export function RouteBoundary({
+  children,
+  fullScreen,
+  resetKey,
+}: RouteBoundaryProps) {
   return (
-    <RouteErrorBoundary fullScreen={fullScreen}>
+    <RouteErrorBoundary fullScreen={fullScreen} resetKey={resetKey}>
       <Suspense fallback={<RouteLoading fullScreen={fullScreen} />}>
         {children}
       </Suspense>

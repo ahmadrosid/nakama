@@ -166,7 +166,7 @@ export function Layout() {
                   : null
               )}
             >
-              <RouteBoundary key={location.pathname}>
+              <RouteBoundary resetKey={location.pathname}>
                 <Outlet />
               </RouteBoundary>
             </main>
