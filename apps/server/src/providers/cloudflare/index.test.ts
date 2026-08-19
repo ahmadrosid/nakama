@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createCloudflareProvider } from "./index";
+import {
+  CLOUDFLARE_API_ROOT,
+  createCloudflareProvider,
+  resolveCloudflareBaseUrl,
+} from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -93,5 +97,28 @@ describe("Cloudflare provider", () => {
     await expect(
       provider.generateText({ prompt: "Hi", system: "Be helpful." })
     ).rejects.toThrow(/Cloudflare/);
+  });
+
+  test("prefers the instance base URL over the env account ID", () => {
+    expect(
+      resolveCloudflareBaseUrl("env-account", {
+        apiKey: "key",
+        baseUrl: `${CLOUDFLARE_API_ROOT}/from-config/ai/v1`,
+        createdAt: new Date(0).toISOString(),
+        id: "cf-1",
+        label: "Cloudflare",
+        type: "cloudflare",
+      })
+    ).toBe(`${CLOUDFLARE_API_ROOT}/from-config/ai/v1`);
+  });
+
+  test("falls back to CLOUDFLARE_ACCOUNT_ID when the instance has no base URL", () => {
+    expect(resolveCloudflareBaseUrl("env-account")).toBe(
+      `${CLOUDFLARE_API_ROOT}/env-account/ai/v1`
+    );
+  });
+
+  test("throws when neither instance base URL nor account ID is set", () => {
+    expect(() => resolveCloudflareBaseUrl("")).toThrow(/base_url/);
   });
 });

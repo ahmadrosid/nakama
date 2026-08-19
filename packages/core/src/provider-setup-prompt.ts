@@ -1,3 +1,4 @@
+import { resolveCloudflareAccountInput } from "./cloudflare-provider-config";
 import {
   isValidBaseUrl,
   normalizeBaseUrl,
@@ -89,6 +90,21 @@ export async function promptForProviderConfig(
       continue;
     }
 
+    let cloudflareBaseUrl: string | undefined;
+
+    if (provider === "cloudflare") {
+      const resolved = resolveCloudflareAccountInput(
+        (await question("Account ID: ")).trim()
+      );
+
+      if (!resolved) {
+        writeLine("Enter a Cloudflare account ID or Workers AI URL.\n");
+        continue;
+      }
+
+      cloudflareBaseUrl = resolved;
+    }
+
     const models = getModelsForProvider(provider);
     writeLine(`\nSelected provider: ${provider}`);
     writeLine("\nAvailable models:");
@@ -134,6 +150,7 @@ export async function promptForProviderConfig(
       id: createProviderInstanceId(),
       label: defaultProviderLabel(provider, []),
       type: getModelById(selectedModel)?.provider ?? provider,
+      ...(cloudflareBaseUrl ? { baseUrl: cloudflareBaseUrl } : {}),
       ...(customModels ? { customModels } : {}),
     };
 

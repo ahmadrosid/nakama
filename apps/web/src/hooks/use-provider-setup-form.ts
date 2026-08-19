@@ -1,3 +1,4 @@
+import { resolveCloudflareAccountInput } from "@nakama/core/cloudflare-provider-config";
 import type {
   CreateProviderResponse,
   OllamaHostMode,
@@ -395,7 +396,11 @@ export function useProviderSetupForm(
         selectedProvider === "openai_compatible" ||
         selectedProvider === "ollama"
           ? validateBaseUrlInput(baseUrl)
-          : null;
+          : selectedProvider === "cloudflare"
+            ? resolveCloudflareAccountInput(baseUrl)
+              ? null
+              : "Enter a Cloudflare account ID or Workers AI URL."
+            : null;
       const nextModelsError =
         selectedProvider === "openai_compatible" ||
         selectedProvider === "ollama"
@@ -433,7 +438,9 @@ export function useProviderSetupForm(
           .getElementById(
             selectedProvider === "ollama"
               ? "ollama-base-url"
-              : "provider-base-url"
+              : selectedProvider === "cloudflare"
+                ? "cloudflare-account-id"
+                : "provider-base-url"
           )
           ?.focus();
         return;
@@ -461,10 +468,14 @@ export function useProviderSetupForm(
       setFormError(null);
 
       try {
+        const resolvedCloudflareBaseUrl =
+          selectedProvider === "cloudflare"
+            ? resolveCloudflareAccountInput(baseUrl)
+            : null;
         const result = await createProvider(
           buildCreateProviderRequest({
             apiKey: trimmedKey,
-            baseUrl,
+            baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             customModels:
               selectedProvider === "openai_compatible" ||
               selectedProvider === "ollama"

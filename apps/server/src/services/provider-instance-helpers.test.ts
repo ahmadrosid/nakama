@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import {
   applyProviderInstanceUpdate,
+  buildProviderInstanceFromCreateRequest,
   modelExistsOnInstance,
   resolveProfileProviderSelection,
 } from "./provider-instance-helpers";
@@ -239,5 +240,23 @@ describe("applyProviderInstanceUpdate", () => {
     expect(
       modelExistsOnInstance(withoutShortlist, "accounts/unknown/models/foo")
     ).toBe(false);
+  });
+});
+
+describe("buildProviderInstanceFromCreateRequest", () => {
+  test("persists a Cloudflare Workers AI base URL on the instance", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        apiKey: "cf-key",
+        baseUrl: "https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1",
+        type: "cloudflare",
+      },
+      []
+    );
+
+    expect(instance.type).toBe("cloudflare");
+    expect(instance.baseUrl).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1"
+    );
   });
 });

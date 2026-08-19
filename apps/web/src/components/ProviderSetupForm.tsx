@@ -13,6 +13,7 @@ import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowse
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -161,6 +162,34 @@ export function ProviderSetupForm({
               </InputGroupAddon>
             </InputGroup>
           </FormField>
+
+          {form.selectedProvider === "cloudflare" ? (
+            <FormField
+              density={density}
+              footer={
+                form.baseUrlError ? (
+                  <p
+                    className="text-destructive text-sm"
+                    id="cloudflare-account-id-error"
+                    role="alert"
+                  >
+                    {form.baseUrlError}
+                  </p>
+                ) : null
+              }
+              id="cloudflare-account-id"
+              label="Account ID"
+            >
+              <Input
+                aria-invalid={form.baseUrlError != null}
+                autoComplete="off"
+                disabled={form.busy}
+                id="cloudflare-account-id"
+                onChange={(event) => form.setBaseUrl(event.target.value)}
+                value={form.baseUrl}
+              />
+            </FormField>
+          ) : null}
 
           {form.selectedProvider === "openai_compatible" ? (
             <CustomProviderFields

@@ -1,12 +1,12 @@
 import {
+  cloudflareBaseUrlFromAccountId,
   normalizeBaseUrl,
   type ProviderClient,
   type ProviderInstance,
 } from "@nakama/core";
 import { createOpenAICompatibleProvider } from "../openai-compatible";
 
-export const CLOUDFLARE_API_ROOT =
-  "https://api.cloudflare.com/client/v4/accounts";
+export { CLOUDFLARE_API_ROOT } from "@nakama/core";
 
 export function resolveCloudflareBaseUrl(
   accountId: string,
@@ -19,11 +19,11 @@ export function resolveCloudflareBaseUrl(
 
   if (!accountId) {
     throw new Error(
-      "Cloudflare provider requires CLOUDFLARE_ACCOUNT_ID env var, or paste the full Workers AI endpoint (https://api.cloudflare.com/client/v4/accounts/<id>/ai/v1) into the provider base URL."
+      "Cloudflare provider requires an account ID on the provider instance (saved as base_url), or CLOUDFLARE_ACCOUNT_ID as a fallback."
     );
   }
 
-  return `${CLOUDFLARE_API_ROOT}/${accountId}/ai/v1`;
+  return cloudflareBaseUrlFromAccountId(accountId);
 }
 
 export function createCloudflareProvider(options: {
