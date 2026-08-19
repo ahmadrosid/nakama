@@ -41,6 +41,28 @@ describe("workspace settings merge", () => {
     expect(merged.visionModel).toBe("other");
   });
 
+  test("merge keeps passthrough when token optimizer is patched", () => {
+    const merged = mergeWorkspaceSettings(
+      {
+        codingAgentHarnesses: [],
+        codingAgentProviderPassthrough: false,
+        id: "default",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        visionModel: null,
+      },
+      {
+        tokenOptimizerEnabled: true,
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }
+    );
+
+    expect(merged.codingAgentProviderPassthrough).toBe(false);
+    expect(merged.tokenOptimizerEnabled).toBe(true);
+  });
+
   test("merge can clear nullable fields to null", () => {
     const merged = mergeWorkspaceSettings(
       {

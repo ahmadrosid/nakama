@@ -7,7 +7,10 @@ import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { createHonoApp } from "./app";
-import { setupFreshInstallSession } from "./test-session-helpers";
+import {
+  loginUserSession,
+  setupFreshInstallSession,
+} from "./test-session-helpers";
 
 describe("coding harness settings routes", () => {
   let configDir = "";
@@ -85,5 +88,88 @@ describe("coding harness settings routes", () => {
       providerPassthroughEnabled: boolean;
     };
     expect(savedBody.providerPassthroughEnabled).toBe(false);
+  });
+
+  test("org members can read coding harness settings but cannot write them", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-member-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const authService = new AuthService();
+    const app = createHonoApp({
+      agent: new AgentService(null, null, databaseAdapter),
+      authService,
+      automationService: {} as never,
+      databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
+      webDistDir: null,
+      workerManager: {} as never,
+    });
+
+    const adminSession = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = adminSession.orgId!;
+
+    const memberResp = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
+        body: JSON.stringify({
+          email: "member@example.com",
+          name: "Member",
+          role: "member",
+        }),
+        headers: adminSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": adminSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(memberResp.status).toBe(201);
+    const memberProvisioned = (await memberResp.json()) as {
+      temporaryPassword: string;
+    };
+    const memberSession = await loginUserSession(
+      app,
+      "member@example.com",
+      memberProvisioned.temporaryPassword,
+      orgId
+    );
+
+    const memberGet = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        headers: memberSession.headers(),
+      })
+    );
+    expect(memberGet.status).toBe(200);
+
+    const memberPut = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        body: JSON.stringify({ providerPassthroughEnabled: false }),
+        headers: memberSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": memberSession.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+    expect(memberPut.status).toBe(403);
+
+    const adminPut = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        body: JSON.stringify({ providerPassthroughEnabled: false }),
+        headers: adminSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": adminSession.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+    expect(adminPut.status).toBe(200);
+    const saved = (await adminPut.json()) as {
+      providerPassthroughEnabled: boolean;
+    };
+    expect(saved.providerPassthroughEnabled).toBe(false);
   });
 });

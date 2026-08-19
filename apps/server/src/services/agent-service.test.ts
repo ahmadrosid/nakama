@@ -267,6 +267,43 @@ describe("AgentService vision settings", () => {
       vision: { model: "p-openai-1::gpt-4o-mini" },
     });
   });
+
+  test("does not reset coding-agent passthrough when vision is saved", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      codingAgentHarnesses: [],
+      codingAgentProviderPassthrough: false,
+      id: "workspace-settings",
+      imageModel: null,
+      selectedCodingAgentHarness: null,
+      transcriptionModel: null,
+      updatedAt: new Date().toISOString(),
+      visionModel: null,
+    });
+    const service = new AgentService(
+      {
+        defaultProviderId: "p-openai-1",
+        providers: [
+          {
+            apiKey: "test-key",
+            createdAt: new Date().toISOString(),
+            id: "p-openai-1",
+            label: "OpenAI",
+            type: "openai",
+          },
+        ],
+      },
+      null,
+      db
+    );
+
+    await service.setVisionSettings({ model: "p-openai-1::gpt-4o-mini" });
+
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      codingAgentProviderPassthrough: false,
+      visionModel: "p-openai-1::gpt-4o-mini",
+    });
+  });
 });
 
 describe("AgentService transcription settings", () => {
@@ -301,6 +338,45 @@ describe("AgentService transcription settings", () => {
     });
     expect(await service.getTranscriptionSettings()).toEqual({
       transcription: { model: "p-openai-1::whisper-1" },
+    });
+  });
+
+  test("does not reset coding-agent passthrough when transcription is saved", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      codingAgentHarnesses: [],
+      codingAgentProviderPassthrough: false,
+      id: "workspace-settings",
+      imageModel: null,
+      selectedCodingAgentHarness: null,
+      transcriptionModel: null,
+      updatedAt: new Date().toISOString(),
+      visionModel: null,
+    });
+    const service = new AgentService(
+      {
+        defaultProviderId: "p-openai-1",
+        providers: [
+          {
+            apiKey: "test-key",
+            createdAt: new Date().toISOString(),
+            id: "p-openai-1",
+            label: "OpenAI",
+            type: "openai",
+          },
+        ],
+      },
+      null,
+      db
+    );
+
+    await service.setTranscriptionSettings({
+      model: "p-openai-1::whisper-1",
+    });
+
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      codingAgentProviderPassthrough: false,
+      transcriptionModel: "p-openai-1::whisper-1",
     });
   });
 });
