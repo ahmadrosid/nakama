@@ -1,0 +1,80 @@
+{
+  "name": "cloudflare-llama-3-3-70b-tool-call",
+  "recordedAt": "2026-08-19T15:25:47.536Z",
+  "request": {
+    "body": {
+      "messages": [
+        {
+          "content": "You are a terse assistant.",
+          "role": "system"
+        },
+        {
+          "content": "What is the weather in Jakarta? Use the weather tool.",
+          "role": "user"
+        }
+      ],
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "function": {
+            "description": "Get the current weather for a city.",
+            "name": "get_weather",
+            "parameters": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.cloudflare.com/client/v4/accounts/fcbe56eee563cc5b87cf77d11d680881/ai/v1/chat/completions"
+  },
+  "response": {
+    "body": {
+      "id": "id-1787153147514",
+      "object": "chat.completion",
+      "created": 1787153147,
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_1787153147514",
+                "type": "function",
+                "function": {
+                  "name": "get_weather",
+                  "arguments": "{\"city\":\"Jakarta\"}"
+                }
+              }
+            ],
+            "refusal": null
+          },
+          "logprobs": null,
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 181,
+        "completion_tokens": 18,
+        "total_tokens": 199,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 8.513343811035156
+      }
+    },
+    "status": 200
+  },
+  "version": 1
+}

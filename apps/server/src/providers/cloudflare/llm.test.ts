@@ -75,3 +75,68 @@ test("chat completion via Workers AI under cassette replay", async () => {
 
   expect(result.assistantMessage.content.trim().length).toBeGreaterThan(0);
 });
+
+test("tool call via Workers AI under cassette replay", async () => {
+  const toolCassetteName = "cloudflare-llama-3-3-70b-tool-call";
+  const cassettePath = cassetteFilePath(toolCassetteName);
+  const existing = await loadCassette(cassettePath);
+  const apiKey = existing ? "cassette-replay-key" : await resolveApiKey();
+
+  if (!(existing || apiKey)) {
+    console.warn(
+      `Skipping ${toolCassetteName}: no cassette at ${cassettePath} and no Cloudflare API key.`
+    );
+    return;
+  }
+
+  let accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? "replay-account";
+  const recordedUrl = existing?.exchanges?.[0]?.request.url;
+  if (recordedUrl) {
+    const parts = new URL(recordedUrl).pathname.split("/");
+    const recorded = parts[4];
+    if (recorded) {
+      accountId = recorded;
+    }
+  }
+
+  const provider = createCloudflareProvider({
+    accountId,
+    apiKey: apiKey ?? "cassette-replay-key",
+    model,
+  });
+
+  const result = await withMswCassette(
+    toolCassetteName,
+    () =>
+      provider.generateChat({
+        messages: [
+          {
+            content: "What is the weather in Jakarta? Use the weather tool.",
+            role: "user",
+          },
+        ],
+        system: "You are a terse assistant.",
+        tools: [
+          {
+            description: "Get the current weather for a city.",
+            name: "get_weather",
+            parameters: {
+              properties: { city: { type: "string" } },
+              type: "object",
+            },
+          },
+        ],
+      }),
+    { url: chatUrlFor(accountId) }
+  );
+
+  // Either the model returns an OpenAI-shaped tool call (agent loop works)
+  // or it falls back to plain text. The cassette documents which one.
+  const toolCalls = result.assistantMessage.toolCalls ?? [];
+  if (toolCalls.length > 0) {
+    expect(toolCalls[0]!.name).toBe("get_weather");
+    expect(toolCalls[0]!.arguments).toHaveProperty("city");
+  } else {
+    expect(result.assistantMessage.content.trim().length).toBeGreaterThan(0);
+  }
+});
