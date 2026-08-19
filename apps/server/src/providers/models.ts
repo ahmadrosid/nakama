@@ -361,7 +361,7 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   {
     contextWindow: 131_072,
-    id: "@cf/meta/llama-3.1-8b-instruct",
+    id: "@cf/meta/infire-llama-3.1-8b-instruct",
     inputPerMillionUsd: 0.14,
     maxOutputTokens: 40_960,
     name: "Llama 3.1 8B",

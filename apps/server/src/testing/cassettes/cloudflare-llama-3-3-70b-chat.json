@@ -1,0 +1,59 @@
+{
+  "name": "cloudflare-llama-3-3-70b-chat",
+  "recordedAt": "2026-08-19T14:45:41.289Z",
+  "request": {
+    "body": {
+      "messages": [
+        {
+          "content": "You are a terse assistant.",
+          "role": "system"
+        },
+        {
+          "content": "Say hello in one short sentence.",
+          "role": "user"
+        }
+      ],
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    },
+    "method": "POST",
+    "url": "https://api.cloudflare.com/client/v4/accounts/fcbe56eee563cc5b87cf77d11d680881/ai/v1/chat/completions"
+  },
+  "response": {
+    "body": {
+      "id": "id-1787150740980",
+      "object": "chat.completion",
+      "created": 1787150740,
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "logprobs": null,
+          "message": {
+            "annotations": null,
+            "audio": null,
+            "content": "Hello.",
+            "function_call": null,
+            "reasoning": null,
+            "refusal": null,
+            "role": "assistant"
+          },
+          "routed_experts": null,
+          "stop_reason": null,
+          "token_ids": null
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 48,
+        "completion_tokens": 3,
+        "total_tokens": 51,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 1.894464135169983
+      }
+    },
+    "status": 200
+  },
+  "version": 1
+}
