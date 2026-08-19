@@ -39,7 +39,7 @@ export function createCloudflareProvider(options: {
   return createOpenAICompatibleProvider({
     apiKey: options.apiKey,
     baseUrl: resolveCloudflareBaseUrl(options.accountId, options.instance),
-    displayName: "Cloudflare",
+    displayName: "Cloudflare Worker AI",
     model: options.model,
     providerName: "cloudflare",
     supportsThinking: false,

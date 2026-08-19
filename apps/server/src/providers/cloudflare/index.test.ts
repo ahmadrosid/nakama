@@ -106,7 +106,7 @@ describe("Cloudflare provider", () => {
         baseUrl: `${CLOUDFLARE_API_ROOT}/from-config/ai/v1`,
         createdAt: new Date(0).toISOString(),
         id: "cf-1",
-        label: "Cloudflare",
+        label: "Cloudflare Worker AI",
         type: "cloudflare",
       })
     ).toBe(`${CLOUDFLARE_API_ROOT}/from-config/ai/v1`);

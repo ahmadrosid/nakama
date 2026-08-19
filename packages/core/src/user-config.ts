@@ -70,7 +70,7 @@ const PROVIDER_SECTION_PREFIX = "provider.";
 const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   anthropic: "Anthropic",
   cerebras: "Cerebras",
-  cloudflare: "Cloudflare",
+  cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
   fireworks: "Fireworks",
   gemini: "Gemini",

@@ -6,7 +6,7 @@ const BUILTIN_LABELS: Record<
 > = {
   anthropic: "Anthropic",
   cerebras: "Cerebras",
-  cloudflare: "Cloudflare",
+  cloudflare: "Cloudflare Worker AI",
   deepseek: "DeepSeek",
   fireworks: "Fireworks",
   gemini: "Gemini",
