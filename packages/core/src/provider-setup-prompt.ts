@@ -35,6 +35,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "deepseek", label: "DeepSeek" },
   { id: "cerebras", label: "Cerebras" },
   { id: "fireworks", label: "Fireworks" },
+  { id: "cloudflare", label: "Cloudflare Workers AI" },
   { id: "ollama", label: "Ollama" },
   { id: "opencode_go", label: "OpenCode Go" },
   { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
