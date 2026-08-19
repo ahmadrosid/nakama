@@ -1,0 +1,105 @@
+---
+title: "Artifacts and files"
+description: "Browse, preview, edit, and publish the files your agent saves, from the dashboard Files page."
+---
+
+**Artifacts** are the files your agent produces: reports, scripts, generated images, Word documents, transcripts. The agent writes them; you read, edit, and publish them from **Files** in the dashboard.
+
+This page covers the dashboard side. For how an agent saves a file in the first place, see [Artifact saves](/builtin-tools#artifact-saves).
+
+## The Files page
+
+**Files** in the sidebar has two tabs. **Artifacts** lists what the agent saved for the active profile. **Knowledge base** manages the documents the agent searches with `knowledge_base_search`.
+
+![The Files page, with a markdown artifact open in the preview panel](/screenshots/artifact-markdown-toc.png)
+
+The artifact list gives you:
+
+- **Search** by filename
+- **Type filters**: All types, Documents, HTML, Images, Markdown, Text, Video, Other
+- **List or grid view**, remembered across visits
+- Endless scroll, so a profile with hundreds of files does not need paging
+
+Each row shows the resolved MIME type, size, and last modified time. Those come from the `{filename}.nakama-meta.json` sidecar the agent writes next to the file. Without a sidecar, Nakama infers the type from the extension, and sniffs the bytes for valid UTF-8 when the extension is unknown, so a `Dockerfile` or a `notes.abc` still previews as text instead of being written off as binary.
+
+## Previews by content type
+
+Clicking a file opens a resizable panel that renders by type, not by extension:
+
+| Type | Preview |
+| --- | --- |
+| Markdown | Rendered, with a toggle to the raw source |
+| HTML | Rendered in a sandboxed frame |
+| Images | Inline, with a download action |
+| Video | `<video controls>` for MP4, WebM, MOV, OGV |
+| Code | Syntax highlighted by extension |
+| Text, CSV, logs | Plain, unhighlighted |
+| Word (`.docx`) | Converted to Markdown for reading |
+
+Legacy `.doc` (Word 97-2003) is refused with a message asking you to convert it. There is no dependable JS parser for the OLE format, and emitting mojibake would be worse than saying no.
+
+## Table of contents for markdown
+
+A markdown artifact with two or more headings gets a collapsible **Contents** list above the rendered body, built from its h1 to h3 headings. Clicking an entry scrolls to that heading.
+
+![Clicking a Contents entry scrolls the preview to that section](/screenshots/artifact-toc-jump.png)
+
+Entries are matched back to their heading by text plus occurrence, so a script that repeats "Hook" jumps to the right one rather than the first. Below two headings nothing renders, which keeps a one-paragraph note free of chrome.
+
+The list lives in the shared artifact body, so the chat panel, the Files preview, and the public share page all show it.
+
+## Editing a markdown artifact
+
+The artifact actions menu carries **Download**, **Edit artifact**, and **Share artifact**.
+
+![The artifact actions menu with Download, Edit artifact, and Share artifact](/screenshots/artifact-actions-menu.png)
+
+**Edit artifact** opens the markdown source in a textarea with Save and Cancel, so fixing one heading does not need another agent turn.
+
+![Editing the markdown source in place](/screenshots/artifact-markdown-editor.png)
+
+Three things to know:
+
+- **Markdown only.** The write path refuses anything whose resolved type is not `text/markdown` with a 400, so a `.docx` cannot be replaced by the markdown its own preview was converted into.
+- **A failed save keeps your buffer** and shows the error, rather than dropping what you typed.
+- **The sidecar is refreshed**, so the Files list does not show a stale size and timestamp.
+
+Editing requires a non-viewer role in the active org. Viewers can read and download.
+
+## Publishing a public share
+
+**Share artifact** publishes the file at a tokenized URL that needs no login, and gives you a link to copy.
+
+![The published artifact on its public share page](/screenshots/artifact-public-share.png)
+
+A published share serves a **snapshot** taken at publish time, not the live file. That is deliberate: a public URL should not change under a reader because an agent turn rewrote the file. Two consequences:
+
+- Saving a hand edit refreshes the snapshot, so the public link keeps up with what you just changed.
+- An agent rewrite does not. Use **Update snapshot** when you want the published copy to catch up.
+
+HTML and SVG artifacts are never served inline on the app origin, so a published page cannot run script against your session.
+
+## Where the files live
+
+```
+~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
+```
+
+See [Profiles](/profiles#knowledge-base-and-memory) for the rest of the workspace layout, and [Backup and restore](/backup-restore) for what an export carries.
+
+## API
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/v1/profiles/:profileId/artifacts` |
+| `GET` | `/v1/profiles/:profileId/artifacts/content?path=` |
+| `PUT` | `/v1/profiles/:profileId/artifacts/content?path=` |
+| `POST` | `/v1/profiles/:profileId/artifacts/shares` |
+| `GET` | `/v1/profiles/:profileId/artifacts/shares/status` |
+| `DELETE` | `/v1/profiles/:profileId/artifacts/shares/:shareId` |
+
+Deleting every artifact for a profile is a platform-admin action. Deleting one file is available from its row menu to any non-viewer.
+
+## Artifacts on channels
+
+Telegram and Discord post a share link after the reply when the agent saves a file. On Discord you can also ask for the file itself and get a native attachment. See [Telegram](/telegram/chat#saved-artifacts-and-share-links) and [Discord](/discord#saved-artifacts-and-share-links).

@@ -1,0 +1,28 @@
+---
+title: "Changelog"
+description: "Where to find what changed in each Nakama release, and how to read it."
+---
+
+Every release is recorded in [`CHANGELOG.md`](https://github.com/ahmadrosid/nakama/blob/main/CHANGELOG.md) in the repository. That file is the source of truth, so this page does not repeat it.
+
+It follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): one section per version, newest first, with entries grouped under **Added**, **Changed**, and **Fixed**. Each entry links the pull request that carried it, so "why does this behave differently now" is one click from the line that changed it.
+
+## Reading it
+
+- **`Unreleased`** at the top is what is already merged to `main` but not yet tagged. If you run from `main` or build your own image, this is your changelog.
+- **A version heading** is a tag that shipped. The compare link on each heading shows the full diff against the previous release.
+- Entries marked **`(in review)`** come from a pull request that is open, not merged. They are in flight, not in the release.
+
+## Releases and images
+
+Tagged releases are listed on [GitHub Releases](https://github.com/ahmadrosid/nakama/releases), each with the container image for that version:
+
+```bash
+docker pull ghcr.io/ahmadrosid/nakama:v0.3.15
+```
+
+See [Docker](/docker) for running it, and [Backup and restore](/backup-restore) for taking an export before an upgrade.
+
+## Version numbers
+
+Nakama follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the project is pre-1.0, treat a minor bump as the one that can require attention on upgrade, and read the `Changed` section before pulling a new image.

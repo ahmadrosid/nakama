@@ -86,9 +86,9 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 ## Artifact saves
 
-Artifacts are files your agent creates and saves for you — reports, summaries, generated text, Word documents, and other outputs you can preview or download later from the dashboard Artifacts tab or from web chat.
+Artifacts are files your agent creates and saves for you — reports, summaries, generated text, Word documents, and other outputs you can preview or download later from the dashboard [Files page](/artifacts) or from web chat.
 
-They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the Artifacts tab shows MIME types and timestamps.
+They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. The skill also documents writing a `{filename}.nakama-meta.json` sidecar so the Files page shows MIME types and timestamps.
 
 On web chat, `write_file` and `write_docx` saves under `artifacts/` appear as attachment chips on the assistant message. Click a chip to open a resizable preview panel with copy, download, and fullscreen:
 

@@ -1,0 +1,85 @@
+---
+title: "Automations and tasks"
+description: "Run a prompt on a cron schedule or at a set time, deliver the result to a channel, and track runs from Agent work."
+---
+
+**Agent work** in the dashboard holds two things that look similar and are not.
+
+- **Automations** are a saved prompt plus a trigger. They run themselves, on a schedule or at a time you name, and can deliver the result to a channel.
+- **Tasks** are a to-do list the agent works through. They have a status you move, not a schedule that fires.
+
+## Automations
+
+An automation is a name, a prompt, a profile, and one trigger:
+
+| Trigger | Shape | Runs |
+| --- | --- | --- |
+| `manual` | none | Only when you press **Run now** |
+| `schedule` | 5-field cron plus a timezone | Every time the cron matches |
+| `runAt` | an ISO timestamp plus a timezone | Once, at that instant |
+
+Cron is validated on save, so a malformed expression is rejected rather than silently never firing. The timezone defaults to the one in your user config. `nextRunAt` is computed from the cron and shown in the list, which is the fastest way to check that a schedule means what you think it means.
+
+A `runAt` automation whose timestamp has already passed is not scheduled. Disabled automations are not scheduled either, whatever their trigger.
+
+### The worker
+
+Scheduled runs are driven by the automation worker, a separate process managed by PM2 alongside the channel bridges. It reports a heartbeat, so **System → Status** tells you whether schedules are actually being served. If the worker is down, `manual` runs from the dashboard still work and scheduled ones do not fire.
+
+See [Docker](/docker) for how the worker is started in a container.
+
+### Run history
+
+Every run is recorded with a status of `running`, `completed`, or `failed`, plus its output or its error, and start and finish timestamps. From the run list you can:
+
+- Open a run to read the full output
+- Press **Run again** on a failed run
+- Delete a run
+- Mark runs read, which is what clears the unread badge
+
+Unread run counts feed the **Notifications** page, so a schedule that started failing overnight is visible without opening each automation.
+
+### Delivering the result
+
+An automation can post its result to a channel instead of leaving it in the run log.
+
+| Channel | Target |
+| --- | --- |
+| `telegram` | All paired users, or one `chatId` |
+| `discord` | All paired users by DM, or one channel by `channelId` |
+| `whatsapp` | All paired users |
+| `email` | The `to` address, which is required |
+
+`notifyOn` decides which runs deliver: `success` (the default), `failure`, or `both`. Each run records its own delivery status of `sent`, `failed`, or `skipped`, with the error when there is one, so a delivery that silently did not happen is distinguishable from one that was never meant to.
+
+Delivery config is validated on save against what the instance actually has. Pointing an automation at Discord on an instance with no Discord bridge fails at save time, not at 3am on the first scheduled run.
+
+## Tasks
+
+A task is a title, a description, a prompt, and a status: `todo`, `in_progress`, `done`, or `failed`. Tasks keep an explicit position, so the list is ordered by you rather than by timestamp. Running one binds it to a chat session, and the messages from that session are readable from the task.
+
+`POST /v1/tasks/draft-prompt` turns a title and description into a first draft of the prompt, which is the fastest way to get from "chase the invoice" to something an agent can act on.
+
+## Permissions
+
+Creating or changing an automation or a task requires a non-viewer role. A caller-supplied `profileId` is checked against what that caller may use, so a member cannot bind an automation to the `bash`-capable Super Bot profile. See [Multi-tenancy](/multi-tenancy) for the role model.
+
+## API
+
+| Method | Path |
+| --- | --- |
+| `GET` `POST` | `/v1/automations` |
+| `GET` `PUT` `DELETE` | `/v1/automations/:automationId` |
+| `POST` | `/v1/automations/:automationId/run` |
+| `GET` | `/v1/automations/:automationId/runs` |
+| `DELETE` | `/v1/automations/:automationId/runs/:runId` |
+| `POST` | `/v1/automations/:automationId/runs/mark-read` |
+| `POST` | `/v1/automations/draft` |
+| `GET` `POST` | `/v1/tasks` |
+| `GET` `PUT` `DELETE` | `/v1/tasks/:taskId` |
+| `POST` | `/v1/tasks/:taskId/run` |
+| `GET` | `/v1/tasks/:taskId/runs` |
+| `GET` | `/v1/tasks/:taskId/messages` |
+| `POST` | `/v1/tasks/draft-prompt` |
+
+Automation runs carry a run id rather than a session id. Anything scoped per conversation, such as the [token optimiser](/token-optimiser) ledger, scopes to that run.

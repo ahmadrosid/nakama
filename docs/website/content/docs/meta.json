@@ -20,16 +20,21 @@
     "org-memory",
     "self-improving-skills",
     "profiles",
+    "artifacts",
+    "automations",
     "agent-prompt",
     "---Extend---",
     "builtin-tools",
     "skills",
     "integrations",
+    "image-generation",
+    "token-optimiser",
     "coding-agent",
     "agent-browser",
     "mcp",
     "composio",
     "---Community---",
-    "contributing"
+    "contributing",
+    "changelog"
   ]
 }
