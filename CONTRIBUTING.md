@@ -100,6 +100,16 @@ When adding or changing a page:
 
 ## Workflow
 
+**Claim the issue before you build.** Comment on it and wait to be assigned. An
+assignee is the only signal other contributors have: a branch on your fork is
+invisible from this repo, so two people can spend a day on the same feature
+without either one seeing the other. Before starting, check the open PRs for that
+issue number too, not just the issue:
+
+```bash
+gh pr list --repo ahmadrosid/nakama --search "<issue-number>"
+```
+
 1. Branch from `main` (or fork, then branch)
 2. One concern per PR
 3. Push and open a PR:
