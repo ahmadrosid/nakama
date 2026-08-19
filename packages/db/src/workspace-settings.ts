@@ -11,32 +11,42 @@ export function isCodingAgentProviderPassthroughEnabled(
   return settings?.codingAgentProviderPassthrough !== false;
 }
 
+function pickDefined<T>(patch: T | undefined, fallback: T): T {
+  return patch === undefined ? fallback : patch;
+}
+
 export function mergeWorkspaceSettings(
   existing: StoredWorkspaceSettingsRecord | null | undefined,
   patch: Partial<StoredWorkspaceSettingsRecord> = {}
 ): StoredWorkspaceSettingsRecord {
   return {
-    codingAgentHarnesses:
-      patch.codingAgentHarnesses ?? existing?.codingAgentHarnesses ?? [],
-    codingAgentProviderPassthrough:
-      patch.codingAgentProviderPassthrough ??
-      existing?.codingAgentProviderPassthrough ??
-      true,
-    id: patch.id ?? existing?.id ?? WORKSPACE_SETTINGS_ID,
-    imageModel: patch.imageModel ?? existing?.imageModel ?? null,
-    orgId: patch.orgId ?? existing?.orgId,
-    selectedCodingAgentHarness:
-      patch.selectedCodingAgentHarness === undefined
-        ? (existing?.selectedCodingAgentHarness ?? null)
-        : patch.selectedCodingAgentHarness,
+    codingAgentHarnesses: pickDefined(
+      patch.codingAgentHarnesses,
+      existing?.codingAgentHarnesses ?? []
+    ),
+    codingAgentProviderPassthrough: pickDefined(
+      patch.codingAgentProviderPassthrough,
+      existing?.codingAgentProviderPassthrough ?? true
+    ),
+    id: pickDefined(patch.id, existing?.id ?? WORKSPACE_SETTINGS_ID),
+    imageModel: pickDefined(patch.imageModel, existing?.imageModel ?? null),
+    orgId: "orgId" in patch ? patch.orgId : existing?.orgId,
+    selectedCodingAgentHarness: pickDefined(
+      patch.selectedCodingAgentHarness,
+      existing?.selectedCodingAgentHarness ?? null
+    ),
     tokenOptimizerEnabled:
       patch.tokenOptimizerEnabled === undefined
         ? existing?.tokenOptimizerEnabled
         : patch.tokenOptimizerEnabled,
-    transcriptionModel:
-      patch.transcriptionModel ?? existing?.transcriptionModel ?? null,
-    updatedAt:
-      patch.updatedAt ?? existing?.updatedAt ?? new Date().toISOString(),
-    visionModel: patch.visionModel ?? existing?.visionModel ?? null,
+    transcriptionModel: pickDefined(
+      patch.transcriptionModel,
+      existing?.transcriptionModel ?? null
+    ),
+    updatedAt: pickDefined(
+      patch.updatedAt,
+      existing?.updatedAt ?? new Date().toISOString()
+    ),
+    visionModel: pickDefined(patch.visionModel, existing?.visionModel ?? null),
   };
 }

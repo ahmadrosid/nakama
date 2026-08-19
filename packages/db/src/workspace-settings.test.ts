@@ -40,4 +40,30 @@ describe("workspace settings merge", () => {
     expect(merged.codingAgentProviderPassthrough).toBe(false);
     expect(merged.visionModel).toBe("other");
   });
+
+  test("merge can clear nullable fields to null", () => {
+    const merged = mergeWorkspaceSettings(
+      {
+        codingAgentHarnesses: [],
+        codingAgentProviderPassthrough: true,
+        id: "default",
+        imageModel: "openai::gpt-image-2",
+        selectedCodingAgentHarness: "coding-harness-codex",
+        transcriptionModel: "whisper",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        visionModel: "vision",
+      },
+      {
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        visionModel: null,
+      }
+    );
+
+    expect(merged.imageModel).toBeNull();
+    expect(merged.selectedCodingAgentHarness).toBeNull();
+    expect(merged.transcriptionModel).toBeNull();
+    expect(merged.visionModel).toBeNull();
+  });
 });
