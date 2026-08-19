@@ -5,6 +5,7 @@ import {
   classifyArtifactType,
 } from "@/components/soul-tools/artifacts-tab-filters";
 import { formatBytes } from "@/lib/knowledge-base-files";
+import { artifactBasename } from "@/pages/files/files-artifact-folders";
 import { ArtifactIcon } from "@/pages/files/files-artifact-icon";
 import { ArtifactRowMenu } from "@/pages/files/files-artifact-row-menu";
 import {
@@ -17,11 +18,13 @@ export function ArtifactGridCard({
   profileId,
   artifact,
   deletePending,
+  showFullPath,
   onDelete,
 }: {
   profileId: string;
   artifact: ArtifactFile;
   deletePending: boolean;
+  showFullPath: boolean;
   onDelete: () => void;
 }) {
   const kind = classifyArtifactType(artifact);
@@ -51,7 +54,9 @@ export function ArtifactGridCard({
       <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
         <div className="min-w-0 space-y-1">
           <p className="truncate font-medium text-foreground text-sm">
-            {artifact.filename}
+            {showFullPath
+              ? artifact.filename
+              : artifactBasename(artifact.filename)}
           </p>
           <p className="text-pretty text-muted-foreground text-xs">
             {typeLabel}

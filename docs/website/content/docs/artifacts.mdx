@@ -17,8 +17,11 @@ The artifact list gives you:
 
 - **Search** by filename
 - **Type filters**: All types, Documents, HTML, Images, Markdown, Text, Video, Other
+- **Folders** for nested paths such as `coding-agent-runs/`, so you open a directory instead of scanning a flat list
 - **List or grid view**, remembered across visits
 - Endless scroll, so a profile with hundreds of files does not need paging
+
+![The Files page grouping nested coding-agent-runs logs into a folder](/screenshots/files-artifacts-after-folders.png)
 
 Each row shows the resolved MIME type, size, and last modified time. Those come from the `{filename}.nakama-meta.json` sidecar the agent writes next to the file. Without a sidecar, Nakama infers the type from the extension, and sniffs the bytes for valid UTF-8 when the extension is unknown, so a `Dockerfile` or a `notes.abc` still previews as text instead of being written off as binary.
 

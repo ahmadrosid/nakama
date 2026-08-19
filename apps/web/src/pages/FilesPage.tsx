@@ -1,5 +1,5 @@
 import type { ArtifactFile } from "@nakama/core/contract";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   ARTIFACT_TYPE_FILTER_LABELS,
@@ -21,6 +21,11 @@ import {
   resolveFilesProfileId,
   setStoredFilesViewMode,
 } from "@/lib/files-page.shared";
+import { ArtifactFolderBreadcrumb } from "@/pages/files/files-artifact-folder-breadcrumb";
+import {
+  listArtifactsInFolder,
+  normalizeArtifactFolderPrefix,
+} from "@/pages/files/files-artifact-folders";
 import { FilesArtifactViews } from "@/pages/files/files-artifact-views";
 import { FilesDeleteDialog } from "@/pages/files/files-delete-dialog";
 import { FilesSearchRow } from "@/pages/files/files-search-row";
@@ -32,9 +37,12 @@ export function FilesPage() {
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
   const profileId = resolveFilesProfileId({ activeProfileId, profiles });
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const view =
     searchParams.get("tab") === "knowledge" ? "knowledge" : "artifacts";
+  const folderPrefix = normalizeArtifactFolderPrefix(
+    searchParams.get("folder") ?? ""
+  );
 
   const [deleteTarget, setDeleteTarget] = useState<ArtifactFile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,6 +95,29 @@ export function FilesPage() {
       return haystack.includes(trimmed);
     });
   }, [artifacts, searchQuery, effectiveTypeFilter]);
+  const isSearching = searchQuery.trim().length > 0;
+  const listing = useMemo(() => {
+    if (isSearching) {
+      return { files: filteredArtifacts, folders: [] };
+    }
+
+    return listArtifactsInFolder(filteredArtifacts, folderPrefix);
+  }, [filteredArtifacts, folderPrefix, isSearching]);
+  const handleFolderChange = useCallback(
+    (prefix: string) => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        const normalized = normalizeArtifactFolderPrefix(prefix);
+        if (normalized) {
+          next.set("folder", normalized);
+        } else {
+          next.delete("folder");
+        }
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
 
   function handleViewModeChange(mode: FilesViewMode) {
     setViewMode(mode);
@@ -127,6 +158,9 @@ export function FilesPage() {
       parts.push(`“${trimmed}”`);
     }
     if (parts.length === 0) {
+      if (folderPrefix && !isSearching) {
+        return "This folder is empty.";
+      }
       return "No artifacts match.";
     }
     return `No artifacts match ${parts.join(" · ")}.`;
@@ -161,19 +195,29 @@ export function FilesPage() {
                 />
               ) : null}
 
+              {folderPrefix && !isSearching ? (
+                <ArtifactFolderBreadcrumb
+                  onNavigate={handleFolderChange}
+                  prefix={folderPrefix}
+                />
+              ) : null}
+
               <FilesArtifactViews
                 artifacts={artifacts}
                 deletePending={deleteMutation.isPending}
                 emptyFilterMessage={emptyFilterMessage}
                 error={error}
-                filteredArtifacts={filteredArtifacts}
+                folders={listing.folders}
                 hasMore={hasNextPage ?? false}
                 isLoading={isLoading}
                 isLoadingMore={isFetchingNextPage}
+                listingFiles={listing.files}
                 onDelete={setDeleteTarget}
+                onOpenFolder={handleFolderChange}
                 onShowMore={() => void fetchNextPage()}
                 profileId={profileId}
                 remainingCount={remainingCount}
+                showFullPath={isSearching}
                 viewMode={viewMode}
               />
             </div>

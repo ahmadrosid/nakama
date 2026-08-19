@@ -2,6 +2,7 @@ import type { ArtifactFile } from "@nakama/core/contract";
 import { Button } from "@/components/ui/button";
 import { formatError } from "@/lib/client";
 import type { FilesViewMode } from "@/lib/files-page.shared";
+import type { ArtifactFolderEntry } from "@/pages/files/files-artifact-folders";
 import { ArtifactGridSkeleton } from "@/pages/files/files-artifact-grid-skeleton";
 import { ArtifactGridView } from "@/pages/files/files-artifact-grid-view";
 import { ArtifactListSkeleton } from "@/pages/files/files-artifact-list-skeleton";
@@ -51,13 +52,16 @@ export function FilesArtifactViews({
   isLoadingMore,
   error,
   artifacts,
-  filteredArtifacts,
+  folders,
+  listingFiles,
   emptyFilterMessage,
+  showFullPath,
   profileId,
   deletePending,
   hasMore,
   remainingCount,
   onDelete,
+  onOpenFolder,
   onShowMore,
 }: {
   viewMode: FilesViewMode;
@@ -65,15 +69,20 @@ export function FilesArtifactViews({
   isLoadingMore: boolean;
   error: unknown;
   artifacts: ArtifactFile[];
-  filteredArtifacts: ArtifactFile[];
+  folders: ArtifactFolderEntry[];
+  listingFiles: ArtifactFile[];
   emptyFilterMessage: string;
+  showFullPath: boolean;
   profileId: string;
   deletePending: boolean;
   hasMore: boolean;
   remainingCount: number;
   onDelete: (artifact: ArtifactFile) => void;
+  onOpenFolder: (prefix: string) => void;
   onShowMore: () => void;
 }) {
+  const listingEmpty = folders.length === 0 && listingFiles.length === 0;
+
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card">
       {isLoading ? (
@@ -90,42 +99,40 @@ export function FilesArtifactViews({
         <div className="px-4 py-10 text-center text-muted-foreground text-sm">
           No artifacts yet.
         </div>
-      ) : filteredArtifacts.length === 0 ? (
+      ) : listingEmpty ? (
         <div className="px-4 py-6 text-muted-foreground text-sm">
           {emptyFilterMessage}
         </div>
       ) : viewMode === "grid" ? (
-        <>
-          <div className="p-4">
-            <ArtifactGridView
-              artifacts={filteredArtifacts}
-              deletePending={deletePending}
-              onDelete={onDelete}
-              profileId={profileId}
-            />
-          </div>
-          <ShowMoreArtifactsButton
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-            onShowMore={onShowMore}
-            remainingCount={remainingCount}
-          />
-        </>
-      ) : (
-        <>
-          <ArtifactListView
-            artifacts={filteredArtifacts}
+        <div className="p-4">
+          <ArtifactGridView
+            artifacts={listingFiles}
             deletePending={deletePending}
+            folders={folders}
             onDelete={onDelete}
+            onOpenFolder={onOpenFolder}
             profileId={profileId}
+            showFullPath={showFullPath}
           />
-          <ShowMoreArtifactsButton
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-            onShowMore={onShowMore}
-            remainingCount={remainingCount}
-          />
-        </>
+        </div>
+      ) : (
+        <ArtifactListView
+          artifacts={listingFiles}
+          deletePending={deletePending}
+          folders={folders}
+          onDelete={onDelete}
+          onOpenFolder={onOpenFolder}
+          profileId={profileId}
+          showFullPath={showFullPath}
+        />
+      )}
+      {isLoading || error || artifacts.length === 0 ? null : (
+        <ShowMoreArtifactsButton
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onShowMore={onShowMore}
+          remainingCount={remainingCount}
+        />
       )}
     </div>
   );
