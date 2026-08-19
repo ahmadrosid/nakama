@@ -22,6 +22,7 @@ import type {
   BranchSessionResponse,
   ChangePasswordRequest,
   CloneProfileRequest,
+  CodingHarnessSettingsResponse,
   CompactionResponse,
   ComposioConnectRequest,
   ComposioConnectResponse,
@@ -256,6 +257,24 @@ export class NakamaClient {
       "/v1/token-optimization",
       {
         body: JSON.stringify({ enabled }),
+        method: "PUT",
+      }
+    );
+  }
+
+  async getCodingHarnessSettings(): Promise<CodingHarnessSettingsResponse> {
+    return this.request<CodingHarnessSettingsResponse>(
+      "/v1/settings/coding-harnesses"
+    );
+  }
+
+  async setCodingHarnessSettings(
+    providerPassthroughEnabled: boolean
+  ): Promise<CodingHarnessSettingsResponse> {
+    return this.request<CodingHarnessSettingsResponse>(
+      "/v1/settings/coding-harnesses",
+      {
+        body: JSON.stringify({ providerPassthroughEnabled }),
         method: "PUT",
       }
     );

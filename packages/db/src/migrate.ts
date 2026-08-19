@@ -1109,6 +1109,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
       ALTER TABLE workspace_settings ADD COLUMN token_optimizer_enabled INTEGER;
     `);
   }
+
+  if (!columnNames.has("coding_agent_provider_passthrough")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN coding_agent_provider_passthrough INTEGER NOT NULL DEFAULT 1;
+    `);
+  }
 }
 
 function migrateAutomationRunsTable(db: Database): void {

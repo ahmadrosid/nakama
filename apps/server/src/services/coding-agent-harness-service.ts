@@ -8,7 +8,10 @@ import type {
   StoredCodingAgentHarnessProbeCache,
   StoredCodingAgentHarnessRecord,
 } from "@nakama/db";
-import { WORKSPACE_SETTINGS_ID } from "@nakama/db";
+import {
+  isCodingAgentProviderPassthroughEnabled,
+  mergeWorkspaceSettings,
+} from "@nakama/db";
 import {
   ensureBunGlobalInstallDirs,
   ensureProcessPath,
@@ -92,6 +95,7 @@ export function buildCodingHarnessInstallPlan(
 
 export interface CodingAgentWorkspaceSettings {
   harnesses: StoredCodingAgentHarnessRecord[];
+  providerPassthroughEnabled: boolean;
   selectedHarnessId: string | null;
 }
 
@@ -99,6 +103,7 @@ const PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface CodingAgentHarnessProbeContext {
   profileModel?: string | null;
+  providerPassthroughEnabled?: boolean;
   userConfig?: UserConfig | null;
 }
 
@@ -166,6 +171,9 @@ export async function loadCodingAgentWorkspaceSettings(
 
   return {
     harnesses: mergeHarnesses(stored?.codingAgentHarnesses ?? []),
+    providerPassthroughEnabled: isCodingAgentProviderPassthroughEnabled(
+      stored ?? null
+    ),
     selectedHarnessId: stored?.selectedCodingAgentHarness ?? null,
   };
 }
@@ -193,6 +201,11 @@ export async function listCodingAgentHarnessStatuses(
         };
       }
 
+      const probeContext = withPassthroughProbeContext(
+        options.probeContext,
+        settings.providerPassthroughEnabled
+      );
+
       const shouldProbe =
         probe && (probeHarnessId === null || probeHarnessId === harness.id);
 
@@ -201,7 +214,7 @@ export async function listCodingAgentHarnessStatuses(
           return buildHarnessStatusFromCache(harness, runtime);
         }
 
-        const light = await probeHarnessLight(harness, options.probeContext);
+        const light = await probeHarnessLight(harness, probeContext);
 
         return {
           ...harness,
@@ -222,7 +235,7 @@ export async function listCodingAgentHarnessStatuses(
           ready: false,
           statusMessage: null,
         },
-        options.probeContext
+        probeContext
       );
 
       return {
@@ -273,7 +286,10 @@ export async function refreshCodingAgentHarnessProbe(
       ready: false,
       statusMessage: null,
     },
-    probeContext
+    withPassthroughProbeContext(
+      probeContext,
+      settings.providerPassthroughEnabled
+    )
   );
 
   const checkedAt = new Date().toISOString();
@@ -302,6 +318,7 @@ export async function saveCodingAgentWorkspaceSettings(
   db: DatabaseAdapter,
   input: {
     selectedHarnessId?: string | null;
+    providerPassthroughEnabled?: boolean;
     harnesses?: Array<{
       id: string;
       command?: string;
@@ -337,19 +354,21 @@ export async function saveCodingAgentWorkspaceSettings(
       : input.selectedHarnessId && byId.has(input.selectedHarnessId)
         ? input.selectedHarnessId
         : null;
+  const providerPassthroughEnabled =
+    input.providerPassthroughEnabled ?? settings.providerPassthroughEnabled;
 
-  await db.upsertWorkspaceSettings({
-    codingAgentHarnesses: nextHarnesses,
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    imageModel: stored?.imageModel ?? null,
-    selectedCodingAgentHarness: selectedHarnessId,
-    transcriptionModel: stored?.transcriptionModel ?? null,
-    updatedAt: new Date().toISOString(),
-    visionModel: stored?.visionModel ?? null,
-  });
+  await db.upsertWorkspaceSettings(
+    mergeWorkspaceSettings(stored, {
+      codingAgentHarnesses: nextHarnesses,
+      codingAgentProviderPassthrough: providerPassthroughEnabled,
+      selectedCodingAgentHarness: selectedHarnessId,
+      updatedAt: new Date().toISOString(),
+    })
+  );
 
   return {
     harnesses: nextHarnesses,
+    providerPassthroughEnabled,
     selectedHarnessId,
   };
 }
@@ -637,15 +656,13 @@ async function saveHarnessProbeCache(
     harness.id === harnessId ? { ...harness, probeCache } : harness
   );
 
-  await db.upsertWorkspaceSettings({
-    codingAgentHarnesses: nextHarnesses,
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    imageModel: stored?.imageModel ?? null,
-    selectedCodingAgentHarness: settings.selectedHarnessId,
-    transcriptionModel: stored?.transcriptionModel ?? null,
-    updatedAt: new Date().toISOString(),
-    visionModel: stored?.visionModel ?? null,
-  });
+  await db.upsertWorkspaceSettings(
+    mergeWorkspaceSettings(stored, {
+      codingAgentHarnesses: nextHarnesses,
+      selectedCodingAgentHarness: settings.selectedHarnessId,
+      updatedAt: new Date().toISOString(),
+    })
+  );
 }
 
 async function clearHarnessProbeCache(
@@ -658,15 +675,13 @@ async function clearHarnessProbeCache(
     harness.id === harnessId ? { ...harness, probeCache: null } : harness
   );
 
-  await db.upsertWorkspaceSettings({
-    codingAgentHarnesses: nextHarnesses,
-    id: stored?.id ?? WORKSPACE_SETTINGS_ID,
-    imageModel: stored?.imageModel ?? null,
-    selectedCodingAgentHarness: settings.selectedHarnessId,
-    transcriptionModel: stored?.transcriptionModel ?? null,
-    updatedAt: new Date().toISOString(),
-    visionModel: stored?.visionModel ?? null,
-  });
+  await db.upsertWorkspaceSettings(
+    mergeWorkspaceSettings(stored, {
+      codingAgentHarnesses: nextHarnesses,
+      selectedCodingAgentHarness: settings.selectedHarnessId,
+      updatedAt: new Date().toISOString(),
+    })
+  );
 }
 
 async function getHarnessRuntimeStatus(
@@ -699,10 +714,22 @@ async function probeHarnessVersion(command: string): Promise<{
   const timeoutMs = 5000;
 
   return new Promise((resolve) => {
-    const child = spawn(command, ["--version"], {
-      env: getToolExecutionEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child: ReturnType<typeof spawn>;
+
+    try {
+      child = spawn(command, ["--version"], {
+        env: getToolExecutionEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch {
+      resolve({
+        installed: false,
+        missing: true,
+        version: null,
+      });
+      return;
+    }
+
     let stdout = "";
     let stderr = "";
 
@@ -748,6 +775,51 @@ function extractVersion(stdout: string, stderr: string): string | null {
   }
 
   return output.split(/\r?\n/, 1)[0]?.trim() || null;
+}
+
+export function getCodingHarnessLoginCommand(
+  kind: StoredCodingAgentHarnessKind
+): string | null {
+  if (kind === "codex") {
+    return "codex login";
+  }
+
+  if (kind === "claude_code") {
+    return "claude auth login";
+  }
+
+  if (kind === "opencode") {
+    return "opencode auth login";
+  }
+
+  if (kind === "pi") {
+    return "pi login";
+  }
+
+  return null;
+}
+
+function withPassthroughProbeContext(
+  probeContext: CodingAgentHarnessProbeContext | undefined,
+  providerPassthroughEnabled: boolean
+): CodingAgentHarnessProbeContext {
+  return {
+    ...probeContext,
+    providerPassthroughEnabled:
+      probeContext?.providerPassthroughEnabled ?? providerPassthroughEnabled,
+  };
+}
+
+function harnessNativeLoginMessage(
+  harness: Pick<CodingAgentHarnessStatus, "kind" | "name">
+): string {
+  const login = getCodingHarnessLoginCommand(harness.kind);
+
+  if (login) {
+    return `${harness.name} is installed. Uses harness login on this server (\`${login}\`).`;
+  }
+
+  return `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`;
 }
 
 export function getCodingHarnessInstallCommand(
@@ -839,12 +911,15 @@ async function probeHarnessLight(
   nextStep: "retry" | null;
   statusMessage: string | null;
 }> {
-  if (harness.kind === "cursor_agent") {
+  if (
+    harness.kind === "cursor_agent" ||
+    probeContext?.providerPassthroughEnabled === false
+  ) {
     return {
       authenticated: null,
       nextStep: null,
       ready: true,
-      statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
+      statusMessage: harnessNativeLoginMessage(harness),
     };
   }
 
@@ -887,15 +962,31 @@ async function probeHarnessExec(
       authenticated: null,
       nextStep: null,
       ready: true,
-      statusMessage: `${harness.name} is installed. Uses host Cursor auth (no Nakama provider passthrough).`,
+      statusMessage: harnessNativeLoginMessage(harness),
     };
   }
 
-  const { spawn, routing } = await resolveCodingAgentSpawnBundle({
-    harnessKind: harness.kind,
-    profileModel: probeContext?.profileModel ?? null,
-    userConfig: probeContext?.userConfig,
-  });
+  const passthrough = probeContext?.providerPassthroughEnabled !== false;
+  const { spawn, routing } = passthrough
+    ? await resolveCodingAgentSpawnBundle({
+        harnessKind: harness.kind,
+        profileModel: probeContext?.profileModel ?? null,
+        userConfig: probeContext?.userConfig,
+      })
+    : {
+        routing: {
+          active: false,
+          apiKey: null,
+          baseUrl: null,
+          compatible: false,
+          configured: false,
+          error: null,
+          model: null,
+          providerLabel: null,
+          providerType: null,
+        },
+        spawn: { env: {} as Record<string, string> },
+      };
   const tempDir = await mkdtemp(
     path.join(tmpdir(), "nakama-coding-agent-probe-")
   );
@@ -934,20 +1025,30 @@ async function probeHarnessExec(
         authenticated: true,
         nextStep: null,
         ready: true,
-        statusMessage: `${harness.name} is installed and ready via Nakama provider passthrough.`,
+        statusMessage: passthrough
+          ? `${harness.name} is installed and ready via Nakama provider passthrough.`
+          : harnessNativeLoginMessage(harness),
       };
     }
 
     if (looksLikeAuthenticationFailure(combinedOutput)) {
+      const login = getCodingHarnessLoginCommand(harness.kind);
+      const nativeHint = login
+        ? `Run \`${login}\` on this server.`
+        : "Authenticate the CLI on this server.";
+
       return {
         authenticated: false,
         nextStep: "retry",
         ready: false,
-        statusMessage:
-          routing.error ??
-          (combinedOutput
-            ? `${harness.name} could not authenticate with the configured Nakama provider. ${summarizeProbeOutput(combinedOutput)} Check Settings → Provider.`
-            : `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`),
+        statusMessage: passthrough
+          ? (routing.error ??
+            (combinedOutput
+              ? `${harness.name} could not authenticate with the configured Nakama provider. ${summarizeProbeOutput(combinedOutput)} Check Settings → Provider.`
+              : `${harness.name} could not authenticate with the configured Nakama provider. Check Settings → Provider.`))
+          : combinedOutput
+            ? `${harness.name} could not authenticate with harness login. ${summarizeProbeOutput(combinedOutput)} ${nativeHint}`
+            : `${harness.name} could not authenticate with harness login. ${nativeHint}`,
       };
     }
 

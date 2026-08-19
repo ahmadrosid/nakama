@@ -1469,6 +1469,8 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
           ...harness,
           args: [...harness.args],
         })),
+        codingAgentProviderPassthrough:
+          record.codingAgentProviderPassthrough !== false,
       };
     },
   };

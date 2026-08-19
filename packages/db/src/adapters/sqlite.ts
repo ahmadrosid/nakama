@@ -186,6 +186,7 @@ interface LlmUsageModelStatsRow {
 
 interface WorkspaceSettingsRow {
   coding_agent_harnesses: string;
+  coding_agent_provider_passthrough: number | null;
   id: string;
   image_model: string | null;
   selected_coding_agent_harness: string | null;
@@ -921,9 +922,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       coding_agent_harnesses,
       selected_coding_agent_harness,
       token_optimizer_enabled,
+      coding_agent_provider_passthrough,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
@@ -931,6 +933,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       coding_agent_harnesses = excluded.coding_agent_harnesses,
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       token_optimizer_enabled = excluded.token_optimizer_enabled,
+      coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
       updated_at = excluded.updated_at
   `);
   const listNotificationDestinationsForOrgStmt = db.prepare(`
@@ -2902,6 +2905,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           record.tokenOptimizerEnabled === undefined
           ? null
           : Number(record.tokenOptimizerEnabled),
+        record.codingAgentProviderPassthrough === false ? 0 : 1,
         record.updatedAt
       );
     },
@@ -3259,6 +3263,7 @@ function toWorkspaceSettingsRecord(
 ): StoredWorkspaceSettingsRecord {
   return {
     codingAgentHarnesses: parseCodingAgentHarnesses(row.coding_agent_harnesses),
+    codingAgentProviderPassthrough: row.coding_agent_provider_passthrough !== 0,
     id: row.id,
     imageModel: row.image_model?.trim() || null,
     selectedCodingAgentHarness:

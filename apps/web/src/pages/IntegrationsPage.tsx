@@ -1,4 +1,5 @@
 import {
+  CodeIcon,
   CpuChargeIcon,
   HashtagIcon,
   Key01Icon,
@@ -8,6 +9,7 @@ import {
   WhatsappIcon,
 } from "hugeicons-react";
 import { Navigate, useSearchParams } from "react-router-dom";
+import { CodingAgentsSettingsCard } from "@/components/CodingAgentsSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
 import { ComposioSettingsCard } from "@/components/ComposioSettingsCard";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
@@ -54,6 +56,11 @@ const INTEGRATION_SECTIONS = [
     label: "Local token",
   },
   {
+    icon: CodeIcon,
+    id: "coding-agents",
+    label: "Coding agents",
+  },
+  {
     icon: CpuChargeIcon,
     id: "optimization",
     label: "Context savings",
@@ -69,7 +76,8 @@ function resolveSection(value: string | null): IntegrationSectionId {
     value === "whatsapp" ||
     value === "discord" ||
     value === "composio" ||
-    value === "optimization"
+    value === "optimization" ||
+    value === "coding-agents"
   ) {
     return value;
   }
@@ -145,6 +153,8 @@ export function IntegrationsPage() {
           {section === "token" ? <LocalAuthTokenCard /> : null}
 
           {section === "optimization" ? <TokenOptimizationCard /> : null}
+
+          {section === "coding-agents" ? <CodingAgentsSettingsCard /> : null}
 
           {section === "composio" ? (
             <div className={cn(isOrgAdmin && "space-y-4")}>

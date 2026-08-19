@@ -166,6 +166,11 @@ export interface StoredLlmUsageModelStatsRecord {
 
 export interface StoredWorkspaceSettingsRecord {
   codingAgentHarnesses: StoredCodingAgentHarnessRecord[];
+  /**
+   * When true (default), coding CLIs get Nakama provider credentials at spawn.
+   * When false, harness-native vendor login on the host is used instead.
+   */
+  codingAgentProviderPassthrough: boolean;
   id: string;
   imageModel: string | null;
   orgId?: string | null;

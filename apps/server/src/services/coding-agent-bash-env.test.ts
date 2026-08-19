@@ -203,4 +203,51 @@ describe("enrichCodingAgentBashInput", () => {
     expect(enriched.env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(enriched.env?.OPENAI_API_KEY).toBeUndefined();
   });
+
+  test("does not merge provider credentials when harness-native login is enabled", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      codingAgentHarnesses: [
+        {
+          args: [],
+          command: "echo",
+          enabled: true,
+          id: "coding-harness-claude-code",
+          kind: "claude_code",
+          name: "Claude Code",
+        },
+      ],
+      codingAgentProviderPassthrough: false,
+      id: "workspace-settings",
+      imageModel: null,
+      selectedCodingAgentHarness: null,
+      transcriptionModel: null,
+      updatedAt: new Date().toISOString(),
+      visionModel: null,
+    });
+    await db.upsertProfile({
+      createdAt: new Date().toISOString(),
+      id: "profile_test",
+      isDefault: true,
+      isSuper: false,
+      model: "anthropic:claude-sonnet-4-6",
+      name: "Test",
+      orgId: "org_test",
+      systemPrompt: "test",
+      updatedAt: new Date().toISOString(),
+    });
+
+    const enriched = (await enrichCodingAgentBashInput(
+      db,
+      { command: "echo hello" },
+      { orgId: "org_test", profileId: "profile_test" },
+      {
+        defaultProviderId: anthropicProvider.id,
+        providers: [anthropicProvider],
+      }
+    )) as { env?: Record<string, string>; codingAgent?: boolean };
+
+    expect(enriched.codingAgent).toBe(true);
+    expect(enriched.env?.ANTHROPIC_API_KEY).toBeUndefined();
+  });
 });

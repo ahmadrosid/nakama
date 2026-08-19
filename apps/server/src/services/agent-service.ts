@@ -164,10 +164,10 @@ import {
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
+  mergeWorkspaceSettings,
   type StoredProfileRecord,
   type StoredTaskRunRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
-  WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
 import {
   AVAILABLE_MODELS,
@@ -633,18 +633,17 @@ export class AgentService {
 
     const vision: VisionSettings = { model };
     const existing = await this.db.getWorkspaceSettings();
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: existing?.codingAgentHarnesses ?? [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: existing?.imageModel ?? this.userConfig?.imageModel ?? null,
-      selectedCodingAgentHarness: existing?.selectedCodingAgentHarness ?? null,
-      transcriptionModel:
-        existing?.transcriptionModel ??
-        this.userConfig?.transcriptionModel ??
-        null,
-      updatedAt: new Date().toISOString(),
-      visionModel: model,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        imageModel: existing?.imageModel ?? this.userConfig?.imageModel ?? null,
+        transcriptionModel:
+          existing?.transcriptionModel ??
+          this.userConfig?.transcriptionModel ??
+          null,
+        updatedAt: new Date().toISOString(),
+        visionModel: model,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = {
@@ -688,16 +687,15 @@ export class AgentService {
 
     const transcription: TranscriptionSettings = { model };
     const existing = await this.db.getWorkspaceSettings();
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: existing?.codingAgentHarnesses ?? [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: existing?.imageModel ?? this.userConfig?.imageModel ?? null,
-      selectedCodingAgentHarness: existing?.selectedCodingAgentHarness ?? null,
-      transcriptionModel: model,
-      updatedAt: new Date().toISOString(),
-      visionModel:
-        existing?.visionModel ?? this.userConfig?.visionModel ?? null,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        imageModel: existing?.imageModel ?? this.userConfig?.imageModel ?? null,
+        transcriptionModel: model,
+        updatedAt: new Date().toISOString(),
+        visionModel:
+          existing?.visionModel ?? this.userConfig?.visionModel ?? null,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = {
@@ -782,15 +780,14 @@ export class AgentService {
       (await loadUserTranscriptionSettings()).model ??
       null;
 
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: stored?.codingAgentHarnesses ?? [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: this.userConfig?.imageModel ?? null,
-      selectedCodingAgentHarness: stored?.selectedCodingAgentHarness ?? null,
-      transcriptionModel: legacyModel,
-      updatedAt: new Date().toISOString(),
-      visionModel: this.userConfig?.visionModel ?? null,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(stored, {
+        imageModel: this.userConfig?.imageModel ?? null,
+        transcriptionModel: legacyModel,
+        updatedAt: new Date().toISOString(),
+        visionModel: this.userConfig?.visionModel ?? null,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = { ...this.userConfig, transcriptionModel: legacyModel };
@@ -822,19 +819,18 @@ export class AgentService {
 
     const imageGeneration: ImageGenerationSettings = { model };
     const existing = await this.db.getWorkspaceSettings();
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: existing?.codingAgentHarnesses ?? [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: model,
-      selectedCodingAgentHarness: existing?.selectedCodingAgentHarness ?? null,
-      transcriptionModel:
-        existing?.transcriptionModel ??
-        this.userConfig?.transcriptionModel ??
-        null,
-      updatedAt: new Date().toISOString(),
-      visionModel:
-        existing?.visionModel ?? this.userConfig?.visionModel ?? null,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        imageModel: model,
+        transcriptionModel:
+          existing?.transcriptionModel ??
+          this.userConfig?.transcriptionModel ??
+          null,
+        updatedAt: new Date().toISOString(),
+        visionModel:
+          existing?.visionModel ?? this.userConfig?.visionModel ?? null,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = {
@@ -916,15 +912,14 @@ export class AgentService {
 
     const legacyModel = this.userConfig?.imageModel ?? null;
 
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: legacyModel,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: this.userConfig?.transcriptionModel ?? null,
-      updatedAt: new Date().toISOString(),
-      visionModel: this.userConfig?.visionModel ?? null,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        imageModel: legacyModel,
+        transcriptionModel: this.userConfig?.transcriptionModel ?? null,
+        updatedAt: new Date().toISOString(),
+        visionModel: this.userConfig?.visionModel ?? null,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = { ...this.userConfig, imageModel: legacyModel };
@@ -968,15 +963,14 @@ export class AgentService {
       null;
     const legacyImageModel = this.userConfig?.imageModel ?? null;
 
-    await this.db.upsertWorkspaceSettings({
-      codingAgentHarnesses: stored?.codingAgentHarnesses ?? [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: legacyImageModel,
-      selectedCodingAgentHarness: stored?.selectedCodingAgentHarness ?? null,
-      transcriptionModel: legacyTranscriptionModel,
-      updatedAt: new Date().toISOString(),
-      visionModel: legacyVisionModel,
-    });
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(stored, {
+        imageModel: legacyImageModel,
+        transcriptionModel: legacyTranscriptionModel,
+        updatedAt: new Date().toISOString(),
+        visionModel: legacyVisionModel,
+      })
+    );
 
     if (this.userConfig) {
       this.userConfig = {

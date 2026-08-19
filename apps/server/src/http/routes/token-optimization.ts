@@ -6,6 +6,7 @@ import {
   type OmniInstallResult,
   OPTIMIZER_ID,
 } from "@nakama/core";
+import { mergeWorkspaceSettings } from "@nakama/db";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -155,16 +156,12 @@ export function registerTokenOptimizationRoutes(
     const enabled = Boolean(body.enabled);
     const existing = await options.databaseAdapter.getWorkspaceSettings();
 
-    await options.databaseAdapter.upsertWorkspaceSettings({
-      codingAgentHarnesses: existing?.codingAgentHarnesses ?? [],
-      id: existing?.id ?? "default",
-      imageModel: existing?.imageModel ?? null,
-      selectedCodingAgentHarness: existing?.selectedCodingAgentHarness ?? null,
-      tokenOptimizerEnabled: enabled,
-      transcriptionModel: existing?.transcriptionModel ?? null,
-      updatedAt: new Date().toISOString(),
-      visionModel: existing?.visionModel ?? null,
-    });
+    await options.databaseAdapter.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        tokenOptimizerEnabled: enabled,
+        updatedAt: new Date().toISOString(),
+      })
+    );
 
     // Switching it on when the binary is absent used to save a setting that did
     // nothing. Fetch it instead, and report the failure to the operator who

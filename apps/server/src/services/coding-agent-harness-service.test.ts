@@ -91,6 +91,38 @@ describe("coding-agent harness resolution", () => {
     expect(cursor?.statusMessage).toMatch(/host Cursor auth/i);
   });
 
+  test("marks a harness ready without Nakama provider when passthrough is off", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertWorkspaceSettings({
+      codingAgentHarnesses: [
+        {
+          args: [],
+          command: "echo",
+          enabled: true,
+          id: "coding-harness-codex",
+          kind: "codex",
+          name: "Codex",
+        },
+      ],
+      codingAgentProviderPassthrough: false,
+      id: "workspace-settings",
+      imageModel: null,
+      selectedCodingAgentHarness: null,
+      transcriptionModel: null,
+      updatedAt: new Date().toISOString(),
+      visionModel: null,
+    });
+
+    const statuses = await listCodingAgentHarnessStatuses(db);
+    const codex = statuses.find(
+      (harness) => harness.id === "coding-harness-codex"
+    );
+    expect(codex?.installed).toBe(true);
+    expect(codex?.ready).toBe(true);
+    expect(codex?.statusMessage).toMatch(/codex login/i);
+    expect(codex?.statusMessage).not.toMatch(/Settings → Provider/);
+  });
+
   test("refreshCodingAgentHarnessProbe persists cached readiness", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertWorkspaceSettings({

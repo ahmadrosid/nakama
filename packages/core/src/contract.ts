@@ -260,6 +260,20 @@ export interface TokenOptimizationUpdateResponse {
   installed: boolean;
 }
 
+export interface CodingHarnessLoginCommand {
+  command: string;
+  name: string;
+}
+
+export interface CodingHarnessSettingsResponse {
+  loginCommands: CodingHarnessLoginCommand[];
+  providerPassthroughEnabled: boolean;
+}
+
+export interface UpdateCodingHarnessSettingsRequest {
+  providerPassthroughEnabled: boolean;
+}
+
 export interface TokenOptimizationTurnArm {
   arm: string;
   /** Turns whose token count came from an estimate, not the provider. */

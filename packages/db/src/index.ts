@@ -15,6 +15,7 @@ export * from "./local-client";
 export * from "./org-profiles";
 export * from "./seed";
 export * from "./types";
+export * from "./workspace-settings";
 
 export interface Database {
   adapter: DatabaseAdapter;

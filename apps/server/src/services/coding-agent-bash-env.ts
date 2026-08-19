@@ -62,8 +62,20 @@ export async function enrichCodingAgentBashInput(
       : null;
   const harness = await resolveCodingAgentHarness(db, inferredKind, {
     profileModel,
+    providerPassthroughEnabled: workspace.providerPassthroughEnabled,
     userConfig,
   });
+
+  if (
+    !workspace.providerPassthroughEnabled ||
+    harness.kind === "cursor_agent"
+  ) {
+    return {
+      ...record,
+      codingAgent: true,
+    };
+  }
+
   const { spawn } = await resolveCodingAgentSpawnBundle({
     harnessKind: harness.kind,
     profileModel,

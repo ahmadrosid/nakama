@@ -1,0 +1,89 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../services/agent-service";
+import { AuthService } from "../services/auth-service";
+import { OrgService } from "../services/org-service";
+import { createHonoApp } from "./app";
+import { setupFreshInstallSession } from "./test-session-helpers";
+
+describe("coding harness settings routes", () => {
+  let configDir = "";
+
+  afterEach(async () => {
+    if (configDir) {
+      await rm(configDir, { force: true, recursive: true });
+      configDir = "";
+    }
+
+    delete process.env.NAKAMA_CONFIG_DIR;
+  });
+
+  test("defaults to Nakama provider passthrough and can switch to harness login", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-coding-harness-route-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const authService = new AuthService();
+    const app = createHonoApp({
+      agent: new AgentService(null, null, databaseAdapter),
+      authService,
+      automationService: {} as never,
+      databaseAdapter,
+      mcpService: {} as never,
+      orgService: new OrgService(databaseAdapter, authService),
+      systemStatus: { getStatus: async () => ({ ok: true }) } as never,
+      taskService: {} as never,
+      webDistDir: null,
+      workerManager: {} as never,
+    });
+
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+
+    const getDefault = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        headers: session.headers(),
+      })
+    );
+    expect(getDefault.status).toBe(200);
+    const defaultBody = (await getDefault.json()) as {
+      providerPassthroughEnabled: boolean;
+      loginCommands: Array<{ command: string; name: string }>;
+    };
+    expect(defaultBody.providerPassthroughEnabled).toBe(true);
+    expect(defaultBody.loginCommands.map((item) => item.command)).toEqual([
+      "codex login",
+      "claude auth login",
+      "opencode auth login",
+      "pi login",
+    ]);
+
+    const putResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        body: JSON.stringify({ providerPassthroughEnabled: false }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+    expect(putResponse.status).toBe(200);
+    const saved = (await putResponse.json()) as {
+      providerPassthroughEnabled: boolean;
+    };
+    expect(saved.providerPassthroughEnabled).toBe(false);
+
+    const getSaved = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/coding-harnesses", {
+        headers: session.headers(),
+      })
+    );
+    const savedBody = (await getSaved.json()) as {
+      providerPassthroughEnabled: boolean;
+    };
+    expect(savedBody.providerPassthroughEnabled).toBe(false);
+  });
+});
