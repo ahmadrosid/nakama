@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   getDefaultModel,
+  getModelById,
   isOpenRouterModelSlug,
   modelSupportsVision,
   resolveModel,
@@ -108,6 +109,18 @@ describe("resolveModel", () => {
     expect(getDefaultModel("fireworks")).toBe(
       "accounts/fireworks/models/kimi-k2p6"
     );
+  });
+
+  test("resolves official Cloudflare 8B catalog ids", () => {
+    expect(resolveModel("cloudflare", "@cf/meta/llama-3.1-8b-instruct")).toBe(
+      "@cf/meta/llama-3.1-8b-instruct"
+    );
+    expect(
+      resolveModel("cloudflare", "@cf/meta/llama-3.1-8b-instruct-fast")
+    ).toBe("@cf/meta/llama-3.1-8b-instruct-fast");
+    expect(
+      getModelById("@cf/meta/infire-llama-3.1-8b-instruct")
+    ).toBeUndefined();
   });
 
   test("uses fireworks custom model shortlist when provided", () => {
