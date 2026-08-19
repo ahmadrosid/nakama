@@ -44,7 +44,13 @@ A markdown artifact with two or more headings gets a collapsible **Contents** li
 
 ![Clicking a Contents entry scrolls the preview to that section](/screenshots/artifact-toc-jump.png)
 
-Entries are matched back to their heading by text plus occurrence, so a script that repeats "Hook" jumps to the right one rather than the first. Below two headings nothing renders, which keeps a one-paragraph note free of chrome.
+Entries are matched back to their heading by text plus occurrence, so a script that repeats "Hook" jumps to the right one rather than the first. Clicking the second **Hook** below lands on the 8:40 beat, not the 0:18 one.
+
+![Clicking the second Hook entry lands on the 8:40 beat rather than the first Hook](/screenshots/artifact-toc-duplicate-heading.png)
+
+Below two headings nothing renders, so a one-paragraph note keeps the preview it has today.
+
+![A one-heading note previews with no Contents list](/screenshots/artifact-toc-short-note.png)
 
 The list lives in the shared artifact body, so the chat panel, the Files preview, and the public share page all show it.
 
@@ -58,11 +64,19 @@ The artifact actions menu carries **Download**, **Edit artifact**, and **Share a
 
 ![Editing the markdown source in place](/screenshots/artifact-markdown-editor.png)
 
+Saving returns to the rendered preview, and the row in the list picks up the new timestamp.
+
+![The saved artifact back in rendered preview, with an updated timestamp in the list](/screenshots/artifact-markdown-saved.png)
+
 Three things to know:
 
 - **Markdown only.** The write path refuses anything whose resolved type is not `text/markdown` with a 400, so a `.docx` cannot be replaced by the markdown its own preview was converted into.
 - **A failed save keeps your buffer** and shows the error, rather than dropping what you typed.
 - **The sidecar is refreshed**, so the Files list does not show a stale size and timestamp.
+
+A failed save looks like this. The error is shown, the buffer is still there, and Save is still available:
+
+![A failed save keeps the edited buffer and shows the error](/screenshots/artifact-edit-failed-save.png)
 
 Editing requires a non-viewer role in the active org. Viewers can read and download.
 
