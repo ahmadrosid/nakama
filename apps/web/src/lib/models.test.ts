@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   encodeModelSelection,
   filterVisionCapableProviderGroups,
@@ -6,6 +7,7 @@ import {
   hasOpenCodeZenProvider,
   isOpenCodeZenBaseUrl,
   isProviderTypeAlreadyConfigured,
+  PROVIDER_OPTIONS,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "./models";
@@ -278,6 +280,14 @@ describe("isProviderTypeAlreadyConfigured", () => {
   });
 });
 
+describe("PROVIDER_OPTIONS", () => {
+  test("lists every registered provider type", () => {
+    expect(PROVIDER_OPTIONS.map((option) => option.id).toSorted()).toEqual(
+      [...USER_PROVIDER_NAMES].toSorted()
+    );
+  });
+});
+
 describe("firstAvailableProviderOption", () => {
   test("keeps preferred provider when it is still free", () => {
     expect(firstAvailableProviderOption(new Set(["anthropic"]), "openai")).toBe(
@@ -298,6 +308,7 @@ describe("firstAvailableProviderOption", () => {
           "gemini",
           "deepseek",
           "cerebras",
+          "cloudflare",
           "fireworks",
           "opencode_go",
         ]),

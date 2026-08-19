@@ -54,6 +54,7 @@ export function formatProviderLabel(
     provider === "gemini" ||
     provider === "deepseek" ||
     provider === "cerebras" ||
+    provider === "cloudflare" ||
     provider === "fireworks" ||
     provider === "ollama" ||
     provider === "openai_compatible" ||
@@ -73,6 +74,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
     { id: "cerebras", label: "Cerebras" },
+    { id: "cloudflare", label: "Cloudflare" },
     { id: "fireworks", label: "Fireworks" },
     { id: "ollama", label: "Ollama" },
     { id: "opencode_go", label: "OpenCode Go" },
