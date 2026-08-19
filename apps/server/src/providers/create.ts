@@ -94,7 +94,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       return createCloudflareProvider({
         accountId: readEnvValue(process.env, "CLOUDFLARE_ACCOUNT_ID") ?? "",
         apiKey: options.apiKey,
-        customModels: options.instance?.customModels,
+        instance: options.instance,
         model,
       });
     case "ollama":
