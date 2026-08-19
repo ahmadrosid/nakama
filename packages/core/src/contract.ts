@@ -1869,7 +1869,8 @@ export type ProviderName =
   | "fireworks"
   | "ollama"
   | "openai_compatible"
-  | "opencode_go";
+  | "opencode_go"
+  | "cloudflare";
 
 export type OllamaHostMode = "local" | "cloud";
 

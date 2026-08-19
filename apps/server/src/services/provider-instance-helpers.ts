@@ -30,6 +30,7 @@ import {
   isOpenRouterModelSlug,
   resolveModel,
   validateCerebrasCustomModels,
+  validateCloudflareCustomModels,
   validateFireworksCustomModels,
   validateOllamaCustomModels,
   validateOpenCodeGoCustomModels,
@@ -235,6 +236,8 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateFireworksCustomModels(request.customModels);
     } else if (instance.type === "ollama") {
       next.customModels = validateOllamaCustomModels(request.customModels);
+    } else if (instance.type === "cloudflare") {
+      next.customModels = validateCloudflareCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
     } else if (
