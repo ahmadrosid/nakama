@@ -93,29 +93,12 @@ export class ArtifactShareService {
 
     if (existing) {
       refreshed = true;
-      await deleteArtifactShareSnapshot(existing.storagePath);
-
-      const storagePath = await writeArtifactShareSnapshot({
+      record = await this.replaceSnapshot(existing, {
         bytes: artifact.bytes,
         filename,
+        mimeType,
         orgId: input.orgId,
-        shareId: existing.id,
       });
-
-      await this.db.updateArtifactShareSnapshot(existing.id, {
-        filename,
-        mimeType,
-        sizeBytes: artifact.bytes.byteLength,
-        storagePath,
-      });
-
-      record = {
-        ...existing,
-        filename,
-        mimeType,
-        sizeBytes: artifact.bytes.byteLength,
-        storagePath,
-      };
     } else {
       token = generateArtifactShareToken();
       const shareId = `share_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -163,6 +146,84 @@ export class ArtifactShareService {
       token: token ?? "",
       webPublicUrlConfigured,
     };
+  }
+
+  private async replaceSnapshot(
+    existing: StoredArtifactShareRecord,
+    input: {
+      bytes: Buffer;
+      filename: string;
+      mimeType: string;
+      orgId: string;
+    }
+  ): Promise<StoredArtifactShareRecord> {
+    await deleteArtifactShareSnapshot(existing.storagePath);
+
+    const storagePath = await writeArtifactShareSnapshot({
+      bytes: input.bytes,
+      filename: input.filename,
+      orgId: input.orgId,
+      shareId: existing.id,
+    });
+
+    await this.db.updateArtifactShareSnapshot(existing.id, {
+      filename: input.filename,
+      mimeType: input.mimeType,
+      sizeBytes: input.bytes.byteLength,
+      storagePath,
+    });
+
+    return {
+      ...existing,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      sizeBytes: input.bytes.byteLength,
+      storagePath,
+    };
+  }
+
+  /**
+   * A share serves a snapshot taken at publish time, so an edited artifact keeps
+   * serving the old text on the public link until the snapshot is replaced.
+   * Callers pass every path the share could have been published under (the
+   * dashboard sends absolute paths, channels send workspace-relative ones), and
+   * this no-ops when the artifact was never shared.
+   */
+  async refreshArtifactShareSnapshot(input: {
+    orgId: string;
+    profileId: string;
+    sourcePaths: string[];
+  }): Promise<boolean> {
+    let refreshed = false;
+
+    for (const sourcePath of new Set(input.sourcePaths)) {
+      const existing = await this.db.getActiveArtifactShareByPath(
+        input.orgId,
+        input.profileId,
+        sourcePath
+      );
+
+      if (!existing) {
+        continue;
+      }
+
+      const artifact = await readArtifactFile({
+        filename: sourcePath,
+        orgId: input.orgId,
+        profileId: input.profileId,
+      });
+      const filename = sourcePath.split("/").pop() ?? "artifact";
+
+      await this.replaceSnapshot(existing, {
+        bytes: artifact.bytes,
+        filename,
+        mimeType: resolveArtifactMimeType(artifact.contentType, filename),
+        orgId: input.orgId,
+      });
+      refreshed = true;
+    }
+
+    return refreshed;
   }
 
   async getArtifactShareStatus(input: {

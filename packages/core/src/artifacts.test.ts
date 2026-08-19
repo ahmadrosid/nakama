@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { listArtifacts, readArtifactFile } from "./artifacts";
+import {
+  listArtifacts,
+  readArtifactFile,
+  writeArtifactFile,
+} from "./artifacts";
 import { getProfileArtifactsDir } from "./soul/resolve";
 
 const SAMPLE_DOCX_PATH = path.join(
@@ -196,4 +200,79 @@ test("paginates artifacts with limit and offset", async () => {
     offset: 4,
   });
   expect(page3.artifacts).toHaveLength(1);
+});
+
+test("saves an edit and refreshes the sidecar size and timestamp", async () => {
+  await writeArtifact("script.md", "# Draft\n");
+  await writeArtifact(
+    "script.md.nakama-meta.json",
+    JSON.stringify({
+      mimeType: "text/markdown",
+      savedAt: "2020-01-01T00:00:00.000Z",
+      sizeBytes: 8,
+    })
+  );
+
+  const saved = await writeArtifactFile({
+    content: "# Draft\n\n## Hook\n\nRewritten by hand.\n",
+    filename: "script.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+
+  const artifact = await readArtifactFile({
+    filename: "script.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(artifact.bytes.toString("utf8")).toContain("Rewritten by hand.");
+
+  const [listed] = (await listArtifacts(ORG_ID, PROFILE_ID)).artifacts;
+  expect(listed.sizeBytes).toBe(saved.sizeBytes);
+  expect(listed.updatedAt).toBe(saved.updatedAt);
+  expect(listed.updatedAt).not.toBe("2020-01-01T00:00:00.000Z");
+});
+
+test("refuses to overwrite a non-markdown artifact", async () => {
+  await writeArtifact("data.json", '{"a":1}');
+
+  await expect(
+    writeArtifactFile({
+      content: "not json anymore",
+      filename: "data.json",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow(/Only markdown artifacts can be edited: data\.json/);
+
+  const artifact = await readArtifactFile({
+    filename: "data.json",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(artifact.bytes.toString("utf8")).toBe('{"a":1}');
+});
+
+test("refuses to write outside the artifacts directory", async () => {
+  await writeArtifact("script.md", "# Draft\n");
+
+  await expect(
+    writeArtifactFile({
+      content: "owned",
+      filename: "../../escaped.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow();
+});
+
+test("names the artifact, not the server path, when the file is gone", async () => {
+  await expect(
+    writeArtifactFile({
+      content: "# Recovered\n",
+      filename: "missing.md",
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+  ).rejects.toThrow("Artifact not found: missing.md");
 });

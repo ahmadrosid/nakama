@@ -1,16 +1,26 @@
-import { readdir, readFile, realpath, stat, unlink } from "node:fs/promises";
+import {
+  readdir,
+  readFile,
+  realpath,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { NakamaApiError } from "./api-error";
 import {
   inferArtifactMimeType,
   isDocxFile,
   isLegacyDocFile,
+  isMarkdownArtifactMimeType,
 } from "./artifact-mime";
 import type {
   ArtifactFile,
   DeleteArtifactResponse,
   ListArtifactsOptions,
   ListArtifactsResponse,
+  UpdateArtifactResponse,
 } from "./contract";
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
@@ -175,6 +185,75 @@ export async function readArtifactFile(input: {
     bytes,
     contentType: metadata.mimeType,
     filePath,
+  };
+}
+
+/**
+ * Hand edits are markdown-only for now: the other artifact types either round-trip
+ * through a converter (docx) or have no editor, so writing raw text back would
+ * corrupt the file the agent saved.
+ */
+export async function writeArtifactFile(input: {
+  orgId: string;
+  profileId: string;
+  filename: string;
+  content: string;
+}): Promise<UpdateArtifactResponse> {
+  const artifactsDir = getProfileArtifactsDir(input.orgId, input.profileId);
+  const resolvedArtifactsDir = await realpath(artifactsDir);
+  const guarded = await guardFilePath(input.filename, null, undefined, {
+    allowedDirs: [resolvedArtifactsDir],
+    cwd: resolvedArtifactsDir,
+  });
+  const filePath = guarded.resolved;
+  // The dashboard saves by absolute path, so error copy uses the relative name:
+  // it is what the user sees in the UI, and it keeps server paths out of the toast.
+  const displayName = path.relative(resolvedArtifactsDir, filePath);
+  const fileStat = await stat(filePath).catch(() => null);
+
+  if (!fileStat?.isFile()) {
+    throw new NakamaApiError(`Artifact not found: ${displayName}`, 404);
+  }
+
+  const metadata = await readArtifactMeta(
+    filePath,
+    fileStat.size,
+    fileStat.mtime.toISOString()
+  );
+
+  if (!isMarkdownArtifactMimeType(metadata.mimeType)) {
+    throw new NakamaApiError(
+      `Only markdown artifacts can be edited: ${displayName}`,
+      400
+    );
+  }
+
+  await writeFile(filePath, input.content, "utf8");
+  const updated = await stat(filePath);
+  const savedAt = updated.mtime.toISOString();
+
+  const metaPath = getArtifactMetaPath(filePath);
+  if (await pathExists(metaPath)) {
+    await writeFile(
+      metaPath,
+      JSON.stringify(
+        {
+          mimeType: metadata.mimeType,
+          savedAt,
+          sizeBytes: updated.size,
+        } satisfies ArtifactMeta,
+        null,
+        2
+      ),
+      "utf8"
+    );
+  }
+
+  return {
+    filename: path.relative(resolvedArtifactsDir, filePath),
+    profileId: input.profileId,
+    sizeBytes: updated.size,
+    updatedAt: savedAt,
   };
 }
 

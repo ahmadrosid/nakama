@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getProfileArtifactsDir } from "@nakama/core";
+import { getProfileArtifactsDir, writeArtifactFile } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
@@ -18,9 +18,39 @@ setupTestConfigDir("nakama-artifact-shares-test-");
 
 function createApp(databaseAdapter = createInMemoryDatabaseAdapter()) {
   return createMinimalHonoApp({
-    agent: {},
+    agent: {
+      writeProfileArtifact: (
+        orgId: string,
+        profileId: string,
+        filename: string,
+        content: string
+      ) => writeArtifactFile({ content, filename, orgId, profileId }),
+    },
     databaseAdapter,
   });
+}
+
+function saveArtifactRequest(params: {
+  content: string;
+  orgId: string;
+  path: string;
+  profileId: string;
+  session: TestBrowserSession;
+}): Request {
+  return new Request(
+    `http://localhost:4310/v1/profiles/${params.profileId}/artifacts/content?path=${encodeURIComponent(params.path)}`,
+    {
+      body: JSON.stringify({ content: params.content }),
+      headers: params.session.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": params.session.csrfToken,
+        },
+        params.orgId
+      ),
+      method: "PUT",
+    }
+  );
 }
 
 async function withEnv<T>(
@@ -318,6 +348,99 @@ describe("artifact share routes", () => {
         );
         expect(published.webPublicUrlConfigured).toBe(true);
       }
+    );
+  });
+
+  test("editing a shared artifact refreshes what the public link serves", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_edit";
+
+    await seedProfileArtifact({
+      content: "# Draft\n",
+      databaseAdapter,
+      filename: "script.md",
+      name: "Share Edit",
+      orgId,
+      profileId,
+    });
+
+    const publishResponse = await app.fetch(
+      publishArtifactShareRequest({
+        body: { path: "script.md" },
+        orgId,
+        profileId,
+        session,
+      })
+    );
+    expect(publishResponse.status).toBe(201);
+    const { token } = (await publishResponse.json()) as { token: string };
+
+    const saveResponse = await app.fetch(
+      saveArtifactRequest({
+        content: "# Draft\n\nEdited by hand.\n",
+        orgId,
+        path: "script.md",
+        profileId,
+        session,
+      })
+    );
+    expect(saveResponse.status).toBe(200);
+
+    const shareResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
+      )
+    );
+    expect(await shareResponse.text()).toBe("# Draft\n\nEdited by hand.\n");
+  });
+
+  test("refreshes the share when the dashboard saves by absolute path", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_abs";
+
+    await seedProfileArtifact({
+      content: "# Draft\n",
+      databaseAdapter,
+      filename: "script.md",
+      name: "Share Abs",
+      orgId,
+      profileId,
+    });
+
+    const publishResponse = await app.fetch(
+      publishArtifactShareRequest({
+        body: { path: "script.md" },
+        orgId,
+        profileId,
+        session,
+      })
+    );
+    const { token } = (await publishResponse.json()) as { token: string };
+
+    // The artifacts list hands the dashboard absolute paths, so a save arrives
+    // under a different string than the share was published with.
+    const saveResponse = await app.fetch(
+      saveArtifactRequest({
+        content: "# Draft\n\nSaved from the dashboard.\n",
+        orgId,
+        path: join(getProfileArtifactsDir(orgId, profileId), "script.md"),
+        profileId,
+        session,
+      })
+    );
+    expect(saveResponse.status).toBe(200);
+
+    const shareResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
+      )
+    );
+    expect(await shareResponse.text()).toBe(
+      "# Draft\n\nSaved from the dashboard.\n"
     );
   });
 });
