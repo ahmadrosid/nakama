@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import { CommandPalette } from "@/components/CommandPalette";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { ProfileRail } from "@/components/ProfileRail";
+import { RouteBoundary } from "@/components/RouteBoundary";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -165,7 +166,9 @@ export function Layout() {
                   : null
               )}
             >
-              <Outlet />
+              <RouteBoundary key={location.pathname}>
+                <Outlet />
+              </RouteBoundary>
             </main>
           </div>
         </div>
