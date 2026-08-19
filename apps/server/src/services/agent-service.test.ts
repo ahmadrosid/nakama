@@ -84,28 +84,36 @@ describe("AgentService branching", () => {
       title: "Need input",
     });
 
-    const result = await service.branchSession(sourceSessionId, 1);
+    const result = await service.branchSession(sourceSessionId, 1, ORG_ID);
 
     expect(result).not.toBeNull();
     const branchSessionId = result!.sessionId;
 
-    const branchMessages = await service.getSessionMessages(branchSessionId);
+    const branchMessages = await service.getSessionMessages(
+      branchSessionId,
+      ORG_ID
+    );
     expect(branchMessages?.messages).toEqual([
       { content: "Hello", role: "user" },
       { content: "Hi there", role: "assistant" },
     ]);
     expect(branchMessages?.messageMeta).toHaveLength(2);
 
-    const branchTodos = await service.getSessionTodos(branchSessionId);
+    const branchTodos = await service.getSessionTodos(branchSessionId, ORG_ID);
     expect(branchTodos).toEqual([]);
-    expect(await service.getSessionQuestionnaire(branchSessionId)).toBeNull();
+    expect(
+      await service.getSessionQuestionnaire(branchSessionId, ORG_ID)
+    ).toBeNull();
 
     const branchRecord = await db.getSession(branchSessionId);
     expect(branchRecord?.profileId).toBe("profile_default");
     expect(branchRecord?.channel).toBe("web");
     expect(branchRecord?.title).toBe("Original chat (Branch)");
 
-    const sourceMessages = await service.getSessionMessages(sourceSessionId);
+    const sourceMessages = await service.getSessionMessages(
+      sourceSessionId,
+      ORG_ID
+    );
     expect(sourceMessages?.messages).toHaveLength(3);
   });
 
@@ -129,9 +137,9 @@ describe("AgentService branching", () => {
       },
     ]);
 
-    await expect(service.branchSession(sourceSessionId, 3)).rejects.toThrow(
-      "messageIndex is out of bounds."
-    );
+    await expect(
+      service.branchSession(sourceSessionId, 3, ORG_ID)
+    ).rejects.toThrow("messageIndex is out of bounds.");
   });
 
   test("falls back to org default when the requested profile is missing", async () => {
@@ -172,6 +180,31 @@ describe("AgentService branching", () => {
     } finally {
       database.close();
     }
+  });
+});
+
+describe("AgentService session org scope", () => {
+  test("by-id reads return null for a session in another org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: "profile_other",
+      isDefault: false,
+      name: "Other",
+      orgId: "org_other",
+    });
+    const service = new AgentService(null, null, db);
+    const sessionId = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default"
+    );
+
+    expect(await service.getSessionMessages(sessionId, "org_other")).toBeNull();
+    expect(await service.resolveSession(sessionId, "org_other")).toBeNull();
+    expect(await service.purgeSession(sessionId, "org_other")).toBe(false);
+    expect(await db.getSession(sessionId)).not.toBeNull();
   });
 });
 
@@ -617,13 +650,13 @@ describe("AgentService skill_manage injection", () => {
       null,
       { orgRole: "admin" }
     );
-    const session = await service.resolveSession(sessionId);
+    const session = await service.resolveSession(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     const typed = "/learn filing an expense: open portal, submit receipt";
     await session!.send({ message: typed });
 
-    const stored = await service.getSessionMessages(sessionId);
+    const stored = await service.getSessionMessages(sessionId, ORG_ID);
     const userMessage = stored?.messages.find(
       (message) => message.role === "user"
     );
@@ -652,14 +685,14 @@ describe("AgentService skill_manage injection", () => {
       null,
       { orgRole: "admin" }
     );
-    const session = await service.resolveSession(sessionId);
+    const session = await service.resolveSession(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     await session!.send({
       message: "/learn filing an expense",
     });
 
-    const stored = await service.getSessionMessages(sessionId);
+    const stored = await service.getSessionMessages(sessionId, ORG_ID);
     const userMessage = stored?.messages.find(
       (message) => message.role === "user"
     );
@@ -688,12 +721,12 @@ describe("AgentService skill_manage injection", () => {
       null,
       { orgRole: "admin" }
     );
-    const session = await service.resolveSession(sessionId);
+    const session = await service.resolveSession(sessionId, ORG_ID);
     expect(session).not.toBeNull();
 
     await session!.send({ message: "/learn" });
 
-    const stored = await service.getSessionMessages(sessionId);
+    const stored = await service.getSessionMessages(sessionId, ORG_ID);
     const userMessage = stored?.messages.find(
       (message) => message.role === "user"
     );
