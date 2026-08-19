@@ -165,6 +165,7 @@ import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
   type StoredProfileRecord,
+  type StoredSessionRecord,
   type StoredTaskRunRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
   WORKSPACE_SETTINGS_ID,
@@ -1386,7 +1387,7 @@ export class AgentService {
       profileId,
       task.orgId
     );
-    const session = await this.resolveSession(sessionId);
+    const session = await this.resolveSession(sessionId, task.orgId);
 
     if (!session) {
       throw new Error("Session not found.");
@@ -1578,8 +1579,11 @@ export class AgentService {
     return sessionId;
   }
 
-  async getSessionTodos(sessionId: string): Promise<AgentTodo[] | null> {
-    const record = await this.db.getSession(sessionId);
+  async getSessionTodos(
+    sessionId: string,
+    orgId: string
+  ): Promise<AgentTodo[] | null> {
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return null;
@@ -1589,9 +1593,10 @@ export class AgentService {
   }
 
   async getSessionQuestionnaire(
-    sessionId: string
+    sessionId: string,
+    orgId: string
   ): Promise<AgentQuestionnaire | null> {
-    const record = await this.db.getSession(sessionId);
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return null;
@@ -1600,13 +1605,16 @@ export class AgentService {
     return this.agentQuestionnaireState.get(sessionId);
   }
 
-  async getSessionMessages(sessionId: string): Promise<{
+  async getSessionMessages(
+    sessionId: string,
+    orgId: string
+  ): Promise<{
     channel: AgentChannel;
     messages: ChatMessage[];
     messageMeta: Array<{ id: string; seq: number; createdAt: string }>;
     contextUsage: ChatContextUsage | null;
   } | null> {
-    const record = await this.db.getSession(sessionId);
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return null;
@@ -1619,7 +1627,7 @@ export class AgentService {
     }
 
     if (sessionTurnRegistry.isActive(sessionId)) {
-      const liveSession = await this.resolveSession(sessionId);
+      const liveSession = await this.resolveSession(sessionId, orgId);
 
       if (liveSession) {
         const history = liveSession.getHistory();
@@ -1644,7 +1652,8 @@ export class AgentService {
     const cached = this.sessions.get(sessionId)?.session;
     const contextUsage = cached
       ? cached.getContextUsage()
-      : ((await this.resolveSession(sessionId))?.getContextUsage() ?? null);
+      : ((await this.resolveSession(sessionId, orgId))?.getContextUsage() ??
+        null);
 
     return {
       channel,
@@ -1660,9 +1669,10 @@ export class AgentService {
 
   async branchSession(
     sessionId: string,
-    messageIndex: number
+    messageIndex: number,
+    orgId: string
   ): Promise<BranchSessionResponse | null> {
-    const record = await this.db.getSession(sessionId);
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return null;
@@ -1707,8 +1717,6 @@ export class AgentService {
     if (!channel) {
       throw new Error("Session channel is invalid.");
     }
-
-    const { orgId } = await this.requireProfileRecord(record.profileId);
 
     const branchOrgRole = await this.resolveOrgRole(orgId, record.userId);
     const session = await this.buildChatSession(
@@ -1763,8 +1771,8 @@ export class AgentService {
     return this.skillPostTurnReviewService;
   }
 
-  async purgeSession(sessionId: string): Promise<boolean> {
-    const record = await this.db.getSession(sessionId);
+  async purgeSession(sessionId: string, orgId: string): Promise<boolean> {
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return false;
@@ -1778,17 +1786,20 @@ export class AgentService {
     return true;
   }
 
-  async resolveSession(sessionId: string): Promise<AgentChatSession | null> {
+  async resolveSession(
+    sessionId: string,
+    orgId: string
+  ): Promise<AgentChatSession | null> {
+    const record = await this.requireSessionForOrg(sessionId, orgId);
+
+    if (!record) {
+      return null;
+    }
+
     const stored = this.sessions.get(sessionId);
 
     if (stored) {
       return stored.session;
-    }
-
-    const record = await this.db.getSession(sessionId);
-
-    if (!record) {
-      return null;
     }
 
     const channel = parseAgentChannel(record.channel);
@@ -1796,8 +1807,6 @@ export class AgentService {
     if (!channel) {
       return null;
     }
-
-    const { orgId } = await this.requireProfileRecord(record.profileId);
 
     const resumeOrgRole = await this.resolveOrgRole(orgId, record.userId);
     const session = await this.buildChatSession(
@@ -1818,8 +1827,8 @@ export class AgentService {
     return session;
   }
 
-  async clearSession(sessionId: string): Promise<boolean> {
-    const record = await this.db.getSession(sessionId);
+  async clearSession(sessionId: string, orgId: string): Promise<boolean> {
+    const record = await this.requireSessionForOrg(sessionId, orgId);
 
     if (!record) {
       return false;
@@ -1838,27 +1847,16 @@ export class AgentService {
 
   async compactSession(
     sessionId: string,
+    orgId: string,
     options: { force?: boolean } = {}
   ): Promise<CompactionResponse | null> {
-    const session = await this.resolveSession(sessionId);
+    const session = await this.resolveSession(sessionId, orgId);
 
     if (!session) {
       return null;
     }
 
     return session.compact(options);
-  }
-
-  async deleteSession(sessionId: string): Promise<boolean> {
-    const deleted = this.sessions.delete(sessionId);
-
-    if (deleted) {
-      this.agentTodoState.clearSession(sessionId);
-      this.agentQuestionnaireState.clearSession(sessionId);
-      await this.db.deleteSession(sessionId);
-    }
-
-    return deleted;
   }
 
   async draftAutomation(prompt: string, channel: AgentChannel) {
@@ -2938,16 +2936,24 @@ export class AgentService {
     return profile;
   }
 
-  private async requireProfileRecord(
-    profileId: string
-  ): Promise<StoredProfileRecord> {
-    const profile = await this.db.getProfile(profileId);
+  /**
+   * Sessions carry no org column; the org is only reachable through their
+   * profile. Every by-id session operation resolves scope here so a caller in
+   * one org cannot name a session id belonging to another.
+   */
+  private async requireSessionForOrg(
+    sessionId: string,
+    orgId: string
+  ): Promise<StoredSessionRecord | null> {
+    const record = await this.db.getSession(sessionId);
 
-    if (!profile?.orgId) {
-      throw new Error("Profile not found.");
+    if (!record) {
+      return null;
     }
 
-    return profile;
+    const profile = await this.db.getProfileForOrg(record.profileId, orgId);
+
+    return profile ? record : null;
   }
 
   private async resolveSessionProfile(
