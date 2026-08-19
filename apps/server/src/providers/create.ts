@@ -11,6 +11,7 @@ import {
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { createCerebrasProvider } from "./cerebras";
+import { createCloudflareProvider } from "./cloudflare";
 import { compatibleModelSupportsThinking } from "./compatible-models";
 import { createFireworksProvider } from "./fireworks";
 import { createGeminiProvider } from "./gemini";
@@ -113,6 +114,21 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
           model,
           options.instance?.customModels
         ),
+      });
+    }
+    case "cloudflare": {
+      const accountId = baseUrlOverride?.trim();
+
+      if (!accountId) {
+        throw new Error(
+          "Cloudflare provider requires an Account ID (set in the baseUrl field)."
+        );
+      }
+
+      return createCloudflareProvider({
+        accountId,
+        apiKey: options.apiKey,
+        model,
       });
     }
   }
