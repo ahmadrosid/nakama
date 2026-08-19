@@ -2,8 +2,8 @@ import type { ProviderClient } from "@nakama/core";
 import { createOpenAICompatibleProvider } from "../openai-compatible";
 
 export interface CloudflareProviderOptions {
-  accountId: string;
   apiKey: string;
+  baseUrl: string;
   model: string;
 }
 
@@ -12,6 +12,10 @@ export interface CloudflareProviderOptions {
  * Uses the OpenAI-compatible endpoint:
  *   https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1
  *
+ * The baseUrl can be:
+ *   - Full URL: https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1
+ *   - Account ID only: {accountId} (will be expanded to full URL)
+ *
  * Auth: Authorization: Bearer {CLOUDFLARE_API_TOKEN}
  *
  * Docs: https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/
@@ -19,12 +23,16 @@ export interface CloudflareProviderOptions {
 export function createCloudflareProvider(
   options: CloudflareProviderOptions
 ): ProviderClient {
-  const { accountId, apiKey, model } = options;
-  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
+  const { baseUrl, apiKey, model } = options;
+
+  // Accept either full URL or just account ID
+  const fullUrl = baseUrl.includes("api.cloudflare.com")
+    ? baseUrl
+    : `https://api.cloudflare.com/client/v4/accounts/${baseUrl}/ai/v1`;
 
   return createOpenAICompatibleProvider({
     apiKey,
-    baseUrl,
+    baseUrl: fullUrl,
     displayName: "Cloudflare Workers AI",
     model,
     providerName: "cloudflare",

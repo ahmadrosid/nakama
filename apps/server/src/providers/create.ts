@@ -117,17 +117,17 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     }
     case "cloudflare": {
-      const accountId = baseUrlOverride?.trim();
+      const baseUrlValue = baseUrlOverride?.trim();
 
-      if (!accountId) {
+      if (!baseUrlValue) {
         throw new Error(
-          "Cloudflare provider requires an Account ID (set in the baseUrl field)."
+          "Cloudflare provider requires a base URL (full endpoint or Account ID)."
         );
       }
 
       return createCloudflareProvider({
-        accountId,
         apiKey: options.apiKey,
+        baseUrl: baseUrlValue,
         model,
       });
     }
