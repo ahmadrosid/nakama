@@ -49,7 +49,10 @@ import {
 import { getTimezoneCatalog } from "../../services/timezone-catalog-service";
 import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
-import { requireOrgAdminFromContext } from "../org-guards";
+import {
+  requireOrgAdminFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
+} from "../org-guards";
 import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -1119,7 +1122,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/models/discover", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<DiscoverModelsRequest>(c.req.raw);
 
     try {
@@ -1137,13 +1140,13 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/providers", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<CreateProviderRequest>(c.req.raw);
     return json<CreateProviderResponse>(await agent.createProvider(body));
   });
 
   app.patch("/v1/providers/:providerId", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateProviderRequest>(c.req.raw);
     return json<UpdateProviderResponse>(
       await agent.updateProvider(
@@ -1154,14 +1157,14 @@ export function registerModelRoutes(
   });
 
   app.delete("/v1/providers/:providerId", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     return json<DeleteProviderResponse>(
       await agent.deleteProvider(decodeURIComponent(c.req.param("providerId")))
     );
   });
 
   app.put("/v1/settings/provider", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<ConfigureProviderRequest>(c.req.raw);
     const result = await agent.configureProvider(body);
     return json<ConfigureProviderResponse>(result);
@@ -1180,7 +1183,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/timezone", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateTimezoneRequest>(c.req.raw);
     const timezone = await agent.setUserTimezone(body.timezone);
     return json<TimezoneSettingsResponse>({ timezone });
@@ -1205,7 +1208,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/vision", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateVisionRequest>(c.req.raw);
 
     try {
@@ -1228,7 +1231,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/transcription", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateTranscriptionRequest>(c.req.raw);
 
     try {
@@ -1269,7 +1272,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/image-generation", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateImageGenerationRequest>(c.req.raw);
 
     try {
@@ -1378,7 +1381,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/telegram", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateTelegramSettingsRequest>(c.req.raw);
 
     try {
@@ -1395,7 +1398,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/telegram/handshake", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<TelegramSettingsResponse>(
         await agent.regenerateTelegramHandshake()
@@ -1412,7 +1415,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/discord", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateDiscordSettingsRequest>(c.req.raw);
 
     try {
@@ -1429,7 +1432,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/discord/handshake", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<DiscordSettingsResponse>(
         await agent.regenerateDiscordHandshake()
@@ -1446,7 +1449,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/composio", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateComposioSettingsRequest>(c.req.raw);
 
     try {
@@ -1467,7 +1470,7 @@ export function registerModelRoutes(
   });
 
   app.put("/v1/settings/whatsapp", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson<UpdateWhatsAppSettingsRequest>(c.req.raw);
 
     try {
@@ -1485,7 +1488,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/pairing-code", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       return json<WhatsAppSettingsResponse>(
         await agent.regenerateWhatsAppPairingCode()
@@ -1497,7 +1500,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/settings/whatsapp/reconnect", async (c) => {
-    getRequestAuth(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     try {
       await workerManager.stopWorker("whatsapp").catch(() => {});
       const settings = await resetWhatsAppSessionForReconnect();
