@@ -13,8 +13,8 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 - Skill curator: archive profile skills unused for 90 days, opt-in per org, with dry run, Run now, and a 7 day scheduled tick ([#274], in review)
 - Repeated in-flight tool polls are waited out inside the tool loop, so a long MCP job costs one turn instead of one per poll ([#300], in review)
-- Table of contents above long markdown artifacts, built from the h1 to h3 headings ([#298], in review)
-- Markdown artifacts can be edited by hand from the artifact panel, and saving refreshes the public share snapshot ([#299], in review)
+- Table of contents above long markdown artifacts, built from the h1 to h3 headings ([#298])
+- Markdown artifacts can be edited by hand from the artifact panel, and saving refreshes the public share snapshot ([#299])
 - `/learn` skill that distills a reusable skill from a source ([#284])
 - Install a public GitHub `SKILL.md` onto a profile ([#280])
 - Clone a profile ([#281])
@@ -24,6 +24,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 - Abort handling in `readStreamEvents`
 - Narrow viewports now say the console needs a wider window ([#269])
 - Docs: private access to a self-hosted instance over Tailscale ([#290])
+- `CHANGELOG.md`, covering every tagged release ([#301])
 
 ### Changed
 
@@ -552,3 +553,4 @@ First tagged release. The baseline it established:
 [#298]: https://github.com/ahmadrosid/nakama/pull/298
 [#299]: https://github.com/ahmadrosid/nakama/pull/299
 [#300]: https://github.com/ahmadrosid/nakama/pull/300
+[#301]: https://github.com/ahmadrosid/nakama/pull/301
