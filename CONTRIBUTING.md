@@ -29,7 +29,7 @@ bun run dev:web      # web dashboard (starts the server if needed)
 bun run dev:cli      # terminal client
 ```
 
-- Local Bun web dashboard: http://localhost:3000
+- Local Bun web dashboard: http://localhost:3003
 - Docker single-container dashboard (API + web + workers): http://localhost:4310
 
 See [AGENTS.md](./AGENTS.md) for Docker run/build scripts and deeper layout notes.
