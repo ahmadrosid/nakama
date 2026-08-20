@@ -395,6 +395,17 @@ async function readAnthropicStream(
       const index = event.index;
       const block = providerContent[index];
 
+      const streamedInput = pending.get(index)?.inputJson;
+      if (
+        streamedInput &&
+        (block?.type === "tool_use" || block?.type === "server_tool_use")
+      ) {
+        providerContent[index] = {
+          ...block,
+          input: parseJsonRecord(streamedInput),
+        };
+      }
+
       if (block?.type === "web_search_tool_result") {
         handlers?.onToolEnd?.({
           result: block.content ?? block,
