@@ -34,7 +34,7 @@ For example:
 
 | Actor | Scope | Capabilities |
 |---|---|---|
-| Platform admin | Whole deployment | Create orgs and manage shared system-level bot resources |
+| Platform admin | Whole deployment | Create orgs, remove an org from use, and manage shared system-level bot resources |
 | Org admin | One organization | Invite members and manage roles |
 | Org member | One organization | Chat with profiles and use the workspace |
 | Org viewer | One organization | Read chat history only — no org memory, agent invoke, or mutations |
@@ -67,6 +67,16 @@ Use separate organizations when you want clear separation between:
 - Different privacy boundaries
 
 If one team needs different bots but should still share users and data boundaries, use multiple **profiles** inside one organization instead.
+
+## Remove an organization
+
+A leftover or test organization can stay in the switcher and keep scheduled work running. A **platform admin** can take it out of use from **System → Organization**.
+
+1. Switch into the organization you want to remove
+2. Open **System → Organization**
+3. Confirm **Delete organization**
+
+That hides the organization from the switcher, chat, and workers. Members, profiles, and files stay on disk. The last remaining organization cannot be removed. Org admins cannot do this.
 
 ## Important limitation
 
