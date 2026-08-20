@@ -8,6 +8,7 @@ import { createContext } from "react";
 
 export interface AuthContextValue {
   activeOrg: UserOrgSummary | null;
+  archiveOrg: (orgId: string) => Promise<void>;
   createOrg: (input: { name: string; slug: string }) => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;

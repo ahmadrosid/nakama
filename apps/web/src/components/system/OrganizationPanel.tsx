@@ -1,3 +1,4 @@
+import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
 import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
@@ -12,6 +13,7 @@ export function OrganizationPanel() {
       <SkillsPostTurnReviewOrgCard />
       <SkillsCuratorOrgCard />
       <OrgMemoryCard />
+      <OrgArchiveCard />
     </div>
   );
 }
