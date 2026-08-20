@@ -259,6 +259,11 @@ async function writeCodingAgentLog(
   stdout: string,
   stderr: string
 ): Promise<string | null> {
+  if (!path.isAbsolute(workspaceRoot)) {
+    throw new Error(
+      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
+    );
+  }
   try {
     const dir = path.join(workspaceRoot, "artifacts", "coding-agent-runs");
     await mkdir(dir, { recursive: true });

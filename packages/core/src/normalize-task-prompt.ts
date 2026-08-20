@@ -93,8 +93,9 @@ function unwrapPayload(payload: unknown): string | null {
       typeof value === "string" && value.trim().length > 0
   );
 
-  if (stringValues.length === 1) {
-    return stringValues[0]!.trim();
+  const [onlyValue] = stringValues;
+  if (stringValues.length === 1 && onlyValue) {
+    return onlyValue.trim();
   }
 
   return null;

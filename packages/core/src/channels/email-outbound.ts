@@ -16,7 +16,7 @@ export function createEmailOutboundAdapter(): EmailOutboundAdapter {
           return { error: "Email is not configured.", ok: false };
         }
 
-        const sender = createSmtpSender(emailConfigToMailboxConfig(config!));
+        const sender = createSmtpSender(emailConfigToMailboxConfig(config));
         await sender.send({
           subject: input.subject,
           text: input.text,

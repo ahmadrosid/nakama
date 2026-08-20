@@ -197,7 +197,7 @@ export async function runEmailTool(
   }
 
   const parsed = parseEmailToolInput(input);
-  const mailboxConfig = emailConfigToMailboxConfig(config!);
+  const mailboxConfig = emailConfigToMailboxConfig(config);
 
   if (parsed.action === "send") {
     return sendEmail(parsed, mailboxConfig, dependencies.createSender);

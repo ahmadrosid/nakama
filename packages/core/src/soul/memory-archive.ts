@@ -10,7 +10,7 @@ import {
   formatMemoryArchiveYearMonth,
   getMemoryArchiveDir,
 } from "./memory-paths";
-import { getProfileSoulDir } from "./resolve";
+import { assertYearMonth, getProfileSoulDir } from "./resolve";
 
 export const MEMORY_ARCHIVE_TEMPLATE = `# Archived Memory
 
@@ -220,7 +220,7 @@ export async function archiveMemoryBullets(
   }
 
   const archivedAt = options.archivedAt ?? new Date();
-  const yearMonth = formatMemoryArchiveYearMonth(archivedAt);
+  const yearMonth = assertYearMonth(formatMemoryArchiveYearMonth(archivedAt));
   const archivePath = join(archiveDir, `${yearMonth}.md`);
   const archiveAppend = formatArchiveAppend(
     archivedAt,

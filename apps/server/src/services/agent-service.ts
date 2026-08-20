@@ -1142,7 +1142,7 @@ export class AgentService {
       throw new Error("Recipient email is required.");
     }
 
-    const sender = createSmtpSender(emailConfigToMailboxConfig(config!));
+    const sender = createSmtpSender(emailConfigToMailboxConfig(config));
     const result = await sender.send({
       subject: "Nakama test email",
       text: "This is a test email from your Nakama deployment.",

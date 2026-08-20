@@ -147,7 +147,9 @@ export function resolveFromHeader(
   return `"${escaped}" <${address}>`;
 }
 
-export function isEmailConfigComplete(config: EmailConfigFile | null): boolean {
+export function isEmailConfigComplete(
+  config: EmailConfigFile | null
+): config is EmailConfigFile {
   if (!config) {
     return false;
   }
