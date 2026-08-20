@@ -4,9 +4,12 @@ import type {
   ComposioUserConnectionStatus,
   ComposioUserConnectionSummary,
   ListComposioToolkitsResponse,
+  ProfileSummary,
 } from "@nakama/core/contract";
+import { useQueries } from "@tanstack/react-query";
 import { MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import { ComposioProfileAssignPicker } from "@/components/ComposioProfileAssignPicker";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import { Button } from "@/components/ui/button";
@@ -18,7 +21,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/use-auth";
+import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  profileComposioToolkitsQueryOptions,
   useComposioSettings,
   useComposioToolkits,
   useConnectComposioToolkit,
@@ -26,6 +31,7 @@ import {
   useDisconnectComposioToolkit,
   useEnableComposioToolkit,
   useSyncComposioToolkit,
+  useUpdateProfileComposioToolkitsMutation,
 } from "@/hooks/use-composio";
 import { formatError } from "@/lib/client";
 import { cn } from "@/lib/utils";
@@ -122,6 +128,7 @@ function StatusPill({
 }
 
 interface ComposioToolkitRowProps {
+  assignedProfileIds: string[];
   busy: boolean;
   isOrgAdmin: boolean;
   onConnect: (slug: string) => void;
@@ -129,6 +136,12 @@ interface ComposioToolkitRowProps {
   onDisconnect: (slug: string) => void;
   onEnable: (slug: string) => void;
   onSync: (slug: string) => void;
+  onToggleProfile: (
+    profileId: string,
+    toolkitId: string,
+    assigned: boolean
+  ) => void;
+  profiles: ProfileSummary[];
   row: ToolkitRowModel;
 }
 
@@ -136,6 +149,9 @@ function ComposioToolkitRow({
   row,
   isOrgAdmin,
   busy,
+  assignedProfileIds,
+  profiles,
+  onToggleProfile,
   onConnect,
   onEnable,
   onDisable,
@@ -176,8 +192,7 @@ function ComposioToolkitRow({
         </div>
         {orgEnabled && userStatus === "connected" ? (
           <p className="mt-1 text-muted-foreground text-xs">
-            Assigned to the default profile. Other profiles are assigned on the
-            Profiles page.
+            Assigned to the default profile when it was enabled.
           </p>
         ) : null}
         {lastError ? (
@@ -228,6 +243,18 @@ function ComposioToolkitRow({
           </DropdownMenu>
         ) : null}
 
+        {isOrgAdmin && orgEnabled && orgToolkit ? (
+          <ComposioProfileAssignPicker
+            assignedProfileIds={assignedProfileIds}
+            busy={busy}
+            onToggle={(profileId, assigned) =>
+              onToggleProfile(profileId, orgToolkit.id, assigned)
+            }
+            profiles={profiles}
+            toolkitName={catalog.name}
+          />
+        ) : null}
+
         {orgEnabled && userStatus !== "connected" ? (
           <Button
             disabled={busy}
@@ -258,6 +285,7 @@ function ComposioToolkitRow({
 }
 
 interface ComposioToolkitListProps {
+  assignedProfileIdsByToolkit: Map<string, string[]>;
   busy: boolean;
   data: ListComposioToolkitsResponse;
   isOrgAdmin: boolean;
@@ -266,12 +294,21 @@ interface ComposioToolkitListProps {
   onDisconnect: (slug: string) => void;
   onEnable: (slug: string) => void;
   onSync: (slug: string) => void;
+  onToggleProfile: (
+    profileId: string,
+    toolkitId: string,
+    assigned: boolean
+  ) => void;
+  profiles: ProfileSummary[];
 }
 
 function ComposioToolkitList({
   data,
   isOrgAdmin,
   busy,
+  assignedProfileIdsByToolkit,
+  profiles,
+  onToggleProfile,
   onConnect,
   onEnable,
   onDisable,
@@ -416,6 +453,10 @@ function ComposioToolkitList({
             <div className="divide-y divide-border">
               {displayedRows.map((row) => (
                 <ComposioToolkitRow
+                  assignedProfileIds={
+                    assignedProfileIdsByToolkit.get(row.orgToolkit?.id ?? "") ??
+                    []
+                  }
                   busy={busy}
                   isOrgAdmin={isOrgAdmin}
                   key={row.catalog.slug}
@@ -424,6 +465,8 @@ function ComposioToolkitList({
                   onDisconnect={onDisconnect}
                   onEnable={onEnable}
                   onSync={onSync}
+                  onToggleProfile={onToggleProfile}
+                  profiles={profiles}
                   row={row}
                 />
               ))}
@@ -505,11 +548,65 @@ export function ComposioConnectionsCard({
   const toolkitsQuery = useComposioToolkits();
   const connectMutation = useConnectComposioToolkit();
   const enableMutation = useEnableComposioToolkit();
+  const assignMutation = useUpdateProfileComposioToolkitsMutation();
+  const profilesQuery = useProfilesQuery();
+  const profiles = isOrgAdmin ? (profilesQuery.data ?? []) : [];
+
+  // Assignments live per profile, so the reverse map is built here rather than
+  // asking the toolkits endpoint for it. Only org admins may read them, and the
+  // profile count is small, so one query per profile is cheap enough.
+  const assignmentQueries = useQueries({
+    queries: profiles.map((profile) =>
+      profileComposioToolkitsQueryOptions(profile.id)
+    ),
+  });
+
+  const assignedProfileIdsByToolkit = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    profiles.forEach((profile, index) => {
+      for (const assignment of assignmentQueries[index]?.data?.assignments ??
+        []) {
+        map.set(assignment.toolkitId, [
+          ...(map.get(assignment.toolkitId) ?? []),
+          profile.id,
+        ]);
+      }
+    });
+
+    return map;
+  }, [profiles, assignmentQueries]);
+
+  const toggleProfileAssignment = (
+    profileId: string,
+    toolkitId: string,
+    assigned: boolean
+  ) => {
+    const index = profiles.findIndex((profile) => profile.id === profileId);
+    const current = assignmentQueries[index]?.data?.assignments ?? [];
+    const next = assigned
+      ? [
+          ...current.map((entry) => ({
+            allowedActions: entry.allowedActions,
+            toolkitId: entry.toolkitId,
+          })),
+          { allowedActions: null, toolkitId },
+        ]
+      : current
+          .filter((entry) => entry.toolkitId !== toolkitId)
+          .map((entry) => ({
+            allowedActions: entry.allowedActions,
+            toolkitId: entry.toolkitId,
+          }));
+
+    assignMutation.mutate({ assignments: next, profileId });
+  };
   const disableMutation = useDisableComposioToolkit();
   const disconnectMutation = useDisconnectComposioToolkit();
   const syncMutation = useSyncComposioToolkit();
 
   const busy =
+    assignMutation.isPending ||
     connectMutation.isPending ||
     enableMutation.isPending ||
     disableMutation.isPending ||
@@ -580,6 +677,7 @@ export function ComposioConnectionsCard({
   return (
     <IntegrationCardShell {...shellProps}>
       <ComposioToolkitList
+        assignedProfileIdsByToolkit={assignedProfileIdsByToolkit}
         busy={busy}
         data={data}
         isOrgAdmin={isOrgAdmin}
@@ -588,6 +686,8 @@ export function ComposioConnectionsCard({
         onDisconnect={(slug) => disconnectMutation.mutate(slug)}
         onEnable={(slug) => enableMutation.mutate(slug)}
         onSync={(slug) => syncMutation.mutate(slug)}
+        onToggleProfile={toggleProfileAssignment}
+        profiles={profiles}
       />
     </IntegrationCardShell>
   );
