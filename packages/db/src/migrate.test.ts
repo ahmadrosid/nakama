@@ -660,6 +660,40 @@ describe("organization schema migration", () => {
     }
   });
 
+  test("adds archived_at to legacy organizations table", () => {
+    const db = new Database(":memory:");
+
+    try {
+      db.exec(`
+        CREATE TABLE organizations (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+        VALUES ('org_legacy', 'Legacy', 'legacy', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+      `);
+
+      migrateDatabase(db);
+
+      const columns = db
+        .prepare("PRAGMA table_info(organizations)")
+        .all() as Array<{ name: string }>;
+      expect(columns.map((column) => column.name)).toContain("archived_at");
+
+      const row = db
+        .prepare("SELECT archived_at FROM organizations WHERE id = ?")
+        .get("org_legacy") as { archived_at: string | null };
+      expect(row.archived_at).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
   test("adds org_id to tenant tables and composite unique indexes", () => {
     const db = new Database(":memory:");
 

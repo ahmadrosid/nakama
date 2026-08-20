@@ -385,6 +385,7 @@ export interface StoredUserRecord {
 }
 
 export interface StoredOrganizationRecord {
+  archivedAt?: string | null;
   createdAt: string;
   id: string;
   name: string;

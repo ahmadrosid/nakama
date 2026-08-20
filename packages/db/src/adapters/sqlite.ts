@@ -308,6 +308,7 @@ interface BrowserSessionRow {
 }
 
 interface OrganizationRow {
+  archived_at: string | null;
   created_at: string;
   id: string;
   name: string;
@@ -1218,8 +1219,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
@@ -1227,21 +1228,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_enabled = excluded.skills_curator_enabled,
       skills_curator_last_run_at = excluded.skills_curator_last_run_at,
+      archived_at = excluded.archived_at,
       updated_at = excluded.updated_at
   `);
   const listOrganizationsStmt = db.prepare(`
-    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, created_at, updated_at
+    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
   const getOrganizationBySlugStmt = db.prepare(`
-    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, created_at, updated_at
+    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
   `);
   const getOrganizationByIdStmt = db.prepare(`
-    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, created_at, updated_at
+    SELECT id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -1504,6 +1506,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.skills_post_turn_review,
       o.skills_curator_enabled,
       o.skills_curator_last_run_at,
+      o.archived_at,
       o.created_at,
       o.updated_at,
       om.role,
@@ -1511,6 +1514,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM org_members om
     INNER JOIN organizations o ON o.id = om.org_id
     WHERE om.user_id = ?
+      AND o.archived_at IS NULL
     ORDER BY o.name ASC
   `);
   const deleteOrgMemberStmt = db.prepare(`
@@ -2518,6 +2522,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           skills_post_turn_review: number;
           skills_curator_enabled: number;
           skills_curator_last_run_at: string | null;
+          archived_at: string | null;
           created_at: string;
           updated_at: string;
           role: string;
@@ -2527,6 +2532,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         return {
           joinedAt: record.joined_at,
           organization: {
+            archivedAt: record.archived_at,
             createdAt: record.created_at,
             id: record.id,
             name: record.name,
@@ -2804,6 +2810,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillsPostTurnReview ? 1 : 0,
         record.skillsCuratorEnabled ? 1 : 0,
         record.skillsCuratorLastRunAt ?? null,
+        record.archivedAt ?? null,
         record.createdAt,
         record.updatedAt
       );
@@ -3487,6 +3494,7 @@ function toUserRecord(row: UserRow): StoredUserRecord {
 
 function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
   return {
+    archivedAt: row.archived_at,
     createdAt: row.created_at,
     id: row.id,
     name: row.name,

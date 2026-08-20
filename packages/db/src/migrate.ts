@@ -22,6 +22,7 @@ export function migrateDatabase(db: Database): void {
   migrateSkillsWriteApprovalColumns(db);
   migrateSkillsPostTurnReviewColumns(db);
   migrateSkillsCuratorColumns(db);
+  migrateOrganizationArchivedAt(db);
   migrateSkillUsageTables(db);
   migrateTenantOrgScope(db);
   migrateSkillOrgIds(db);
@@ -555,6 +556,17 @@ function migrateSkillsCuratorColumns(db: Database): void {
     db.exec(
       "ALTER TABLE organizations ADD COLUMN skills_curator_last_run_at TEXT;"
     );
+  }
+}
+
+function migrateOrganizationArchivedAt(db: Database): void {
+  const orgColumns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  const names = new Set(orgColumns.map((column) => column.name));
+
+  if (!names.has("archived_at")) {
+    db.exec("ALTER TABLE organizations ADD COLUMN archived_at TEXT;");
   }
 }
 

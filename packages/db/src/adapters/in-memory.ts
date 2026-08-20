@@ -1099,7 +1099,7 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
         .filter((member) => member.userId === userId)
         .map((member) => {
           const organization = organizations.get(member.orgId);
-          if (!organization) {
+          if (!organization || organization.archivedAt) {
             return null;
           }
 
