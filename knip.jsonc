@@ -8,8 +8,6 @@
     "apps/web": {
       "entry": ["src/shims/*.ts"]
     },
-    "packages/core": {},
-    "packages/db": {},
     // Not in package.json#workspaces; Knip would skip it otherwise.
     "docs/website": {}
   },
