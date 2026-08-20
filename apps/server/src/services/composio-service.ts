@@ -341,6 +341,7 @@ export class ComposioService {
         updatedAt: now,
       };
       await this.databaseAdapter.upsertComposioToolkit(updated);
+      await this.assignToDefaultProfile(orgId, updated.id);
       return toOrgToolkitSummary(updated);
     }
 
@@ -357,6 +358,7 @@ export class ComposioService {
     };
 
     await this.databaseAdapter.upsertComposioToolkit(record);
+    await this.assignToDefaultProfile(orgId, record.id);
     return toOrgToolkitSummary(record);
   }
 
@@ -371,7 +373,69 @@ export class ComposioService {
       updatedAt: new Date().toISOString(),
     };
     await this.databaseAdapter.upsertComposioToolkit(updated);
+    await this.unassignFromAllProfiles(orgId, updated.id);
     return toOrgToolkitSummary(updated);
+  }
+
+  /**
+   * Enabling a toolkit assigns it to the org's default profile, so a fresh
+   * setup is usable without a second trip to Profiles. Other profiles stay an
+   * explicit choice: Super Bot and channel-facing profiles should not gain a
+   * member's Gmail because an admin enabled it for the org.
+   */
+  private async assignToDefaultProfile(
+    orgId: string,
+    toolkitId: string
+  ): Promise<void> {
+    const profiles = await this.databaseAdapter.listProfiles();
+    const target = profiles.find(
+      (profile) => profile.orgId === orgId && profile.isDefault === true
+    );
+    if (!target) {
+      return;
+    }
+
+    const assignments = await this.databaseAdapter.listProfileComposioToolkits(
+      target.id
+    );
+    if (assignments.some((entry) => entry.toolkitId === toolkitId)) {
+      return;
+    }
+
+    await this.databaseAdapter.replaceProfileComposioToolkits(target.id, [
+      ...assignments,
+      { allowedActions: null, profileId: target.id, toolkitId },
+    ]);
+  }
+
+  /**
+   * Disabling for the org removes the toolkit from every profile. The tool
+   * bridge already skips disabled toolkits, so this is about the Profiles page
+   * not listing a toolkit that does nothing.
+   */
+  private async unassignFromAllProfiles(
+    orgId: string,
+    toolkitId: string
+  ): Promise<void> {
+    const profiles = await this.databaseAdapter.listProfiles();
+
+    for (const profile of profiles) {
+      if (profile.orgId !== orgId) {
+        continue;
+      }
+
+      const assignments =
+        await this.databaseAdapter.listProfileComposioToolkits(profile.id);
+      const kept = assignments.filter((entry) => entry.toolkitId !== toolkitId);
+      if (kept.length === assignments.length) {
+        continue;
+      }
+
+      await this.databaseAdapter.replaceProfileComposioToolkits(
+        profile.id,
+        kept
+      );
+    }
   }
 
   async connectToolkit(

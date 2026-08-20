@@ -154,6 +154,78 @@ describe("ComposioService", () => {
     }
   });
 
+  test("enableToolkit assigns the toolkit to the org default profile", async () => {
+    const { db, service, restore } = await createConfiguredService();
+
+    try {
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id: "profile_default",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Default",
+        orgId: ORG_ID,
+        systemPrompt: "",
+      });
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id: "profile_super",
+        isDefault: false,
+        isSuper: true,
+        model: null,
+        name: "Super Bot",
+        orgId: ORG_ID,
+        systemPrompt: "",
+      });
+
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
+
+      const assigned = await db.listProfileComposioToolkits("profile_default");
+      expect(assigned.map((entry) => entry.toolkitId)).toEqual([toolkit.id]);
+
+      // Super Bot and channel-facing profiles stay an explicit choice.
+      expect(await db.listProfileComposioToolkits("profile_super")).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("disableToolkit removes the toolkit from every profile in the org", async () => {
+    const { db, service, restore } = await createConfiguredService();
+
+    try {
+      await db.upsertProfile({
+        createdAt: new Date().toISOString(),
+        id: "profile_default",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Default",
+        orgId: ORG_ID,
+        systemPrompt: "",
+      });
+
+      const toolkit = await service.enableToolkit(ORG_ID, {
+        toolkitSlug: "gmail",
+      });
+      expect(
+        await db.listProfileComposioToolkits("profile_default")
+      ).toHaveLength(1);
+
+      await service.disableToolkit(ORG_ID, "gmail");
+
+      expect(await db.listProfileComposioToolkits("profile_default")).toEqual(
+        []
+      );
+      expect(toolkit.status).toBe("enabled");
+    } finally {
+      restore();
+    }
+  });
+
   test("connectToolkit stores oauth state on user connection and returns redirect URL", async () => {
     const { service, restore } = await createConfiguredService();
 

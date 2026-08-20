@@ -176,7 +176,8 @@ function ComposioToolkitRow({
         </div>
         {orgEnabled && userStatus === "connected" ? (
           <p className="mt-1 text-muted-foreground text-xs">
-            Agents can use this once the toolkit is assigned to a profile.
+            Assigned to the default profile. Other profiles are assigned on the
+            Profiles page.
           </p>
         ) : null}
         {lastError ? (
