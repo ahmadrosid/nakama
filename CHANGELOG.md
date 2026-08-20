@@ -47,6 +47,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 - Persist the Cloudflare account ID in `config.ini` ([#318])
 - Use the official Cloudflare Llama 3.1 8B model ids ([#319])
 - Require an admin for workspace-global settings writes ([#305])
+- By-id session routes scoped to the caller's org, so a member of one org can no longer read, send to, compact, branch, or delete another org's session by naming its id ([#304])
 - Require `orgId` on by-id session operations ([#321])
 - Keep chat mounted when the session URL updates ([#317])
 - Skill name lookups scoped to the owning org, so the first org to install a public skill no longer takes that name from every other tenant ([#288])
@@ -568,6 +569,7 @@ First tagged release. The baseline it established:
 [#299]: https://github.com/ahmadrosid/nakama/pull/299
 [#301]: https://github.com/ahmadrosid/nakama/pull/301
 [#303]: https://github.com/ahmadrosid/nakama/pull/303
+[#304]: https://github.com/ahmadrosid/nakama/pull/304
 [#305]: https://github.com/ahmadrosid/nakama/pull/305
 [#306]: https://github.com/ahmadrosid/nakama/pull/306
 [#310]: https://github.com/ahmadrosid/nakama/pull/310
