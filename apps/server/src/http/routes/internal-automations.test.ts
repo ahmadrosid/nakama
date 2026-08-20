@@ -201,4 +201,80 @@ describe("internal automation routes", () => {
 
     expect(response.status).toBe(409);
   });
+
+  test("omits automations on archived orgs from the schedule list", async () => {
+    const options = createServerOptions();
+    await seedOrgAndProfile(options.databaseAdapter);
+    await seedLocalClientUser(options.databaseAdapter);
+    const now = new Date().toISOString();
+    await options.databaseAdapter.upsertOrganization({
+      archivedAt: now,
+      createdAt: now,
+      id: ORG_ID,
+      name: "Default Org",
+      slug: "default-org",
+      updatedAt: now,
+    });
+
+    await options.automationService.create(
+      ORG_ID,
+      {
+        description: "Ping",
+        name: "Hourly",
+        prompt: "Ping",
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    const app = createHonoApp(options);
+    const token = await loadLocalAuthToken();
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/internal/automations/schedules", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([]);
+  });
+
+  test("does not run an automation for an archived org", async () => {
+    const options = createServerOptions();
+    await seedOrgAndProfile(options.databaseAdapter);
+    await seedLocalClientUser(options.databaseAdapter);
+    const automation = await options.automationService.create(
+      ORG_ID,
+      {
+        description: "Ping",
+        name: "Hourly",
+        prompt: "Ping",
+        trigger: { cron: "0 * * * *", timezone: "UTC", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+    const now = new Date().toISOString();
+    await options.databaseAdapter.upsertOrganization({
+      archivedAt: now,
+      createdAt: now,
+      id: ORG_ID,
+      name: "Default Org",
+      slug: "default-org",
+      updatedAt: now,
+    });
+
+    const app = createHonoApp(options);
+    const token = await loadLocalAuthToken();
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(404);
+  });
 });

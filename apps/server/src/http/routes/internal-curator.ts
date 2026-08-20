@@ -38,6 +38,11 @@ export function registerInternalCuratorRoutes(
     }
 
     const orgId = decodeURIComponent(c.req.param("orgId"));
+    const organization = await orgService.getOrganization(orgId);
+    if (!organization || organization.archivedAt) {
+      return errorResponse("Not found", 404);
+    }
+
     const body = await readJson<RunSkillCuratorInternalRequest>(c.req.raw);
     const trigger = body.trigger === "seed" ? "seed" : "schedule";
     const result = await skillCuratorService.run(orgId, { trigger });

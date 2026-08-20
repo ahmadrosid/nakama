@@ -7,7 +7,7 @@ export function registerInternalAutomationRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
-  const { agent, automationService } = options;
+  const { agent, automationService, orgService } = options;
 
   app.get("/v1/internal/automations/schedules", async (c) => {
     const auth = c.get("auth");
@@ -16,8 +16,19 @@ export function registerInternalAutomationRoutes(
     }
 
     const automations = await automationService.listAll();
+    const archivedOrgIds = new Set(
+      orgService
+        ? (await orgService.listOrganizations())
+            .filter((organization) => organization.archivedAt)
+            .map((organization) => organization.id)
+        : []
+    );
     const schedules: AutomationSchedule[] = automations
-      .filter((automation) => isWorkerSchedulable(automation))
+      .filter(
+        (automation) =>
+          isWorkerSchedulable(automation) &&
+          !(automation.orgId && archivedOrgIds.has(automation.orgId))
+      )
       .map((automation) => {
         if (automation.trigger.type === "runAt") {
           return {
@@ -58,6 +69,13 @@ export function registerInternalAutomationRoutes(
 
     if (!automation) {
       return errorResponse("Automation not found", 404);
+    }
+
+    if (automation.orgId && orgService) {
+      const organization = await orgService.getOrganization(automation.orgId);
+      if (!organization || organization.archivedAt) {
+        return errorResponse("Not found", 404);
+      }
     }
 
     const result = await agent.runAutomation(automationId);

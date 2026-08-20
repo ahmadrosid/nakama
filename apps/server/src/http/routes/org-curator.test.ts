@@ -217,6 +217,57 @@ describe("org curator routes", () => {
     const body = (await response.json()) as { orgs: Array<{ id: string }> };
     expect(body.orgs.map((org) => org.id)).toEqual([orgId]);
   });
+
+  test("internal org list omits archived orgs", async () => {
+    const { app, databaseAdapter, orgService } = createMinimalHonoApp();
+    await seedLocalClientUser(databaseAdapter);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    await orgService.updateOrganization(orgId, { skillsCuratorEnabled: true });
+    await databaseAdapter.upsertOrganization({
+      ...(await databaseAdapter.getOrganizationById(orgId))!,
+      archivedAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    });
+
+    const token = await loadLocalAuthToken();
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/internal/curator/orgs`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { orgs: Array<{ id: string }> };
+    expect(body.orgs).toEqual([]);
+  });
+
+  test("internal curator run returns 404 for an archived org", async () => {
+    const { app, databaseAdapter, orgService } = createMinimalHonoApp();
+    await seedLocalClientUser(databaseAdapter);
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    await orgService.updateOrganization(orgId, { skillsCuratorEnabled: true });
+    await databaseAdapter.upsertOrganization({
+      ...(await databaseAdapter.getOrganizationById(orgId))!,
+      archivedAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    });
+
+    const token = await loadLocalAuthToken();
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/internal/curator/orgs/${orgId}/run`, {
+        body: JSON.stringify({ trigger: "schedule" }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(404);
+  });
 });
 
 async function addUnusedSkill(input: {
