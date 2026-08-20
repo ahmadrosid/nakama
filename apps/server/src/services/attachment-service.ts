@@ -60,7 +60,11 @@ export function createAttachmentLoader(
   return async (attachmentId) => {
     const record = await db.getAttachment(attachmentId);
 
-    if (!record || record.profileId !== context.profileId) {
+    if (
+      !record ||
+      record.orgId !== context.orgId ||
+      record.profileId !== context.profileId
+    ) {
       return null;
     }
 

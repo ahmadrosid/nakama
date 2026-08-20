@@ -732,6 +732,7 @@ async function probeHarnessVersion(command: string): Promise<{
 
     let stdout = "";
     let stderr = "";
+    let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
     // The bash tool awaits this probe, so a CLI that never answers --version
     // would otherwise hold the turn open forever. Resolve on the timer instead
@@ -740,6 +741,10 @@ async function probeHarnessVersion(command: string): Promise<{
     // timeout a second time on its PATH retry.
     const timeoutId = setTimeout(() => {
       child.kill("SIGTERM");
+      // A harness that traps SIGTERM outlives the probe, and its open stdio
+      // pipes then keep this process alive too. Same escalation as the probe
+      // run and the install (#275); this site was missed.
+      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), SIGTERM_GRACE_MS);
       resolve({ installed: false, missing: false, version: null });
     }, timeoutMs);
 
@@ -751,6 +756,7 @@ async function probeHarnessVersion(command: string): Promise<{
     });
     child.once("error", (error) => {
       clearTimeout(timeoutId);
+      clearTimeout(killTimeoutId);
       resolve({
         installed: false,
         missing: (error as NodeJS.ErrnoException).code === "ENOENT",
@@ -759,6 +765,7 @@ async function probeHarnessVersion(command: string): Promise<{
     });
     child.once("close", (code) => {
       clearTimeout(timeoutId);
+      clearTimeout(killTimeoutId);
       resolve({
         installed: code === 0,
         missing: false,

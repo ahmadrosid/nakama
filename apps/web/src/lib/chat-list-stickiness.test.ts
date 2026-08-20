@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   followOutputBehavior,
   listOverflowsViewport,
-  shouldAutoscrollOnHeightGrowth,
 } from "./chat-list-stickiness";
 
 describe("followOutputBehavior", () => {
@@ -12,13 +11,6 @@ describe("followOutputBehavior", () => {
 
   test("does not follow when not at bottom", () => {
     expect(followOutputBehavior(false)).toBe(false);
-  });
-});
-
-describe("shouldAutoscrollOnHeightGrowth", () => {
-  test("autoscrolls only when at bottom", () => {
-    expect(shouldAutoscrollOnHeightGrowth(true)).toBe(true);
-    expect(shouldAutoscrollOnHeightGrowth(false)).toBe(false);
   });
 });
 

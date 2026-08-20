@@ -102,8 +102,9 @@ export function resolveProvider(
     return envVar && readEnvValue(env, envVar);
   });
 
-  if (providersWithEnvKeys.length === 1) {
-    return providersWithEnvKeys[0]!;
+  const [onlyProvider] = providersWithEnvKeys;
+  if (providersWithEnvKeys.length === 1 && onlyProvider) {
+    return onlyProvider;
   }
 
   return null;

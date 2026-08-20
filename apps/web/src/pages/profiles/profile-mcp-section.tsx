@@ -1,6 +1,5 @@
 import type { McpServerSummary, ProfileDetail } from "@nakama/core/contract";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { McpServerAssignPicker } from "@/components/McpServerAssignPicker";
 import { Button } from "@/components/ui/button";
 import type { RemoveAssignmentTarget } from "@/pages/profiles/profiles-page.shared";
 
@@ -8,17 +7,13 @@ export function ProfileMcpSection({
   detail,
   busy,
   allMcpServers,
-  availableMcpServers,
   onCreateOpen,
-  onAssign,
   onRemove,
 }: {
   detail: ProfileDetail;
   busy: boolean;
   allMcpServers: McpServerSummary[];
-  availableMcpServers: McpServerSummary[];
   onCreateOpen: () => void;
-  onAssign: (serverId: string) => void;
   onRemove: (target: RemoveAssignmentTarget) => void;
 }) {
   return (
@@ -32,24 +27,16 @@ export function ProfileMcpSection({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            disabled={busy}
-            onClick={onCreateOpen}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Add01Icon aria-hidden className="size-4" />
-            Add MCP server
-          </Button>
-          <McpServerAssignPicker
-            buttonLabel="Assign existing"
-            disabled={busy}
-            onAssign={onAssign}
-            servers={availableMcpServers}
-          />
-        </div>
+        <Button
+          disabled={busy}
+          onClick={onCreateOpen}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <Add01Icon aria-hidden className="size-4" />
+          Add MCP server
+        </Button>
       </div>
 
       {allMcpServers.length === 0 ? (

@@ -18,9 +18,7 @@ export function ProfileConfigAssignmentsSection({
     handleAssignTool,
     setRemoveConfirm,
     allMcpServers,
-    availableMcpServers,
     setMcpCreateOpen,
-    handleAssignMcpServer,
     composioToolkitsData,
     assignedComposioToolkits,
     availableComposioToolkits,
@@ -50,10 +48,8 @@ export function ProfileConfigAssignmentsSection({
       />
       <ProfileMcpSection
         allMcpServers={allMcpServers}
-        availableMcpServers={availableMcpServers}
         busy={busy}
         detail={detail}
-        onAssign={handleAssignMcpServer}
         onCreateOpen={() => setMcpCreateOpen(true)}
         onRemove={setRemoveConfirm}
       />

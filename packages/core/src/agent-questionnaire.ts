@@ -59,7 +59,10 @@ export function tryParseChannelQuestionnaireAnswers(
   }
 
   if (questionnaire.questions.length === 1) {
-    const question = questionnaire.questions[0]!;
+    const [question] = questionnaire.questions;
+    if (!question) {
+      return null;
+    }
     const answer = resolveQuestionAnswer(question, trimmed);
 
     if (!answer) {

@@ -18,7 +18,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   type ProfileSaveStatus,
-  profileSidebarDescription,
   profilesTagline,
   sectionClass,
 } from "@/pages/profiles/profiles-page.shared";
@@ -194,43 +193,6 @@ export function EditableProfileAvatar({
   );
 }
 
-export function ProfileScopeButton({
-  profile,
-  active,
-  disabled,
-  onClick,
-}: {
-  profile: ProfileSummary;
-  active: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:cursor-not-allowed",
-        disabled && "opacity-50",
-        active
-          ? "bg-primary/5 text-foreground dark:bg-primary/10"
-          : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-      )}
-      disabled={disabled}
-      onClick={onClick}
-      type="button"
-    >
-      <ProfileAvatar active={active} profile={profile} size="sm" />
-      <span className="min-w-0 space-y-0.5">
-        <span className="block truncate font-medium text-sm leading-tight">
-          {profile.name}
-        </span>
-        <span className="block truncate text-muted-foreground text-xs leading-snug">
-          {profileSidebarDescription(profile)}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 const profileEmptySteps = [
   {
     description: "Give it a name, avatar, and system prompt.",
@@ -247,73 +209,43 @@ const profileEmptySteps = [
 ] as const;
 
 export function ProfilesEmptyState({
-  variant,
   disabled,
   canCreate = true,
   onCreate,
   onAskSuperBot,
 }: {
-  variant: "compact" | "full";
   disabled?: boolean;
   canCreate?: boolean;
   onCreate: () => void;
   onAskSuperBot?: () => void;
 }) {
-  const isCompact = variant === "compact";
-
   return (
     <div
       aria-labelledby="profiles-empty-title"
-      className={cn(
-        "text-center",
-        isCompact
-          ? "flex flex-col items-center gap-3 rounded-md border border-border/80 border-dashed bg-muted/20 px-3 py-6"
-          : "flex min-h-[min(20rem,50dvh)] flex-col items-center justify-center gap-6 px-4 py-10 sm:px-6"
-      )}
+      className="flex min-h-[min(20rem,50dvh)] flex-col items-center justify-center gap-6 px-4 py-10 text-center sm:px-6"
       role="status"
     >
-      <div
-        className={cn(
-          "flex shrink-0 items-center justify-center border border-border bg-muted/40",
-          isCompact ? "size-10 rounded-full" : "size-14 rounded-2xl"
-        )}
-      >
-        <UserGroup02Icon
-          aria-hidden
-          className={cn(
-            "text-muted-foreground",
-            isCompact ? "size-4" : "size-6"
-          )}
-        />
+      <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted/40">
+        <UserGroup02Icon aria-hidden className="size-6 text-muted-foreground" />
       </div>
 
-      <div className={cn("space-y-1.5", !isCompact && "max-w-sm")}>
+      <div className="max-w-sm space-y-1.5">
         <p
-          className={cn(
-            "font-medium text-foreground",
-            isCompact ? "text-sm" : "type-section-title"
-          )}
+          className="type-section-title font-medium text-foreground"
           id="profiles-empty-title"
         >
-          {isCompact ? "No profiles yet" : "Create your first profile"}
+          Create your first profile
         </p>
-        {isCompact ? null : (
-          <p className="type-body text-muted-foreground text-sm">
-            {profilesTagline}
-          </p>
-        )}
+        <p className="type-body text-muted-foreground text-sm">
+          {profilesTagline}
+        </p>
       </div>
 
       <div className="flex flex-col items-center gap-2">
         {canCreate ? (
-          <Button
-            disabled={disabled}
-            onClick={onCreate}
-            size={isCompact ? "sm" : "default"}
-            type="button"
-          >
+          <Button disabled={disabled} onClick={onCreate} type="button">
             <Add01Icon aria-hidden className="size-4" />
-            {isCompact ? "Create profile" : "New profile"}
+            New profile
           </Button>
         ) : null}
         {onAskSuperBot ? (
@@ -329,28 +261,26 @@ export function ProfilesEmptyState({
         ) : null}
       </div>
 
-      {isCompact ? null : (
-        <ol className="w-full max-w-md space-y-3 border-border border-t pt-6 text-left">
-          {profileEmptySteps.map((step, index) => (
-            <li className="flex gap-3" key={step.title}>
-              <span
-                aria-hidden
-                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums"
-              >
-                {index + 1}
-              </span>
-              <div className="min-w-0 pt-0.5">
-                <p className="font-medium text-foreground text-sm">
-                  {step.title}
-                </p>
-                <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
+      <ol className="w-full max-w-md space-y-3 border-border border-t pt-6 text-left">
+        {profileEmptySteps.map((step, index) => (
+          <li className="flex gap-3" key={step.title}>
+            <span
+              aria-hidden
+              className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs tabular-nums"
+            >
+              {index + 1}
+            </span>
+            <div className="min-w-0 pt-0.5">
+              <p className="font-medium text-foreground text-sm">
+                {step.title}
+              </p>
+              <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
+                {step.description}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

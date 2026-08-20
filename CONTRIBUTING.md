@@ -29,7 +29,7 @@ bun run dev:web      # web dashboard (starts the server if needed)
 bun run dev:cli      # terminal client
 ```
 
-- Local Bun web dashboard: http://localhost:3000
+- Local Bun web dashboard: http://localhost:3003
 - Docker single-container dashboard (API + web + workers): http://localhost:4310
 
 See [AGENTS.md](./AGENTS.md) for Docker run/build scripts and deeper layout notes.
@@ -60,9 +60,10 @@ Lint and format with Biome via [Ultracite](https://www.ultracite.ai/). Config: `
 ```bash
 bun run check   # ultracite check
 bun run fix     # ultracite fix
+bun run knip    # unused files, dependencies, and exports
 ```
 
-Husky runs `bun x ultracite fix` on staged files in `.husky/pre-commit` and re-stages them. Fix issues locally before pushing; CI expects a clean check.
+Husky runs `bun x ultracite fix` on staged files in `.husky/pre-commit` and re-stages them. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
 
 ## Testing
 

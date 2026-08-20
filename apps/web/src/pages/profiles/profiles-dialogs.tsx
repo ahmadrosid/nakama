@@ -38,6 +38,8 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     setMcpCreateOpen,
     createMcpMutation,
     assignMcpMutation,
+    availableMcpServers,
+    handleAssignMcpServer,
     handleCreateMcpServer,
     deleteOpen,
     handleDeleteOpenChange,
@@ -85,7 +87,9 @@ export function ProfilesDialogs(state: ProfilesPageState) {
       />
 
       <McpServerDialog
+        availableServers={availableMcpServers}
         busy={createMcpMutation.isPending || assignMcpMutation.isPending}
+        onAssign={handleAssignMcpServer}
         onOpenChange={(open) => {
           setMcpCreateOpen(open);
         }}

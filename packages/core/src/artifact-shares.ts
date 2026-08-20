@@ -11,7 +11,7 @@ export function generateArtifactShareToken(): string {
 }
 
 export function buildArtifactSharePath(token: string): string {
-  return `/s/${token}`;
+  return `/s/${assertConfigPathSegment(token, "shareToken")}`;
 }
 
 export async function writeArtifactShareSnapshot(input: {

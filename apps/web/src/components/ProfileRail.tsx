@@ -15,9 +15,10 @@ import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   buildChatBasePath,
   isChatSessionPath,
+  isProfilesPath,
   resolveActiveProfileIdFromLocation,
 } from "@/lib/chat-history";
-import { PAGE_PATHS, pathForPage } from "@/lib/navigation";
+import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -35,16 +36,33 @@ export function ProfileRail() {
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
 
+  const onProfilesPage = isProfilesPath(location.pathname);
   const activeProfileId = resolveActiveProfileIdFromLocation({
     historyPath: PAGE_PATHS.history,
     liveChatProfileId,
     pathname: location.pathname,
     profiles,
+    profilesPath: PAGE_PATHS.profiles,
     search: location.search,
   });
 
   function handleSelectProfile(profileId: string) {
     if (profileId === activeProfileId) {
+      return;
+    }
+
+    if (onProfilesPage) {
+      setLiveChatProfileId(profileId);
+      if (location.pathname === PAGE_PATHS.profiles) {
+        const params = new URLSearchParams(location.search);
+        params.set("profile", profileId);
+        navigate(`${PAGE_PATHS.profiles}?${params.toString()}`, {
+          replace: true,
+        });
+        return;
+      }
+
+      navigate(profilePath(profileId));
       return;
     }
 
@@ -134,8 +152,22 @@ export function ProfileRail() {
 
         {user?.isPlatformAdmin ? (
           <ProfileAdminPlusButton
-            label="Manage profiles"
-            onClick={() => navigate(pathForPage("profiles"))}
+            label={onProfilesPage ? "New profile" : "Manage profiles"}
+            onClick={() => {
+              if (!onProfilesPage) {
+                navigate(pathForPage("profiles"));
+                return;
+              }
+
+              if (location.pathname !== PAGE_PATHS.profiles) {
+                navigate(`${PAGE_PATHS.profiles}?create=1`);
+                return;
+              }
+
+              const params = new URLSearchParams(location.search);
+              params.set("create", "1");
+              navigate(`${PAGE_PATHS.profiles}?${params.toString()}`);
+            }}
           />
         ) : null}
       </div>

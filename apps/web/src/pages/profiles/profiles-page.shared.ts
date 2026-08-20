@@ -1,10 +1,4 @@
-import type { ProfileSummary } from "@nakama/core/contract";
-
 export const sectionClass = "rounded-md border border-border bg-card";
-export const profilePanelHeaderClass =
-  "flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 sm:px-5";
-export const profilePanelHeaderLabelClass =
-  "inline-flex items-center px-3 py-2.5 text-sm font-medium text-foreground sm:px-4";
 export const profilesTagline =
   "Separate prompt, tools, and knowledge for each bot.";
 export const profileTextSaveDelayMs = 1000;
@@ -60,27 +54,3 @@ export type RemoveAssignmentTarget =
   | { kind: "mcp"; id: string; name: string }
   | { kind: "skill"; id: string; name: string }
   | { kind: "composio"; id: string; name: string };
-
-export function profileSidebarDescription(profile: ProfileSummary): string {
-  if (profile.isSuper) {
-    return "Super bot";
-  }
-
-  const parts: string[] = [];
-
-  if (profile.toolCount > 0) {
-    parts.push(
-      `${profile.toolCount} tool${profile.toolCount === 1 ? "" : "s"}`
-    );
-  }
-
-  if (profile.mcpServerCount > 0) {
-    parts.push(`${profile.mcpServerCount} MCP`);
-  }
-
-  if (parts.length > 0) {
-    return parts.join(" · ");
-  }
-
-  return profile.isDefault ? "Default profile" : profile.id;
-}

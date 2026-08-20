@@ -119,7 +119,7 @@ export async function runExtractDocumentText(
         };
       }
 
-      const mailboxConfig = emailConfigToMailboxConfig(config!);
+      const mailboxConfig = emailConfigToMailboxConfig(config);
       let reference;
       try {
         reference = verifyAttachmentReference(

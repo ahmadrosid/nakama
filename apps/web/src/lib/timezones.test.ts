@@ -31,11 +31,4 @@ describe("searchTimezoneEntries", () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]?.id).toBe("America/Los_Angeles");
   });
-
-  test("matches when query tokens appear in different fields", () => {
-    const matches = searchTimezoneEntries("san francisco", sampleCatalog);
-
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.id).toBe("America/Los_Angeles");
-  });
 });

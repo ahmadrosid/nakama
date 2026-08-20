@@ -191,6 +191,30 @@ export function resolveDefaultProfileId(
   );
 }
 
+export function isProfilesPath(
+  pathname: string,
+  profilesPath = "/profiles"
+): boolean {
+  return pathname === profilesPath || pathname.startsWith(`${profilesPath}/`);
+}
+
+/** Profile id for `/profiles` — URL when present, else live chat state / storage / default. */
+export function resolveProfilesPageProfileId(input: {
+  search: string;
+  profiles: ReadonlyArray<{ id: string }>;
+  liveChatProfileId?: string | null;
+}): string | null {
+  const fromUrl = new URLSearchParams(input.search).get("profile");
+  return (
+    pickKnownProfileId(
+      input.profiles,
+      fromUrl,
+      input.liveChatProfileId,
+      readStoredActiveChatProfileId()
+    ) ?? resolveDefaultProfileId(input.profiles)
+  );
+}
+
 /** Profile id for sidebar rail highlight — URL when present, else live chat state / storage. */
 export function resolveActiveProfileIdFromLocation(input: {
   pathname: string;
@@ -198,6 +222,7 @@ export function resolveActiveProfileIdFromLocation(input: {
   profiles: ReadonlyArray<{ id: string }>;
   liveChatProfileId?: string | null;
   historyPath?: string;
+  profilesPath?: string;
 }): string | null {
   const {
     pathname,
@@ -205,6 +230,7 @@ export function resolveActiveProfileIdFromLocation(input: {
     profiles,
     liveChatProfileId,
     historyPath = "/history",
+    profilesPath = "/profiles",
   } = input;
 
   const isKnownProfile = (
@@ -214,6 +240,14 @@ export function resolveActiveProfileIdFromLocation(input: {
 
   if (pathname === historyPath) {
     return resolveHistoryProfileId({ liveChatProfileId, profiles, search });
+  }
+
+  if (isProfilesPath(pathname, profilesPath)) {
+    return resolveProfilesPageProfileId({
+      liveChatProfileId,
+      profiles,
+      search,
+    });
   }
 
   const fromSessionPath = chatProfileIdFromPath(pathname);

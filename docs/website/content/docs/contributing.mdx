@@ -45,6 +45,7 @@ Deeper layout and conventions: [AGENTS.md](https://github.com/ahmadrosid/nakama/
 ```bash
 bun test
 bun run check    # Biome via Ultracite
+bun run knip     # unused files, dependencies, and exports (CI fails on findings)
 ```
 
 Assert behavior, not exact prompt or error copy. Live LLM tests use MSW cassettes (`*.llm.test.ts`); see [CONTRIBUTING.md](https://github.com/ahmadrosid/nakama/blob/main/CONTRIBUTING.md#testing) for replay and `LLM_VCR_MODE=record`.

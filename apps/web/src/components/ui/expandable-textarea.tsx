@@ -1,4 +1,4 @@
-import { PencilIcon } from "hugeicons-react";
+import { Edit03Icon } from "hugeicons-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ function ExpandableTextarea({
             type="button"
             variant="ghost"
           >
-            <PencilIcon aria-hidden className="size-3.5" />
+            <Edit03Icon aria-hidden className="size-3.5" />
             Edit
           </Button>
         </div>

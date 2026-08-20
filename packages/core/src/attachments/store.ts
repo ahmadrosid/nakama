@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { ensureDir, readBytes, removeFile, writePrivateBytesFile } from "../fs";
-import { getProfileSoulDir } from "../soul/resolve";
+import { assertConfigPathSegment, getProfileSoulDir } from "../soul/resolve";
 
 const ATTACHMENTS_DIR = "attachments";
 
@@ -13,7 +13,10 @@ export function getAttachmentFilePath(
   profileId: string,
   attachmentId: string
 ): string {
-  return join(getAttachmentDir(orgId, profileId), attachmentId);
+  return join(
+    getAttachmentDir(orgId, profileId),
+    assertConfigPathSegment(attachmentId, "attachmentId")
+  );
 }
 
 export async function saveAttachmentBytes(

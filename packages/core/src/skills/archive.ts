@@ -33,27 +33,17 @@ export async function archiveSkillDirectory(options: {
   skillName: string;
   now?: Date;
 }): Promise<{ archivedDirectory: string; skillName: string }> {
-  const skillName = assertValidSkillName(options.skillName);
-  assertNotBundledSkillName(skillName);
-
   const liveDirectory = resolveProfileSkillDirectory(
     options.orgId,
     options.profileId,
-    skillName
+    options.skillName
   );
+  // resolveProfileSkillDirectory already assertValidSkillName + assertNotBundledSkillName
+  // and keeps liveDirectory inside the profile skills root.
+  const skillName = path.basename(liveDirectory);
 
   if (isUnderArchiveDir(options.orgId, options.profileId, liveDirectory)) {
     throw new Error("Skill is already archived.");
-  }
-
-  if (
-    !isPathWithinProfileSkillsDir(
-      options.orgId,
-      options.profileId,
-      liveDirectory
-    )
-  ) {
-    throw new Error("Path is outside the profile skills directory.");
   }
 
   if (!(await pathExists(liveDirectory))) {
@@ -66,20 +56,11 @@ export async function archiveSkillDirectory(options: {
   );
   await mkdir(archiveRoot, { recursive: true });
 
+  // skillName is a single validated segment from resolveProfileSkillDirectory.
   let archivedDirectory = path.join(archiveRoot, skillName);
   if (await pathExists(archivedDirectory)) {
     const stamp = (options.now ?? new Date()).getTime();
     archivedDirectory = path.join(archiveRoot, `${skillName}-${stamp}`);
-  }
-
-  if (
-    !isPathWithinProfileSkillsDir(
-      options.orgId,
-      options.profileId,
-      archivedDirectory
-    )
-  ) {
-    throw new Error("Archive path is outside the profile skills directory.");
   }
 
   if (
