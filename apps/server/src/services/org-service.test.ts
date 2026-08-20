@@ -513,6 +513,33 @@ describe("OrgService", () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
+  test("refuses updates on an archived org", async () => {
+    const { orgService, authService } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-update-archive" },
+    });
+    await orgService.createOrganization(
+      { name: "Beta", slug: "beta-update-archive" },
+      bootstrapped.user.id
+    );
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+
+    await expect(
+      orgService.updateOrganization(bootstrapped.organization.id, {
+        name: "Renamed",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   test("refuses to archive the last active org", async () => {
     const { orgService } = createOrgService();
     const created = await orgService.createOrganization({

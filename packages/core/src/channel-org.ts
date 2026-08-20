@@ -156,7 +156,27 @@ export async function prepareChannelOrgContext(options: {
 
   if (orgs.length === 1) {
     const org = orgs[0];
-    if (options.getSelectedOrgId() !== org.id) {
+    const storedOrgId = options.getSelectedOrgId();
+    if (storedOrgId && storedOrgId !== org.id) {
+      const selectionInput = options.text?.trim();
+      if (selectionInput) {
+        const picked = findOrgBySelectionInput(selectionInput, orgs);
+        if (picked) {
+          await options.saveSelectedOrgId(picked.id);
+          return {
+            justSelected: true,
+            orgId: picked.id,
+            orgName: picked.name,
+            status: "ready",
+          };
+        }
+      }
+      return {
+        message: formatOrgSelectionPrompt(orgs, storedOrgId),
+        status: "prompt",
+      };
+    }
+    if (storedOrgId !== org.id) {
       await options.saveSelectedOrgId(org.id);
     }
     return { orgId: org.id, orgName: org.name, status: "ready" };

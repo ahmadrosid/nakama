@@ -124,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrgs(nextOrgs);
       if (nextOrgId) {
         setUser(await client.setActiveOrg(nextOrgId));
+      } else {
+        client.setOrgId(null);
       }
       refreshAuthenticatedQueries();
     },

@@ -55,6 +55,21 @@ describe("prepareChannelOrgContext", () => {
     expect(saved).toBe("org_a");
   });
 
+  test("prompts when the stored org is gone and one other remains", async () => {
+    let saved: string | undefined;
+
+    const result = await prepareChannelOrgContext({
+      getSelectedOrgId: () => "org_archived",
+      listOrgs: async () => ({ orgs: [orgs[0]!] }),
+      saveSelectedOrgId: async (orgId) => {
+        saved = orgId;
+      },
+    });
+
+    expect(result.status).toBe("prompt");
+    expect(saved).toBeUndefined();
+  });
+
   test("prompts when multiple orgs and nothing stored", async () => {
     const result = await prepareChannelOrgContext({
       getSelectedOrgId: () => undefined,

@@ -112,10 +112,7 @@ export class OrgService {
     orgId: string,
     request: UpdateOrganizationRequest
   ): Promise<OrganizationSummary> {
-    const org = await this.databaseAdapter.getOrganizationById(orgId);
-    if (!org) {
-      throw new NakamaApiError("Not found", 404);
-    }
+    const org = await this.requireActiveOrganization(orgId);
 
     const name = request.name === undefined ? org.name : request.name.trim();
     if (request.name !== undefined && !name) {
