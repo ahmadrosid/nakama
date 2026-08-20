@@ -196,6 +196,65 @@ export function registerPlatformOrgRoutes(
 
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "delete",
+      operationId: "archivePlatformOrganization",
+      path: "/v1/platform/orgs/{orgId}",
+      request: {
+        params: z.object({
+          orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({})
+                .passthrough()
+                .openapi("OrganizationResponse"),
+            },
+          },
+          description: "Organization archived",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Archive an organization",
+      tags: ["Platform"],
+    })
+  );
+
+  app.delete("/v1/platform/orgs/:orgId", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const organization = await orgService.archiveOrganization(
+      orgId,
+      auth.user.id
+    );
+    return json<OrganizationResponse>({ organization });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "post",
       operationId: "createPlatformOrganizationInvite",
       path: "/v1/platform/orgs/{orgId}/invites",

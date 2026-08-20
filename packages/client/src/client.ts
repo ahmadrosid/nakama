@@ -1921,6 +1921,17 @@ export class NakamaClient {
     );
   }
 
+  async archivePlatformOrganization(
+    orgId: string
+  ): Promise<OrganizationResponse> {
+    return this.request<OrganizationResponse>(
+      `/v1/platform/orgs/${encodeURIComponent(orgId)}`,
+      {
+        method: "DELETE",
+      }
+    );
+  }
+
   async setActiveOrg(orgId: string): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>(
       "/v1/auth/active-org",

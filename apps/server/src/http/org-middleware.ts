@@ -74,6 +74,12 @@ export function createOrgContextMiddleware(
       return;
     }
 
+    const organization = await databaseAdapter.getOrganizationById(orgId);
+    if (!organization || organization.archivedAt) {
+      c.res = errorResponse("Not found", 404);
+      return;
+    }
+
     const member = await databaseAdapter.getOrgMember(orgId, auth.user.id);
     if (!member) {
       c.res = errorResponse("Not found", 404);
