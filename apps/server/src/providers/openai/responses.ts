@@ -185,14 +185,14 @@ function toResponsesAssistantInput(
   const input: unknown[] = [];
 
   if (message.toolCalls?.length) {
-    if (message.content.trim()) {
-      input.push(toResponsesAssistantTextMessage(message.content));
-    }
-
     if (message.providerContent?.length) {
+      // providerContent already carries the assistant message item; pushing
+      // message.content as well would replay the same text twice.
       input.push(
         ...message.providerContent.filter(isNonFunctionCallProviderItem)
       );
+    } else if (message.content.trim()) {
+      input.push(toResponsesAssistantTextMessage(message.content));
     }
 
     input.push(
