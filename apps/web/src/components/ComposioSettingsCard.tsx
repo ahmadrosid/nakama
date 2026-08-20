@@ -174,7 +174,7 @@ export function ComposioSettingsCard({
               Project API key
             </p>
             <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-              Paste a Composio project API key — not the MCP consumer key.
+              Paste a Composio project API key, not the MCP consumer key.
             </p>
           </div>
           {embedded ? (
@@ -251,7 +251,7 @@ export function ComposioSettingsCard({
       <div className={cn(footerPadding)}>
         <a
           className="inline-flex items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground"
-          href="https://docs.composio.dev/reference/authentication"
+          href="https://dashboard.composio.dev"
           rel="noreferrer"
           target="_blank"
         >

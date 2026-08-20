@@ -38,6 +38,41 @@ import { cn } from "@/lib/utils";
 
 const CATALOG_PAGE_SIZE = 15;
 
+/**
+ * The catalog is 200 apps, which buries the ones a team actually asks for. The
+ * list opens on these plus whatever the org already enabled; everything else is
+ * one click away behind "all apps", and search always covers the full catalog.
+ */
+const FEATURED_TOOLKIT_SLUGS = new Set([
+  "airtable",
+  "asana",
+  "clickup",
+  "discord",
+  "dropbox",
+  "facebook",
+  "github",
+  "gmail",
+  "googlecalendar",
+  "googledocs",
+  "googledrive",
+  "googlemeet",
+  "googlesheets",
+  "googletasks",
+  "jira",
+  "linear",
+  "linkedin",
+  "notion",
+  "one_drive",
+  "outlook",
+  "reddit",
+  "slack",
+  "trello",
+  "twitter",
+  "whatsapp",
+  "youtube",
+  "zoom",
+]);
+
 function compareToolkitRows(a: ToolkitRowModel, b: ToolkitRowModel): number {
   const aActive = isActiveToolkit(a) ? 0 : 1;
   const bActive = isActiveToolkit(b) ? 0 : 1;
@@ -317,6 +352,7 @@ function ComposioToolkitList({
 }: ComposioToolkitListProps) {
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(CATALOG_PAGE_SIZE);
+  const [showAllApps, setShowAllApps] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
   const query = deferredSearch.trim().toLowerCase();
@@ -368,8 +404,15 @@ function ComposioToolkitList({
       return activeRows.filter((row) => row.orgToolkit?.status === "enabled");
     }
 
-    return rows.toSorted(compareToolkitRows);
-  }, [activeRows, isOrgAdmin, isSearching, query, rows]);
+    const base = showAllApps
+      ? rows
+      : rows.filter(
+          (row) =>
+            FEATURED_TOOLKIT_SLUGS.has(row.catalog.slug) || isActiveToolkit(row)
+        );
+
+    return base.toSorted(compareToolkitRows);
+  }, [activeRows, isOrgAdmin, isSearching, query, rows, showAllApps]);
 
   const displayedRows = filteredRows.slice(0, visibleCount);
   const remainingCount = Math.max(
@@ -409,22 +452,41 @@ function ComposioToolkitList({
           />
         </div>
 
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {isSearching ? (
-            <>
-              {filteredRows.length} match{filteredRows.length === 1 ? "" : "es"}
-            </>
-          ) : isOrgAdmin ? (
-            <>
-              {enabledCount} enabled · {connectedCount} connected by you ·{" "}
-              {data.catalog.length} available
-            </>
-          ) : (
-            <>
-              {enabledCount} enabled · {connectedCount} connected by you
-            </>
-          )}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {isSearching ? (
+              <>
+                {filteredRows.length} match
+                {filteredRows.length === 1 ? "" : "es"}
+              </>
+            ) : isOrgAdmin ? (
+              <>
+                {enabledCount} enabled · {connectedCount} connected by you ·{" "}
+                {showAllApps ? data.catalog.length : filteredRows.length} shown
+              </>
+            ) : (
+              <>
+                {enabledCount} enabled · {connectedCount} connected by you
+              </>
+            )}
+          </p>
+
+          {isOrgAdmin && !isSearching ? (
+            <Button
+              className="h-auto p-0 text-xs"
+              onClick={() => {
+                setShowAllApps((current) => !current);
+                setVisibleCount(CATALOG_PAGE_SIZE);
+              }}
+              type="button"
+              variant="link"
+            >
+              {showAllApps
+                ? "Show popular apps"
+                : `Show all ${data.catalog.length} apps`}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {data.catalog.length === 0 ? (
