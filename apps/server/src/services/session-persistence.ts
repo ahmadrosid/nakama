@@ -15,7 +15,6 @@ export function wrapPersistedSession(
     clear() {
       session.clear();
       lastPersistedRevision = session.getHistoryRevision();
-      void db.deleteMessagesForSession(sessionId);
     },
     async compact(options) {
       const revisionBefore = session.getHistoryRevision();
