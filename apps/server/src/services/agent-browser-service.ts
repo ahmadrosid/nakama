@@ -64,14 +64,38 @@ async function probeAgentBrowserVersion(): Promise<{
   missing: boolean;
 }> {
   const { spawn } = await import("node:child_process");
+  const timeoutMs = 5000;
 
   return new Promise((resolve) => {
-    const child = spawn(AGENT_BROWSER_COMMAND, ["--version"], {
-      env: getToolExecutionEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child: ReturnType<typeof spawn>;
+
+    try {
+      child = spawn(AGENT_BROWSER_COMMAND, ["--version"], {
+        env: getToolExecutionEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch {
+      resolve({
+        installed: false,
+        missing: true,
+        version: null,
+      });
+      return;
+    }
+
     let stdout = "";
     let stderr = "";
+
+    // Settings awaits this probe, so a CLI that never answers --version
+    // would otherwise hold GET /v1/settings/agent-browser open forever.
+    // Resolve on the timer instead of waiting for close, because a child
+    // that ignores SIGTERM never emits one. `missing: false` keeps
+    // getAgentBrowserRuntimeStatus from paying the timeout a second time
+    // on its PATH retry.
+    const timeoutId = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ installed: false, missing: false, version: null });
+    }, timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -79,20 +103,22 @@ async function probeAgentBrowserVersion(): Promise<{
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    child.once("error", (error) =>
+    child.once("error", (error) => {
+      clearTimeout(timeoutId);
       resolve({
         installed: false,
         missing: (error as NodeJS.ErrnoException).code === "ENOENT",
         version: null,
-      })
-    );
-    child.once("close", (code) =>
+      });
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeoutId);
       resolve({
         installed: code === 0,
         missing: false,
         version: code === 0 ? extractVersion(stdout, stderr) : null,
-      })
-    );
+      });
+    });
   });
 }
 
