@@ -71,6 +71,18 @@ export function useDisableComposioToolkit() {
   });
 }
 
+export function useConnectComposioToolkit() {
+  return useMutation({
+    mutationFn: (toolkitSlug: string) =>
+      client.connectComposioToolkit(toolkitSlug),
+    onSuccess: (response) => {
+      // Composio hosts the account picker and consent, then redirects back to
+      // /integrations through our OAuth callback.
+      window.location.href = response.redirectUrl;
+    },
+  });
+}
+
 export function useDisconnectComposioToolkit() {
   const queryClient = useQueryClient();
 

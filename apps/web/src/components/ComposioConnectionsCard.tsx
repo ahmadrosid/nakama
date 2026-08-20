@@ -21,6 +21,7 @@ import { useAuth } from "@/context/use-auth";
 import {
   useComposioSettings,
   useComposioToolkits,
+  useConnectComposioToolkit,
   useDisableComposioToolkit,
   useDisconnectComposioToolkit,
   useEnableComposioToolkit,
@@ -123,6 +124,7 @@ function StatusPill({
 interface ComposioToolkitRowProps {
   busy: boolean;
   isOrgAdmin: boolean;
+  onConnect: (slug: string) => void;
   onDisable: (slug: string) => void;
   onDisconnect: (slug: string) => void;
   onEnable: (slug: string) => void;
@@ -134,6 +136,7 @@ function ComposioToolkitRow({
   row,
   isOrgAdmin,
   busy,
+  onConnect,
   onEnable,
   onDisable,
   onSync,
@@ -171,6 +174,11 @@ function ComposioToolkitRow({
             />
           ) : null}
         </div>
+        {orgEnabled && userStatus === "connected" ? (
+          <p className="mt-1 text-muted-foreground text-xs">
+            Agents can use this once the toolkit is assigned to a profile.
+          </p>
+        ) : null}
         {lastError ? (
           <p className="mt-1 truncate text-destructive text-xs">{lastError}</p>
         ) : null}
@@ -219,6 +227,19 @@ function ComposioToolkitRow({
           </DropdownMenu>
         ) : null}
 
+        {orgEnabled && userStatus !== "connected" ? (
+          <Button
+            disabled={busy}
+            onClick={() => onConnect(catalog.slug)}
+            size="sm"
+            type="button"
+          >
+            {userStatus === "oauth_in_progress"
+              ? "Finish connecting"
+              : "Connect"}
+          </Button>
+        ) : null}
+
         {isOrgAdmin && orgEnabled && userStatus !== "connected" ? (
           <Button
             disabled={busy}
@@ -239,6 +260,7 @@ interface ComposioToolkitListProps {
   busy: boolean;
   data: ListComposioToolkitsResponse;
   isOrgAdmin: boolean;
+  onConnect: (slug: string) => void;
   onDisable: (slug: string) => void;
   onDisconnect: (slug: string) => void;
   onEnable: (slug: string) => void;
@@ -249,6 +271,7 @@ function ComposioToolkitList({
   data,
   isOrgAdmin,
   busy,
+  onConnect,
   onEnable,
   onDisable,
   onSync,
@@ -395,6 +418,7 @@ function ComposioToolkitList({
                   busy={busy}
                   isOrgAdmin={isOrgAdmin}
                   key={row.catalog.slug}
+                  onConnect={onConnect}
                   onDisable={onDisable}
                   onDisconnect={onDisconnect}
                   onEnable={onEnable}
@@ -478,12 +502,14 @@ export function ComposioConnectionsCard({
   const isOrgAdmin = activeOrg?.role === "admin";
   const { data: settings } = useComposioSettings();
   const toolkitsQuery = useComposioToolkits();
+  const connectMutation = useConnectComposioToolkit();
   const enableMutation = useEnableComposioToolkit();
   const disableMutation = useDisableComposioToolkit();
   const disconnectMutation = useDisconnectComposioToolkit();
   const syncMutation = useSyncComposioToolkit();
 
   const busy =
+    connectMutation.isPending ||
     enableMutation.isPending ||
     disableMutation.isPending ||
     disconnectMutation.isPending ||
@@ -556,6 +582,7 @@ export function ComposioConnectionsCard({
         busy={busy}
         data={data}
         isOrgAdmin={isOrgAdmin}
+        onConnect={(slug) => connectMutation.mutate(slug)}
         onDisable={(slug) => disableMutation.mutate(slug)}
         onDisconnect={(slug) => disconnectMutation.mutate(slug)}
         onEnable={(slug) => enableMutation.mutate(slug)}
