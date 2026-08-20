@@ -23,11 +23,13 @@ The key is stored in `~/.nakama/composio/config.ini` on the Nakama server.
 ## Setup
 
 1. As an org admin, open **Integrations → Composio** and save your Composio **project API key**.
-2. Confirm `/health` reports `composioConfigured: true`. Reachability (`composioAvailable`) is on `GET /v1/system/status` under `server`.
-3. As an org admin, **enable** a toolkit for the organization.
-4. As any org member, click **Connect your account** and complete OAuth in the browser.
-5. Click **Sync tools** after connecting.
-6. Assign the toolkit to a profile on the **Profiles** page.
+2. As an org admin, **enable** a toolkit for the organization.
+3. As any org member, click **Connect your account** and complete OAuth in the browser. Tools sync automatically when the callback returns.
+4. Assign the toolkit to a profile on the **Profiles** page.
+
+The API key is the only thing you need from the Composio dashboard. Nakama creates the auth config for a toolkit the first time someone connects it, so the Google Cloud project and consent screen setup in Composio's own docs does not apply here.
+
+The Integrations card shows whether the key is saved and whether Composio is reachable, so there is nothing to verify by hand. Do not read `GET /health` for this: it runs local checks only and always reports `composioAvailable: false`. Reachability is on `GET /v1/system/status` under `server`.
 
 ## Tenancy model
 
