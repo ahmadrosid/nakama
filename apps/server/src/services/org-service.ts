@@ -38,6 +38,10 @@ import {
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
+const LAST_MEMBERSHIP_MESSAGE =
+  "Cannot archive your last remaining organization.";
+const LAST_ORGANIZATION_MESSAGE =
+  "Cannot archive the last remaining organization.";
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
@@ -74,38 +78,34 @@ export class OrgService {
   ): Promise<OrganizationSummary> {
     const org = await this.requireActiveOrganization(orgId);
 
-    const organizations = await this.databaseAdapter.listOrganizations();
-    const activeCount = organizations.filter(
-      (organization) => !organization.archivedAt
-    ).length;
-    if (activeCount <= 1) {
-      throw new NakamaApiError(
-        "Cannot archive the last remaining organization.",
-        409
-      );
-    }
-
     if (actorUserId) {
       const memberships =
         await this.databaseAdapter.listUserOrganizations(actorUserId);
       const onlyMembership =
         memberships.length === 1 && memberships[0]?.organization.id === orgId;
       if (onlyMembership) {
-        throw new NakamaApiError(
-          "Cannot archive the last remaining organization.",
-          409
-        );
+        throw new NakamaApiError(LAST_MEMBERSHIP_MESSAGE, 409);
       }
     }
 
     const now = new Date().toISOString();
-    const updated: StoredOrganizationRecord = {
+    const archived = await this.databaseAdapter.tryMarkOrganizationArchived(
+      orgId,
+      now
+    );
+    if (!archived) {
+      const current = await this.databaseAdapter.getOrganizationById(orgId);
+      if (!current || current.archivedAt) {
+        throw new NakamaApiError("Not found", 404);
+      }
+      throw new NakamaApiError(LAST_ORGANIZATION_MESSAGE, 409);
+    }
+
+    return toOrganizationSummary({
       ...org,
       archivedAt: now,
       updatedAt: now,
-    };
-    await this.databaseAdapter.upsertOrganization(updated);
-    return toOrganizationSummary(updated);
+    });
   }
 
   async updateOrganization(
@@ -234,6 +234,12 @@ export class OrgService {
     const memberships =
       await this.databaseAdapter.listUserOrganizations(userId);
     if (memberships.length === 0) {
+      if (sessionId) {
+        await this.databaseAdapter.updateBrowserSessionActiveOrgId(
+          sessionId,
+          null
+        );
+      }
       return null;
     }
 

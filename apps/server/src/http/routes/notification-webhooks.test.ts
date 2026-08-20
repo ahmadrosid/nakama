@@ -40,6 +40,13 @@ describe("notification webhook routes", () => {
 
     try {
       const { app, databaseAdapter, authService } = await createApp();
+      await databaseAdapter.upsertOrganization({
+        createdAt: "2026-07-04T10:00:00.000Z",
+        id: "org_1",
+        name: "Acme",
+        slug: "acme",
+        updatedAt: "2026-07-04T10:00:00.000Z",
+      });
       await databaseAdapter.upsertNotificationDestination({
         channel: "telegram",
         config: { chatId: 1001, topicId: 22 },
@@ -104,5 +111,52 @@ describe("notification webhook routes", () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  test("does not deliver for an archived organization", async () => {
+    const telegramCalls: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_input, init) => {
+      telegramCalls.push(init?.body);
+      return new Response("ok", { status: 200 });
+    };
+
+    try {
+      const { app, databaseAdapter, authService } = await createApp();
+      await databaseAdapter.upsertOrganization({
+        archivedAt: "2026-08-21T00:00:00.000Z",
+        createdAt: "2026-07-04T10:00:00.000Z",
+        id: "org_1",
+        name: "Acme",
+        slug: "acme",
+        updatedAt: "2026-08-21T00:00:00.000Z",
+      });
+      await databaseAdapter.upsertNotificationDestination({
+        channel: "telegram",
+        config: { chatId: 1001, topicId: null },
+        createdAt: "2026-07-04T10:00:00.000Z",
+        id: "dest_1",
+        name: "Payments",
+        orgId: "org_1",
+        secretHash: authService.hashToken("secret_key"),
+        updatedAt: "2026-07-04T10:00:00.000Z",
+      });
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/notify/dest_1", {
+          body: JSON.stringify({ body: "Hello" }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": "secret_key",
+          },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(404);
+      expect(telegramCalls).toEqual([]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

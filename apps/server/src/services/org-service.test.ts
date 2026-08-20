@@ -489,6 +489,47 @@ describe("OrgService", () => {
     expect(resolved).toBe(second.organization.id);
   });
 
+  test("clears a stale session org when the user has no remaining memberships", async () => {
+    const { orgService, authService, databaseAdapter } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-session-clear" },
+    });
+    await databaseAdapter.createBrowserSession({
+      activeOrgId: bootstrapped.organization.id,
+      createdAt: new Date().toISOString(),
+      csrfTokenHash: "csrf",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      id: "session_stale",
+      lastUsedAt: null,
+      revokedAt: null,
+      sessionTokenHash: "token_stale",
+      userId: bootstrapped.user.id,
+    });
+    await databaseAdapter.upsertOrganization({
+      ...(await databaseAdapter.getOrganizationById(
+        bootstrapped.organization.id
+      ))!,
+      archivedAt: new Date().toISOString(),
+    });
+
+    const resolved = await orgService.resolveActiveOrgId(
+      bootstrapped.user.id,
+      "session_stale",
+      bootstrapped.organization.id
+    );
+    expect(resolved).toBeNull();
+
+    const session =
+      await databaseAdapter.getBrowserSessionBySessionTokenHash("token_stale");
+    expect(session?.activeOrgId).toBeNull();
+  });
+
   test("refuses to archive the actor's last remaining membership", async () => {
     const { orgService, authService } = createOrgService();
     const bootstrapped = await orgService.bootstrapInitialSetup({
@@ -510,7 +551,10 @@ describe("OrgService", () => {
         bootstrapped.organization.id,
         bootstrapped.user.id
       )
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({
+      message: "Cannot archive your last remaining organization.",
+      status: 409,
+    });
   });
 
   test("refuses updates on an archived org", async () => {
@@ -549,7 +593,10 @@ describe("OrgService", () => {
 
     await expect(
       orgService.archiveOrganization(created.organization.id)
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({
+      message: "Cannot archive the last remaining organization.",
+      status: 409,
+    });
 
     const stillListed = await orgService.listOrganizations();
     expect(stillListed).toHaveLength(1);

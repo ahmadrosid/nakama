@@ -59,4 +59,41 @@ describe("organization archive persistence", () => {
       ["org_active"]
     );
   });
+
+  test("tryMarkOrganizationArchived refuses the last active org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = "2026-08-21T00:00:00.000Z";
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_only",
+      name: "Only",
+      slug: "only",
+      updatedAt: now,
+    });
+
+    expect(await db.tryMarkOrganizationArchived("org_only", now)).toBe(false);
+    expect((await db.getOrganizationById("org_only"))?.archivedAt).toBeFalsy();
+  });
+
+  test("tryMarkOrganizationArchived archives when another org remains", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = "2026-08-21T00:00:00.000Z";
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_a",
+      name: "A",
+      slug: "a",
+      updatedAt: now,
+    });
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_b",
+      name: "B",
+      slug: "b",
+      updatedAt: now,
+    });
+
+    expect(await db.tryMarkOrganizationArchived("org_a", now)).toBe(true);
+    expect((await db.getOrganizationById("org_a"))?.archivedAt).toBe(now);
+  });
 });

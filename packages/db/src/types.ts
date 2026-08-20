@@ -847,6 +847,11 @@ export interface DatabaseAdapter {
     content: string,
     updatedAt: string
   ): Promise<void>;
+
+  tryMarkOrganizationArchived(
+    orgId: string,
+    archivedAt: string
+  ): Promise<boolean>;
   unassignMcpServerFromProfile(
     profileId: string,
     serverId: string
@@ -920,7 +925,6 @@ export interface DatabaseAdapter {
   upsertNotificationDestination(
     record: StoredNotificationDestinationRecord
   ): Promise<void>;
-
   upsertOrganization(record: StoredOrganizationRecord): Promise<void>;
   upsertOrgMember(record: StoredOrgMemberRecord): Promise<void>;
   upsertProfile(record: StoredProfileRecord): Promise<void>;

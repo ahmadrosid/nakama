@@ -1192,6 +1192,29 @@ export function createInMemoryDatabaseAdapter(): DatabaseAdapter {
       usersByEmail.set(updated.email, updated);
     },
 
+    async tryMarkOrganizationArchived(orgId, archivedAt) {
+      const activeCount = Array.from(organizations.values()).filter(
+        (organization) => !organization.archivedAt
+      ).length;
+      if (activeCount <= 1) {
+        return false;
+      }
+
+      const organization = organizations.get(orgId);
+      if (!organization || organization.archivedAt) {
+        return false;
+      }
+
+      const updated = {
+        ...organization,
+        archivedAt,
+        updatedAt: archivedAt,
+      };
+      organizations.set(orgId, updated);
+      organizationsBySlug.set(updated.slug, updated);
+      return true;
+    },
+
     async unassignMcpServerFromProfile(profileId, serverId) {
       const assigned = profileMcpServers.get(profileId);
 

@@ -60,6 +60,13 @@ export class NotificationWebhookService {
       throw new NakamaApiError("Invalid notification credentials.", 401);
     }
 
+    const organization = await this.databaseAdapter.getOrganizationById(
+      destination.orgId
+    );
+    if (!organization || organization.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
     const normalized = normalizeNotificationWebhookRequest(payload);
     const result = await this.telegram.send({
       chatIds: [destination.config.chatId],

@@ -15,6 +15,13 @@ describe("NotificationWebhookService", () => {
       parseMode?: "HTML";
     }> = [];
 
+    await databaseAdapter.upsertOrganization({
+      createdAt: "2026-07-04T10:00:00.000Z",
+      id: "org_1",
+      name: "Acme",
+      slug: "acme",
+      updatedAt: "2026-07-04T10:00:00.000Z",
+    });
     await databaseAdapter.upsertNotificationDestination({
       channel: "telegram",
       config: { chatId: 1001, topicId: 22 },

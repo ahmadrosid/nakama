@@ -1218,6 +1218,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+  const tryMarkOrganizationArchivedStmt = db.prepare(`
+    UPDATE organizations
+    SET archived_at = ?, updated_at = ?
+    WHERE id = ?
+      AND archived_at IS NULL
+      AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
+  `);
   const upsertOrganizationStmt = db.prepare(`
     INSERT INTO organizations (id, name, slug, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2579,6 +2586,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async setUserContext(orgId, userId, content, _updatedAt) {
       setUserContextStmt.run(content, orgId, userId);
+    },
+
+    async tryMarkOrganizationArchived(orgId, archivedAt) {
+      const result = tryMarkOrganizationArchivedStmt.run(
+        archivedAt,
+        archivedAt,
+        orgId
+      );
+      return result.changes > 0;
     },
 
     async unassignMcpServerFromProfile(profileId, serverId) {
