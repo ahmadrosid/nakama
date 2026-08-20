@@ -58,14 +58,21 @@ export class OrgService {
     return org ? toOrganizationSummary(org) : null;
   }
 
-  async archiveOrganization(
-    orgId: string,
-    actorUserId?: string
-  ): Promise<OrganizationSummary> {
+  private async requireActiveOrganization(
+    orgId: string
+  ): Promise<StoredOrganizationRecord> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
     if (!org || org.archivedAt) {
       throw new NakamaApiError("Not found", 404);
     }
+    return org;
+  }
+
+  async archiveOrganization(
+    orgId: string,
+    actorUserId?: string
+  ): Promise<OrganizationSummary> {
+    const org = await this.requireActiveOrganization(orgId);
 
     const organizations = await this.databaseAdapter.listOrganizations();
     const activeCount = organizations.filter(
@@ -589,10 +596,7 @@ export class OrgService {
     role: OrgRole;
     invitedByUserId: string;
   }): Promise<OrgInviteCreatedResponse> {
-    const org = await this.databaseAdapter.getOrganizationById(input.orgId);
-    if (!org || org.archivedAt) {
-      throw new NakamaApiError("Not found", 404);
-    }
+    await this.requireActiveOrganization(input.orgId);
 
     const email = normalizeEmail(input.email);
     if (!EMAIL_PATTERN.test(email)) {
@@ -672,12 +676,7 @@ export class OrgService {
 
     assertInviteUsable(invite);
 
-    const inviteOrg = await this.databaseAdapter.getOrganizationById(
-      invite.orgId
-    );
-    if (!inviteOrg || inviteOrg.archivedAt) {
-      throw new NakamaApiError("Not found", 404);
-    }
+    await this.requireActiveOrganization(invite.orgId);
 
     const password = request.password?.trim();
     if (!password) {

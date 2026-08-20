@@ -16,7 +16,10 @@ import {
   type AuthContextValue,
 } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
-import { nextOrgIdAfterArchive } from "@/lib/org-archive";
+import {
+  canArchiveOrganization,
+  nextOrgIdAfterArchive,
+} from "@/lib/org-archive";
 import { queryClient } from "@/lib/query-client";
 
 function refreshAuthenticatedQueries(): void {
@@ -111,22 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const archiveOrg = useCallback(
     async (orgId: string) => {
-      if (!user?.isPlatformAdmin) {
+      if (!canArchiveOrganization(user?.isPlatformAdmin === true)) {
         throw new Error("Only platform admins can delete organizations.");
       }
 
       await client.archivePlatformOrganization(orgId);
       const { orgs: nextOrgs } = await client.listUserOrgs();
       const nextOrgId = nextOrgIdAfterArchive(nextOrgs, orgId);
-      if (!nextOrgId) {
-        setOrgs(nextOrgs);
-        refreshAuthenticatedQueries();
-        return;
-      }
-
-      const nextUser = await client.setActiveOrg(nextOrgId);
       setOrgs(nextOrgs);
-      setUser(nextUser);
+      if (nextOrgId) {
+        setUser(await client.setActiveOrg(nextOrgId));
+      }
       refreshAuthenticatedQueries();
     },
     [user?.isPlatformAdmin]

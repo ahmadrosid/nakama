@@ -2514,35 +2514,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listUserOrganizations(userId) {
       return listUserOrganizationsStmt.all(userId).map((row) => {
-        const record = row as {
-          id: string;
-          name: string;
-          slug: string;
-          skills_write_approval: number;
-          skills_post_turn_review: number;
-          skills_curator_enabled: number;
-          skills_curator_last_run_at: string | null;
-          archived_at: string | null;
-          created_at: string;
-          updated_at: string;
-          role: string;
+        const record = row as OrganizationRow & {
           joined_at: string;
+          role: string;
         };
 
         return {
           joinedAt: record.joined_at,
-          organization: {
-            archivedAt: record.archived_at,
-            createdAt: record.created_at,
-            id: record.id,
-            name: record.name,
-            skillsCuratorEnabled: record.skills_curator_enabled !== 0,
-            skillsCuratorLastRunAt: record.skills_curator_last_run_at,
-            skillsPostTurnReview: record.skills_post_turn_review !== 0,
-            skillsWriteApproval: record.skills_write_approval !== 0,
-            slug: record.slug,
-            updatedAt: record.updated_at,
-          },
+          organization: toOrganizationRecord(record),
           role: record.role as StoredUserOrganizationRecord["role"],
         };
       });

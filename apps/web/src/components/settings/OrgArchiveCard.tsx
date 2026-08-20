@@ -26,6 +26,19 @@ export function OrgArchiveCard() {
 
   const orgName = activeOrg.name;
 
+  async function handleArchive() {
+    setPending(true);
+    setFormError(null);
+    try {
+      await archiveOrg(activeOrg.id);
+      setConfirmOpen(false);
+    } catch (error) {
+      setFormError(formatError(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <Card className="gap-0 py-0">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
@@ -74,18 +87,7 @@ export function OrgArchiveCard() {
             <Button
               disabled={pending}
               onClick={() => {
-                void (async () => {
-                  setPending(true);
-                  setFormError(null);
-                  try {
-                    await archiveOrg(activeOrg.id);
-                    setConfirmOpen(false);
-                  } catch (error) {
-                    setFormError(formatError(error));
-                  } finally {
-                    setPending(false);
-                  }
-                })();
+                void handleArchive();
               }}
               type="button"
               variant="destructive"
