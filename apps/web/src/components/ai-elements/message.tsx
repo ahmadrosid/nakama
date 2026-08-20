@@ -3,7 +3,6 @@
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { type ComponentProps, type HTMLAttributes, memo } from "react";
 import {
@@ -12,6 +11,7 @@ import {
   Streamdown,
 } from "streamdown";
 import { ExternalLinkSafetyModal } from "@/components/ai-elements/external-link-safety-modal";
+import { createLazyMermaidPlugin } from "@/components/ai-elements/lazy-mermaid-plugin";
 import { MarkdownA } from "@/components/ai-elements/markdown-a";
 import { useTheme } from "@/context/use-theme";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,10 @@ export const MessageContent = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const lazyMermaidPlugin = createLazyMermaidPlugin(
+  () => import("@streamdown/mermaid")
+);
+const streamdownPlugins = { cjk, code, math, mermaid: lazyMermaidPlugin };
 
 function renderExternalLinkSafetyModal(props: LinkSafetyModalProps) {
   return <ExternalLinkSafetyModal {...props} />;
@@ -81,6 +84,7 @@ const MessageResponseBody = memo(
     shikiTheme,
     linkSafety: linkSafetyOverride,
     components: userComponents,
+    plugins: pluginsOverride,
     ...props
   }: MessageResponseProps) => (
     <Streamdown
@@ -92,7 +96,7 @@ const MessageResponseBody = memo(
       controls={controls}
       lineNumbers={lineNumbers}
       linkSafety={linkSafetyOverride ?? linkSafety}
-      plugins={streamdownPlugins}
+      plugins={pluginsOverride ?? streamdownPlugins}
       shikiTheme={shikiTheme}
       {...props}
     />
