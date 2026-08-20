@@ -1,61 +1,82 @@
 ---
 title: "Composio"
-description: "Connect SaaS apps through Composio with org-scoped OAuth and profile toolkit assignment."
+description: "Let your agents use your own SaaS accounts, such as Gmail, Slack, or GitHub."
 ---
 
-Nakama integrates with [Composio](https://composio.dev) to give agents access to external SaaS tools with managed OAuth.
+Composio lets an agent act inside apps you already use. Connect your Gmail once and the agent can read and send mail for you. The same works for Slack, GitHub, Notion, and around 200 other apps.
 
-Nakama uses the Composio SDK (`@composio/core`) with a **hybrid** model: org admins curate which toolkits are allowed; each member connects their own accounts.
+You connect your own account, and nobody else's. Your colleague connects theirs. An agent uses the account of whoever is talking to it.
 
-## API key
+## What you need first
 
-Nakama needs a **project API key** for the Composio SDK (`x-api-key`).
+- A **Composio account**. Sign up at [composio.dev](https://composio.dev), it is free to start.
+- The **org admin** role in Nakama for steps 1 to 3 and step 5 below. Any member can do step 4 for their own account.
 
-| Key | Where to find it | Used by Nakama? |
-| --- | --- | --- |
-| Project API key | [Composio dashboard](https://dashboard.composio.dev) → **Settings** → **Project Settings** → **API Keys** | Yes |
-| MCP consumer key (`ck_…`) | Dashboard → **AI Clients** → select client | No |
-
-See [Composio authentication docs](https://docs.composio.dev/reference/authentication) for details.
-
-The key is stored in `~/.nakama/composio/config.ini` on the Nakama server.
+You do not need to set anything up inside Composio beyond creating the account. Nakama does the rest for you.
 
 ## Setup
 
-1. As an org admin, open **Integrations → Composio** and save your Composio **project API key**.
-2. As an org admin, **enable** a toolkit for the organization.
-3. As any org member, click **Connect your account** and complete OAuth in the browser. Tools sync automatically when the callback returns.
-4. Assign the toolkit to a profile on the **Profiles** page.
+**1. Get your Composio API key.** This is the only thing you fetch from Composio, so here is the exact path:
 
-The API key is the only thing you need from the Composio dashboard. Nakama creates the auth config for a toolkit the first time someone connects it, so the Google Cloud project and consent screen setup in Composio's own docs does not apply here.
+1. Open [dashboard.composio.dev](https://dashboard.composio.dev) and sign in.
+2. Click **Settings** in the left sidebar.
+3. Open **Project Settings**.
+4. Open **API Keys**.
+5. Copy the key.
 
-The Integrations card shows whether the key is saved and whether Composio is reachable, so there is nothing to verify by hand. Do not read `GET /health` for this: it runs local checks only and always reports `composioAvailable: false`. Reachability is on `GET /v1/system/status` under `server`.
+Take the **project API key**. Composio also has an *MCP consumer key* that starts with `ck_`, found under AI Clients. That one looks like a key and does not work here, so if Nakama rejects what you pasted, this is usually why.
 
-## Tenancy model
+**2. Paste it into Nakama.** Open **Integrations**, then **Composio**, paste the key in the **Project API key** box, and press **Save**.
 
-- **Org catalog:** which SaaS toolkits are permitted (`enabled` / `disabled` per org).
-- **User connections:** each member's OAuth lives in `composio_user_connections`; Composio `user_id` is `nakama:user:{userId}`.
-- Chat uses the **chatting user's** connected accounts for assigned toolkits.
-- Org admins enable/disable toolkits and assign them to profiles. Members connect their own accounts.
+Nakama checks the key against Composio right then. A wrong key fails on the spot with the reason, so you never have to wonder whether it took. A good one turns the card's badge to connected.
 
-## Upgrades
+**3. Enable the app you want.** Still on the Composio page, search for the app, Gmail for example, and press **Enable**. This decides what your organisation is allowed to use. It does not touch anyone's account yet.
 
-If you used org-shared connections before this model, existing connected toolkits are migrated to the first org admin's user connection on database startup. Other members should connect their own accounts on Integrations.
+**4. Connect your account.** Press **Connect your account** on that app. A Composio page opens, you sign in to the app the normal way, and you land back in Nakama. The tools appear on their own, there is nothing to refresh.
 
-## Chat behavior
+**5. Give the app to an agent.** On the **Profiles** page, open the agent you want and assign the toolkit to it. An agent can only use apps that were given to it, so this is the step that makes it work in chat.
 
-- Assigned Composio toolkits are exposed to the agent as two tools — `composio__search_actions` (search the action catalog) and `composio__invoke_action` (call a specific action by slug). The agent searches first, then invokes; this keeps token overhead flat regardless of how many actions a toolkit has.
-- When the user's account is not connected, chat exposes `composio__connect_account` so the agent can generate an OAuth link and send it in the reply.
-- **Web chat:** callback URL comes from the browser automatically (`window.location.origin`).
-- **Setup wizard:** silently saves `window.location.origin` during first-time setup (no extra step shown).
-- **Settings:** org admins can view or change the public web URL under Settings.
-- **Telegram / WhatsApp / Discord / CLI:** these bridges authenticate as the local client user. Composio still uses the **earliest human org admin's** connected accounts (so OAuth completed in the web Integrations UI works on Telegram). Bridges also read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL`) and pass it on each message so new OAuth links open on a reachable host — localhost callbacks are rejected.
-- The OAuth callback (`/v1/composio/oauth/callback`) is public — Composio redirects the browser there without a Nakama login cookie. After success, close the tab and continue in chat.
-- Auth failures return `COMPOSIO_NOT_CONNECTED`; the agent should call `composio__connect_account` and share the link.
-- Automations without a user context do not resolve personal Composio tools.
-- Composio is **org-scoped**: enable toolkits and assign them to a profile in the same org your Telegram `/org` selection uses.
+That is the whole setup. Ask the agent to check your inbox and it will.
+
+## When something does not look right
+
+| What you see | What it means | What to do |
+| --- | --- | --- |
+| The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open Integrations and press Connect your account |
+| The agent never mentions the app at all | The app was enabled, but not given to this agent | Assign it to the profile on the Profiles page |
+| Composio says "not reachable" on the Integrations card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
+| On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set a public web address in Settings, then restart the channel |
+
+## Who can do what
+
+| Action | Who |
+| --- | --- |
+| Save the API key | Org admin |
+| Enable or disable an app for the organisation | Org admin |
+| Connect an account | Every member, for their own account |
+| Assign an app to an agent | Org admin |
+| Use the app in chat | Anyone chatting, using their own connected account |
+
+Disabling an app for the organisation stops it for everybody at once. Disconnecting your own account stops it for you only, and leaves your colleagues working.
+
+## How it works underneath
+
+For anyone who wants the mechanics rather than the steps.
+
+- Nakama talks to Composio through the `@composio/core` SDK, and the agent reaches the tools over an MCP session that Composio hosts.
+- The API key is stored as `api_key` in `~/.nakama/composio/config.ini` on the server.
+- Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here.
+- An agent never sees hundreds of tools at once. It gets two, `composio__search_actions` to find an action and `composio__invoke_action` to run it, so the prompt stays the same size no matter how large the toolkit is. When an account is not connected it also gets `composio__connect_account`, which produces a sign-in link the agent can paste into the reply.
+- Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Chat resolves tools against the connection of the person talking.
+- The sign-in callback (`/v1/composio/oauth/callback`) is public, because Composio redirects a browser there with no Nakama session.
+- Web chat takes the callback address from the browser. The Telegram, WhatsApp, Discord and CLI bridges cannot, so they read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL`). A loopback address is refused rather than sent to a phone that cannot open it.
+- Automations that run without a person attached do not resolve personal Composio tools.
+- Everything is scoped to one organisation. Enable the app and assign the agent in the same org your Telegram `/org` selection points at.
+- `GET /health` reports whether a key is saved, and always reports `composioAvailable: false` because it runs local checks only. Reachability is on `GET /v1/system/status`.
+
+If you connected apps before per-member connections existed, those connections move to the first org admin on startup. Everyone else connects their own account from Integrations.
 
 ## Related docs
 
-- [MCP servers](/mcp) — generic MCP integration (separate from Composio)
-- [Integrations](/integrations) — other bridge and channel settings
+- [MCP servers](/mcp), for connecting an MCP server yourself, which is separate from Composio
+- [Integrations](/integrations), for the other channels and bridges
