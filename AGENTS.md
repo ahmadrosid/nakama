@@ -180,6 +180,7 @@ This project uses **Ultracite**, a zero-config preset that enforces strict code 
 - **Format code**: `bun x ultracite fix`
 - **Check for issues**: `bun x ultracite check`
 - **Diagnose setup**: `bun x ultracite doctor`
+- **Unused files, dependencies, and exports**: `bun run knip` (CI fails on findings)
 
 Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
 

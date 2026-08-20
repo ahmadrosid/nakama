@@ -60,9 +60,10 @@ Lint and format with Biome via [Ultracite](https://www.ultracite.ai/). Config: `
 ```bash
 bun run check   # ultracite check
 bun run fix     # ultracite fix
+bun run knip    # unused files, dependencies, and exports
 ```
 
-Husky runs `bun x ultracite fix` on staged files in `.husky/pre-commit` and re-stages them. Fix issues locally before pushing; CI expects a clean check.
+Husky runs `bun x ultracite fix` on staged files in `.husky/pre-commit` and re-stages them. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
 
 ## Testing
 
