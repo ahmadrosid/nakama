@@ -58,6 +58,49 @@ export class OrgService {
     return org ? toOrganizationSummary(org) : null;
   }
 
+  async archiveOrganization(
+    orgId: string,
+    actorUserId?: string
+  ): Promise<OrganizationSummary> {
+    const org = await this.databaseAdapter.getOrganizationById(orgId);
+    if (!org || org.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const organizations = await this.databaseAdapter.listOrganizations();
+    const activeCount = organizations.filter(
+      (organization) => !organization.archivedAt
+    ).length;
+    if (activeCount <= 1) {
+      throw new NakamaApiError(
+        "Cannot archive the last remaining organization.",
+        409
+      );
+    }
+
+    if (actorUserId) {
+      const memberships =
+        await this.databaseAdapter.listUserOrganizations(actorUserId);
+      const onlyMembership =
+        memberships.length === 1 && memberships[0]?.organization.id === orgId;
+      if (onlyMembership) {
+        throw new NakamaApiError(
+          "Cannot archive the last remaining organization.",
+          409
+        );
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updated: StoredOrganizationRecord = {
+      ...org,
+      archivedAt: now,
+      updatedAt: now,
+    };
+    await this.databaseAdapter.upsertOrganization(updated);
+    return toOrganizationSummary(updated);
+  }
+
   async updateOrganization(
     orgId: string,
     request: UpdateOrganizationRequest
@@ -118,7 +161,7 @@ export class OrgService {
   > {
     const organizations = await this.databaseAdapter.listOrganizations();
     return organizations
-      .filter((org) => org.skillsCuratorEnabled)
+      .filter((org) => org.skillsCuratorEnabled && !org.archivedAt)
       .map((org) => ({
         id: org.id,
         skillsCuratorEnabled: true,
@@ -547,7 +590,7 @@ export class OrgService {
     invitedByUserId: string;
   }): Promise<OrgInviteCreatedResponse> {
     const org = await this.databaseAdapter.getOrganizationById(input.orgId);
-    if (!org) {
+    if (!org || org.archivedAt) {
       throw new NakamaApiError("Not found", 404);
     }
 
@@ -628,6 +671,13 @@ export class OrgService {
     }
 
     assertInviteUsable(invite);
+
+    const inviteOrg = await this.databaseAdapter.getOrganizationById(
+      invite.orgId
+    );
+    if (!inviteOrg || inviteOrg.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
 
     const password = request.password?.trim();
     if (!password) {
@@ -867,6 +917,7 @@ function toOrganizationSummary(
   record: StoredOrganizationRecord
 ): OrganizationSummary {
   return {
+    archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
     id: record.id,
     name: record.name,
