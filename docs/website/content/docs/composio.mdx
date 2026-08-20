@@ -54,7 +54,7 @@ That is the whole setup. Ask the agent to check your inbox and it will.
 
 | What you see | What it means | What to do |
 | --- | --- | --- |
-| The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open Integrations and press Connect your account |
+| The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open Integrations and press Connect |
 | The agent never mentions the app at all | The app was enabled, but not given to this agent | Press the profiles button on the app's row and tick that agent |
 | Composio says "not reachable" on the Integrations card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
 | On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set a public web address in Settings, then restart the channel |
@@ -80,7 +80,7 @@ For anyone who wants the mechanics rather than the steps.
 - The API key is stored as `api_key` in `~/.nakama/composio/config.ini` on the server.
 - Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here.
 - An agent never sees hundreds of tools at once. It gets two, `composio__search_actions` to find an action and `composio__invoke_action` to run it, so the prompt stays the same size no matter how large the toolkit is. When an account is not connected it also gets `composio__connect_account`, which produces a sign-in link the agent can paste into the reply.
-- Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Chat resolves tools against the connection of the person talking.
+- Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Web chat resolves tools against the connection of the person talking. On Telegram, WhatsApp, Discord, and CLI, it uses the connection of the earliest org admin.
 - The sign-in callback (`/v1/composio/oauth/callback`) is public, because Composio redirects a browser there with no Nakama session.
 - Web chat takes the callback address from the browser. The Telegram, WhatsApp, Discord and CLI bridges cannot, so they read `web_public_url` from `~/.nakama/config.ini` (or `NAKAMA_WEB_PUBLIC_URL`). A loopback address is refused rather than sent to a phone that cannot open it.
 - Automations that run without a person attached do not resolve personal Composio tools.
