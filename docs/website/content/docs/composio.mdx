@@ -10,7 +10,7 @@ You connect your own account, and nobody else's. Your colleague connects theirs.
 ## What you need first
 
 - A **Composio account**. Sign up at [composio.dev](https://composio.dev), it is free to start.
-- The **org admin** role in Nakama for steps 1 to 3 and step 5 below. Any member can do step 4 for their own account.
+- The **org admin** role in Nakama for steps 1, 2, 3 and 5 below. Any member can do step 4 for their own account.
 
 You do not need to set anything up inside Composio beyond creating the account. Nakama does the rest for you.
 
@@ -28,13 +28,25 @@ Take the **project API key**. Composio also has an *MCP consumer key* that start
 
 **2. Paste it into Nakama.** Open **Integrations**, then **Composio**, paste the key in the **Project API key** box, and press **Save**.
 
-Nakama checks the key against Composio right then. A wrong key fails on the spot with the reason, so you never have to wonder whether it took. A good one turns the card's badge to connected.
+![The Composio page in Nakama before a key is saved, with the Project API key box and a link to the dashboard](/screenshots/composio-api-key.png)
 
-**3. Enable the app you want.** Still on the Composio page, search for the app, Gmail for example, and press **Enable**. This decides what your organisation is allowed to use. It does not touch anyone's account yet.
+Nakama checks the key against Composio right then. A wrong key fails on the spot with the reason, so you never have to wonder whether it took. A good one turns the badge in the corner to connected.
 
-**4. Connect your account.** Press **Connect your account** on that app. A Composio page opens, you sign in to the app the normal way, and you land back in Nakama. The tools appear on their own, there is nothing to refresh.
+**3. Enable the app you want.** Still on the Composio page, find the app and press **Enable**. This decides what your organisation is allowed to use. It does not touch anyone's account yet.
 
-**5. Give the app to an agent.** On the **Profiles** page, open the agent you want and assign the toolkit to it. An agent can only use apps that were given to it, so this is the step that makes it work in chat.
+The list opens on the apps teams ask for most. If yours is not there, search for it, or press **Show all 200 apps**.
+
+![The SaaS toolkits list showing Gmail enabled and the popular apps below it](/screenshots/composio-toolkit-list.png)
+
+**4. Connect your account.** Press **Connect** on that app. A Composio page opens, you sign in to the app the normal way, and you land back in Nakama. The tools appear on their own, there is nothing to refresh.
+
+![A Gmail row enabled for the org and not yet connected, with the Connect button](/screenshots/composio-connect.png)
+
+**5. Give the app to an agent.** Enabling already gave it to your default agent, so there is nothing to do unless you want another one. Press the **profiles** button on the app's row and tick whichever agents should have it.
+
+![The profile picker listing Default Bot as able to use the toolkit and Super Bot as not assigned](/screenshots/composio-profiles.png)
+
+An agent can only use apps that were given to it, which is what makes it work in chat.
 
 That is the whole setup. Ask the agent to check your inbox and it will.
 
@@ -43,7 +55,7 @@ That is the whole setup. Ask the agent to check your inbox and it will.
 | What you see | What it means | What to do |
 | --- | --- | --- |
 | The agent says it cannot reach your account | You are signed in to Nakama as someone who has not connected that app yet | Open Integrations and press Connect your account |
-| The agent never mentions the app at all | The app was enabled, but not given to this agent | Assign it to the profile on the Profiles page |
+| The agent never mentions the app at all | The app was enabled, but not given to this agent | Press the profiles button on the app's row and tick that agent |
 | Composio says "not reachable" on the Integrations card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
 | On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set a public web address in Settings, then restart the channel |
 
@@ -55,6 +67,7 @@ That is the whole setup. Ask the agent to check your inbox and it will.
 | Enable or disable an app for the organisation | Org admin |
 | Connect an account | Every member, for their own account |
 | Assign an app to an agent | Org admin |
+| See the full catalog rather than the popular apps | Org admin, via Show all apps |
 | Use the app in chat | Anyone chatting, using their own connected account |
 
 Disabling an app for the organisation stops it for everybody at once. Disconnecting your own account stops it for you only, and leaves your colleagues working.
