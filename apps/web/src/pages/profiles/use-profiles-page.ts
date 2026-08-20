@@ -712,6 +712,7 @@ export function useProfilesPage() {
         profileId: selectedId,
         serverId,
       });
+      setMcpCreateOpen(false);
     } catch (err) {
       setError(formatError(err));
     }

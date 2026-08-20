@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 export function McpServerDialogForm({
   idPrefix,
   isEdit,
+  nameAutoFocus = true,
   transport,
   name,
   url,
@@ -40,6 +41,7 @@ export function McpServerDialogForm({
 }: {
   idPrefix: string;
   isEdit: boolean;
+  nameAutoFocus?: boolean;
   transport: McpTransport;
   name: string;
   url: string;
@@ -126,7 +128,7 @@ export function McpServerDialogForm({
 
       <McpFormField htmlFor={`${idPrefix}-name`} label="Name">
         <Input
-          autoFocus
+          autoFocus={nameAutoFocus}
           disabled={formDisabled}
           id={`${idPrefix}-name`}
           onChange={(event) => onNameChange(event.target.value)}
