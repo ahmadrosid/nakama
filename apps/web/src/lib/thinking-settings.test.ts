@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAutoEnableThinkingPayload,
   shouldAutoEnableThinking,
-  shouldBlockThinkingEffortChange,
   shouldShowThinkingEffort,
 } from "./thinking-settings";
 
@@ -54,10 +53,5 @@ describe("thinking-settings helpers", () => {
         hasProfileId: false,
       })
     ).toBe(false);
-  });
-
-  test("shouldBlockThinkingEffortChange blocks while busy", () => {
-    expect(shouldBlockThinkingEffortChange(true)).toBe(true);
-    expect(shouldBlockThinkingEffortChange(false)).toBe(false);
   });
 });

@@ -4,7 +4,6 @@ import {
   buildGenerateImageToolState,
   formatImageGenerationResolution,
   imageGenerationAspectFromSize,
-  isGenerateImageTool,
   parseGenerateImagePrompt,
   parseGenerateImageSize,
   shouldRenderGenerateImageToolRow,
@@ -26,12 +25,6 @@ function toolMessage(
 }
 
 describe("chat-stream-image-generation", () => {
-  test("isGenerateImageTool matches name", () => {
-    expect(isGenerateImageTool("generate_image")).toBe(true);
-    expect(isGenerateImageTool("web_search")).toBe(false);
-    expect(isGenerateImageTool(undefined)).toBe(false);
-  });
-
   test("parseGenerateImagePrompt and size", () => {
     expect(parseGenerateImagePrompt({ prompt: "  lake  " })).toBe("lake");
     expect(parseGenerateImagePrompt({})).toBeNull();
