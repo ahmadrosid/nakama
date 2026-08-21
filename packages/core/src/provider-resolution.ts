@@ -16,6 +16,8 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openai_compatible",
   "opencode_go",
   "cloudflare",
+  "minimax",
+  "minimax_cn",
 ] as const;
 
 export function parseProviderName(
@@ -34,7 +36,9 @@ export function parseProviderName(
     normalized === "ollama" ||
     normalized === "openai_compatible" ||
     normalized === "opencode_go" ||
-    normalized === "cloudflare"
+    normalized === "cloudflare" ||
+    normalized === "minimax" ||
+    normalized === "minimax_cn"
   ) {
     return normalized;
   }
@@ -68,6 +72,10 @@ export function apiKeyEnvVarForProvider(
       return "OPENCODE_GO_API_KEY";
     case "cloudflare":
       return "CLOUDFLARE_API_KEY";
+    case "minimax":
+      return "MINIMAX_API_KEY";
+    case "minimax_cn":
+      return "MINIMAX_CN_API_KEY";
   }
 }
 

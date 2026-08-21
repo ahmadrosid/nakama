@@ -142,9 +142,40 @@ describe("resolveModel", () => {
       "accounts/fireworks/models/glm-5p2"
     );
   });
+
+  test("resolves MiniMax models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "MiniMax-M3" },
+      { id: "MiniMax-M2.7" },
+      { id: "MiniMax-M2.5" },
+    ];
+
+    expect(resolveModel("minimax", "MiniMax-M2.7", customModels)).toBe(
+      "MiniMax-M2.7"
+    );
+    expect(getDefaultModel("minimax", customModels)).toBe("MiniMax-M3");
+    expect(getDefaultModel("minimax_cn", customModels)).toBe("MiniMax-M3");
+  });
+
+  test("falls back to instance default for unknown MiniMax ids", () => {
+    const customModels = [{ default: true, id: "MiniMax-M3" }];
+    expect(resolveModel("minimax_cn", "not-a-real-model", customModels)).toBe(
+      "MiniMax-M3"
+    );
+  });
 });
 
 describe("modelSupportsVision", () => {
+  test("keeps MiniMax models opt-in only (discovered lists)", () => {
+    expect(modelSupportsVision("MiniMax-M3", "minimax")).toBe(false);
+
+    expect(
+      modelSupportsVision("MiniMax-VL", "minimax_cn", [
+        { id: "MiniMax-VL", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
   test("treats openai-compatible models as opt-in only", () => {
     expect(
       modelSupportsVision("qwen-vl", "openai_compatible", [{ id: "qwen-vl" }])

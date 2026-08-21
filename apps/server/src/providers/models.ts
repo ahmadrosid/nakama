@@ -526,7 +526,13 @@ export function getDefaultModel(
   provider: ProviderName,
   customModels?: CustomModelEntry[]
 ): string {
-  if (provider === "openai_compatible") {
+  if (
+    provider === "openai_compatible" ||
+    provider === "minimax" ||
+    provider === "minimax_cn"
+  ) {
+    // MiniMax model lists are fetched live from the platform (/models) and
+    // stored as instance custom models — no hardcoded catalog.
     return resolveCompatibleDefaultModel(customModels);
   }
 
@@ -579,10 +585,6 @@ export function getDefaultModel(
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
-export function isValidModel(model: string): boolean {
-  return AVAILABLE_MODELS.some((option) => option.id === model);
-}
-
 export function resolveModel(
   provider: ProviderName,
   model?: string,
@@ -626,7 +628,15 @@ export function resolveModel(
     return resolveCompatibleDefaultModel(customModels, trimmed);
   }
 
-  if (trimmed && provider === "openai_compatible") {
+  if (
+    trimmed &&
+    (provider === "openai_compatible" ||
+      provider === "minimax" ||
+      provider === "minimax_cn")
+  ) {
+    // Dynamic catalog: accept ids discovered from the platform's /models
+    // endpoint (stored as instance custom models); otherwise resolve the
+    // instance default.
     if (findCustomModel(customModels, trimmed)) {
       return trimmed;
     }
@@ -652,12 +662,13 @@ export function resolveModel(
     return resolveCompatibleDefaultModel(customModels, trimmed);
   }
 
-  if (trimmed && isValidModel(trimmed)) {
-    const option = getModelById(trimmed);
-
-    if (option?.provider === provider) {
-      return trimmed;
-    }
+  // Provider-scoped check: region variants (e.g. minimax vs minimax_cn) may
+  // expose identical model ids, so global id uniqueness must not be assumed.
+  if (
+    trimmed &&
+    getModelsForProvider(provider).some((model) => model.id === trimmed)
+  ) {
+    return trimmed;
   }
 
   if (
@@ -687,7 +698,9 @@ export function modelSupportsVision(
   if (
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
-    provider === "deepseek"
+    provider === "deepseek" ||
+    provider === "minimax" ||
+    provider === "minimax_cn"
   ) {
     return false;
   }

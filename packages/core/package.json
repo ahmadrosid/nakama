@@ -22,6 +22,7 @@
     "./image-content": "./src/image-content.ts",
     "./normalize-task-prompt": "./src/normalize-task-prompt.ts",
     "./cloudflare-provider-config": "./src/cloudflare-provider-config.ts",
+    "./minimax-provider-config": "./src/minimax-provider-config.ts",
     "./ollama-provider-config": "./src/ollama-provider-config.ts",
     "./provider-inference": "./src/provider-inference.ts",
     "./provider-label": "./src/provider-label.ts",

@@ -74,6 +74,8 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   deepseek: "DeepSeek",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  minimax: "MiniMax",
+  minimax_cn: "MiniMax (CN)",
   ollama: "Ollama",
   openai: "OpenAI",
   openai_compatible: "Custom",

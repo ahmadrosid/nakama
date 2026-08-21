@@ -1938,7 +1938,9 @@ export type ProviderName =
   | "ollama"
   | "openai_compatible"
   | "opencode_go"
-  | "cloudflare";
+  | "cloudflare"
+  | "minimax"
+  | "minimax_cn";
 
 export type OllamaHostMode = "local" | "cloud";
 

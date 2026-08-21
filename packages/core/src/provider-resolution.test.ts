@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { parseProviderName, resolveProvider } from "./provider-resolution";
+import {
+  apiKeyEnvVarForProvider,
+  parseProviderName,
+  resolveProvider,
+} from "./provider-resolution";
 
 describe("parseProviderName", () => {
   test("accepts known providers", () => {
@@ -11,6 +15,8 @@ describe("parseProviderName", () => {
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("cerebras")).toBe("cerebras");
     expect(parseProviderName("fireworks")).toBe("fireworks");
+    expect(parseProviderName("minimax")).toBe("minimax");
+    expect(parseProviderName("minimax_cn")).toBe("minimax_cn");
   });
 
   test("rejects unknown values", () => {
@@ -100,5 +106,12 @@ describe("resolveProvider fireworks", () => {
     });
 
     expect(provider).toBe("fireworks");
+  });
+});
+
+describe("apiKeyEnvVarForProvider", () => {
+  test("maps MiniMax regions to distinct env keys", () => {
+    expect(apiKeyEnvVarForProvider("minimax")).toBe("MINIMAX_API_KEY");
+    expect(apiKeyEnvVarForProvider("minimax_cn")).toBe("MINIMAX_CN_API_KEY");
   });
 });

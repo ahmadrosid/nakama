@@ -8,6 +8,10 @@ import {
   readEnvValue,
   type UserConfig,
 } from "@nakama/core";
+import {
+  MINIMAX_CN_DEFAULT_BASE_URL,
+  MINIMAX_DEFAULT_BASE_URL,
+} from "@nakama/core/minimax-provider-config";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { createCerebrasProvider } from "./cerebras";
@@ -72,6 +76,20 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
         model,
         providerName: "deepseek",
+      });
+    case "minimax":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? MINIMAX_DEFAULT_BASE_URL,
+        model,
+        providerName: "minimax",
+      });
+    case "minimax_cn":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? MINIMAX_CN_DEFAULT_BASE_URL,
+        model,
+        providerName: "minimax_cn",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({
