@@ -1942,6 +1942,8 @@ export type ProviderName =
   | "cloudflare"
   | "minimax"
   | "minimax_cn"
+  | "zhipu"
+  | "zhipu_cn"
   | "xai";
 
 export type OllamaHostMode = "local" | "cloud";

@@ -163,6 +163,25 @@ describe("resolveModel", () => {
       "MiniMax-M3"
     );
   });
+
+  test("resolves Zhipu GLM models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "glm-5.2" },
+      { id: "glm-5.1" },
+      { id: "glm-4v" },
+    ];
+
+    expect(resolveModel("zhipu", "glm-5.1", customModels)).toBe("glm-5.1");
+    expect(getDefaultModel("zhipu", customModels)).toBe("glm-5.2");
+    expect(getDefaultModel("zhipu_cn", customModels)).toBe("glm-5.2");
+  });
+
+  test("falls back to instance default for unknown Zhipu ids", () => {
+    const customModels = [{ default: true, id: "glm-5.2" }];
+    expect(resolveModel("zhipu_cn", "not-a-real-model", customModels)).toBe(
+      "glm-5.2"
+    );
+  });
 });
 
 describe("modelSupportsVision", () => {
@@ -172,6 +191,16 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("MiniMax-VL", "minimax_cn", [
         { id: "MiniMax-VL", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
+  test("keeps Zhipu models opt-in only (GLM-4V flags via discovery)", () => {
+    expect(modelSupportsVision("glm-5.2", "zhipu")).toBe(false);
+
+    expect(
+      modelSupportsVision("glm-4v", "zhipu_cn", [
+        { id: "glm-4v", supportsVision: true },
       ])
     ).toBe(true);
   });

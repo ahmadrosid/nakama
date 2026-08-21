@@ -1,10 +1,5 @@
 import { join } from "node:path";
-import {
-  pathExists,
-  readTextOrNull,
-  removeFile,
-  writeTextFile,
-} from "./fs";
+import { pathExists, readTextOrNull, removeFile, writeTextFile } from "./fs";
 
 const DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS = 45_000;
 const HEARTBEAT_FILENAME = "worker-heartbeat.json";

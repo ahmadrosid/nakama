@@ -8,10 +8,7 @@ import {
   readEnvValue,
   type UserConfig,
 } from "@nakama/core";
-import {
-  MINIMAX_CN_DEFAULT_BASE_URL,
-  MINIMAX_DEFAULT_BASE_URL,
-} from "@nakama/core/minimax-provider-config";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { createCerebrasProvider } from "./cerebras";
@@ -44,6 +41,8 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
   );
 
   const baseUrlOverride = options.instance?.baseUrl?.trim();
+  const discoveryBaseUrl =
+    defaultDiscoveryBaseUrl(options.provider) ?? undefined;
 
   switch (options.provider) {
     case "openai":
@@ -81,14 +80,14 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "minimax":
       return createOpenAIProvider({
         apiKey: options.apiKey,
-        baseUrl: baseUrlOverride ?? MINIMAX_DEFAULT_BASE_URL,
+        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
         model,
         providerName: "minimax",
       });
     case "minimax_cn":
       return createOpenAIProvider({
         apiKey: options.apiKey,
-        baseUrl: baseUrlOverride ?? MINIMAX_CN_DEFAULT_BASE_URL,
+        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
         model,
         providerName: "minimax_cn",
       });
@@ -98,6 +97,20 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_XAI_BASE_URL,
         model,
         providerName: "xai",
+      });
+    case "zhipu":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
+        model,
+        providerName: "zhipu",
+      });
+    case "zhipu_cn":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
+        model,
+        providerName: "zhipu_cn",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({

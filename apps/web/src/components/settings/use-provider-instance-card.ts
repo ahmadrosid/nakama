@@ -3,8 +3,10 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
-import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
-import { defaultMinimaxBaseUrl } from "@nakama/core/minimax-provider-config";
+import {
+  defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
+} from "@nakama/core/discovery-providers";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import type { ModelListRow } from "@/components/ModelListEditor";
@@ -110,7 +112,7 @@ export function useProviderInstanceCard({
         (isOllama
           ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local")
           : isDiscovery
-            ? (defaultMinimaxBaseUrl(providerType) ?? "")
+            ? (defaultDiscoveryBaseUrl(providerType) ?? "")
             : "")
     );
     setManageModels(seedManageModelRows(instance.customModels, instanceModels));
