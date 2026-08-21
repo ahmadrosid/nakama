@@ -18,6 +18,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("fireworks")).toBe("fireworks");
     expect(parseProviderName("minimax")).toBe("minimax");
     expect(parseProviderName("minimax_cn")).toBe("minimax_cn");
+    expect(parseProviderName("xai")).toBe("xai");
   });
 
   test("rejects unknown values", () => {
@@ -115,6 +116,10 @@ describe("apiKeyEnvVarForProvider", () => {
     expect(apiKeyEnvVarForProvider("minimax")).toBe("MINIMAX_API_KEY");
     expect(apiKeyEnvVarForProvider("minimax_cn")).toBe("MINIMAX_CN_API_KEY");
   });
+
+  test("maps xAI to its env key", () => {
+    expect(apiKeyEnvVarForProvider("xai")).toBe("XAI_API_KEY");
+  });
 });
 
 describe("isDiscoveryModelProvider", () => {
@@ -122,6 +127,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("openai_compatible")).toBe(true);
     expect(isDiscoveryModelProvider("minimax")).toBe(true);
     expect(isDiscoveryModelProvider("minimax_cn")).toBe(true);
+    expect(isDiscoveryModelProvider("xai")).toBe(true);
   });
 
   test("excludes catalog providers", () => {

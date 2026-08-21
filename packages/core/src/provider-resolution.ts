@@ -18,6 +18,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "cloudflare",
   "minimax",
   "minimax_cn",
+  "xai",
 ] as const;
 
 export {
@@ -43,7 +44,8 @@ export function parseProviderName(
     normalized === "opencode_go" ||
     normalized === "cloudflare" ||
     normalized === "minimax" ||
-    normalized === "minimax_cn"
+    normalized === "minimax_cn" ||
+    normalized === "xai"
   ) {
     return normalized;
   }
@@ -81,6 +83,8 @@ export function apiKeyEnvVarForProvider(
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "xai":
+      return "XAI_API_KEY";
   }
 }
 

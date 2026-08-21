@@ -5,7 +5,7 @@ import type { ProviderName } from "./contract";
 // hardcoded catalog. Adding a discovery-based provider is one entry here
 // plus its type/env-key/label/base-URL wiring — no resolution edits.
 export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
-  new Set<ProviderName>(["openai_compatible", "minimax", "minimax_cn"]);
+  new Set<ProviderName>(["openai_compatible", "minimax", "minimax_cn", "xai"]);
 
 export function isDiscoveryModelProvider(provider: ProviderName): boolean {
   return DISCOVERY_MODEL_PROVIDERS.has(provider);

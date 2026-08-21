@@ -16,6 +16,7 @@ const BUILTIN_LABELS: Record<
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  xai: "xAI Grok",
 };
 
 export function formatConfiguredProviderLabel(

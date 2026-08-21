@@ -157,6 +157,18 @@ describe("resolveModel", () => {
     expect(getDefaultModel("minimax_cn", customModels)).toBe("MiniMax-M3");
   });
 
+  test("resolves xAI Grok models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "grok-4" },
+      { id: "grok-4-fast" },
+    ];
+
+    expect(resolveModel("xai", "grok-4-fast", customModels)).toBe(
+      "grok-4-fast"
+    );
+    expect(getDefaultModel("xai", customModels)).toBe("grok-4");
+  });
+
   test("falls back to instance default for unknown MiniMax ids", () => {
     const customModels = [{ default: true, id: "MiniMax-M3" }];
     expect(resolveModel("minimax_cn", "not-a-real-model", customModels)).toBe(
@@ -172,6 +184,16 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("MiniMax-VL", "minimax_cn", [
         { id: "MiniMax-VL", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
+  test("keeps xAI models opt-in only (vision variants flag via discovery)", () => {
+    expect(modelSupportsVision("grok-4", "xai")).toBe(false);
+
+    expect(
+      modelSupportsVision("grok-4-vision", "xai", [
+        { id: "grok-4-vision", supportsVision: true },
       ])
     ).toBe(true);
   });
