@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type {
   ChatCompletionResult,
   ChatMessage,
-  CompactionConfig,
   ProviderClient,
 } from "@nakama/core";
 import {
   buildCompactionPrompt,
+  type CompactionConfig,
   compactHistory,
   estimateHistoryTokens,
   isOverflow,
