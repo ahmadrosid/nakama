@@ -426,7 +426,7 @@ The contract:
 - The child process inherits your environment plus two extras: `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) and `NAKAMA_CONFIG_DIR`.
 - Set `NAKAMA_PYTHON_BIN` before starting Nakama if your interpreter is not on `PATH` as `python3`.
 
-Parameters are declared as a JSON Schema in the tool's `handlerConfig.parameters`, the same way as JavaScript tools.
+Parameters are declared as an optional JSON Schema in the tool's `handlerConfig.parameters`. When omitted, the model sees a permissive open object and can pass any arguments.
 
 Python tools run sequentially by default and cannot opt into parallel execution, because each call spawns a new process.
 

@@ -129,22 +129,22 @@ Path bugs (tool resolves under repo instead of `~/.nakama`) → start here. Over
 | Path | Purpose |
 |---|---|
 | `~/.nakama/orgs/{orgId}/profiles/{profileId}/` | Profile workspace — `getProfileSoulDir()` |
-| `~/.nakama/tools/*.js` | Custom JS tools — `getCustomToolsDir()` |
+| `~/.nakama/tools/*.js`, `*.py` | Custom JS / Python tools — `getCustomToolsDir()` |
 
-Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS tools must use `context.workspaceRoot`, **not** `process.cwd()`.
+Always build context with `buildToolExecutionContext()` (`packages/core/src/tools/context.ts`) so `workspaceRoot` = soul dir. Custom JS tools must use `context.workspaceRoot`, **not** `process.cwd()`; custom Python tools receive it as the `NAKAMA_WORKSPACE_ROOT` env var.
 
-| | Built-in | Custom JS |
-|---|---|---|
-| Code | `packages/core/src/tools/`, `apps/server/src/tools/` | `~/.nakama/tools/*.js` |
-| Workspace | `getProfileSoulDir` inside handler | `context.workspaceRoot` |
-| Loader | builtins map | `javascript-tool-loader.ts` |
+| | Built-in | Custom JS | Custom Python |
+|---|---|---|---|
+| Code | `packages/core/src/tools/`, `apps/server/src/tools/` | `~/.nakama/tools/*.js` | `~/.nakama/tools/*.py` |
+| Workspace | `getProfileSoulDir` inside handler | `context.workspaceRoot` | `NAKAMA_WORKSPACE_ROOT` env |
+| Loader | builtins map | `javascript-tool-loader.ts` | `python-tool-loader.ts` |
 
 | Flow | Entry |
 |---|---|
 | Chat | `agent-service` → `buildChatSession()` → `buildToolExecutionContext(...)` |
 | Tool loop | `packages/agent/src/tool-loop.ts` → `executeToolCall()`; parallel batching in `packages/agent/src/chat.ts` when every call in the turn is `parallelSafe` |
 
-**Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; export `parallelSafe: true` from the module to opt in. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
+**Parallel tool calls:** Built-in read/search/fetch tools (`read_file`, `search_files`, `knowledge_base_search`, `web_search`, `web_fetch`) set `parallelSafe: true` on `ToolDefinition`. Mutating, shell, delegation, and session-state tools stay sequential. Custom JS tools default to sequential; export `parallelSafe: true` from the module to opt in. Custom Python tools cannot opt in — each call spawns a subprocess and stays sequential. When a turn mixes parallel-safe and sequential tools, the whole turn runs sequentially.
 
 | Flow | Entry |
 |---|---|

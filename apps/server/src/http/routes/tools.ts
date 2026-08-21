@@ -202,7 +202,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
           description: "Error",
         },
       },
-      summary: "Run a custom JavaScript tool in the playground",
+      summary: "Run a custom JavaScript or Python tool in the playground",
       tags: ["Tools"],
     })
   );
