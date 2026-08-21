@@ -78,18 +78,14 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         providerName: "deepseek",
       });
     case "minimax":
-      return createOpenAIProvider({
-        apiKey: options.apiKey,
-        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
-        model,
-        providerName: "minimax",
-      });
     case "minimax_cn":
+    case "zhipu":
+    case "zhipu_cn":
       return createOpenAIProvider({
         apiKey: options.apiKey,
         baseUrl: baseUrlOverride ?? discoveryBaseUrl,
         model,
-        providerName: "minimax_cn",
+        providerName: options.provider,
       });
     case "xai":
       return createOpenAIProvider({
@@ -97,20 +93,6 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_XAI_BASE_URL,
         model,
         providerName: "xai",
-      });
-    case "zhipu":
-      return createOpenAIProvider({
-        apiKey: options.apiKey,
-        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
-        model,
-        providerName: "zhipu",
-      });
-    case "zhipu_cn":
-      return createOpenAIProvider({
-        apiKey: options.apiKey,
-        baseUrl: baseUrlOverride ?? discoveryBaseUrl,
-        model,
-        providerName: "zhipu_cn",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({
