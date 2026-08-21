@@ -16,6 +16,8 @@ const BUILTIN_LABELS: Record<
   openai: "OpenAI",
   opencode_go: "OpenCode Go",
   openrouter: "OpenRouter",
+  zhipu: "GLM (Z.ai)",
+  zhipu_cn: "GLM (CN)",
 };
 
 export function formatConfiguredProviderLabel(

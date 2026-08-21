@@ -1,5 +1,4 @@
 import { readEnvValue } from "./config";
-
 import type { ProviderName } from "./contract";
 
 export type UserProviderName = ProviderName;
@@ -18,10 +17,13 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "cloudflare",
   "minimax",
   "minimax_cn",
+  "zhipu",
+  "zhipu_cn",
 ] as const;
 
 export {
   DISCOVERY_MODEL_PROVIDERS,
+  defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "./discovery-providers";
 
@@ -43,7 +45,9 @@ export function parseProviderName(
     normalized === "opencode_go" ||
     normalized === "cloudflare" ||
     normalized === "minimax" ||
-    normalized === "minimax_cn"
+    normalized === "minimax_cn" ||
+    normalized === "zhipu" ||
+    normalized === "zhipu_cn"
   ) {
     return normalized;
   }
@@ -81,6 +85,10 @@ export function apiKeyEnvVarForProvider(
       return "MINIMAX_API_KEY";
     case "minimax_cn":
       return "MINIMAX_CN_API_KEY";
+    case "zhipu":
+      return "ZHIPU_API_KEY";
+    case "zhipu_cn":
+      return "ZHIPU_CN_API_KEY";
   }
 }
 
