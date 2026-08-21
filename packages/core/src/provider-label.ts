@@ -10,6 +10,7 @@ const BUILTIN_LABELS: Record<
   deepseek: "DeepSeek",
   fireworks: "Fireworks",
   gemini: "Gemini",
+  groq: "Groq",
   minimax: "MiniMax",
   minimax_cn: "MiniMax (CN)",
   ollama: "Ollama",

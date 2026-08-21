@@ -34,6 +34,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "groq", label: "Groq" },
   { id: "cerebras", label: "Cerebras" },
   { id: "cloudflare", label: "Cloudflare Worker AI" },
   { id: "fireworks", label: "Fireworks" },
@@ -183,7 +184,8 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "openai_compatible" ||
     normalized === "opencode_go" ||
     normalized === "minimax" ||
-    normalized === "minimax_cn"
+    normalized === "minimax_cn" ||
+    normalized === "groq"
   ) {
     return normalized;
   }

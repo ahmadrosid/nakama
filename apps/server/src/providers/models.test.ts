@@ -157,6 +157,18 @@ describe("resolveModel", () => {
     expect(getDefaultModel("minimax_cn", customModels)).toBe("MiniMax-M3");
   });
 
+  test("resolves Groq models from discovered custom models", () => {
+    const customModels = [
+      { default: true, id: "llama-3.3-70b" },
+      { id: "qwen-2.5-coder-32b" },
+    ];
+
+    expect(resolveModel("groq", "qwen-2.5-coder-32b", customModels)).toBe(
+      "qwen-2.5-coder-32b"
+    );
+    expect(getDefaultModel("groq", customModels)).toBe("llama-3.3-70b");
+  });
+
   test("falls back to instance default for unknown MiniMax ids", () => {
     const customModels = [{ default: true, id: "MiniMax-M3" }];
     expect(resolveModel("minimax_cn", "not-a-real-model", customModels)).toBe(
@@ -172,6 +184,16 @@ describe("modelSupportsVision", () => {
     expect(
       modelSupportsVision("MiniMax-VL", "minimax_cn", [
         { id: "MiniMax-VL", supportsVision: true },
+      ])
+    ).toBe(true);
+  });
+
+  test("keeps Groq models opt-in only (vision variants flag via discovery)", () => {
+    expect(modelSupportsVision("llama-3.3-70b", "groq")).toBe(false);
+
+    expect(
+      modelSupportsVision("llama-scout-vision", "groq", [
+        { id: "llama-scout-vision", supportsVision: true },
       ])
     ).toBe(true);
   });

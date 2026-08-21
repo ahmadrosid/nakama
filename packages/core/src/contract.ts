@@ -1941,7 +1941,8 @@ export type ProviderName =
   | "opencode_go"
   | "cloudflare"
   | "minimax"
-  | "minimax_cn";
+  | "minimax_cn"
+  | "groq";
 
 export type OllamaHostMode = "local" | "cloud";
 

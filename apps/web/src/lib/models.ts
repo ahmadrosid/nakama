@@ -60,7 +60,8 @@ export function formatProviderLabel(
     provider === "openai_compatible" ||
     provider === "opencode_go" ||
     provider === "minimax" ||
-    provider === "minimax_cn"
+    provider === "minimax_cn" ||
+    provider === "groq"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -81,6 +82,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "ollama", label: "Ollama" },
     { id: "opencode_go", label: "OpenCode Go" },
     { id: "minimax", label: "MiniMax" },
+    { id: "groq", label: "Groq" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
     { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
   ];

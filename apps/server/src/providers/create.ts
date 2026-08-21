@@ -27,6 +27,7 @@ import { createOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider } from "./openrouter";
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 export interface CreateProviderOptions {
   apiKey: string;
@@ -90,6 +91,13 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? MINIMAX_CN_DEFAULT_BASE_URL,
         model,
         providerName: "minimax_cn",
+      });
+    case "groq":
+      return createOpenAIProvider({
+        apiKey: options.apiKey,
+        baseUrl: baseUrlOverride ?? DEFAULT_GROQ_BASE_URL,
+        model,
+        providerName: "groq",
       });
     case "opencode_go":
       return createOpenCodeGoProvider({
