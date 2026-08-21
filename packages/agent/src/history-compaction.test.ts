@@ -132,6 +132,39 @@ describe("history compaction", () => {
     );
   });
 
+  test("does not truncate when reclaimed tokens do not clear the minimum fraction", () => {
+    // usable = 200k (protect = 100k, minimum = 20k). Walking newest→oldest,
+    // the 95k-token result stays under protect and the 20k-token one crosses
+    // it, but the reclaim equals the minimum, so nothing may be rewritten.
+    const messages: ChatMessage[] = [
+      { content: "turn 1", role: "user" },
+      createToolMessage(repeat("a", 80_000)),
+      { content: "done 1", role: "assistant" },
+      { content: "turn 2", role: "user" },
+      createToolMessage(repeat("b", 380_000)),
+      { content: "done 2", role: "assistant" },
+      { content: "turn 3", role: "user" },
+      createToolMessage(repeat("c", 4000)),
+      { content: "done 3", role: "assistant" },
+      { content: "turn 4", role: "user" },
+      { content: "done 4", role: "assistant" },
+    ];
+    const window: CompactionConfig = {
+      contextWindow: 208_192,
+      maxOutputTokens: 8192,
+    };
+
+    const result = pruneToolOutputs(messages, window);
+
+    expect(result.prunedTokens).toBe(0);
+    expect(messages[1]?.role === "tool" && messages[1].content).toBe(
+      repeat("a", 80_000)
+    );
+    expect(messages[4]?.role === "tool" && messages[4].content).toBe(
+      repeat("b", 380_000)
+    );
+  });
+
   test("does not prune when usable tokens are non-positive", () => {
     const degenerate: CompactionConfig = {
       contextWindow: 4096,
