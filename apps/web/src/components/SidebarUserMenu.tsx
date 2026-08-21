@@ -170,7 +170,15 @@ export function SidebarUserMenu() {
         email={user.email}
         name={user.name ?? ""}
         onOpenChange={setProfileOpen}
-        onSaved={() => void refreshSession()}
+        onSaved={({ passwordChanged }) => {
+          if (passwordChanged) {
+            // Server revoked all sessions and cleared cookies; drop local auth
+            // so AuthGuard sends the user to login with the new password.
+            void logout();
+            return;
+          }
+          void refreshSession();
+        }}
         open={profileOpen}
         phone={user.phone ?? ""}
       />
@@ -197,7 +205,7 @@ function UserProfileDialog({
   email: string;
   name: string;
   phone: string;
-  onSaved: () => void;
+  onSaved: (result: { passwordChanged: boolean }) => void;
 }) {
   const [formName, setFormName] = useState(name);
   const [formEmail, setFormEmail] = useState(email);
@@ -258,9 +266,12 @@ function UserProfileDialog({
           currentPassword,
           newPassword,
         });
+        onOpenChange(false);
+        onSaved({ passwordChanged: true });
+        return;
       }
 
-      onSaved();
+      onSaved({ passwordChanged: false });
       onOpenChange(false);
     } catch (err) {
       setError(formatError(err));

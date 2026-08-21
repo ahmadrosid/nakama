@@ -96,7 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await client.logout();
+    try {
+      await client.logout();
+    } catch {
+      // Session may already be revoked (e.g. after password change clears
+      // cookies and revokes every browser session server-side).
+    }
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
