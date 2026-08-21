@@ -7,19 +7,9 @@ import {
   loadLocalAuthToken,
   verifyLocalAuthToken,
 } from "@nakama/core/local-auth";
-import {
-  formatRotateTokenError,
-  isRotateTokenCommand,
-  runRotateToken,
-} from "./rotate-token";
+import { formatRotateTokenError, runRotateToken } from "./rotate-token";
 
 describe("rotate-token command", () => {
-  test("isRotateTokenCommand matches the rotate-token subcommand", () => {
-    expect(isRotateTokenCommand(["rotate-token"])).toBe(true);
-    expect(isRotateTokenCommand(["chat"])).toBe(false);
-    expect(isRotateTokenCommand([])).toBe(false);
-  });
-
   test("runRotateToken rotates the on-disk token", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-rotate-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

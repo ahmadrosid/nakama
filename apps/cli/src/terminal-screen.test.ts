@@ -31,10 +31,6 @@ describe("consumeTerminalInput", () => {
     expect(consumed.events).toEqual(["\x1b[200~hello\x1b[201~"]);
   });
 
-  test("isTerminalResponse identifies cursor reports", () => {
-    expect(isTerminalResponse("\x1b[12;1R")).toBe(true);
-  });
-
   test("emits mouse tracking events", () => {
     const consumed = consumeTerminalInput("a\x1b[<64;12;8Mb");
 

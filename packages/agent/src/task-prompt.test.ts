@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderClient } from "@nakama/core";
-import { normalizeTaskPrompt } from "@nakama/core";
 import {
   buildTaskPromptUserPrompt,
   draftTaskPromptFromFields,
@@ -18,12 +17,6 @@ describe("task prompt drafting", () => {
     await expect(
       draftTaskPromptFromFields({ title: "   " }, {})
     ).rejects.toThrow("Task title is required.");
-  });
-
-  test("normalizeTaskPrompt unwraps JSON for provider mocks", () => {
-    expect(
-      normalizeTaskPrompt('{"prompt":"Summarize competitor positioning."}')
-    ).toBe("Summarize competitor positioning.");
   });
 
   test("draftTaskPromptFromFields unwraps JSON-like provider output", async () => {

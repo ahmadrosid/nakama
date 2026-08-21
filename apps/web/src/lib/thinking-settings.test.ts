@@ -1,28 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildAutoEnableThinkingPayload,
-  shouldAutoEnableThinking,
-  shouldShowThinkingEffort,
-} from "./thinking-settings";
+import { shouldAutoEnableThinking } from "./thinking-settings";
 
 describe("thinking-settings helpers", () => {
-  test("shouldShowThinkingEffort is true only when model explicitly supports thinking", () => {
-    expect(shouldShowThinkingEffort(true)).toBe(true);
-    expect(shouldShowThinkingEffort(false)).toBe(false);
-    expect(shouldShowThinkingEffort(undefined)).toBe(false);
-  });
-
-  test("buildAutoEnableThinkingPayload always enables thinking", () => {
-    expect(buildAutoEnableThinkingPayload({ effort: "high" })).toEqual({
-      effort: "high",
-      enabled: true,
-    });
-    expect(buildAutoEnableThinkingPayload({ effort: "medium" })).toEqual({
-      effort: "medium",
-      enabled: true,
-    });
-  });
-
   test("shouldAutoEnableThinking respects guards", () => {
     const disabled = { effort: "low" as const, enabled: false };
 

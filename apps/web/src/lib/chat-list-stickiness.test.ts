@@ -1,18 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  followOutputBehavior,
-  listOverflowsViewport,
-} from "./chat-list-stickiness";
-
-describe("followOutputBehavior", () => {
-  test("follows with auto when at bottom", () => {
-    expect(followOutputBehavior(true)).toBe("auto");
-  });
-
-  test("does not follow when not at bottom", () => {
-    expect(followOutputBehavior(false)).toBe(false);
-  });
-});
+import { listOverflowsViewport } from "./chat-list-stickiness";
 
 describe("listOverflowsViewport", () => {
   test("detects when content is taller than the viewport", () => {

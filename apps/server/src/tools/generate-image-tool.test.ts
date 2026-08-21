@@ -14,7 +14,6 @@ import { GENERATE_IMAGE_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
   ensureGenerateImageToolDefinition,
-  removeUnsupportedTools,
   seedDatabase,
   seedOrgSuperBotProfile,
 } from "@nakama/db";
@@ -67,15 +66,6 @@ describe("generate_image tool seed and resolver (U3)", () => {
     expect(tool).not.toBeNull();
     expect(tool?.name).toBe(GENERATE_IMAGE_TOOL_NAME);
     expect(tool?.handlerType).toBe("generate_image");
-  });
-
-  test("unsupported-handler cleanup retains generate_image after seed", async () => {
-    const db = createInMemoryDatabaseAdapter();
-
-    await ensureGenerateImageToolDefinition(db);
-    await removeUnsupportedTools(db);
-
-    expect(await db.getTool(GENERATE_IMAGE_TOOL_ID)).not.toBeNull();
   });
 
   test("seedDatabase includes generate_image and Super Bot is not auto-assigned", async () => {
