@@ -20,7 +20,35 @@ LLM_VCR_MODE=record bun test path/to/foo.llm.test.ts  # re-record (needs provide
 
 ## GitHub
 
-Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Run the gh cli command outside the sandbox so that the auth can works.
+Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL.
+
+**Always run `gh` outside the sandbox** (`required_permissions: ["all"]`). Sandbox returns `Forbidden` on `api.github.com` (auth cookies and GraphQL both fail).
+
+**Prefer REST (`gh api`) over `gh issue` / `gh pr` / `gh repo view --json`.** Those commands POST to `https://api.github.com/graphql`. From this network that hits GitHub Asia (`20.205.243.168`) and often dies with `dial tcp … i/o timeout` at ~30s. REST (`/repos/{owner}/{repo}/…`) is slower than local but completes.
+
+| Do | Instead of |
+|---|---|
+| `gh api repos/{owner}/{repo}/issues --jq '.[] \| {number,title}'` | `gh issue list` / `--json` |
+| `gh api repos/{owner}/{repo}/issues/398` | `gh issue view 398 --json …` |
+| `gh api repos/{owner}/{repo}/issues --method POST --input payload.json` | `gh issue create` |
+| `gh api repos/{owner}/{repo}/pulls` | `gh pr list --json …` |
+| `gh api repos/{owner}/{repo}/labels` | `gh label list` (GraphQL) |
+
+Create an issue by writing JSON first, then POSTing it — do not put a markdown body inside `gh issue create --body "$(cat <<'EOF'"`.
+
+```bash
+python3 -c '
+import json
+open("/tmp/gh-issue.json","w").write(json.dumps({
+  "title": "Title",
+  "labels": ["new-feature"],
+  "body": open("/tmp/gh-issue.md").read(),
+}))
+'
+gh api repos/ahmadrosid/nakama/issues --method POST --input /tmp/gh-issue.json --jq '{url: .html_url, number: .number}'
+```
+
+If you must use a GraphQL `gh` command, set the shell `block_until_ms` to at least 90s. On timeout, retry once with REST — do not keep hitting GraphQL.
 
 ## Browser automation
 
