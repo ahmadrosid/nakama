@@ -9,6 +9,7 @@ import type {
   DeleteKnowledgeBaseResponse,
   DocumentAttachment,
   ImageAttachment,
+  JsonSchema,
   ListKnowledgeBaseResponse,
   ListProfilesResponse,
   ListToolsResponse,
@@ -842,7 +843,7 @@ function readToolHandlerType(handlerType: string | undefined): CustomToolType {
 function readCustomToolHandlerConfig(
   handlerType: CustomToolType,
   handlerConfig: unknown
-): { modulePath: string } {
+): { modulePath: string; parameters?: JsonSchema } {
   const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
 
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
@@ -851,7 +852,8 @@ function readCustomToolHandlerConfig(
     );
   }
 
-  const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
+  const config = handlerConfig as Record<string, unknown>;
+  const modulePath = config.modulePath;
 
   if (
     typeof modulePath !== "string" ||
@@ -862,7 +864,23 @@ function readCustomToolHandlerConfig(
     );
   }
 
-  return { modulePath: modulePath.trim() };
+  const parameters = config.parameters;
+
+  if (
+    parameters !== undefined &&
+    (typeof parameters !== "object" ||
+      parameters === null ||
+      Array.isArray(parameters))
+  ) {
+    throw new Error(
+      "handlerConfig.parameters must be a JSON schema object when provided."
+    );
+  }
+
+  return {
+    modulePath: modulePath.trim(),
+    ...(parameters === undefined ? {} : { parameters }),
+  };
 }
 
 async function writeGeneratedSoulFiles(

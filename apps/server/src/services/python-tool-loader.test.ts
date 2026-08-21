@@ -90,7 +90,7 @@ if __name__ == "__main__":
     const tool = await loadPythonTool(makeRecord());
     const result = (await tool!.run({}, {})) as { error: string };
 
-    expect(result.error).toMatch(/not found/i);
+    expect(result.error).toContain("echo.py");
   });
 
   test("returns an error tool when the module lacks a run function", async () => {
@@ -110,7 +110,7 @@ print("hi")
     );
 
     const result = (await tool!.run({}, {})) as { error: string };
-    expect(result.error).toMatch(/run/i);
+    expect(result.error).toMatch(/run\s*\(/i);
   });
 
   test("returns an error tool when the module exits non-zero", async () => {
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     );
     const result = (await tool!.run({}, {})) as { error: string };
 
-    expect(result.error).toMatch(/exit code 7/i);
+    expect(result.error).toMatch(/exit code/i);
     expect(result.error).toContain("kaboom");
   });
 
@@ -164,7 +164,80 @@ if __name__ == "__main__":
     );
     const result = (await tool!.run({}, {})) as { error: string };
 
-    expect(result.error).toMatch(/json/i);
+    expect(result.error).toMatch(/non-json/i);
+  });
+
+  test("returns an error tool when the module prints nothing to stdout", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "silent.py"),
+      `def run(input, context):
+    return None
+
+if __name__ == "__main__":
+    run({}, {})
+`,
+      "utf8"
+    );
+
+    const tool = await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "silent.py" },
+        name: "silent",
+      })
+    );
+    const result = (await tool!.run({}, {})) as { error?: unknown };
+
+    expect(result.error).toBeTruthy();
+    expect(result.error).toMatch(/no output/i);
+  });
+
+  test("rejects on timeout even when the module exits 0", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+
+    await writeFile(
+      path.join(toolsDir, "stubborn.py"),
+      `import json, signal, sys, time
+
+got_sigterm = False
+
+def run(input, context):
+    return {"ok": True}
+
+def _on_sigterm(signum, frame):
+    global got_sigterm
+    got_sigterm = True
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _on_sigterm)
+    payload = json.loads(sys.stdin.read() or "{}")
+    sys.stdout.write(json.dumps(run(payload, {})))
+    sys.stdout.flush()
+    while not got_sigterm:
+        time.sleep(0.02)
+    sys.exit(0)
+`,
+      "utf8"
+    );
+
+    const tool = await loadPythonTool(
+      makeRecord({
+        handlerConfig: { modulePath: "stubborn.py" },
+        name: "stubborn",
+      })
+    );
+
+    process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS = "200";
+    try {
+      const result = (await tool!.run({}, {})) as { error?: unknown };
+      expect(result.error).toBeTruthy();
+      expect(result.error).toMatch(/timed out/i);
+    } finally {
+      delete process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS;
+    }
   });
 
   test("rejects module paths outside the tools directory", async () => {

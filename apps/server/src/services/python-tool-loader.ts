@@ -19,6 +19,14 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const SIGKILL_GRACE_MS = 5000;
 const MAX_OUTPUT_CHARS = 1_000_000;
 
+// Call-time env override so tests can shrink the kill timer.
+function resolveTimeoutMs(): number {
+  const configured = Number(process.env.NAKAMA_PYTHON_TOOL_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_TIMEOUT_MS;
+}
+
 export async function loadPythonTool(
   record: StoredToolRecord
 ): Promise<ToolDefinition | null> {
@@ -130,6 +138,7 @@ async function spawnAndParse(
   context: ToolContext,
   env: NodeJS.ProcessEnv
 ): Promise<unknown> {
+  const timeoutMs = resolveTimeoutMs();
   const result = await new Promise<{ stdout: string; stderr: string }>(
     (resolve, reject) => {
       // Node SIGTERMs the child when the turn is cancelled, so a stopped chat
@@ -158,7 +167,7 @@ async function spawnAndParse(
             // already exited
           }
         }, SIGKILL_GRACE_MS).unref();
-      }, DEFAULT_TIMEOUT_MS);
+      }, timeoutMs);
 
       child.stdout?.on("data", (chunk: Buffer | string) => {
         stdout = appendCapped(stdout, String(chunk));
@@ -179,17 +188,26 @@ async function spawnAndParse(
 
       child.once("close", (exitCode) => {
         clearTimeout(sigtermTimer);
+        const tail = stderr.trim() || "(no stderr)";
+
+        // A child that traps SIGTERM can still exit 0 after the deadline;
+        // the budget is spent either way, so report the timeout.
+        if (timedOut) {
+          reject(
+            new Error(
+              `Python tool timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
+            )
+          );
+          return;
+        }
 
         if (exitCode === 0) {
           resolve({ stderr, stdout });
           return;
         }
 
-        const tail = stderr.trim() || "(no stderr)";
         reject(
-          new Error(
-            `Python tool exit code ${exitCode ?? "null"}${timedOut ? " (timed out)" : ""}: ${tail}`
-          )
+          new Error(`Python tool exit code ${exitCode ?? "null"}: ${tail}`)
         );
       });
 
@@ -207,7 +225,9 @@ async function spawnAndParse(
   const trimmed = result.stdout.trim();
 
   if (!trimmed) {
-    return null;
+    throw new Error(
+      `Python tool produced no output; it must print its JSON result to stdout. stderr: ${result.stderr.trim() || "(empty)"}`
+    );
   }
 
   try {
