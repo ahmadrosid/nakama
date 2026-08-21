@@ -1,7 +1,20 @@
-import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
+import {
+  generateHandshakeCode,
+  isBotChannelUserAuthorized,
+  loadBotChannelIniConfig,
+  maskBotToken,
+  resolveHandshakeCodeOnSave,
+  verifyAndPairBotChannelUser,
+  writeBotChannelIniConfig,
+} from "./channel-config-shared";
 import { getUserConfigDir } from "./user-config";
+
+export {
+  generateHandshakeCode,
+  maskBotToken,
+  normalizeHandshakeInput,
+} from "./channel-config-shared";
 
 export const DEFAULT_TELEGRAM_PROFILE_ID = "default";
 
@@ -36,28 +49,6 @@ export function getTelegramConfigPath(): string {
   return join(getTelegramConfigDir(), "config.ini");
 }
 
-export function maskBotToken(token: string): string | null {
-  const trimmed = token.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (trimmed.length <= 8) {
-    return "••••••••";
-  }
-
-  return `${"•".repeat(Math.min(trimmed.length - 4, 12))}${trimmed.slice(-4)}`;
-}
-
-export function generateHandshakeCode(): string {
-  return randomBytes(4).toString("hex").toUpperCase();
-}
-
-export function normalizeHandshakeInput(input: string): string {
-  return input.trim().replace(/\s+/g, "").toUpperCase();
-}
-
 export function parseAllowedUserIds(raw: string): number[] {
   const ids = new Set<number>();
 
@@ -84,37 +75,15 @@ export function isTelegramUserAuthorized(
   userId: number,
   config: Pick<TelegramConfigFile, "pairedUserIds" | "allowedUserIds">
 ): boolean {
-  return (
-    config.pairedUserIds.includes(userId) ||
-    config.allowedUserIds.includes(userId)
-  );
+  return isBotChannelUserAuthorized(userId, config);
 }
 
 export async function loadTelegramConfigFile(): Promise<TelegramConfigFile | null> {
-  const raw = await readTextOrNull(getTelegramConfigPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  const values = parseIni(raw);
-  const botToken = values.bot_token?.trim() ?? "";
-  const profileId = values.profile_id?.trim() || DEFAULT_TELEGRAM_PROFILE_ID;
-  const handshakeCode = values.handshake_code?.trim() || null;
-  const pairedRaw = values.paired_user_ids?.trim() ?? "";
-  const allowlistRaw = values.allowed_user_ids?.trim() ?? "";
-
-  if (!botToken) {
-    return null;
-  }
-
-  return {
-    allowedUserIds: allowlistRaw ? parseAllowedUserIds(allowlistRaw) : [],
-    botToken,
-    handshakeCode,
-    pairedUserIds: pairedRaw ? parseAllowedUserIds(pairedRaw) : [],
-    profileId,
-  };
+  return loadBotChannelIniConfig({
+    configPath: getTelegramConfigPath(),
+    defaultProfileId: DEFAULT_TELEGRAM_PROFILE_ID,
+    parseUserIds: parseAllowedUserIds,
+  });
 }
 
 export function toTelegramSettingsPublic(
@@ -148,22 +117,11 @@ export async function loadTelegramSettingsPublic(): Promise<TelegramSettingsPubl
 async function writeTelegramConfigFile(
   config: TelegramConfigFile
 ): Promise<void> {
-  const lines = [
-    "# Nakama Telegram bridge",
-    `bot_token=${config.botToken}`,
-    `profile_id=${config.profileId}`,
-    ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
-    ...(config.pairedUserIds.length > 0
-      ? [`paired_user_ids=${config.pairedUserIds.join(",")}`]
-      : []),
-    ...(config.allowedUserIds.length > 0
-      ? [`allowed_user_ids=${config.allowedUserIds.join(",")}`]
-      : []),
-    "",
-  ];
-
-  await writePrivateTextFile(getTelegramConfigPath(), lines.join("\n"), {
-    ensureDir: getTelegramConfigDir(),
+  await writeBotChannelIniConfig({
+    config,
+    configDir: getTelegramConfigDir(),
+    configPath: getTelegramConfigPath(),
+    label: "Telegram",
   });
 }
 
@@ -199,20 +157,6 @@ function resolveAllowedUserIdsInput(
   return raw ? parseAllowedUserIds(raw) : [];
 }
 
-function resolveHandshakeCode(
-  existing: TelegramConfigFile | null,
-  allowedUserIds: number[]
-): string | null {
-  const pairedUserIds = existing?.pairedUserIds ?? [];
-  const handshakeCode = existing?.handshakeCode ?? null;
-
-  if (pairedUserIds.length > 0 || allowedUserIds.length > 0 || handshakeCode) {
-    return handshakeCode;
-  }
-
-  return generateHandshakeCode();
-}
-
 function buildSavedTelegramConfig(
   input: UpdateTelegramSettingsInput,
   existing: TelegramConfigFile | null
@@ -228,7 +172,7 @@ function buildSavedTelegramConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCode(existing, allowedUserIds),
+    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
     pairedUserIds: existing?.pairedUserIds ?? [],
     profileId: resolveTelegramProfileId(input, existing),
   };
@@ -263,52 +207,14 @@ export async function verifyAndPairTelegramUser(
   handshakeInput: string,
   userId: number
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
-  const config = await loadTelegramConfigFile();
-
-  if (!config) {
-    return {
-      message: "Telegram is not configured on the server yet.",
-      ok: false,
-    };
-  }
-
-  if (isTelegramUserAuthorized(userId, config)) {
-    return { message: "This chat is already linked.", ok: true };
-  }
-
-  const expected = config.handshakeCode;
-
-  if (!expected) {
-    return {
-      message:
-        "No pairing code is active. Open Nakama Integrations → Telegram and generate a new code.",
-      ok: false,
-    };
-  }
-
-  if (
-    normalizeHandshakeInput(handshakeInput) !==
-    normalizeHandshakeInput(expected)
-  ) {
-    return {
-      message:
-        "Invalid pairing code. Copy it from Integrations → Telegram and try again.",
-      ok: false,
-    };
-  }
-
-  const pairedUserIds = [...new Set([...config.pairedUserIds, userId])];
-
-  await writeTelegramConfigFile({
-    ...config,
-    handshakeCode: null,
-    pairedUserIds,
+  return verifyAndPairBotChannelUser({
+    handshakeInput,
+    isAuthorized: isTelegramUserAuthorized,
+    label: "Telegram",
+    load: loadTelegramConfigFile,
+    userId,
+    write: writeTelegramConfigFile,
   });
-
-  return {
-    message: "Linked successfully. You can chat with Nakama now.",
-    ok: true,
-  };
 }
 
 export function resolveTelegramConfigFromSources(options: {

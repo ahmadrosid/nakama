@@ -12,6 +12,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
     "openai_compatible",
     "minimax",
     "minimax_cn",
+    "xai",
     "zhipu",
     "zhipu_cn",
   ]);

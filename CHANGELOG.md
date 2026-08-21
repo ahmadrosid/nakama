@@ -9,6 +9,10 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+### Added
+
+- Optional CloakBrowser stealth Chromium behind the agent-browser skill ([#121], in review)
+
 ## [0.4.0] - 2026-08-20
 
 ### Added
@@ -505,6 +509,7 @@ First tagged release. The baseline it established:
 
 [#107]: https://github.com/ahmadrosid/nakama/pull/107
 [#109]: https://github.com/ahmadrosid/nakama/pull/109
+[#121]: https://github.com/ahmadrosid/nakama/issues/121
 [#176]: https://github.com/ahmadrosid/nakama/pull/176
 [#177]: https://github.com/ahmadrosid/nakama/pull/177
 [#178]: https://github.com/ahmadrosid/nakama/pull/178

@@ -1,5 +1,4 @@
-import type { EmailConfigFile } from "../email-config";
-import { toMailboxConfig } from "../email-config";
+import type { toMailboxConfig } from "../email-config";
 
 export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
 export const MAX_EMAIL_MESSAGE_BYTES = 10 * 1024 * 1024;
@@ -60,12 +59,6 @@ export interface MailSender {
 }
 
 export type MailboxConfig = ReturnType<typeof toMailboxConfig>;
-
-export function emailConfigToMailboxConfig(
-  config: EmailConfigFile
-): MailboxConfig {
-  return toMailboxConfig(config);
-}
 
 export function formatMailAddress(value: unknown): string {
   if (typeof value === "string") {

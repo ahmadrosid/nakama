@@ -24,6 +24,8 @@ Use `gh` for issues, PRs, checks, reviews, releases, and any GitHub URL. Always 
 
 `gh issue` / `gh pr` / `--json` go through GraphQL and often time out here. Prefer REST: `gh api repos/{owner}/{repo}/issues` or `/pulls`, body in a JSON file, `POST --input`. On GraphQL timeout, retry REST once.
 
+**PR descriptions:** use [`.agents/skills/adhd-pr-description/SKILL.md`](.agents/skills/adhd-pr-description/SKILL.md) (default body shape). GitHub fills the same shape via `.github/PULL_REQUEST_TEMPLATE.md`. Agents composing PR bodies (including `ce-commit-push-pr`) must follow that skill.
+
 ## Browser automation
 
 Use `agent-browser` cli to do browser automation, screenshot etc. Run the docker first when you need to debug with first installation, for just quick test or screenshot use local dev server that already running.

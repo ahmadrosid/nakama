@@ -1,28 +1,27 @@
-import { join } from "node:path";
 import type { TelegramWorkerStatus } from "./contract";
-import {
-  pathExists,
-  readTextOrNull,
-  removeFile,
-  writePrivateTextFile,
-} from "./fs";
 import {
   getTelegramConfigDir,
   loadTelegramSettingsPublic,
   type TelegramSettingsPublic,
 } from "./telegram-config";
+import {
+  createWorkerHeartbeatStore,
+  isHeartbeatAlive,
+  isProcessAlive,
+} from "./worker-heartbeat";
 
-export interface TelegramWorkerHeartbeat {
-  pid: number;
-  updatedAt: string;
-}
+export type { WorkerHeartbeatBase as TelegramWorkerHeartbeat } from "./worker-heartbeat";
+export { isHeartbeatAlive, isProcessAlive };
 
-const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
-const HEARTBEAT_FILENAME = "worker-heartbeat.json";
+const store = createWorkerHeartbeatStore({
+  getDir: getTelegramConfigDir,
+});
 
-export function getTelegramWorkerHeartbeatPath(): string {
-  return join(getTelegramConfigDir(), HEARTBEAT_FILENAME);
-}
+export const getTelegramWorkerHeartbeatPath = store.getPath;
+export const parseTelegramWorkerHeartbeat = store.parse;
+export const readTelegramWorkerHeartbeat = store.read;
+export const clearTelegramWorkerHeartbeat = store.clear;
+export const isTelegramWorkerRunning = store.isRunning;
 
 export function resolveTelegramWorkerStatus(
   settings: TelegramSettingsPublic,
@@ -35,96 +34,11 @@ export function resolveTelegramWorkerStatus(
   return { configured, ok, paired, running };
 }
 
-export function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function isHeartbeatAlive(
-  heartbeat: TelegramWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): boolean {
-  if (!heartbeat) {
-    return false;
-  }
-
-  const updatedAt = Date.parse(heartbeat.updatedAt);
-
-  if (!Number.isFinite(updatedAt)) {
-    return false;
-  }
-
-  if (Date.now() - updatedAt > maxAgeMs) {
-    return false;
-  }
-
-  return isProcessAlive(heartbeat.pid);
-}
-
-export function parseTelegramWorkerHeartbeat(
-  raw: string
-): TelegramWorkerHeartbeat | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as TelegramWorkerHeartbeat).pid !== "number" ||
-      typeof (parsed as TelegramWorkerHeartbeat).updatedAt !== "string"
-    ) {
-      return null;
-    }
-
-    return parsed as TelegramWorkerHeartbeat;
-  } catch {
-    return null;
-  }
-}
-
 export async function writeTelegramWorkerHeartbeat(
   pid = process.pid,
   updatedAt = new Date().toISOString()
 ): Promise<void> {
-  const payload: TelegramWorkerHeartbeat = { pid, updatedAt };
-
-  await writePrivateTextFile(
-    getTelegramWorkerHeartbeatPath(),
-    `${JSON.stringify(payload)}\n`,
-    { ensureDir: getTelegramConfigDir() }
-  );
-}
-
-export async function clearTelegramWorkerHeartbeat(): Promise<void> {
-  const path = getTelegramWorkerHeartbeatPath();
-
-  if (await pathExists(path)) {
-    await removeFile(path);
-  }
-}
-
-export async function readTelegramWorkerHeartbeat(): Promise<TelegramWorkerHeartbeat | null> {
-  const raw = await readTextOrNull(getTelegramWorkerHeartbeatPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  return parseTelegramWorkerHeartbeat(raw.trim());
-}
-
-export async function isTelegramWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): Promise<boolean> {
-  return isHeartbeatAlive(await readTelegramWorkerHeartbeat(), maxAgeMs);
+  await store.write({ pid, updatedAt });
 }
 
 export async function getTelegramWorkerStatus(): Promise<TelegramWorkerStatus> {

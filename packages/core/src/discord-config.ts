@@ -1,7 +1,20 @@
-import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
+import {
+  generateHandshakeCode,
+  isBotChannelUserAuthorized,
+  loadBotChannelIniConfig,
+  maskBotToken,
+  resolveHandshakeCodeOnSave,
+  verifyAndPairBotChannelUser,
+  writeBotChannelIniConfig,
+} from "./channel-config-shared";
 import { getUserConfigDir } from "./user-config";
+
+export {
+  generateHandshakeCode,
+  maskBotToken,
+  normalizeHandshakeInput,
+} from "./channel-config-shared";
 
 export const DEFAULT_DISCORD_PROFILE_ID = "default";
 
@@ -121,28 +134,6 @@ async function withDiscordInviteUrl(
   };
 }
 
-export function maskBotToken(token: string): string | null {
-  const trimmed = token.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (trimmed.length <= 8) {
-    return "••••••••";
-  }
-
-  return `${"•".repeat(Math.min(trimmed.length - 4, 12))}${trimmed.slice(-4)}`;
-}
-
-export function generateHandshakeCode(): string {
-  return randomBytes(4).toString("hex").toUpperCase();
-}
-
-export function normalizeHandshakeInput(input: string): string {
-  return input.trim().replace(/\s+/g, "").toUpperCase();
-}
-
 export function parseAllowedUserIds(raw: string): string[] {
   const ids = new Set<string>();
 
@@ -167,37 +158,15 @@ export function isDiscordUserAuthorized(
   userId: string,
   config: Pick<DiscordConfigFile, "pairedUserIds" | "allowedUserIds">
 ): boolean {
-  return (
-    config.pairedUserIds.includes(userId) ||
-    config.allowedUserIds.includes(userId)
-  );
+  return isBotChannelUserAuthorized(userId, config);
 }
 
 async function loadDiscordConfigFile(): Promise<DiscordConfigFile | null> {
-  const raw = await readTextOrNull(getDiscordConfigPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  const values = parseIni(raw);
-  const botToken = values.bot_token?.trim() ?? "";
-  const profileId = values.profile_id?.trim() || DEFAULT_DISCORD_PROFILE_ID;
-  const handshakeCode = values.handshake_code?.trim() || null;
-  const pairedRaw = values.paired_user_ids?.trim() ?? "";
-  const allowlistRaw = values.allowed_user_ids?.trim() ?? "";
-
-  if (!botToken) {
-    return null;
-  }
-
-  return {
-    allowedUserIds: allowlistRaw ? parseAllowedUserIds(allowlistRaw) : [],
-    botToken,
-    handshakeCode,
-    pairedUserIds: pairedRaw ? parseAllowedUserIds(pairedRaw) : [],
-    profileId,
-  };
+  return loadBotChannelIniConfig({
+    configPath: getDiscordConfigPath(),
+    defaultProfileId: DEFAULT_DISCORD_PROFILE_ID,
+    parseUserIds: parseAllowedUserIds,
+  });
 }
 
 export { loadDiscordConfigFile };
@@ -237,22 +206,11 @@ export async function loadDiscordSettingsPublic(): Promise<DiscordSettingsPublic
 async function writeDiscordConfigFile(
   config: DiscordConfigFile
 ): Promise<void> {
-  const lines = [
-    "# Nakama Discord bridge",
-    `bot_token=${config.botToken}`,
-    `profile_id=${config.profileId}`,
-    ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
-    ...(config.pairedUserIds.length > 0
-      ? [`paired_user_ids=${config.pairedUserIds.join(",")}`]
-      : []),
-    ...(config.allowedUserIds.length > 0
-      ? [`allowed_user_ids=${config.allowedUserIds.join(",")}`]
-      : []),
-    "",
-  ];
-
-  await writePrivateTextFile(getDiscordConfigPath(), lines.join("\n"), {
-    ensureDir: getDiscordConfigDir(),
+  await writeBotChannelIniConfig({
+    config,
+    configDir: getDiscordConfigDir(),
+    configPath: getDiscordConfigPath(),
+    label: "Discord",
   });
 }
 
@@ -286,20 +244,6 @@ function resolveAllowedUserIdsInput(
   return raw ? parseAllowedUserIds(raw) : [];
 }
 
-function resolveHandshakeCode(
-  existing: DiscordConfigFile | null,
-  allowedUserIds: string[]
-): string | null {
-  const pairedUserIds = existing?.pairedUserIds ?? [];
-  const handshakeCode = existing?.handshakeCode ?? null;
-
-  if (pairedUserIds.length > 0 || allowedUserIds.length > 0 || handshakeCode) {
-    return handshakeCode;
-  }
-
-  return generateHandshakeCode();
-}
-
 function buildSavedDiscordConfig(
   input: UpdateDiscordSettingsInput,
   existing: DiscordConfigFile | null
@@ -315,7 +259,7 @@ function buildSavedDiscordConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCode(existing, allowedUserIds),
+    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
     pairedUserIds: existing?.pairedUserIds ?? [],
     profileId: resolveDiscordProfileId(input, existing),
   };
@@ -398,52 +342,14 @@ export async function verifyAndPairDiscordUser(
   handshakeInput: string,
   userId: string
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
-  const config = await loadDiscordConfigFile();
-
-  if (!config) {
-    return {
-      message: "Discord is not configured on the server yet.",
-      ok: false,
-    };
-  }
-
-  if (isDiscordUserAuthorized(userId, config)) {
-    return { message: "This chat is already linked.", ok: true };
-  }
-
-  const expected = config.handshakeCode;
-
-  if (!expected) {
-    return {
-      message:
-        "No pairing code is active. Open Nakama Integrations → Discord and generate a new code.",
-      ok: false,
-    };
-  }
-
-  if (
-    normalizeHandshakeInput(handshakeInput) !==
-    normalizeHandshakeInput(expected)
-  ) {
-    return {
-      message:
-        "Invalid pairing code. Copy it from Integrations → Discord and try again.",
-      ok: false,
-    };
-  }
-
-  const pairedUserIds = [...new Set([...config.pairedUserIds, userId])];
-
-  await writeDiscordConfigFile({
-    ...config,
-    handshakeCode: null,
-    pairedUserIds,
+  return verifyAndPairBotChannelUser({
+    handshakeInput,
+    isAuthorized: isDiscordUserAuthorized,
+    label: "Discord",
+    load: loadDiscordConfigFile,
+    userId,
+    write: writeDiscordConfigFile,
   });
-
-  return {
-    message: "Linked successfully. You can chat with Nakama now.",
-    ok: true,
-  };
 }
 
 export function resolveDiscordConfigFromSources(options: {

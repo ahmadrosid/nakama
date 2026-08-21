@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { writePrivateTextFile } from "../fs";
+import { writeTextFile } from "../fs";
 import type { SoulStackFiles } from "./types";
 
 const WRITABLE_SOUL_FILES = {
@@ -20,13 +20,9 @@ export async function writeSoulFile(
   key: WritableSoulFileKey,
   content: string
 ): Promise<void> {
-  await writePrivateTextFile(
-    join(directory, WRITABLE_SOUL_FILES[key]),
-    content,
-    {
-      ensureDir: directory,
-    }
-  );
+  await writeTextFile(join(directory, WRITABLE_SOUL_FILES[key]), content, {
+    ensureDir: directory,
+  });
 }
 
 export type { SoulStackFiles };

@@ -25,7 +25,6 @@ export function OpenRouterProviderModelFields({
       density={density}
       disabled={disabled}
       fieldId="openrouter-provider-models"
-      footerHint="Add models by ID or browse OpenRouter. Pricing from browse is saved for usage cost on the Status page."
       modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
       renderBrowse={(onSelect) => (

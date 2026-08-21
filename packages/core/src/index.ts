@@ -16,6 +16,7 @@ export * from "./channel-artifact-delivery";
 export * from "./channel-artifacts";
 export * from "./channel-org";
 export * from "./channels";
+export * from "./chat-stream-timeout";
 export * from "./cloudflare-provider-config";
 export * from "./compatible-provider-config";
 export * from "./composio";
@@ -30,8 +31,9 @@ export {
 } from "./discord-attachment";
 // Explicit Discord exports — omit helpers that collide with telegram-* names
 // (maskBotToken, generateHandshakeCode, normalizeHandshakeInput, parseAllowedUserIds,
-// isHeartbeatAlive, isProcessAlive). Import those from @nakama/core/discord-config
-// or @nakama/core/discord-worker when the Discord-specific variant is required.
+// isHeartbeatAlive, isProcessAlive). Shared implementations live in
+// channel-config-shared.ts; import Discord variants from @nakama/core/discord-config
+// or @nakama/core/discord-worker when required.
 export {
   buildDiscordInviteUrl,
   DEFAULT_DISCORD_PROFILE_ID,
@@ -83,6 +85,7 @@ export * from "./profile-avatar";
 export * from "./profiles";
 export * from "./provider-label";
 export * from "./provider-setup-prompt";
+export * from "./runtime";
 export * from "./skills";
 export * from "./soul";
 export * from "./telegram-config";

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { readTextOrNull, writeTextFile } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export type PlatformWorkerName =
@@ -65,7 +65,7 @@ export async function setWorkerDesiredRunning(
   const state = await readWorkerDesiredState();
   state[name] = running;
 
-  await writePrivateTextFile(
+  await writeTextFile(
     getWorkerDesiredStatePath(),
     `${JSON.stringify(state)}\n`,
     { ensureDir: join(getUserConfigDir(), "runtime") }

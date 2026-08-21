@@ -9,7 +9,7 @@ import { convertHtmlToMarkdown } from "./tools/web-fetch";
  * A real `.docx` is a ZIP archive, so it always starts with the local file header
  * magic `PK\x03\x04`.
  */
-export function looksLikeZipArchive(bytes: Uint8Array): boolean {
+function looksLikeZipArchive(bytes: Uint8Array): boolean {
   return (
     bytes[0] === 0x50 &&
     bytes[1] === 0x4b &&
@@ -52,7 +52,7 @@ function decodeXmlEntities(value: string): string {
  * is not a valid `.docx`, but it is still a document we can read: pull the text out
  * of each `<w:p>` and promote heading styles to Markdown headings.
  */
-export function convertWordprocessingXmlToMarkdown(xml: string): string {
+function convertWordprocessingXmlToMarkdown(xml: string): string {
   const blocks: string[] = [];
 
   for (const match of xml.match(/<w:p[\s>][\s\S]*?<\/w:p>|<w:p\s*\/>/gi) ??

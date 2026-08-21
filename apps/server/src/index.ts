@@ -5,7 +5,6 @@ import { ensureProcessPath } from "./lib/ensure-process-path";
 
 ensureProcessPath();
 
-import { mergeOrgMemoryWithApprovedBullet } from "@nakama/agent";
 import {
   clearRuntimeServerUrl,
   DEFAULT_SERVER_HOST,
@@ -164,17 +163,7 @@ agent.setTaskRunner(taskRunner);
 const workerManager = new WorkerManagerService(projectRoot);
 
 const orgService = new OrgService(database.adapter, authService);
-const orgMemoryService = new OrgMemoryService(database.adapter, {
-  approvedBulletMerger: {
-    merge(content, bullet, options) {
-      return mergeOrgMemoryWithApprovedBullet(content, bullet, {
-        dateUtc: options.dateUtc,
-        pin: options.pin,
-        provider,
-      });
-    },
-  },
-});
+const orgMemoryService = new OrgMemoryService(database.adapter);
 const skillProposalService = new SkillProposalService(
   database.adapter,
   skillsService

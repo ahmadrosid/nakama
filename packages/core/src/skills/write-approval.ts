@@ -1,3 +1,5 @@
+import { resolveProfileOrgBooleanOverride } from "./profile-org-override";
+
 export interface SkillWriteApprovalSources {
   orgSkillsWriteApproval?: boolean | null;
   profileSkillsWriteApproval?: boolean | null;
@@ -7,11 +9,8 @@ export interface SkillWriteApprovalSources {
 export function resolveSkillWriteApprovalRequired(
   sources: SkillWriteApprovalSources
 ): boolean {
-  if (
-    sources.profileSkillsWriteApproval !== undefined &&
-    sources.profileSkillsWriteApproval !== null
-  ) {
-    return sources.profileSkillsWriteApproval;
-  }
-  return sources.orgSkillsWriteApproval === true;
+  return resolveProfileOrgBooleanOverride(
+    sources.profileSkillsWriteApproval,
+    sources.orgSkillsWriteApproval
+  );
 }

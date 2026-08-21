@@ -131,27 +131,60 @@ describe("web_fetch tool validation errors", () => {
 });
 
 describe("web_fetch SSRF guard", () => {
-  test("rejects private IPv4 literal", async () => {
+  test("rejects loopback IPv4 literals", async () => {
     await expect(
       webFetchTool.run({ url: "http://127.0.0.1/" }, CTX)
     ).rejects.toThrow(/private or reserved/);
     await expect(
+      webFetchTool.run({ url: "http://127.1.2.3/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+  });
+
+  test("rejects RFC1918 IPv4 literals", async () => {
+    await expect(
       webFetchTool.run({ url: "http://10.0.0.1/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+    await expect(
+      webFetchTool.run({ url: "http://172.16.0.1/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+    await expect(
+      webFetchTool.run({ url: "http://172.31.255.255/" }, CTX)
     ).rejects.toThrow(/private or reserved/);
     await expect(
       webFetchTool.run({ url: "http://192.168.1.1/" }, CTX)
     ).rejects.toThrow(/private or reserved/);
   });
 
-  test("rejects IPv6 loopback literal", async () => {
+  test("rejects CGNAT 100.64.0.0/10", async () => {
     await expect(
-      webFetchTool.run({ url: "http://[::1]/" }, CTX)
+      webFetchTool.run({ url: "http://100.64.0.1/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+    await expect(
+      webFetchTool.run({ url: "http://100.127.255.254/" }, CTX)
     ).rejects.toThrow(/private or reserved/);
   });
 
   test("rejects link-local 169.254.x.x", async () => {
     await expect(
       webFetchTool.run({ url: "http://169.254.169.254/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+  });
+
+  test("rejects multicast and reserved IPv4", async () => {
+    await expect(
+      webFetchTool.run({ url: "http://224.0.0.1/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+    await expect(
+      webFetchTool.run({ url: "http://239.255.255.255/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+    await expect(
+      webFetchTool.run({ url: "http://240.0.0.1/" }, CTX)
+    ).rejects.toThrow(/private or reserved/);
+  });
+
+  test("rejects IPv6 loopback literal", async () => {
+    await expect(
+      webFetchTool.run({ url: "http://[::1]/" }, CTX)
     ).rejects.toThrow(/private or reserved/);
   });
 
@@ -178,6 +211,22 @@ describe("web_fetch SSRF guard", () => {
     expect(
       (fetchInit as RequestInit & { idleTimeout?: number }).idleTimeout
     ).toBe(0);
+  });
+
+  test("allows public IPv4 adjacent to blocked ranges", async () => {
+    stubFetch(async () => htmlResponse("<p>ok</p>"));
+
+    // Just outside CGNAT / RFC1918 / multicast — must still fetch.
+    for (const host of [
+      "100.63.255.255",
+      "100.128.0.1",
+      "172.15.0.1",
+      "172.32.0.1",
+      "223.255.255.255",
+    ]) {
+      const out = await webFetchTool.run({ url: `http://${host}/` }, CTX);
+      expect(out.status).toBe(200);
+    }
   });
 
   test("rejects hostnames with only private addresses", async () => {

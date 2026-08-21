@@ -1,3 +1,5 @@
+import { resolveProfileOrgBooleanOverride } from "./profile-org-override";
+
 export interface SkillPostTurnReviewSources {
   orgSkillsPostTurnReview?: boolean | null;
   profileSkillsPostTurnReview?: boolean | null;
@@ -7,11 +9,8 @@ export interface SkillPostTurnReviewSources {
 export function resolveSkillPostTurnReviewEnabled(
   sources: SkillPostTurnReviewSources
 ): boolean {
-  if (
-    sources.profileSkillsPostTurnReview !== undefined &&
-    sources.profileSkillsPostTurnReview !== null
-  ) {
-    return sources.profileSkillsPostTurnReview;
-  }
-  return sources.orgSkillsPostTurnReview === true;
+  return resolveProfileOrgBooleanOverride(
+    sources.profileSkillsPostTurnReview,
+    sources.orgSkillsPostTurnReview
+  );
 }

@@ -76,14 +76,6 @@ export async function writeTextFile(
   }
 }
 
-export async function writePrivateTextFile(
-  path: string,
-  content: string,
-  options: { ensureDir?: string } = {}
-): Promise<void> {
-  await writeTextFile(path, content, options);
-}
-
 export async function writePrivateTextFileIfMissing(
   path: string,
   content: string
@@ -92,7 +84,7 @@ export async function writePrivateTextFileIfMissing(
     return false;
   }
 
-  await writePrivateTextFile(path, content);
+  await writeTextFile(path, content);
   return true;
 }
 

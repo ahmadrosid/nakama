@@ -79,6 +79,20 @@ export function isOpenRouterModelFree(
   return prompt === 0 && completion === 0;
 }
 
+/** OpenRouter uses 2098-12-31 as a placeholder on live stealth/preview models. */
+const OPENROUTER_SENTINEL_EXPIRATION_YEAR = 2090;
+
+export function isOpenRouterModelDeprecated(
+  expirationDate: string | null | undefined
+): boolean {
+  if (!expirationDate) {
+    return false;
+  }
+
+  const year = Number.parseInt(expirationDate.slice(0, 4), 10);
+  return Number.isFinite(year) && year < OPENROUTER_SENTINEL_EXPIRATION_YEAR;
+}
+
 export function normalizeOpenRouterModel(
   entry: OpenRouterApiModel
 ): OpenRouterModelRow {
@@ -88,7 +102,7 @@ export function normalizeOpenRouterModel(
 
   return {
     contextLength: entry.context_length ?? 0,
-    deprecated: entry.expiration_date != null,
+    deprecated: isOpenRouterModelDeprecated(entry.expiration_date),
     description: truncateDescription(entry.description ?? ""),
     id: entry.id,
     isFree: isOpenRouterModelFree(entry.pricing),

@@ -1,6 +1,6 @@
 import { access, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { writePrivateTextFile, writePrivateTextFileIfMissing } from "../../fs";
+import { writePrivateTextFileIfMissing, writeTextFile } from "../../fs";
 import { getGlobalSkillsDir, SKILL_FILE_NAME } from "../paths";
 import { BUNDLED_SKILL_NAMES, readBundledSkillMarkdown } from "./index";
 
@@ -9,6 +9,7 @@ const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "manage-skills",
   "coding-agent",
   "coding-backend-cursor",
+  "agent-browser",
 ]);
 
 const RENAMED_BUNDLED_SKILL_DIRS = [
@@ -65,7 +66,7 @@ export async function ensureBundledSkillFiles(): Promise<string[]> {
       refreshed.includes(name) ||
       FORCE_REFRESH_BUNDLED_SKILL_NAMES.has(name)
     ) {
-      await writePrivateTextFile(skillFilePath, content);
+      await writeTextFile(skillFilePath, content);
       created.push(name);
       continue;
     }

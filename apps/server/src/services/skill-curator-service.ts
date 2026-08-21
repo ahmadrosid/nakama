@@ -8,7 +8,7 @@ import {
   pathExists,
   readTextIfExists,
   restoreArchivedSkillDirectory,
-  writePrivateTextFile,
+  writeTextFile,
 } from "@nakama/core";
 import type {
   SkillCuratorRestoreMiss,
@@ -244,14 +244,11 @@ export class SkillCuratorService {
     result: SkillCuratorRunResult
   ): Promise<void> {
     const logDir = getOrgCuratorLogDir(orgId);
-    await writePrivateTextFile(
+    await writeTextFile(
       join(logDir, "run.json"),
       `${JSON.stringify(result, null, 2)}\n`
     );
-    await writePrivateTextFile(
-      join(logDir, "REPORT.md"),
-      formatCuratorReport(result)
-    );
+    await writeTextFile(join(logDir, "REPORT.md"), formatCuratorReport(result));
   }
 }
 

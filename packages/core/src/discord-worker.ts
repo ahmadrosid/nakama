@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import type { DiscordWorkerStatus } from "./contract";
 import {
   type DiscordSettingsPublic,
@@ -6,24 +5,31 @@ import {
   loadDiscordSettingsPublic,
 } from "./discord-config";
 import {
-  pathExists,
-  readTextOrNull,
-  removeFile,
-  writePrivateTextFile,
-} from "./fs";
+  createWorkerHeartbeatStore,
+  isHeartbeatAlive,
+  isProcessAlive,
+  type WorkerHeartbeatBase,
+} from "./worker-heartbeat";
 
-export interface DiscordWorkerHeartbeat {
+export interface DiscordWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
-  pid: number;
-  updatedAt: string;
 }
 
-const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
-const HEARTBEAT_FILENAME = "worker-heartbeat.json";
+export { isHeartbeatAlive, isProcessAlive };
 
-export function getDiscordWorkerHeartbeatPath(): string {
-  return join(getDiscordConfigDir(), HEARTBEAT_FILENAME);
-}
+const store = createWorkerHeartbeatStore<DiscordWorkerHeartbeat>({
+  getDir: getDiscordConfigDir,
+  parse: (value, base) => ({
+    connected: value.connected === true,
+    ...base,
+  }),
+});
+
+export const getDiscordWorkerHeartbeatPath = store.getPath;
+export const parseDiscordWorkerHeartbeat = store.parse;
+export const readDiscordWorkerHeartbeat = store.read;
+export const clearDiscordWorkerHeartbeat = store.clear;
+export const isDiscordWorkerRunning = store.isRunning;
 
 export function resolveDiscordWorkerStatus(
   settings: DiscordSettingsPublic,
@@ -37,107 +43,16 @@ export function resolveDiscordWorkerStatus(
   return { configured, connected, ok, paired, running };
 }
 
-export function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function isHeartbeatAlive(
-  heartbeat: DiscordWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): boolean {
-  if (!heartbeat) {
-    return false;
-  }
-
-  const updatedAt = Date.parse(heartbeat.updatedAt);
-
-  if (!Number.isFinite(updatedAt)) {
-    return false;
-  }
-
-  if (Date.now() - updatedAt > maxAgeMs) {
-    return false;
-  }
-
-  return isProcessAlive(heartbeat.pid);
-}
-
-export function parseDiscordWorkerHeartbeat(
-  raw: string
-): DiscordWorkerHeartbeat | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as DiscordWorkerHeartbeat).pid !== "number" ||
-      typeof (parsed as DiscordWorkerHeartbeat).updatedAt !== "string"
-    ) {
-      return null;
-    }
-
-    const heartbeat = parsed as DiscordWorkerHeartbeat;
-
-    return {
-      connected: heartbeat.connected === true,
-      pid: heartbeat.pid,
-      updatedAt: heartbeat.updatedAt,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export async function writeDiscordWorkerHeartbeat(
   pid = process.pid,
   updatedAt = new Date().toISOString(),
   connected?: boolean
 ): Promise<void> {
-  const payload: DiscordWorkerHeartbeat = {
+  await store.write({
     pid,
     updatedAt,
     ...(connected === undefined ? {} : { connected }),
-  };
-
-  await writePrivateTextFile(
-    getDiscordWorkerHeartbeatPath(),
-    `${JSON.stringify(payload)}\n`,
-    { ensureDir: getDiscordConfigDir() }
-  );
-}
-
-export async function clearDiscordWorkerHeartbeat(): Promise<void> {
-  const path = getDiscordWorkerHeartbeatPath();
-
-  if (await pathExists(path)) {
-    await removeFile(path);
-  }
-}
-
-export async function readDiscordWorkerHeartbeat(): Promise<DiscordWorkerHeartbeat | null> {
-  const raw = await readTextOrNull(getDiscordWorkerHeartbeatPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  return parseDiscordWorkerHeartbeat(raw.trim());
-}
-
-export async function isDiscordWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): Promise<boolean> {
-  return isHeartbeatAlive(await readDiscordWorkerHeartbeat(), maxAgeMs);
+  });
 }
 
 export async function getDiscordWorkerStatus(): Promise<DiscordWorkerStatus> {

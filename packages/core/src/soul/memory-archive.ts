@@ -1,11 +1,6 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  pathExists,
-  readText,
-  readTextIfExists,
-  writePrivateTextFile,
-} from "../fs";
+import { pathExists, readText, readTextIfExists, writeTextFile } from "../fs";
 import {
   formatMemoryArchiveYearMonth,
   getMemoryArchiveDir,
@@ -237,10 +232,10 @@ export async function archiveMemoryBullets(
   const activeContent = rebuildMemoryContent(active);
   const activeBytes = Buffer.byteLength(activeContent, "utf8");
 
-  await writePrivateTextFile(archivePath, archiveContent, {
+  await writeTextFile(archivePath, archiveContent, {
     ensureDir: archiveDir,
   });
-  await writePrivateTextFile(memoryPath, activeContent);
+  await writeTextFile(memoryPath, activeContent);
 
   return {
     activeBytes,

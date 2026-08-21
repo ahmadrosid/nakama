@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
-import { readTextOrNull, writePrivateTextFile } from "@nakama/core/fs";
+import { readTextOrNull, writeTextFile } from "@nakama/core/fs";
 
 /** Persisted ownership of Discord threads the bot started. */
 export class ThreadStore {
@@ -73,7 +73,7 @@ export class ThreadStore {
     for (const id of this.owned) {
       map[id] = id;
     }
-    await writePrivateTextFile(this.path, `${JSON.stringify(map, null, 2)}\n`, {
+    await writeTextFile(this.path, `${JSON.stringify(map, null, 2)}\n`, {
       ensureDir: dirname(this.path),
     });
   }

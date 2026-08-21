@@ -46,4 +46,12 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
     expect(composeAgentBrowserCapabilityPrompt([{ name: "weather" }])).toBe("");
     expect(composeAgentBrowserCapabilityPrompt([])).toBe("");
   });
+
+  test("mentions host Chromium override when agent-browser is assigned", () => {
+    const prompt = composeAgentBrowserCapabilityPrompt([
+      { name: "agent-browser" },
+    ]);
+    expect(prompt).toContain("AGENT_BROWSER_EXECUTABLE_PATH");
+    expect(prompt).toContain("AGENT_BROWSER_ARGS");
+  });
 });

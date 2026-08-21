@@ -62,6 +62,22 @@ To remove the container, volume, and image and start fresh:
 ./scripts/docker-build-run.sh
 ```
 
+## Optional: CloakBrowser with agent-browser
+
+The image does not include [CloakBrowser](https://github.com/CloakHQ/CloakBrowser). Stock Chrome from `agent-browser install` still works inside the container when you use the dashboard **Install** path.
+
+To use Cloak as the Chromium behind agent-browser, bind-mount the Cloak binary and pass the same host env Nakama's `bash` tool already inherits:
+
+```bash
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+  -v /path/to/cloak-chromium:/cloak/chromium:ro \
+  -e AGENT_BROWSER_EXECUTABLE_PATH=/cloak/chromium \
+  -e AGENT_BROWSER_ARGS="<copy from Cloak's agent-browser example>" \
+  --name nakama ghcr.io/ahmadrosid/nakama:latest
+```
+
+See [Agent browser](/agent-browser#3-optional-cloakbrowser-for-antibot-sites).
+
 ## Next steps
 
 - [Quickstart](/quickstart) — first-run flow from zero

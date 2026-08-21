@@ -308,7 +308,7 @@ Run a one-off shell command in the profile workspace and return stdout, stderr, 
 
 **Scope:** Profile workspace only. Do not use `bash` to create persistent tools or `.sh` wrappers — register JavaScript tools under `~/.nakama/tools/` instead.
 
-**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/agent-browser) skill.
+**Availability:** When assigned to the profile. Super Bot receives `bash` by default. Required for the [coding agent](/coding-agent) workflow and the opt-in [agent-browser](/agent-browser) skill. Interactive browser runs inherit host `AGENT_BROWSER_EXECUTABLE_PATH` / `AGENT_BROWSER_ARGS` when you opt into Cloak.
 
 ### `sub_agent`
 

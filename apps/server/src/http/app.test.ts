@@ -549,6 +549,71 @@ describe("createHonoApp", () => {
     }
   });
 
+  test("rejects local auth token rotation for non-platform-admin browser sessions", async () => {
+    const configDir = await mkdtemp(
+      join(tmpdir(), "nakama-rotate-auth-member-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      const options = createServerOptions();
+      const app = createHonoApp(options);
+      const setupResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/setup", {
+          body: JSON.stringify(
+            buildSetupAuthBody("admin@example.com", {
+              admin: { password: "secret123" },
+            })
+          ),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+      expect(setupResponse.status).toBe(201);
+      const orgId = await seedOrgForUser(
+        options.databaseAdapter,
+        "admin@example.com"
+      );
+
+      const now = new Date().toISOString();
+      await options.databaseAdapter.createUser({
+        createdAt: now,
+        email: "member@example.com",
+        id: "user_member_rotate",
+        passwordHash: await options.authService.hashPassword("secret123"),
+        updatedAt: now,
+      });
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: now,
+        orgId,
+        role: "member",
+        userId: "user_member_rotate",
+      });
+
+      const member = await loginUserSession(
+        app,
+        "member@example.com",
+        "secret123",
+        orgId
+      );
+
+      const rotateResponse = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/local-token/rotate", {
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
+          method: "POST",
+        })
+      );
+
+      expect(rotateResponse.status).toBe(403);
+      await expect(rotateResponse.json()).resolves.toEqual({
+        error: "Forbidden",
+      });
+    } finally {
+      delete process.env.NAKAMA_CONFIG_DIR;
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("serves health through the Hono fetch boundary", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);

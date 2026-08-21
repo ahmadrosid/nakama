@@ -13,7 +13,6 @@ import {
 } from "./document-content";
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
-export const MAX_IMAGES_PER_MESSAGE = MAX_ATTACHMENTS_PER_MESSAGE;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const TOKENS_PER_IMAGE_ESTIMATE = 1500;

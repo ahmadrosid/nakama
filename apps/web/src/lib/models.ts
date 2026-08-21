@@ -62,7 +62,8 @@ export function formatProviderLabel(
     provider === "minimax" ||
     provider === "minimax_cn" ||
     provider === "zhipu" ||
-    provider === "zhipu_cn"
+    provider === "zhipu_cn" ||
+    provider === "xai"
   ) {
     return formatConfiguredProviderLabel(provider, displayName);
   }
@@ -83,6 +84,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "ollama", label: "Ollama" },
     { id: "opencode_go", label: "OpenCode Go" },
     { id: "minimax", label: "MiniMax" },
+    { id: "xai", label: "xAI Grok" },
     { id: "minimax_cn", label: "MiniMax (CN)" },
     { id: "zhipu", label: "GLM (Z.ai)" },
     { id: "zhipu_cn", label: "GLM (CN)" },

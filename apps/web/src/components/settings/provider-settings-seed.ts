@@ -58,5 +58,5 @@ export function seedShortlistManageModelRows(
     ];
   }
 
-  return [{ id: "", name: "" }];
+  return [];
 }

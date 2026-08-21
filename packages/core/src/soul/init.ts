@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { ensureDir, pathExists, readText, writePrivateTextFile } from "../fs";
+import { ensureDir, pathExists, readText, writeTextFile } from "../fs";
 import {
   BAD_OUTPUTS_TEMPLATE,
   GOOD_OUTPUTS_TEMPLATE,
@@ -68,7 +68,7 @@ async function ensureSoulTemplateFile(
     return false;
   }
 
-  await writePrivateTextFile(targetPath, content);
+  await writeTextFile(targetPath, content);
   return true;
 }
 

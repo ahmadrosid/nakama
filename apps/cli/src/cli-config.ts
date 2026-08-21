@@ -1,9 +1,5 @@
 import { join } from "node:path";
-import {
-  getUserConfigDir,
-  readTextOrNull,
-  writePrivateTextFile,
-} from "@nakama/core";
+import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
 
 export function getCliConfigPath(): string {
   return join(getUserConfigDir(), "cli.ini");
@@ -82,7 +78,7 @@ async function writeCliConfig(values: Record<string, string>): Promise<void> {
 
   lines.push("");
 
-  await writePrivateTextFile(getCliConfigPath(), lines.join("\n"), {
+  await writeTextFile(getCliConfigPath(), lines.join("\n"), {
     ensureDir: getUserConfigDir(),
   });
 }

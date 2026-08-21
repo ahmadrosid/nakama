@@ -1,17 +1,23 @@
-import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  generateHandshakeCode,
+  normalizeHandshakeInput,
+} from "./channel-config-shared";
 import {
   parseIni,
   pathExists,
   readTextOrNull,
   removeFile,
-  writePrivateTextFile,
+  writeTextFile,
 } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
-export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
+/** WhatsApp name for shared handshake helpers. */
+export const generatePairingCode = generateHandshakeCode;
+export const normalizePairingCode = normalizeHandshakeInput;
 
+export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
 export interface WhatsAppConfigFile {
   outboundPort?: string | null;
   pairedJid: string | null;
@@ -54,14 +60,6 @@ export function maskPhoneNumber(phoneNumber: string): string | null {
   }
 
   return `+${"•".repeat(Math.min(trimmed.length - 2, 10))}${trimmed.slice(-2)}`;
-}
-
-export function generatePairingCode(): string {
-  return randomBytes(4).toString("hex").toUpperCase();
-}
-
-export function normalizePairingCode(input: string): string {
-  return input.trim().replace(/\s+/g, "").toUpperCase();
 }
 
 function phoneDigits(phone: string): string {
@@ -206,7 +204,7 @@ async function writeWhatsAppConfigFile(
     "",
   ];
 
-  await writePrivateTextFile(getWhatsAppConfigPath(), lines.join("\n"), {
+  await writeTextFile(getWhatsAppConfigPath(), lines.join("\n"), {
     ensureDir: getWhatsAppConfigDir(),
   });
 }

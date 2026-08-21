@@ -14,7 +14,7 @@ export function composeAgentBrowserCapabilityPrompt(
 
 The **agent-browser** skill is assigned (see Available Agent Skills). Skills are workflow instructions, not callable tools — run this one with \`bash\` + the agent-browser CLI. For login walls, forms, clicks, screenshots, and dynamic pages; prefer \`web_fetch\` for plain public text.
 
-\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it.`;
+\`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.`;
 }
 
 export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {

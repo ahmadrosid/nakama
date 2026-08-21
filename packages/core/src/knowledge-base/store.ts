@@ -8,7 +8,7 @@ import {
   readTextOrNull,
   removeFile,
   writePrivateBytesFile,
-  writePrivateTextFile,
+  writeTextFile,
 } from "../fs";
 import { createId } from "../ids";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
@@ -159,7 +159,7 @@ async function writeManifest(
   const tempPath = `${manifestPath}.tmp`;
   const content = `${JSON.stringify(manifest, null, 2)}\n`;
 
-  await writePrivateTextFile(tempPath, content);
+  await writeTextFile(tempPath, content);
   await rename(tempPath, manifestPath);
 }
 
@@ -245,7 +245,7 @@ export async function uploadKnowledgeBaseDocument(
       mediaType,
       uploadedAt,
     });
-    await writePrivateTextFile(
+    await writeTextFile(
       getKnowledgeBaseExtractedPath(orgId, profileId, documentId),
       `${header}${body}\n`
     );

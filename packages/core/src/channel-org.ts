@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { readTextOrNull, writeTextFile } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export type ChannelOrgSelectionChannel = "telegram" | "whatsapp" | "discord";
@@ -64,13 +64,9 @@ export class ChannelOrgStore {
   }
 
   async save(): Promise<void> {
-    await writePrivateTextFile(
-      this.path,
-      `${JSON.stringify(this.map, null, 2)}\n`,
-      {
-        ensureDir: dirname(this.path),
-      }
-    );
+    await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+      ensureDir: dirname(this.path),
+    });
   }
 }
 

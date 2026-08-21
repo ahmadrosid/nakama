@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { maskSecret } from "./email-config";
-import { parseIni, readTextOrNull, writePrivateTextFile } from "./fs";
+import { parseIni, readTextOrNull, writeTextFile } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export interface ComposioConfigFile {
@@ -94,7 +94,7 @@ async function writeComposioConfigFile(
     "",
   ];
 
-  await writePrivateTextFile(getComposioConfigPath(), lines.join("\n"), {
+  await writeTextFile(getComposioConfigPath(), lines.join("\n"), {
     ensureDir: getComposioConfigDir(),
   });
 }

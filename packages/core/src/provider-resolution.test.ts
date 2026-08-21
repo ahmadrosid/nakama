@@ -21,6 +21,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("minimax_cn")).toBe("minimax_cn");
     expect(parseProviderName("zhipu")).toBe("zhipu");
     expect(parseProviderName("zhipu_cn")).toBe("zhipu_cn");
+    expect(parseProviderName("xai")).toBe("xai");
   });
 
   test("rejects unknown values", () => {
@@ -123,6 +124,10 @@ describe("apiKeyEnvVarForProvider", () => {
     expect(apiKeyEnvVarForProvider("zhipu")).toBe("ZHIPU_API_KEY");
     expect(apiKeyEnvVarForProvider("zhipu_cn")).toBe("ZHIPU_CN_API_KEY");
   });
+
+  test("maps xAI to its env key", () => {
+    expect(apiKeyEnvVarForProvider("xai")).toBe("XAI_API_KEY");
+  });
 });
 
 describe("isDiscoveryModelProvider", () => {
@@ -132,6 +137,7 @@ describe("isDiscoveryModelProvider", () => {
     expect(isDiscoveryModelProvider("minimax_cn")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu_cn")).toBe(true);
+    expect(isDiscoveryModelProvider("xai")).toBe(true);
   });
 
   test("excludes catalog providers", () => {

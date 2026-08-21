@@ -1,30 +1,35 @@
 import { join } from "node:path";
 import type { WhatsAppWorkerStatus } from "./contract";
-import {
-  pathExists,
-  readTextOrNull,
-  removeFile,
-  writePrivateTextFile,
-} from "./fs";
+import { pathExists, readTextOrNull, removeFile, writeTextFile } from "./fs";
 import {
   getWhatsAppConfigDir,
   loadWhatsAppSettingsPublic,
   type WhatsAppSettingsPublic,
 } from "./whatsapp-config";
+import {
+  createWorkerHeartbeatStore,
+  isProcessAlive,
+  type WorkerHeartbeatBase,
+} from "./worker-heartbeat";
 
-export interface WhatsAppWorkerHeartbeat {
+export interface WhatsAppWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
-  pid: number;
-  updatedAt: string;
 }
 
-const DEFAULT_HEARTBEAT_MAX_AGE_MS = 45_000;
-const HEARTBEAT_FILENAME = "worker-heartbeat.json";
 const QR_CODE_FILENAME = "worker-qr.txt";
 
-export function getWhatsAppWorkerHeartbeatPath(): string {
-  return join(getWhatsAppConfigDir(), HEARTBEAT_FILENAME);
-}
+const store = createWorkerHeartbeatStore<WhatsAppWorkerHeartbeat>({
+  getDir: getWhatsAppConfigDir,
+  parse: (value) => value as unknown as WhatsAppWorkerHeartbeat,
+});
+
+export const getWhatsAppWorkerHeartbeatPath = store.getPath;
+export const parseWhatsAppWorkerHeartbeat = store.parse;
+export const readWhatsAppWorkerHeartbeat = store.read;
+export const clearWhatsAppWorkerHeartbeat = store.clear;
+export const isWhatsAppWorkerRunning = store.isRunning;
+export const isWhatsAppProcessAlive = isProcessAlive;
+export const isWhatsAppHeartbeatAlive = store.isAlive;
 
 export function getWhatsAppQrCodePath(): string {
   return join(getWhatsAppConfigDir(), QR_CODE_FILENAME);
@@ -43,85 +48,16 @@ export function resolveWhatsAppWorkerStatus(
   return { configured, connected, ok, paired, qrCode, running };
 }
 
-export function isWhatsAppProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function isWhatsAppHeartbeatAlive(
-  heartbeat: WhatsAppWorkerHeartbeat | null,
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): boolean {
-  if (!heartbeat) {
-    return false;
-  }
-
-  const updatedAt = Date.parse(heartbeat.updatedAt);
-
-  if (!Number.isFinite(updatedAt)) {
-    return false;
-  }
-
-  if (Date.now() - updatedAt > maxAgeMs) {
-    return false;
-  }
-
-  return isWhatsAppProcessAlive(heartbeat.pid);
-}
-
-export function parseWhatsAppWorkerHeartbeat(
-  raw: string
-): WhatsAppWorkerHeartbeat | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as WhatsAppWorkerHeartbeat).pid !== "number" ||
-      typeof (parsed as WhatsAppWorkerHeartbeat).updatedAt !== "string"
-    ) {
-      return null;
-    }
-
-    return parsed as WhatsAppWorkerHeartbeat;
-  } catch {
-    return null;
-  }
-}
-
 export async function writeWhatsAppWorkerHeartbeat(
   pid = process.pid,
   updatedAt = new Date().toISOString(),
   connected = false
 ): Promise<void> {
-  const payload: WhatsAppWorkerHeartbeat = { connected, pid, updatedAt };
-
-  await writePrivateTextFile(
-    getWhatsAppWorkerHeartbeatPath(),
-    `${JSON.stringify(payload)}\n`,
-    { ensureDir: getWhatsAppConfigDir() }
-  );
-}
-
-export async function clearWhatsAppWorkerHeartbeat(): Promise<void> {
-  const path = getWhatsAppWorkerHeartbeatPath();
-
-  if (await pathExists(path)) {
-    await removeFile(path);
-  }
+  await store.write({ connected, pid, updatedAt });
 }
 
 export async function writeWhatsAppQrCode(qr: string): Promise<void> {
-  await writePrivateTextFile(getWhatsAppQrCodePath(), qr, {
+  await writeTextFile(getWhatsAppQrCodePath(), qr, {
     ensureDir: getWhatsAppConfigDir(),
   });
 }
@@ -137,25 +73,6 @@ export async function clearWhatsAppQrCode(): Promise<void> {
 export async function readWhatsAppQrCode(): Promise<string | null> {
   const raw = await readTextOrNull(getWhatsAppQrCodePath());
   return raw?.trim() || null;
-}
-
-export async function readWhatsAppWorkerHeartbeat(): Promise<WhatsAppWorkerHeartbeat | null> {
-  const raw = await readTextOrNull(getWhatsAppWorkerHeartbeatPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  return parseWhatsAppWorkerHeartbeat(raw.trim());
-}
-
-export async function isWhatsAppWorkerRunning(
-  maxAgeMs = DEFAULT_HEARTBEAT_MAX_AGE_MS
-): Promise<boolean> {
-  return isWhatsAppHeartbeatAlive(
-    await readWhatsAppWorkerHeartbeat(),
-    maxAgeMs
-  );
 }
 
 export async function getWhatsAppWorkerStatus(): Promise<WhatsAppWorkerStatus> {

@@ -18,7 +18,10 @@ import {
   resolveRequestClientOrigin,
 } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
-import { requirePlatformAdminFromContext } from "../org-guards";
+import {
+  requirePlatformAdmin,
+  requirePlatformAdminFromContext,
+} from "../org-guards";
 import {
   assertBrowserCsrf,
   authenticateRequest,
@@ -611,6 +614,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       );
     }
 
+    requirePlatformAdmin(auth);
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     try {

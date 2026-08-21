@@ -1,4 +1,5 @@
 import { readTextOrNull } from "./fs";
+import { maskTrailingSecret, REDACTED_SECRET_VALUE } from "./secret-mask";
 import {
   getUserConfigPath,
   parseIniWithSections,
@@ -6,7 +7,7 @@ import {
 } from "./user-config";
 
 export const EMAIL_SECTION = "email";
-export const REDACTED_SECRET_VALUE = "••••••••";
+export { REDACTED_SECRET_VALUE };
 
 export const DEFAULT_IMAP_PORT = 993;
 export const DEFAULT_SMTP_PORT = 587;
@@ -52,17 +53,7 @@ export interface UpdateEmailSettingsInput {
 }
 
 export function maskSecret(secret: string): string | null {
-  const trimmed = secret.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (trimmed.length <= 8) {
-    return REDACTED_SECRET_VALUE;
-  }
-
-  return `${"•".repeat(Math.min(trimmed.length - 4, 12))}${trimmed.slice(-4)}`;
+  return maskTrailingSecret(secret);
 }
 
 export function parseIniBoolean(

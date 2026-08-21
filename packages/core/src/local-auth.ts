@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
-import { readTextOrNull, writePrivateTextFile } from "./fs";
+import { readTextOrNull, writeTextFile } from "./fs";
 import {
   getUserConfigDir,
   loadUserConfig,
@@ -63,7 +63,7 @@ async function loadStoredLocalAuthToken(): Promise<string | null> {
 }
 
 async function persistLocalAuthToken(token: string): Promise<void> {
-  await writePrivateTextFile(getLocalAuthTokenPath(), `${token}\n`, {
+  await writeTextFile(getLocalAuthTokenPath(), `${token}\n`, {
     ensureDir: getUserConfigDir(),
   });
 }

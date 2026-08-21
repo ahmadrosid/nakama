@@ -24,6 +24,22 @@ agent-browser install
 
 If `bash` returns `command not found`, `ENOENT`, or similar for `agent-browser`, tell the operator to run the install commands above (and `agent-browser install --with-deps` on Linux if Chrome libraries are missing). Do not invent a different browser tool.
 
+### Optional: CloakBrowser (stealth Chromium)
+
+Stock Chrome from `agent-browser install` is the default. Use [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) only when the site blocks that Chrome (bot detection / antibot). Cloak is **not** the default and is **not** bundled with Nakama.
+
+The operator installs Cloak on the **same host** that runs `bash` and points agent-browser at Cloak's binary:
+
+```bash
+# Host env for the Nakama process (inherited by bash)
+export AGENT_BROWSER_EXECUTABLE_PATH="/path/to/cloak-chromium"
+export AGENT_BROWSER_ARGS="<stealth args from Cloak's agent-browser example>"
+```
+
+Get the binary path with `python -m cloakbrowser info` or `npx cloakbrowser info` after `cloakbrowser install`. Copy `AGENT_BROWSER_ARGS` from Cloak's [agent-browser integration](https://github.com/CloakHQ/CloakBrowser/blob/main/examples/integrations/agent_browser.sh). Do not invent flags.
+
+If those variables are unset, keep using stock Chrome. Do not pass Cloak paths in each `bash` `env` unless the operator asked you to override the host env for this run.
+
 ## Browser workflow
 
 Drive the browser with the `bash` tool. Multiple `agent-browser` commands in the **same agent run** share one daemon session — that is how login → navigate → act stays coherent.
