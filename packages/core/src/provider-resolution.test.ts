@@ -112,12 +112,9 @@ describe("resolveProvider fireworks", () => {
 });
 
 describe("apiKeyEnvVarForProvider", () => {
-  test("maps MiniMax regions to distinct env keys", () => {
+  test("maps providers to their env keys", () => {
     expect(apiKeyEnvVarForProvider("minimax")).toBe("MINIMAX_API_KEY");
     expect(apiKeyEnvVarForProvider("minimax_cn")).toBe("MINIMAX_CN_API_KEY");
-  });
-
-  test("maps xAI to its env key", () => {
     expect(apiKeyEnvVarForProvider("xai")).toBe("XAI_API_KEY");
   });
 });
